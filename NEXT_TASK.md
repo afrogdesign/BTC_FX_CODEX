@@ -5,16 +5,17 @@
 - MEXC API 取得・`run_cycle()` 1回実行・ログ更新まで確認済み。
 - `.env` の本番値（OpenAI/SMTP/MAIL）反映まで完了。
 - 通知系の本番確認は SMTP単体テストまで完了（`run_cycle` 経由の通知発火は条件待ち）。
+- 2026-03-09 23:35 JST に `launchd` へ `com.afrog.btc-monitor` として登録し、常駐プロセスの `state = running` を確認。
+- 2026-03-09 23:45 JST に Python 3.12.10 を並行インストールし、`.venv312` の依存再構築と `launchd` の切り替えまで完了。
 
 ## 次のタスク
-- Task 12: `main.py` 常駐実行または cron 登録で初回監視に入る。
-- Task 13: 通知テスト後に `logs/errors/` と受信メール結果を突合して最終判定。
-- Task 14: `run_cycle` で実際に通知条件が発火したタイミングの送信確認（`last_notified.json` 生成確認）。
+- Task 14: 2026-03-10 01:05 JST 以降に `logs/heartbeat.txt` / `logs/last_result.json` / `logs/errors/` を確認し、初回常駐サイクルの結果を確定する。
+- Task 15: `run_cycle` で実際に通知条件が発火したタイミングの送信確認（`last_notified.json` 生成確認）。
 - Task 16: 月次レビューを実施し、`reports/log_review_YYYY-MM.md` を作成して改善点を反映。
+- Task 17: 新規プロジェクト作成時に `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` を使う運用を定着させる。
+- Task 18: `/Users/marupro/CODEX/Global_BOX/PROJECT開始指南書.md` を実際の新規案件で使い、必要なら文言を改善する。
 
 ## 残り作業
-- Python を 3.11+ へ上げる（現状 3.9.6、動作はしているが理想条件未達）。
-- 常駐運用（`python3 main.py`）または cron 登録。
 - 起動後、`heartbeat` / `last_result` / `errors` を数サイクル監視。
 - 通知条件発火時に `last_notified.json` が更新されることを確認。
 - 月次・年次のログ分析を定期実施し、閾値見直しサイクルを運用に組み込む。
@@ -62,6 +63,19 @@
   - `ログ検証と改善運用ガイド.md` を新規作成
   - `tools/log_analytics.py` を追加（全期間/年次/月次/期間指定の集計）
   - `reports/log_review_all.md`, `reports/log_review_2026.md` を生成し、出力確認
+- 追記（23:35 JST）: 本番常駐へ移行:
+  - `deploy/com.afrog.btc-monitor.plist` を追加
+  - `~/Library/LaunchAgents/com.afrog.btc-monitor.plist` へ登録
+  - `launchctl print gui/501/com.afrog.btc-monitor` で `state = running`, `pid = 37687` を確認
+  - `logs/runtime/monitor.err` に LibreSSL 由来の `urllib3` 警告あり（致命ではなく起動継続）
+- 追記（23:4x JST）: Python 更新を実施:
+  - Python 3.12.10 を並行インストール
+  - `.venv312` を作成し、`requirements.txt` を再インストール
+  - `.venv312/bin/python --version` -> `Python 3.12.10`
+  - `ssl.OPENSSL_VERSION` -> `OpenSSL 3.0.16 11 Feb 2025`
+  - `launchd` の実行先を `.venv312/bin/python` に切り替え
+  - `launchctl print gui/501/com.afrog.btc-monitor` で `state = running`, `pid = 38773` を確認
+  - `logs/runtime/monitor.err` は 23:35 の旧警告ログのみで、新環境切り替え後の追記なし
 
 ## チェックリスト進捗（本番開始前チェックリスト対応）
 - 1. ファイルと環境の確認: 一部完了（Python 3.11理想は未達）。
@@ -72,7 +86,8 @@
   - 更新: SMTP認証/送信は確認済み。`run_cycle` 経由の通知発火確認は継続。
 - 6. API連携チェック: 完了（MEXCデータと funding rate 取得成功）。
 - 7. 常駐運用前チェック: 未完了（本番 `.env` / 常駐前提項目が未実施）。
-- 8. 運用開始後の初回監視ポイント: 未着手（常駐後に実施）。
+- 更新: `launchd` 登録と `state = running` までは完了。
+- 8. 運用開始後の初回監視ポイント: 進行中（初回定時実行待ち）。
 - 9. 最終判定: 未完了。
 
 ## 直近判定（2026-03-09 22:00 JST）
@@ -92,3 +107,5 @@
 - Task 10 完了: `.env` の本番値（OpenAI/SMTP/MAIL）を反映。
 - Task 11 完了: `DRYRUN_MODE=false` で通知系テストを実施し、SMTP認証/送信成功を確認。
 - Task 15 完了: ログ検証・年次集計の運用基盤（ガイド + 集計スクリプト + 初回レポート）を追加。
+- Task 12 完了: `launchd` に `com.afrog.btc-monitor` を登録し、本番常駐プロセスを `state = running` で起動。
+- Task 13 完了: Python 3.12.10 と `.venv312` へ切り替え、`launchd` の本番実行系を更新。
