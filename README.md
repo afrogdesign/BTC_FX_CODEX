@@ -46,6 +46,17 @@ python3 main.py
 - `logs/last_result.json` が更新される
 - `logs/errors/` に新しい例外が増えていない
 
+## ログ検証・年次集計
+- 運用ガイド: `ログ検証と改善運用ガイド.md`
+- 全期間レポート作成:
+```bash
+python3 tools/log_analytics.py --output-md reports/log_review_all.md
+```
+- 年次レポート作成（例: 2026年）:
+```bash
+python3 tools/log_analytics.py --year 2026 --output-md reports/log_review_2026.md
+```
+
 ## 注意
 - `.env` は機密情報を含むため、絶対にコミットしないでください。
 - 初回は `DRYRUN_MODE=true` で動作確認し、その後 `false` に切り替えるのがおすすめです。

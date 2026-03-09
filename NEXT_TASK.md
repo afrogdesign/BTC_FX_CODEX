@@ -10,12 +10,14 @@
 - Task 12: `main.py` 常駐実行または cron 登録で初回監視に入る。
 - Task 13: 通知テスト後に `logs/errors/` と受信メール結果を突合して最終判定。
 - Task 14: `run_cycle` で実際に通知条件が発火したタイミングの送信確認（`last_notified.json` 生成確認）。
+- Task 16: 月次レビューを実施し、`reports/log_review_YYYY-MM.md` を作成して改善点を反映。
 
 ## 残り作業
 - Python を 3.11+ へ上げる（現状 3.9.6、動作はしているが理想条件未達）。
 - 常駐運用（`python3 main.py`）または cron 登録。
 - 起動後、`heartbeat` / `last_result` / `errors` を数サイクル監視。
 - 通知条件発火時に `last_notified.json` が更新されることを確認。
+- 月次・年次のログ分析を定期実施し、閾値見直しサイクルを運用に組み込む。
 
 ## 本日実行ログ（2026-03-09）
 - 実施: `python3 --version` -> `Python 3.9.6`。
@@ -56,6 +58,10 @@
   - `run_cycle()` 1回実行は成功（ただし通知トリガー条件に当たらず `last_notified.json` は未生成）
   - SMTP単体テストメール送信は成功（認証/送信OK）
   - `logs/errors/` 新規エラーなし
+- 追記（22:27 JST）: ログ検証基盤を追加:
+  - `ログ検証と改善運用ガイド.md` を新規作成
+  - `tools/log_analytics.py` を追加（全期間/年次/月次/期間指定の集計）
+  - `reports/log_review_all.md`, `reports/log_review_2026.md` を生成し、出力確認
 
 ## チェックリスト進捗（本番開始前チェックリスト対応）
 - 1. ファイルと環境の確認: 一部完了（Python 3.11理想は未達）。
@@ -85,3 +91,4 @@
 - Task 9 完了: 本番開始前チェックリストの実地確認を開始し、MEXC/API/単発実行/ログ更新まで検証。
 - Task 10 完了: `.env` の本番値（OpenAI/SMTP/MAIL）を反映。
 - Task 11 完了: `DRYRUN_MODE=false` で通知系テストを実施し、SMTP認証/送信成功を確認。
+- Task 15 完了: ログ検証・年次集計の運用基盤（ガイド + 集計スクリプト + 初回レポート）を追加。
