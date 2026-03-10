@@ -27,6 +27,18 @@ def _bias_upgrade(old: str, new: str) -> bool:
     return old == "wait" and new in {"long", "short"}
 
 
+_PRELABEL_RANK = {
+    "NO_TRADE_CANDIDATE": 0,
+    "SWEEP_WAIT": 1,
+    "RISKY_ENTRY": 2,
+    "ENTRY_OK": 3,
+}
+
+
+def _prelabel_upgrade(old: str, new: str) -> bool:
+    return _PRELABEL_RANK.get(new, -1) > _PRELABEL_RANK.get(old, -1)
+
+
 def should_notify(
     current: dict[str, Any],
     last_result: dict[str, Any] | None,
@@ -53,6 +65,11 @@ def should_notify(
     if _bias_upgrade(prev_bias, bias):
         reasons.append("bias_changed")
 
+    prev_prelabel = (last_result or {}).get("prelabel", "NO_TRADE_CANDIDATE")
+    current_prelabel = current.get("prelabel", "NO_TRADE_CANDIDATE")
+    if _prelabel_upgrade(prev_prelabel, current_prelabel):
+        reasons.append("prelabel_improved")
+
     prev_conf = int((last_notified or {}).get("confidence", confidence))
     if abs(confidence - prev_conf) >= cfg.CONFIDENCE_ALERT_CHANGE:
         reasons.append("confidence_jump")
@@ -64,7 +81,7 @@ def should_notify(
             reasons.append("agreement_changed")
 
     no_trade_flags = current.get("no_trade_flags", [])
-    if current_status == "invalid" and len(no_trade_flags) >= 2:
+    if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
         return False, []
 
     if not reasons:

@@ -1,5 +1,35 @@
 # Progress Log
 
+- 日時: 2026-03-10 16:19 JST
+- 実施内容: ユーザー許可のうえで `run_cycle` を手動1回実行し、Ver02の新項目が実出力に入ることを確認した。結果は `prelabel=SWEEP_WAIT`、`location_risk=60.0`、`oi_value=81815.097`、`orderbook_bias=bid_heavy`、`market_structure_missing_fields=[]`、AI判定 `WAIT_FOR_SWEEP` で、位置フィルターと市場構造データが実運用ラインで動作していることを確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: WS清算イベントは時間帯によって0件が続くため、イベント蓄積（ローカル保存）による安定化が次タスク。
+- メモ: OpenAI API を使う手動実行は本件で実施済み（許可取得済み）。
+
+- 日時: 2026-03-10 15:42 JST
+- 実施内容: `NEXT_TASK` の実行を進め、`.venv312` に `websocket-client` を導入した。Binance REST 側（OI/板/CVD材料）の取得は実データで成功を確認した。WS清算イベントは0件継続だったため、`!forceOrder@arr` フォールバックと SSL 検証失敗時の接続フォールバックを追加して取りこぼし耐性を上げた。あわせて通知本文フォールバックの先頭が「方向」ではなく「位置評価」になることをローカル生成で確認した。
+- 変更ファイル: `requirements.txt`, `src/data/provider_client/binance_market.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 清算イベントはテスト時点で0件のため、次の本番サイクルで実測確認が必要。`last_result.json` の新項目確認は1サイクル実行後に実施予定。OpenAI API を使う実通信確認はユーザー許可待ち。
+- メモ: `fetch_market_structure` 単体テストで `missing_fields=[]`、`oi_value`・`oi_change_pct`・orderbook件数は取得できた。
+
+- 日時: 2026-03-10 15:15 JST
+- 実施内容: 打ち合わせシートに、今回のブランチ評価として「実用性はかなり上がったが、精度の大幅向上はまだ運用確認待ち」という整理を追記した。期待しすぎず、それでも前進ははっきりしているという温度感でまとめた。
+- 変更ファイル: `打ち合わせシート.md`, `運用資料/progress.md`
+- 未解決事項: 実ログ確認後に、この見立てを「仮評価」から「実績評価」へ更新する必要がある。
+- メモ: 打ち合わせシートの `updated` は `2026-03-10 15:13 JST` に更新済み。
+
+- 日時: 2026-03-10 15:05 JST
+- 実施内容: Obsidian の打ち合わせシートに、今回の「流動性・清算・OI・CVD・板情報対応版」実装の報告を追記した。内容は技術ログではなく、今の状況・現在の動向・今後のやるべきことに分けて、位置フィルター化の意味が追いやすい形へ整理した。
+- 変更ファイル: `打ち合わせシート.md`, `運用資料/progress.md`
+- 未解決事項: 打ち合わせシート上の今後のやるべきことは、次回の本番サイクル確認後に進捗反映が必要。
+- メモ: Obsidian ノートの `updated` は `2026-03-10 14:57 JST` に更新済み。
+
+- 日時: 2026-03-10 14:57 JST
+- 実施内容: 無料API前提の「流動性・清算・板情報対応版」を実装した。MEXCベースの既存判定は維持しつつ、Binance公開APIを使う市場構造取得層、流動性・清算クラスター・OI/CVD・板の分析モジュール、位置フィルターによる `prelabel` / `location_risk` / `risk_flags`、通知・要約・CSV・バックテスト追従を追加した。清算は有料ヒートマップではなく、直近の清算イベント集計による近似実装にした。
+- 変更ファイル: `main.py`, `config.py`, `requirements.txt`, `.env.example`, `README.md`, `backtest/runner.py`, `prompts/advice_prompt.md`, `prompts/summary_prompt.md`, `src/data/exchange_fetcher.py`, `src/data/provider_client/binance_market.py`, `src/analysis/liquidity.py`, `src/analysis/liquidation.py`, `src/analysis/oi_cvd.py`, `src/analysis/orderbook.py`, `src/analysis/position_risk.py`, `src/ai/advice.py`, `src/ai/summary.py`, `src/notification/trigger.py`, `src/storage/csv_logger.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: Binanceの清算イベント取得は `websocket-client` 導入後に本番環境で実データ確認が必要。OpenAI API を使う実通信確認は、許可をもらってから行う。
+- メモ: 構文チェックは `.venv312/bin/python -m compileall .` で通過。位置判定モジュールの単体サンプル実行でも `prelabel` と `risk_flags` の出力を確認した。
+
 - 日時: 2026-03-10 13:48 JST
 - 実施内容: 他プロジェクトでも使い回せるよう、`Global_BOX` に打ち合わせノート共通テンプレートを新規作成し、`AGENTS_TEMPLATE.md` に打ち合わせノートの運用ルールを追加した。今後は各案件で保存先だけ決めれば、同じ型をそのまま導入できる状態にした。
 - 変更ファイル: `Global_BOX/AGENTS_TEMPLATE.md`, `Global_BOX/打ち合わせノートテンプレート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`

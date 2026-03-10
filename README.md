@@ -18,3 +18,4 @@ cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
 
 ## 補足
 - 運用メモ・手順書は `運用資料/` にあります。
+- 市場構造の補助データとして Binance の公開APIも使います。

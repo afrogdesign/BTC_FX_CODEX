@@ -3,3 +3,4 @@ pandas>=2.2.0
 requests>=2.32.0
 schedule>=1.2.0
 openai>=1.40.0
+websocket-client>=1.8.0

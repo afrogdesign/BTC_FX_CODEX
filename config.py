@@ -53,6 +53,10 @@ def _coerce_value(key: str, value: str) -> Any:
         "ALERT_COOLDOWN_MINUTES",
         "HEALTH_CHECK_MAX_HOURS",
         "SERVER_TIME_TOLERANCE_SEC",
+        "BINANCE_OI_LIMIT",
+        "BINANCE_TAKER_LIMIT",
+        "BINANCE_ORDERBOOK_LIMIT",
+        "BINANCE_LIQUIDATION_MAX_EVENTS",
     }
     float_keys = {
         "REQUEST_INTERVAL_SEC",
@@ -64,6 +68,10 @@ def _coerce_value(key: str, value: str) -> Any:
         "FUNDING_SHORT_PROHIBITED",
         "FUNDING_LONG_WARNING",
         "FUNDING_LONG_PROHIBITED",
+        "BINANCE_LIQUIDATION_LOOKBACK_SEC",
+        "LIQUIDITY_EQUAL_THRESHOLD_PCT",
+        "POSITION_RISK_HIGH_THRESHOLD",
+        "POSITION_RISK_MEDIUM_THRESHOLD",
     }
     bool_keys = {"AI_CACHE_ENABLED", "DRYRUN_MODE"}
 
@@ -129,7 +137,13 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         merged[key] = _coerce_value(key, value)
 
     for key, value in os.environ.items():
-        if key in file_env or key in REQUIRED_KEYS or key.startswith("MEXC_") or key.startswith("OPENAI_"):
+        if (
+            key in file_env
+            or key in REQUIRED_KEYS
+            or key.startswith("MEXC_")
+            or key.startswith("OPENAI_")
+            or key.startswith("BINANCE_")
+        ):
             merged[key] = _coerce_value(key, value)
 
     missing = [key for key in REQUIRED_KEYS if not str(merged.get(key, "")).strip()]
@@ -183,6 +197,19 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "ALERT_COOLDOWN_MINUTES": 60,
         "DRYRUN_MODE": False,
         "SERVER_TIME_TOLERANCE_SEC": 2,
+        "BINANCE_BASE_URL": "https://fapi.binance.com",
+        "BINANCE_WS_URL": "wss://fstream.binance.com/ws",
+        "BINANCE_SYMBOL": "BTCUSDT",
+        "BINANCE_OI_PERIOD": "5m",
+        "BINANCE_OI_LIMIT": 12,
+        "BINANCE_TAKER_PERIOD": "5m",
+        "BINANCE_TAKER_LIMIT": 12,
+        "BINANCE_ORDERBOOK_LIMIT": 100,
+        "BINANCE_LIQUIDATION_LOOKBACK_SEC": 4.0,
+        "BINANCE_LIQUIDATION_MAX_EVENTS": 40,
+        "LIQUIDITY_EQUAL_THRESHOLD_PCT": 0.0008,
+        "POSITION_RISK_HIGH_THRESHOLD": 70.0,
+        "POSITION_RISK_MEDIUM_THRESHOLD": 45.0,
     }
 
     for key, value in defaults.items():

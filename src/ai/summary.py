@@ -70,6 +70,8 @@ def _label_ai_decision(value: Any) -> str:
         "SHORT": "ショート寄り",
         "WAIT": "様子見",
         "NO_TRADE": "見送り",
+        "WAIT_FOR_SWEEP": "Sweep待ち",
+        "WAIT_FOR_BREAK_RETEST": "ブレイク後の押し戻り待ち",
     }
     return mapping.get(str(value).upper(), str(value))
 
@@ -109,6 +111,8 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         if notes:
             ai_line += f" 補足: {notes}"
 
+    prelabel = result.get("prelabel", "RISKY_ENTRY")
+    location_risk = result.get("location_risk")
     long_score = result.get("long_display_score")
     short_score = result.get("short_display_score")
     gap = result.get("score_gap")
@@ -120,7 +124,8 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     short_setup = _label_setup(result.get("short_setup", {}).get("status"))
 
     return (
-        f"【結論】今回は {_label_bias(result.get('bias'))} の見方です。"
+        f"【結論】現在位置の評価は {prelabel} です。位置リスクは {location_risk} で、"
+        f"方向感は {_label_bias(result.get('bias'))} です。"
         f"局面は「{_label_phase(result.get('phase'))}」で、信頼度は {confidence} です。\n"
         f"【機械判定】機械判定の点数はロング {long_score}、ショート {short_score} で、差は {gap} です。"
         f"相場環境は「{_label_regime(result.get('market_regime'))}」と見ています。"
@@ -131,7 +136,8 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         f"ATR比は値動きの荒さ、出来高比は売買の勢いを見る目安です。\n"
         f"【セットアップ】ロング側は「{long_setup}」、ショート側は「{short_setup}」です。\n"
         f"【AI】{ai_line}\n"
-        f"【注意点】{_format_flags(result.get('no_trade_flags', []))}"
+        f"【注意点】{_format_flags(result.get('no_trade_flags', []))} "
+        f"位置フラグ: {', '.join(result.get('risk_flags', [])) or '特になし'}"
     )
 
 
@@ -144,7 +150,10 @@ def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
 
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
-    subject = f"[BTC監視] {jst_ts} {result.get('bias')} / Confidence {result.get('confidence')}"
+    subject = (
+        f"[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
+        f"{result.get('bias')} / Confidence {result.get('confidence')}"
+    )
     ai_advice = result.get("ai_advice")
     if ai_advice is None:
         subject += " ⚠️ AI審査:機械判定のみ"

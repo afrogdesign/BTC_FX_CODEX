@@ -37,20 +37,27 @@ def _extract_json(text: str) -> dict[str, Any] | None:
 
 
 def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
-    decision = str(payload.get("decision", "WAIT")).upper()
-    if decision not in {"LONG", "SHORT", "WAIT", "NO_TRADE"}:
+    decision = str(payload.get("decision") or payload.get("final_action", "WAIT")).upper()
+    if decision not in {"LONG", "SHORT", "WAIT", "NO_TRADE", "WAIT_FOR_SWEEP", "WAIT_FOR_BREAK_RETEST"}:
         decision = "WAIT"
-    quality = str(payload.get("quality", "C")).upper()
+    quality = str(payload.get("quality", payload.get("entry_position_quality", "C"))).upper()
     if quality not in {"A", "B", "C"}:
-        quality = "C"
-    confidence = float(payload.get("confidence", 0.0))
+        quality = {"GOOD": "A", "OK": "B", "BAD": "C"}.get(quality, "C")
+    confidence_raw = float(payload.get("confidence", 0.0))
+    confidence = confidence_raw / 100.0 if confidence_raw > 1 else confidence_raw
     confidence = max(0.0, min(1.0, confidence))
-    notes = str(payload.get("notes", "")).strip()[:200]
+    notes = str(payload.get("notes") or payload.get("primary_reason", "")).strip()[:200]
     return {
         "decision": decision,
+        "final_action": decision,
         "quality": quality,
         "confidence": round(confidence, 2),
         "notes": notes,
+        "primary_reason": str(payload.get("primary_reason", notes)).strip()[:200],
+        "market_interpretation": str(payload.get("market_interpretation", "")).strip()[:200],
+        "entry_position_quality": str(payload.get("entry_position_quality", "")).strip()[:50],
+        "warnings": payload.get("warnings", []) if isinstance(payload.get("warnings"), list) else [],
+        "next_condition": str(payload.get("next_condition", "")).strip()[:200],
     }
 
 

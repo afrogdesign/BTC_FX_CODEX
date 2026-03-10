@@ -8,7 +8,12 @@ import pandas as pd
 
 from config import load_config
 from src.analysis.confidence import compute_confidence
+from src.analysis.liquidation import analyze_liquidation_clusters
+from src.analysis.liquidity import analyze_liquidity
+from src.analysis.oi_cvd import analyze_oi_cvd
+from src.analysis.orderbook import analyze_orderbook
 from src.analysis.phase import determine_phase
+from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
 from src.analysis.regime import classify_market_regime
 from src.analysis.rr import build_setup, choose_primary_setup
 from src.analysis.scoring import compute_scores
@@ -176,6 +181,33 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             cfg,
         )
         bias = scores["bias"]
+        liquidity_info = analyze_liquidity(
+            df_15m=part_15m,
+            swings=tf_15m["swings"],
+            price=price,
+            atr=atr,
+            equal_threshold_pct=cfg.LIQUIDITY_EQUAL_THRESHOLD_PCT,
+        )
+        liquidation_info = analyze_liquidation_clusters(price=price, atr=atr, liquidation_events=None)
+        oi_cvd_info = analyze_oi_cvd(
+            oi_value=None,
+            oi_change_pct=None,
+            oi_trend_values=None,
+            cvd_series=None,
+            price_series=[float(v) for v in part_15m["close"].tail(12).tolist()],
+        )
+        orderbook_info = analyze_orderbook(bids=None, asks=None, price=price)
+        position_risk = evaluate_position_risk(
+            bias=bias,
+            price=price,
+            atr=atr,
+            liquidity_info=liquidity_info,
+            liquidation_info=liquidation_info,
+            oi_cvd_info=oi_cvd_info,
+            orderbook_info=orderbook_info,
+            high_threshold=cfg.POSITION_RISK_HIGH_THRESHOLD,
+            medium_threshold=cfg.POSITION_RISK_MEDIUM_THRESHOLD,
+        )
         phase = determine_phase(
             bias=bias,
             market_regime=regime["market_regime"],
@@ -201,7 +233,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
                 "rr_estimate": rr_conf,
                 "opposite_gap_atr": opposite_gap / atr if atr > 0 and opposite_gap != float("inf") else 10.0,
                 "critical_zone": critical_zone,
-                "warning_flags": scores["warning_flags"],
+                "warning_flags": scores["warning_flags"] + position_risk["risk_flags"],
             },
             cfg,
         )
@@ -225,6 +257,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             trigger_ready=True,
             warning_count=len(scores["warning_flags"]),
         )
+        long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
         short_setup, _ = build_setup(
             side="short",
             price=price,
@@ -244,12 +277,16 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             trigger_ready=True,
             warning_count=len(scores["warning_flags"]),
         )
+        short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
         primary_side, primary_status = choose_primary_setup(bias, long_setup, short_setup)
         results.append(
             {
                 "timestamp": current_ts,
                 "price": price,
                 "bias": bias,
+                "prelabel": position_risk["prelabel"],
+                "location_risk": position_risk["location_risk"],
+                "risk_flags": position_risk["risk_flags"],
                 "phase": phase,
                 "confidence": confidence,
                 "market_regime": regime["market_regime"],

@@ -11,6 +11,11 @@ from zoneinfo import ZoneInfo
 from config import load_config
 from src.ai.advice import request_ai_advice
 from src.ai.summary import build_summary_body, build_summary_subject
+from src.analysis.liquidation import analyze_liquidation_clusters
+from src.analysis.liquidity import analyze_liquidity
+from src.analysis.oi_cvd import analyze_oi_cvd
+from src.analysis.orderbook import analyze_orderbook
+from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
 from src.analysis.confidence import compute_confidence, compute_machine_agreement
 from src.analysis.phase import determine_phase
 from src.analysis.qualitative import build_qualitative_context
@@ -25,6 +30,7 @@ from src.analysis.support_resistance import (
     zone_gap_to_opposite,
 )
 from src.data.fetcher import DataFetchError, FetchConfig, fetch_funding_rate, fetch_klines, get_server_time_ms
+from src.data.exchange_fetcher import fetch_market_structure
 from src.data.validator import validate_klines
 from src.indicators.atr import calculate_atr, calculate_atr_ratio
 from src.indicators.ema import calculate_ema, get_ema20_slope, get_ema_alignment
@@ -63,6 +69,12 @@ def _error_log(base_dir: Path, title: str, details: str) -> None:
 
 def _round2(value: float) -> float:
     return round(float(value), 2)
+
+
+def _round_optional(value: float | None, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
 
 
 def _prepare_tf(df, cfg, swing_n: int) -> dict[str, Any]:
@@ -143,6 +155,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     atr_15m = float(tf_15m["atr"].iloc[-1])
     atr_ratio = calculate_atr_ratio(tf_15m["atr"], 50)
     funding_rate = fetch_funding_rate(fetch_cfg)
+    market_structure = fetch_market_structure(cfg)
 
     support_zones, resistance_zones = build_support_resistance(
         {"4h": {"df": df_4h, "swings": tf_4h["swings"]}, "1h": {"df": df_1h, "swings": tf_1h["swings"]}, "15m": {"df": df_15m, "swings": tf_15m["swings"]}},
@@ -238,6 +251,42 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     bias = score_info["bias"]
 
+    liquidity_info = analyze_liquidity(
+        df_15m=df_15m,
+        swings=tf_15m["swings"],
+        price=price,
+        atr=atr_15m,
+        equal_threshold_pct=cfg.LIQUIDITY_EQUAL_THRESHOLD_PCT,
+    )
+    liquidation_info = analyze_liquidation_clusters(
+        price=price,
+        atr=atr_15m,
+        liquidation_events=market_structure.liquidation_events,
+    )
+    oi_cvd_info = analyze_oi_cvd(
+        oi_value=market_structure.oi_value,
+        oi_change_pct=market_structure.oi_change_pct,
+        oi_trend_values=market_structure.oi_trend_values,
+        cvd_series=market_structure.cvd_series,
+        price_series=[float(v) for v in df_15m["close"].tail(12).tolist()],
+    )
+    orderbook_info = analyze_orderbook(
+        bids=market_structure.orderbook_bids,
+        asks=market_structure.orderbook_asks,
+        price=price,
+    )
+    position_risk = evaluate_position_risk(
+        bias=bias,
+        price=price,
+        atr=atr_15m,
+        liquidity_info=liquidity_info,
+        liquidation_info=liquidation_info,
+        oi_cvd_info=oi_cvd_info,
+        orderbook_info=orderbook_info,
+        high_threshold=cfg.POSITION_RISK_HIGH_THRESHOLD,
+        medium_threshold=cfg.POSITION_RISK_MEDIUM_THRESHOLD,
+    )
+
     pullback_depth_atr = abs(price - float(tf_4h["ema_mid"].iloc[-1])) / max(float(tf_4h["atr"].iloc[-1]), 1e-9)
     reversal_risk_flag = (
         float(tf_15m["rsi"].iloc[-1]) > 75
@@ -278,7 +327,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "rr_estimate": rr_for_conf,
             "opposite_gap_atr": opposite_gap_atr,
             "critical_zone": critical_zone,
-            "warning_flags": score_info["warning_flags"],
+            "warning_flags": score_info["warning_flags"] + position_risk["risk_flags"],
         },
         cfg,
     )
@@ -323,8 +372,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         trigger_ready=trigger_down,
         warning_count=len(score_info["warning_flags"]),
     )
+    long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
+    short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
     primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
-    all_flags = sorted(set(score_info["no_trade_flags"] + long_flags + short_flags))
+    all_flags = sorted(set(score_info["no_trade_flags"] + long_flags + short_flags + position_risk["risk_flags"]))
     if critical_zone:
         all_flags.append("Critical_zone_warning")
         all_flags = sorted(set(all_flags))
@@ -368,6 +419,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "score_gap": score_info["score_gap"],
         "confidence": confidence,
         "agreement_with_machine": agreement_with_machine,
+        "prelabel": position_risk["prelabel"],
+        "location_risk": position_risk["location_risk"],
         "critical_zone": critical_zone,
         "support_zones": support_zones,
         "resistance_zones": resistance_zones,
@@ -378,11 +431,34 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "funding_rate": _round2(funding_rate),
         "atr_ratio": _round2(atr_ratio),
         "volume_ratio": _round2(float(tf_15m["volume_ratio"].iloc[-1])),
+        "liquidity_above": _round_optional(liquidity_info.get("liquidity_above")),
+        "liquidity_below": _round_optional(liquidity_info.get("liquidity_below")),
+        "nearest_liquidity_above_price": _round_optional(liquidity_info.get("nearest_liquidity_above_price")),
+        "nearest_liquidity_below_price": _round_optional(liquidity_info.get("nearest_liquidity_below_price")),
+        "liquidity_swept_recently": liquidity_info.get("liquidity_swept_recently"),
+        "liquidation_above": _round_optional(liquidation_info.get("liquidation_above"), 4),
+        "liquidation_below": _round_optional(liquidation_info.get("liquidation_below"), 4),
+        "largest_liquidation_price": _round_optional(liquidation_info.get("largest_liquidation_price")),
+        "distance_to_largest_liquidation": _round_optional(liquidation_info.get("distance_to_largest_liquidation")),
+        "liquidation_density_above": _round_optional(liquidation_info.get("liquidation_density_above"), 4),
+        "liquidation_density_below": _round_optional(liquidation_info.get("liquidation_density_below"), 4),
+        "oi_value": _round_optional(oi_cvd_info.get("oi_value"), 4),
+        "oi_change_pct": _round_optional(oi_cvd_info.get("oi_change_pct")),
+        "cvd_value": _round_optional(oi_cvd_info.get("cvd_value"), 4),
+        "cvd_slope": _round_optional(oi_cvd_info.get("cvd_slope"), 4),
+        "cvd_price_divergence": oi_cvd_info.get("cvd_price_divergence"),
+        "orderbook_bid_wall_price": _round_optional(orderbook_info.get("orderbook_bid_wall_price")),
+        "orderbook_ask_wall_price": _round_optional(orderbook_info.get("orderbook_ask_wall_price")),
+        "orderbook_bid_wall_size": _round_optional(orderbook_info.get("orderbook_bid_wall_size"), 4),
+        "orderbook_ask_wall_size": _round_optional(orderbook_info.get("orderbook_ask_wall_size"), 4),
+        "orderbook_bias": orderbook_info.get("orderbook_bias"),
         "rr_estimate": _round2(
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
         "no_trade_flags": all_flags,
+        "risk_flags": position_risk["risk_flags"],
+        "market_structure_missing_fields": market_structure.missing_fields or [],
         "reason_for_notification": [],
     }
 
