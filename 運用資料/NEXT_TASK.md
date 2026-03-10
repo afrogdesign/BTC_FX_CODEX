@@ -2,7 +2,7 @@
 
 ## 現在の状況
 - Ver01 は本番運用フェーズで、MBP2020 上の `com.afrog.btc-monitor-ver01` を継続監視する段階。
-- Ver02 の現時点はタグ `v2.1` として固定済み。
+- Ver02 の現時点はタグ `v2.2` として固定予定の内容まで反映済み。
 - Ver02 では、Funding を `raw / % / ラベル` で扱う構成に変更し、判定単位を `%` に統一した。
 - Ver02 のサポレジは、内部計算用 `all zones` と表示用（近い順 / 強度順）を分離した。
 - Ver02 には `signal_tier`（normal / strong_machine / strong_ai_confirmed）と `signal_badge`（🟡/🔥）を実装した。
@@ -13,6 +13,7 @@
 - 清算イベントは `logs/cache/` へ蓄積する近似実装で運用中。効果検証はこれから。
 - 単体テスト（`unittest`）は 7 件追加済みで、現時点は全件成功。
 - 打ち合わせノート参照先、ブランチ運用ルール、タグ運用ルール、Obsidian 側の `NEXT_TASK.md` リンク整備は完了済み。
+- プロジェクト用 `AGENTS.md` は `btc_monitor/AGENTS.md` へ移動済み。
 
 ## 次のタスク
 - 1. Ver02 通知を 3〜5 サイクル観察して、`location_risk` / `risk_flags` / `signal_tier` の出方が強すぎないか確認する。

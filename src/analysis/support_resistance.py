@@ -82,6 +82,16 @@ def build_support_resistance(
     per_tf_inputs: dict[str, dict[str, Any]],
     atr_value: float,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    all_support, all_resistance = build_all_support_resistance(per_tf_inputs, atr_value)
+    top_support = sorted(all_support, key=lambda z: z["strength"], reverse=True)[:3]
+    top_resistance = sorted(all_resistance, key=lambda z: z["strength"], reverse=True)[:3]
+    return top_support, top_resistance
+
+
+def build_all_support_resistance(
+    per_tf_inputs: dict[str, dict[str, Any]],
+    atr_value: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     support_all: list[dict[str, Any]] = []
     resistance_all: list[dict[str, Any]] = []
     for tf, payload in per_tf_inputs.items():
@@ -93,9 +103,6 @@ def build_support_resistance(
 
     merged_support = merge_nearby_zones(support_all, atr_value)
     merged_resistance = merge_nearby_zones(resistance_all, atr_value)
-
-    merged_support = sorted(merged_support, key=lambda z: z["strength"], reverse=True)[:3]
-    merged_resistance = sorted(merged_resistance, key=lambda z: z["strength"], reverse=True)[:3]
 
     for zones in (merged_support, merged_resistance):
         for z in zones:

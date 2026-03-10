@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-10 22:58 JST
+- 実施内容: Ver02 の現時点を `v2.2` として固定する前提で、そこそこの改善を一式反映した。主な内容は、(1) Funding 閾値と表示を `%` 単位で統一、(2) `signal_tier` / `signal_badge` と昇格通知ロジックを追加、(3) サポレジを内部計算用と表示用に分離、(4) 件名・本文の Funding 表示と強条件バッジ表示を改善、(5) CSV/JSON とバックテストを新仕様へ追従、(6) `unittest` 7件を追加して全件成功、(7) プロジェクト用 `AGENTS.md` を `btc_monitor/` 配下へ移動、である。
+- 変更ファイル: `main.py`, `src/analysis/funding.py`, `src/analysis/signal_tier.py`, `src/analysis/support_resistance.py`, `src/notification/trigger.py`, `src/ai/summary.py`, `src/storage/csv_logger.py`, `backtest/runner.py`, `prompts/summary_prompt.md`, `.env.example`, `README.md`, `tests/test_funding_and_signal.py`, `tests/test_notification_trigger.py`, `tests/test_support_resistance.py`, `tests/test_summary_format.py`, `AGENTS.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 強条件バッジ（🟡 / 🔥）の実運用発火確認と、実メール文面の最終微調整は継続。
+- メモ: 確認は `./.venv312/bin/python -m unittest discover -s tests -v` で実施し、7件すべて成功。
+
 - 日時: 2026-03-10 21:55 JST
 - 実施内容: Ver02 の現時点コミットをタグ `v2.1` として固定し、GitHub へ push した。`v2.1` の主な内容は、Funding 表示の `%` 統一、サポレジの近接順表示、距離表示、TP順整列、`signal_tier` / `signal_badge` 追加、通知昇格トリガー対応、件名・本文の見せ方改善、および関連テスト追加である。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`

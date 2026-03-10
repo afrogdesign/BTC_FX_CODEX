@@ -8,6 +8,7 @@ import pandas as pd
 
 from config import load_config
 from src.analysis.confidence import compute_confidence
+from src.analysis.funding import funding_rate_raw_to_pct
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
 from src.analysis.oi_cvd import analyze_oi_cvd
@@ -18,7 +19,12 @@ from src.analysis.regime import classify_market_regime
 from src.analysis.rr import build_setup, choose_primary_setup
 from src.analysis.scoring import compute_scores
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
-from src.analysis.support_resistance import build_support_resistance, detect_critical_zone, nearest_zone_distance, zone_gap_to_opposite
+from src.analysis.support_resistance import (
+    build_all_support_resistance,
+    detect_critical_zone,
+    nearest_zone_distance,
+    zone_gap_to_opposite,
+)
 from src.indicators.atr import calculate_atr, calculate_atr_ratio
 from src.indicators.ema import calculate_ema, get_ema20_slope, get_ema_alignment
 from src.indicators.rsi import calculate_rsi
@@ -91,12 +97,13 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
         price = float(part_15m["close"].iloc[-1])
         atr = float(tf_15m["atr"].iloc[-1])
         atr_ratio = calculate_atr_ratio(tf_15m["atr"], 50)
+        funding_rate_pct = funding_rate_raw_to_pct(0.0)
 
-        support_zones, resistance_zones = build_support_resistance(
+        all_support_zones, all_resistance_zones = build_all_support_resistance(
             {"4h": {"df": part_4h, "swings": tf_4h["swings"]}, "1h": {"df": part_1h, "swings": tf_1h["swings"]}, "15m": {"df": part_15m, "swings": tf_15m["swings"]}},
             atr,
         )
-        critical_zone = detect_critical_zone(price, support_zones, resistance_zones)
+        critical_zone = detect_critical_zone(price, all_support_zones, all_resistance_zones)
 
         regime = classify_market_regime(
             ema_alignment_4h=tf_4h["ema_alignment"],
@@ -110,8 +117,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             ema50_series_4h=[float(v) for v in tf_4h["ema_mid"].tail(10).tolist()],
             atr_4h=float(tf_4h["atr"].iloc[-1]),
         )
-        near_support = nearest_zone_distance(price, support_zones) <= atr * 0.5
-        near_resistance = nearest_zone_distance(price, resistance_zones) <= atr * 0.5
+        near_support = nearest_zone_distance(price, all_support_zones) <= atr * 0.5
+        near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr * 0.5
         recent_high = float(part_15m["high"].tail(20).max())
         recent_low = float(part_15m["low"].tail(20).min())
         breakout_up = price > recent_high
@@ -122,8 +129,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             side="long",
             price=price,
             atr=atr,
-            support_zones=support_zones,
-            resistance_zones=resistance_zones,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
             sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
             min_rr_ratio=0.0,
             confidence=100,
@@ -131,7 +138,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             atr_ratio=atr_ratio,
             atr_ratio_min=0.0,
             atr_ratio_max=999.0,
-            funding_rate=0.0,
+            funding_rate=funding_rate_pct,
             funding_warning=999.0,
             funding_prohibited=999.0,
             trigger_ready=False,
@@ -141,8 +148,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             side="short",
             price=price,
             atr=atr,
-            support_zones=support_zones,
-            resistance_zones=resistance_zones,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
             sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
             min_rr_ratio=0.0,
             confidence=100,
@@ -150,7 +157,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             atr_ratio=atr_ratio,
             atr_ratio_min=0.0,
             atr_ratio_max=999.0,
-            funding_rate=0.0,
+            funding_rate=funding_rate_pct,
             funding_warning=-999.0,
             funding_prohibited=-999.0,
             trigger_ready=False,
@@ -169,7 +176,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
                 "rsi_15m": float(tf_15m["rsi"].iloc[-1]),
                 "volume_ratio": float(tf_15m["volume_ratio"].iloc[-1]),
                 "atr_ratio": atr_ratio,
-                "funding_rate": 0.0,
+                "funding_rate": funding_rate_pct,
                 "rr_long": pre_long["rr_estimate"],
                 "rr_short": pre_short["rr_estimate"],
                 "near_support": near_support,
@@ -219,7 +226,12 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             ema200=float(tf_4h["ema_slow"].iloc[-1]),
         )
         rr_conf = pre_long["rr_estimate"] if bias == "long" else pre_short["rr_estimate"]
-        opposite_gap = zone_gap_to_opposite(price, bias if bias in {"long", "short"} else "long", support_zones, resistance_zones)
+        opposite_gap = zone_gap_to_opposite(
+            price,
+            bias if bias in {"long", "short"} else "long",
+            all_support_zones,
+            all_resistance_zones,
+        )
         confidence = compute_confidence(
             {
                 "bias": bias,
@@ -242,8 +254,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             side="long",
             price=price,
             atr=atr,
-            support_zones=support_zones,
-            resistance_zones=resistance_zones,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
             sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
             min_rr_ratio=cfg.MIN_RR_RATIO,
             confidence=confidence,
@@ -251,7 +263,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             atr_ratio=atr_ratio,
             atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
             atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-            funding_rate=0.0,
+            funding_rate=funding_rate_pct,
             funding_warning=999.0,
             funding_prohibited=999.0,
             trigger_ready=True,
@@ -262,8 +274,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             side="short",
             price=price,
             atr=atr,
-            support_zones=support_zones,
-            resistance_zones=resistance_zones,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
             sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
             min_rr_ratio=cfg.MIN_RR_RATIO,
             confidence=confidence,
@@ -271,7 +283,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             atr_ratio=atr_ratio,
             atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
             atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-            funding_rate=0.0,
+            funding_rate=funding_rate_pct,
             funding_warning=-999.0,
             funding_prohibited=-999.0,
             trigger_ready=True,

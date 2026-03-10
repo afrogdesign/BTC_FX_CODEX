@@ -13,9 +13,11 @@ from src.ai.advice import request_ai_advice
 from src.ai.summary import build_summary_body, build_summary_subject
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
+from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
+from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
 from src.analysis.confidence import compute_confidence, compute_machine_agreement
 from src.analysis.phase import determine_phase
 from src.analysis.qualitative import build_qualitative_context
@@ -24,6 +26,7 @@ from src.analysis.rr import build_setup, choose_primary_setup
 from src.analysis.scoring import compute_scores
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
 from src.analysis.support_resistance import (
+    build_all_support_resistance,
     build_support_resistance,
     detect_critical_zone,
     nearest_zone_distance,
@@ -155,16 +158,28 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     price = float(df_15m["close"].iloc[-1])
     atr_15m = float(tf_15m["atr"].iloc[-1])
     atr_ratio = calculate_atr_ratio(tf_15m["atr"], 50)
-    funding_rate = fetch_funding_rate(fetch_cfg)
+    funding_rate_raw = fetch_funding_rate(fetch_cfg)
+    funding_rate_pct = funding_rate_raw_to_pct(funding_rate_raw)
+    funding_label = funding_rate_label(
+        funding_rate_pct=funding_rate_pct,
+        long_warning_pct=cfg.FUNDING_LONG_WARNING,
+        long_prohibited_pct=cfg.FUNDING_LONG_PROHIBITED,
+        short_warning_pct=cfg.FUNDING_SHORT_WARNING,
+        short_prohibited_pct=cfg.FUNDING_SHORT_PROHIBITED,
+    )
+    funding_display = f"{funding_label} ({format_funding_pct(funding_rate_pct)})"
     market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
-    support_zones, resistance_zones = build_support_resistance(
-        {"4h": {"df": df_4h, "swings": tf_4h["swings"]}, "1h": {"df": df_1h, "swings": tf_1h["swings"]}, "15m": {"df": df_15m, "swings": tf_15m["swings"]}},
-        atr_15m,
-    )
-    support_zones_nearest = sort_zones_by_distance(price, support_zones)
-    resistance_zones_nearest = sort_zones_by_distance(price, resistance_zones)
-    critical_zone = detect_critical_zone(price, support_zones, resistance_zones)
+    per_tf_inputs = {
+        "4h": {"df": df_4h, "swings": tf_4h["swings"]},
+        "1h": {"df": df_1h, "swings": tf_1h["swings"]},
+        "15m": {"df": df_15m, "swings": tf_15m["swings"]},
+    }
+    all_support_zones, all_resistance_zones = build_all_support_resistance(per_tf_inputs, atr_15m)
+    support_zones, resistance_zones = build_support_resistance(per_tf_inputs, atr_15m)
+    support_zones_nearest = sort_zones_by_distance(price, all_support_zones)[:3]
+    resistance_zones_nearest = sort_zones_by_distance(price, all_resistance_zones)[:3]
+    critical_zone = detect_critical_zone(price, all_support_zones, all_resistance_zones)
 
     regime_info = classify_market_regime(
         ema_alignment_4h=tf_4h["ema_alignment"],
@@ -181,8 +196,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     market_regime = regime_info["market_regime"]
     transition_direction = regime_info["transition_direction"]
 
-    near_support = nearest_zone_distance(price, support_zones) <= atr_15m * 0.5
-    near_resistance = nearest_zone_distance(price, resistance_zones) <= atr_15m * 0.5
+    near_support = nearest_zone_distance(price, all_support_zones) <= atr_15m * 0.5
+    near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr_15m * 0.5
     recent_high = float(df_15m["high"].tail(20).max())
     recent_low = float(df_15m["low"].tail(20).min())
     breakout_up = price > recent_high
@@ -194,8 +209,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         side="long",
         price=price,
         atr=atr_15m,
-        support_zones=support_zones,
-        resistance_zones=resistance_zones,
+        support_zones=all_support_zones,
+        resistance_zones=all_resistance_zones,
         sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
         min_rr_ratio=0.0,
         confidence=100,
@@ -203,7 +218,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         atr_ratio=atr_ratio,
         atr_ratio_min=0.0,
         atr_ratio_max=999.0,
-        funding_rate=funding_rate,
+        funding_rate=funding_rate_pct,
         funding_warning=999.0,
         funding_prohibited=999.0,
         trigger_ready=False,
@@ -213,8 +228,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         side="short",
         price=price,
         atr=atr_15m,
-        support_zones=support_zones,
-        resistance_zones=resistance_zones,
+        support_zones=all_support_zones,
+        resistance_zones=all_resistance_zones,
         sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
         min_rr_ratio=0.0,
         confidence=100,
@@ -222,7 +237,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         atr_ratio=atr_ratio,
         atr_ratio_min=0.0,
         atr_ratio_max=999.0,
-        funding_rate=funding_rate,
+        funding_rate=funding_rate_pct,
         funding_warning=-999.0,
         funding_prohibited=-999.0,
         trigger_ready=False,
@@ -241,7 +256,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "rsi_15m": float(tf_15m["rsi"].iloc[-1]),
             "volume_ratio": float(tf_15m["volume_ratio"].iloc[-1]),
             "atr_ratio": atr_ratio,
-            "funding_rate": funding_rate,
+            "funding_rate": funding_rate_pct,
             "rr_long": pre_long_setup["rr_estimate"],
             "rr_short": pre_short_setup["rr_estimate"],
             "near_support": near_support,
@@ -314,7 +329,12 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         if bias == "short"
         else max(pre_long_setup["rr_estimate"], pre_short_setup["rr_estimate"])
     )
-    opposite_gap = zone_gap_to_opposite(price, bias if bias in {"long", "short"} else "long", support_zones, resistance_zones)
+    opposite_gap = zone_gap_to_opposite(
+        price,
+        bias if bias in {"long", "short"} else "long",
+        all_support_zones,
+        all_resistance_zones,
+    )
     opposite_gap_atr = opposite_gap / atr_15m if atr_15m > 0 and opposite_gap != float("inf") else 10.0
 
     confidence = compute_confidence(
@@ -341,8 +361,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         side="long",
         price=price,
         atr=atr_15m,
-        support_zones=support_zones,
-        resistance_zones=resistance_zones,
+        support_zones=all_support_zones,
+        resistance_zones=all_resistance_zones,
         sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
         min_rr_ratio=cfg.MIN_RR_RATIO,
         confidence=confidence,
@@ -350,7 +370,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         atr_ratio=atr_ratio,
         atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
         atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate,
+        funding_rate=funding_rate_pct,
         funding_warning=cfg.FUNDING_LONG_WARNING,
         funding_prohibited=cfg.FUNDING_LONG_PROHIBITED,
         trigger_ready=trigger_up,
@@ -360,8 +380,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         side="short",
         price=price,
         atr=atr_15m,
-        support_zones=support_zones,
-        resistance_zones=resistance_zones,
+        support_zones=all_support_zones,
+        resistance_zones=all_resistance_zones,
         sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
         min_rr_ratio=cfg.MIN_RR_RATIO,
         confidence=confidence,
@@ -369,7 +389,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         atr_ratio=atr_ratio,
         atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
         atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate,
+        funding_rate=funding_rate_pct,
         funding_warning=cfg.FUNDING_SHORT_WARNING,
         funding_prohibited=cfg.FUNDING_SHORT_PROHIBITED,
         trigger_ready=trigger_down,
@@ -400,10 +420,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         market_regime=market_regime,
         ema_alignment_4h=tf_4h["ema_alignment"],
         price=price,
-        support_zones=support_zones,
-        resistance_zones=resistance_zones,
+        support_zones=all_support_zones,
+        resistance_zones=all_resistance_zones,
         volume_ratio=float(tf_15m["volume_ratio"].iloc[-1]),
-        funding_rate=funding_rate,
+        funding_rate=funding_rate_pct,
     )
 
     result: dict[str, Any] = {
@@ -431,11 +451,17 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "resistance_zones": resistance_zones_nearest,
         "support_zones_by_strength": support_zones,
         "resistance_zones_by_strength": resistance_zones,
+        "support_zones_all": all_support_zones,
+        "resistance_zones_all": all_resistance_zones,
         "long_setup": long_setup,
         "short_setup": short_setup,
         "primary_setup_side": primary_setup_side,
         "primary_setup_status": primary_setup_status,
-        "funding_rate": _round2(funding_rate),
+        "funding_rate": _round_optional(funding_rate_raw, 8),
+        "funding_rate_raw": _round_optional(funding_rate_raw, 8),
+        "funding_rate_pct": _round_optional(funding_rate_pct, 4),
+        "funding_rate_label": funding_label,
+        "funding_rate_display": funding_display,
         "atr_ratio": _round2(atr_ratio),
         "volume_ratio": _round2(float(tf_15m["volume_ratio"].iloc[-1])),
         "liquidity_above": _round_optional(liquidity_info.get("liquidity_above")),
@@ -463,8 +489,11 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
+        "warning_flags": score_info["warning_flags"],
         "no_trade_flags": all_flags,
         "risk_flags": position_risk["risk_flags"],
+        "signal_tier": "normal",
+        "signal_badge": "",
         "market_structure_missing_fields": market_structure.missing_fields or [],
         "reason_for_notification": [],
     }
@@ -479,6 +508,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         qualitative_payload=qualitative_context,
     )
     result["ai_advice"] = ai_advice
+    result["signal_tier"] = compute_signal_tier(result, cfg)
+    result["signal_badge"] = signal_tier_badge(result["signal_tier"])
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))

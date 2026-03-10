@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from src.analysis.signal_tier import signal_tier_upgraded
+
 
 def _parse_utc(iso_text: str) -> datetime | None:
     if not iso_text:
@@ -80,6 +82,11 @@ def should_notify(
         if prev_agreement != curr_agreement:
             reasons.append("agreement_changed")
 
+    prev_tier = str((last_notified or {}).get("signal_tier", "normal"))
+    curr_tier = str(current.get("signal_tier", "normal"))
+    if signal_tier_upgraded(prev_tier, curr_tier):
+        reasons.append("signal_tier_upgraded")
+
     no_trade_flags = current.get("no_trade_flags", [])
     if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
         return False, []
@@ -92,6 +99,7 @@ def should_notify(
     if last_notified_ts and now_ts:
         cooldown = timedelta(minutes=cfg.ALERT_COOLDOWN_MINUTES)
         if now_ts - last_notified_ts < cooldown:
-            return False, []
+            if "signal_tier_upgraded" not in reasons:
+                return False, []
 
     return True, sorted(set(reasons))

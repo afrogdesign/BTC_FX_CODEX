@@ -106,6 +106,24 @@ def _format_price(value: Any) -> str:
     return f"{price:,.2f}"
 
 
+def _format_pct(value: Any) -> str:
+    try:
+        pct = float(value)
+    except Exception:  # noqa: BLE001
+        return str(value)
+    return f"{pct:+.4f}%"
+
+
+def _signal_intro(result: dict[str, Any]) -> str:
+    tier = str(result.get("signal_tier", "normal"))
+    badge = str(result.get("signal_badge", "")).strip()
+    if not badge:
+        return ""
+    if tier == "strong_ai_confirmed":
+        return f"{badge} 機械判定とAI審査が同方向でそろった強い候補です。"
+    return f"{badge} 条件がそろい始めた場面です。崩れないかを確認しながら追跡します。"
+
+
 def _format_zone_summary(name: str, zones: list[dict[str, Any]]) -> str:
     if not zones:
         return f"{name}は特に抽出できていません。"
@@ -157,15 +175,20 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     gap = result.get("score_gap")
     confidence = result.get("confidence")
     current_price = _format_price(result.get("current_price"))
-    funding = result.get("funding_rate")
+    funding_display = str(result.get("funding_rate_display", "")).strip()
+    if not funding_display:
+        funding_label = str(result.get("funding_rate_label", "ほぼ中立"))
+        funding_pct = _format_pct(result.get("funding_rate_pct", 0.0))
+        funding_display = f"{funding_label} ({funding_pct})"
     atr_ratio = result.get("atr_ratio")
     volume_ratio = result.get("volume_ratio")
     long_setup = result.get("long_setup", {})
     short_setup = result.get("short_setup", {})
     support_text = _format_zone_summary("近いサポート帯", result.get("support_zones", []))
     resistance_text = _format_zone_summary("近いレジスタンス帯", result.get("resistance_zones", []))
+    signal_intro = _signal_intro(result)
 
-    return (
+    body = (
         f"【結論】現在位置の評価は {prelabel} です。位置リスクは {location_risk} で、"
         f"いま入る位置としてはまずこの評価を優先します。信頼度は {confidence} です。\n"
         f"【方向感】方向感は {_label_bias(result.get('bias'))} で、局面は「{_label_phase(result.get('phase'))}」です。\n"
@@ -174,7 +197,7 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         f"時間足ごとの印象は、4時間足が {_label_signal(result.get('signals_4h'))}、"
         f"1時間足が {_label_signal(result.get('signals_1h'))}、"
         f"15分足が {_label_signal(result.get('signals_15m'))} です。\n"
-        f"【環境】現在価格は {current_price} USDT、Funding は {funding}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
+        f"【環境】現在価格は {current_price} USDT、Funding は {funding_display}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
         f"ATR比は値動きの荒さ、出来高比は売買の勢いを見る目安です。"
         f"{support_text} {resistance_text}\n"
         f"【セットアップ】{_format_setup_levels('ロング側', long_setup, 'long')} "
@@ -183,6 +206,9 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         f"【注意点】{_format_flags(result.get('no_trade_flags', []))} "
         f"位置フラグ: {', '.join(result.get('risk_flags', [])) or '特になし'}"
     )
+    if signal_intro:
+        return f"{signal_intro}\n{body}"
+    return body
 
 
 def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
@@ -196,9 +222,11 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
     label_prefix = f"[{label}] " if label else ""
+    badge = str(result.get("signal_badge", "")).strip()
+    badge_prefix = f"{badge} " if badge else ""
     current_price = _format_price(result.get("current_price"))
     subject = (
-        f"{label_prefix}[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
+        f"{badge_prefix}{label_prefix}[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
         f"{result.get('bias')} / {current_price} / Confidence {result.get('confidence')}"
     )
     ai_advice = result.get("ai_advice")
@@ -236,7 +264,11 @@ def build_summary_body(
             )
             content = response.choices[0].message.content
             if content and content.strip():
-                return content.strip()
+                body = content.strip()
+                signal_intro = _signal_intro(result_payload)
+                if signal_intro:
+                    return f"{signal_intro}\n{body}"
+                return body
             last_error = "response content was empty"
         except Exception as exc:  # noqa: BLE001
             last_error = f"{type(exc).__name__}: {exc}"
