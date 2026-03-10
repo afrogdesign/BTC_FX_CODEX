@@ -142,6 +142,23 @@ def sort_zones_by_distance(price: float, zones: list[dict[str, Any]]) -> list[di
     return enriched
 
 
+def select_nearest_directional_zones(
+    price: float,
+    zones: list[dict[str, Any]],
+    zone_type: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    if zone_type == "support":
+        directional = [zone for zone in zones if float(zone["low"]) <= price]
+    elif zone_type == "resistance":
+        directional = [zone for zone in zones if float(zone["high"]) >= price]
+    else:
+        directional = list(zones)
+
+    ordered = sort_zones_by_distance(price, directional or zones)
+    return ordered[:limit]
+
+
 def zone_gap_to_opposite(price: float, side: str, support_zones: list[dict[str, Any]], resistance_zones: list[dict[str, Any]]) -> float:
     if side == "long":
         above = [z["low"] - price for z in resistance_zones if z["low"] > price]

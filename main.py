@@ -30,6 +30,7 @@ from src.analysis.support_resistance import (
     build_support_resistance,
     detect_critical_zone,
     nearest_zone_distance,
+    select_nearest_directional_zones,
     sort_zones_by_distance,
     zone_gap_to_opposite,
 )
@@ -177,8 +178,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     }
     all_support_zones, all_resistance_zones = build_all_support_resistance(per_tf_inputs, atr_15m)
     support_zones, resistance_zones = build_support_resistance(per_tf_inputs, atr_15m)
-    support_zones_nearest = sort_zones_by_distance(price, all_support_zones)[:3]
-    resistance_zones_nearest = sort_zones_by_distance(price, all_resistance_zones)[:3]
+    support_zones_nearest = select_nearest_directional_zones(price, all_support_zones, "support")
+    resistance_zones_nearest = select_nearest_directional_zones(price, all_resistance_zones, "resistance")
     critical_zone = detect_critical_zone(price, all_support_zones, all_resistance_zones)
 
     regime_info = classify_market_regime(

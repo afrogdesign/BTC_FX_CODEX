@@ -1,5 +1,17 @@
 # Progress Log
 
+- 日時: 2026-03-10 23:26 JST
+- 実施内容: Ver02 開発環境の常駐 `com.afrog.btc-monitor` を再起動し、今回の近場サポレジ表示補正を常駐プロセスへ反映した。再起動前は `pid=37563`、再起動後は `pid=42329` となり、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`program = .../.venv312/bin/python` を確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 補正後の表示が次回以降の実メールで自然に見えるかは、定時サイクル確認が必要。
+- メモ: `zsh tools/start_monitor.sh` をローカルで実行。ChatGPT API を使う処理は今回行っていない。
+
+- 日時: 2026-03-10 23:20 JST
+- 実施内容: Ver02 の最優先タスクとして、直近5サイクル（21:05 / 21:36 / 22:05 / 22:47 / 23:05 JST）のログを確認し、`location_risk` / `risk_flags` / `signal_tier` の出方を点検した。観察の結果、`signal_tier` は全件 `normal` で、`prelabel` は `SWEEP_WAIT` と `NO_TRADE_CANDIDATE` が中心、主な阻害要因は `lower_liquidity_close`、`sweep_incomplete`、`ask_wall_close`、および `RR_insufficient` だった。あわせて、表示用の近場サポレジに「現在価格の反対側の帯」が混ざるケースを確認したため、表示ロジックを修正し、サポートは価格下側中心、レジスタンスは価格上側中心で出すよう調整した。`unittest` へ回帰テストを1件追加し、全8件成功を確認した。
+- 変更ファイル: `main.py`, `src/analysis/support_resistance.py`, `tests/test_support_resistance.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 強条件（🟡 / 🔥）と `signal_tier_upgraded` の実運用発火確認は未完了。今回のサポレジ表示修正が実メール上で自然に見えるかも次回サイクルで確認が必要。
+- メモ: OpenAI API を使う実行は今回行っていない。確認は既存ログ読取と `./.venv312/bin/python -m unittest discover -s tests -v` で実施。
+
 - 日時: 2026-03-10 22:58 JST
 - 実施内容: Ver02 の現時点を `v2.2` として固定する前提で、そこそこの改善を一式反映した。主な内容は、(1) Funding 閾値と表示を `%` 単位で統一、(2) `signal_tier` / `signal_badge` と昇格通知ロジックを追加、(3) サポレジを内部計算用と表示用に分離、(4) 件名・本文の Funding 表示と強条件バッジ表示を改善、(5) CSV/JSON とバックテストを新仕様へ追従、(6) `unittest` 7件を追加して全件成功、(7) プロジェクト用 `AGENTS.md` を `btc_monitor/` 配下へ移動、である。
 - 変更ファイル: `main.py`, `src/analysis/funding.py`, `src/analysis/signal_tier.py`, `src/analysis/support_resistance.py`, `src/notification/trigger.py`, `src/ai/summary.py`, `src/storage/csv_logger.py`, `backtest/runner.py`, `prompts/summary_prompt.md`, `.env.example`, `README.md`, `tests/test_funding_and_signal.py`, `tests/test_notification_trigger.py`, `tests/test_support_resistance.py`, `tests/test_summary_format.py`, `AGENTS.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`

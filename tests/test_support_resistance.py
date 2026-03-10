@@ -14,6 +14,7 @@ if str(BASE_DIR) not in sys.path:
 from src.analysis.support_resistance import (
     build_all_support_resistance,
     build_support_resistance,
+    select_nearest_directional_zones,
     sort_zones_by_distance,
 )
 
@@ -63,7 +64,24 @@ class SupportResistanceTest(unittest.TestCase):
         self.assertEqual(sorted_zones[0]["low"], 70050.0)
         self.assertIn("distance_from_price", sorted_zones[0])
 
+    def test_select_nearest_directional_zones_filters_by_side(self) -> None:
+        support_zones = [
+            {"low": 69600.0, "high": 69850.0, "strength": 12},
+            {"low": 70190.0, "high": 70320.0, "strength": 10},
+            {"low": 69270.0, "high": 69400.0, "strength": 6},
+        ]
+        resistance_zones = [
+            {"low": 69930.0, "high": 70210.0, "strength": 45},
+            {"low": 69370.0, "high": 69540.0, "strength": 24},
+            {"low": 70260.0, "high": 70390.0, "strength": 11},
+        ]
+
+        nearest_support = select_nearest_directional_zones(69883.7, support_zones, "support")
+        nearest_resistance = select_nearest_directional_zones(69883.7, resistance_zones, "resistance")
+
+        self.assertEqual([zone["low"] for zone in nearest_support], [69600.0, 69270.0])
+        self.assertEqual([zone["low"] for zone in nearest_resistance], [69930.0, 70260.0])
+
 
 if __name__ == "__main__":
     unittest.main()
-
