@@ -1,5 +1,29 @@
 # Progress Log
 
+- 日時: 2026-03-10 17:22 JST
+- 実施内容: ブランチ環境と常駐ジョブの棚卸しを実施し、不要な常駐をクリーンアップした。ローカル開発機では `com.afrog.btc-monitor` を停止し、`~/Library/LaunchAgents/com.afrog.btc-monitor.plist` は無効化ファイル（`.disabled_...`）へリネーム。本番MBP2020側は `com.afrog.btc-monitor-ver01` のみ残し、`launchd` が参照していた旧パスを `~/CODEX/BTC_FX_CODEX_ver01/...` へ修正して再登録し、`state=running` を確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: なし（常駐の重複・旧パス参照は解消）。
+- メモ: ローカルのCodexアプリ常駐（`application.com.openai.codex...`）は開発ツール本体のため維持。
+
+- 日時: 2026-03-10 17:16 JST
+- 実施内容: MBP2020 側の旧本番パス `/Users/marupro/BTC_FX_CODEX_ver01` を削除した。移行後の運用先は `/Users/marupro/CODEX/BTC_FX_CODEX_ver01` に統一済みで、削除後に旧パスが存在しないことを確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: なし（本番配置の旧パス整理は完了）。
+- メモ: 今後の本番アップロード先は `~/CODEX` 配下のみを使用する。
+
+- 日時: 2026-03-10 16:55 JST
+- 実施内容: VPN接続後に MBP2020 (`192.168.1.38`) へSSH接続し、Ver01（`main`）を本番専用ディレクトリ `~/BTC_FX_CODEX_ver01/btc_monitor` へ配備した。Python 3.12.10 を導入し、`.venv312_prod` を作成、依存関係をインストール、`.env` を配置。`launchd` は新ラベル `com.afrog.btc-monitor-ver01` で登録し、`running` 状態（専用作業ディレクトリ・専用ログパス）を確認した。Ver02専用ファイル（例: `src/analysis/liquidity.py`）が存在しないことも確認し、Ver01運用分離を達成。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: Ver01本番の定時実行で `last_result.json` が継続更新されるかの追跡確認が必要。
+- メモ: 既存ローカル開発（Ver02）は未変更。今回の本番起動は `com.afrog.btc-monitor-ver01` のみ。
+
+- 日時: 2026-03-10 16:39 JST
+- 実施内容: Ver01/Ver02 の本番分離作業に着手し、指定先 `192.168.1.38` への到達確認を実施した。`ping` は 100% loss、`ssh` は `port 22 timeout` で接続できず、現時点では VPN 未接続または経路未到達のためデプロイ作業本体は未開始。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: VPN接続後に再度SSH疎通確認し、Ver01（main）をMBP2020へ配備する必要あり。
+- メモ: ローカル側の実装・検証状態は維持されており、接続回復後はそのまま本番分離手順へ移行可能。
+
 - 日時: 2026-03-10 16:19 JST
 - 実施内容: ユーザー許可のうえで `run_cycle` を手動1回実行し、Ver02の新項目が実出力に入ることを確認した。結果は `prelabel=SWEEP_WAIT`、`location_risk=60.0`、`oi_value=81815.097`、`orderbook_bias=bid_heavy`、`market_structure_missing_fields=[]`、AI判定 `WAIT_FOR_SWEEP` で、位置フィルターと市場構造データが実運用ラインで動作していることを確認した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
