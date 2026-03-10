@@ -106,6 +106,37 @@ def _format_price(value: Any) -> str:
     return f"{price:,.2f}"
 
 
+def _format_zone_summary(name: str, zones: list[dict[str, Any]]) -> str:
+    if not zones:
+        return f"{name}は特に抽出できていません。"
+    parts = []
+    for zone in zones[:2]:
+        low = _format_price(zone.get("low"))
+        high = _format_price(zone.get("high"))
+        distance = _format_price(zone.get("distance_from_price"))
+        parts.append(f"{low} - {high}（現在値から {distance} ドル）")
+    return f"{name}は " + " / ".join(parts) + " です。"
+
+
+def _format_setup_levels(name: str, setup: dict[str, Any], side: str) -> str:
+    if not isinstance(setup, dict):
+        return f"{name}は情報不足です。"
+    status = _label_setup(setup.get("status"))
+    entry_low = _format_price((setup.get("entry_zone") or {}).get("low"))
+    entry_high = _format_price((setup.get("entry_zone") or {}).get("high"))
+    stop_loss = _format_price(setup.get("stop_loss"))
+    tp1 = _format_price(setup.get("tp1"))
+    tp2 = _format_price(setup.get("tp2"))
+    if side == "long":
+        tp_text = f"TP1 {tp1} → TP2 {tp2}"
+    else:
+        tp_text = f"TP1 {tp1} → TP2 {tp2}"
+    return (
+        f"{name}は「{status}」で、エントリー帯は {entry_low} - {entry_high}、"
+        f"損切り目安は {stop_loss}、利確候補は {tp_text} です。"
+    )
+
+
 def _fallback_summary(result: dict[str, Any]) -> str:
     ai_advice = result.get("ai_advice")
     ai_line = "AI審査は今回は使わず、機械判定を中心に整理しています。"
@@ -129,21 +160,25 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     funding = result.get("funding_rate")
     atr_ratio = result.get("atr_ratio")
     volume_ratio = result.get("volume_ratio")
-    long_setup = _label_setup(result.get("long_setup", {}).get("status"))
-    short_setup = _label_setup(result.get("short_setup", {}).get("status"))
+    long_setup = result.get("long_setup", {})
+    short_setup = result.get("short_setup", {})
+    support_text = _format_zone_summary("近いサポート帯", result.get("support_zones", []))
+    resistance_text = _format_zone_summary("近いレジスタンス帯", result.get("resistance_zones", []))
 
     return (
         f"【結論】現在位置の評価は {prelabel} です。位置リスクは {location_risk} で、"
-        f"方向感は {_label_bias(result.get('bias'))} です。"
-        f"局面は「{_label_phase(result.get('phase'))}」で、信頼度は {confidence} です。\n"
+        f"いま入る位置としてはまずこの評価を優先します。信頼度は {confidence} です。\n"
+        f"【方向感】方向感は {_label_bias(result.get('bias'))} で、局面は「{_label_phase(result.get('phase'))}」です。\n"
         f"【機械判定】機械判定の点数はロング {long_score}、ショート {short_score} で、差は {gap} です。"
         f"相場環境は「{_label_regime(result.get('market_regime'))}」と見ています。"
         f"時間足ごとの印象は、4時間足が {_label_signal(result.get('signals_4h'))}、"
         f"1時間足が {_label_signal(result.get('signals_1h'))}、"
         f"15分足が {_label_signal(result.get('signals_15m'))} です。\n"
         f"【環境】現在価格は {current_price} USDT、Funding は {funding}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
-        f"ATR比は値動きの荒さ、出来高比は売買の勢いを見る目安です。\n"
-        f"【セットアップ】ロング側は「{long_setup}」、ショート側は「{short_setup}」です。\n"
+        f"ATR比は値動きの荒さ、出来高比は売買の勢いを見る目安です。"
+        f"{support_text} {resistance_text}\n"
+        f"【セットアップ】{_format_setup_levels('ロング側', long_setup, 'long')} "
+        f"{_format_setup_levels('ショート側', short_setup, 'short')}\n"
         f"【AI】{ai_line}\n"
         f"【注意点】{_format_flags(result.get('no_trade_flags', []))} "
         f"位置フラグ: {', '.join(result.get('risk_flags', [])) or '特になし'}"

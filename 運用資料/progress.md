@@ -1,5 +1,35 @@
 # Progress Log
 
+- 日時: 2026-03-10 21:53 JST
+- 実施内容: ユーザー依頼により、打ち合わせノートへ「次の作業タイミング」の判断メモを追記した。内容は、軽い文面見直しは 2026-03-11 に一度行う、本格的な閾値調整は Ver02 通知を 3〜5 サイクル分ためてから行う、という運用方針。
+- 変更ファイル: `📒打ち合わせノート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: なし
+- メモ: 実装フェーズから観察・調整フェーズへ移っていることを、打ち合わせノート側にも反映した。
+
+- 日時: 2026-03-10 21:48 JST
+- 実施内容: `NEXT_TASK.md` の運用形式を整理し、見出しを `現在の状況` / `次のタスク` / `ブロッカー` / `完了条件` の構成へ書き直した。あわせて、「現在の状況」は履歴ではなく、不要項目を消す・並べ替える・短く整える前提の整理欄として扱うルールを `Global_BOX/AGENTS_TEMPLATE.md` に追記した。Obsidian 側の `00_Global_BOX` は `Global_BOX` へのシンボリックリンク構成のため、同内容がそのまま反映される状態。
+- 変更ファイル: `運用資料/NEXT_TASK.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `運用資料/progress.md`
+- 未解決事項: なし
+- メモ: `NEXT_TASK.md` は履歴ではなく、毎回見やすく更新する「最新版の作業メモ」として運用する。
+
+- 日時: 2026-03-10 21:42 JST
+- 実施内容: ユーザー指示により、Ver02 開発環境の常駐 `com.afrog.btc-monitor` を再起動した。`./tools/start_monitor.sh` 実行後、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`pid = 33064`、`program = .../.venv312/bin/python` を確認し、`logs/runtime/monitor.pid` も `33064` に更新されていることを確認した。これにより、今回の表示改善コードを常駐プロセスへ反映した。
+- 変更ファイル: `運用資料/progress.md`
+- 未解決事項: なし
+- メモ: 今後は「開発環境の実行ファイルに関わる変更」を行った作業の終了時に、常駐有無を確認し、稼働中なら必要に応じて再起動する運用で進める。
+
+- 日時: 2026-03-10 21:36 JST
+- 実施内容: ユーザー許可のうえで Ver02 の手動 `run_cycle` を1回実行し、表示改善の実動作を確認した。`summary_subject` は `[Ver02] [BTC監視] 2026-03-10 21:36 SWEEP_WAIT / long / 70,356.30 / Confidence 77`。`last_result.json` では `support_zones` / `resistance_zones` が現在価格に近い順へ並び、`distance_from_price` も付与されていることを確認した。`support_zones_by_strength` / `resistance_zones_by_strength` には従来の強度順も保持されている。TP順も `long: TP1 69263.31 -> TP2 69947.99`、`short: TP1 69521.3 -> TP2 68387.01` と自然順で確認できた。AI要約本文でも、最寄りサポート・レジスタンスを距離つきで記述することを確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: AI要約本文は改善意図どおり概ね反映されたが、表現としてまだ「方向感」と「いま入る位置」がやや近接して読める箇所があるため、必要なら次回さらにプロンプト調整する。
+- メモ: OpenAI API 使用はユーザー許可取得済み。通知理由は `confidence_jump`。
+
+- 日時: 2026-03-10 21:34 JST
+- 実施内容: Ver02 の「見せ方調整」を実装した。サポート / レジスタンスは計算用の強度上位3件を残したまま、通知や `last_result.json` に載せる表示用データを「現在価格に近い順」へ並び替え、各ゾーンに `distance_from_price` を追加した。あわせて、ロング / ショートの TP1 / TP2 が逆転しないよう正規化処理を `src/analysis/rr.py` に追加し、要約フォールバック文と AI 要約プロンプトも「方向感」と「いま入る位置」を分けて書く形へ調整した。
+- 変更ファイル: `main.py`, `src/analysis/support_resistance.py`, `src/analysis/rr.py`, `src/ai/summary.py`, `prompts/summary_prompt.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 実メール本文での見え方確認は未実施。`run_cycle` は OpenAI API を使うため、今回こちらでは実行していない。
+- メモ: `python3 -m py_compile` と `.venv312` 上のローカル確認スクリプトで、構文エラーなし・近接順表示・TP順整列を確認済み。
+
 - 日時: 2026-03-10 21:27 JST
 - 実施内容: Ver01メールと現在チャートのズレに関する考察を、Ver02改善方針として打ち合わせノートへ追記した。要点は「サポレジ表示が強度優先で、現在価格に近い順ではないため直感とズレる」「方向感と位置の説明が混ざっている」「TP1/TP2の順序逆転が起こりうる」の3点。あわせて `NEXT_TASK.md` を更新し、Ver02での改善項目として「近接順表示」「距離併記」「TP順整列」を追加した。
 - 変更ファイル: `📒打ち合わせノート.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`

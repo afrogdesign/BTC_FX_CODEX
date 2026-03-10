@@ -112,14 +112,27 @@ def nearest_zone_distance(price: float, zones: list[dict[str, Any]]) -> float:
         return float("inf")
     distances = []
     for zone in zones:
-        low, high = float(zone["low"]), float(zone["high"])
-        if low <= price <= high:
-            distances.append(0.0)
-        elif price < low:
-            distances.append(low - price)
-        else:
-            distances.append(price - high)
+        distances.append(zone_distance(price, zone))
     return min(distances)
+
+
+def zone_distance(price: float, zone: dict[str, Any]) -> float:
+    low, high = float(zone["low"]), float(zone["high"])
+    if low <= price <= high:
+        return 0.0
+    if price < low:
+        return low - price
+    return price - high
+
+
+def sort_zones_by_distance(price: float, zones: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(zones, key=lambda zone: (zone_distance(price, zone), -float(zone.get("strength", 0))))
+    enriched: list[dict[str, Any]] = []
+    for zone in ordered:
+        copied = dict(zone)
+        copied["distance_from_price"] = round(zone_distance(price, zone), 2)
+        enriched.append(copied)
+    return enriched
 
 
 def zone_gap_to_opposite(price: float, side: str, support_zones: list[dict[str, Any]], resistance_zones: list[dict[str, Any]]) -> float:

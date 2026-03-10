@@ -27,6 +27,7 @@ from src.analysis.support_resistance import (
     build_support_resistance,
     detect_critical_zone,
     nearest_zone_distance,
+    sort_zones_by_distance,
     zone_gap_to_opposite,
 )
 from src.data.fetcher import DataFetchError, FetchConfig, fetch_funding_rate, fetch_klines, get_server_time_ms
@@ -161,6 +162,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         {"4h": {"df": df_4h, "swings": tf_4h["swings"]}, "1h": {"df": df_1h, "swings": tf_1h["swings"]}, "15m": {"df": df_15m, "swings": tf_15m["swings"]}},
         atr_15m,
     )
+    support_zones_nearest = sort_zones_by_distance(price, support_zones)
+    resistance_zones_nearest = sort_zones_by_distance(price, resistance_zones)
     critical_zone = detect_critical_zone(price, support_zones, resistance_zones)
 
     regime_info = classify_market_regime(
@@ -424,8 +427,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "prelabel": position_risk["prelabel"],
         "location_risk": position_risk["location_risk"],
         "critical_zone": critical_zone,
-        "support_zones": support_zones,
-        "resistance_zones": resistance_zones,
+        "support_zones": support_zones_nearest,
+        "resistance_zones": resistance_zones_nearest,
+        "support_zones_by_strength": support_zones,
+        "resistance_zones_by_strength": resistance_zones,
         "long_setup": long_setup,
         "short_setup": short_setup,
         "primary_setup_side": primary_setup_side,

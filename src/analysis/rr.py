@@ -22,6 +22,23 @@ def _empty_setup(reason: str = "") -> dict[str, Any]:
     }
 
 
+def _normalize_take_profits(side: str, entry_mid: float, tp1: float, tp2: float) -> tuple[float, float]:
+    if side == "long":
+        candidates = [tp for tp in (tp1, tp2) if tp > entry_mid]
+        if len(candidates) < 2:
+            candidates = sorted([max(tp1, entry_mid), max(tp2, entry_mid)])
+        else:
+            candidates = sorted(candidates)
+        return candidates[0], candidates[1]
+
+    candidates = [tp for tp in (tp1, tp2) if tp < entry_mid]
+    if len(candidates) < 2:
+        candidates = sorted([min(tp1, entry_mid), min(tp2, entry_mid)], reverse=True)
+    else:
+        candidates = sorted(candidates, reverse=True)
+    return candidates[0], candidates[1]
+
+
 def _select_zone(side: str, price: float, support_zones: list[dict[str, Any]], resistance_zones: list[dict[str, Any]]) -> dict[str, Any] | None:
     if side == "long":
         candidates = [z for z in support_zones if float(z["high"]) <= price or float(z["low"]) <= price <= float(z["high"])]
@@ -83,6 +100,7 @@ def build_setup(
         target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
         tp1 = target_hint if target_hint and target_hint > entry_mid else entry_mid + risk * 1.8
         tp2 = entry_mid + risk * 2.0
+        tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = tp1 - entry_mid
     else:
         stop_loss = entry_high + sl_atr_multiplier * atr
@@ -90,6 +108,7 @@ def build_setup(
         target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
         tp1 = target_hint if target_hint and target_hint < entry_mid else entry_mid - risk * 1.8
         tp2 = entry_mid - risk * 2.0
+        tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = entry_mid - tp1
 
     rr_estimate = reward / risk if risk > 0 else 0.0
