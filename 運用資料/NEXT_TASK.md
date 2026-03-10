@@ -7,15 +7,20 @@
 - 清算は有料ヒートマップではなく、直近清算イベントの集計による近似実装。
 - OpenAI API を使う手動 `run_cycle` は実施済み（`WAIT_FOR_SWEEP` 応答を確認）。
 - Ver01（`main`）は MBP2020 へ本番配備済み。launchd ラベル `com.afrog.btc-monitor-ver01` で常駐起動中。
+- 件名識別用に `SYSTEM_LABEL` を導入し、Ver01/Ver02 を件名で判別できる状態にした。
+- 打ち合わせシートへも、件名識別対応の最新状況を反映済み。
+- Ver02（ローカル）のAI待ち時間は 2 倍設定へ変更済み（`AI_TIMEOUT_SEC=10`, `AI_SUMMARY_TIMEOUT_SEC=20`）。
+- ただし、現在 Ver02 は常駐停止中のため、設定反映は次回起動時に有効。
+- Ver01 も待ち時間を同値（10秒/20秒）へ反映し、`launchd` 再起動で適用済み。
+- Ver02 コードでは、Binance 清算イベントを `logs/cache/` に蓄積して次サイクルへ引き継ぐ実装を追加済み。
 - 旧本番パス `/Users/marupro/BTC_FX_CODEX_ver01` は削除済み。現在の本番配置は `~/CODEX` 配下に統一済み。
 - ローカルの不要常駐 `com.afrog.btc-monitor` は停止済み（LaunchAgentは `.disabled` 化）。
+- 方針として、Ver01 の開発は一旦区切り、以後は Ver02 の改善へ注力する。
 
 ## 次のタスク
-- 1. MBP2020 側の Ver01 で、次回定時実行後に `logs/last_result.json` と `logs/runtime/monitor.err` を確認する。
-- 2. Ver01本番で通知本文と AI判定が安定するか、数サイクル追跡する。
-- 3. Ver02（ローカル開発）を再常駐する場合は、`com.afrog.btc-monitor-ver02` など別ラベルで起動する運用ルールを固定する。
-- 4. 位置フィルターが強すぎるか弱すぎるか、`location_risk` と `risk_flags` を数サイクル分観察して閾値を調整する。
-- 5. Binance WS 清算イベントが0件になる時間帯を減らすため、イベント蓄積（ローカル保存）を追加する。
+- 1. Ver01 は運用監視として、`logs/last_result.json` と `logs/runtime/monitor.err` の継続更新だけ確認する。
+- 2. Ver02 で位置フィルターが強すぎるか弱すぎるか、`location_risk` と `risk_flags` を数サイクル分観察して閾値を調整する。
+- 3. Ver02 の清算イベント蓄積（`logs/cache`）が実運用で有効かを確認し、必要なら保持秒数・件数を再調整する。
 
 ## 完了条件
-- 市場構造データが本番サイクルで安定取得でき、`prelabel` と通知文が実運用で使える粒度になっていること。
+- Ver01 を安定運用しつつ、Ver02 の調整項目をログ根拠で詰められる状態になること。

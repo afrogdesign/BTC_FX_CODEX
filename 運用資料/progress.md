@@ -1,5 +1,59 @@
 # Progress Log
 
+- 日時: 2026-03-10 18:58 JST
+- 実施内容: ユーザー指示に従い、Ver01 本番へ AI 待ち時間再調整（10秒/20秒）をデプロイした。MBP2020上で `.env` と `load_config` の値を確認後、`com.afrog.btc-monitor-ver01` を再起動し `running` を確認。あわせて打ち合わせシートへ「Ver01開発は一旦ここまで、以後はVer02注力」の方針を追記し、`NEXT_TASK.md` も同方針へ更新した。
+- 変更ファイル: `打ち合わせシート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`（※Ver01反映はリモート環境で実施）
+- 未解決事項: Ver01 は運用監視を継続。改善作業は Ver02 側で進行。
+- メモ: OpenAI API を使う手動実行は今回行っていない（設定反映と再起動のみ）。
+
+- 日時: 2026-03-10 18:53 JST
+- 実施内容: ユーザー依頼に合わせて `NEXT_TASK.md` を整理し、完了済みタスク（Ver01/Ver02の件名確認）を削除した。未完了の項目のみを残し、次回着手順を 3 件へ圧縮した。
+- 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/progress.md`
+- 未解決事項: Ver01 の継続更新確認、位置フィルター閾値調整、清算イベント蓄積の本番適用は継続。
+- メモ: 完了済みを残さない運用へ合わせて更新。
+
+- 日時: 2026-03-10 18:50 JST
+- 実施内容: 「清算イベント0件が続く時間帯を減らす」ため、Binance清算イベントのローカル蓄積を実装した。`fetch_market_structure` に `base_dir` を渡し、`logs/cache/binance_liquidations_{symbol}.json` へ直近イベントを保持。次サイクルではWS取得分とキャッシュをマージして TTL 内イベントを利用できるようにした（重複除去・件数上限あり）。あわせて設定値 `BINANCE_LIQUIDATION_CACHE_SEC` と `BINANCE_LIQUIDATION_CACHE_MAX` を追加し、構文チェックを通過。Ver01のログ確認も行い、現時点の `last_result` は 18:05 のまま、`monitor.err` に直近エラー追記なしを確認。
+- 変更ファイル: `src/data/exchange_fetcher.py`, `main.py`, `config.py`, `.env.example`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: この清算イベント蓄積実装は現時点でローカルVer02側のみ。Ver01へ反映するには次回デプロイ時の取り込みが必要。
+- メモ: OpenAI API を使う検証は行っていない（構文/ローカルロジック検証のみ）。
+
+- 日時: 2026-03-10 18:38 JST
+- 実施内容: ユーザー許可のうえで Ver02 ローカル `run_cycle` を再実行した。結果は `summary_subject=[Ver02] [BTC監視] 2026-03-10 18:37 SWEEP_WAIT / long / Confidence 74`、`prelabel=SWEEP_WAIT`、`location_risk=45.0`、`ai_advice_none=False`。通知理由は空配列で、今回は通知トリガー条件に該当しなかった。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: Ver01 は設定更新済みだが未再起動のため、10秒/20秒設定の実反映確認は保留。
+- メモ: OpenAI API を使う手動実行はユーザー許可後に実施。
+
+- 日時: 2026-03-10 18:29 JST
+- 実施内容: ユーザー指示により、Ver01（本番側ファイル）の AI 待ち時間設定を Ver02 と同値へ更新した。MBP2020 の `~/CODEX/BTC_FX_CODEX_ver01/btc_monitor/.env` と `.env.example` を `AI_TIMEOUT_SEC=10`、`AI_SUMMARY_TIMEOUT_SEC=20` に変更。デプロイ不要指定のため、`launchd` 再起動は実施していない。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`（※Ver01実ファイルはリモート環境で更新）
+- 未解決事項: Ver01 の実行プロセスは再起動していないため、設定値は次回再起動後に有効化される。
+- メモ: 現在の `com.afrog.btc-monitor-ver01` は `running` 継続中。
+
+- 日時: 2026-03-10 18:25 JST
+- 実施内容: ローカル Ver02 で手動 `run_cycle` を1回実行した。待ち時間2倍設定（`AI_TIMEOUT_SEC=10`, `AI_SUMMARY_TIMEOUT_SEC=20`）適用後の実行で、`summary_subject=[Ver02] ...`、`prelabel=SWEEP_WAIT`、`location_risk=63.0`、`ai_advice_none=False` を確認した。通知理由は `agreement_changed / confidence_jump / prelabel_improved` だった。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: Ver02 の件名ラベル表示は実行結果で確認できたが、実メール受信での見え方確認は継続タスク。
+- メモ: 本番 Ver01 には未反映（ローカル Ver02 のみ確認）。
+
+- 日時: 2026-03-10 18:23 JST
+- 実施内容: ユーザー要望に合わせて、ローカル開発環境（Ver02）のAI待ち時間を2倍に変更した。`.env` と `.env.example` の `AI_TIMEOUT_SEC` を 5→10 秒、`AI_SUMMARY_TIMEOUT_SEC` を 10→20 秒に更新。本番（Ver01）は未変更。あわせてローカルの常駐状態を確認し、現在 Ver02 は起動中ではない（`launchctl` / `ps` とも該当なし）ことを確認した。
+- 変更ファイル: `.env`, `.env.example`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: Ver02 は現在停止中のため、設定は次回起動時に反映される。必要なら再起動手順を実施する。
+- メモ: 本番への適用は未実施（ユーザー指示どおり）。
+
+- 日時: 2026-03-10 18:10 JST
+- 実施内容: 打ち合わせシートへ最新報告を追記した。内容は、Ver01/Ver02 の通知メール件名に環境ラベル（`[Ver01]` / `[Ver02]`）を付けて識別できるようにした点と、本番側再起動まで完了している点を中心に整理した。
+- 変更ファイル: `打ち合わせシート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 次回の実着信メールで、件名ラベルの表示が期待どおりか最終確認が必要。
+- メモ: 打ち合わせシートは「今の状況 / 現在の動向 / 今後のやるべきこと」の形式で追記。
+
+- 日時: 2026-03-10 18:07 JST
+- 実施内容: メール件名で Ver01/Ver02 を識別できるように対応した。ローカル（Ver02）は `SYSTEM_LABEL=Ver02` を導入し、件名生成ロジックへ環境ラベルを反映。あわせて本番MBP2020（Ver01）にも `SYSTEM_LABEL=Ver01` を設定し、`main.py` で件名へプレフィックス付与する修正を反映。文法チェック後に `com.afrog.btc-monitor-ver01` を再起動し、`state=running` を確認した。
+- 変更ファイル: `config.py`, `main.py`, `src/ai/summary.py`, `.env`, `.env.example`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 次回通知メールの実着信で、件名が期待どおり `Ver01` / `Ver02` 表示になるか最終確認が必要。
+- メモ: 本番側はリモート編集後に `python -m py_compile` と `launchctl` 再起動で反映済み。
+
 - 日時: 2026-03-10 17:22 JST
 - 実施内容: ブランチ環境と常駐ジョブの棚卸しを実施し、不要な常駐をクリーンアップした。ローカル開発機では `com.afrog.btc-monitor` を停止し、`~/Library/LaunchAgents/com.afrog.btc-monitor.plist` は無効化ファイル（`.disabled_...`）へリネーム。本番MBP2020側は `com.afrog.btc-monitor-ver01` のみ残し、`launchd` が参照していた旧パスを `~/CODEX/BTC_FX_CODEX_ver01/...` へ修正して再登録し、`state=running` を確認した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`

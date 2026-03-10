@@ -155,7 +155,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     atr_15m = float(tf_15m["atr"].iloc[-1])
     atr_ratio = calculate_atr_ratio(tf_15m["atr"], 50)
     funding_rate = fetch_funding_rate(fetch_cfg)
-    market_structure = fetch_market_structure(cfg)
+    market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
     support_zones, resistance_zones = build_support_resistance(
         {"4h": {"df": df_4h, "swings": tf_4h["swings"]}, "1h": {"df": df_1h, "swings": tf_1h["swings"]}, "15m": {"df": df_15m, "swings": tf_15m["swings"]}},
@@ -406,6 +406,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result: dict[str, Any] = {
         "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
         "timestamp_jst": now_jst.isoformat(),
+        "system_label": str(getattr(cfg, "SYSTEM_LABEL", "")).strip(),
         "server_time_gap_sec": round(gap_sec, 2),
         "bias": bias,
         "phase": phase,

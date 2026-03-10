@@ -150,8 +150,10 @@ def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
 
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
+    label = str(result.get("system_label", "")).strip()
+    label_prefix = f"[{label}] " if label else ""
     subject = (
-        f"[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
+        f"{label_prefix}[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
         f"{result.get('bias')} / Confidence {result.get('confidence')}"
     )
     ai_advice = result.get("ai_advice")

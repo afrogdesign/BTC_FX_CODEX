@@ -57,6 +57,7 @@ def _coerce_value(key: str, value: str) -> Any:
         "BINANCE_TAKER_LIMIT",
         "BINANCE_ORDERBOOK_LIMIT",
         "BINANCE_LIQUIDATION_MAX_EVENTS",
+        "BINANCE_LIQUIDATION_CACHE_MAX",
     }
     float_keys = {
         "REQUEST_INTERVAL_SEC",
@@ -69,6 +70,7 @@ def _coerce_value(key: str, value: str) -> Any:
         "FUNDING_LONG_WARNING",
         "FUNDING_LONG_PROHIBITED",
         "BINANCE_LIQUIDATION_LOOKBACK_SEC",
+        "BINANCE_LIQUIDATION_CACHE_SEC",
         "LIQUIDITY_EQUAL_THRESHOLD_PCT",
         "POSITION_RISK_HIGH_THRESHOLD",
         "POSITION_RISK_MEDIUM_THRESHOLD",
@@ -157,6 +159,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "OPENAI_SUMMARY_MODEL": "gpt-4o-mini",
         "OPENAI_ADVICE_MODEL": "gpt-4o",
         "TIMEZONE": "Asia/Tokyo",
+        "SYSTEM_LABEL": "",
         "REPORT_TIMES": ["09:05", "13:05", "17:05", "21:05", "01:05", "05:05"],
         "EMA_FAST": 20,
         "EMA_MID": 50,
@@ -207,6 +210,8 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "BINANCE_ORDERBOOK_LIMIT": 100,
         "BINANCE_LIQUIDATION_LOOKBACK_SEC": 4.0,
         "BINANCE_LIQUIDATION_MAX_EVENTS": 40,
+        "BINANCE_LIQUIDATION_CACHE_SEC": 1800.0,
+        "BINANCE_LIQUIDATION_CACHE_MAX": 500,
         "LIQUIDITY_EQUAL_THRESHOLD_PCT": 0.0008,
         "POSITION_RISK_HIGH_THRESHOLD": 70.0,
         "POSITION_RISK_MEDIUM_THRESHOLD": 45.0,
