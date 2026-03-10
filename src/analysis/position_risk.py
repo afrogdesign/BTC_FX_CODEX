@@ -19,6 +19,28 @@ def _price_distance_atr(price: float, level: float | None, atr: float) -> float 
     return abs(level - price) / atr
 
 
+def _push_risk(
+    breakdown: dict[str, float],
+    flags: list[str],
+    code: str,
+    delta: float,
+    *,
+    flag: str | None = None,
+) -> float:
+    breakdown[code] = round(breakdown.get(code, 0.0) + delta, 4)
+    if flag:
+        flags.append(flag)
+    return delta
+
+
+def _primary_reason_from_breakdown(breakdown: dict[str, float]) -> str:
+    ranked = [(code, score) for code, score in breakdown.items() if score > 0]
+    if not ranked:
+        return "balanced_location"
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    return ranked[0][0]
+
+
 def evaluate_position_risk(
     *,
     bias: str,
@@ -33,6 +55,7 @@ def evaluate_position_risk(
 ) -> dict[str, Any]:
     risk_score = 0.0
     flags: list[str] = []
+    breakdown: dict[str, float] = {}
 
     above_liq = liquidity_info.get("liquidity_above")
     below_liq = liquidity_info.get("liquidity_below")
@@ -43,50 +66,65 @@ def evaluate_position_risk(
     divergence = oi_cvd_info.get("cvd_price_divergence")
 
     if bias == "short":
-        risk_score += _score_from_distance(above_liq, 0.8, 1.8)
+        delta = _score_from_distance(above_liq, 0.8, 1.8)
+        risk_score += delta
+        if delta:
+            breakdown["upper_liquidity_distance"] = round(delta, 4)
         if above_liq is not None and above_liq <= 0.8:
             flags.append("upper_liquidity_close")
         bid_wall_atr = _price_distance_atr(price, bid_wall_price, atr)
-        risk_score += _score_from_distance(bid_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(bid_wall_atr, 0.6, 1.2)
+        risk_score += delta
+        if delta:
+            breakdown["bid_wall_distance"] = round(delta, 4)
         if bid_wall_atr is not None and bid_wall_atr <= 0.6:
             flags.append("bid_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        risk_score += _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        risk_score += delta
+        if delta:
+            breakdown["liquidation_cluster_distance"] = round(delta, 4)
         if largest_liq_atr is not None and largest_liq_atr <= 0.9 and largest_liq_price > price:
             flags.append("liquidation_cluster_above")
     elif bias == "long":
-        risk_score += _score_from_distance(below_liq, 0.8, 1.8)
+        delta = _score_from_distance(below_liq, 0.8, 1.8)
+        risk_score += delta
+        if delta:
+            breakdown["lower_liquidity_distance"] = round(delta, 4)
         if below_liq is not None and below_liq <= 0.8:
             flags.append("lower_liquidity_close")
         ask_wall_atr = _price_distance_atr(price, ask_wall_price, atr)
-        risk_score += _score_from_distance(ask_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(ask_wall_atr, 0.6, 1.2)
+        risk_score += delta
+        if delta:
+            breakdown["ask_wall_distance"] = round(delta, 4)
         if ask_wall_atr is not None and ask_wall_atr <= 0.6:
             flags.append("ask_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        risk_score += _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        risk_score += delta
+        if delta:
+            breakdown["liquidation_cluster_distance"] = round(delta, 4)
         if largest_liq_atr is not None and largest_liq_atr <= 0.9 and largest_liq_price < price:
             flags.append("liquidation_cluster_below")
 
     if liquidity_info.get("liquidity_swept_recently"):
+        breakdown["sweep_recent_bonus"] = -8.0
         risk_score -= 8.0
     else:
-        flags.append("sweep_incomplete")
-        risk_score += 8.0
+        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 8.0, flag="sweep_incomplete")
 
     if oi_state in {"short_cover_risk", "long_flush_exhaustion"}:
-        flags.append(oi_state)
-        risk_score += 12.0
+        risk_score += _push_risk(breakdown, flags, oi_state, 12.0, flag=oi_state)
     if divergence in {"bearish", "bullish"}:
-        flags.append(f"cvd_{divergence}_divergence")
-        risk_score += 12.0
+        code = f"cvd_{divergence}_divergence"
+        risk_score += _push_risk(breakdown, flags, code, 12.0, flag=code)
 
     orderbook_bias = orderbook_info.get("orderbook_bias")
     if bias == "long" and orderbook_bias == "ask_heavy":
-        flags.append("orderbook_ask_heavy")
-        risk_score += 10.0
+        risk_score += _push_risk(breakdown, flags, "orderbook_ask_heavy", 10.0, flag="orderbook_ask_heavy")
     elif bias == "short" and orderbook_bias == "bid_heavy":
-        flags.append("orderbook_bid_heavy")
-        risk_score += 10.0
+        risk_score += _push_risk(breakdown, flags, "orderbook_bid_heavy", 10.0, flag="orderbook_bid_heavy")
 
     risk_score = max(0.0, min(risk_score, 100.0))
     if bias not in {"long", "short"}:
@@ -104,6 +142,8 @@ def evaluate_position_risk(
         "prelabel": prelabel,
         "location_risk": round(risk_score, 2),
         "risk_flags": sorted(set(flags)),
+        "primary_reason": _primary_reason_from_breakdown(breakdown),
+        "risk_breakdown": dict(sorted(breakdown.items(), key=lambda item: item[0])),
     }
 
 

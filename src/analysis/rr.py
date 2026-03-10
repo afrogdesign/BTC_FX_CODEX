@@ -10,6 +10,7 @@ def _round2(value: float) -> float:
 def _empty_setup(reason: str = "") -> dict[str, Any]:
     return {
         "status": "invalid",
+        "status_reason_code": "invalid_empty_setup",
         "entry_zone": {"low": 0.0, "high": 0.0},
         "entry_mid": 0.0,
         "stop_loss": 0.0,
@@ -114,50 +115,62 @@ def build_setup(
     rr_estimate = reward / risk if risk > 0 else 0.0
 
     invalid_reasons: list[str] = []
+    invalid_reason_codes: list[str] = []
     if rr_estimate < min_rr_ratio:
         invalid_reasons.append("RR不足")
+        invalid_reason_codes.append("rr_below_min")
         no_trade_flags.append("RR_insufficient")
 
     if atr_ratio > atr_ratio_max or atr_ratio < atr_ratio_min:
         invalid_reasons.append("ATR極端値")
+        invalid_reason_codes.append("atr_out_of_range")
         no_trade_flags.append("ATR_extreme")
 
     if side == "long":
         if funding_rate >= funding_prohibited:
             invalid_reasons.append("Funding禁止域")
+            invalid_reason_codes.append("funding_long_prohibited")
             no_trade_flags.append("Funding_prohibited")
         elif funding_rate >= funding_warning:
             no_trade_flags.append("Funding_warning")
     else:
         if funding_rate <= funding_prohibited:
             invalid_reasons.append("Funding禁止域")
+            invalid_reason_codes.append("funding_short_prohibited")
             no_trade_flags.append("Funding_prohibited")
         elif funding_rate <= funding_warning:
             no_trade_flags.append("Funding_warning")
 
     if confidence < confidence_min:
         invalid_reasons.append("confidence不足")
+        invalid_reason_codes.append("confidence_below_min")
 
     if warning_count >= 2:
         invalid_reasons.append("warning多発")
+        invalid_reason_codes.append("warning_cluster")
 
     if invalid_reasons:
         status = "invalid"
+        status_reason_code = invalid_reason_codes[0] if invalid_reason_codes else "invalid_filters"
     else:
         inside_zone = entry_low <= price <= entry_high
         zone_distance = min(abs(price - entry_low), abs(price - entry_high))
         if inside_zone and trigger_ready:
             status = "ready"
+            status_reason_code = "inside_entry_zone_with_trigger"
         elif zone_distance <= atr * 0.3:
             status = "watch"
+            status_reason_code = "near_entry_zone_waiting_trigger"
         else:
             status = "watch"
+            status_reason_code = "entry_zone_not_reached"
 
     entry_to_stop_pct = abs(entry_mid - stop_loss) / atr if atr > 0 else 0.0
     entry_to_target_pct = abs(tp1 - entry_mid) / atr if atr > 0 else 0.0
 
     setup = {
         "status": status,
+        "status_reason_code": status_reason_code,
         "entry_zone": {"low": _round2(entry_low), "high": _round2(entry_high)},
         "entry_mid": _round2(entry_mid),
         "stop_loss": _round2(stop_loss),
@@ -167,6 +180,7 @@ def build_setup(
         "entry_to_stop_pct": _round2(entry_to_stop_pct),
         "entry_to_target_pct": _round2(entry_to_target_pct),
         "invalid_reason": " / ".join(invalid_reasons),
+        "invalid_reason_codes": invalid_reason_codes,
     }
     return setup, sorted(set(no_trade_flags))
 

@@ -46,17 +46,18 @@ def should_notify(
     last_result: dict[str, Any] | None,
     last_notified: dict[str, Any] | None,
     cfg: Any,
-) -> tuple[bool, list[str]]:
+) -> dict[str, Any]:
     reasons: list[str] = []
+    suppress_reasons: list[str] = []
 
     bias = current.get("bias")
     confidence = int(current.get("confidence", 0))
     if bias not in {"long", "short"}:
-        return False, reasons
+        return {"notify": False, "notify_reason_codes": [], "suppress_reason_codes": ["bias_wait"]}
     if bias == "long" and confidence < cfg.CONFIDENCE_LONG_MIN:
-        return False, reasons
+        return {"notify": False, "notify_reason_codes": [], "suppress_reason_codes": ["confidence_below_long_min"]}
     if bias == "short" and confidence < cfg.CONFIDENCE_SHORT_MIN:
-        return False, reasons
+        return {"notify": False, "notify_reason_codes": [], "suppress_reason_codes": ["confidence_below_short_min"]}
 
     prev_status = (last_result or {}).get("primary_setup_status", "none")
     current_status = current.get("primary_setup_status", "none")
@@ -89,10 +90,14 @@ def should_notify(
 
     no_trade_flags = current.get("no_trade_flags", [])
     if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
-        return False, []
+        return {
+            "notify": False,
+            "notify_reason_codes": [],
+            "suppress_reason_codes": ["primary_setup_invalid", "multiple_no_trade_flags"],
+        }
 
     if not reasons:
-        return False, []
+        return {"notify": False, "notify_reason_codes": [], "suppress_reason_codes": ["no_material_change"]}
 
     last_notified_ts = _parse_utc((last_notified or {}).get("timestamp_utc", ""))
     now_ts = _parse_utc(str(current.get("timestamp_utc", "")))
@@ -100,6 +105,11 @@ def should_notify(
         cooldown = timedelta(minutes=cfg.ALERT_COOLDOWN_MINUTES)
         if now_ts - last_notified_ts < cooldown:
             if "signal_tier_upgraded" not in reasons:
-                return False, []
+                suppress_reasons.append("cooldown_active")
+                return {"notify": False, "notify_reason_codes": [], "suppress_reason_codes": sorted(set(suppress_reasons))}
 
-    return True, sorted(set(reasons))
+    return {
+        "notify": True,
+        "notify_reason_codes": sorted(set(reasons)),
+        "suppress_reason_codes": sorted(set(suppress_reasons)),
+    }

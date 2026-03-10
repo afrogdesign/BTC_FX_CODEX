@@ -1,5 +1,29 @@
 # Progress Log
 
+- 日時: 2026-03-11 02:24 JST
+- 実施内容: Ver02 の現時点を `v2.3` として固定する前提で、大幅な改善を一式実装した。主な内容は、(1) `signal_id`・通知結果・抑制理由・データ欠損状態などを `result` / JSON / CSV に保存する詳細ログ化、(2) `signal_tier` を理由コード付きで返す構成への拡張、(3) 通知判定を `notify_reason_codes` / `suppress_reason_codes` を返す構造へ整理、(4) Funding 取得失敗時を中立扱いしつつ欠損として記録する処理、(5) スコア内訳・主要因・主要セットアップ理由の保存、(6) `tools/log_feedback.py` とレビュー導線・週次/月次レポート基盤の追加、(7) 関連 README / 運用資料の整備、である。
+- 変更ファイル: `main.py`, `src/analysis/position_risk.py`, `src/analysis/rr.py`, `src/analysis/scoring.py`, `src/analysis/signal_tier.py`, `src/notification/trigger.py`, `src/storage/csv_logger.py`, `src/storage/json_store.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `tests/test_funding_and_signal.py`, `tests/test_notification_trigger.py`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/AI向けシステムログ全体整理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: ログ活用基盤は実装済みだが、実運用データをためた後の週次・月次レポート活用はこれから。
+- メモ: `./.venv312/bin/python -m unittest discover -s tests -v` で 13 件すべて成功。
+
+- 日時: 2026-03-11 02:19 JST
+- 実施内容: 改善設計書 v2.1 に沿って、Ver02 の観測基盤 Phase 0 を拡張実装した。主な内容は、(1) `compute_scores()` に因子寄与度内訳と上位 positive / negative factor を追加、(2) `evaluate_position_risk()` に `prelabel_primary_reason` と breakdown を追加、(3) `build_setup()` に `status_reason_code` / `invalid_reason_codes` を追加、(4) `compute_signal_tier()` と `should_notify()` を理由コードつき返却へ変更、(5) `main.py` で `data_quality_flag` / `data_missing_fields` / `notify_reason_codes` / `suppress_reason_codes` / `ai_decision` / `ai_confidence` / `primary_setup` 価格情報を payload へ追加、(6) Funding 取得失敗時は中立扱いで継続し `data_missing_fields=funding` を残す構成へ変更、(7) `trades.csv` に Phase 0 用の追加列を実装、(8) `tools/log_feedback.py` を `shadow_log.csv` / 12h 評価 / `tp1_hit_first` / `outcome` / `actual_move_driver` / `logic_validated` / 通知監査 A/B/C/D 対応へ全面拡張、(9) Obsidian `📝通知レビュー.md` を新列付きで再出力、(10) README と運用ガイドへ `shadow_log.csv` と `build-shadow-log` を追記、(11) `unittest` 13件成功、`py_compile` 成功、`build-feedback-report --period weekly` の煙テスト成功、(12) 開発環境常駐 `com.afrog.btc-monitor` を再起動し、再起動前 `pid=47314`、再起動後 `pid=54689` を確認した。
+- 変更ファイル: `main.py`, `src/analysis/scoring.py`, `src/analysis/position_risk.py`, `src/analysis/rr.py`, `src/analysis/signal_tier.py`, `src/notification/trigger.py`, `src/storage/csv_logger.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `tests/test_notification_trigger.py`, `tests/test_funding_and_signal.py`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`, `📝通知レビュー.md`
+- 未解決事項: `shadow_log.csv` と追加列が次回の定時サイクルで実データとして自然に流れるかは未確認。`daily-sync` の本番初回確認と `actual_move_driver` 入力後の `logic_validated` 実運用確認もこれから。Phase 1 の paper trade / 損益管理モジュール着手は未実施。
+- メモ: ChatGPT API を使う実行は今回行っていない。確認は `./.venv312/bin/python -m unittest discover -s tests -v`、`./.venv312/bin/python -m py_compile ...`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly --output-md /tmp/btc_feedback_weekly_phase0.md`、`./.venv312/bin/python tools/log_feedback.py export-review-queue`、`zsh tools/start_monitor.sh` で実施。
+
+- 日時: 2026-03-11 00:50 JST
+- 実施内容: 他AI評価用として、現行 `btc_monitor` のロジック全体を実装ベースで整理した仕様書 `運用資料/AI向けシステムロジック全体整理.md` を新規作成した。内容は、定時実行フロー、MEXC/Binance の取得データ、各分析モジュールの役割、`bias` / `prelabel` / `confidence` / `signal_tier` / 通知条件 / ログ保存 / 補助ツールまでを一連の判断レイヤーとして説明する形にまとめた。コード変更はドキュメント追加と運用記録更新のみで、実行ロジック本体は変更していない。
+- 変更ファイル: `運用資料/AI向けシステムロジック全体整理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 新規仕様書は実装ベースで整理済みだが、他AIへ評価依頼したあとの指摘反映は未実施。
+- メモ: ChatGPT API を使う実行は今回行っていない。コード読取対象は `main.py`, `config.py`, `src/analysis/*`, `src/data/*`, `src/ai/*`, `src/notification/*`, `src/storage/*`, `tools/log_feedback.py` を中心に確認した。
+
+- 日時: 2026-03-11 00:33 JST
+- 実施内容: ログ活用基盤 フェーズ1 を実装した。主な内容は、(1) 観測ログへ `signal_id`、通知有無、通知時刻、`atr_15m_value`、最寄りサポレジ、`summary_subject` を追加、(2) `save_signal_snapshot()` を `signal_id` ベース保存へ変更、(3) `tools/log_feedback.py` を新規追加して `update-outcomes` / `export-review-queue` / `import-reviews` / `build-feedback-report` / `daily-sync` を実装、(4) `signal_outcomes.csv` と `user_reviews.csv` を扱う upsert ロジック、事後評価ロジック、レビュー Markdown テーブルの入出力を追加、(5) フィードバック週次・月次レポートの雛形と改善候補抽出ロジックを実装、(6) `📝通知レビュー.md` を Obsidian 側へ新規作成し、README と運用ガイドへ運用コマンドを追記、(7) `unittest` 4件を追加して全12件成功を確認、(8) 開発環境常駐 `com.afrog.btc-monitor` を再起動して最新コードを反映、である。再起動前 `pid=42329`、再起動後 `pid=47314` を確認した。
+- 変更ファイル: `main.py`, `src/storage/csv_logger.py`, `src/storage/json_store.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`, `📝通知レビュー.md`
+- 未解決事項: `tools/log_feedback.py daily-sync` を実データで回した初回結果の確認は未実施。新しい `signal_id` / `was_notified` / `notified_at_utc` / 最寄りサポレジ列が実ログへ想定どおり入るかも次回定時サイクル確認が必要。
+- メモ: 確認は `./.venv312/bin/python -m unittest discover -s tests -v`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly --output-md /tmp/btc_feedback_weekly.md`、`./.venv312/bin/python tools/log_feedback.py export-review-queue --review-note /tmp/btc_feedback_review.md` で実施。ChatGPT API は未使用。
+
 - 日時: 2026-03-10 23:26 JST
 - 実施内容: Ver02 開発環境の常駐 `com.afrog.btc-monitor` を再起動し、今回の近場サポレジ表示補正を常駐プロセスへ反映した。再起動前は `pid=37563`、再起動後は `pid=42329` となり、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`program = .../.venv312/bin/python` を確認した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`

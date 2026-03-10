@@ -82,6 +82,45 @@ def _round_optional(value: float | None, digits: int = 2) -> float | None:
     return round(float(value), digits)
 
 
+def _dedupe_preserve(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        key = str(value).strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    return ordered
+
+
+def _normalize_missing_data_fields(raw_fields: list[str], *, ai_missing: bool, funding_missing: bool) -> list[str]:
+    mapped: list[str] = []
+    if funding_missing:
+        mapped.append("funding")
+    if ai_missing:
+        mapped.append("ai_response")
+    for field in raw_fields:
+        if field in {"oi_value", "oi_change_pct", "oi_trend_values"}:
+            mapped.append("oi")
+        elif field in {"buy_volume", "sell_volume", "cvd_series"}:
+            mapped.append("taker")
+        elif field in {"orderbook_bids", "orderbook_asks"}:
+            mapped.append("orderbook")
+        elif field == "liquidation_events":
+            mapped.append("liquidation")
+    return _dedupe_preserve(mapped)
+
+
+def _data_quality_flag(missing_fields: list[str]) -> str:
+    count = len(_dedupe_preserve(missing_fields))
+    if count <= 0:
+        return "ok"
+    if count == 1:
+        return "degraded"
+    return "partial_missing"
+
+
 def _prepare_tf(df, cfg, swing_n: int) -> dict[str, Any]:
     close = df["close"]
     high = df["high"]
@@ -132,6 +171,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     now_utc = datetime.now(tz=timezone.utc)
     now_jst = now_utc.astimezone(ZoneInfo(cfg.TIMEZONE))
     now_ms = int(now_utc.timestamp() * 1000)
+    signal_id = now_utc.strftime("%Y%m%d_%H%M%S")
 
     update_heartbeat(base_dir, cfg.HEARTBEAT_FILE)
     cleanup_if_due(base_dir, cfg, now_utc)
@@ -159,16 +199,24 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     price = float(df_15m["close"].iloc[-1])
     atr_15m = float(tf_15m["atr"].iloc[-1])
     atr_ratio = calculate_atr_ratio(tf_15m["atr"], 50)
-    funding_rate_raw = fetch_funding_rate(fetch_cfg)
-    funding_rate_pct = funding_rate_raw_to_pct(funding_rate_raw)
-    funding_label = funding_rate_label(
-        funding_rate_pct=funding_rate_pct,
-        long_warning_pct=cfg.FUNDING_LONG_WARNING,
-        long_prohibited_pct=cfg.FUNDING_LONG_PROHIBITED,
-        short_warning_pct=cfg.FUNDING_SHORT_WARNING,
-        short_prohibited_pct=cfg.FUNDING_SHORT_PROHIBITED,
-    )
-    funding_display = f"{funding_label} ({format_funding_pct(funding_rate_pct)})"
+    funding_missing = False
+    try:
+        funding_rate_raw = fetch_funding_rate(fetch_cfg)
+        funding_rate_pct = funding_rate_raw_to_pct(funding_rate_raw)
+        funding_label = funding_rate_label(
+            funding_rate_pct=funding_rate_pct,
+            long_warning_pct=cfg.FUNDING_LONG_WARNING,
+            long_prohibited_pct=cfg.FUNDING_LONG_PROHIBITED,
+            short_warning_pct=cfg.FUNDING_SHORT_WARNING,
+            short_prohibited_pct=cfg.FUNDING_SHORT_PROHIBITED,
+        )
+        funding_display = f"{funding_label} ({format_funding_pct(funding_rate_pct)})"
+    except Exception:  # noqa: BLE001
+        funding_missing = True
+        funding_rate_raw = 0.0
+        funding_rate_pct = 0.0
+        funding_label = "取得失敗"
+        funding_display = "取得失敗 (中立扱い)"
     market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
     per_tf_inputs = {
@@ -399,6 +447,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
     short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
     primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
+    primary_setup = (
+        long_setup if primary_setup_side == "long" else short_setup if primary_setup_side == "short" else {}
+    )
     all_flags = sorted(set(score_info["no_trade_flags"] + long_flags + short_flags + position_risk["risk_flags"]))
     if critical_zone:
         all_flags.append("Critical_zone_warning")
@@ -428,10 +479,13 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
 
     result: dict[str, Any] = {
+        "signal_id": signal_id,
         "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
         "timestamp_jst": now_jst.isoformat(),
         "system_label": str(getattr(cfg, "SYSTEM_LABEL", "")).strip(),
         "current_price": _round2(price),
+        "was_notified": False,
+        "notified_at_utc": "",
         "server_time_gap_sec": round(gap_sec, 2),
         "bias": bias,
         "phase": phase,
@@ -440,12 +494,21 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "signals_4h": tf_4h["signal"],
         "signals_1h": tf_1h["signal"],
         "signals_15m": tf_15m["signal"],
+        "long_score": score_info["long_display_score"],
+        "short_score": score_info["short_display_score"],
         "long_display_score": score_info["long_display_score"],
         "short_display_score": score_info["short_display_score"],
+        "long_raw_score": _round_optional(score_info["long_raw_score"], 4),
+        "short_raw_score": _round_optional(score_info["short_raw_score"], 4),
         "score_gap": score_info["score_gap"],
+        "score_factor_breakdown_long": score_info["long_factor_breakdown"],
+        "score_factor_breakdown_short": score_info["short_factor_breakdown"],
+        "top_positive_factors": score_info["top_positive_factors"],
+        "top_negative_factors": score_info["top_negative_factors"],
         "confidence": confidence,
         "agreement_with_machine": agreement_with_machine,
         "prelabel": position_risk["prelabel"],
+        "prelabel_primary_reason": position_risk["primary_reason"],
         "location_risk": position_risk["location_risk"],
         "critical_zone": critical_zone,
         "support_zones": support_zones_nearest,
@@ -458,11 +521,18 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "short_setup": short_setup,
         "primary_setup_side": primary_setup_side,
         "primary_setup_status": primary_setup_status,
+        "primary_setup_reason": primary_setup.get("status_reason_code", ""),
+        "invalid_reason": primary_setup.get("invalid_reason", ""),
+        "primary_entry_mid": primary_setup.get("entry_mid", ""),
+        "primary_stop_loss": primary_setup.get("stop_loss", ""),
+        "primary_tp1": primary_setup.get("tp1", ""),
+        "primary_tp2": primary_setup.get("tp2", ""),
         "funding_rate": _round_optional(funding_rate_raw, 8),
         "funding_rate_raw": _round_optional(funding_rate_raw, 8),
         "funding_rate_pct": _round_optional(funding_rate_pct, 4),
         "funding_rate_label": funding_label,
         "funding_rate_display": funding_display,
+        "atr_15m_value": _round_optional(atr_15m, 4),
         "atr_ratio": _round2(atr_ratio),
         "volume_ratio": _round2(float(tf_15m["volume_ratio"].iloc[-1])),
         "liquidity_above": _round_optional(liquidity_info.get("liquidity_above")),
@@ -490,12 +560,19 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
+        "ai_decision": "",
+        "ai_confidence": "",
         "warning_flags": score_info["warning_flags"],
         "no_trade_flags": all_flags,
         "risk_flags": position_risk["risk_flags"],
         "signal_tier": "normal",
         "signal_badge": "",
+        "signal_tier_reason_codes": [],
         "market_structure_missing_fields": market_structure.missing_fields or [],
+        "data_missing_fields": [],
+        "data_quality_flag": "ok",
+        "notify_reason_codes": [],
+        "suppress_reason_codes": [],
         "reason_for_notification": [],
     }
 
@@ -509,16 +586,30 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         qualitative_payload=qualitative_context,
     )
     result["ai_advice"] = ai_advice
-    result["signal_tier"] = compute_signal_tier(result, cfg)
+    if isinstance(ai_advice, dict):
+        result["ai_decision"] = ai_advice.get("decision", "")
+        result["ai_confidence"] = ai_advice.get("confidence", "")
+
+    data_missing_fields = _normalize_missing_data_fields(
+        market_structure.missing_fields or [],
+        ai_missing=bool(getattr(cfg, "OPENAI_API_KEY", "")) and ai_advice is None,
+        funding_missing=funding_missing,
+    )
+    result["data_missing_fields"] = data_missing_fields
+    result["data_quality_flag"] = _data_quality_flag(data_missing_fields)
+
+    signal_tier_info = compute_signal_tier(result, cfg)
+    result["signal_tier"] = signal_tier_info["tier"]
+    result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
     result["signal_badge"] = signal_tier_badge(result["signal_tier"])
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
-    notify, reasons = should_notify(result, last_result, last_notified, cfg)
-    result["reason_for_notification"] = reasons
-    if ai_advice is None:
-        if "ai_error" not in result["reason_for_notification"]:
-            result["reason_for_notification"].append("ai_error")
+    notify_info = should_notify(result, last_result, last_notified, cfg)
+    notify = bool(notify_info["notify"])
+    result["notify_reason_codes"] = notify_info["notify_reason_codes"]
+    result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
+    result["reason_for_notification"] = notify_info["notify_reason_codes"]
 
     result["summary_subject"] = build_summary_subject(result)
     result["summary_body"] = build_summary_body(
@@ -530,12 +621,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         result_payload=result,
     )
 
-    save_signal_snapshot(base_dir, result)
-    append_trade_log(base_dir, result)
-    save_json(get_last_result_path(base_dir), result)
-
     if notify:
         if cfg.DRYRUN_MODE:
+            result["was_notified"] = True
+            result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
             save_json(get_last_notified_path(base_dir), result)
         else:
             try:
@@ -549,10 +638,16 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                     subject=result["summary_subject"],
                     body=result["summary_body"],
                 )
+                result["was_notified"] = True
+                result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
                 save_json(get_last_notified_path(base_dir), result)
             except Exception as exc:  # noqa: BLE001
                 save_pending_email(base_dir, result["summary_subject"], result["summary_body"])
                 _error_log(base_dir, "smtp_error", f"{exc}\n{traceback.format_exc()}")
+
+    save_signal_snapshot(base_dir, result)
+    append_trade_log(base_dir, result)
+    save_json(get_last_result_path(base_dir), result)
 
     return result
 

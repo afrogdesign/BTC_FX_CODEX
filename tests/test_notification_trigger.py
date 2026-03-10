@@ -47,9 +47,9 @@ class NotificationTriggerTest(unittest.TestCase):
             "signal_tier": "normal",
         }
 
-        notify, reasons = should_notify(current, last_result, last_notified, self.cfg)
-        self.assertTrue(notify)
-        self.assertIn("signal_tier_upgraded", reasons)
+        decision = should_notify(current, last_result, last_notified, self.cfg)
+        self.assertTrue(decision["notify"])
+        self.assertIn("signal_tier_upgraded", decision["notify_reason_codes"])
 
     def test_respect_cooldown_when_no_tier_upgrade(self) -> None:
         now = datetime.now(tz=timezone.utc)
@@ -75,11 +75,11 @@ class NotificationTriggerTest(unittest.TestCase):
             "signal_tier": "normal",
         }
 
-        notify, reasons = should_notify(current, last_result, last_notified, self.cfg)
-        self.assertFalse(notify)
-        self.assertEqual(reasons, [])
+        decision = should_notify(current, last_result, last_notified, self.cfg)
+        self.assertFalse(decision["notify"])
+        self.assertEqual(decision["notify_reason_codes"], [])
+        self.assertIn("no_material_change", decision["suppress_reason_codes"])
 
 
 if __name__ == "__main__":
     unittest.main()
-

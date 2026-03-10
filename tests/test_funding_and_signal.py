@@ -43,17 +43,22 @@ class FundingAndSignalTest(unittest.TestCase):
             "warning_flags": [],
             "agreement_with_machine": "agree",
         }
-        self.assertEqual(compute_signal_tier(base_result, self.cfg), "strong_machine")
+        tier_info = compute_signal_tier(base_result, self.cfg)
+        self.assertEqual(tier_info["tier"], "strong_machine")
+        self.assertIn("primary_ready", tier_info["reason_codes"])
 
         ai_confirmed = dict(base_result)
         ai_confirmed["ai_advice"] = {"decision": "LONG", "confidence": 0.75, "quality": "A"}
-        self.assertEqual(compute_signal_tier(ai_confirmed, self.cfg), "strong_ai_confirmed")
+        ai_tier_info = compute_signal_tier(ai_confirmed, self.cfg)
+        self.assertEqual(ai_tier_info["tier"], "strong_ai_confirmed")
+        self.assertIn("ai_direction_match", ai_tier_info["reason_codes"])
 
         not_strong = dict(base_result)
         not_strong["prelabel"] = "SWEEP_WAIT"
-        self.assertEqual(compute_signal_tier(not_strong, self.cfg), "normal")
+        weak_info = compute_signal_tier(not_strong, self.cfg)
+        self.assertEqual(weak_info["tier"], "normal")
+        self.assertIn("prelabel_not_entry_ok", weak_info["reason_codes"])
 
 
 if __name__ == "__main__":
     unittest.main()
-

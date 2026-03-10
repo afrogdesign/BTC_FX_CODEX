@@ -83,6 +83,45 @@ python3 tools/log_analytics.py --output-md 運用資料/reports/log_review_all.m
 python3 tools/log_analytics.py --year 2026 --output-md 運用資料/reports/log_review_2026.md
 ```
 
+## ログ活用基盤
+- 観測ログ: `logs/signals/*.json`, `logs/csv/trades.csv`
+- 事後評価ログ: `logs/csv/signal_outcomes.csv`
+- ユーザーレビューログ: `logs/csv/user_reviews.csv`
+- 分析用統合ログ: `logs/csv/shadow_log.csv`
+- Obsidian入力先: `📝通知レビュー.md`
+
+### 日次同期
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+./.venv312/bin/python tools/log_feedback.py daily-sync
+```
+
+- 事後評価更新
+- Obsidian レビュー候補更新
+- `done` レビューの CSV 反映
+- 週次フィードバックレポート出力
+
+### 統合ログの再生成
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+./.venv312/bin/python tools/log_feedback.py build-shadow-log
+```
+
+- `trades.csv` / `signal_outcomes.csv` / `user_reviews.csv` を `signal_id` で結合して `shadow_log.csv` を更新します。
+- `shadow_log.csv` は改善判断の主テーブルで、週次・月次レポートの元データです。
+
+### 週次レポート
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly
+```
+
+### 月次レポート
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+./.venv312/bin/python tools/log_feedback.py build-feedback-report --period monthly
+```
+
 ## 注意
 - `.env` は機密情報を含むため、絶対にコミットしないでください。
 - 初回は `DRYRUN_MODE=true` で動作確認し、その後 `false` に切り替えるのがおすすめです。

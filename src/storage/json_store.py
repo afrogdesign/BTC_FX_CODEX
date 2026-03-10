@@ -27,7 +27,8 @@ def save_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def save_signal_snapshot(base_dir: Path, payload: dict[str, Any]) -> Path:
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    signal_id = str(payload.get("signal_id", "")).strip()
+    ts = signal_id or datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     path = base_dir / "logs" / "signals" / f"{ts}.json"
     save_json(path, payload)
     return path

@@ -1,30 +1,51 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from typing import Any
 
 
 CSV_HEADER = [
+    "signal_id",
     "timestamp_utc",
     "timestamp_jst",
+    "was_notified",
+    "notified_at_utc",
+    "current_price",
     "bias",
     "phase",
     "market_regime",
     "transition_direction",
+    "long_score",
+    "short_score",
     "long_display_score",
     "short_display_score",
+    "long_raw_score",
+    "short_raw_score",
     "score_gap",
+    "score_factor_breakdown_long",
+    "score_factor_breakdown_short",
+    "top_positive_factors",
+    "top_negative_factors",
     "confidence",
     "agreement_with_machine",
     "prelabel",
+    "prelabel_primary_reason",
     "location_risk",
     "primary_setup_side",
     "primary_setup_status",
+    "primary_setup_reason",
+    "invalid_reason",
+    "primary_entry_mid",
+    "primary_stop_loss",
+    "primary_tp1",
+    "primary_tp2",
     "funding_rate",
     "funding_rate_raw",
     "funding_rate_pct",
     "funding_rate_label",
+    "atr_15m_value",
     "atr_ratio",
     "volume_ratio",
     "rr_estimate",
@@ -42,38 +63,79 @@ CSV_HEADER = [
     "long_rr",
     "short_rr",
     "warning_flags",
+    "risk_flags",
     "signal_tier",
     "signal_badge",
+    "signal_tier_reason_codes",
+    "ai_decision",
+    "ai_confidence",
+    "data_quality_flag",
+    "data_missing_fields",
+    "nearest_support_low",
+    "nearest_support_high",
+    "nearest_support_distance",
+    "nearest_resistance_low",
+    "nearest_resistance_high",
+    "nearest_resistance_distance",
+    "summary_subject",
     "no_trade_flags",
+    "notify_reason_codes",
+    "suppress_reason_codes",
     "reason_for_notification",
 ]
 
 
-def append_trade_log(base_dir: Path, payload: dict[str, Any]) -> Path:
-    path = base_dir / "logs" / "csv" / "trades.csv"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.exists()
+def _first_zone(zones: list[dict[str, Any]] | None) -> dict[str, Any]:
+    if not zones:
+        return {}
+    first = zones[0]
+    return first if isinstance(first, dict) else {}
 
-    row = {
+
+def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    support_zone = _first_zone(payload.get("support_zones"))
+    resistance_zone = _first_zone(payload.get("resistance_zones"))
+    json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
+    return {
+        "signal_id": payload.get("signal_id"),
         "timestamp_utc": payload.get("timestamp_utc"),
         "timestamp_jst": payload.get("timestamp_jst"),
+        "was_notified": payload.get("was_notified"),
+        "notified_at_utc": payload.get("notified_at_utc"),
+        "current_price": payload.get("current_price"),
         "bias": payload.get("bias"),
         "phase": payload.get("phase"),
         "market_regime": payload.get("market_regime"),
         "transition_direction": payload.get("transition_direction"),
+        "long_score": payload.get("long_score"),
+        "short_score": payload.get("short_score"),
         "long_display_score": payload.get("long_display_score"),
         "short_display_score": payload.get("short_display_score"),
+        "long_raw_score": payload.get("long_raw_score"),
+        "short_raw_score": payload.get("short_raw_score"),
         "score_gap": payload.get("score_gap"),
+        "score_factor_breakdown_long": json_dumps(payload.get("score_factor_breakdown_long")),
+        "score_factor_breakdown_short": json_dumps(payload.get("score_factor_breakdown_short")),
+        "top_positive_factors": json_dumps(payload.get("top_positive_factors")),
+        "top_negative_factors": json_dumps(payload.get("top_negative_factors")),
         "confidence": payload.get("confidence"),
         "agreement_with_machine": payload.get("agreement_with_machine"),
         "prelabel": payload.get("prelabel"),
+        "prelabel_primary_reason": payload.get("prelabel_primary_reason"),
         "location_risk": payload.get("location_risk"),
         "primary_setup_side": payload.get("primary_setup_side"),
         "primary_setup_status": payload.get("primary_setup_status"),
+        "primary_setup_reason": payload.get("primary_setup_reason"),
+        "invalid_reason": payload.get("invalid_reason"),
+        "primary_entry_mid": payload.get("primary_entry_mid"),
+        "primary_stop_loss": payload.get("primary_stop_loss"),
+        "primary_tp1": payload.get("primary_tp1"),
+        "primary_tp2": payload.get("primary_tp2"),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
         "funding_rate_pct": payload.get("funding_rate_pct"),
         "funding_rate_label": payload.get("funding_rate_label"),
+        "atr_15m_value": payload.get("atr_15m_value"),
         "atr_ratio": payload.get("atr_ratio"),
         "volume_ratio": payload.get("volume_ratio"),
         "rr_estimate": payload.get("rr_estimate"),
@@ -91,15 +153,52 @@ def append_trade_log(base_dir: Path, payload: dict[str, Any]) -> Path:
         "long_rr": (payload.get("long_setup") or {}).get("rr_estimate"),
         "short_rr": (payload.get("short_setup") or {}).get("rr_estimate"),
         "warning_flags": ",".join(payload.get("warning_flags", [])),
+        "risk_flags": ",".join(payload.get("risk_flags", [])),
         "signal_tier": payload.get("signal_tier"),
         "signal_badge": payload.get("signal_badge"),
+        "signal_tier_reason_codes": json_dumps(payload.get("signal_tier_reason_codes")),
+        "ai_decision": payload.get("ai_decision"),
+        "ai_confidence": payload.get("ai_confidence"),
+        "data_quality_flag": payload.get("data_quality_flag"),
+        "data_missing_fields": json_dumps(payload.get("data_missing_fields")),
+        "nearest_support_low": support_zone.get("low"),
+        "nearest_support_high": support_zone.get("high"),
+        "nearest_support_distance": support_zone.get("distance_from_price"),
+        "nearest_resistance_low": resistance_zone.get("low"),
+        "nearest_resistance_high": resistance_zone.get("high"),
+        "nearest_resistance_distance": resistance_zone.get("distance_from_price"),
+        "summary_subject": payload.get("summary_subject"),
         "no_trade_flags": ",".join(payload.get("no_trade_flags", [])),
+        "notify_reason_codes": json_dumps(payload.get("notify_reason_codes")),
+        "suppress_reason_codes": json_dumps(payload.get("suppress_reason_codes")),
         "reason_for_notification": ",".join(payload.get("reason_for_notification", [])),
     }
 
-    with path.open("a", newline="", encoding="utf-8") as fp:
+
+def _load_existing_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
+    if not path.exists():
+        return [], []
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        return list(reader.fieldnames or []), list(reader)
+
+
+def append_trade_log(base_dir: Path, payload: dict[str, Any]) -> Path:
+    path = base_dir / "logs" / "csv" / "trades.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current_header, existing_rows = _load_existing_rows(path)
+    row = _row_from_payload(payload)
+
+    needs_rewrite = current_header and current_header != CSV_HEADER
+    mode = "a"
+    if not path.exists() or needs_rewrite:
+        mode = "w"
+
+    with path.open(mode, newline="", encoding="utf-8") as fp:
         writer = csv.DictWriter(fp, fieldnames=CSV_HEADER)
-        if write_header:
+        if mode == "w":
             writer.writeheader()
+            for existing in existing_rows:
+                writer.writerow({field: existing.get(field, "") for field in CSV_HEADER})
         writer.writerow(row)
     return path
