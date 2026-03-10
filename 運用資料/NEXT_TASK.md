@@ -13,6 +13,7 @@
 - ただし、現在 Ver02 は常駐停止中のため、設定反映は次回起動時に有効。
 - Ver01 も待ち時間を同値（10秒/20秒）へ反映し、`launchd` 再起動で適用済み。
 - Ver02 コードでは、Binance 清算イベントを `logs/cache/` に蓄積して次サイクルへ引き継ぐ実装を追加済み。
+- Ver02 の保存ブランチとして `ver02` を作成済み。
 - 旧本番パス `/Users/marupro/BTC_FX_CODEX_ver01` は削除済み。現在の本番配置は `~/CODEX` 配下に統一済み。
 - ローカルの不要常駐 `com.afrog.btc-monitor` は停止済み（LaunchAgentは `.disabled` 化）。
 - 方針として、Ver01 の開発は一旦区切り、以後は Ver02 の改善へ注力する。
