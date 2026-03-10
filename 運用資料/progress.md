@@ -1,5 +1,17 @@
 # Progress Log
 
+- 日時: 2026-03-11 07:13 JST
+- 実施内容: 次の定時サイクル確認として、開発環境常駐 `com.afrog.btc-monitor` の 05:05 / 06:05 / 07:05 JST サイクルを確認した。結果として、`logs/csv/trades.csv` と `logs/signals/20260310_220500.json` に `top_positive_factors`、`top_negative_factors`、`prelabel_primary_reason`、`data_quality_flag`、`data_missing_fields`、`notify_reason_codes`、`suppress_reason_codes`、`signal_tier_reason_codes` が実データとして入っていることを確認した。直近 07:05 JST サイクルでは `prelabel=SWEEP_WAIT`、`prelabel_primary_reason=lower_liquidity_distance`、`data_quality_flag=ok`、`suppress_reason_codes=[\"confidence_below_long_min\"]` が記録されていた。`heartbeat.txt` と `last_result.json` も 07:05 に更新され、常駐 `pid=56906` で継続稼働している。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: `notify_reason_codes` は今回のサイクルでは空配列だったため、通知が発生するケースでの実データ確認は未完了。`daily-sync` / `shadow_log.csv` / `actual_move_driver` 連携の本番確認もまだ。
+- メモ: `signal_id` は UTC ベースのため、JST 07:05 サイクルでもファイル名は `20260310_220500` になる。時刻ズレではなく、UTC命名仕様によるもの。
+
+- 日時: 2026-03-11 02:38 JST
+- 実施内容: `REPORT_TIMES` の参照不整合を修正した。確認の結果、実行中の開発環境 `.env` はすでに「毎時 `:05` の 24回実行」になっており、`load_config()` でも 24件を読めていたため、監視システムの実行そのものに時刻ズレは出ていなかった。一方で、`config.py` のデフォルト値と `.env.example` が旧設定の「1日6回」のままだったため、参照ファイル群として不整合が残っていた。今回この2点を毎時 `:05` の24件へ統一し、開発環境常駐 `com.afrog.btc-monitor` も再起動して、再起動前 `pid=54689`、再起動後 `pid=56906` を確認した。
+- 変更ファイル: `config.py`, `.env.example`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 実行ロジック側の時刻ズレは確認されなかったが、次回の定時サイクルで `00:05` 〜 `23:05` の毎時運用が継続しているかは引き続き観察が必要。
+- メモ: 確認は `rg '^REPORT_TIMES=' .env .env.example`、`./.venv312/bin/python - <<'PY' ... load_config ... PY`、`./.venv312/bin/python -m py_compile config.py`、`zsh tools/start_monitor.sh` で実施。ChatGPT API は未使用。
+
 - 日時: 2026-03-11 02:24 JST
 - 実施内容: Ver02 の現時点を `v2.3` として固定する前提で、大幅な改善を一式実装した。主な内容は、(1) `signal_id`・通知結果・抑制理由・データ欠損状態などを `result` / JSON / CSV に保存する詳細ログ化、(2) `signal_tier` を理由コード付きで返す構成への拡張、(3) 通知判定を `notify_reason_codes` / `suppress_reason_codes` を返す構造へ整理、(4) Funding 取得失敗時を中立扱いしつつ欠損として記録する処理、(5) スコア内訳・主要因・主要セットアップ理由の保存、(6) `tools/log_feedback.py` とレビュー導線・週次/月次レポート基盤の追加、(7) 関連 README / 運用資料の整備、である。
 - 変更ファイル: `main.py`, `src/analysis/position_risk.py`, `src/analysis/rr.py`, `src/analysis/scoring.py`, `src/analysis/signal_tier.py`, `src/notification/trigger.py`, `src/storage/csv_logger.py`, `src/storage/json_store.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `tests/test_funding_and_signal.py`, `tests/test_notification_trigger.py`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/AI向けシステムログ全体整理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
