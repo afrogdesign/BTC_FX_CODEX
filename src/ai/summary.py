@@ -98,6 +98,14 @@ def _format_flags(flags: list[Any]) -> str:
     return " ".join(parts)
 
 
+def _format_price(value: Any) -> str:
+    try:
+        price = float(value)
+    except Exception:  # noqa: BLE001
+        return str(value)
+    return f"{price:,.2f}"
+
+
 def _fallback_summary(result: dict[str, Any]) -> str:
     ai_advice = result.get("ai_advice")
     ai_line = "AI審査は今回は使わず、機械判定を中心に整理しています。"
@@ -117,6 +125,7 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     short_score = result.get("short_display_score")
     gap = result.get("score_gap")
     confidence = result.get("confidence")
+    current_price = _format_price(result.get("current_price"))
     funding = result.get("funding_rate")
     atr_ratio = result.get("atr_ratio")
     volume_ratio = result.get("volume_ratio")
@@ -132,7 +141,7 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         f"時間足ごとの印象は、4時間足が {_label_signal(result.get('signals_4h'))}、"
         f"1時間足が {_label_signal(result.get('signals_1h'))}、"
         f"15分足が {_label_signal(result.get('signals_15m'))} です。\n"
-        f"【環境】Funding は {funding}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
+        f"【環境】現在価格は {current_price} USDT、Funding は {funding}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
         f"ATR比は値動きの荒さ、出来高比は売買の勢いを見る目安です。\n"
         f"【セットアップ】ロング側は「{long_setup}」、ショート側は「{short_setup}」です。\n"
         f"【AI】{ai_line}\n"
@@ -152,9 +161,10 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
     label_prefix = f"[{label}] " if label else ""
+    current_price = _format_price(result.get("current_price"))
     subject = (
         f"{label_prefix}[BTC監視] {jst_ts} {result.get('prelabel', 'RISKY_ENTRY')} / "
-        f"{result.get('bias')} / Confidence {result.get('confidence')}"
+        f"{result.get('bias')} / {current_price} / Confidence {result.get('confidence')}"
     )
     ai_advice = result.get("ai_advice")
     if ai_advice is None:
