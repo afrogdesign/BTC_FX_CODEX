@@ -1,5 +1,35 @@
 # Progress Log
 
+- 日時: 2026-03-10 21:55 JST
+- 実施内容: Ver02 の現時点コミットをタグ `v2.1` として固定し、GitHub へ push した。`v2.1` の主な内容は、Funding 表示の `%` 統一、サポレジの近接順表示、距離表示、TP順整列、`signal_tier` / `signal_badge` 追加、通知昇格トリガー対応、件名・本文の見せ方改善、および関連テスト追加である。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 強条件バッジ（🟡 / 🔥）の実運用発火確認は未完了。
+- メモ: タグ `v2.1` はコミット `93e462a` を指す。
+
+- 日時: 2026-03-10 22:52 JST
+- 実施内容: ユーザー依頼により、打ち合わせノートへ最新状況を要約追記した。内容は「Ver02 改善実装完了」「常駐再起動済み」「手動実行で Funding 新表示確認済み」「現在は実メール観察フェーズ」「強条件バッジ発火確認は市場条件待ち」。
+- 変更ファイル: `📒打ち合わせノート.md`, `運用資料/progress.md`
+- 未解決事項: 強条件（🟡 / 🔥）の実運用発火確認は未完了。
+- メモ: 実装フェーズから観察フェーズへ移行したことを、打ち合わせノート側の文脈にも反映した。
+
+- 日時: 2026-03-10 22:48 JST
+- 実施内容: ユーザー許可のうえで Ver02 の手動 `run_cycle` を1回実行し、新仕様の実動作を確認した。結果は `timestamp_jst=2026-03-10T22:47:18+09:00`、`prelabel=SWEEP_WAIT`、`signal_tier=normal`、`signal_badge=''`、`funding_rate_raw=0.000023`、`funding_rate_pct=0.0023`、`funding_rate_display='ほぼ中立 (+0.0023%)'`。`last_result.json` でも同値を確認し、メール本文に「ファンディングレート: ほぼ中立 (+0.0023%)」が反映されることを確認した。今回の条件は強条件に未到達のため、バッジ非表示挙動（normal）が正しく動作した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 強条件（🟡 / 🔥）が実際に発火するケースの実運用確認は未実施。
+- メモ: OpenAI API 使用はユーザー許可取得済み。通知理由は空配列。
+
+- 日時: 2026-03-10 22:42 JST
+- 実施内容: Ver02 改善計画を実装した。主な内容は、(1) Funding を raw / % / ラベル表示に分離して判定単位を `%` に統一、(2) サポレジを内部計算用 `all zones` と表示用（近い順 / 強度順）に分離、(3) `signal_tier`（`normal` / `strong_machine` / `strong_ai_confirmed`）と `signal_badge`（🟡/🔥）を追加、(4) 通知トリガーへ `signal_tier_upgraded` を追加してクールダウン中の昇格通知を許可、(5) 要約件名・本文へバッジ表示と Funding 表示（例: ほぼ中立 (+0.0037%)）を反映、(6) CSV/JSON へ新項目を追加。バックテスト側も `all zones` と `%単位Funding` へ揃え、ライブとのロジック差分を減らした。あわせて `unittest` を新規追加し、7件すべて成功を確認した。
+- 変更ファイル: `main.py`, `src/analysis/funding.py`, `src/analysis/signal_tier.py`, `src/analysis/support_resistance.py`, `src/notification/trigger.py`, `src/ai/summary.py`, `src/storage/csv_logger.py`, `backtest/runner.py`, `prompts/summary_prompt.md`, `.env.example`, `README.md`, `tests/test_funding_and_signal.py`, `tests/test_notification_trigger.py`, `tests/test_support_resistance.py`, `tests/test_summary_format.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 実メールでの最終見え方確認（件名バッジ、Funding表示、signal_tier動作）は未実施。`run_cycle` 実行には OpenAI API 利用が含まれるため、次回は許可取得のうえで確認する。
+- メモ: 構文チェック `python3 -m py_compile` と `./.venv312/bin/python -m unittest discover -s tests -v` は成功。
+
+- 日時: 2026-03-10 22:06 JST
+- 実施内容: ユーザー依頼により、打ち合わせノートへ「このシステムでかなり理想に近い場面」の短い整理メモを追記した。あわせて、そうした場面を今後はメール内で絵文字や目立つラベル付きで分かりやすく伝えたい、という実装方針も記録した。`NEXT_TASK.md` にも、強い好条件通知の視覚強調を検討項目として追加した。
+- 変更ファイル: `📒打ち合わせノート.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`
+- 未解決事項: 実装自体はまだ未着手。
+- メモ: 方向・位置・RR がそろった場面を、通常通知と視覚的に差別化する方針。
+
 - 日時: 2026-03-10 21:53 JST
 - 実施内容: ユーザー依頼により、打ち合わせノートへ「次の作業タイミング」の判断メモを追記した。内容は、軽い文面見直しは 2026-03-11 に一度行う、本格的な閾値調整は Ver02 通知を 3〜5 サイクル分ためてから行う、という運用方針。
 - 変更ファイル: `📒打ち合わせノート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
