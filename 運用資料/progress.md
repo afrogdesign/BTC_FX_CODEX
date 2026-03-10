@@ -1,0 +1,57 @@
+# Progress Log
+
+- 日時: 2026-03-10 13:05 JST
+- 実施内容: `progress.md` の日時記録を、推測ではなく実時刻ベースで残す運用に修正した。今後は更新直前に `date` コマンドで取得した JST をそのまま記録する。あわせて、根拠が取れた直近エントリの時刻をファイル更新時刻ベースで補正した。
+- 変更ファイル: `運用資料/progress.md`
+- 未解決事項: すでに残っている古いエントリには概算時刻が混ざる可能性があるため、厳密性が必要な場合は都度ログ照合が必要。
+- メモ: 以後は「手入力のだいたい時刻」を避け、必ず実時刻を入れる。
+
+- 日時: 2026-03-10 12:13 JST
+- 実施内容: メール本文が `bias=short` や `long=59 short=74` のような生データ中心で読みにくい問題に対応した。`src/ai/summary.py` のフォールバック本文を、数値の意味を日本語で説明する文章へ変更し、AI要約成功時も同じ方向性になるよう `prompts/summary_prompt.md` を調整した。
+- 変更ファイル: `src/ai/summary.py`, `prompts/summary_prompt.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 次回メールで、AI要約成功時とフォールバック時の両方が十分読みやすいか確認が必要。
+- メモ: 「数字を見せる」より「意味を伝える」を優先する方向へ調整。
+
+- 日時: 2026-03-10 08:11 JST
+- 実施内容: 08:05 実行で `ai_summary_error` が発生し、要約生成のみ `APITimeoutError` で失敗していることを確認したため、要約側だけ別タイムアウト設定を持てるよう修正した。`AI_SUMMARY_TIMEOUT_SEC=10` を追加し、判定AIは `AI_TIMEOUT_SEC=5` のまま、要約生成のみ 10 秒待つ構成へ変更した。
+- 変更ファイル: `config.py`, `main.py`, `.env`, `.env.example`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 設定反映後の次回実行で `ai_summary_error` が再発するかは確認が必要。
+- メモ: 判定AIと要約AIを同じ待ち時間にせず、要約だけ長めにしたので、全体の応答性を大きく落としにくい。
+
+- 記録ルール: 以後、`日付` ではなく `日時` を `YYYY-MM-DD HH:MM JST` 形式で記録し、更新直前に `date` コマンドで取得した実時刻を使う。
+
+- 日時: 2026-03-10 07:53 JST
+- 実施内容: 定時実行を 4時間ごとから 1時間ごとへ変更した。`.env` の `REPORT_TIMES` を毎時 `:05` 実行に更新し、常駐再起動で反映する前提にした。ユーザー観察として、2026-03-09 朝9時ごろのロングが理想タイミングだったという情報も踏まえ、短めの機会を逃しにくい運用へ寄せた。
+- 変更ファイル: `.env`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 1時間運用で通知量が増えすぎないか、数サイクルの観察が必要。
+- メモ: 15分足を使う判定ロジックに対して、1時間実行は 4時間実行より実戦に寄せた設定。
+
+- 日時: 2026-03-10 07:48 JST
+- 実施内容: `tools/start_monitor.sh` に実PID保存処理を追加し、`launchctl print` で取得した PID を `logs/runtime/monitor.pid` に書き込むよう修正した。修正反映のため常駐プロセスを再起動し、`monitor.pid=49076` と `launchd` 上の実PIDが一致することを確認した。
+- 変更ファイル: `tools/start_monitor.sh`, `運用資料/README.md`, `運用資料/運用コマンドメモ.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 次回定時サイクル後に AI判定が復帰するかは引き続き確認が必要。
+- メモ: PID ファイルは再起動時に同期される方式。手動で `launchctl` 操作だけ行った場合は、`tools/start_monitor.sh` を使う運用に寄せるとずれにくい。
+
+- 日時: 2026-03-10 07:42 JST
+- 実施内容: `tools/start_monitor.sh` で `launchd` 常駐プロセスを再起動し、最新の `.env` とコード変更を反映した。`launchctl print` で `com.afrog.btc-monitor` が `running`、PID `48843`、実行バイナリが `.venv312/bin/python` であることを確認した。あわせて `monitor.err` に新しいAIエラーは出ていないことも確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: `logs/runtime/monitor.pid` は古い PID `37423` のままで、実プロセスPIDと一致していない。必要なら PID ファイル更新処理を別途追加する。
+- メモ: `logs/heartbeat.txt` と `logs/last_result.json` の更新時刻はまだ前回サイクル時刻のままなので、次回定時実行後に AI判定復帰可否を確認する。
+
+- 日時: 2026-03-10 07:38 JST
+- 実施内容: ChatGPT API の実接続テストを実施し、`.venv312` から `gpt-4o-mini` へ正常応答 `OK` を確認した。これにより API キー不正や接続不能ではないことを確認できたため、AI判定エラーの主因を `.env` の `AI_TIMEOUT_SEC=1` / `AI_RETRY_COUNT=1` と判断し、`AI_TIMEOUT_SEC=5`、`AI_RETRY_COUNT=3` に戻した。
+- 変更ファイル: `.env`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 設定変更後の常駐サイクルで `ai_error` が解消するかは次回実行結果の確認が必要。
+- メモ: ChatGPT API 実接続テストはユーザー許可のうえで実施。最小限の疎通確認のみで、本番ロジック全体の実行までは行っていない。
+
+- 日時: 2026-03-10 07:20 JST
+- 実施内容: AI判定エラーを調査した。`logs/last_result.json` では 2026-03-10 05:05 JST 時点の `ai_advice=null` と `reason_for_notification=["confidence_jump","ai_error"]` を確認。設定も点検し、`.env` の `AI_TIMEOUT_SEC=1`・`AI_RETRY_COUNT=1` が原因候補として強いと判断した。あわせて、AI例外が握りつぶされて詳細不明になる問題を改善し、`src/ai/advice.py` と `src/ai/summary.py` に失敗理由を `logs/errors/` へ保存するログ出力を追加した。
+- 変更ファイル: `src/ai/advice.py`, `src/ai/summary.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 実際の OpenAI 応答失敗理由は、次回サイクル実行後に新設ログを確認するまで確定しない。設定上はタイムアウト1秒が最有力。
+- メモ: APIキー自体は設定済み。常駐実行は `.venv312/bin/python` を使っており、そこで `openai 2.26.0` は導入済み。今回こちらから ChatGPT API 実行テストはしていない。
+
+- 日時: 2026-03-10 00:20 JST
+- 実施内容: 通知設定を「気づき重視」に調整した。`CONFIDENCE_LONG_MIN=60`、`CONFIDENCE_SHORT_MIN=65`、`CONFIDENCE_ALERT_CHANGE=7`、`ALERT_COOLDOWN_MINUTES=30` に変更し、通知が少し早めに来るようにした。あわせて記録ファイルを整理し、この案件で今必要な情報だけ残す形へ簡素化した。`launchd` 再起動後、常駐プロセスが新しい PID で動作していることも確認した。さらに、状態確認・ログ確認・再起動・停止・自動起動確認をまとめた運用メモを新規作成し、資料類を `運用資料/` に集約した。
+- 変更ファイル: `.env`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `運用資料/運用コマンドメモ.md`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`
+- 未解決事項: 変更後の実際の通知頻度はまだ未確認。次回以降の `last_notified.json` と通知メールの増え方を見て微調整が必要な可能性がある。
+- メモ: この通知は「売買サイン」ではなく「考えるきっかけ」を目的にした軽め設定。通知が増えすぎる場合は、まず `CONFIDENCE_ALERT_CHANGE` を 7 から 8 か 9 へ戻すと調整しやすい。

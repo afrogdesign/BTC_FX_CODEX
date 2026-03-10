@@ -409,7 +409,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result["summary_body"] = build_summary_body(
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_SUMMARY_MODEL,
-        timeout_sec=cfg.AI_TIMEOUT_SEC,
+        timeout_sec=cfg.AI_SUMMARY_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,
         result_payload=result,

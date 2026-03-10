@@ -51,6 +51,7 @@ zsh tools/start_monitor.sh
 - `launchd` に `com.afrog.btc-monitor` として登録します。
 - 実行系は `.venv312/bin/python`（Python 3.12）を使います。
 - 標準出力は `logs/runtime/monitor.out`、エラー出力は `logs/runtime/monitor.err` に出ます。
+- 再起動時に実PIDを `logs/runtime/monitor.pid` に保存します。
 - 初回の定時実行は `REPORT_TIMES` の次回時刻です。
 
 ## 運用時の確認ポイント
@@ -62,11 +63,11 @@ zsh tools/start_monitor.sh
 - 運用ガイド: `ログ検証と改善運用ガイド.md`
 - 全期間レポート作成:
 ```bash
-python3 tools/log_analytics.py --output-md reports/log_review_all.md
+python3 tools/log_analytics.py --output-md 運用資料/reports/log_review_all.md
 ```
 - 年次レポート作成（例: 2026年）:
 ```bash
-python3 tools/log_analytics.py --year 2026 --output-md reports/log_review_2026.md
+python3 tools/log_analytics.py --year 2026 --output-md 運用資料/reports/log_review_2026.md
 ```
 
 ## 注意

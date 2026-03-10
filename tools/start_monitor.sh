@@ -17,4 +17,10 @@ launchctl bootout "gui/$(id -u)" "$PLIST_DEST" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST_DEST"
 launchctl kickstart -k "gui/$(id -u)/$LABEL"
 
+# launchd が割り当てた実PIDを保存して、運用確認をしやすくする
+PID="$(launchctl print "gui/$(id -u)/$LABEL" | awk '/^\tpid = / {print $3; exit}')"
+if [[ -n "$PID" ]]; then
+  echo "$PID" > "$BASE_DIR/logs/runtime/monitor.pid"
+fi
+
 echo "launch_agent_started:$LABEL"

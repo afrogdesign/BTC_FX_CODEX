@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +54,13 @@ def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
+    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
+    path = base_dir / "logs" / "errors" / f"{ts}_{title}.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(details, encoding="utf-8")
+
+
 def request_ai_advice(
     *,
     api_key: str,
@@ -75,7 +83,8 @@ def request_ai_advice(
         "qualitative": qualitative_payload,
     }
 
-    for _ in range(max(1, retry_count)):
+    last_error: str | None = None
+    for attempt in range(1, max(1, retry_count) + 1):
         try:
             response = client.chat.completions.create(
                 model=model,
@@ -88,8 +97,24 @@ def request_ai_advice(
             content = response.choices[0].message.content or ""
             parsed = _extract_json(content)
             if parsed is None:
+                last_error = f"response was not valid JSON: {content[:500]}"
                 continue
             return _normalize_advice(parsed)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
             continue
+    if last_error:
+        _write_ai_error_log(
+            base_dir,
+            "ai_advice_error",
+            "\n".join(
+                [
+                    f"model={model}",
+                    f"timeout_sec={timeout_sec}",
+                    f"retry_count={retry_count}",
+                    f"last_attempt={attempt}",
+                    f"details={last_error}",
+                ]
+            ),
+        )
     return None
