@@ -1,5 +1,71 @@
 # Progress Log
 
+- 日時: 2026-03-12 10:05 JST
+- 実施内容: Ver02 本番移行後の今後の進め方を運用ルールとして文書化した。新規に `運用資料/今後の運用ルール.md` を追加し、「常駐は MBP2020 を正本」「MBA15 は開発・単発検証専用」「Ver01 は比較基準、Ver02 は改善検証対象として本番で並走」の方針を固定した。あわせて `運用資料/README.md`、`運用資料/ログ検証と改善運用ガイド.md`、`運用資料/運用コマンドメモ.md` を更新し、日次確認、`daily-sync` 実行条件、本番優先の確認手順、Ver02 本番再起動コマンドが追いやすい形に整理した。
+- 変更ファイル: `運用資料/今後の運用ルール.md`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/運用コマンドメモ.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 運用ルールの文書化は完了したが、Ver02 本番の次回定時サイクル確認、`notify_reason_codes` の実通知確認、`daily-sync` 初回本番確認、`logic_validated` 反映確認はまだ未実施。
+- メモ: 今回は文書と運用整理が中心で、常駐設定そのものの変更や再起動はしていない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 09:37 JST
+- 実施内容: 開発環境で蓄積した Ver02 ログのうち、実運用で活用価値が高い `logs/csv/`、`logs/signals/`、`logs/cache/` を本番 MBP2020 の Ver02 環境へ移行した。ローカルで `/tmp/btc_monitor_ver02_logs.tgz` を作成して MBP2020 へ転送し、`/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor/logs/` 配下へ展開した。件数照合として、本番側で `csv=2`、`signals=60`、`cache=1` を確認し、ローカル件数と一致した。展開後に Ver02 本番常駐 `com.afrog.btc-monitor-ver02` も再確認し、`state = running`、`pid = 98787` を維持していることを確認した。
+- 変更ファイル: 本番 Ver02 ログ一式（`logs/csv/`, `logs/signals/`, `logs/cache/`）, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 過去ログは本番へ移行できたが、Ver02 本番の `heartbeat.txt` と `last_result.json` は次の定時サイクル更新確認がまだ必要。`signal_outcomes.csv` と `user_reviews.csv` は元々未生成のため、今回も移行対象には含まれていない。
+- メモ: 過去ログを活かす観点で、分析用に重要な CSV・signal snapshot・cache を優先移行した。runtime ログは移行していない。
+
+- 日時: 2026-03-12 09:33 JST
+- 実施内容: Ver02 を MBP2020 本番環境へ移行した。ローカルから `btc_monitor` 一式を `/tmp/btc_monitor_ver02_deploy.tgz` としてまとめて転送し、MBP2020 側 `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` へ展開した。`python3 -m venv .venv312_prod` で本番用仮想環境を作成し、`requirements.txt` をインストールしたうえで、Ver02 専用 plist `com.afrog.btc-monitor-ver02.plist` と起動スクリプト `tools/start_monitor_ver02_prod.sh` を使って `launchd` へ登録した。起動確認として、MBP2020 上で `launchctl print gui/$(id -u)/com.afrog.btc-monitor-ver02` を実行し、`state = running`、`pid = 98787`、`program = /Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor/.venv312_prod/bin/python` を確認した。さらに `logs/runtime/monitor.pid` も作成されていることを確認した。続けて、ローカル開発環境の Ver02 常駐 `com.afrog.btc-monitor` は `launchctl bootout gui/$(id -u)/com.afrog.btc-monitor` で停止し、`~/Library/LaunchAgents/com.afrog.btc-monitor.plist` は `com.afrog.btc-monitor.plist.disabled_20260312_0933` として退避した。停止後はローカル `launchctl list` と `ps` で該当プロセスが消えていることを確認した。
+- 変更ファイル: `deploy/com.afrog.btc-monitor-ver02.plist`, `tools/start_monitor_ver02_prod.sh`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Ver02 本番は起動済みだが、確認時点では `logs/heartbeat.txt` と `logs/last_result.json` はまだ未生成だった。次の定時サイクル（毎時 `:05`）で更新されるかを確認する必要がある。
+- メモ: 今回はユーザー許可のうえで、本番 Ver02 起動に伴い OpenAI API を使う常駐運用へ入った。ローカルの Ver02 常駐は停止済み。
+
+- 日時: 2026-03-12 09:45 JST
+- 実施内容: MBP2020 (`192.168.1.38`) へ SSH 接続し、Ver01 本番常駐の現物確認を実施した。`launchctl print gui/$(id -u)/com.afrog.btc-monitor-ver01` では `state = running`、`pid = 91182`、`program = /Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor/.venv312_prod/bin/python`、plist パスは `/Users/marupro/Library/LaunchAgents/com.afrog.btc-monitor-ver01.plist` を確認した。plist も読み取り、`WorkingDirectory`、`StandardOutPath`、`StandardErrorPath` はすべて `/Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor` 配下に統一されていた。`logs/heartbeat.txt` と `logs/last_result.json` は 2026-03-12 09:05 JST 更新で、本番 Ver01 が定時稼働していることを確認した。あわせて `launchctl list`、`LaunchAgents`、Ver02 配置先の有無も確認し、本番機では現状 `com.afrog.btc-monitor-ver01` のみが動作し、`/Users/marupro/CODEX/BTC_FX_CODEX_ver02` は未作成であることを確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Ver01 の `logs/runtime/monitor.out` と `monitor.err` は 0 byte のままで、`monitor.pid` ファイルも未作成だった。Ver02 本番化時は runtime ログと PID 保存の扱いをどうそろえるか決める必要がある。
+- メモ: 今回は確認のみで、本番コード・設定の変更や再起動は未実施。SSH はパスワード認証で接続した。
+
+- 日時: 2026-03-12 09:23 JST
+- 実施内容: Obsidian 側 `00_Global_BOX` 配下のファイル実態を確認し、リンク運用の最終整理を行った。確認結果として、`README.md`、`AGENTS_TEMPLATE.md`、`開発環境仕様書.md`、`打ち合わせノートテンプレート.md` はすでに `/Users/marupro/CODEX/Global_BOX` へのシンボリックリンクだった一方、`秘密情報管理.md` だけが通常ファイルだった。今回このファイルを削除して、`/Users/marupro/CODEX/Global_BOX/秘密情報管理.md` へのシンボリックリンクへ置き換えた。これにより、Obsidian 側 `00_Global_BOX` のファイル群はすべて `CODEX/Global_BOX` を本体とするリンク運用で統一された。
+- 変更ファイル: `秘密情報管理.md`（Obsidian 側シンボリックリンク化）, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Global BOX のリンク運用は整ったが、MBP2020 本番機の実機確認自体はまだ未完了。Ver02 本番移行前に Ver01 の実状態確認が必要。
+- メモ: `00_Global_BOX` 配下の `.DS_Store` を含む各ファイルのリンク先確認済み。コード本体は未変更、常駐再起動も不要。
+
+- 日時: 2026-03-12 09:35 JST
+- 実施内容: `Global_BOX` 全体を横断確認し、今後の別プロジェクトから読んでも整合するよう参照先を整理した。具体的には、`/Users/marupro/CODEX/Global_BOX` を本体の共通参照ルートとして扱い、秘密情報の一元管理ファイル `秘密情報管理.md` を本体側へ新規追加した。`README.md` には主ファイル一覧と運用ルールを追記、`AGENTS_TEMPLATE.md` には秘密情報の実値参照先を追加、`開発環境仕様書.md` には `秘密情報管理.md` を唯一の実値参照先として明記した。Obsidian 側の `秘密情報管理.md` は、本体ファイルへの案内用に切り替えた。
+- 変更ファイル: `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`, `/Users/marupro/CODEX/Global_BOX/秘密情報管理.md`, `開発環境仕様書.md`, `秘密情報管理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Global BOX の資料整合はそろったが、MBP2020 本番機の実機確認自体はまだ未完了。Ver02 の本番移行前に、実際の Ver01 plist とログ更新状況は別途確認が必要。
+- メモ: コード本体は未変更。秘密情報の実値はユーザー向け返答には出していない。ローカル Ver02 常駐は `running / pid 56906` のまま。
+
+- 日時: 2026-03-12 09:20 JST
+- 実施内容: Global BOX の環境資料整理として、秘密情報を一元管理する専用ファイル `秘密情報管理.md` を新規作成した。内容は、共通 API / SMTP、MBP2020 SSH、BTC Monitor 本番運用メモをまとめたもので、今後は「仕様書はルール」「秘密情報管理は実値」という役割分担で参照できる形にした。あわせて `開発環境仕様書.md` を更新し、秘密情報の実値は新ファイルを参照する方針へ切り替えた。
+- 変更ファイル: `開発環境仕様書.md`, `秘密情報管理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: MBP2020 本番機の現物確認そのものはまだ未完了のため、Ver01 の最新 `pid`、plist 実体、ログ更新状況は今後の SSH 実接続時に確認が必要。
+- メモ: 秘密情報の値はユーザー向け返答には出していない。コード本体は未変更で、常駐再起動も不要。
+
+- 日時: 2026-03-12 09:00 JST
+- 実施内容: ローカル開発環境（MBA15）と本番デプロイ環境（MBP2020）の現状把握を行った。共通仕様は `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md` を参照し、ローカルは `AFROG-MBA15.local`、本番常時実行ホストは `AFROG-MBP2020.local`（`marupro@192.168.1.38`）という前提を再確認した。ローカル実機では `launchctl list` と `launchctl print gui/$(id -u)/com.afrog.btc-monitor` により、Ver02 が `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/.venv312/bin/python` で `com.afrog.btc-monitor` として常駐中 (`pid=56906`) であることを確認した。本番側は SSH による直接確認も試したが、この作業環境からは `Permission denied (publickey,password,keyboard-interactive)` で接続できず、現時点では仕様書と過去の運用記録から「MBP2020 上で Ver01 が `com.afrog.btc-monitor-ver01` として常駐している前提」を採用する整理にとどめた。調査結果として、Ver02 を本番へ同時配置するには、Ver01 と別ディレクトリ・別 `launchd` ラベル・別 plist・別ログ出力先を用意する前提で進めるのが安全と判断した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 本番 MBP2020 へこのセッションから直接 SSH 接続できなかったため、`com.afrog.btc-monitor-ver01` の現在の `pid`、実際の `WorkingDirectory`、ログ更新状況は未実測。Ver02 を本番同時常駐させる前に、本番側の plist と配置先を現地確認する必要がある。
+- メモ: 今回は調査のみで、コード本体と常駐設定の変更は未実施。ChatGPT API は未使用。
+
+- 日時: 2026-03-12 08:44 JST
+- 実施内容: 次の優先作業として、通知済みシグナルの有無と `daily-sync` 実行条件を確認した。`trades.csv` は 59 行、そのうち `signal_id` ありの対象行は 32 行だったが、`was_notified=True` は依然 0 件で、`signal_outcomes.csv` と `user_reviews.csv` も未生成のままだった。常駐 `com.afrog.btc-monitor` は `state = running` / `pid = 56906`、`heartbeat.txt` と `last_result.json` も 2026-03-12 08:05 JST に更新されており、停止ではなく「通知条件未達」の状態と判断した。直近 24 サイクルでは `notify_reason_codes` は空、抑制理由は `confidence_below_long_min` が 13 件、`bias_wait` が 7 件、`confidence_below_short_min` が 4 件で、最大 `confidence` も 39 にとどまっていた。あわせて、最新サイクルまで反映されていなかった `shadow_log.csv` を `./.venv312/bin/python tools/log_feedback.py build-shadow-log` で再生成し、32 行へ更新した。
+- 変更ファイル: `logs/csv/shadow_log.csv`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 通知済みシグナルがまだ 0 件のため、`daily-sync` の初回本番確認、`notify_reason_codes` の通知発火経路確認、`📝通知レビュー.md` への `actual_move_driver` 入力後の `logic_validated` 確認は未実施。
+- メモ: 今回はコード本体は未変更。ChatGPT API は未使用。`shadow_log.csv` の最新化は `build-shadow-log` のみで実施したため、常駐再起動は不要。
+
+- 日時: 2026-03-11 13:17 JST
+- 実施内容: `AGENTS.md` と運用資料、Obsidian ノート、主要コード（`main.py`, `config.py`, `tools/log_feedback.py`, `src/storage/csv_logger.py`, `src/storage/json_store.py`, `tests/test_log_feedback.py`）を読み、Ver02 の現状を棚卸しした。`git status` は `ver02` で、未コミット変更は `運用資料/progress.md` と `運用資料/NEXT_TASK.md` のみ。`launchctl print gui/$(id -u)/com.afrog.btc-monitor | grep -E 'state =|pid ='` では `state = running` / `pid = 56906` を確認した。実ログ確認では `logs/csv/trades.csv` に新列が流れており、`shadow_log.csv` も生成済みだった一方、`signal_outcomes.csv` と `user_reviews.csv` は未生成、`was_notified=True` も 0 件で、通知起点の `daily-sync` 初回本番確認はまだ進められない状態だった。あわせて、`progress.md` と `NEXT_TASK.md` で存在前提になっていた `運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md` が実際には見当たらなかったため、現状サマリと再開手順を整理して復元した。
+- 変更ファイル: `運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 通知済みシグナルがまだ 0 件のため、`./.venv312/bin/python tools/log_feedback.py daily-sync` の初回本番確認、`notify_reason_codes` の通知経路確認、`📝通知レビュー.md` への `actual_move_driver` 入力と `logic_validated` 検証は未実施。
+- メモ: `trades.csv` の先頭付近には `signal_id` 空欄の旧ログが残っているが、`tools/log_feedback.py` は `signal_id` がある行だけを評価対象にする実装だった。ChatGPT API は未使用。
+
+- 日時: 2026-03-11 11:25 JST
+- 実施内容: 次スレッドへ安全に移れるよう、引き継ぎ専用ファイル `運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md` を新規作成した。内容は、先に読むべきファイル一覧、現状サマリ、実装済み内容、運用状態、未完了確認項目、次にやること、注意点、そして次スレッドへそのまま貼れる完全プロンプトまでを一体化したもの。これにより、次スレッドではこのファイルを起点に `daily-sync` 初回本番確認と `logic_validated` 検証へスムーズに着手できる状態にした。
+- 変更ファイル: `運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
+- 未解決事項: 引き継ぎファイル自体は作成済みだが、`daily-sync` の初回本番確認、通知発火ケースでの `notify_reason_codes` 確認、`actual_move_driver` 反映確認はまだこれから。
+- メモ: 新スレッドでは、まずこの引き継ぎファイルと `AGENTS.md` を読めば、現状把握と再開地点がそろう構成にした。
+
 - 日時: 2026-03-11 07:13 JST
 - 実施内容: 次の定時サイクル確認として、開発環境常駐 `com.afrog.btc-monitor` の 05:05 / 06:05 / 07:05 JST サイクルを確認した。結果として、`logs/csv/trades.csv` と `logs/signals/20260310_220500.json` に `top_positive_factors`、`top_negative_factors`、`prelabel_primary_reason`、`data_quality_flag`、`data_missing_fields`、`notify_reason_codes`、`suppress_reason_codes`、`signal_tier_reason_codes` が実データとして入っていることを確認した。直近 07:05 JST サイクルでは `prelabel=SWEEP_WAIT`、`prelabel_primary_reason=lower_liquidity_distance`、`data_quality_flag=ok`、`suppress_reason_codes=[\"confidence_below_long_min\"]` が記録されていた。`heartbeat.txt` と `last_result.json` も 07:05 に更新され、常駐 `pid=56906` で継続稼働している。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`
