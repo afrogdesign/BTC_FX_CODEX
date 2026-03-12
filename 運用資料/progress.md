@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 18:31 JST
+- 実施内容: ユーザー依頼に合わせて、本番 Ver02 はそのままにしつつ、開発環境の現行 `Ver02.1` をローカル常駐で起動した。誤通知防止のためローカル `.env` の `DRYRUN_MODE=true` を確認したうえで `zsh tools/start_monitor.sh` を実行し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`pid = 32695` を確認した。さらに `logs/heartbeat.txt`、`logs/last_result.json`、`logs/runtime/monitor.*` を確認し、`timestamp_jst=2026-03-12T17:19:20.524394+09:00`、`system_label=Ver02`、`signal_id=20260312_081920`、`ai_decision=WAIT_FOR_SWEEP`、`was_notified=False`、`data_quality_flag=ok` を確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 開発環境の常駐は起動できたが、長時間連続で安定するかはまだ未確認。ローカル `.env` は `DRYRUN_MODE=true` のままなので、本番反映時は設定を混同しない注意が必要。
+- メモ: `logs/runtime/monitor.err` に見えているのは既存の `urllib3` / `LibreSSL` 警告のみで、新しい致命エラーは確認していない。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 17:17 JST
 - 実施内容: `.env` のローカル設定へ CLI 切り替え値を追加し、AI助言・要約の両方を `cli` に向けた。あわせて `tools/codex_cli_wrapper.py` を調整し、入力モデル名が API 用 (`gpt-4o` 系) でも Codex CLI 用既定モデルへ自動で寄せるようにした。確認として `DRYRUN_MODE=true .venv312/bin/python - <<'PY' ... run_cycle(...)` を 2 回実施し、1 回目でタイムアウトを確認後、`.env` の `AI_TIMEOUT_SEC=45` / `AI_SUMMARY_TIMEOUT_SEC=60` へ調整したうえで再実行し、`ai_decision=WAIT_FOR_SWEEP`、`ai_confidence=0.84`、CLI 生成の `summary_body` が埋まることを確認した。
 - 変更ファイル: `tools/codex_cli_wrapper.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`

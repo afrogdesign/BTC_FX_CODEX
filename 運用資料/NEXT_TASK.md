@@ -1,6 +1,8 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- 開発環境ローカル常駐 `com.afrog.btc-monitor` を起動し、`state = running`、`pid = 32695` を確認した。
+- 最新の `logs/last_result.json` では `system_label=Ver02`、`signal_id=20260312_081920`、`ai_decision=WAIT_FOR_SWEEP`、`was_notified=False`、`data_quality_flag=ok` まで確認済み。
 - `.env` のローカル設定では、AI助言・要約の両方を CLI ラッパーへ向け、`run_cycle()` 1 回実行で `ai_decision` と `summary_body` が埋まることを確認した。
 - 初回は `AI_TIMEOUT_SEC=10` / `AI_SUMMARY_TIMEOUT_SEC=20` でタイムアウトしたが、CLI 用に 45 秒 / 60 秒へ広げた後は通過した。
 - `codex/ai-cli-wrapper-validation` で `tools/codex_cli_wrapper.py` を追加し、`summary` と `ai_advice` の両方を `codex exec` 経由で返す最小ラッパーを作成した。
@@ -35,7 +37,7 @@
 - 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. この CLI 設定のまま、ローカルで 2〜3 サイクル連続または短時間ループ確認を行い、`logs/errors/` に新しいタイムアウトが増えないかを見る。
+- 1. 開発環境の常駐をしばらく維持し、次の更新サイクルでも `heartbeat.txt` と `last_result.json` が進むか確認する。
 - 2. 問題がなければ本番 Ver02 へコード反映し、MBP2020 側 `.env` にも同じ CLI 設定を入れる手順を整理する。
 - 3. 本番反映前に、初回タイムアウトで残った `logs/errors/` の見分けがつくよう、必要なら確認メモを残す。
 - 4. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
@@ -53,6 +55,7 @@
 ## ブロッカー
 - Codex CLI は `run_cycle()` 1 回では通ったが、長時間運転したときの認証持続やエラー回復はまだ未確認。
 - CLI 切り替え直後の初回実行ではタイムアウトが発生したため、現在は長めタイムアウト前提で運用している。
+- 開発環境は `DRYRUN_MODE=true` で回しているため、通知送信やメール文面の最終確認には使っていない。
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
 - 通知が止まっている直接原因は、現時点の実データでは Ver01 `bias=wait`、Ver02 `was_notified=False` / `confidence=0` で、しきい値未達の可能性が高い。
 - `signal_outcomes.csv` と `user_reviews.csv` はまだ存在せず、`daily-sync` 初回本番確認には通知発生待ちが必要。
