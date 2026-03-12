@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 17:17 JST
+- 実施内容: `.env` のローカル設定へ CLI 切り替え値を追加し、AI助言・要約の両方を `cli` に向けた。あわせて `tools/codex_cli_wrapper.py` を調整し、入力モデル名が API 用 (`gpt-4o` 系) でも Codex CLI 用既定モデルへ自動で寄せるようにした。確認として `DRYRUN_MODE=true .venv312/bin/python - <<'PY' ... run_cycle(...)` を 2 回実施し、1 回目でタイムアウトを確認後、`.env` の `AI_TIMEOUT_SEC=45` / `AI_SUMMARY_TIMEOUT_SEC=60` へ調整したうえで再実行し、`ai_decision=WAIT_FOR_SWEEP`、`ai_confidence=0.84`、CLI 生成の `summary_body` が埋まることを確認した。
+- 変更ファイル: `tools/codex_cli_wrapper.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 本番常駐へこの CLI 設定を反映して長時間連続運転したときの安定性はまだ未確認。`logs/errors/` には初回タイムアウト時のエラーログが残っている。
+- メモ: `.env` はローカル設定のため Git 管理していない。ChatGPT API は使わず、Codex CLI のみで切り替え確認した。
+
 - 日時: 2026-03-12 17:11 JST
 - 実施内容: `codex/ai-cli-wrapper-validation` で Codex CLI 用の検証ラッパー `tools/codex_cli_wrapper.py` を追加した。監視側から渡す標準入力 JSON の `task` を見て `summary` と `ai_advice` を切り替え、`codex exec` を使って本文テキストまたは JSON を返す構成にした。`.env.example` と `README.md` に同じラッパーを両方へ設定できる例を追記し、`tests/test_codex_cli_wrapper.py` を新設した。加えて `tests/test_summary_format.py` の引数ズレも修正し、`.venv312/bin/python -m unittest tests.test_codex_cli_wrapper tests.test_summary_format` を通した。単発スモークとして、要約と助言の両方で標準入力から Codex CLI を呼び出し、要約本文と助言 JSON が返ることも確認した。
 - 変更ファイル: `tools/codex_cli_wrapper.py`, `tests/test_codex_cli_wrapper.py`, `tests/test_summary_format.py`, `.env.example`, `README.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`

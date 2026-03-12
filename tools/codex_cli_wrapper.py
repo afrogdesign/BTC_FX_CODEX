@@ -142,7 +142,9 @@ def _build_command(
 def _run_codex(payload: dict[str, Any]) -> str:
     prompt = _build_prompt(payload)
     task = str(payload.get("task", "")).strip().lower()
-    model = str(payload.get("model", "")).strip() or os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip()
+    requested_model = str(payload.get("model", "")).strip()
+    default_model = os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip() or "gpt-5.3-codex"
+    model = requested_model if "codex" in requested_model.lower() else default_model
     codex_bin = os.environ.get("CODEX_BIN", "codex").strip() or "codex"
 
     with tempfile.TemporaryDirectory(prefix="btc-monitor-codex-") as tmp_dir:
