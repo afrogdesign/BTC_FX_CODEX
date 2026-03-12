@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 10:24 JST
+- 実施内容: 再開時に無駄が多くならないよう、入口系ファイルの役割と参照優先度を精査した。`運用資料/NEXT_TASK.md` の `現在の状況` を圧縮し、直近判断に必要な前提だけを残す形へ整理した。`運用資料/スレッド引き継ぎファイル.md` では `progress.md` を「最初に読むファイル」から外し、必要時だけ参照する補足へ変更した。Obsidian 側 `👩‍⚖️秘書.md` にも `progress.md` は履歴確認が必要なときだけ見る位置づけを明記した。さらに Global_BOX の `README.md` と `AGENTS_TEMPLATE.md` に、参照優先度 `👩‍⚖️秘書.md` → `スレッド引き継ぎファイル.md` → `NEXT_TASK.md` → 必要なら `📒打ち合わせノート.md` → 必要時のみ `progress.md` を追記し、他案件でも同じ重みづけで運用できるようにした。
+- 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `👩‍⚖️秘書.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `運用資料/progress.md`, `📒打ち合わせノート.md`
+- 未解決事項: 入口系の重みづけは整理できたが、`NEXT_TASK.md` の `現在の状況` は今後も増えすぎたら定期的に圧縮が必要。実運用の未確認事項そのものは変わらず残っている。
+- メモ: `progress.md` は削る対象ではなく、毎回読む主入口から外すことで無駄感を減らす方針にした。
+
 - 日時: 2026-03-12 10:18 JST
 - 実施内容: 今回整えた運営体制を、他プロジェクトでも流用できるように Global_BOX へ標準化した。`/Users/marupro/CODEX/Global_BOX/README.md` に、`👩‍⚖️秘書.md`、`progress.md`、`NEXT_TASK.md`、`📒打ち合わせノート.md`、`スレッド引き継ぎファイル.md` を役割分担して運用する考え方を追記した。`/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` には `スレッド引き継ぎファイル` 節を新設し、固定ファイル名で毎回書き直す運用、役割分担、標準保存先、更新方針を追加した。さらに、共通ひな形として `/Users/marupro/CODEX/Global_BOX/スレッド引き継ぎファイルテンプレート.md` を新規追加した。
 - 変更ファイル: `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/スレッド引き継ぎファイルテンプレート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`

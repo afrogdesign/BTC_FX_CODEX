@@ -1,40 +1,15 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
-- 今回整えた運営体制は Global_BOX にも標準化済み。今後ほかの案件でも、`👩‍⚖️秘書.md`、`NEXT_TASK.md`、`progress.md`、`📒打ち合わせノート.md`、`スレッド引き継ぎファイル.md` の役割分担を基本形として使える。
-- 次スレッド継続用に `運用資料/スレッド引き継ぎファイル.md` を固定ファイル名で運用する形へ切り替え済み。今後は毎回このファイルを精査して書き直し、`👩‍⚖️秘書.md` と合わせて次スレッド開始時の入口として使う。
-- Obsidian 側のこの案件フォルダに `👩‍⚖️秘書.md` を追加済み。今後は、履歴ではなく「今の状況」「次に見る」「次にやる」を短く案内する入口メモとして使う。
-- Global_BOX の `開発環境仕様書.md` に GitHub 接続の実務情報を追記済み。現行環境では `afrogdesign` として、`~/.ssh/github_afrog_btc_fx` を使い `ssh -T git@github.com` で認証成功を確認している。
-- Global_BOX の共通ルールへ、Git 運用を AI が自動管理する方針を反映済み。今後は各案件で、差分確認、意味単位のコミット分割、Push、ブランチ/Push 状況の報告までを標準運用として扱う。
-- 今後の常駐運用ルールを `運用資料/今後の運用ルール.md` に明文化し、「本番 MBP2020 を正本」「MBA15 は検証専用」とする方針を固定した。
-- 既存の `README.md`、`ログ検証と改善運用ガイド.md`、`運用コマンドメモ.md` も、この運用ルールに合わせて参照関係と手順を整理済み。
-- 他AI評価用に、現行ロジックを実装ベースで整理した `運用資料/AI向けシステムロジック全体整理.md` を追加済み。
-- 次スレッドへ移るための引き継ぎファイルは、固定名 `運用資料/スレッド引き継ぎファイル.md` として運用する形に整理済み。元の日付入りファイルは、2026-03-11 13:17 JST 時点で実ファイル不在を確認後に復元した内容を引き継いでいる。
-- Ver01 は本番運用フェーズで、MBP2020 上の `com.afrog.btc-monitor-ver01` を継続監視する段階。
-- Ver02 の現時点はタグ `v2.3` として固定予定の内容まで反映済み。
-- Ver02 には ログ活用基盤 フェーズ1 に加え、改善設計書 v2.1 の Phase 0 拡張を反映し、`shadow_log.csv`、12h MFE / MAE、`tp1_hit_first`、`outcome`、`actual_move_driver`、`logic_validated`、通知監査 A/B/C/D の土台まで実装済み。
-- Ver02 では、Funding を `raw / % / ラベル` で扱う構成に変更し、判定単位を `%` に統一した。
-- Ver02 のサポレジは、内部計算用 `all zones` と表示用（近い順 / 強度順）を分離し、表示用は「サポートは下側中心 / レジスタンスは上側中心」に補正済み。
-- Ver02 には `signal_tier`（normal / strong_machine / strong_ai_confirmed）と `signal_badge`（🟡/🔥）を実装した。
-- 通知トリガーは `signal_tier_upgraded` に対応し、クールダウン中でも段階昇格時は通知できる構成にした。
-- 件名と本文にはバッジ表示を追加し、Funding は `ほぼ中立 (+0.0037%)` 形式で出せるようにした。
-- CSV/JSON には `funding_rate_raw`、`funding_rate_pct`、`funding_rate_label`、`signal_tier`、`signal_badge` に加え、観測ログ用の `signal_id`、通知状態、最寄りサポレジ列、因子 breakdown、`prelabel_primary_reason`、`data_quality_flag`、通知理由コード列を追加済み。
-- 位置フィルター層（`prelabel` / `location_risk` / `risk_flags`）と、Binance 市場構造データの取得は稼働済み。
-- 清算イベントは `logs/cache/` へ蓄積する近似実装で運用中。効果検証はこれから。
-- 単体テスト（`unittest`）は 13 件で、現時点は全件成功。
-- 開発環境の実行スケジュールは、`.env` / `config.py` / `.env.example` をそろえて「毎時 `:05` の 24回実行」に統一済み。
-- 2026-03-12 08:44 JST 時点でも `trades.csv` の `was_notified=True` は 0 件で、`signal_outcomes.csv` と `user_reviews.csv` はまだ未生成。
-- `shadow_log.csv` は `build-shadow-log` で再生成し、`signal_id` ありの 32 行まで最新化済み。
-- 直近 24 サイクルの主な抑制理由は `confidence_below_long_min`、`bias_wait`、`confidence_below_short_min` で、最大 `confidence` は 39。
-- 環境整理として、ローカル開発機は MBA15 (`AFROG-MBA15.local`) で、今後は Ver02 の常駐を置かず一時検証専用として扱う。本番常時実行ホストは MBP2020 (`AFROG-MBP2020.local` / `192.168.1.38`) で、Ver01 / Ver02 を並走させる前提。
-- Ver02 を本番同時常駐させる場合は、Ver01 と別ディレクトリ・別 `launchd` ラベル・別 plist・別ログ出力先が必要。
-- Global BOX は `CODEX/Global_BOX` を本体の共通参照ルートとし、Obsidian 側 `00_Global_BOX` のファイル群も含めてシンボリックリンク運用へ統一済み。
-- MBP2020 実機確認により、Ver01 本番は `com.afrog.btc-monitor-ver01` / `pid=91182` / `/Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor` で稼働中。
-- Ver02 は MBP2020 へ `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` として配備済みで、`com.afrog.btc-monitor-ver02` / `pid=98787` で起動済み。
-- ローカル開発環境の Ver02 常駐 `com.afrog.btc-monitor` は停止済みで、LaunchAgents からも退避済み。
-- 開発環境で蓄積した Ver02 ログのうち、`logs/csv/`、`logs/signals/`、`logs/cache/` は本番 Ver02 側へ移行済み（`csv=2`, `signals=60`, `cache=1`）。
-- 打ち合わせノート参照先、ブランチ運用ルール、タグ運用ルール、Obsidian 側の `NEXT_TASK.md` リンク整備は完了済み。
-- プロジェクト用 `AGENTS.md` は `btc_monitor/AGENTS.md` へ移動済み。
+- 読む優先度は `👩‍⚖️秘書.md` → `運用資料/スレッド引き継ぎファイル.md` → `NEXT_TASK.md`。`progress.md` は履歴確認が必要なときだけ参照する。
+- 常駐の正本は MBP2020。本番では Ver01 を比較基準、Ver02 を改善検証対象として並走運用する。
+- MBA15 は開発・単発確認専用で、ローカル常駐 `com.afrog.btc-monitor` は停止済み。
+- Ver02 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` / `com.afrog.btc-monitor-ver02`、Ver01 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor` / `com.afrog.btc-monitor-ver01` で稼働中。
+- Ver02 には、ログ活用基盤フェーズ1と改善設計書 v2.1 の Phase 0 拡張まで実装済み。
+- 過去の Ver02 ログ `logs/csv/`、`logs/signals/`、`logs/cache/` は本番 Ver02 側へ移行済み。
+- `signal_outcomes.csv` と `user_reviews.csv` はまだ未生成で、通知後 24 時間の本番確認待ち。
+- 直近では `was_notified=True` は 0 件で、通知未発生の主因は `confidence` 未達と `bias=wait` に見えている。
+- Global_BOX には Git 自動運用、GitHub 接続情報、`👩‍⚖️秘書.md` / `スレッド引き継ぎファイル.md` を含む共通運営体制を標準化済み。
 
 ## 次のタスク
 - 1. 次の定時サイクル後に、MBP2020 上の Ver02 `logs/heartbeat.txt` と `logs/last_result.json` が更新されるか確認する。
@@ -47,7 +22,7 @@
 ## ブロッカー
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
 - 通知が止まっている直接原因は現時点ではロジック異常ではなく、`confidence` 未達と `bias=wait` が中心に見える。
-- Ver02 本番は起動したばかりで、確認時点では `heartbeat.txt` / `last_result.json` がまだ未生成だった。次の定時サイクル確認が必要。
+- Ver02 本番の定時更新は、次の `heartbeat.txt` / `last_result.json` 実確認がまだ必要。
 - `signal_outcomes.csv` と `user_reviews.csv` はまだ存在せず、`daily-sync` 初回本番確認には通知発生待ちが必要。
 - Ver01 / Ver02 の runtime ログはまだ 0 byte のため、実運用中にログが必要十分に残るかは引き続き観察が必要。
 - 強条件（🟡 / 🔥）は市場条件が厳しめに設定されているため、発火確認までに数サイクル必要。
