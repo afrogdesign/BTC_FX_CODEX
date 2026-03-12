@@ -1,5 +1,65 @@
 # Progress Log
 
+- 日時: 2026-03-13 06:19 JST
+- 実施内容: 本番 Ver02 を API 版のままデプロイ更新した。作業前に `tools/pull_ver02_prod_logs.sh` で MBP2020 本番ログを `tmp/prod_ver02_snapshot/` へ退避し、`logs/heartbeat.txt`、`logs/last_result.json`、`logs/csv/`、`logs/signals/`、`logs/cache/`、`logs/runtime/monitor.pid` を取得した。そのうえで本番 `.env` に `AI_ADVICE_PROVIDER=api`、`AI_SUMMARY_PROVIDER=api` を明記し、`DRYRUN_MODE=false` と `SYSTEM_LABEL=Ver02` を維持した。デプロイ時に `tools/deploy_ver02_prod.sh` が日本語ファイル名を含むリポジトリで失敗したため、`git ls-files -z` と `rsync --from0` を使う形へ修正して再実行し、`com.afrog.btc-monitor-ver02` の再起動まで完了した。起動確認として本番 `launchctl print gui/$(id -u)/com.afrog.btc-monitor-ver02` で `state = running`、`pid = 4019` を確認し、`logs/csv/trades.csv` は 81 行、`logs/csv/shadow_log.csv` は 32 行のまま保持され、`last_result.json` も `system_label=Ver02`、`ai_decision=WAIT_FOR_SWEEP`、`data_quality_flag=ok` を維持していることを確認した。
+- 変更ファイル: `tools/deploy_ver02_prod.sh`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 本番 Ver02 は更新完了したが、新コード反映後の次回自然サイクルで `heartbeat.txt` / `last_result.json` が継続更新されるかはまだ観測待ち。開発環境 CLI 版との実通知比較、`was_notified=True` の実データ確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認は継続中。
+- メモ: 本番ログは消さずに保持し、コードだけ反映した。開発環境は引き続き CLI 版、sandbox は切り分け専用のまま維持する。ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 06:05 JST
+- 実施内容: CLI版の安定化確認を sandbox で進めた。`src/ai/advice.py` と `src/ai/summary.py` に CLI 実行時も `retry_count` を使う再試行処理を追加し、一時失敗 1 回で `ai_response` 欠落にならないよう補強した。あわせて `tests/test_ai_cli_retry.py` を新設し、CLI の再試行回復と再試行枯渇時のログ出力を確認した。確認として本流と sandbox の両方で `./.venv312/bin/python -m unittest tests.test_ai_cli_retry tests.test_codex_cli_wrapper tests.test_phase1_trade_plans tests.test_funding_and_signal tests.test_notification_trigger tests.test_summary_format` を実行して 17 件すべて成功した。そのうえで sandbox 側へ差分を同期し、`run_cycle()` を合計 6 サイクル連続で実行して `ai_decision` / `summary_body` / `data_quality_flag=ok` / `data_missing_fields=[]` を確認し、`logs/errors/` が空のままであることも確認した。
+- 変更ファイル: `src/ai/advice.py`, `src/ai/summary.py`, `tests/test_ai_cli_retry.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: sandbox では CLI 版の連続実行が安定したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログが自然更新されるかはまだ未観測。本番 Ver02 の通知発生待ち、`was_notified=True` の実データ確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認は継続中。
+- メモ: 今回は ChatGPT API を使っていない。sandbox は `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を使い、`SYSTEM_LABEL=Ver02.1-sandbox` / `DRYRUN_MODE=true` のまま検証した。
+
+- 日時: 2026-03-13 05:51 JST
+- 実施内容: 比較環境を汚さずに確認できるよう、sandbox コピーを新設した。元の `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor` は観測専用のまま残し、確認用として `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を作成した。コピー時は `.git` と `logs/` を引き継がず、sandbox 側の `.env` だけ `SYSTEM_LABEL=Ver02.1-sandbox`、`DRYRUN_MODE=true`、CLI ラッパー参照先を sandbox 側パスへ変更した。`logs/` の各ディレクトリも空で作成し、`.venv312` が存在することを確認した。
+- 変更ファイル: `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor/.env`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: sandbox は作成済みだが、まだ単発確認は回していない。本流比較環境は引き続き触らず観測を続け、必要な強制確認だけ sandbox 側で行う前提。
+- メモ: 今回は本流リポジトリのコード本体は未変更。ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 05:43 JST
+- 実施内容: CLI版の AI 欠落原因だった `codex` 実行パス問題を修正した。`tools/codex_cli_wrapper.py` に `codex` 実行ファイルの解決処理を追加し、`CODEX_BIN` が未設定でも `shutil.which("codex")` と `/usr/local/bin/codex` / `/opt/homebrew/bin/codex` の順で自動解決するようにした。あわせて `tests/test_codex_cli_wrapper.py` に fallback 解決テストを追加し、`./.venv312/bin/python -m unittest tests.test_codex_cli_wrapper tests.test_phase1_trade_plans tests.test_funding_and_signal tests.test_notification_trigger` を実行して 12 件すべて成功した。さらに `env -i PATH=/usr/bin:/bin ... tools/codex_cli_wrapper.py` で薄い `PATH` を再現した実動確認も行い、要約テキストが返ることを確認した。
+- 変更ファイル: `tools/codex_cli_wrapper.py`, `tests/test_codex_cli_wrapper.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `codex` コマンド未検出による CLI 欠落は解消見込みだが、Ver02.1 の AI 助言欠落がこれで完全に消えるかは次サイクル観察が必要。実通知比較、`was_notified=True` の本番確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認はまだ未完了。
+- メモ: 今回は ChatGPT API は使っていない。CLI ラッパーの PATH 耐性と関連テストの強化が主目的。
+
+- 日時: 2026-03-13 05:34 JST
+- 実施内容: `signal_tier` の値名ズレを、計画書に合わせてコード側で同期した。`src/trade/position_sizing.py` に strong 系 tier 判定ヘルパーを追加し、旧値 `"strong"` ではなく `strong_machine` / `strong_ai_confirmed` を strong 系として扱うよう修正した。あわせて `tests/test_phase1_trade_plans.py` を正式値へ更新し、`strong_machine` と `strong_ai_confirmed` の両方で `strong_tier_kept_flat` が付く確認を追加した。確認として `./.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_funding_and_signal` を実行し、5件すべて成功した。
+- 変更ファイル: `src/trade/position_sizing.py`, `tests/test_phase1_trade_plans.py`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `signal_tier` の値名ズレは今回の修正箇所では解消したが、他の古い表現が残っていないかは引き続き注意が必要。実務本体は引き続き通知発生待ちで、`was_notified=True` の本番確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認はまだ未完了。
+- メモ: 今回はコードとテストの同期のみで、ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 05:16 JST
+- 実施内容: ユーザー依頼に合わせて、`Ver02 = API運用` / `Ver02.1 = CLI寄り検証版` の比較で見えてきたことを `📒打ち合わせノート.md` と `👩‍⚖️秘書.md` に反映した。要点は「Ver02.1 でも要約本文は作れているが、AI助言欠落は API版より目立つ」「ただし実通知比較と欠落原因の切り分けは未完了」という整理。
+- 変更ファイル: `運用資料/progress.md`, `📒打ち合わせノート.md`, `👩‍⚖️秘書.md`
+- 未解決事項: Ver02.1 の AI 応答欠落が構造的問題か一時的問題かは未判定。実通知発生後の比較もまだ未実施。
+- メモ: 今回は判断整理の追記のみで、コード本体や本番設定は変更していない。ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 05:13 JST
+- 実施内容: ユーザー確認に合わせて、`運用資料/reports/log_review_ver02_vs_ver021_20260312.md` へ「今わかっていること / 未確定なこと / 次に検証すること」を追記した。前提として `Ver02 = API運用`、`Ver02.1 = CLI寄り検証版` を明記したうえで、現状では CLI寄りの Ver02.1 の方が AI助言欠落が目立つこと、ただし実通知比較と根本原因切り分けはまだ未完了であることを整理した。
+- 変更ファイル: `運用資料/reports/log_review_ver02_vs_ver021_20260312.md`, `運用資料/progress.md`
+- 未解決事項: Ver02.1 の AI 応答欠落が構造的問題か一時的問題かは未判定。実通知発生後の比較もまだ未実施。
+- メモ: 今回は比較メモの整理のみで、コード本体や本番設定は変更していない。ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 05:04 JST
+- 実施内容: ユーザー依頼に合わせて `運用資料/計画/` を今後の実装正本として読めるよう再編した。`マイルストーン定義.md` に「このフォルダが正本」「Obsidian 側改善設計書は参考資料」という位置づけと参照順を明記し、`Ver03` 以降の昇格条件を「実装完了条件」と「運用完了条件」に分離した。あわせて `フェーズ別計画_Phase0-1.md` は `実装済み / 部分実装 / 本番確認待ち / 未実装` を明示する構成へ更新し、`signal_tier` の正式値、`phase1_active` 条件、`loss_streak` ルール、出口管理が計画値記録どまりであること、proxy 指標の境界を固定した。さらに `フェーズ別計画_Phase2-3.md` では `Phase 2` の実装順を `watch_prices` → 価格乖離監視 → blackout → 構造化 AI 審査 → `config_change_log` に固定し、各項目へ目的・着手条件・入力元・出力項目・保存先・`run_cycle()` 統合位置を追記した。
+- 変更ファイル: `運用資料/計画/マイルストーン定義.md`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/計画/フェーズ別計画_Phase2-3.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 計画書の正本化は完了したが、コード側にはまだ `signal_tier` 名称の未同期など設計と実装の差分が残る可能性がある。実務本体も引き続き通知発生待ちで、`was_notified=True` の本番確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認はまだ未完了。
+- メモ: 今回は計画書と記録の更新のみで、コード本体や本番設定は変更していない。ChatGPT API は使っていない。
+
+- 日時: 2026-03-13 04:43 JST
+- 実施内容: ユーザー依頼に合わせて、[AI向けシステムロジック全体整理.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/参考資料/AI向けシステムロジック全体整理.md) を現行 `Ver02.x` 実装に合わせて全面更新した。冒頭に更新日時を追加し、`run_cycle()` の最新フロー、`AI_ADVICE_PROVIDER` / `AI_SUMMARY_PROVIDER` による `api / cli` 独立切替、`tools/codex_cli_wrapper.py` の役割、`Phase 1` の `phase1_active` / `loss_streak_at_entry` / サイズ計画 / 出口計画、`shadow_log.csv` / `signal_outcomes.csv` / `user_reviews.csv` / `logic_validated` / `daily-sync` の流れを反映した。あわせて、旧表現だった `phase=trend_follow` を現行コードの `trend_following` に修正し、現時点では通知発生待ちで本番の一周確認が未完了であることも整理した。
+- 変更ファイル: `運用資料/参考資料/AI向けシステムロジック全体整理.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 文書整理は完了したが、実務本体は引き続き通知発生待ちで、`was_notified=True` の本番確認、`daily-sync` 初回本番確認、`logic_validated` の実データ確認はまだ未完了。
+- メモ: 今回は説明資料と記録の更新のみで、コード本体や本番設定は変更していない。ChatGPT API は使っていない。
+
+- 日時: 2026-03-12 18:49 JST
+- 実施内容: ユーザー判断に合わせて、本番環境は現状の Ver02 のまま通知待ちとし、開発環境だけ `Ver02.1` の実メール待ちへ切り替えた。ローカル `.env` の `DRYRUN_MODE` を `false` に戻したうえで `zsh tools/start_monitor.sh` を再実行し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`pid = 33271` を確認した。あわせて `logs/last_result.json` を確認し、`system_label=Ver02.1`、`summary_subject=[Ver02.1] [BTC監視] ...`、`was_notified=False` を確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: まだ通知条件に達していないため、Ver02 / Ver02.1 の実メール比較は未実施。開発環境は実メール送信ありに戻したため、通知発生時は本番と開発の 2 通が届く前提で観察する。
+- メモ: 本番 Ver02 には未変更。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 18:36 JST
 - 実施内容: ユーザー判断に合わせて、開発環境ローカル `.env` の `SYSTEM_LABEL` を `Ver02.1` へ切り替えた。`zsh tools/start_monitor.sh` で開発環境常駐を再起動し、`DRYRUN_MODE=true .venv312/bin/python - <<'PY' ... run_cycle(...)` で件名確認を行い、`[Ver02.1] [BTC監視] ...` と `system_label=Ver02.1` が返ることを確認した。あわせて、現行本番相当の退避点としてコミット `7b89190` から `codex/ver02.0-freeze` ブランチを作成し、`origin/codex/ver02.0-freeze` へ push した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`

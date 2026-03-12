@@ -80,20 +80,25 @@ def request_ai_advice(
         if not str(cli_command).strip():
             write_ai_error_log(base_dir, "ai_advice_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
             return None
-        try:
-            parsed = run_cli_json(
-                command=cli_command,
-                timeout_sec=timeout_sec,
-                payload={
-                    "task": "ai_advice",
-                    "model": model,
-                    "system_prompt": _load_prompt(base_dir),
-                    "machine": machine_payload,
-                    "qualitative": qualitative_payload,
-                },
-            )
-            return _normalize_advice(parsed)
-        except Exception as exc:  # noqa: BLE001
+        last_error: str | None = None
+        for attempt in range(1, max(1, retry_count) + 1):
+            try:
+                parsed = run_cli_json(
+                    command=cli_command,
+                    timeout_sec=timeout_sec,
+                    payload={
+                        "task": "ai_advice",
+                        "model": model,
+                        "system_prompt": _load_prompt(base_dir),
+                        "machine": machine_payload,
+                        "qualitative": qualitative_payload,
+                    },
+                )
+                return _normalize_advice(parsed)
+            except Exception as exc:  # noqa: BLE001
+                last_error = f"{type(exc).__name__}: {exc}"
+                continue
+        if last_error:
             write_ai_error_log(
                 base_dir,
                 "ai_advice_error",
@@ -102,11 +107,13 @@ def request_ai_advice(
                         "provider=cli",
                         f"model={model}",
                         f"timeout_sec={timeout_sec}",
-                        f"details={type(exc).__name__}: {exc}",
+                        f"retry_count={retry_count}",
+                        f"last_attempt={attempt}",
+                        f"details={last_error}",
                     ]
                 ),
             )
-            return None
+        return None
 
     if not api_key:
         return None

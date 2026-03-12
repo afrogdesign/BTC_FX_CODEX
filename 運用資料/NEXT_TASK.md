@@ -1,6 +1,17 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- 本番 Ver02 は 2026-03-13 06:19 JST にコードだけ更新し、`AI_ADVICE_PROVIDER=api` / `AI_SUMMARY_PROVIDER=api` を明記した API 版として再起動済み。`com.afrog.btc-monitor-ver02` は `state = running`、`pid = 4019` を確認した。
+- 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行、`last_result.json` は `system_label=Ver02` / `ai_decision=WAIT_FOR_SWEEP` / `data_quality_flag=ok` を維持している。
+- sandbox `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` で CLI 版を合計 6 サイクル連続確認し、`ai_decision` 欠落なし、`summary_body` 正常生成、`data_quality_flag=ok`、`data_missing_fields=[]`、`logs/errors/` 空を確認した。
+- CLI 側は `codex` 実行パス自動解決に加えて、`src/ai/advice.py` / `src/ai/summary.py` で `retry_count` を使う再試行を実装済み。単発失敗 1 回で AI 欠落になりにくい状態へ補強した。
+- 比較環境を汚さない確認用として `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を作成済みで、sandbox 側は `SYSTEM_LABEL=Ver02.1-sandbox` / `DRYRUN_MODE=true` に切り替えてある。
+- CLI ラッパーは `codex` 実行パスを自動解決するよう修正済みで、薄い `PATH` を再現した単発確認でも要約テキストが返ることを確認した。
+- `signal_tier` の値名ズレは `position_sizing.py` と `tests/test_phase1_trade_plans.py` で同期済みで、strong 系 tier は `strong_machine` / `strong_ai_confirmed` を正式値として扱うようそろえた。
+- `運用資料/計画/` を今後の実装正本として再編し、`マイルストーン定義.md`・`フェーズ別計画_Phase0-1.md`・`フェーズ別計画_Phase2-3.md` だけで判断順、`Phase 1` の実装状態、`Phase 2` の実装順が読める状態に更新済み。
+- `運用資料/参考資料/AI向けシステムロジック全体整理.md` を 2026-03-13 04:43 JST 時点の現行実装へ更新し、`api / cli` 切替、`Phase 1`、`shadow_log.csv`、`daily-sync`、`logic_validated` まで反映済み。
+- 本番環境は Ver02 のまま通知待ちを継続し、開発環境は `Ver02.1` 件名の実メール送信ありへ切り替え済み。
+- 開発環境ローカル常駐 `com.afrog.btc-monitor` は再起動後 `pid = 33271` で稼働中。
 - 開発環境ローカルの件名ラベルは `Ver02.1` へ切り替え済みで、単発確認でも `[Ver02.1] [BTC監視] ...` を確認した。
 - 現行本番相当の凍結退避点として `codex/ver02.0-freeze` を `7b89190` から作成し、remote へ push 済み。
 - 開発環境ローカル常駐 `com.afrog.btc-monitor` を起動し、`state = running`、`pid = 32695` を確認した。
@@ -39,10 +50,11 @@
 - 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. 開発環境の `DRYRUN_MODE` を false にするか判断し、必要なら Ver02 / Ver02.1 の比較通知を実際に取る準備をする。
-- 2. 開発環境の常駐をしばらく維持し、次の更新サイクルでも `heartbeat.txt` と `last_result.json` が進むか確認する。
-- 3. 問題がなければ本番 Ver02 へコード反映し、MBP2020 側 `.env` にも同じ CLI 設定を入れる手順を整理する。
+- 1. 本番 Ver02 と開発 Ver02.1 の次回自然更新を観測し、両方で `heartbeat.txt` / `last_result.json` が進み続けるか確認する。
+- 2. Ver02 / Ver02.1 の比較通知が実際に来たら、件名・本文・AI助言・通知理由コードの差を確認する。
+- 3. 本番は API、開発は CLI の役割分担のまま、差分観測のメモを `運用資料/reports/` と `📒打ち合わせノート.md` へ整理する。
 - 4. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
+- 4.5. 将来の軽改修候補として、「通知しない回は要約本文 AI を呼ばず、通知時だけメール作文 AI を回す」構成にできるか検討する。これは Ver03 昇格条件とは別の効率改善メモとして扱う。
 - 5. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
 - 6. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
 - 7. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
@@ -55,10 +67,10 @@
 - 11. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
-- Codex CLI は `run_cycle()` 1 回では通ったが、長時間運転したときの認証持続やエラー回復はまだ未確認。
-- CLI 切り替え直後の初回実行ではタイムアウトが発生したため、現在は長めタイムアウト前提で運用している。
-- 開発環境は `DRYRUN_MODE=true` で回しているため、通知送信やメール文面の最終確認には使っていない。
-- そのため、Ver02 / Ver02.1 の実メール比較はまだ未実施。
+- 本番 Ver02 は再起動済みだが、新コード反映後の最初の自然サイクル更新はまだ未観測。
+- sandbox では 6 サイクル連続成功したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログがまだ自然観測できていない。
+- CLI は長めタイムアウトと再試行で安定度を上げたが、launchd 常駐での長時間認証持続までは未確認。
+- Ver02 / Ver02.1 の実メール比較は、通知条件に達するまで待ちが必要。
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
 - 通知が止まっている直接原因は、現時点の実データでは Ver01 `bias=wait`、Ver02 `was_notified=False` / `confidence=0` で、しきい値未達の可能性が高い。
 - `signal_outcomes.csv` と `user_reviews.csv` はまだ存在せず、`daily-sync` 初回本番確認には通知発生待ちが必要。

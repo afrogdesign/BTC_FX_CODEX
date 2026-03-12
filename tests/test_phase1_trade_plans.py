@@ -7,12 +7,12 @@ from src.trade.position_sizing import build_position_size_plan
 
 
 class Phase1TradePlanTests(unittest.TestCase):
-    def test_position_sizing_applies_loss_streak_reduction_and_cap(self) -> None:
+    def test_position_sizing_applies_loss_streak_reduction_and_cap_for_strong_machine(self) -> None:
         plan = build_position_size_plan(
             account_balance=10000,
             entry_price=70000,
             stop_loss_price=69500,
-            signal_tier="strong",
+            signal_tier="strong_machine",
             loss_streak=2,
             base_risk_pct=0.5,
             loss_streak_step_pct=0.1,
@@ -26,6 +26,22 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertTrue(plan["max_size_capped"])
         self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
         self.assertIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
+
+    def test_position_sizing_treats_strong_ai_confirmed_as_strong_tier(self) -> None:
+        plan = build_position_size_plan(
+            account_balance=10000,
+            entry_price=70000,
+            stop_loss_price=69500,
+            signal_tier="strong_ai_confirmed",
+            loss_streak=0,
+            base_risk_pct=0.5,
+            loss_streak_step_pct=0.1,
+            min_risk_pct=0.2,
+            max_position_size_usd=3000,
+        )
+
+        self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
+        self.assertNotIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
 
     def test_exit_plan_builds_prices_from_r_multiple(self) -> None:
         plan = build_exit_plan(

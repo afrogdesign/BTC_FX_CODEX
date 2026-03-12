@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -112,6 +113,21 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     return parsed
 
 
+def _resolve_codex_bin() -> str:
+    configured = os.environ.get("CODEX_BIN", "").strip()
+    if configured:
+        return configured
+
+    discovered = shutil.which("codex")
+    if discovered:
+        return discovered
+
+    for candidate in ("/usr/local/bin/codex", "/opt/homebrew/bin/codex"):
+        if Path(candidate).exists():
+            return candidate
+    return "codex"
+
+
 def _build_command(
     *,
     codex_bin: str,
@@ -145,7 +161,7 @@ def _run_codex(payload: dict[str, Any]) -> str:
     requested_model = str(payload.get("model", "")).strip()
     default_model = os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip() or "gpt-5.3-codex"
     model = requested_model if "codex" in requested_model.lower() else default_model
-    codex_bin = os.environ.get("CODEX_BIN", "codex").strip() or "codex"
+    codex_bin = _resolve_codex_bin()
 
     with tempfile.TemporaryDirectory(prefix="btc-monitor-codex-") as tmp_dir:
         tmp_path = Path(tmp_dir)

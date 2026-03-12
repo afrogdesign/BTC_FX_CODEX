@@ -15,6 +15,16 @@ from tools.codex_cli_wrapper import _build_command, _build_prompt, _extract_json
 
 
 class CodexCliWrapperTest(TestCase):
+    @patch.dict("os.environ", {}, clear=True)
+    @patch("tools.codex_cli_wrapper.shutil.which", return_value=None)
+    @patch("tools.codex_cli_wrapper.Path.exists")
+    def test_resolve_codex_bin_falls_back_to_common_absolute_path(self, exists_mock: object, _which: object) -> None:
+        exists_mock.side_effect = lambda: False
+        with patch("tools.codex_cli_wrapper.Path.exists", side_effect=[True, False]):
+            from tools.codex_cli_wrapper import _resolve_codex_bin
+
+            self.assertEqual(_resolve_codex_bin(), "/usr/local/bin/codex")
+
     def test_build_prompt_for_summary_includes_result_payload(self) -> None:
         prompt = _build_prompt(
             {

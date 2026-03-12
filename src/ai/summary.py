@@ -245,19 +245,24 @@ def build_summary_body(
     if provider_name == "cli":
         if not str(cli_command).strip():
             return _fallback_summary(result_payload)
-        try:
-            content = run_cli_text(
-                command=cli_command,
-                timeout_sec=timeout_sec,
-                payload={
-                    "task": "summary",
-                    "model": model,
-                    "system_prompt": _load_prompt(base_dir),
-                    "result_payload": result_payload,
-                },
-            )
-            return content or _fallback_summary(result_payload)
-        except Exception as exc:  # noqa: BLE001
+        last_error: str | None = None
+        for attempt in range(1, max(1, retry_count) + 1):
+            try:
+                content = run_cli_text(
+                    command=cli_command,
+                    timeout_sec=timeout_sec,
+                    payload={
+                        "task": "summary",
+                        "model": model,
+                        "system_prompt": _load_prompt(base_dir),
+                        "result_payload": result_payload,
+                    },
+                )
+                return content or _fallback_summary(result_payload)
+            except Exception as exc:  # noqa: BLE001
+                last_error = f"{type(exc).__name__}: {exc}"
+                continue
+        if last_error:
             write_ai_error_log(
                 base_dir,
                 "ai_summary_error",
@@ -266,11 +271,13 @@ def build_summary_body(
                         "provider=cli",
                         f"model={model}",
                         f"timeout_sec={timeout_sec}",
-                        f"details={type(exc).__name__}: {exc}",
+                        f"retry_count={retry_count}",
+                        f"last_attempt={attempt}",
+                        f"details={last_error}",
                     ]
                 ),
             )
-            return _fallback_summary(result_payload)
+        return _fallback_summary(result_payload)
 
     if not api_key:
         return _fallback_summary(result_payload)

@@ -48,14 +48,13 @@ fi
 
 TMP_FILES="$(mktemp)"
 trap 'rm -f "$TMP_FILES"' EXIT
-
-git -C "$BASE_DIR" ls-files > "$TMP_FILES"
+git -C "$BASE_DIR" -c core.quotePath=false ls-files -z > "$TMP_FILES"
 
 echo "deploy_target:$PROD_HOST:$PROD_DIR"
 echo "sync_mode:git-tracked-files"
 
 ssh "$PROD_HOST" "mkdir -p '$PROD_DIR'"
-rsync -av --files-from="$TMP_FILES" "$BASE_DIR"/ "$PROD_HOST":"$PROD_DIR"/
+rsync -av --from0 --files-from="$TMP_FILES" "$BASE_DIR"/ "$PROD_HOST":"$PROD_DIR"/
 
 if [[ "$RESTART_AFTER_DEPLOY" -eq 1 ]]; then
   ssh "$PROD_HOST" "cd '$PROD_DIR' && zsh tools/start_monitor_ver02_prod.sh '$PROD_DIR' && launchctl print gui/\$(id -u)/$PROD_LABEL | grep -E 'state =|pid ='"

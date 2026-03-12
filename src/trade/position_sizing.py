@@ -17,6 +17,10 @@ def _empty_plan(reason: str) -> dict[str, Any]:
     }
 
 
+def _is_strong_tier(signal_tier: str) -> bool:
+    return str(signal_tier).strip() in {"strong_machine", "strong_ai_confirmed"}
+
+
 def build_position_size_plan(
     *,
     account_balance: float,
@@ -39,7 +43,7 @@ def build_position_size_plan(
     size_reduction_reasons: list[str] = []
     applied_risk_pct = max(base_risk_pct - max(loss_streak, 0) * loss_streak_step_pct, min_risk_pct)
 
-    if signal_tier == "strong":
+    if _is_strong_tier(signal_tier):
         size_reduction_reasons.append("strong_tier_kept_flat")
     if loss_streak > 0:
         size_reduction_reasons.append("loss_streak_risk_reduced")
