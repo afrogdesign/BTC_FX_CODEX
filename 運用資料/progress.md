@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:50 JST
+- 実施内容: 新スレッド移行に備えて `運用資料/スレッド引き継ぎファイル.md` を最新状態へ更新した。内容は、MBP2020 を正本とする前提、Phase 1 の現状到達点、正式指標と proxy 指標の整理、今後の本番反映は `tools/deploy_ver02_prod.sh`、本番ログ確認は `tools/pull_ver02_prod_logs.sh` を入口にする運用まで反映した。これにより、次スレッドでは `👩‍⚖️秘書.md` → `開発ロードマップ.md` → `NEXT_TASK.md` で足りないときだけ引き継ぎファイルを開けば、現在地と次の実務を再開しやすい状態になった。
+- 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、`was_notified=True`、`notify_reason_codes`、`daily-sync` 初回本番確認、`phase1_active=true` の実データ確認はまだ未完了。
+- メモ: 今回は引き継ぎ整理のみで、コード本体や本番稼働設定の変更はしていない。ChatGPT API も未使用。
+
 - 日時: 2026-03-12 12:39 JST
 - 実施内容: 本番環境と開発環境のつなぎ方を見直し、「Git はコードの正本、実ログは別同期」という運用に整理した。新規に `tools/deploy_ver02_prod.sh` を追加し、`git ls-files` に載っているコードだけを `rsync` で MBP2020 本番 Ver02 へ反映し、必要なら再起動まで行えるようにした。あわせて `tools/pull_ver02_prod_logs.sh` を追加し、`heartbeat.txt`、`last_result.json`、`logs/csv/`、`logs/signals/`、`logs/cache/` など確認に必要な本番ログだけをローカル `tmp/prod_ver02_snapshot/` へ取得できるようにした。`README.md` と `運用資料/運用/今後の運用ルール.md`、`NEXT_TASK.md` にも「コードは Git 基準で配備、実データは Git に入れない」という運用方針を反映した。確認として `zsh -n tools/deploy_ver02_prod.sh`、`zsh -n tools/pull_ver02_prod_logs.sh`、各 `--help` 表示まで実行した。
 - 変更ファイル: `.gitignore`, `tools/deploy_ver02_prod.sh`, `tools/pull_ver02_prod_logs.sh`, `README.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `📒打ち合わせノート.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`
