@@ -1,5 +1,6 @@
 # Ver02 と Ver02.1 の通知比較（2026-03-12）
 
+- 補足: このファイルは 2026-03-12 時点の単発比較メモです。定期的に更新する正本は `cli_api定期比較レポート.md` を使います。
 - 補足: これは件名整理前の比較メモです。現在の運用名は `Ver02.1 API` / `Ver02.1 CLI` に統一しています。
 - 比較元ログ: `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs/last_result.json`, `logs/signals/*.json`, `logs/csv/trades.csv`
 - 目的: 件名・本文・AI助言・通知理由コードの差分整理

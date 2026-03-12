@@ -4,6 +4,7 @@
 - 2026-03-13 07:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260312_220500.json`、`last_result.json` は 2026-03-13 07:08 JST 更新まで進んだ。一方で `heartbeat.txt` は 2026-03-13 07:05 JST のままで、同時進行の継続確認は未完了。
 - 同ログ配下の `logs/errors/` には `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）が新規追加されており、再発有無の自然観測が必要。
 - 本番は `Ver02.1 API`、開発は `Ver02.1 CLI` に役割を固定した。件名は `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` を基本形にする。
+- API / CLI の安定性比較は、単発メモではなく `運用資料/reports/cli_api定期比較レポート.md` を正本にして定期更新する方針へ整理した。
 - 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
 - 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
 - Git の作業正本ブランチは `codex/ver02.1` に切り替えた。
@@ -34,7 +35,7 @@
 ## 次のタスク
 - 1. 本番 Ver02.1 と開発 Ver02.1 の次回自然更新を観測し、両方で `heartbeat.txt` / `last_result.json` が進み続けるか確認する。
 - 2. API 本番 / CLI 開発の比較通知が実際に来たら、件名・本文・AI助言・通知理由コードの差を確認する。
-- 3. 本番は API、開発は CLI の役割分担のまま、差分観測のメモを `運用資料/reports/` と `📒打ち合わせノート.md` へ整理する。
+- 3. 本番は API、開発は CLI の役割分担のまま、差分観測が取れたら `運用資料/reports/cli_api定期比較レポート.md` を更新する。
 - 4. 今後の本番反映は `zsh tools/deploy_ver021_prod.sh`、本番ログ確認は `zsh tools/pull_ver021_prod_logs.sh` を入口にする。
 - 4.5. 将来の軽改修候補として、「通知しない回は要約本文 AI を呼ばず、通知時だけメール作文 AI を回す」構成にできるか検討する。これは Ver03 昇格条件とは別の効率改善メモとして扱う。
 - 5. 次の通知発生サイクルを確認し、Ver02.1 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
