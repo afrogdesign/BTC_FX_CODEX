@@ -5,6 +5,7 @@
 - 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
 - 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
 - Git の作業正本ブランチは `codex/ver02.1` に切り替えた。
+- `codex/ver02.1` は `origin/codex/ver02.1` へ push 済みで、今後の Ver02.1 系の作業正本として使える。
 - sandbox `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` で CLI 版を合計 6 サイクル連続確認し、`ai_decision` 欠落なし、`summary_body` 正常生成、`data_quality_flag=ok`、`data_missing_fields=[]`、`logs/errors/` 空を確認した。
 - CLI 側は `codex` 実行パス自動解決に加えて、`src/ai/advice.py` / `src/ai/summary.py` で `retry_count` を使う再試行を実装済み。単発失敗 1 回で AI 欠落になりにくい状態へ補強した。
 - 比較環境を汚さない確認用として `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を作成済みで、sandbox 側は `SYSTEM_LABEL=Ver02.1-sandbox` / `DRYRUN_MODE=true` に切り替えてある。

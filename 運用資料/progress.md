@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 06:35 JST
+- 実施内容: `Ver02.1` 名義整理後の Git 整理を完了した。現在の作業ブランチを `codex/ver02.1` として新規作成し、今回の変更一式をコミット `cfb7465`（`Ver02.1名義とAPI/CLI件名へ整理`）で確定、`origin/codex/ver02.1` へ push した。これにより、今後は `codex/ver02.1` を Ver02.1 系の正本ブランチとして扱いやすい状態になった。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `codex/ver02.1` は push 済みだが、本番 Ver02.1 API 版と開発 Ver02.1 CLI 版の次回自然サイクル観測はこれから。実通知比較、`daily-sync` 初回本番確認、`logic_validated` 実データ確認は継続中。
+- メモ: `AGENTS.md` の既存差分と `運用資料/reports/` の未追跡は今回のコミットへ含めていない。ChatGPT API は使っていない。
+
 - 日時: 2026-03-13 06:33 JST
 - 実施内容: 版名と運用名を `Ver02.1` 基準へ整理した。件名生成を `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` の形へ変更するため、`main.py` に実行モードラベル生成を追加し、`src/ai/summary.py` の件名組み立てを更新した。`.env.example` と README も `Ver02.1` 表記へそろえた。あわせて本番用ファイル群を `ver021` 名へ移行し、`deploy/com.afrog.btc-monitor-ver021.plist`、`tools/start_monitor_ver021_prod.sh`、`tools/deploy_ver021_prod.sh`、`tools/pull_ver021_prod_logs.sh` を正本にした。`tools/start_monitor_ver021_prod.sh` は旧 `com.afrog.btc-monitor-ver02` を自動で bootout して新 `com.afrog.btc-monitor-ver021` へ切り替えるようにした。実運用では MBP2020 本番 `.env` を `SYSTEM_LABEL=Ver02.1` / `AI_ADVICE_PROVIDER=api` / `AI_SUMMARY_PROVIDER=api` に更新したうえで、新デプロイスクリプトで再配備し、本番 `launchctl print gui/$(id -u)/com.afrog.btc-monitor-ver021` で `state = running`、`pid = 4103` を確認した。旧 `com.afrog.btc-monitor-ver02` は `old_label_status=113` で外れていることも確認した。開発環境側も `zsh tools/start_monitor.sh` で再起動し、`com.afrog.btc-monitor` は `pid = 78995` で稼働中。Git 側は新ブランチ `codex/ver02.1` を作成して以後の正本ブランチに切り替えた。
 - 変更ファイル: `main.py`, `src/ai/summary.py`, `tests/test_summary_format.py`, `.env.example`, `README.md`, `deploy/com.afrog.btc-monitor-ver021.plist`, `tools/start_monitor_ver021_prod.sh`, `tools/deploy_ver021_prod.sh`, `tools/pull_ver021_prod_logs.sh`, `運用資料/開発ロードマップ.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/運用/運用コマンドメモ.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/参考資料/AI向けシステムロジック全体整理.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
