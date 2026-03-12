@@ -1,6 +1,7 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- `ver02` はコミット `7b89190` まで `origin/ver02` へ push 済みで、検証用ブランチ `codex/ai-cli-wrapper-validation` を切った。
 - AI助言と要約生成を、それぞれ `.env` の `AI_ADVICE_PROVIDER` / `AI_SUMMARY_PROVIDER` で `api` と `cli` に切り替えられるよう実装した。CLI 使用時は `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` を実行する。
 - Obsidian 側の `仕様書/Ver02判定ロジック早見表.md` を追加し、Ver02 の判定条件、通知条件、強ランク条件、実ログの読み方を1ページで確認できるようにした。
 - 運営ルールの正本は `AGENTS.md` とし、文書の役割分担と入口順はそこに従う。秘書メモは軽い入口、大きな報告は打ち合わせノート、全体計画はロードマップと `運用資料/計画/` に置く。
@@ -29,11 +30,14 @@
 - 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
-- 2. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
-- 3. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
-- 4. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
-- 5. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
+- 1. `codex/ai-cli-wrapper-validation` で検証用ラッパーを作り、まず要約か助言のどちらか片側だけ CLI 単発確認する。
+- 2. `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` に入れる実行形式を決め、標準入力 JSON と標準出力の期待形を合わせる。
+- 3. CLI ラッパーが通ったら `AI_ADVICE_PROVIDER=cli` または `AI_SUMMARY_PROVIDER=cli` で実運転前の切り替え確認をする。
+- 4. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
+- 5. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
+- 6. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
+- 7. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
+- 8. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
 - 6. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
 - 7. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
 - 8. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。

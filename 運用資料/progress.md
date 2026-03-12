@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 17:02 JST
+- 実施内容: ここまでの変更を `ver02` でコミット `7b89190`（`AI切り替え基盤と運用資料を更新`）として確定し、`origin/ver02` へ push した。その後、CLI 検証用ブランチ `codex/ai-cli-wrapper-validation` を新規作成し、次スレッド用の `スレッド引き継ぎファイル.md`、`NEXT_TASK.md`、`👩‍⚖️秘書.md` を検証再開前提へ更新した。
+- 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: CLI 実行コマンドの実体はまだ未設定で、検証用ラッパーもこれから作る。本番 Ver02 の通知発生待ちも継続中。
+- メモ: `ver02` は push 済みの退避点になった。次スレッドは原則 `codex/ai-cli-wrapper-validation` で再開する。ChatGPT API は未使用。
+
 - 日時: 2026-03-12 16:52 JST
 - 実施内容: ユーザー要望に合わせて、AI助言と要約生成をそれぞれ `API / CLI` で独立切り替えできる仕組みを実装した。`src/ai/cli_provider.py` を追加し、`.env` の `AI_ADVICE_PROVIDER` / `AI_SUMMARY_PROVIDER` と `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` で分岐できるようにした。`README.md` と `.env.example` に設定例を追記し、`python3 -m py_compile ...` で構文確認も実施した。
 - 変更ファイル: `main.py`, `config.py`, `.env.example`, `README.md`, `src/ai/advice.py`, `src/ai/summary.py`, `src/ai/cli_provider.py`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
