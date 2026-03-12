@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:08 JST
+- 実施内容: ユーザー要望に合わせて、秘書メモの書き方ルールをプロジェクト固有ルールと共通テンプレートへ反映した。`AGENTS.md` には、`👩‍⚖️秘書.md` を `今の状況` → `次にやる` → `次に見る` → `重要メモ` の順で保ち、変数名や機械的な状態列挙より「人が次の人へ短く報告する文体」を優先することを追記した。あわせて `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` と `/Users/marupro/CODEX/Global_BOX/README.md` にも同じ方針を反映し、他案件へ流用するときも同じ運用になるようそろえた。
+- 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/README.md`
+- 未解決事項: ルールはそろえたが、今後の各案件で実際の秘書メモが再び機械的な文体へ戻らないよう、運用しながら継続確認が必要。
+- メモ: Global_BOX 側は共通参照用のローカル更新で、GitHub へは上げない前提。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 12:05 JST
 - 実施内容: ユーザー指摘に合わせて、`AGENTS.md` の秘書ノート運用ルールを実態に合わせて修正した。`👩‍⚖️秘書.md` の基本構成を `今の状況` → `次にやる` → `次に見る` → `重要メモ` の順へ変更し、「今どういう状態で、次に何をするか」が先に分かる入口にする方針を明文化した。あわせて Obsidian 側 `👩‍⚖️秘書.md` も同じ順序へそろえて更新済み。
 - 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
