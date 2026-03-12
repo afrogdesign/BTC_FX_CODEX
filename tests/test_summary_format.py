@@ -60,8 +60,10 @@ class SummaryFormatTest(unittest.TestCase):
 
         subject = build_summary_subject(payload)
         body = build_summary_body(
+            provider="api",
             api_key="",
             model="",
+            cli_command="",
             timeout_sec=1,
             retry_count=1,
             base_dir=BASE_DIR,
@@ -74,4 +76,3 @@ class SummaryFormatTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

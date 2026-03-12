@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 17:11 JST
+- 実施内容: `codex/ai-cli-wrapper-validation` で Codex CLI 用の検証ラッパー `tools/codex_cli_wrapper.py` を追加した。監視側から渡す標準入力 JSON の `task` を見て `summary` と `ai_advice` を切り替え、`codex exec` を使って本文テキストまたは JSON を返す構成にした。`.env.example` と `README.md` に同じラッパーを両方へ設定できる例を追記し、`tests/test_codex_cli_wrapper.py` を新設した。加えて `tests/test_summary_format.py` の引数ズレも修正し、`.venv312/bin/python -m unittest tests.test_codex_cli_wrapper tests.test_summary_format` を通した。単発スモークとして、要約と助言の両方で標準入力から Codex CLI を呼び出し、要約本文と助言 JSON が返ることも確認した。
+- 変更ファイル: `tools/codex_cli_wrapper.py`, `tests/test_codex_cli_wrapper.py`, `tests/test_summary_format.py`, `.env.example`, `README.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `.env` へ実際に `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` を入れて監視本体から切り替え確認する作業はまだ未実施。本番 Ver02 の通知発生待ちも継続中。
+- メモ: 今回は ChatGPT API を使わず、ローカルの `codex` CLI を利用した。助言側では Codex の JSON Schema 制約に合わせて `required` を全列挙にする必要があった。
+ 
 - 日時: 2026-03-12 17:02 JST
 - 実施内容: ここまでの変更を `ver02` でコミット `7b89190`（`AI切り替え基盤と運用資料を更新`）として確定し、`origin/ver02` へ push した。その後、CLI 検証用ブランチ `codex/ai-cli-wrapper-validation` を新規作成し、次スレッド用の `スレッド引き継ぎファイル.md`、`NEXT_TASK.md`、`👩‍⚖️秘書.md` を検証再開前提へ更新した。
 - 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`

@@ -1,6 +1,9 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- `codex/ai-cli-wrapper-validation` で `tools/codex_cli_wrapper.py` を追加し、`summary` と `ai_advice` の両方を `codex exec` 経由で返す最小ラッパーを作成した。
+- `tests/test_codex_cli_wrapper.py` を追加し、`.venv312/bin/python -m unittest tests.test_codex_cli_wrapper tests.test_summary_format` で通過確認済み。
+- 単発スモークでは、要約側で本文テキスト、助言側で JSON オブジェクトが返ることを確認した。CLI 実行形式はラッパー 1 本を両方へ指定する形で固まった。
 - `ver02` はコミット `7b89190` まで `origin/ver02` へ push 済みで、検証用ブランチ `codex/ai-cli-wrapper-validation` を切った。
 - AI助言と要約生成を、それぞれ `.env` の `AI_ADVICE_PROVIDER` / `AI_SUMMARY_PROVIDER` で `api` と `cli` に切り替えられるよう実装した。CLI 使用時は `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` を実行する。
 - Obsidian 側の `仕様書/Ver02判定ロジック早見表.md` を追加し、Ver02 の判定条件、通知条件、強ランク条件、実ログの読み方を1ページで確認できるようにした。
@@ -30,9 +33,9 @@
 - 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. `codex/ai-cli-wrapper-validation` で検証用ラッパーを作り、まず要約か助言のどちらか片側だけ CLI 単発確認する。
-- 2. `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` に入れる実行形式を決め、標準入力 JSON と標準出力の期待形を合わせる。
-- 3. CLI ラッパーが通ったら `AI_ADVICE_PROVIDER=cli` または `AI_SUMMARY_PROVIDER=cli` で実運転前の切り替え確認をする。
+- 1. `.env` の `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` に `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py` を入れ、片側ずつ `provider=cli` にして監視本体から切り替え確認する。
+- 2. まず `AI_SUMMARY_PROVIDER=cli` で本文生成だけ切り替え、問題なければ `AI_ADVICE_PROVIDER=cli` も試す。
+- 3. 切り替え確認でエラーログが出る場合は `logs/errors/` を見て、Codex CLI 認証や出力形式の崩れがないかを確認する。
 - 4. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
 - 5. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
 - 6. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
@@ -46,6 +49,7 @@
 - 11. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
+- Codex CLI はローカル単発確認までは通ったが、監視本体から長時間運転したときの認証持続やエラー回復はまだ未確認。
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
 - 通知が止まっている直接原因は、現時点の実データでは Ver01 `bias=wait`、Ver02 `was_notified=False` / `confidence=0` で、しきい値未達の可能性が高い。
 - `signal_outcomes.csv` と `user_reviews.csv` はまだ存在せず、`daily-sync` 初回本番確認には通知発生待ちが必要。

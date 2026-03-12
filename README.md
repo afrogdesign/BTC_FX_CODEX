@@ -30,7 +30,7 @@ cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
 AI_ADVICE_PROVIDER=api
 AI_SUMMARY_PROVIDER=cli
 AI_ADVICE_CLI_COMMAND=
-AI_SUMMARY_CLI_COMMAND=/absolute/path/to/your-cli-wrapper
+AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py
 ```
 
 - `AI_ADVICE_PROVIDER`
@@ -42,6 +42,10 @@ AI_SUMMARY_CLI_COMMAND=/absolute/path/to/your-cli-wrapper
 - CLI モードでは、監視システムは JSON を標準入力へ渡し、標準出力を受け取ります。
   - 助言CLIは JSON オブジェクトを返す必要があります
   - 要約CLIは本文テキストを返す想定です
+- 同じラッパーを両方に使えます。
+  - `AI_ADVICE_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
+  - `AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
+  - ラッパー側は、入力 JSON の `task` を見て `summary` と `ai_advice` を自動で切り替えます
 
 ## 本番運用の考え方
 
