@@ -155,6 +155,8 @@ SHADOW_HEADER = [
     "planned_risk_usd",
     "position_size_usd",
     "loss_streak_at_entry",
+    "phase1_active",
+    "phase1_activation_reason",
     "max_size_capped",
     "size_reduction_reasons",
     "tp1_price",
@@ -890,6 +892,8 @@ def build_shadow_log(
                 "planned_risk_usd": trade.get("planned_risk_usd", ""),
                 "position_size_usd": trade.get("position_size_usd", ""),
                 "loss_streak_at_entry": trade.get("loss_streak_at_entry", ""),
+                "phase1_active": trade.get("phase1_active", ""),
+                "phase1_activation_reason": trade.get("phase1_activation_reason", ""),
                 "max_size_capped": trade.get("max_size_capped", ""),
                 "size_reduction_reasons": trade.get("size_reduction_reasons", ""),
                 "tp1_price": trade.get("tp1_price", ""),
@@ -1014,15 +1018,20 @@ def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         or str(row.get("position_size_usd", "")).strip()
         or str(row.get("exit_rule_version", "")).strip()
     ]
-    capped_count = sum(1 for row in phase1_rows if _parse_bool(row.get("max_size_capped")))
-    timeout_rows = [row for row in phase1_rows if str(row.get("timeout_hours", "")).strip()]
+    active_rows = [row for row in phase1_rows if _parse_bool(row.get("phase1_active"))]
+    capped_count = sum(1 for row in active_rows if _parse_bool(row.get("max_size_capped")))
+    timeout_rows = [row for row in active_rows if str(row.get("timeout_hours", "")).strip()]
+    reduced_rows = [row for row in active_rows if _parse_float(row.get("loss_streak_at_entry"), 0.0) > 0]
     return {
         "count": len(phase1_rows),
-        "avg_risk_percent": _mean_value(phase1_rows, "risk_percent_applied"),
-        "avg_planned_risk_usd": _mean_value(phase1_rows, "planned_risk_usd"),
-        "avg_position_size_usd": _mean_value(phase1_rows, "position_size_usd"),
-        "avg_loss_streak": _mean_value(phase1_rows, "loss_streak_at_entry"),
-        "cap_rate": _ratio(capped_count, len(phase1_rows)),
+        "active_count": len(active_rows),
+        "reference_count": len(phase1_rows) - len(active_rows),
+        "avg_risk_percent": _mean_value(active_rows, "risk_percent_applied"),
+        "avg_planned_risk_usd": _mean_value(active_rows, "planned_risk_usd"),
+        "avg_position_size_usd": _mean_value(active_rows, "position_size_usd"),
+        "avg_loss_streak": _mean_value(active_rows, "loss_streak_at_entry"),
+        "avg_reduced_risk_percent": _mean_value(reduced_rows, "risk_percent_applied"),
+        "cap_rate": _ratio(capped_count, len(active_rows)),
         "avg_timeout_hours": _mean_value(timeout_rows, "timeout_hours"),
     }
 
@@ -1310,7 +1319,10 @@ def build_feedback_report(
     phase1_summary = _phase1_summary(completed)
     if phase1_summary["count"] > 0:
         lines.append(f"- Phase 1 計画付き件数: {phase1_summary['count']}")
+        lines.append(f"- 本有効件数: {phase1_summary['active_count']}")
+        lines.append(f"- 参考ログ件数: {phase1_summary['reference_count']}")
         lines.append(f"- 平均 risk_percent_applied: {phase1_summary['avg_risk_percent']:.2f}")
+        lines.append(f"- 連敗時平均 risk_percent_applied: {phase1_summary['avg_reduced_risk_percent']:.2f}")
         lines.append(f"- 平均 planned_risk_usd: {phase1_summary['avg_planned_risk_usd']:.2f}")
         lines.append(f"- 平均 position_size_usd: {phase1_summary['avg_position_size_usd']:.2f}")
         lines.append(f"- 平均 loss_streak_at_entry: {phase1_summary['avg_loss_streak']:.2f}")

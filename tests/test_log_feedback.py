@@ -384,6 +384,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["logic_validated"], "true")
             self.assertEqual(rows[0]["risk_percent_applied"], "")
+            self.assertEqual(rows[0]["phase1_active"], "")
 
 
 if __name__ == "__main__":

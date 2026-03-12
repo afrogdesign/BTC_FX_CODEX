@@ -22,6 +22,7 @@
 - `loss_streak` は `signal_outcomes.csv` と `trades.csv` の完了済み通知履歴から自動計算するように変更し、履歴がまだ無い場合だけ `PHASE1_LOSS_STREAK` を予備値として使う構成にした。
 - `tools/log_feedback.py` は Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すよう更新済みで、現時点では件数 0 の空集計まで確認済み。
 - ただし、この空集計確認はローカル構造確認であり、Phase 1 の実データ評価は MBP2020 本番ログで行う前提に戻す。
+- `phase1_active` と `phase1_activation_reason` はコードに追加済みで、今後は `ready` 行だけを正式集計対象にしやすい状態になった。
 
 ## 次のタスク
 - 1. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
@@ -31,7 +32,7 @@
 - 5. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
 - 6. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
 - 7. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
-- 8. `phase1_active` のような明示フラグを追加し、`ready` 行だけを正式集計対象にできるようにする。
+- 8. `phase1_active=true` の行だけで MBP2020 本番ログを集計し、正式指標の最初の母数 (`n`) を確認する。
 - 9. `expired` と `tp1_hit_first=false` は現状 proxy 指標なので、将来の timeout / stop 実測ログ化が必要かを判断する。
 - 10. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
@@ -45,7 +46,7 @@
 - `Phase 1` の中核実装はまだ未着手で、`Ver03` 昇格には通知後フロー確認だけでなく損益管理モジュール導入も必要。
 - `loss_streak` は自動反映に切り替わったが、履歴 0 件の間は `PHASE1_LOSS_STREAK` 予備値へフォールバックする。
 - `Phase 1` の追加ログ列は `shadow_log.csv` と週次レポートまで接続済みだが、件数 0 のため実データ評価はまだできない。
-- Phase 1 の有効条件と正式指標は整理したが、まだコード上の「有効フラグ」は未実装で、現状はログ先行の段階。
+- `phase1_active` は実装済みだが、MBP2020 本番ログ側でまだこの列を蓄積できていない。
 - `expired` と `tp1_hit_first=false` は、現状では timeout / stop の proxy であり、厳密な実測指標ではない。
 
 ## 完了条件

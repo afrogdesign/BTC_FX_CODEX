@@ -52,6 +52,7 @@ from src.storage.json_store import (
     save_json,
     save_signal_snapshot,
 )
+from src.trade.activation import determine_phase1_activation
 from src.trade.exit_manager import build_exit_plan
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
@@ -174,6 +175,8 @@ def _phase1_defaults() -> dict[str, Any]:
         "planned_risk_usd": "",
         "position_size_usd": "",
         "loss_streak_at_entry": "",
+        "phase1_active": "",
+        "phase1_activation_reason": "",
         "max_size_capped": "",
         "size_reduction_reasons": [],
         "tp1_price": "",
@@ -625,6 +628,14 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result["signal_badge"] = signal_tier_badge(result["signal_tier"])
 
     if primary_setup_side in {"long", "short"}:
+        phase1_activation = determine_phase1_activation(
+            bias=bias,
+            primary_setup_side=primary_setup_side,
+            primary_setup_status=primary_setup_status,
+            data_quality_flag=result["data_quality_flag"],
+            entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
+            stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
+        )
         loss_streak = load_loss_streak(
             base_dir=base_dir,
             fallback_streak=int(cfg.PHASE1_LOSS_STREAK),
@@ -652,6 +663,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             exit_rule_version="phase1_v0",
         )
         result["loss_streak_at_entry"] = loss_streak
+        result.update(phase1_activation)
         result.update(position_size_plan)
         result.update(exit_plan)
 

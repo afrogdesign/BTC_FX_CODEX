@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:30 JST
+- 実施内容: 続きの作業として、Phase 1 の有効判定をコードへ進めた。新規 `src/trade/activation.py` を追加し、`bias`、`primary_setup_status`、`data_quality_flag`、価格入力から `phase1_active` / `phase1_activation_reason` を返すようにした。`main.py`、`src/storage/csv_logger.py`、`tools/log_feedback.py` も更新し、このフラグを `trades.csv` と `shadow_log.csv` に載せたうえで、週次レポートの Phase 1 集計を「本有効件数」と「参考ログ件数」に分けて見られるようにした。確認として `./.venv312/bin/python -m unittest tests/test_phase1_trade_plans.py tests/test_phase1_activation.py tests/test_performance_state.py tests/test_log_feedback.py`、`./.venv312/bin/python -m py_compile ...`、`./.venv312/bin/python tools/log_feedback.py build-shadow-log`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly` を実行し、すべて成功した。
+- 変更ファイル: `main.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/activation.py`, `tools/log_feedback.py`, `tests/test_phase1_activation.py`, `tests/test_log_feedback.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `phase1_active` 自体は実装できたが、MBP2020 本番ログへまだ反映されていないため、実データでの有効件数確認はこれから。timeout / stop の厳密実測ログも未実装。
+- メモ: 検証用に生成した週次レポートは片づけ済み。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 12:24 JST
 - 実施内容: Phase 1 の正式指標をもう一度見直し、実装とずれない形へ補正した。`運用資料/計画/フェーズ別計画_Phase0-1.md` では、正式評価の対象を「MBP2020 本番ログ」「当面は `primary_setup_status=ready` の行」に限定する前提を追加し、正式指標を「本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率」に更新した。あわせて、`expired` は timeout の暫定 proxy、`tp1_hit_first=false` は stop 先行の暫定 proxy であることを明記した。`NEXT_TASK.md` も同じ考え方に合わせて更新した。
 - 変更ファイル: `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
