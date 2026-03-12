@@ -1,6 +1,6 @@
 # フェーズ別計画 Phase0-1
 
-更新日: 2026-03-12 11:57 JST
+更新日: 2026-03-12 12:11 JST
 
 このファイルは、現在の実務に直結する `Phase 0` と `Phase 1` の計画をまとめたものです。
 直近の作業は、ここを見れば判断できる状態を目指します。
@@ -62,6 +62,59 @@
 - `loss_streak` は `signal_outcomes.csv` + `trades.csv` の完了済み通知履歴から自動計算する構成へ接続済み
 - `shadow_log.csv` と週次レポートに Phase 1 計画ログを流す接続も追加済み
 - 未完了なのは、実運用での有効/無効条件の詰め、件数がたまった後の評価指標整理
+
+### Phase 1 を有効扱いにする条件
+
+- まず前提として、`primary_setup_side` が `long` または `short` であること
+- `primary_setup_status` は原則 `ready` を本有効、`watch` は参考ログのみとする
+- `bias` が `wait` のときは Phase 1 を有効にしない
+- `primary_stop_loss` と `primary_entry_mid` が両方あり、サイズ計算に必要な距離が正しく取れること
+- `data_quality_flag` が `partial_missing` のときは本有効にせず、ログだけ残す
+- `signal_tier=strong` でもサイズは増やさず、通常サイズのまま扱う
+- `loss_streak` が増えたときはリスク縮小のみ許可し、拡大方向の調整はしない
+
+補足:
+
+- 当面は `ready` を「有効」、`watch` を「まだ発動しないが参考として残す」に分ける
+- つまり次の実装段階では、Phase 1 計画は今まで通りログに残しつつ、実際の有効判定フラグは `primary_setup_status=ready` を中心に付ける方針にする
+
+### Phase 1 で見る評価指標
+
+- 最優先:
+  - `tp1_hit_first`
+  - `outcome`
+  - `direction_outcome`
+- 出口管理の確認:
+  - TP1 到達率
+  - 時間切れ撤退率
+  - SL 先行率
+  - `breakeven_after_tp1` の対象件数
+- サイズ管理の確認:
+  - 平均 `risk_percent_applied`
+  - 平均 `planned_risk_usd`
+  - 平均 `position_size_usd`
+  - `max_size_capped` 発生率
+  - 平均 `loss_streak_at_entry`
+- 改善判断用:
+  - `signal_based_MFE_24h` と `signal_based_MAE_24h`
+  - `entry_ready_based_MFE_24h` と `entry_ready_based_MAE_24h`
+  - `signal_tier` 別の勝率
+  - `prelabel` 別の勝率
+
+### 当面の正式指標
+
+- Phase 1 の良し悪し判断は、当面は次の 5 指標を正本として見る
+  1. TP1 到達率
+  2. SL 先行率
+  3. 時間切れ撤退率
+  4. 平均 `risk_percent_applied`
+  5. `max_size_capped` 発生率
+
+補足:
+
+- 勝率だけで Phase 1 を判断しない
+- 理由は、Phase 1 の主目的が「勝率を上げること」だけでなく、「資金毀損を抑えること」にあるため
+- そのため、TP / SL / timeout の出口比率と、実際にどれだけリスクを絞れたかを先に見る
 
 ### position_sizing の役割
 

@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:11 JST
+- 実施内容: `Phase 1` を次にどう運用判断するかを文書として整理した。`運用資料/計画/フェーズ別計画_Phase0-1.md` に、Phase 1 を本有効扱いにする条件として「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」「`bias=wait` は無効」「`data_quality_flag=partial_missing` は本有効にしない」などを追記した。あわせて、評価指標を「最優先」「出口管理」「サイズ管理」「改善判断用」に分け、当面の正式指標を TP1 到達率 / SL 先行率 / 時間切れ撤退率 / 平均 `risk_percent_applied` / `max_size_capped` 発生率の 5 本に定めた。`NEXT_TASK.md` もこの整理内容に合わせて更新した。
+- 変更ファイル: `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`
+- 未解決事項: ルール整理は完了したが、コード上で `ready` と `watch` を分けた有効フラグはまだ未実装。実データがまだ無いため、正式指標の妥当性評価もこれから。
+- メモ: 今回は判断基準の整理が目的で、コード本体と本番常駐には変更していない。ChatGPT API も未使用。
+
 - 日時: 2026-03-12 12:08 JST
 - 実施内容: ユーザー要望に合わせて、秘書メモの書き方ルールをプロジェクト固有ルールと共通テンプレートへ反映した。`AGENTS.md` には、`👩‍⚖️秘書.md` を `今の状況` → `次にやる` → `次に見る` → `重要メモ` の順で保ち、変数名や機械的な状態列挙より「人が次の人へ短く報告する文体」を優先することを追記した。あわせて `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` と `/Users/marupro/CODEX/Global_BOX/README.md` にも同じ方針を反映し、他案件へ流用するときも同じ運用になるようそろえた。
 - 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/README.md`

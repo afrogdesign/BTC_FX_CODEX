@@ -26,9 +26,9 @@
 - 2. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
 - 3. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
 - 4. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
-- 5. `Phase 1` の土台を前提に、`main.py` のどの条件でサイズ計画を有効扱いにするかを決める。
+- 5. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
 - 6. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
-- 7. `Phase 1` の週次/月次レポートに、どの指標を「改善判断に使う正式指標」として残すかを決める。
+- 7. Phase 1 の正式指標として、TP1 到達率 / SL 先行率 / 時間切れ撤退率 / 平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
 - 8. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
@@ -41,6 +41,7 @@
 - `Phase 1` の中核実装はまだ未着手で、`Ver03` 昇格には通知後フロー確認だけでなく損益管理モジュール導入も必要。
 - `loss_streak` は自動反映に切り替わったが、履歴 0 件の間は `PHASE1_LOSS_STREAK` 予備値へフォールバックする。
 - `Phase 1` の追加ログ列は `shadow_log.csv` と週次レポートまで接続済みだが、件数 0 のため実データ評価はまだできない。
+- Phase 1 の有効条件と正式指標は整理したが、まだコード上の「有効フラグ」は未実装で、現状はログ先行の段階。
 
 ## 完了条件
-- Ver01 を比較基準として維持しつつ、Ver02 の `Phase 0` 通知後フローが本番で一周完了し、あわせて `Phase 1` の土台実装後に残る接続論点が明確になっていること。
+- Ver01 を比較基準として維持しつつ、Ver02 の `Phase 0` 通知後フローが本番で一周完了し、あわせて `Phase 1` の有効条件と正式指標が文書と実装候補の両方で整理されていること。
