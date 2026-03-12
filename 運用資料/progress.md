@@ -1,5 +1,29 @@
 # Progress Log
 
+- 日時: 2026-03-12 10:11 JST
+- 実施内容: スレッドを切り替えても今の運営を継続しやすいように、引き継ぎ入口を最新化した。`運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md` を更新し、`👩‍⚖️秘書.md`、`今後の運用ルール.md`、本番 MBP2020 正本運用、Ver01 / Ver02 並走、ローカル常駐停止済み、Git 自動運用、次の実務優先順を反映した。あわせて Obsidian 側 `👩‍⚖️秘書.md` にも「次スレッドの入口」として引き継ぎファイルへのリンクと、スレッド変更時に最初に読むべきことを追記した。
+- 変更ファイル: `運用資料/次スレッド引き継ぎプロンプト_2026-03-11.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`, `📒打ち合わせノート.md`
+- 未解決事項: 次スレッド継続の入口は整ったが、Ver02 本番の次回定時サイクル確認、`notify_reason_codes` 実通知確認、`daily-sync` 初回本番確認、`logic_validated` 反映確認はまだ未実施。
+- メモ: 今後は、次スレッド開始時に `👩‍⚖️秘書.md` と `次スレッド引き継ぎプロンプト_2026-03-11.md` を最初に見れば、現状把握と実務再開がしやすい。
+
+- 日時: 2026-03-12 10:09 JST
+- 実施内容: Obsidian 側のこの案件フォルダに `👩‍⚖️秘書.md` を新規追加し、入口メモ運用を反映した。保存先は `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/👩‍⚖️秘書.md`。内容は、`今の状況`、`次に見る`、`次にやる`、`重要メモ` の4ブロックに絞り、`NEXT_TASK.md`、`📒打ち合わせノート.md`、`📝通知レビュー.md`、`運用資料/今後の運用ルール.md` への入口として機能する構成にした。これにより、Obsidian を開いた直後に最新状況と参照先がすぐ分かる状態を作った。
+- 変更ファイル: `👩‍⚖️秘書.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: `👩‍⚖️秘書.md` は今回ひな形を入れた段階で、今後は履歴を増やさず最新版だけに保つ運用が必要。必要に応じて、Obsidian 上でより目立つ位置に置くか、他資料からリンクするかは後で調整余地がある。
+- メモ: 秘書ノートには履歴をためず、入口メモとして短く保つ方針にした。コード本体や常駐設定は未変更。
+
+- 日時: 2026-03-12 10:01 JST
+- 実施内容: Global_BOX に GitHub アクセスの実務情報を追記した。`/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md` の `Git / GitHub 共通情報` へ、GitHub ユーザー `afrogdesign`、SSH URL 利用方針、GitHub 用鍵 `~/.ssh/github_afrog_btc_fx`、`~/.ssh/config` の `github.com` 設定、`ssh -T git@github.com` による接続確認方法、成功時メッセージを追加した。実機確認として `~/.ssh/config` と `~/.ssh/` 配下を確認し、`ssh -T git@github.com` で `Hi afrogdesign!` の認証成功を確認した。あわせて `README.md` と `AGENTS_TEMPLATE.md` にも参照導線を追加した。
+- 変更ファイル: `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Global_BOX の GitHub 接続情報は整理できたが、秘密鍵自体のバックアップ方針や、別端末追加時の鍵登録手順まではまだ書いていない。Global_BOX は Git 管理外のため、今回の更新はローカル反映のみ。
+- メモ: GitHub 接続テストは正常で、現行環境では `~/.ssh/github_afrog_btc_fx` を使って `afrogdesign` として認証できる。
+
+- 日時: 2026-03-12 09:58 JST
+- 実施内容: Global_BOX の共通ルールへ、Git 運用を AI 側で自動管理する方針を追記した。`/Users/marupro/CODEX/Global_BOX/README.md` に共通運用ルールとして、`git status`、差分確認、意味単位のコミット分割、Push、作業報告でのブランチ/Push 状況明記を追加した。`/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` には `Git 運用ルール` 節を新設し、自動コミット運用、履歴破壊操作を避けること、タグ付けや節目作業は必要に応じて共有することを明文化した。`/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md` にも同方針を補足して、別ファイル間で Git 運用ルールが食い違わないようにそろえた。
+- 変更ファイル: `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: Global_BOX は Git リポジトリではないため、今回の共通ルール更新はローカルファイル反映のみで、GitHub Push 対象ではない。btc_monitor 側の直近 Git 状態は `ver02...origin/ver02` で差分なし。
+- メモ: 今後は各プロジェクトで、Git の確認、コミット分割、Push までを AI の標準運用として扱う。
+
 - 日時: 2026-03-12 10:05 JST
 - 実施内容: Ver02 本番移行後の今後の進め方を運用ルールとして文書化した。新規に `運用資料/今後の運用ルール.md` を追加し、「常駐は MBP2020 を正本」「MBA15 は開発・単発検証専用」「Ver01 は比較基準、Ver02 は改善検証対象として本番で並走」の方針を固定した。あわせて `運用資料/README.md`、`運用資料/ログ検証と改善運用ガイド.md`、`運用資料/運用コマンドメモ.md` を更新し、日次確認、`daily-sync` 実行条件、本番優先の確認手順、Ver02 本番再起動コマンドが追いやすい形に整理した。
 - 変更ファイル: `運用資料/今後の運用ルール.md`, `運用資料/README.md`, `運用資料/ログ検証と改善運用ガイド.md`, `運用資料/運用コマンドメモ.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
