@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 18:36 JST
+- 実施内容: ユーザー判断に合わせて、開発環境ローカル `.env` の `SYSTEM_LABEL` を `Ver02.1` へ切り替えた。`zsh tools/start_monitor.sh` で開発環境常駐を再起動し、`DRYRUN_MODE=true .venv312/bin/python - <<'PY' ... run_cycle(...)` で件名確認を行い、`[Ver02.1] [BTC監視] ...` と `system_label=Ver02.1` が返ることを確認した。あわせて、現行本番相当の退避点としてコミット `7b89190` から `codex/ver02.0-freeze` ブランチを作成し、`origin/codex/ver02.0-freeze` へ push した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: `Ver02.1` 件名は開発環境で反映できたが、実際の比較通知を取るには開発環境の `DRYRUN_MODE` を false に戻す判断がまだ必要。本番 Ver02 を `Ver02.1` へ差し替えるかは比較検証後の判断。
+- メモ: `codex/ver02.0-freeze` は「現行本番相当の凍結退避点」として使える。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 18:31 JST
 - 実施内容: ユーザー依頼に合わせて、本番 Ver02 はそのままにしつつ、開発環境の現行 `Ver02.1` をローカル常駐で起動した。誤通知防止のためローカル `.env` の `DRYRUN_MODE=true` を確認したうえで `zsh tools/start_monitor.sh` を実行し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state = running`、`pid = 32695` を確認した。さらに `logs/heartbeat.txt`、`logs/last_result.json`、`logs/runtime/monitor.*` を確認し、`timestamp_jst=2026-03-12T17:19:20.524394+09:00`、`system_label=Ver02`、`signal_id=20260312_081920`、`ai_decision=WAIT_FOR_SWEEP`、`was_notified=False`、`data_quality_flag=ok` を確認した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
