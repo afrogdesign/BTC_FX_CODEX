@@ -53,6 +53,7 @@ from src.storage.json_store import (
     save_signal_snapshot,
 )
 from src.trade.exit_manager import build_exit_plan
+from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
 
 
@@ -172,6 +173,7 @@ def _phase1_defaults() -> dict[str, Any]:
         "risk_percent_applied": "",
         "planned_risk_usd": "",
         "position_size_usd": "",
+        "loss_streak_at_entry": "",
         "max_size_capped": "",
         "size_reduction_reasons": [],
         "tp1_price": "",
@@ -623,12 +625,16 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result["signal_badge"] = signal_tier_badge(result["signal_tier"])
 
     if primary_setup_side in {"long", "short"}:
+        loss_streak = load_loss_streak(
+            base_dir=base_dir,
+            fallback_streak=int(cfg.PHASE1_LOSS_STREAK),
+        )
         position_size_plan = build_position_size_plan(
             account_balance=float(cfg.PHASE1_ACCOUNT_BALANCE_USD),
             entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
             stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
             signal_tier=result["signal_tier"],
-            loss_streak=int(cfg.PHASE1_LOSS_STREAK),
+            loss_streak=loss_streak,
             base_risk_pct=float(cfg.PHASE1_BASE_RISK_PCT),
             loss_streak_step_pct=float(cfg.PHASE1_LOSS_STREAK_STEP_PCT),
             min_risk_pct=float(cfg.PHASE1_MIN_RISK_PCT),
@@ -645,6 +651,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
             exit_rule_version="phase1_v0",
         )
+        result["loss_streak_at_entry"] = loss_streak
         result.update(position_size_plan)
         result.update(exit_plan)
 

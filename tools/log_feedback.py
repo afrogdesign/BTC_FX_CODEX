@@ -151,6 +151,18 @@ SHADOW_HEADER = [
     "would_trade",
     "memo",
     "evaluation_status",
+    "risk_percent_applied",
+    "planned_risk_usd",
+    "position_size_usd",
+    "loss_streak_at_entry",
+    "max_size_capped",
+    "size_reduction_reasons",
+    "tp1_price",
+    "tp2_price",
+    "breakeven_after_tp1",
+    "trail_atr_multiplier",
+    "timeout_hours",
+    "exit_rule_version",
 ]
 
 VALID_USER_VERDICTS = {
@@ -874,6 +886,18 @@ def build_shadow_log(
                 "would_trade": review.get("would_trade", ""),
                 "memo": review.get("memo", ""),
                 "evaluation_status": outcome.get("evaluation_status", ""),
+                "risk_percent_applied": trade.get("risk_percent_applied", ""),
+                "planned_risk_usd": trade.get("planned_risk_usd", ""),
+                "position_size_usd": trade.get("position_size_usd", ""),
+                "loss_streak_at_entry": trade.get("loss_streak_at_entry", ""),
+                "max_size_capped": trade.get("max_size_capped", ""),
+                "size_reduction_reasons": trade.get("size_reduction_reasons", ""),
+                "tp1_price": trade.get("tp1_price", ""),
+                "tp2_price": trade.get("tp2_price", ""),
+                "breakeven_after_tp1": trade.get("breakeven_after_tp1", ""),
+                "trail_atr_multiplier": trade.get("trail_atr_multiplier", ""),
+                "timeout_hours": trade.get("timeout_hours", ""),
+                "exit_rule_version": trade.get("exit_rule_version", ""),
             }
         )
 
@@ -979,6 +1003,27 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "verdicts": verdicts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
         "actual_move_driver_rate": _ratio(actual_move_driver_count, len(rows)),
+    }
+
+
+def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    phase1_rows = [
+        row
+        for row in rows
+        if str(row.get("risk_percent_applied", "")).strip()
+        or str(row.get("position_size_usd", "")).strip()
+        or str(row.get("exit_rule_version", "")).strip()
+    ]
+    capped_count = sum(1 for row in phase1_rows if _parse_bool(row.get("max_size_capped")))
+    timeout_rows = [row for row in phase1_rows if str(row.get("timeout_hours", "")).strip()]
+    return {
+        "count": len(phase1_rows),
+        "avg_risk_percent": _mean_value(phase1_rows, "risk_percent_applied"),
+        "avg_planned_risk_usd": _mean_value(phase1_rows, "planned_risk_usd"),
+        "avg_position_size_usd": _mean_value(phase1_rows, "position_size_usd"),
+        "avg_loss_streak": _mean_value(phase1_rows, "loss_streak_at_entry"),
+        "cap_rate": _ratio(capped_count, len(phase1_rows)),
+        "avg_timeout_hours": _mean_value(timeout_rows, "timeout_hours"),
     }
 
 
@@ -1261,8 +1306,22 @@ def build_feedback_report(
         lines.append("- まだ改善候補を絞れるだけのデータがありません")
     lines.append("")
 
+    lines.append("## 10. Phase 1 計画ログ")
+    phase1_summary = _phase1_summary(completed)
+    if phase1_summary["count"] > 0:
+        lines.append(f"- Phase 1 計画付き件数: {phase1_summary['count']}")
+        lines.append(f"- 平均 risk_percent_applied: {phase1_summary['avg_risk_percent']:.2f}")
+        lines.append(f"- 平均 planned_risk_usd: {phase1_summary['avg_planned_risk_usd']:.2f}")
+        lines.append(f"- 平均 position_size_usd: {phase1_summary['avg_position_size_usd']:.2f}")
+        lines.append(f"- 平均 loss_streak_at_entry: {phase1_summary['avg_loss_streak']:.2f}")
+        lines.append(f"- max_size_capped 発生率: {_format_pct(phase1_summary['cap_rate'])}")
+        lines.append(f"- 平均 timeout_hours: {phase1_summary['avg_timeout_hours']:.2f}")
+    else:
+        lines.append("- まだ Phase 1 計画ログは集計対象にありません")
+    lines.append("")
+
     if period == "weekly":
-        lines.append("## 10. risk_flags 有効性比較")
+        lines.append("## 11. risk_flags 有効性比較")
         risk_flags = _risk_flag_summary(completed)
         if risk_flags:
             for item in risk_flags:
@@ -1271,14 +1330,14 @@ def build_feedback_report(
             lines.append("- 比較対象となる risk_flag はまだありません")
         lines.append("")
     else:
-        lines.append("## 10. 前月比")
+        lines.append("## 11. 前月比")
         if previous_completed:
             lines.append(f"- 前月件数: {len(previous_completed)}")
             lines.append(f"- 今月との差: {len(completed) - len(previous_completed)} 件")
         else:
             lines.append("- 前月データはまだありません")
         lines.append("")
-        lines.append("## 11. 設定変更提案")
+        lines.append("## 12. 設定変更提案")
         if improvements:
             for item in improvements:
                 lines.append(

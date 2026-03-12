@@ -1,6 +1,6 @@
 # フェーズ別計画 Phase0-1
 
-更新日: 2026-03-12 11:49 JST
+更新日: 2026-03-12 11:57 JST
 
 このファイルは、現在の実務に直結する `Phase 0` と `Phase 1` の計画をまとめたものです。
 直近の作業は、ここを見れば判断できる状態を目指します。
@@ -59,7 +59,9 @@
 - `main.py` から primary setup 確定後に Phase 1 計画を result へ載せる土台を追加済み
 - `config.py` に `PHASE1_*` 設定値を追加済み
 - `trades.csv` に Phase 1 用の保存列を追加済み
-- 未完了なのは、`loss_streak` の実データ連携、Phase 1 ログの集計接続、実運用での有効/無効条件の詰め
+- `loss_streak` は `signal_outcomes.csv` + `trades.csv` の完了済み通知履歴から自動計算する構成へ接続済み
+- `shadow_log.csv` と週次レポートに Phase 1 計画ログを流す接続も追加済み
+- 未完了なのは、実運用での有効/無効条件の詰め、件数がたまった後の評価指標整理
 
 ### position_sizing の役割
 

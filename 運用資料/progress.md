@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 11:57 JST
+- 実施内容: `Phase 1` の未接続部分を自動化した。新規 `src/trade/performance_state.py` を追加し、`signal_outcomes.csv` と `trades.csv` の完了済み通知履歴から連敗数 `loss_streak` を自動計算し、履歴が無い場合だけ `PHASE1_LOSS_STREAK` を予備値として使う構成へ切り替えた。`main.py` ではこの自動計算値を `loss_streak_at_entry` として保存し、`src/storage/csv_logger.py` へ列追加した。さらに `tools/log_feedback.py` を更新し、Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すようにした。確認として `./.venv312/bin/python -m unittest tests/test_phase1_trade_plans.py tests/test_performance_state.py tests/test_log_feedback.py`、`./.venv312/bin/python -m py_compile ...`、`./.venv312/bin/python tools/log_feedback.py build-shadow-log`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly` を実行し、Phase 1 セクション付きレポート生成まで確認した。
+- 変更ファイル: `main.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/performance_state.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `tests/test_performance_state.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 通知発生ケースでの `was_notified=True` と `notify_reason_codes` の本番確認はまだ未完了。Phase 1 は自動連敗数と集計配線まで進んだが、どの条件でサイズ計画を「有効扱い」とするか、実データがたまった後の正式評価指標はまだ要整理。
+- メモ: `python3` 直実行では `pandas` 不足で `tests/test_log_feedback.py` が読めなかったため、検証は `.venv312` で実施した。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 11:49 JST
 - 実施内容: ユーザー方針に合わせて、通知待ちを前提に `Phase 1` の設計入口をコード側へ先行実装した。新規に `src/trade/position_sizing.py` と `src/trade/exit_manager.py` を追加し、`main.py` から primary setup 確定後にサイズ計画と出口計画の雛形を `result` へ載せる構成を入れた。あわせて `config.py` に `PHASE1_*` 設定値を追加し、`src/storage/csv_logger.py` の `trades.csv` 保存列へ `risk_percent_applied`、`planned_risk_usd`、`position_size_usd`、`max_size_capped`、`size_reduction_reasons`、`tp1_price`、`tp2_price`、`breakeven_after_tp1`、`trail_atr_multiplier`、`timeout_hours`、`exit_rule_version` を追加した。最小確認として `tests/test_phase1_trade_plans.py` を追加し、`python3 -m unittest tests/test_phase1_trade_plans.py` と `python3 -m py_compile ...` は成功した。
 - 変更ファイル: `main.py`, `config.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/position_sizing.py`, `src/trade/exit_manager.py`, `tests/test_phase1_trade_plans.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`

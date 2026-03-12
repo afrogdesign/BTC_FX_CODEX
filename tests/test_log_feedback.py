@@ -383,6 +383,7 @@ class LogFeedbackTest(unittest.TestCase):
             rows = _load_csv_rows(shadow_path)
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["logic_validated"], "true")
+            self.assertEqual(rows[0]["risk_percent_applied"], "")
 
 
 if __name__ == "__main__":
