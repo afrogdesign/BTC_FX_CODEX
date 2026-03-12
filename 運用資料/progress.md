@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:05 JST
+- 実施内容: ユーザー指摘に合わせて、`AGENTS.md` の秘書ノート運用ルールを実態に合わせて修正した。`👩‍⚖️秘書.md` の基本構成を `今の状況` → `次にやる` → `次に見る` → `重要メモ` の順へ変更し、「今どういう状態で、次に何をするか」が先に分かる入口にする方針を明文化した。あわせて Obsidian 側 `👩‍⚖️秘書.md` も同じ順序へそろえて更新済み。
+- 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 秘書メモの順序は整ったが、今後も「次に見る」を情報置き場に戻しすぎず、判断と行動が先に見える軽さを保つ運用が必要。
+- メモ: 今回は運用ルール修正のみで、コード本体・本番運用・API 利用には変更なし。
+
 - 日時: 2026-03-12 11:57 JST
 - 実施内容: `Phase 1` の未接続部分を自動化した。新規 `src/trade/performance_state.py` を追加し、`signal_outcomes.csv` と `trades.csv` の完了済み通知履歴から連敗数 `loss_streak` を自動計算し、履歴が無い場合だけ `PHASE1_LOSS_STREAK` を予備値として使う構成へ切り替えた。`main.py` ではこの自動計算値を `loss_streak_at_entry` として保存し、`src/storage/csv_logger.py` へ列追加した。さらに `tools/log_feedback.py` を更新し、Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すようにした。確認として `./.venv312/bin/python -m unittest tests/test_phase1_trade_plans.py tests/test_performance_state.py tests/test_log_feedback.py`、`./.venv312/bin/python -m py_compile ...`、`./.venv312/bin/python tools/log_feedback.py build-shadow-log`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly` を実行し、Phase 1 セクション付きレポート生成まで確認した。
 - 変更ファイル: `main.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/performance_state.py`, `tools/log_feedback.py`, `tests/test_log_feedback.py`, `tests/test_performance_state.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
