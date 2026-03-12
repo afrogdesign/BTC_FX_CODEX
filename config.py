@@ -168,6 +168,10 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "MEXC_SYMBOL": "BTC_USDT",
         "OPENAI_SUMMARY_MODEL": "gpt-4o-mini",
         "OPENAI_ADVICE_MODEL": "gpt-4o",
+        "AI_ADVICE_PROVIDER": "api",
+        "AI_SUMMARY_PROVIDER": "api",
+        "AI_ADVICE_CLI_COMMAND": "",
+        "AI_SUMMARY_CLI_COMMAND": "",
         "TIMEZONE": "Asia/Tokyo",
         "SYSTEM_LABEL": "",
         "REPORT_TIMES": [

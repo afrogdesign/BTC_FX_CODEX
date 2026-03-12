@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.ai.cli_provider import run_cli_text, write_ai_error_log
+
 
 def _load_prompt(base_dir: Path) -> str:
     prompt_path = base_dir / "prompts" / "summary_prompt.md"
@@ -210,14 +212,6 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         return f"{signal_intro}\n{body}"
     return body
 
-
-def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
-    path = base_dir / "logs" / "errors" / f"{ts}_{title}.log"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(details, encoding="utf-8")
-
-
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
@@ -237,13 +231,47 @@ def build_summary_subject(result: dict[str, Any]) -> str:
 
 def build_summary_body(
     *,
+    provider: str,
     api_key: str,
     model: str,
+    cli_command: str,
     timeout_sec: int,
     retry_count: int,
     base_dir: Path,
     result_payload: dict[str, Any],
 ) -> str:
+    provider_name = str(provider or "api").strip().lower()
+
+    if provider_name == "cli":
+        if not str(cli_command).strip():
+            return _fallback_summary(result_payload)
+        try:
+            content = run_cli_text(
+                command=cli_command,
+                timeout_sec=timeout_sec,
+                payload={
+                    "task": "summary",
+                    "model": model,
+                    "system_prompt": _load_prompt(base_dir),
+                    "result_payload": result_payload,
+                },
+            )
+            return content or _fallback_summary(result_payload)
+        except Exception as exc:  # noqa: BLE001
+            write_ai_error_log(
+                base_dir,
+                "ai_summary_error",
+                "\n".join(
+                    [
+                        "provider=cli",
+                        f"model={model}",
+                        f"timeout_sec={timeout_sec}",
+                        f"details={type(exc).__name__}: {exc}",
+                    ]
+                ),
+            )
+            return _fallback_summary(result_payload)
+
     if not api_key:
         return _fallback_summary(result_payload)
 
@@ -274,11 +302,12 @@ def build_summary_body(
             last_error = f"{type(exc).__name__}: {exc}"
             continue
     if last_error:
-        _write_ai_error_log(
+        write_ai_error_log(
             base_dir,
             "ai_summary_error",
             "\n".join(
                 [
+                    f"provider={provider_name}",
                     f"model={model}",
                     f"timeout_sec={timeout_sec}",
                     f"retry_count={retry_count}",

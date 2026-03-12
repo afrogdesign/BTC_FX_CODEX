@@ -601,8 +601,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     }
 
     ai_advice = request_ai_advice(
+        provider=cfg.AI_ADVICE_PROVIDER,
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_ADVICE_MODEL,
+        cli_command=cfg.AI_ADVICE_CLI_COMMAND,
         timeout_sec=cfg.AI_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,
@@ -677,8 +679,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     result["summary_subject"] = build_summary_subject(result)
     result["summary_body"] = build_summary_body(
+        provider=cfg.AI_SUMMARY_PROVIDER,
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_SUMMARY_MODEL,
+        cli_command=cfg.AI_SUMMARY_CLI_COMMAND,
         timeout_sec=cfg.AI_SUMMARY_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,

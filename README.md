@@ -21,6 +21,28 @@ cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
 - 市場構造の補助データとして Binance の公開APIも使います。
 - Funding 閾値（`FUNDING_*`）は `%` 単位で設定します（例: `0.05` は `0.05%`）。
 
+## AI の切り替え
+
+- 助言と要約は、それぞれ `API / CLI` を別々に切り替えられます。
+- `.env` の設定例:
+
+```bash
+AI_ADVICE_PROVIDER=api
+AI_SUMMARY_PROVIDER=cli
+AI_ADVICE_CLI_COMMAND=
+AI_SUMMARY_CLI_COMMAND=/absolute/path/to/your-cli-wrapper
+```
+
+- `AI_ADVICE_PROVIDER`
+  - `api` なら OpenAI API を使います
+  - `cli` なら `AI_ADVICE_CLI_COMMAND` を実行します
+- `AI_SUMMARY_PROVIDER`
+  - `api` なら OpenAI API を使います
+  - `cli` なら `AI_SUMMARY_CLI_COMMAND` を実行します
+- CLI モードでは、監視システムは JSON を標準入力へ渡し、標準出力を受け取ります。
+  - 助言CLIは JSON オブジェクトを返す必要があります
+  - 要約CLIは本文テキストを返す想定です
+
 ## 本番運用の考え方
 
 - Git は「コードの正本」に使います。

@@ -1,5 +1,47 @@
 # Progress Log
 
+- 日時: 2026-03-12 16:52 JST
+- 実施内容: ユーザー要望に合わせて、AI助言と要約生成をそれぞれ `API / CLI` で独立切り替えできる仕組みを実装した。`src/ai/cli_provider.py` を追加し、`.env` の `AI_ADVICE_PROVIDER` / `AI_SUMMARY_PROVIDER` と `AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` で分岐できるようにした。`README.md` と `.env.example` に設定例を追記し、`python3 -m py_compile ...` で構文確認も実施した。
+- 変更ファイル: `main.py`, `config.py`, `.env.example`, `README.md`, `src/ai/advice.py`, `src/ai/summary.py`, `src/ai/cli_provider.py`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: CLI 実行コマンドの実体はまだ未設定で、`AI_ADVICE_CLI_COMMAND` / `AI_SUMMARY_CLI_COMMAND` に何を入れるかは今後決める必要がある。本番 Ver02 の通知発生待ちも継続中。
+- メモ: 今回は切り替え基盤の追加までで、CLI 実コマンドをつないだ運転確認はまだしていない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 16:35 JST
+- 実施内容: ユーザー依頼に合わせて、`Ver02判定ロジック早見表.md` の OpenAI API 欄へモデル名を追記した。既定値として、AI助言は `gpt-4o`、要約生成は `gpt-4o-mini` を使うことが分かるよう表を更新し、`👩‍⚖️秘書.md` にも反映した。
+- 変更ファイル: `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/仕様書/Ver02判定ロジック早見表.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、本番 Ver02 のログ蓄積と `was_notified=True` の実データ確認は未完了。
+- メモ: 今回は説明資料の補足のみで、コード本体や本番設定は変更していない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 16:31 JST
+- 実施内容: ユーザー質問に合わせて、`Ver02判定ロジック早見表.md` に「API一覧表」節を追記した。内容は、MEXC API、Binance REST API、Binance WebSocket、OpenAI API、SMTP について、1サイクルあたりの目安回数、用途、retry / timeout の既定値をまとめたもの。あわせて `👩‍⚖️秘書.md` にも新しい更新点を反映した。
+- 変更ファイル: `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/仕様書/Ver02判定ロジック早見表.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、本番 Ver02 のログ蓄積と `was_notified=True` の実データ確認は未完了。
+- メモ: 今回は説明資料の補強のみで、コード本体や本番設定は変更していない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 16:07 JST
+- 実施内容: ユーザー質問に合わせて、`Ver02判定ロジック早見表.md` に「位置リスク5項目のデータ取得方法」節を追記した。内容は、流動性の近さ、清算クラスター、板の壁、sweep 済み判定、OI/CVD 危険信号について、それぞれの取得元、計算方法、判定への使い方、注意点を表形式で整理した。あわせて `👩‍⚖️秘書.md` にも新しい更新点を反映した。
+- 変更ファイル: `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/仕様書/Ver02判定ロジック早見表.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、本番 Ver02 のログ蓄積と `was_notified=True` の実データ確認は未完了。
+- メモ: 今回の追記は説明資料の補強であり、コード本体や本番設定は変更していない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 12:59 JST
+- 実施内容: ユーザー依頼に合わせて、Obsidian 側の `仕様書` フォルダへ `Ver02判定ロジック早見表.md` を新規作成した。内容は、`bias` 判定条件、`confidence` 条件、`ready / watch / invalid` の意味、通知条件、`strong_machine / strong_ai_confirmed` 条件、さらに実際の `trades.csv` ログを使った読み解き例までを1ページで確認できる構成にした。あわせて `👩‍⚖️秘書.md` と `NEXT_TASK.md` にも入口リンクと現状を反映した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`, `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/仕様書/Ver02判定ロジック早見表.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、本番 Ver02 のログ蓄積と `was_notified=True` の実データ確認は未完了。
+- メモ: 実ログ例はローカル `logs/csv/trades.csv` を使って説明資料化した。本番の最終確認は引き続き MBP2020 側ログを正本として扱う。ChatGPT API は未使用。
+
+- 日時: 2026-03-12 12:58 JST
+- 実施内容: ユーザー要望に合わせて、`👩‍⚖️秘書.md` の `今の状況` と `次にやる` は「新しく変わったことを常に先頭行に置き、継続状況はその下に回す」ルールをプロジェクト `AGENTS.md` と `Global_BOX` 共通文書へ明文化した。あわせて秘書メモ本体の並び順も新ルールどおりに調整した。
+- 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、Ver02 本番の `was_notified=True`、`notify_reason_codes`、`daily-sync` 初回本番確認は未完了。
+- メモ: 今回は運用ルール明文化と文書整列のみで、コード本体や本番稼働設定は変更していない。ChatGPT API も未使用。
+
+- 日時: 2026-03-12 12:56 JST
+- 実施内容: ユーザー依頼に合わせて `AGENTS.md` を再確認し、次スレッドでも作業前に `AGENTS.md` を確認する流れを `運用資料/スレッド引き継ぎファイル.md` へ反映した。あわせて `NEXT_TASK.md` と `👩‍⚖️秘書.md` にも同じ前提が見えるよう最小限の更新を入れた。
+- 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 実務本体は引き続き通知発生待ちで、Ver02 本番の `was_notified=True`、`notify_reason_codes`、`daily-sync` 初回本番確認は未完了。
+- メモ: 今回は文書整理のみで、コード本体や本番稼働設定は変更していない。ChatGPT API も未使用。
+
 - 日時: 2026-03-12 12:52 JST
 - 実施内容: ユーザー指摘に合わせて、コミットメッセージを日本語で書く運用ルールを明文化した。プロジェクト側 `AGENTS.md` に加え、共通テンプレートの `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`、`/Users/marupro/CODEX/Global_BOX/README.md`、`/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md` にも同じ方針を反映した。これにより、今後の Git 履歴は原則として日本語で統一する。
 - 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`

@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.ai.cli_provider import run_cli_json, write_ai_error_log
+
 
 def _load_prompt(base_dir: Path) -> str:
     prompt_path = base_dir / "prompts" / "advice_prompt.md"
@@ -60,24 +62,52 @@ def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
         "next_condition": str(payload.get("next_condition", "")).strip()[:200],
     }
 
-
-def _write_ai_error_log(base_dir: Path, title: str, details: str) -> None:
-    ts = datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
-    path = base_dir / "logs" / "errors" / f"{ts}_{title}.log"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(details, encoding="utf-8")
-
-
 def request_ai_advice(
     *,
+    provider: str,
     api_key: str,
     model: str,
+    cli_command: str,
     timeout_sec: int,
     retry_count: int,
     base_dir: Path,
     machine_payload: dict[str, Any],
     qualitative_payload: dict[str, Any],
 ) -> dict[str, Any] | None:
+    provider_name = str(provider or "api").strip().lower()
+
+    if provider_name == "cli":
+        if not str(cli_command).strip():
+            write_ai_error_log(base_dir, "ai_advice_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
+            return None
+        try:
+            parsed = run_cli_json(
+                command=cli_command,
+                timeout_sec=timeout_sec,
+                payload={
+                    "task": "ai_advice",
+                    "model": model,
+                    "system_prompt": _load_prompt(base_dir),
+                    "machine": machine_payload,
+                    "qualitative": qualitative_payload,
+                },
+            )
+            return _normalize_advice(parsed)
+        except Exception as exc:  # noqa: BLE001
+            write_ai_error_log(
+                base_dir,
+                "ai_advice_error",
+                "\n".join(
+                    [
+                        "provider=cli",
+                        f"model={model}",
+                        f"timeout_sec={timeout_sec}",
+                        f"details={type(exc).__name__}: {exc}",
+                    ]
+                ),
+            )
+            return None
+
     if not api_key:
         return None
 
@@ -111,11 +141,12 @@ def request_ai_advice(
             last_error = f"{type(exc).__name__}: {exc}"
             continue
     if last_error:
-        _write_ai_error_log(
+        write_ai_error_log(
             base_dir,
             "ai_advice_error",
             "\n".join(
                 [
+                    f"provider={provider_name}",
                     f"model={model}",
                     f"timeout_sec={timeout_sec}",
                     f"retry_count={retry_count}",
