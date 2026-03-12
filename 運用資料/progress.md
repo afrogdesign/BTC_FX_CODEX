@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:52 JST
+- 実施内容: ユーザー指摘に合わせて、コミットメッセージを日本語で書く運用ルールを明文化した。プロジェクト側 `AGENTS.md` に加え、共通テンプレートの `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`、`/Users/marupro/CODEX/Global_BOX/README.md`、`/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md` にも同じ方針を反映した。これにより、今後の Git 履歴は原則として日本語で統一する。
+- 変更ファイル: `AGENTS.md`, `運用資料/progress.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`
+- 未解決事項: 直近の英語コミットはすでに push 済みのため、そのまま残っている。過去分まで日本語へ直すには履歴書き換えが必要なので、明示依頼がある場合だけ対応する。
+- メモ: 今後の新規コミットから日本語でそろえる。ChatGPT API は使っていない。
+
 - 日時: 2026-03-12 12:50 JST
 - 実施内容: 新スレッド移行に備えて `運用資料/スレッド引き継ぎファイル.md` を最新状態へ更新した。内容は、MBP2020 を正本とする前提、Phase 1 の現状到達点、正式指標と proxy 指標の整理、今後の本番反映は `tools/deploy_ver02_prod.sh`、本番ログ確認は `tools/pull_ver02_prod_logs.sh` を入口にする運用まで反映した。これにより、次スレッドでは `👩‍⚖️秘書.md` → `開発ロードマップ.md` → `NEXT_TASK.md` で足りないときだけ引き継ぎファイルを開けば、現在地と次の実務を再開しやすい状態になった。
 - 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`
