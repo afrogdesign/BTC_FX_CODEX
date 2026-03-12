@@ -2,6 +2,7 @@
 
 ## 現在の状況
 - 読む優先度は `👩‍⚖️秘書.md` → `運用資料/スレッド引き継ぎファイル.md` → `NEXT_TASK.md`。`progress.md` は履歴確認が必要なときだけ参照する。
+- `運用資料/スレッド引き継ぎファイル.md` は、毎回更新ではなく、スレッド切り替え直前や大きな区切りのときだけ更新する運用に整理済み。
 - 常駐の正本は MBP2020。本番では Ver01 を比較基準、Ver02 を改善検証対象として並走運用する。
 - MBA15 は開発・単発確認専用で、ローカル常駐 `com.afrog.btc-monitor` は停止済み。
 - Ver02 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` / `com.afrog.btc-monitor-ver02`、Ver01 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor` / `com.afrog.btc-monitor-ver01` で稼働中。

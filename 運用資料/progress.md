@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 10:30 JST
+- 実施内容: 引き継ぎファイルの更新タイミングも精査し、「毎回更新」ではなく「スレッド切り替え直前や大きな区切りのときだけ更新」に統一した。`運用資料/スレッド引き継ぎファイル.md` の冒頭文を修正し、固定ファイル名を切り替え時にだけ精査して書き直す運用へ変更した。あわせて `/Users/marupro/CODEX/Global_BOX/スレッド引き継ぎファイルテンプレート.md`、`/Users/marupro/CODEX/Global_BOX/README.md`、`/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md` も同方針にそろえ、他案件でも「普段は触らず、切り替え前だけ更新」で運用できるようにした。
+- 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `/Users/marupro/CODEX/Global_BOX/スレッド引き継ぎファイルテンプレート.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `📒打ち合わせノート.md`
+- 未解決事項: 更新タイミングのルールは整理できたが、実際に次回スレッド切り替え時に内容をどこまで圧縮できるかは運用しながら調整が必要。
+- メモ: 引き継ぎファイルは「常時最新化」より「切り替え直前に圧縮」の方が、クレジット消費と情報鮮度のバランスがよいと判断した。
+
 - 日時: 2026-03-12 10:24 JST
 - 実施内容: 再開時に無駄が多くならないよう、入口系ファイルの役割と参照優先度を精査した。`運用資料/NEXT_TASK.md` の `現在の状況` を圧縮し、直近判断に必要な前提だけを残す形へ整理した。`運用資料/スレッド引き継ぎファイル.md` では `progress.md` を「最初に読むファイル」から外し、必要時だけ参照する補足へ変更した。Obsidian 側 `👩‍⚖️秘書.md` にも `progress.md` は履歴確認が必要なときだけ見る位置づけを明記した。さらに Global_BOX の `README.md` と `AGENTS_TEMPLATE.md` に、参照優先度 `👩‍⚖️秘書.md` → `スレッド引き継ぎファイル.md` → `NEXT_TASK.md` → 必要なら `📒打ち合わせノート.md` → 必要時のみ `progress.md` を追記し、他案件でも同じ重みづけで運用できるようにした。
 - 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `👩‍⚖️秘書.md`, `/Users/marupro/CODEX/Global_BOX/README.md`, `/Users/marupro/CODEX/Global_BOX/AGENTS_TEMPLATE.md`, `運用資料/progress.md`, `📒打ち合わせノート.md`
