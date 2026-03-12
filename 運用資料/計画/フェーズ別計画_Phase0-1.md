@@ -1,6 +1,6 @@
 # フェーズ別計画 Phase0-1
 
-更新日: 2026-03-12 11:10 JST
+更新日: 2026-03-12 11:49 JST
 
 このファイルは、現在の実務に直結する `Phase 0` と `Phase 1` の計画をまとめたものです。
 直近の作業は、ここを見れば判断できる状態を目指します。
@@ -52,6 +52,14 @@
 
 - `src/trade/position_sizing.py`
 - `src/trade/exit_manager.py`
+
+### 2026-03-12 時点の入口実装
+
+- `position_sizing` と `exit_manager` の雛形モジュールは追加済み
+- `main.py` から primary setup 確定後に Phase 1 計画を result へ載せる土台を追加済み
+- `config.py` に `PHASE1_*` 設定値を追加済み
+- `trades.csv` に Phase 1 用の保存列を追加済み
+- 未完了なのは、`loss_streak` の実データ連携、Phase 1 ログの集計接続、実運用での有効/無効条件の詰め
 
 ### position_sizing の役割
 

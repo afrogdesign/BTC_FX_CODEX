@@ -58,6 +58,8 @@ def _coerce_value(key: str, value: str) -> Any:
         "BINANCE_ORDERBOOK_LIMIT",
         "BINANCE_LIQUIDATION_MAX_EVENTS",
         "BINANCE_LIQUIDATION_CACHE_MAX",
+        "PHASE1_TIMEOUT_HOURS",
+        "PHASE1_LOSS_STREAK",
     }
     float_keys = {
         "REQUEST_INTERVAL_SEC",
@@ -74,6 +76,14 @@ def _coerce_value(key: str, value: str) -> Any:
         "LIQUIDITY_EQUAL_THRESHOLD_PCT",
         "POSITION_RISK_HIGH_THRESHOLD",
         "POSITION_RISK_MEDIUM_THRESHOLD",
+        "PHASE1_ACCOUNT_BALANCE_USD",
+        "PHASE1_BASE_RISK_PCT",
+        "PHASE1_MIN_RISK_PCT",
+        "PHASE1_LOSS_STREAK_STEP_PCT",
+        "PHASE1_MAX_POSITION_SIZE_USD",
+        "PHASE1_TP1_RR_MULTIPLE",
+        "PHASE1_TP2_RR_MULTIPLE",
+        "PHASE1_TRAIL_ATR_MULTIPLIER",
     }
     bool_keys = {"AI_CACHE_ENABLED", "DRYRUN_MODE"}
 
@@ -240,6 +250,16 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "LIQUIDITY_EQUAL_THRESHOLD_PCT": 0.0008,
         "POSITION_RISK_HIGH_THRESHOLD": 70.0,
         "POSITION_RISK_MEDIUM_THRESHOLD": 45.0,
+        "PHASE1_ACCOUNT_BALANCE_USD": 10000.0,
+        "PHASE1_BASE_RISK_PCT": 0.5,
+        "PHASE1_MIN_RISK_PCT": 0.2,
+        "PHASE1_LOSS_STREAK_STEP_PCT": 0.1,
+        "PHASE1_MAX_POSITION_SIZE_USD": 3000.0,
+        "PHASE1_TP1_RR_MULTIPLE": 1.0,
+        "PHASE1_TP2_RR_MULTIPLE": 2.0,
+        "PHASE1_TRAIL_ATR_MULTIPLIER": 1.5,
+        "PHASE1_TIMEOUT_HOURS": 12,
+        "PHASE1_LOSS_STREAK": 0,
     }
 
     for key, value in defaults.items():

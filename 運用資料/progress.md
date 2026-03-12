@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 11:49 JST
+- 実施内容: ユーザー方針に合わせて、通知待ちを前提に `Phase 1` の設計入口をコード側へ先行実装した。新規に `src/trade/position_sizing.py` と `src/trade/exit_manager.py` を追加し、`main.py` から primary setup 確定後にサイズ計画と出口計画の雛形を `result` へ載せる構成を入れた。あわせて `config.py` に `PHASE1_*` 設定値を追加し、`src/storage/csv_logger.py` の `trades.csv` 保存列へ `risk_percent_applied`、`planned_risk_usd`、`position_size_usd`、`max_size_capped`、`size_reduction_reasons`、`tp1_price`、`tp2_price`、`breakeven_after_tp1`、`trail_atr_multiplier`、`timeout_hours`、`exit_rule_version` を追加した。最小確認として `tests/test_phase1_trade_plans.py` を追加し、`python3 -m unittest tests/test_phase1_trade_plans.py` と `python3 -m py_compile ...` は成功した。
+- 変更ファイル: `main.py`, `config.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/position_sizing.py`, `src/trade/exit_manager.py`, `tests/test_phase1_trade_plans.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 通知発生ケースでの `was_notified=True` と `notify_reason_codes` の本番実データ確認はまだ未完了。Phase 1 も土台までで、`loss_streak` の実データ連携と `tools/log_feedback.py` 側の集計接続は未実装。
+- メモ: 今回は ChatGPT API を使っていない。Phase 1 の設定値は雛形なので、本番でサイズを増やす用途ではなく、まずログに計画値を残す入口として扱う。
+
 - 日時: 2026-03-12 11:39 JST
 - 実施内容: ユーザー依頼に合わせて `運用資料/スレッド引き継ぎファイル.md` を最新状態へ更新した。更新時刻を進めたうえで、入口順・秘書メモ必須更新・圧縮運用まで `AGENTS.md` に反映済みであること、ならびに運用設計整理が Git コミット `1892f70` として `ver02` / `origin/ver02` に反映済みであることを追記した。あわせて Obsidian 側 `👩‍⚖️秘書.md` の更新時刻もそろえた。
 - 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`

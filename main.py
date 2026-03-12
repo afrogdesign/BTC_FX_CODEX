@@ -52,6 +52,8 @@ from src.storage.json_store import (
     save_json,
     save_signal_snapshot,
 )
+from src.trade.exit_manager import build_exit_plan
+from src.trade.position_sizing import build_position_size_plan
 
 
 def _base_dir() -> Path:
@@ -163,6 +165,22 @@ def _build_fetch_cfg(cfg: Any) -> FetchConfig:
         retry_count=cfg.API_RETRY_COUNT,
         request_interval_sec=cfg.REQUEST_INTERVAL_SEC,
     )
+
+
+def _phase1_defaults() -> dict[str, Any]:
+    return {
+        "risk_percent_applied": "",
+        "planned_risk_usd": "",
+        "position_size_usd": "",
+        "max_size_capped": "",
+        "size_reduction_reasons": [],
+        "tp1_price": "",
+        "tp2_price": "",
+        "breakeven_after_tp1": "",
+        "trail_atr_multiplier": "",
+        "timeout_hours": "",
+        "exit_rule_version": "",
+    }
 
 
 def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str, Any]:
@@ -527,6 +545,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "primary_stop_loss": primary_setup.get("stop_loss", ""),
         "primary_tp1": primary_setup.get("tp1", ""),
         "primary_tp2": primary_setup.get("tp2", ""),
+        **_phase1_defaults(),
         "funding_rate": _round_optional(funding_rate_raw, 8),
         "funding_rate_raw": _round_optional(funding_rate_raw, 8),
         "funding_rate_pct": _round_optional(funding_rate_pct, 4),
@@ -602,6 +621,32 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result["signal_tier"] = signal_tier_info["tier"]
     result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
     result["signal_badge"] = signal_tier_badge(result["signal_tier"])
+
+    if primary_setup_side in {"long", "short"}:
+        position_size_plan = build_position_size_plan(
+            account_balance=float(cfg.PHASE1_ACCOUNT_BALANCE_USD),
+            entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
+            stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
+            signal_tier=result["signal_tier"],
+            loss_streak=int(cfg.PHASE1_LOSS_STREAK),
+            base_risk_pct=float(cfg.PHASE1_BASE_RISK_PCT),
+            loss_streak_step_pct=float(cfg.PHASE1_LOSS_STREAK_STEP_PCT),
+            min_risk_pct=float(cfg.PHASE1_MIN_RISK_PCT),
+            max_position_size_usd=float(cfg.PHASE1_MAX_POSITION_SIZE_USD),
+        )
+        exit_plan = build_exit_plan(
+            side=primary_setup_side,
+            entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
+            stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
+            atr=atr_15m,
+            tp1_rr_multiple=float(cfg.PHASE1_TP1_RR_MULTIPLE),
+            tp2_rr_multiple=float(cfg.PHASE1_TP2_RR_MULTIPLE),
+            trail_atr_multiplier=float(cfg.PHASE1_TRAIL_ATR_MULTIPLIER),
+            timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
+            exit_rule_version="phase1_v0",
+        )
+        result.update(position_size_plan)
+        result.update(exit_plan)
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
