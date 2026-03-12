@@ -30,8 +30,10 @@
 - 4. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
 - 5. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
 - 6. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
-- 7. Phase 1 の正式指標として、TP1 到達率 / SL 先行率 / 時間切れ撤退率 / 平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
-- 8. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
+- 7. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
+- 8. `phase1_active` のような明示フラグを追加し、`ready` 行だけを正式集計対象にできるようにする。
+- 9. `expired` と `tp1_hit_first=false` は現状 proxy 指標なので、将来の timeout / stop 実測ログ化が必要かを判断する。
+- 10. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
@@ -44,6 +46,7 @@
 - `loss_streak` は自動反映に切り替わったが、履歴 0 件の間は `PHASE1_LOSS_STREAK` 予備値へフォールバックする。
 - `Phase 1` の追加ログ列は `shadow_log.csv` と週次レポートまで接続済みだが、件数 0 のため実データ評価はまだできない。
 - Phase 1 の有効条件と正式指標は整理したが、まだコード上の「有効フラグ」は未実装で、現状はログ先行の段階。
+- `expired` と `tp1_hit_first=false` は、現状では timeout / stop の proxy であり、厳密な実測指標ではない。
 
 ## 完了条件
 - Ver01 を比較基準として維持しつつ、Ver02 の `Phase 0` 通知後フローが本番で一周完了し、あわせて `Phase 1` の有効条件と正式指標が文書と実装候補の両方で整理されていること。

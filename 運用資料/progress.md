@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:24 JST
+- 実施内容: Phase 1 の正式指標をもう一度見直し、実装とずれない形へ補正した。`運用資料/計画/フェーズ別計画_Phase0-1.md` では、正式評価の対象を「MBP2020 本番ログ」「当面は `primary_setup_status=ready` の行」に限定する前提を追加し、正式指標を「本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率」に更新した。あわせて、`expired` は timeout の暫定 proxy、`tp1_hit_first=false` は stop 先行の暫定 proxy であることを明記した。`NEXT_TASK.md` も同じ考え方に合わせて更新した。
+- 変更ファイル: `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 指標の考え方は整ったが、`phase1_active` のような明示フラグと timeout / stop の実測ログはまだ未実装。したがって、現段階の一部指標は proxy のまま扱う必要がある。
+- メモ: 今回は指標定義の補正であり、コード本体や本番設定の変更はしていない。ChatGPT API は未使用。
+
 - 日時: 2026-03-12 12:15 JST
 - 実施内容: ユーザー指摘を受けて、Phase 1 計画の前提を修正した。現況判断や実データ評価に使う最新ログの正本は MBA15 ローカルではなく MBP2020 本番環境であることを再確認し、`NEXT_TASK.md` と `運用資料/計画/フェーズ別計画_Phase0-1.md` に明記した。これにより、ローカル `btc_monitor` ログは構造確認用、本番 MBP2020 ログは運用判断用、という使い分けをはっきりさせた。
 - 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`

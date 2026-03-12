@@ -1,6 +1,6 @@
 # フェーズ別計画 Phase0-1
 
-更新日: 2026-03-12 12:15 JST
+更新日: 2026-03-12 12:24 JST
 
 このファイルは、現在の実務に直結する `Phase 0` と `Phase 1` の計画をまとめたものです。
 直近の作業は、ここを見れば判断できる状態を目指します。
@@ -81,14 +81,19 @@
 
 ### Phase 1 で見る評価指標
 
+- 前提:
+  - 正式評価は MBP2020 本番ログだけを使う
+  - 集計対象は、将来 `phase1_active=true` を付けた行、または当面は `primary_setup_status=ready` の行に絞る
+  - `watch` / `invalid` / `none` を混ぜたまま Phase 1 成績を判断しない
+
 - 最優先:
   - `tp1_hit_first`
   - `outcome`
   - `direction_outcome`
 - 出口管理の確認:
   - TP1 到達率
-  - 時間切れ撤退率
-  - SL 先行率
+  - `expired` 率
+  - `tp1_hit_first=false` 率
   - `breakeven_after_tp1` の対象件数
 - サイズ管理の確認:
   - 平均 `risk_percent_applied`
@@ -96,6 +101,7 @@
   - 平均 `position_size_usd`
   - `max_size_capped` 発生率
   - 平均 `loss_streak_at_entry`
+  - `loss_streak_at_entry > 0` の行だけで見た平均 `risk_percent_applied`
 - 改善判断用:
   - `signal_based_MFE_24h` と `signal_based_MAE_24h`
   - `entry_ready_based_MFE_24h` と `entry_ready_based_MAE_24h`
@@ -104,24 +110,30 @@
 
 ### 当面の正式指標
 
-- Phase 1 の良し悪し判断は、当面は次の 5 指標を正本として見る
-  1. TP1 到達率
-  2. SL 先行率
-  3. 時間切れ撤退率
-  4. 平均 `risk_percent_applied`
-  5. `max_size_capped` 発生率
+- Phase 1 の良し悪し判断は、当面は次の 7 指標を正本として見る
+  1. 本有効件数 (`n`)
+  2. TP1 到達率
+  3. `tp1_hit_first=false` 率
+  4. `expired` 率
+  5. 平均 `risk_percent_applied`
+  6. `loss_streak_at_entry > 0` の行だけで見た平均 `risk_percent_applied`
+  7. `max_size_capped` 発生率
 
 補足:
 
 - 勝率だけで Phase 1 を判断しない
 - 理由は、Phase 1 の主目的が「勝率を上げること」だけでなく、「資金毀損を抑えること」にあるため
-- そのため、TP / SL / timeout の出口比率と、実際にどれだけリスクを絞れたかを先に見る
+- そのため、TP / stop proxy / expired proxy の出口比率と、実際にどれだけリスクを絞れたかを先に見る
+- いまの `expired` は「12h timeout を直接観測した値」ではなく、現行ロジック上の暫定 proxy として扱う
+- いまの `tp1_hit_first=false` も「SL が先だった可能性が高い」ことを見る proxy で、同一足で TP と stop が両方触れた曖昧ケースを含む
 
 ### 検証時の注意
 
 - Phase 1 の実データ評価は、必ず MBP2020 本番環境の `trades.csv` / `shadow_log.csv` / `signal_outcomes.csv` を正本として行う
 - ローカル MBA15 側の `btc_monitor` は停止済みなので、そこで見えるログは列追加や構造確認には使えても、現況判断の根拠にはしない
 - したがって、件数・勝率・TP1 到達率などの正式判断は MBP2020 側でそろったデータだけを見る
+- `time_out` 系の正式評価は、将来 `timeout_exit` を明示ログ化するまでは proxy 指標として扱う
+- `stop` 系の正式評価も、将来より細かい約定順ログが入るまでは proxy 指標として扱う
 
 ### position_sizing の役割
 
