@@ -8,6 +8,7 @@
 - `運用資料/開発ロードマップ.md` と `運用資料/計画/` 配下を新設し、全体計画はそこで管理する運用へ切り替えた。
 - 常駐の正本は MBP2020。本番では Ver01 を比較基準、Ver02 を改善検証対象として並走運用する。
 - MBA15 は開発・単発確認専用で、ローカル常駐 `com.afrog.btc-monitor` は停止済み。
+- 現状の最新ログと運用判断の正本は MBP2020 本番環境にある。MBA15 側の `btc_monitor` ログは構造確認や単発確認には使えるが、現況判断の正本には使わない。
 - Ver02 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` / `com.afrog.btc-monitor-ver02`、Ver01 本番は `/Users/marupro/CODEX/BTC_FX_CODEX_ver01/btc_monitor` / `com.afrog.btc-monitor-ver01` で稼働中。
 - 2026-03-12 10:44 JST に MBP2020 実機へ SSH 接続して再確認し、Ver01 / Ver02 とも `state = running`、Ver01 `pid=91182`、Ver02 `pid=98787` を確認した。`heartbeat.txt` は両系統とも `2026-03-12 10:05:00 JST`、`last_result.json` は Ver01 `10:05:15 JST`、Ver02 `10:05:24 JST` 更新で、定時サイクル更新確認は完了した。
 - 現在の版位置づけは `Ver02.x` で、`Phase 0` 実運用確認中。次の大型節目は `Ver03`。
@@ -20,6 +21,7 @@
 - Phase 1 のテスト入口として `tests/test_phase1_trade_plans.py` を追加し、サイズ上限制御と TP 計算の最小確認は通過済み。
 - `loss_streak` は `signal_outcomes.csv` と `trades.csv` の完了済み通知履歴から自動計算するように変更し、履歴がまだ無い場合だけ `PHASE1_LOSS_STREAK` を予備値として使う構成にした。
 - `tools/log_feedback.py` は Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すよう更新済みで、現時点では件数 0 の空集計まで確認済み。
+- ただし、この空集計確認はローカル構造確認であり、Phase 1 の実データ評価は MBP2020 本番ログで行う前提に戻す。
 
 ## 次のタスク
 - 1. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
