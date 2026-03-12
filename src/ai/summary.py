@@ -215,7 +215,13 @@ def _fallback_summary(result: dict[str, Any]) -> str:
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
-    label_prefix = f"[{label}] " if label else ""
+    mode_label = str(result.get("system_mode_label", "")).strip()
+    subject_labels: list[str] = []
+    if label:
+        subject_labels.append(f"[{label}]")
+    if mode_label:
+        subject_labels.append(f"[{mode_label}]")
+    label_prefix = f"{' '.join(subject_labels)} " if subject_labels else ""
     badge = str(result.get("signal_badge", "")).strip()
     badge_prefix = f"{badge} " if badge else ""
     current_price = _format_price(result.get("current_price"))

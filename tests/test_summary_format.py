@@ -16,7 +16,8 @@ class SummaryFormatTest(unittest.TestCase):
     def test_subject_and_body_include_badge_and_funding_display(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-11T09:05:00+09:00",
-            "system_label": "Ver02",
+            "system_label": "Ver02.1",
+            "system_mode_label": "API",
             "signal_badge": "🟡 好条件接近",
             "signal_tier": "strong_machine",
             "prelabel": "ENTRY_OK",
@@ -70,6 +71,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertTrue(subject.startswith("🟡 好条件接近"))
+        self.assertIn("[Ver02.1] [API]", subject)
         self.assertIn("ほぼ中立 (+0.0037%)", body)
         self.assertIn("🟡 好条件接近", body)
 

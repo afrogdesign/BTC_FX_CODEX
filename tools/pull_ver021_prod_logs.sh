@@ -5,16 +5,16 @@ set -eu
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROD_HOST="${BTC_MONITOR_PROD_HOST:-marupro@192.168.1.38}"
 PROD_DIR="${BTC_MONITOR_PROD_DIR:-/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor}"
-LOCAL_SNAPSHOT_DIR="${BTC_MONITOR_PROD_SNAPSHOT_DIR:-$BASE_DIR/tmp/prod_ver02_snapshot}"
+LOCAL_SNAPSHOT_DIR="${BTC_MONITOR_PROD_SNAPSHOT_DIR:-$BASE_DIR/tmp/prod_ver021_snapshot}"
 
 usage() {
   cat <<'EOF'
 使い方:
-  zsh tools/pull_ver02_prod_logs.sh
+  zsh tools/pull_ver021_prod_logs.sh
 
 概要:
-  MBP2020 本番 Ver02 の確認に必要なログだけを、
-  ローカルの tmp/prod_ver02_snapshot/ へ取得します。
+  MBP2020 本番 Ver02.1 の確認に必要なログだけを、
+  ローカルの tmp/prod_ver021_snapshot/ へ取得します。
 
 取得対象:
   logs/heartbeat.txt

@@ -55,21 +55,24 @@ AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex
 - 本番 MBP2020 への反映は、`git ls-files` を元にした `rsync` 配備へ寄せます。
 - 本番ログの確認は、必要なものだけを別同期します。
 
-### コードを本番へ反映する
+### コードを本番 Ver02.1 へ反映する
 
 ```bash
 cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/deploy_ver02_prod.sh
+zsh tools/deploy_ver021_prod.sh
 ```
 
-### 本番ログをローカルへ取得する
+### 本番 Ver02.1 ログをローカルへ取得する
 
 ```bash
 cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/pull_ver02_prod_logs.sh
+zsh tools/pull_ver021_prod_logs.sh
 ```
 
 補足:
 
 - これで「コード反映」と「実データ確認」を分けて扱えます。
 - `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。
+- 件名は `SYSTEM_LABEL` に加えて実行モードも自動で付きます。
+  - 例: `[Ver02.1] [API] [BTC監視] ...`
+  - 例: `[Ver02.1] [CLI] [BTC監視] ...`

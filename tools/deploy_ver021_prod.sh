@@ -5,17 +5,18 @@ set -eu
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROD_HOST="${BTC_MONITOR_PROD_HOST:-marupro@192.168.1.38}"
 PROD_DIR="${BTC_MONITOR_PROD_DIR:-/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor}"
-PROD_LABEL="${BTC_MONITOR_PROD_LABEL:-com.afrog.btc-monitor-ver02}"
+PROD_LABEL="${BTC_MONITOR_PROD_LABEL:-com.afrog.btc-monitor-ver021}"
 RESTART_AFTER_DEPLOY=1
 
 usage() {
   cat <<'EOF'
 使い方:
-  zsh tools/deploy_ver02_prod.sh [--no-restart]
+  zsh tools/deploy_ver021_prod.sh [--no-restart]
 
 概要:
-  Git 管理下のコードだけを MBP2020 本番 Ver02 へ rsync で反映します。
+  Git 管理下のコードだけを MBP2020 本番 Ver02.1 へ rsync で反映します。
   logs/ や .env、仮想環境は本番側のまま残します。
+  既存ログ保全のため、実体ディレクトリは従来の `BTC_FX_CODEX_ver02` を継続利用します。
 
 環境変数で上書きできる値:
   BTC_MONITOR_PROD_HOST   接続先ホスト
@@ -57,7 +58,7 @@ ssh "$PROD_HOST" "mkdir -p '$PROD_DIR'"
 rsync -av --from0 --files-from="$TMP_FILES" "$BASE_DIR"/ "$PROD_HOST":"$PROD_DIR"/
 
 if [[ "$RESTART_AFTER_DEPLOY" -eq 1 ]]; then
-  ssh "$PROD_HOST" "cd '$PROD_DIR' && zsh tools/start_monitor_ver02_prod.sh '$PROD_DIR' && launchctl print gui/\$(id -u)/$PROD_LABEL | grep -E 'state =|pid ='"
+  ssh "$PROD_HOST" "cd '$PROD_DIR' && zsh tools/start_monitor_ver021_prod.sh '$PROD_DIR' && launchctl print gui/\$(id -u)/$PROD_LABEL | grep -E 'state =|pid ='"
 else
   echo "restart_skipped:1"
 fi

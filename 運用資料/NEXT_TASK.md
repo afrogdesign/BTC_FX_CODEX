@@ -1,8 +1,10 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
-- 本番 Ver02 は 2026-03-13 06:19 JST にコードだけ更新し、`AI_ADVICE_PROVIDER=api` / `AI_SUMMARY_PROVIDER=api` を明記した API 版として再起動済み。`com.afrog.btc-monitor-ver02` は `state = running`、`pid = 4019` を確認した。
-- 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行、`last_result.json` は `system_label=Ver02` / `ai_decision=WAIT_FOR_SWEEP` / `data_quality_flag=ok` を維持している。
+- 本番は `Ver02.1 API`、開発は `Ver02.1 CLI` に役割を固定した。件名は `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` を基本形にする。
+- 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
+- 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
+- Git の作業正本ブランチは `codex/ver02.1` に切り替えた。
 - sandbox `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` で CLI 版を合計 6 サイクル連続確認し、`ai_decision` 欠落なし、`summary_body` 正常生成、`data_quality_flag=ok`、`data_missing_fields=[]`、`logs/errors/` 空を確認した。
 - CLI 側は `codex` 実行パス自動解決に加えて、`src/ai/advice.py` / `src/ai/summary.py` で `retry_count` を使う再試行を実装済み。単発失敗 1 回で AI 欠落になりにくい状態へ補強した。
 - 比較環境を汚さない確認用として `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を作成済みで、sandbox 側は `SYSTEM_LABEL=Ver02.1-sandbox` / `DRYRUN_MODE=true` に切り替えてある。
@@ -50,10 +52,10 @@
 - 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. 本番 Ver02 と開発 Ver02.1 の次回自然更新を観測し、両方で `heartbeat.txt` / `last_result.json` が進み続けるか確認する。
-- 2. Ver02 / Ver02.1 の比較通知が実際に来たら、件名・本文・AI助言・通知理由コードの差を確認する。
+- 1. 本番 Ver02.1 と開発 Ver02.1 の次回自然更新を観測し、両方で `heartbeat.txt` / `last_result.json` が進み続けるか確認する。
+- 2. API 本番 / CLI 開発の比較通知が実際に来たら、件名・本文・AI助言・通知理由コードの差を確認する。
 - 3. 本番は API、開発は CLI の役割分担のまま、差分観測のメモを `運用資料/reports/` と `📒打ち合わせノート.md` へ整理する。
-- 4. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
+- 4. 今後の本番反映は `zsh tools/deploy_ver021_prod.sh`、本番ログ確認は `zsh tools/pull_ver021_prod_logs.sh` を入口にする。
 - 4.5. 将来の軽改修候補として、「通知しない回は要約本文 AI を呼ばず、通知時だけメール作文 AI を回す」構成にできるか検討する。これは Ver03 昇格条件とは別の効率改善メモとして扱う。
 - 5. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
 - 6. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
@@ -67,7 +69,7 @@
 - 11. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
-- 本番 Ver02 は再起動済みだが、新コード反映後の最初の自然サイクル更新はまだ未観測。
+- 本番 Ver02.1 API 版は再起動済みだが、新件名形式と新 launchd ラベルでの最初の自然サイクル更新はまだ未観測。
 - sandbox では 6 サイクル連続成功したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログがまだ自然観測できていない。
 - CLI は長めタイムアウトと再試行で安定度を上げたが、launchd 常駐での長時間認証持続までは未確認。
 - Ver02 / Ver02.1 の実メール比較は、通知条件に達するまで待ちが必要。

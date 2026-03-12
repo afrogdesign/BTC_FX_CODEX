@@ -98,6 +98,23 @@ def _dedupe_preserve(values: list[str]) -> list[str]:
     return ordered
 
 
+def _normalize_provider_label(value: Any) -> str:
+    label = str(value or "api").strip().lower()
+    if label == "cli":
+        return "CLI"
+    if label == "api":
+        return "API"
+    return label.upper() or "API"
+
+
+def _build_system_mode_label(cfg: Any) -> str:
+    advice = _normalize_provider_label(getattr(cfg, "AI_ADVICE_PROVIDER", "api"))
+    summary = _normalize_provider_label(getattr(cfg, "AI_SUMMARY_PROVIDER", "api"))
+    if advice == summary:
+        return advice
+    return f"{advice}/{summary}"
+
+
 def _normalize_missing_data_fields(raw_fields: list[str], *, ai_missing: bool, funding_missing: bool) -> list[str]:
     mapped: list[str] = []
     if funding_missing:
@@ -506,6 +523,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
         "timestamp_jst": now_jst.isoformat(),
         "system_label": str(getattr(cfg, "SYSTEM_LABEL", "")).strip(),
+        "system_mode_label": _build_system_mode_label(cfg),
         "current_price": _round2(price),
         "was_notified": False,
         "notified_at_utc": "",
