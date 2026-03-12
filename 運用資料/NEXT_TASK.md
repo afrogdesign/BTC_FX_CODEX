@@ -1,8 +1,8 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
-- 2026-03-13 07:05 JST 時点で `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs/heartbeat.txt` の更新は確認できた。一方で `signals` 最新は `20260312_210500.json`、`last_result.json` は 2026-03-13 06:06 JST 更新で、同時進行の継続確認は未完了。
-- 同ログ配下の `logs/errors/` には 2026-03-12 20:05 台の `*_ai_advice_error.log` / `*_ai_summary_error.log` が残っており、自然観測の継続確認が必要。
+- 2026-03-13 07:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260312_220500.json`、`last_result.json` は 2026-03-13 07:08 JST 更新まで進んだ。一方で `heartbeat.txt` は 2026-03-13 07:05 JST のままで、同時進行の継続確認は未完了。
+- 同ログ配下の `logs/errors/` には `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）が新規追加されており、再発有無の自然観測が必要。
 - 本番は `Ver02.1 API`、開発は `Ver02.1 CLI` に役割を固定した。件名は `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` を基本形にする。
 - 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
 - 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
@@ -49,7 +49,7 @@
 - 14. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
-- 2026-03-13 07:05 JST 時点で heartbeat は更新しているが、`signals` / `last_result.json` が同サイクルで進む状態はまだ確認できていない。
+- 2026-03-13 07:16 JST 時点で `signals` / `last_result.json` は 07:05 サイクルまで進んだが、`heartbeat.txt` は 07:05 JST のままで、同サイクル同時進行の継続性は未確認。
 - この端末で即時に確認できた観測先は `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみで、API本番とCLI開発の2系統を同時に追跡する観測先整理が未完了。
 - 本番 Ver02.1 API 版は再起動済みだが、新件名形式と新 launchd ラベルでの最初の自然サイクル更新はまだ未観測。
 - sandbox では 6 サイクル連続成功したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログがまだ自然観測できていない。
