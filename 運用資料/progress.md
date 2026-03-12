@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-12 12:39 JST
+- 実施内容: 本番環境と開発環境のつなぎ方を見直し、「Git はコードの正本、実ログは別同期」という運用に整理した。新規に `tools/deploy_ver02_prod.sh` を追加し、`git ls-files` に載っているコードだけを `rsync` で MBP2020 本番 Ver02 へ反映し、必要なら再起動まで行えるようにした。あわせて `tools/pull_ver02_prod_logs.sh` を追加し、`heartbeat.txt`、`last_result.json`、`logs/csv/`、`logs/signals/`、`logs/cache/` など確認に必要な本番ログだけをローカル `tmp/prod_ver02_snapshot/` へ取得できるようにした。`README.md` と `運用資料/運用/今後の運用ルール.md`、`NEXT_TASK.md` にも「コードは Git 基準で配備、実データは Git に入れない」という運用方針を反映した。確認として `zsh -n tools/deploy_ver02_prod.sh`、`zsh -n tools/pull_ver02_prod_logs.sh`、各 `--help` 表示まで実行した。
+- 変更ファイル: `.gitignore`, `tools/deploy_ver02_prod.sh`, `tools/pull_ver02_prod_logs.sh`, `README.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `📒打ち合わせノート.md`, `/Users/marupro/CODEX/Global_BOX/開発環境仕様書.md`
+- 未解決事項: 新しい配備スクリプトは追加したが、MBP2020 側を Git リポジトリ化するところまではまだ進めていない。現時点の最適化は「本番を Git で直接動かす」のではなく、「ローカルの Git 管理コードを安全に配備し、本番ログは別で引く」方式。初回の実地運用確認もこれから。
+- メモ: `rsync` はローカル標準コマンドを利用し、パスワードや API キーはスクリプトへ直書きしていない。ChatGPT API も未使用。
+
 - 日時: 2026-03-12 12:30 JST
 - 実施内容: 続きの作業として、Phase 1 の有効判定をコードへ進めた。新規 `src/trade/activation.py` を追加し、`bias`、`primary_setup_status`、`data_quality_flag`、価格入力から `phase1_active` / `phase1_activation_reason` を返すようにした。`main.py`、`src/storage/csv_logger.py`、`tools/log_feedback.py` も更新し、このフラグを `trades.csv` と `shadow_log.csv` に載せたうえで、週次レポートの Phase 1 集計を「本有効件数」と「参考ログ件数」に分けて見られるようにした。確認として `./.venv312/bin/python -m unittest tests/test_phase1_trade_plans.py tests/test_phase1_activation.py tests/test_performance_state.py tests/test_log_feedback.py`、`./.venv312/bin/python -m py_compile ...`、`./.venv312/bin/python tools/log_feedback.py build-shadow-log`、`./.venv312/bin/python tools/log_feedback.py build-feedback-report --period weekly` を実行し、すべて成功した。
 - 変更ファイル: `main.py`, `src/storage/csv_logger.py`, `src/trade/__init__.py`, `src/trade/activation.py`, `tools/log_feedback.py`, `tests/test_phase1_activation.py`, `tests/test_log_feedback.py`, `運用資料/計画/フェーズ別計画_Phase0-1.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`

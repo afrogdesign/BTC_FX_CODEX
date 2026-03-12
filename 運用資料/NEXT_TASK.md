@@ -23,18 +23,20 @@
 - `tools/log_feedback.py` は Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すよう更新済みで、現時点では件数 0 の空集計まで確認済み。
 - ただし、この空集計確認はローカル構造確認であり、Phase 1 の実データ評価は MBP2020 本番ログで行う前提に戻す。
 - `phase1_active` と `phase1_activation_reason` はコードに追加済みで、今後は `ready` 行だけを正式集計対象にしやすい状態になった。
+- 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver02_prod.sh` と `tools/pull_ver02_prod_logs.sh` を追加した。
 
 ## 次のタスク
-- 1. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
-- 2. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
-- 3. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
-- 4. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
-- 5. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
-- 6. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
-- 7. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
-- 8. `phase1_active=true` の行だけで MBP2020 本番ログを集計し、正式指標の最初の母数 (`n`) を確認する。
-- 9. `expired` と `tp1_hit_first=false` は現状 proxy 指標なので、将来の timeout / stop 実測ログ化が必要かを判断する。
-- 10. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
+- 1. 今後の本番反映は `zsh tools/deploy_ver02_prod.sh`、本番ログ確認は `zsh tools/pull_ver02_prod_logs.sh` を入口にする。
+- 2. 次の通知発生サイクルを確認し、Ver02 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
+- 3. 通知が 1 件でも発生したら、Ver01 / Ver02 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
+- 4. 最初の通知から 24 時間経過後に、本番 Ver02 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
+- 5. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
+- 6. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
+- 7. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
+- 8. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
+- 9. `phase1_active=true` の行だけで MBP2020 本番ログを集計し、正式指標の最初の母数 (`n`) を確認する。
+- 10. `expired` と `tp1_hit_first=false` は現状 proxy 指標なので、将来の timeout / stop 実測ログ化が必要かを判断する。
+- 11. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
 - 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
