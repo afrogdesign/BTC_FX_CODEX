@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 07:07 JST
+- 実施内容: 自然観測結果の確認だけを実施した。`/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` を読取確認し、`heartbeat.txt` は `2026-03-12T22:05:00.400245Z`（= 2026-03-13 07:05 JST）まで進んでいる一方、`signals` の最新は `20260312_210500.json`、`last_result.json` の更新時刻は 2026-03-13 06:06 JST で、同時進行はまだ確認できていないことを記録した。あわせて `logs/errors/` の最新が 2026-03-12 20:05 台（`*_ai_advice_error.log` / `*_ai_summary_error.log`）であることを確認した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: この端末では `Ver02.1 API 本番` と `Ver02.1 CLI 開発` の両観測先を同時に特定できていない。現時点で確認できたのは `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみ。
+- メモ: 今回は読取確認と文書更新のみ。コード変更・手動実行・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 06:50 JST
 - 実施内容: `運用資料/スレッド引き継ぎファイル.md` を全面見直しし、次の AI が `Ver02.1 API / Ver02.1 CLI` 前提で迷わず再開できる内容へ圧縮更新した。古かった「CLI 実行コマンド未設定」「開発常駐停止済み」などの記述を現状へ合わせ、正本ブランチ、実装正本の参照順、自然観測待ち、sandbox 利用方針、`deploy_ver021_prod.sh` / `pull_ver021_prod_logs.sh` の入口を明記した。
 - 変更ファイル: `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
