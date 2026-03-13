@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 15:04 JST
+- 実施内容: Automation が止まりにくいように、再発防止の固定策を導入した。`tools/pull_ver021_prod_logs_auto.sh` を新規追加し、`秘密情報管理.md` の SSH パスワードを使って API snapshot 取得を非対話実行できる入口を作成した。`tools/sync_secretary_note.sh` も新規追加し、`NEXT_TASK.md` から秘書メモを自動同期し、Obsidian 側が書き込み不可でも `運用資料/運用/秘書メモ更新待ち.md` へ退避して停止しない動作にした。加えて Automation 本体（`/Users/marupro/.codex/automations/btc/automation.toml`）の prompt を更新し、API 取得は `pull_ver021_prod_logs_auto.sh` 固定、秘書更新は `sync_secretary_note.sh` 固定、失敗時は記録して続行するルールを明文化した。運用文書にも同じ入口を反映し、`今後の運用ルール.md` と `NEXT_TASK.md` を同期した。
+- 変更ファイル: `tools/pull_ver021_prod_logs_auto.sh`, `tools/sync_secretary_note.sh`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/automation.toml`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: 通知発生がまだ無く、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は継続待ち。`signal_outcomes.csv` / `user_reviews.csv` も未生成。
+- メモ: 今回は停止対策の導線整備と検証のみ。閾値変更・本番反映・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 14:57 JST
 - 実施内容: ブロッカー解消対応を実施した。まず API 側 snapshot 取得を再試行し、`tools/pull_ver021_prod_logs.sh` で `20260313_050500`（14:05 JST）まで取得できることを確認した。続いて再発防止として `tools/pull_ver021_prod_logs.sh` を改修し、`BTC_MONITOR_PROD_SSH_PASSWORD` を設定した場合は `SSH_ASKPASS` で非対話のパスワード認証を使えるようにした。これにより `Too many authentication failures` を回避し、Automation でも snapshot pull が実行できることを確認した。あわせて取得結果を `tmp/prod_ver021_snapshot_live/logs/` に同期し、API/CLI とも 14:05 JST まで同時刻比較できる状態へ更新した。さらに `NEXT_TASK.md`、`cli_api定期比較レポート.md`、`スレッド引き継ぎファイル.md`、`👩‍⚖️秘書.md` を現状へ同期した。
 - 変更ファイル: `tools/pull_ver021_prod_logs.sh`, `運用資料/NEXT_TASK.md`, `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
