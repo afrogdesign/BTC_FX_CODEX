@@ -1,6 +1,6 @@
 ## Global_BOX 共通参照
 
-更新日: 2026-03-13 16:31 JST
+更新日: 2026-03-13 16:32 JST
 
 - 共通参照ルートは `/Users/marupro/CODEX/Global_BOX`
 - 開発環境の共通仕様は `/Users/marupro/CODEX/Global_BOX/10_共通仕様/開発環境仕様書.md`
@@ -179,9 +179,7 @@
 - `運用資料/NEXT_TASK.md` には、今すぐ着手する実務だけを残し、将来構想や長い背景説明は持ち込まない。
 - 秘書メモが長くなりそうな場合は、まず `開発ロードマップ.md` か `📒打ち合わせノート.md` に逃がし、`👩‍⚖️秘書.md` は軽く保つ。
 - 本番ログ確認は、まず `tools/sync_ver021_prod_status.sh` のような軽量同期で `heartbeat.txt`、`last_result.json`、`monitor.pid` などの最小情報だけをローカルへ寄せる。
-- 本番状態の定期確認は、Codex Automation ではなく Mac 側の `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す運用を標準にする。
-- `Codex Automation` は常用せず、止めるか `PAUSED` のまま予備用途だけにする。
+- 本番状態の定期確認は、Mac 側の `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す運用を標準にする。
 - `tools/pull_ver021_prod_logs_auto.sh` のようなフル取得は、詳細調査や通知発生後の確認など、本当に必要なときだけ使う。
 - SSH パスワードを秘密情報ファイルから読む fallback は、通常運用では使わない。必要なときだけ明示的な別コマンドを使う。
-- `tools/sync_secretary_note.sh` は Automation 継続前提の補助として残すが、通常運用では使わない。
 - AI は、まずローカルに落とした要約ファイルや snapshot を見て判断し、重い SSH 取得や大量ログ読取を習慣化しない。

@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 16:31 JST
+更新日: 2026-03-13 16:32 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -15,7 +15,7 @@
 - `tmp/` は `status/`、`snapshots/`、`errors/` へ整理済み。日常確認は `tmp/status/` だけを見る。
 - `pull_ver021_prod_logs_auto.sh` は鍵認証専用を標準にした。パスワード fallback は `pull_ver021_prod_logs_with_password.sh` を明示的に使う例外手順へ分離した。
 - 今後は、デプロイ先データが必要でも AI がいきなり SSH の重いログを読むのではなく、先に Mac 側スクリプトで軽量同期してから参照する。
-- `Codex Automation` は常用しない。定期処理は Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す前提へ切り替える。
+- 定期処理は Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す前提へ切り替えた。
 - `com.afrog.btc-monitor-status-sync` は 2026-03-13 15:53 JST に登録済み。`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0` を確認した。
 - 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見る。詳細ログは例外時だけ開く。
 - `progress.md` は軽い入口にし、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する運用へ切り替えた。

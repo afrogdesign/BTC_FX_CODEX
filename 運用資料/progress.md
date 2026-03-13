@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-13 16:31 JST
+更新日: 2026-03-13 16:32 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -21,3 +21,6 @@
   - 軽量同期の出力先を `tmp/status/`、詳細 snapshot を `tmp/snapshots/`、失敗記録を `tmp/errors/` へ整理した。
   - 詳細取得の標準を鍵認証専用に寄せ、パスワード fallback は `tools/pull_ver021_prod_logs_with_password.sh` へ分離した。
   - 週次 `progress` 圧縮用に `tools/archive_progress_week.sh` を追加し、日常確認をさらに軽くした。
+- 2026-03-13 16:32 JST
+  - 停止済み Automation の名残を現行文書から外し、`tools/sync_secretary_note.sh` を削除した。
+  - `tools/archive_progress_week.sh` の圧縮を強め、`progress_weekly/2026-W11.md` を約 140KB から約 96KB へ縮小した。

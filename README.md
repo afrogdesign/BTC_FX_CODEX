@@ -1,5 +1,7 @@
 # BTC Monitor
 
+更新日: 2026-03-13 16:32 JST
+
 BTC監視システムの実行プロジェクトです。
 
 ## セットアップ
@@ -88,7 +90,7 @@ zsh tools/start_prod_status_sync.sh
 
 - Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
 - 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
-- `Codex Automation` は常用せず、必要時の手動作業へ寄せます。
+- 定期処理は `launchd` に固定し、AI の自動巡回は使いません。
 - 日常確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見ます。
 
 ### 本番 Ver02.1 ログをフル取得する

@@ -8,6 +8,7 @@ TARGET="${1:-$BASE_DIR/運用資料/progress_weekly/2026-W11.md}"
 python3 - "$TARGET" <<'PY'
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,22 @@ def compress_entry(block: list[str]) -> list[str]:
         if line.startswith("- 変更ファイル:"):
             continue
         if line.startswith("- メモ:"):
+            continue
+        if line.startswith("- 実施内容:"):
+            body = line.split(":", 1)[1].strip()
+            body = re.sub(r"\s+", " ", body)
+            body = re.sub(r"`([^`]+)`", r"\1", body)
+            if len(body) > 180:
+                body = body[:180].rstrip() + "…"
+            out.append(f"- 実施内容: {body}")
+            continue
+        if line.startswith("- 未解決事項:"):
+            body = line.split(":", 1)[1].strip()
+            body = re.sub(r"\s+", " ", body)
+            body = re.sub(r"`([^`]+)`", r"\1", body)
+            if len(body) > 120:
+                body = body[:120].rstrip() + "…"
+            out.append(f"- 未解決事項: {body}")
             continue
         out.append(line)
     return out
