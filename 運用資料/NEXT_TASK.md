@@ -1,6 +1,7 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- 2026-03-13 12:00 JST 観測時点でも、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` の最新は `signals=20260313_020500.json`、`heartbeat.txt=11:05 JST`、`last_result.json=11:05 JST` のままで、11:05 JST 以降の新規自然更新はまだ来ていない。
 - 2026-03-13 11:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260313_020500.json`、`heartbeat.txt` は 11:05 JST、`last_result.json` は 11:05 JST まで自然更新を確認した。
 - 直近 4 サイクル（`20260312_230500`〜`20260313_020500`）は `ai_decision` と `summary_body` が連続で埋まり、`data_quality_flag=ok`、`was_notified=false` が継続している。
 - 同ログ配下の `logs/errors/` 最新は `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）のままで、07:08 JST 以降の新規エラー追加は確認されていない。
@@ -55,6 +56,8 @@
 - 14. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
+- この実行環境では Obsidian 側 `👩‍⚖️秘書.md`（`/Users/marupro/Library/Mobile Documents/...`）への書き込みが `Operation not permitted` で失敗するため、入口メモの最終整形は書き込み可能環境での反映が必要。
+- 2026-03-13 12:00 JST 時点でも 11:05 JST 以降の新規自然更新が開発側で未観測のため、比較母数の追加は次サイクル待ち。
 - 2026-03-13 11:16 JST 時点で開発 CLI 側の自然更新継続は確認できたが、API 側は 10:50 JST 取得の snapshot 以降の追加 pull がなく、同時刻帯の比較母数が増えていない。
 - この端末で即時に確認できた観測先は `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみで、API本番とCLI開発の2系統を同時に追跡する観測先整理が未完了。
 - 本番 Ver02.1 API 版は再起動済みだが、新件名形式と新 launchd ラベルでの最初の自然サイクル更新はまだ未観測。
