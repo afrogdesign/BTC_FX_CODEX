@@ -1,11 +1,10 @@
 ## Global_BOX 共通参照
 
-更新日: 2026-03-13 16:32 JST
+更新日: 2026-03-13 17:18 JST
 
 - 共通参照ルートは `/Users/marupro/CODEX/Global_BOX`
 - 開発環境の共通仕様は `/Users/marupro/CODEX/Global_BOX/10_共通仕様/開発環境仕様書.md`
 - 秘密情報の実値参照先は `/Users/marupro/CODEX/Global_BOX/10_共通仕様/秘密情報管理.md`
-- 共通 AGENTS テンプレートは `/Users/marupro/CODEX/Global_BOX/10_共通仕様/AGENTS_TEMPLATE.md`
 - `Global_BOX` は非公開前提です。GitHub や外部公開場所へアップしないでください。
 - GitHub 接続の実務情報は、`開発環境仕様書.md` の `Git / GitHub 共通情報` を参照してください。
 
