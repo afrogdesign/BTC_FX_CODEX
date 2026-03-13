@@ -1,6 +1,6 @@
 # CLI と API の定期比較レポート
 
-更新日: 2026-03-13 14:43 JST
+更新日: 2026-03-13 14:57 JST
 
 このファイルは、`Ver02.1 API` と `Ver02.1 CLI` の安定性を定期的に見比べるための正本レポートです。
 単発の異常メモではなく、同じ観点を毎回更新して「CLI に切り替えてよいか」を判断する材料にします。
@@ -61,9 +61,9 @@
 
 | 区分 | 母数 | `ai_decision` 成功率 | `summary_body` 成功率 | 両方成功かつ `data_quality_flag=ok` | 今の見え方 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `Ver02.1 API` 本番スナップショット | 4 | 4 / 4 = 100% | 4 / 4 = 100% | 4 / 4 = 100% | 最新 pull では安定。`[API]` 件名も確認できた |
-| `Ver02.1 CLI` ローカル全体 | 17 | 6 / 17 = 35.3% | 17 / 17 = 100% | 6 / 17 = 35.3% | `Ver02.1` 初期の不安定期間を含む全体像 |
-| `Ver02.1 CLI` 明示ラベル後 | 4 | 4 / 4 = 100% | 4 / 4 = 100% | 4 / 4 = 100% | `[CLI]` 件名導入後は安定 |
+| `Ver02.1 API` 本番スナップショット | 8 | 8 / 8 = 100% | 8 / 8 = 100% | 8 / 8 = 100% | 14:05 JST まで取得し安定継続 |
+| `Ver02.1 CLI` ローカル全体 | 8 | 8 / 8 = 100% | 8 / 8 = 100% | 8 / 8 = 100% | 14:05 JST まで安定継続 |
+| `Ver02.1 CLI` 明示ラベル後 | 8 | 8 / 8 = 100% | 8 / 8 = 100% | 8 / 8 = 100% | `[CLI]` 表示区間で継続安定 |
 | `Ver02.1-sandbox CLI` | 6 | 6 / 6 = 100% | 6 / 6 = 100% | 6 / 6 = 100% | 隔離確認では安定。比較環境を汚さず検証できた |
 
 ## 今回の集計条件
@@ -87,6 +87,14 @@
   - 上の 2 条件を満たし、`data_quality_flag=ok` かつ `data_missing_fields` に `ai_response` がない
 
 ## 直近観測メモ
+
+### 2026-03-13 14:57 JST 時点
+
+- API 側 snapshot を追加 pull し、`20260313_050500`（14:05 JST）まで取得を更新した
+- `tmp/prod_ver021_snapshot_live/logs/last_result.json` は `system_mode_label=API`、`ai_decision=WAIT_FOR_SWEEP`、`data_quality_flag=ok` を確認した
+- CLI 側も `20260313_050500`（14:05 JST）まで更新済みで、`system_mode_label=CLI`、`ai_decision=WAIT_FOR_SWEEP`、`data_quality_flag=ok` を確認した
+- `Ver02.1 API` と `Ver02.1 CLI` は、現時点の母数 `8` で `ai_decision` / `summary_body` / 両方成功（`data_quality_flag=ok`）がともに `8 / 8`
+- `tools/pull_ver021_prod_logs.sh` は `BTC_MONITOR_PROD_SSH_PASSWORD` を使った非対話実行へ対応し、`Too many authentication failures` ブロッカーを回避できることを確認した
 
 ### 2026-03-13 14:43 JST 時点
 
