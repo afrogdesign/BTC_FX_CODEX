@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-13 17:29 JST
+更新日: 2026-03-13 22:39 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,11 @@
 
 ## 最新の実作業
 
+- 2026-03-13 22:39 JST
+  - 朝 `08:05` と `09:05` の `Ver02.1` 判定を追跡し、上昇初動を取り逃がした主因が `CONFIDENCE_LONG_MIN`、`MIN_RR_RATIO`、`sweep_incomplete` 加点の厳しさにあることを確認した。
+  - 実効設定を `CONFIDENCE_LONG_MIN=40`、`MIN_RR_RATIO=1.15`、`sweep_incomplete=+4` へ調整し、`.env` / `.env.example` / 関連テストまで反映した。
+  - 今後すぐ見直せるように `運用資料/運用/採点調整シート.md` を追加し、閾値・影響先・確認場所・`.env` 優先の注意点を 1 枚に整理した。
+  - `python3 -m unittest tests.test_notification_trigger tests.test_funding_and_signal tests.test_phase1_activation` を実行し、7件成功を確認した。
 - 2026-03-13 17:29 JST
   - `AGENTS.md` と `Global_BOX` の報告義務文を削除し、sandbox / 隔離環境の扱いを「軽い方法優先」の文へ整理した。
   - `BTC_FX_Claude`、`レシート処理`、`インキャビラジオ`、sandbox 側にも同じ軽量化を反映した。

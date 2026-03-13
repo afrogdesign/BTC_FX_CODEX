@@ -16,7 +16,7 @@ from src.analysis.signal_tier import compute_signal_tier
 
 class FundingAndSignalTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.cfg = SimpleNamespace(CONFIDENCE_LONG_MIN=65, CONFIDENCE_SHORT_MIN=70)
+        self.cfg = SimpleNamespace(CONFIDENCE_LONG_MIN=40, CONFIDENCE_SHORT_MIN=70)
 
     def test_funding_rate_conversion_and_label(self) -> None:
         pct = funding_rate_raw_to_pct(0.000037)

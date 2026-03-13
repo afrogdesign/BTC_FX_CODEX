@@ -112,7 +112,7 @@ def evaluate_position_risk(
         breakdown["sweep_recent_bonus"] = -8.0
         risk_score -= 8.0
     else:
-        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 8.0, flag="sweep_incomplete")
+        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 4.0, flag="sweep_incomplete")
 
     if oi_state in {"short_cover_risk", "long_flush_exhaustion"}:
         risk_score += _push_risk(breakdown, flags, oi_state, 12.0, flag=oi_state)

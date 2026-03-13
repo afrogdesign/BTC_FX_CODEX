@@ -17,7 +17,7 @@ from src.notification.trigger import should_notify
 class NotificationTriggerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.cfg = SimpleNamespace(
-            CONFIDENCE_LONG_MIN=65,
+            CONFIDENCE_LONG_MIN=40,
             CONFIDENCE_SHORT_MIN=70,
             CONFIDENCE_ALERT_CHANGE=10,
             ALERT_COOLDOWN_MINUTES=60,
