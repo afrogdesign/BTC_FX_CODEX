@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-13 16:32 JST
+更新日: 2026-03-13 16:38 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -24,3 +24,6 @@
 - 2026-03-13 16:32 JST
   - 停止済み Automation の名残を現行文書から外し、`tools/sync_secretary_note.sh` を削除した。
   - `tools/archive_progress_week.sh` の圧縮を強め、`progress_weekly/2026-W11.md` を約 140KB から約 96KB へ縮小した。
+- 2026-03-13 16:38 JST
+  - Obsidian 側 `資料/` に、現行運用整理・軽量運営モデル・Global_BOX反映設計の 3 本を新規追加した。
+  - 次段階の Global_BOX 共通化で、どの原則を残し、どの部分を案件固有に残すかを切り分けやすい状態へ整理した。

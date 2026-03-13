@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 16:32 JST
+更新日: 2026-03-13 16:38 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -19,18 +19,21 @@
 - `com.afrog.btc-monitor-status-sync` は 2026-03-13 15:53 JST に登録済み。`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0` を確認した。
 - 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見る。詳細ログは例外時だけ開く。
 - `progress.md` は軽い入口にし、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する運用へ切り替えた。
+- Obsidian 側 `資料/` に、現行運用整理・軽量運営モデル・Global_BOX反映設計の 3 本を追加し、次の共通化検討に入れる状態へ整理した。
 - Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 - この実行環境では外部 SSH が制限される場合があり、失敗時は `ssh: connect to host ... Operation not permitted` になる。疎通可能環境で再試行する。
 
 ## 次のタスク
-1. 次回は `tmp/status/prod_status_summary.md` の更新時刻と `tmp/status/prod_status_sync_last_success.txt` を見て、2 時間ごとの軽量同期が継続しているか確認する。
-2. 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` を見て、異常や通知があるときだけ `zsh tools/pull_ver021_prod_logs_auto.sh` で詳細を掘る。
-3. 鍵認証で詳細取得できない場面が出たときだけ、例外手順として `zsh tools/pull_ver021_prod_logs_with_password.sh` を使う。
-4. 次回自然更新で CLI 側 `heartbeat` / `last_result` 継続更新と `ai_summary_error` 再発有無を確認する。
-5. 通知発生時または比較材料がまとまって増えたときに、API/CLI の件名・本文・`notify_reason_codes`・`decision/quality/warnings` 差分を `運用資料/reports/cli_api定期比較レポート.md` に追記する。
-6. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
-7. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` 反映を確認する。
-8. Phase 1 の正式評価（`phase1_active=true` 母数、TP1到達率、`max_size_capped` 発生率）を開始する。
+1. Obsidian 側 `資料/01_現在の運用整理.md`、`02_運用改良版_軽量運営モデル.md`、`03_Global_BOX反映用テンプレート設計.md` を読み返し、Global_BOX へ反映する共通原則を確定する。
+2. 次の作業では `Global_BOX/README.md`、`10_共通仕様/AGENTS_TEMPLATE.md`、`30_テンプレート/記録ファイル運用ルールテンプレート.md` を優先して見直す。
+3. 次回は `tmp/status/prod_status_summary.md` の更新時刻と `tmp/status/prod_status_sync_last_success.txt` を見て、2 時間ごとの軽量同期が継続しているか確認する。
+4. 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` を見て、異常や通知があるときだけ `zsh tools/pull_ver021_prod_logs_auto.sh` で詳細を掘る。
+5. 鍵認証で詳細取得できない場面が出たときだけ、例外手順として `zsh tools/pull_ver021_prod_logs_with_password.sh` を使う。
+6. 次回自然更新で CLI 側 `heartbeat` / `last_result` 継続更新と `ai_summary_error` 再発有無を確認する。
+7. 通知発生時または比較材料がまとまって増えたときに、API/CLI の件名・本文・`notify_reason_codes`・`decision/quality/warnings` 差分を `運用資料/reports/cli_api定期比較レポート.md` に追記する。
+8. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
+9. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` 反映を確認する。
+10. Phase 1 の正式評価（`phase1_active=true` 母数、TP1到達率、`max_size_capped` 発生率）を開始する。
 
 ## ブロッカー
 - 通知発生がまだ無く、`daily-sync` と `logic_validated` の本番評価に進めない。
