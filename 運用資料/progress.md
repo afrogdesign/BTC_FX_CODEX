@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 13:12 JST
+- 実施内容: AI 入口の簡素化プランを反映した。`AGENTS.md` を入口構成の正本として整理し、AI の日常入口を `NEXT_TASK.md` → `開発ロードマップ.md` に固定、`👩‍⚖️秘書.md` は人向け資料として分離した。あわせて `開発ロードマップ.md` から入口順の重複説明を削除し、`スレッド引き継ぎファイル.md` を例外時だけ使う圧縮メモへ再編、`今後の運用ルール.md` に AGENTS 参照の一文を追加した。
+- 変更ファイル: `AGENTS.md`, `運用資料/NEXT_TASK.md`, `運用資料/開発ロードマップ.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は入口構造と資料役割の整理のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 13:03 JST
 - 実施内容: ユーザー指摘に合わせて、`NEXT_TASK.md` が実行履歴化しないための運用ルールを整理した。`AGENTS.md` の `NEXT_TASK.md` 節に「時系列ログは書かない」「重複を圧縮」「詳細は他資料へ分離」を追記し、`運用資料/運用/今後の運用ルール.md` に `NEXT_TASK と progress の分離ルール` を新設した。あわせて `NEXT_TASK.md` 冒頭に運用メモ（履歴は progress へ）を追加した。
 - 変更ファイル: `AGENTS.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
