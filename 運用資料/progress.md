@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 12:27 JST
+- 実施内容: ブランチ運用の整理を実施した。`codex/ver02.1` を `origin` へ push 後、`main` を `codex/ver02.1` と同一コミット（`be5ddcb`）へ更新し、`origin/main` へ反映した。あわせて `ver01` は `ver01-freeze` へ改名し、`origin/ver01-freeze` を作成して `origin/ver01` は削除した。`codex/ver02.0-freeze` は保全目的で維持した。
+- 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: `main` への反映は履歴整流のため `--force-with-lease` を使用。今回はブランチ運用整理と文書更新のみ。
+
 - 日時: 2026-03-13 12:17 JST
 - 実施内容: ユーザー判断に合わせて、不要ブランチ整理を実施した。`Ver02.1-Automation` と `ver02` が `codex/ver02.1` に取り込み済みであることを確認したうえで、`Ver02.1-Automation` は紐づいていた worktree（`/Users/marupro/.codex/worktrees/Ver02.1-Automation/btc_monitor`）を削除後にローカルブランチを削除、`ver02` はローカル・`origin/ver02` を削除した。削除後の一覧確認で両ブランチが残っていないことを確認した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
