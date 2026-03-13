@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 10:50 JST
+- 実施内容: `tools/pull_ver021_prod_logs.sh` の代わりに `scp -r` で本番 `Ver02.1 API` の `logs/` を再取得し、`tmp/prod_ver021_snapshot_live/` へ最新 snapshot を作成した。取得後に `signals/*.json`、`last_result.json`、`heartbeat.txt` を確認し、`20260312_220500` から `20260313_010500` の 4 サイクルで `system_label=Ver02.1`、`system_mode_label=API`、`ai_decision` 成功 4 / 4、`summary_body` 成功 4 / 4、`data_quality_flag=ok` 4 / 4 を確認した。これに合わせて `cli_api定期比較レポート.md` を更新し、直近 4 サイクルでは API も CLI も 100% 成功で並んでいると整理した。
+- 変更ファイル: `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: 直近 4 サイクルでは API / CLI とも成功しているが、母数はまだ少ない。通知発生時の本文品質差、`notify_reason_codes` 差、長時間運用での再発有無は継続観測が必要。
+- メモ: 本番ログは削除せず保持したまま再取得した。今回はログ取得と文書更新のみで、コード変更や ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 10:30 JST
 - 実施内容: ユーザー判断に合わせて、`運用資料/reports/cli_api定期比較レポート.md` の成功率集計を「Ver02.1 以降だけ」に仕切り直した。古い `Ver02` ログは削除せず残しつつ、この定期比較の母集団からは外した。その結果、現時点では `Ver02.1 API` 側の母数は 0 件、`Ver02.1 CLI` ローカル全体は 17 件中 6 件成功、`[CLI]` 明示ラベル後は 4 / 4 成功、sandbox は 6 / 6 成功として整理した。あわせて次タスクを「API 側の新しい pull 取得」へ寄せた。
 - 変更ファイル: `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
