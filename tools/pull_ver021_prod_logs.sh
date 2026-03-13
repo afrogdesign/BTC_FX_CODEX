@@ -3,7 +3,7 @@
 set -eu
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROD_HOST="${BTC_MONITOR_PROD_HOST:-marupro@192.168.1.38}"
+PROD_HOST="${BTC_MONITOR_PROD_HOST:-mbp2020-btc}"
 PROD_DIR="${BTC_MONITOR_PROD_DIR:-/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor}"
 LOCAL_SNAPSHOT_DIR="${BTC_MONITOR_PROD_SNAPSHOT_DIR:-$BASE_DIR/tmp/prod_ver021_snapshot}"
 PROD_SSH_PASSWORD="${BTC_MONITOR_PROD_SSH_PASSWORD:-}"
@@ -45,7 +45,7 @@ usage() {
   logs/cache/
   logs/runtime/monitor.pid
 
-任意設定（パスワード認証を自動入力したい場合）:
+任意設定（鍵認証で入れない場合の予備）:
   export BTC_MONITOR_PROD_SSH_PASSWORD='***'
   zsh tools/pull_ver021_prod_logs.sh
 EOF

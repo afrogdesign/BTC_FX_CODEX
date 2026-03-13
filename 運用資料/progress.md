@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 15:15 JST
+- 実施内容: SSH の抜本対策として、MBP2020 用の専用鍵 `~/.ssh/mbp2020_btc_monitor` を新規作成し、本番機 `marupro@192.168.1.38` の `authorized_keys` へ公開鍵を登録した。続いて `~/.ssh/config` に alias `mbp2020-btc` を追加し、`ssh mbp2020-btc` で鍵認証ログインできることを確認した。あわせて `tools/pull_ver021_prod_logs.sh` と `tools/deploy_ver021_prod.sh` の既定接続先を `mbp2020-btc` へ変更し、`tools/pull_ver021_prod_logs_auto.sh` は鍵認証を標準、パスワード認証を予備として扱う形へ整理した。検証として `ssh mbp2020-btc 'hostname && whoami'`、`zsh tools/pull_ver021_prod_logs_auto.sh` を実行し、最新 `20260313_060501.json` まで取得できることを確認した。
+- 変更ファイル: `~/.ssh/config`, `~/.ssh/mbp2020_btc_monitor`, `~/.ssh/mbp2020_btc_monitor.pub`, `tools/pull_ver021_prod_logs.sh`, `tools/pull_ver021_prod_logs_auto.sh`, `tools/deploy_ver021_prod.sh`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `運用資料/運用/今後の運用ルール.md`, `秘密情報管理.md`, `開発環境仕様書.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: 通知発生がまだ無く、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は継続待ち。`signal_outcomes.csv` / `user_reviews.csv` も未生成。
+- メモ: 以後の MBP2020 接続は鍵認証を標準とし、パスワード認証は予備経路としてのみ残す。
+
 - 日時: 2026-03-13 15:04 JST
 - 実施内容: Automation が止まりにくいように、再発防止の固定策を導入した。`tools/pull_ver021_prod_logs_auto.sh` を新規追加し、`秘密情報管理.md` の SSH パスワードを使って API snapshot 取得を非対話実行できる入口を作成した。`tools/sync_secretary_note.sh` も新規追加し、`NEXT_TASK.md` から秘書メモを自動同期し、Obsidian 側が書き込み不可でも `運用資料/運用/秘書メモ更新待ち.md` へ退避して停止しない動作にした。加えて Automation 本体（`/Users/marupro/.codex/automations/btc/automation.toml`）の prompt を更新し、API 取得は `pull_ver021_prod_logs_auto.sh` 固定、秘書更新は `sync_secretary_note.sh` 固定、失敗時は記録して続行するルールを明文化した。運用文書にも同じ入口を反映し、`今後の運用ルール.md` と `NEXT_TASK.md` を同期した。
 - 変更ファイル: `tools/pull_ver021_prod_logs_auto.sh`, `tools/sync_secretary_note.sh`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/automation.toml`, `/Users/marupro/.codex/automations/btc/memory.md`

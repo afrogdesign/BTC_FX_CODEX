@@ -12,10 +12,4 @@ if [[ -z "${BTC_MONITOR_PROD_SSH_PASSWORD:-}" && -r "$SECRET_FILE" ]]; then
   fi
 fi
 
-if [[ -z "${BTC_MONITOR_PROD_SSH_PASSWORD:-}" ]]; then
-  echo "error: BTC_MONITOR_PROD_SSH_PASSWORD が未設定です。" >&2
-  echo "hint: 秘密情報管理.md から読み取れない場合は環境変数で指定してください。" >&2
-  exit 1
-fi
-
 exec zsh "$BASE_DIR/tools/pull_ver021_prod_logs.sh" "$@"

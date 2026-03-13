@@ -3,7 +3,7 @@
 set -eu
 
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROD_HOST="${BTC_MONITOR_PROD_HOST:-marupro@192.168.1.38}"
+PROD_HOST="${BTC_MONITOR_PROD_HOST:-mbp2020-btc}"
 PROD_DIR="${BTC_MONITOR_PROD_DIR:-/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor}"
 PROD_LABEL="${BTC_MONITOR_PROD_LABEL:-com.afrog.btc-monitor-ver021}"
 RESTART_AFTER_DEPLOY=1
