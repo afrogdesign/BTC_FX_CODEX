@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 11:02 JST
+- 実施内容: `運用資料/reports/cli_api定期比較レポート.md` に、成功率比較だけでなく `AI 判断品質比較` と `モデルと実行系の前提` の節を追加した。API 側は `gpt-4o` / `gpt-4o-mini`、CLI 側は実質 `CODEX_CLI_DEFAULT_MODEL` へ寄る構成で、現状は `gpt-5.3-codex` 既定の可能性が高いことを明記した。あわせて 2026-03-13 10:05 サイクルの API / CLI JSON 差を例示し、`decision` は一致しても `quality`・`warnings`・本文論調がズレることを比較軸として固定した。
+- 変更ファイル: `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
+- 未解決事項: CLI 側で実際にどの Codex モデルが最適かはまだ未比較。今後は成功率と別に `decision` / `quality` / `warnings` の一致率も継続観測が必要。
+- メモ: 今回はローカル実装と既存ログの整理のみ。ChatGPT API は使っていない。
+
 - 日時: 2026-03-13 10:50 JST
 - 実施内容: `tools/pull_ver021_prod_logs.sh` の代わりに `scp -r` で本番 `Ver02.1 API` の `logs/` を再取得し、`tmp/prod_ver021_snapshot_live/` へ最新 snapshot を作成した。取得後に `signals/*.json`、`last_result.json`、`heartbeat.txt` を確認し、`20260312_220500` から `20260313_010500` の 4 サイクルで `system_label=Ver02.1`、`system_mode_label=API`、`ai_decision` 成功 4 / 4、`summary_body` 成功 4 / 4、`data_quality_flag=ok` 4 / 4 を確認した。これに合わせて `cli_api定期比較レポート.md` を更新し、直近 4 サイクルでは API も CLI も 100% 成功で並んでいると整理した。
 - 変更ファイル: `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`
