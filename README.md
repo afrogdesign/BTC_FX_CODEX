@@ -62,7 +62,20 @@ cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
 zsh tools/deploy_ver021_prod.sh
 ```
 
-### 本番 Ver02.1 ログをローカルへ取得する
+### 本番 Ver02.1 状態を軽く同期する
+
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+zsh tools/sync_ver021_prod_status.sh
+```
+
+補足:
+
+- まずはこちらを普段使いの入口にします。
+- 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
+- そのあと `tmp/prod_status_summary.json` と `tmp/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
+
+### 本番 Ver02.1 ログをフル取得する
 
 ```bash
 cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
@@ -72,6 +85,7 @@ zsh tools/pull_ver021_prod_logs.sh
 補足:
 
 - これで「コード反映」と「実データ確認」を分けて扱えます。
+- `--light` を付けると、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得します。
 - `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。
 - 件名は `SYSTEM_LABEL` に加えて実行モードも自動で付きます。
   - 例: `[Ver02.1] [API] [BTC監視] ...`

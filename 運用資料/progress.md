@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 15:34 JST
+- 実施内容: 自動化の無駄を減らすため、本番ログ同期を「AI が読む前の軽量スクリプト処理」へ寄せた。`tools/pull_ver021_prod_logs.sh` に `--light` を追加し、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得できるようにした。さらに `tools/build_prod_status_summary.py` を追加して、API snapshot とローカル CLI の比較要点を `tmp/prod_status_summary.json` / `tmp/prod_status_summary.md` にまとめるようにした。普段使いの入口として `tools/sync_ver021_prod_status.sh` も追加し、README、`今後の運用ルール.md`、`NEXT_TASK.md` を「軽量同期優先」の運用へ更新した。確認として `zsh tools/pull_ver021_prod_logs.sh --help` と `./.venv312/bin/python tools/build_prod_status_summary.py` を実行し、`tmp/prod_status_summary.md` 生成まで確認した。
+- 変更ファイル: `tools/pull_ver021_prod_logs.sh`, `tools/build_prod_status_summary.py`, `tools/sync_ver021_prod_status.sh`, `README.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`
+- 未解決事項: この環境では外部 SSH が制限される場合があり、`sync_ver021_prod_status.sh` の実 pull 自体は未実行。通知発生待ちのため `daily-sync` 初回本番確認と `logic_validated` 実データ確認も継続待ち。
+- メモ: 普段は `zsh tools/sync_ver021_prod_status.sh`、詳細調査時だけ `zsh tools/pull_ver021_prod_logs_auto.sh` を使う前提に切り替えた。ChatGPT API は使っていない。
+
 - 日時: 2026-03-13 15:15 JST
 - 実施内容: SSH の抜本対策として、MBP2020 用の専用鍵 `~/.ssh/mbp2020_btc_monitor` を新規作成し、本番機 `marupro@192.168.1.38` の `authorized_keys` へ公開鍵を登録した。続いて `~/.ssh/config` に alias `mbp2020-btc` を追加し、`ssh mbp2020-btc` で鍵認証ログインできることを確認した。あわせて `tools/pull_ver021_prod_logs.sh` と `tools/deploy_ver021_prod.sh` の既定接続先を `mbp2020-btc` へ変更し、`tools/pull_ver021_prod_logs_auto.sh` は鍵認証を標準、パスワード認証を予備として扱う形へ整理した。検証として `ssh mbp2020-btc 'hostname && whoami'`、`zsh tools/pull_ver021_prod_logs_auto.sh` を実行し、最新 `20260313_060501.json` まで取得できることを確認した。
 - 変更ファイル: `~/.ssh/config`, `~/.ssh/mbp2020_btc_monitor`, `~/.ssh/mbp2020_btc_monitor.pub`, `tools/pull_ver021_prod_logs.sh`, `tools/pull_ver021_prod_logs_auto.sh`, `tools/deploy_ver021_prod.sh`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `運用資料/運用/今後の運用ルール.md`, `秘密情報管理.md`, `開発環境仕様書.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
