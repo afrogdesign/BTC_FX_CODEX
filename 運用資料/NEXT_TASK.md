@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 16:08 JST
+更新日: 2026-03-13 16:11 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -16,6 +16,7 @@
 - `Codex Automation` は常用しない。定期処理は Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す前提へ切り替える。
 - `com.afrog.btc-monitor-status-sync` は 2026-03-13 15:53 JST に登録済み。`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0` を確認した。
 - 普段の本番確認は、まず `tmp/prod_status_summary.md` と `tmp/prod_status_sync_last_success.txt` だけを見る。詳細ログは例外時だけ開く。
+- `progress.md` は軽い入口にし、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する運用へ切り替えた。
 - Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 - この実行環境では外部 SSH が制限される場合があり、失敗時は `ssh: connect to host ... Operation not permitted` になる。疎通可能環境で再試行する。
 

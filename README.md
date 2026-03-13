@@ -54,6 +54,7 @@ AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex
 - `logs/` や実行中に増える CSV / JSON は Git へ入れません。
 - 本番 MBP2020 への反映は、`git ls-files` を元にした `rsync` 配備へ寄せます。
 - 本番ログの確認は、必要なものだけを別同期します。
+- 実行履歴は `運用資料/progress.md` を軽く保ち、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避します。
 
 ### コードを本番 Ver02.1 へ反映する
 

@@ -128,6 +128,7 @@
 ### progress.md
 
 - 役割と更新判断は `運用資料/運用/記録ファイル運用ルール.md` を正本にする。
+- `progress.md` は軽い入口として保ち、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する。
 
 ### NEXT_TASK.md
 
