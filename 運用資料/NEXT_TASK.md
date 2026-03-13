@@ -1,11 +1,12 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
-- 2026-03-13 07:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260312_220500.json`、`last_result.json` は 2026-03-13 07:08 JST 更新まで進んだ。一方で `heartbeat.txt` は 2026-03-13 07:05 JST のままで、同時進行の継続確認は未完了。
-- 同ログ配下の `logs/errors/` には `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）が新規追加されており、再発有無の自然観測が必要。
+- 2026-03-13 11:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260313_020500.json`、`heartbeat.txt` は 11:05 JST、`last_result.json` は 11:05 JST まで自然更新を確認した。
+- 直近 4 サイクル（`20260312_230500`〜`20260313_020500`）は `ai_decision` と `summary_body` が連続で埋まり、`data_quality_flag=ok`、`was_notified=false` が継続している。
+- 同ログ配下の `logs/errors/` 最新は `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）のままで、07:08 JST 以降の新規エラー追加は確認されていない。
 - 本番は `Ver02.1 API`、開発は `Ver02.1 CLI` に役割を固定した。件名は `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` を基本形にする。
 - API / CLI の安定性比較は、単発メモではなく `運用資料/reports/cli_api定期比較レポート.md` を正本にして定期更新する方針へ整理した。
-- 2026-03-13 10:50 JST 時点で、本番 `Ver02.1 API` の最新 snapshot を再取得し、`20260312_220500` から `20260313_010500` の 4 サイクルは API 4 / 4、CLI 4 / 4 で成功していることを確認した。直近比較では成功率差は見えていない。
+- 2026-03-13 10:50 JST 時点で再取得した本番 `Ver02.1 API` snapshot（`20260312_220500`〜`20260313_010500`）では API 4 / 4、CLI 4 / 4 で成功している。最新観測時点では API 側の追加 pull は未実施。
 - ただし 2026-03-13 10:05 サイクル比較では、`decision=WAIT_FOR_SWEEP` は一致しても、API は `quality=C`・清算寄り、CLI は `quality=B`・sweep/板寄りで、AI 判断内容とメール論調に差があることを確認した。
 - 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
 - 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
@@ -54,7 +55,7 @@
 - 14. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
-- 2026-03-13 07:16 JST 時点で `signals` / `last_result.json` は 07:05 サイクルまで進んだが、`heartbeat.txt` は 07:05 JST のままで、同サイクル同時進行の継続性は未確認。
+- 2026-03-13 11:16 JST 時点で開発 CLI 側の自然更新継続は確認できたが、API 側は 10:50 JST 取得の snapshot 以降の追加 pull がなく、同時刻帯の比較母数が増えていない。
 - この端末で即時に確認できた観測先は `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみで、API本番とCLI開発の2系統を同時に追跡する観測先整理が未完了。
 - 本番 Ver02.1 API 版は再起動済みだが、新件名形式と新 launchd ラベルでの最初の自然サイクル更新はまだ未観測。
 - sandbox では 6 サイクル連続成功したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログがまだ自然観測できていない。
