@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 14:01 JST
+- 実施内容: `Global_BOX` のファイル群を用途別フォルダーへ再編した。ルートは `README.md` だけを入口として残し、共通仕様を `10_共通仕様/`、案件開始用を `20_初期構築/`、各 Markdown ひな形を `30_テンプレート/` へ移動した。あわせて `案件初期化スクリプト.sh` のテンプレート参照先を新構成へ更新し、`/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/00_Global_BOX` 側のシンボリックリンク構成も同じ階層へ整理した。仮ディレクトリで新しいスクリプト実行を確認し、標準セットが問題なく生成されることを確認した。
+- 変更ファイル: `Global_BOX/README.md`, `Global_BOX/10_共通仕様/AGENTS_TEMPLATE.md`, `Global_BOX/10_共通仕様/開発環境仕様書.md`, `Global_BOX/10_共通仕様/秘密情報管理.md`, `Global_BOX/20_初期構築/案件初期構築テンプレート.md`, `Global_BOX/20_初期構築/案件初期化スクリプト.sh`, `Global_BOX/30_テンプレート/*`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/運用/本番常駐メモ.md`, `AGENTS.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`, `🔆 PROJECT開始指南書.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は `Global_BOX` と Obsidian 側リンクの整理、参照パス更新、初期化スクリプト検証のみ。本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 13:54 JST
 - 実施内容: `Global_BOX/開発環境仕様書.md` から BTC 固有の本番常駐情報を切り離し、共通原則だけを残す形へ整理した。あわせて `Global_BOX/本番常駐メモテンプレート.md` を追加し、`案件初期化スクリプト.sh` が `運用資料/運用/本番常駐メモ.md` も自動生成するよう更新した。BTC 側には `運用/本番常駐メモ.md` を新設し、Ver01 / Ver02.1 のラベル・配置先・確認対象を移した。仮ディレクトリで初期化スクリプトを再実行し、新しい本番常駐メモが生成されることも確認した。
 - 変更ファイル: `Global_BOX/開発環境仕様書.md`, `Global_BOX/本番常駐メモテンプレート.md`, `Global_BOX/README.md`, `Global_BOX/AGENTS_TEMPLATE.md`, `Global_BOX/案件初期構築テンプレート.md`, `Global_BOX/案件初期化スクリプト.sh`, `運用資料/運用/本番常駐メモ.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
