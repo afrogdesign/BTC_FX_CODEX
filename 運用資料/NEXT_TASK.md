@@ -1,6 +1,7 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- 2026-03-13 12:17 JST に不要枝整理を実施し、`Ver02.1-Automation`（worktree 含む）と `ver02`（`origin/ver02` 含む）を削除した。運用の作業正本は `codex/ver02.1` へ一本化した。
 - 2026-03-13 12:00 JST 観測時点でも、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` の最新は `signals=20260313_020500.json`、`heartbeat.txt=11:05 JST`、`last_result.json=11:05 JST` のままで、11:05 JST 以降の新規自然更新はまだ来ていない。
 - 2026-03-13 11:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260313_020500.json`、`heartbeat.txt` は 11:05 JST、`last_result.json` は 11:05 JST まで自然更新を確認した。
 - 直近 4 サイクル（`20260312_230500`〜`20260313_020500`）は `ai_decision` と `summary_body` が連続で埋まり、`data_quality_flag=ok`、`was_notified=false` が継続している。
