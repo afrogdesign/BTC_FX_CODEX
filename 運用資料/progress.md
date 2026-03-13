@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-13 16:48 JST
+更新日: 2026-03-13 17:03 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,10 @@
 
 ## 最新の実作業
 
+- 2026-03-13 17:03 JST
+  - `/Users/marupro/CODEX/` 配下の他案件 `AGENTS.md` を軽量運営ルールへそろえた。
+  - `IZUZYA_SP`、`インキャビラジオ`、`レシート処理`、`BTC_FX_Claude`、sandbox 側で、軽量同期前提・更新条件・Git 粒度・入口順を見直した。
+  - `git 管理外` の案件はファイル反映まで、`git 管理下` の案件は `AGENTS.md` だけを独立して扱う前提で整理した。
 - 2026-03-13 16:31 JST
   - 軽量同期の出力先を `tmp/status/`、詳細 snapshot を `tmp/snapshots/`、失敗記録を `tmp/errors/` へ整理した。
   - 詳細取得の標準を鍵認証専用に寄せ、パスワード fallback は `tools/pull_ver021_prod_logs_with_password.sh` へ分離した。
