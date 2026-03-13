@@ -110,10 +110,10 @@ def _build_markdown(summary: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="本番 API snapshot とローカル CLI の軽量サマリを生成します。")
-    parser.add_argument("--snapshot-dir", default="tmp/prod_ver021_snapshot", help="本番 snapshot ディレクトリ")
+    parser.add_argument("--snapshot-dir", default="tmp/snapshots/prod_ver021_snapshot", help="本番 snapshot ディレクトリ")
     parser.add_argument("--local-logs-dir", default="logs", help="ローカル logs ディレクトリ")
-    parser.add_argument("--output-json", default="tmp/prod_status_summary.json", help="出力 JSON パス")
-    parser.add_argument("--output-md", default="tmp/prod_status_summary.md", help="出力 Markdown パス")
+    parser.add_argument("--output-json", default="tmp/status/prod_status_summary.json", help="出力 JSON パス")
+    parser.add_argument("--output-md", default="tmp/status/prod_status_summary.md", help="出力 Markdown パス")
     args = parser.parse_args()
 
     snapshot_dir = Path(args.snapshot_dir)

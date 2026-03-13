@@ -5,7 +5,7 @@ set -eu
 BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROD_HOST="${BTC_MONITOR_PROD_HOST:-mbp2020-btc}"
 PROD_DIR="${BTC_MONITOR_PROD_DIR:-/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor}"
-LOCAL_SNAPSHOT_DIR="${BTC_MONITOR_PROD_SNAPSHOT_DIR:-$BASE_DIR/tmp/prod_ver021_snapshot}"
+LOCAL_SNAPSHOT_DIR="${BTC_MONITOR_PROD_SNAPSHOT_DIR:-$BASE_DIR/tmp/snapshots/prod_ver021_snapshot}"
 PROD_SSH_PASSWORD="${BTC_MONITOR_PROD_SSH_PASSWORD:-}"
 LIGHT_MODE=0
 
@@ -36,7 +36,7 @@ usage() {
 
 概要:
   MBP2020 本番 Ver02.1 の確認に必要なログだけを、
-  ローカルの tmp/prod_ver021_snapshot/ へ取得します。
+  ローカルの tmp/snapshots/prod_ver021_snapshot/ へ取得します。
 
 通常取得対象:
   logs/heartbeat.txt
@@ -54,6 +54,9 @@ usage() {
 任意設定（鍵認証で入れない場合の予備）:
   export BTC_MONITOR_PROD_SSH_PASSWORD='***'
   zsh tools/pull_ver021_prod_logs.sh
+
+秘密情報ファイルから明示的に読みたい場合:
+  zsh tools/pull_ver021_prod_logs_with_password.sh
 EOF
 }
 
