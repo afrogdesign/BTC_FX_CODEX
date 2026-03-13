@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 12:40 JST
+- 実施内容: 命名統一と枝整理を実施した。不要な `codex/ai-cli-wrapper-validation` をローカル・リモートから削除し、`snapshot/ver02.1` と `ver02.1-v1` を作成して今後の運用線を分離した。さらに `ver01-freeze` は `ver01-baseline` へ改名し、`ver02.0-stable` を作成した（`codex/ver02.0-freeze` は互換目的で維持）。加えて、`運用資料/運用/今後の運用ルール.md` に `Stable / Snapshot / Baseline` の命名ルールを新設し、`👩‍⚖️秘書.md` 末尾へ履歴解説を追記した。
+- 変更ファイル: `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回はブランチ運用整理と文書更新のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 12:27 JST
 - 実施内容: ブランチ運用の整理を実施した。`codex/ver02.1` を `origin` へ push 後、`main` を `codex/ver02.1` と同一コミット（`be5ddcb`）へ更新し、`origin/main` へ反映した。あわせて `ver01` は `ver01-freeze` へ改名し、`origin/ver01-freeze` を作成して `origin/ver01` は削除した。`codex/ver02.0-freeze` は保全目的で維持した。
 - 変更ファイル: `運用資料/progress.md`, `運用資料/NEXT_TASK.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`

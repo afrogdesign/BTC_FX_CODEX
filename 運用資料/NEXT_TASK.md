@@ -1,7 +1,7 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
-- 2026-03-13 12:27 JST 時点で、`main` は `codex/ver02.1` と同一コミット（`be5ddcb`）へ更新済み。`ver01` は `ver01-freeze` へ改名し、`codex/ver02.0-freeze` は退避枝として維持している。
+- 2026-03-13 12:27 JST 時点で、命名整理を実施。`main` は最新版入口、`ver02.1-v1` は継続開発、`snapshot/ver02.1` は固定時点、`ver01-baseline` は比較基準、`ver02.0-stable` は安定退避として運用する形に統一した。不要な `codex/ai-cli-wrapper-validation` は削除済み。
 - 2026-03-13 12:17 JST に不要枝整理を実施し、`Ver02.1-Automation`（worktree 含む）と `ver02`（`origin/ver02` 含む）を削除した。運用の作業正本は `codex/ver02.1` へ一本化した。
 - 2026-03-13 12:00 JST 観測時点でも、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` の最新は `signals=20260313_020500.json`、`heartbeat.txt=11:05 JST`、`last_result.json=11:05 JST` のままで、11:05 JST 以降の新規自然更新はまだ来ていない。
 - 2026-03-13 11:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260313_020500.json`、`heartbeat.txt` は 11:05 JST、`last_result.json` は 11:05 JST まで自然更新を確認した。
