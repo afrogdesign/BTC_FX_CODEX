@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 13:46 JST
+- 実施内容: `Global_BOX` 側の共通運用を刷新した。`README.md` と `AGENTS_TEMPLATE.md` を今の入口構造に合わせて整理し、`記録ファイル運用ルールテンプレート.md`、`NEXT_TASKテンプレート.md`、`progressテンプレート.md`、`開発ロードマップテンプレート.md` を追加、既存の秘書・打ち合わせ・引き継ぎテンプレートも更新した。さらに `案件初期化スクリプト.sh` を新設し、新規案件で `AGENTS.md`、`運用資料/` 配下、Obsidian 側 `👩‍⚖️秘書.md` / `📒打ち合わせノート.md`、`進行状況/` のシンボリックリンクまで自動生成できることを仮ディレクトリで確認した。
+- 変更ファイル: `Global_BOX/README.md`, `Global_BOX/AGENTS_TEMPLATE.md`, `Global_BOX/案件初期構築テンプレート.md`, `Global_BOX/案件初期化スクリプト.sh`, `Global_BOX/秘書ノートテンプレート.md`, `Global_BOX/打ち合わせノートテンプレート.md`, `Global_BOX/スレッド引き継ぎファイルテンプレート.md`, `Global_BOX/NEXT_TASKテンプレート.md`, `Global_BOX/progressテンプレート.md`, `Global_BOX/開発ロードマップテンプレート.md`, `Global_BOX/記録ファイル運用ルールテンプレート.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は Global_BOX の共通化整理と初期化自動化のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 13:36 JST
 - 実施内容: ユーザー提案に合わせて、`📒打ち合わせノート.md` の更新タイミングを `毎回更新` ではなく `定期更新（一定の作業が終わったら）` に変更した。`運用/記録ファイル運用ルール.md` の更新タイミング欄を修正し、`NEXT_TASK.md` と `👩‍⚖️秘書.md` を今回判断へ同期した。
 - 変更ファイル: `運用資料/運用/記録ファイル運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
