@@ -1,6 +1,7 @@
 # NEXT TASK TRACKER
 
 ## 現在の状況
+- 2026-03-13 12:52 JST に `👩‍⚖️秘書.md` の履歴欄を「更新履歴」形式へ変更し、日時付きの時系列表示（最新→過去）へ統一した。
 - 2026-03-13 12:49 JST に `codex/ver02.1` と `codex/ver02.0-freeze` をローカル/リモートから削除し、運用枝を `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` へ統一した。
 - 2026-03-13 12:27 JST 時点で、命名整理を実施。`main` は最新版入口、`ver02.1-v1` は継続開発、`snapshot/ver02.1` は固定時点、`ver01-baseline` は比較基準、`ver02.0-stable` は安定退避として運用する形に統一した。不要な `codex/ai-cli-wrapper-validation` は削除済み。
 - 2026-03-13 12:17 JST に不要枝整理を実施し、`Ver02.1-Automation`（worktree 含む）と `ver02`（`origin/ver02` 含む）を削除した。運用の作業正本は `codex/ver02.1` へ一本化した。
