@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 14:30 JST
+- 実施内容: 新規案件の実試行で `👩‍⚖️秘書.md` が無視されやすいことが分かったため、`Global_BOX` 側の入口文書を補強した。`README.md` に「作業後は `👩‍⚖️秘書.md` / `NEXT_TASK.md` / `progress.md` を毎回更新する」旨を追加し、初回確認にも `📒打ち合わせノート.md` を追記した。`10_共通仕様/AGENTS_TEMPLATE.md` には `毎回更新するもの` 節を追加し、`🔆 PROJECT開始指南書.md` の短縮版・基本版・API 版・追加指示・Obsidian 秘書システム節でも `👩‍⚖️秘書.md` の毎回更新を明文化した。
+- 変更ファイル: `Global_BOX/README.md`, `Global_BOX/10_共通仕様/AGENTS_TEMPLATE.md`, `🔆 PROJECT開始指南書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は入口文書の補強のみ。`👩‍⚖️秘書.md` を「作るだけ」ではなく「毎回更新する」ことを、開始時点から読み取れる形へ直した。
+
 - 日時: 2026-03-13 14:21 JST
 - 実施内容: `🔆 PROJECT開始指南書.md` の内部リンク切れを修正した。目次を通常 Markdown の `#anchor` 形式から Obsidian 向けの `[[#見出し名|表示名]]` 形式へ置き換え、あわせて 8〜10 番の見出し対応を現在の本文構成へそろえた。
 - 変更ファイル: `🔆 PROJECT開始指南書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
