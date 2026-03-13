@@ -87,6 +87,7 @@ zsh tools/start_prod_status_sync.sh
 - Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
 - 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
 - `Codex Automation` は常用せず、必要時の手動作業へ寄せます。
+- 日常確認は、まず `tmp/prod_status_summary.md` と `tmp/prod_status_sync_last_success.txt` だけを見ます。
 
 ### 本番 Ver02.1 ログをフル取得する
 
@@ -99,6 +100,7 @@ zsh tools/pull_ver021_prod_logs_auto.sh
 
 - これで「コード反映」と「実データ確認」を分けて扱えます。
 - 普段は使わず、通知発生後や詳細調査のときだけ使います。
+- `tmp/prod_status_summary.md` で足りるあいだは呼びません。
 - `tools/pull_ver021_prod_logs.sh` は下位入口で、個別オプションを直接使いたいときだけ呼びます。
 - `--light` を付けると、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得します。
 - `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。

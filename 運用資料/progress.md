@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 16:08 JST
+- 実施内容: 軽量運営の第2段として、Automation 前提の名残と記録更新の重さをさらに整理した。`AGENTS.md`、`README.md`、`今後の運用ルール.md`、`記録ファイル運用ルール.md`、`NEXT_TASK.md`、`スレッド引き継ぎファイル.md` を見直し、普段の本番確認は `tmp/prod_status_summary.md` と `tmp/prod_status_sync_last_success.txt` を入口にすること、`pull_ver021_prod_logs_auto.sh` は例外時だけ使うこと、`sync_secretary_note.sh` は旧 Automation 補助として残すが通常運用では使わないことを明記した。あわせて `cli_api定期比較レポート.md` も「毎回更新」ではなく、通知発生時または比較材料がまとまって増えた時だけ更新するルールへ整理した。
+- 変更ファイル: `AGENTS.md`, `README.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/運用/記録ファイル運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`
+- 未解決事項: 次回の 2 時間後実行で `tmp/prod_status_sync_last_success.txt` と `tmp/prod_status_summary.md` が継続更新されるかは観測待ち。通知発生待ちのため `daily-sync` 初回本番確認と `logic_validated` 実データ確認も未完了。
+- メモ: 今回は運用ルールの軽量化整理のみ。コード変更、閾値変更、本番コード反映、ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 15:57 JST
 - 実施内容: クレジット節約を優先する軽量運営へ切り替えるため、Mac 側の 2 時間ごとの軽量同期ジョブを追加した。`tools/sync_ver021_prod_status.sh` に失敗マーカーとローカルログ保存を追加し、`deploy/com.afrog.btc-monitor-status-sync.plist`、`tools/start_prod_status_sync.sh`、`tools/stop_prod_status_sync.sh` を新設した。`zsh tools/start_prod_status_sync.sh` を実行して `com.afrog.btc-monitor-status-sync` を登録し、`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0`、`state = not running` を確認した。`state = not running` は常駐ではなく 2 時間ごとの単発ジョブであるため正常。あわせて `AGENTS.md`、`記録ファイル運用ルール.md`、`README.md`、`今後の運用ルール.md`、`NEXT_TASK.md`、`スレッド引き継ぎファイル.md`、Automation 設定を軽量運営前提へ更新した。
 - 変更ファイル: `tools/sync_ver021_prod_status.sh`, `tools/start_prod_status_sync.sh`, `tools/stop_prod_status_sync.sh`, `deploy/com.afrog.btc-monitor-status-sync.plist`, `AGENTS.md`, `README.md`, `運用資料/運用/記録ファイル運用ルール.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `/Users/marupro/.codex/automations/btc/automation.toml`
