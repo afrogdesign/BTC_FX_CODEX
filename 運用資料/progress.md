@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 12:56 JST
+- 実施内容: ユーザー要望に合わせて、`👩‍⚖️秘書.md` の履歴欄を「ブランチ名を見れば過去版の成立時刻が分かる」形式へ再整形した。表示を `日時 + ブランチ名 + 1行説明` の時系列（最新→過去）に統一し、`運用資料/運用/今後の運用ルール.md` に同じ記録ルール（10-4）を追記した。あわせて `NEXT_TASK.md` へ今回の文書整備反映を追加した。
+- 変更ファイル: `👩‍⚖️秘書.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は履歴フォーマット整備のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 12:52 JST
 - 実施内容: ユーザー要望に合わせて、Obsidian 側 `👩‍⚖️秘書.md` の履歴欄を「HPのアップデート履歴風」へ再構成した。`更新履歴（Stable / Snapshot / Baseline）` セクションを新設し、`YYYY.MM.DD HH:MM JST` 形式で時系列表示（最新→過去）に統一、各行を1行説明で読める形に変更した。あわせて `NEXT_TASK.md` と `progress.md` に今回の文書整備を記録した。
 - 変更ファイル: `👩‍⚖️秘書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `/Users/marupro/.codex/automations/btc/memory.md`
