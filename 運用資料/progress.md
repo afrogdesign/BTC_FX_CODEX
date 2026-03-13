@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 14:21 JST
+- 実施内容: `🔆 PROJECT開始指南書.md` の内部リンク切れを修正した。目次を通常 Markdown の `#anchor` 形式から Obsidian 向けの `[[#見出し名|表示名]]` 形式へ置き換え、あわせて 8〜10 番の見出し対応を現在の本文構成へそろえた。
+- 変更ファイル: `🔆 PROJECT開始指南書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は Obsidian 目次リンク修正のみ。本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 14:15 JST
 - 実施内容: 新規案件の試行結果を踏まえ、`AGENTS.md` が抜けないように開始導線を補強した。`Global_BOX/README.md` と `20_初期構築/案件初期構築テンプレート.md` に「初期化スクリプトが CODEX 側ルートへ `AGENTS.md` を生成する」ことと初回確認項目を追記し、`🔆 PROJECT開始指南書.md` も「手作業ではなく、最初に `20_初期構築/案件初期化スクリプト.sh` を実行する」「`AGENTS.md` 生成を確認する」流れへ修正した。
 - 変更ファイル: `Global_BOX/README.md`, `Global_BOX/20_初期構築/案件初期構築テンプレート.md`, `🔆 PROJECT開始指南書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
