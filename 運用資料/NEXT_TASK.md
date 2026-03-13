@@ -1,84 +1,29 @@
 # NEXT TASK TRACKER
 
+更新日: 2026-03-13 13:00 JST
+
 ## 現在の状況
-- 2026-03-13 12:56 JST に `👩‍⚖️秘書.md` の履歴欄を「ブランチ名を先頭に見る時系列」へ再整形した。`日時 + ブランチ名 + 1行説明` で読める形に更新し、`運用資料/運用/今後の運用ルール.md` に同形式の記録ルールを追記した。
-- 2026-03-13 12:52 JST に `👩‍⚖️秘書.md` の履歴欄を「更新履歴」形式へ変更し、日時付きの時系列表示（最新→過去）へ統一した。
-- 2026-03-13 12:49 JST に `codex/ver02.1` と `codex/ver02.0-freeze` をローカル/リモートから削除し、運用枝を `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` へ統一した。
-- 2026-03-13 12:27 JST 時点で、命名整理を実施。`main` は最新版入口、`ver02.1-v1` は継続開発、`snapshot/ver02.1` は固定時点、`ver01-baseline` は比較基準、`ver02.0-stable` は安定退避として運用する形に統一した。不要な `codex/ai-cli-wrapper-validation` は削除済み。
-- 2026-03-13 12:17 JST に不要枝整理を実施し、`Ver02.1-Automation`（worktree 含む）と `ver02`（`origin/ver02` 含む）を削除した。運用の作業正本は `codex/ver02.1` へ一本化した。
-- 2026-03-13 12:00 JST 観測時点でも、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` の最新は `signals=20260313_020500.json`、`heartbeat.txt=11:05 JST`、`last_result.json=11:05 JST` のままで、11:05 JST 以降の新規自然更新はまだ来ていない。
-- 2026-03-13 11:16 JST 観測時点で、開発側 `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` は `signals` 最新が `20260313_020500.json`、`heartbeat.txt` は 11:05 JST、`last_result.json` は 11:05 JST まで自然更新を確認した。
-- 直近 4 サイクル（`20260312_230500`〜`20260313_020500`）は `ai_decision` と `summary_body` が連続で埋まり、`data_quality_flag=ok`、`was_notified=false` が継続している。
-- 同ログ配下の `logs/errors/` 最新は `20260312_220848_ai_summary_error.log`（CLI 要約 60 秒タイムアウト）のままで、07:08 JST 以降の新規エラー追加は確認されていない。
-- 本番は `Ver02.1 API`、開発は `Ver02.1 CLI` に役割を固定した。件名は `[Ver02.1] [API] [BTC監視] ...` / `[Ver02.1] [CLI] [BTC監視] ...` を基本形にする。
-- API / CLI の安定性比較は、単発メモではなく `運用資料/reports/cli_api定期比較レポート.md` を正本にして定期更新する方針へ整理した。
-- 2026-03-13 10:50 JST 時点で再取得した本番 `Ver02.1 API` snapshot（`20260312_220500`〜`20260313_010500`）では API 4 / 4、CLI 4 / 4 で成功している。最新観測時点では API 側の追加 pull は未実施。
-- ただし 2026-03-13 10:05 サイクル比較では、`decision=WAIT_FOR_SWEEP` は一致しても、API は `quality=C`・清算寄り、CLI は `quality=B`・sweep/板寄りで、AI 判断内容とメール論調に差があることを確認した。
-- 本番 launchd は `com.afrog.btc-monitor-ver021` へ移行済みで、旧 `com.afrog.btc-monitor-ver02` は停止確認済み。実体パスはログ保全のため従来の `/Users/marupro/CODEX/BTC_FX_CODEX_ver02/btc_monitor` を継続利用する。
-- 本番ログは保持したまま反映しており、確認時点で `trades.csv` は 81 行、`shadow_log.csv` は 32 行のまま残っている。
-- Git の作業正本ブランチは `ver02.1-v1` へ移行済み。
-- `main` は最新版入口として `origin/main` と同期運用に切り替えた。
-- sandbox `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` で CLI 版を合計 6 サイクル連続確認し、`ai_decision` 欠落なし、`summary_body` 正常生成、`data_quality_flag=ok`、`data_missing_fields=[]`、`logs/errors/` 空を確認した。
-- CLI 側は `codex` 実行パス自動解決に加えて、`src/ai/advice.py` / `src/ai/summary.py` で `retry_count` を使う再試行を実装済み。単発失敗 1 回で AI 欠落になりにくい状態へ補強した。
-- 比較環境を汚さない確認用として `/Users/marupro/CODEX/BTC_FX_CODEX_sandbox/btc_monitor` を作成済みで、sandbox 側は `SYSTEM_LABEL=Ver02.1-sandbox` / `DRYRUN_MODE=true` に切り替えてある。
-- CLI ラッパーは `codex` 実行パスを自動解決するよう修正済みで、薄い `PATH` を再現した単発確認でも要約テキストが返ることを確認した。
-- `signal_tier` の値名ズレは `position_sizing.py` と `tests/test_phase1_trade_plans.py` で同期済みで、strong 系 tier は `strong_machine` / `strong_ai_confirmed` を正式値として扱うようそろえた。
-- `運用資料/計画/` を今後の実装正本として再編し、`マイルストーン定義.md`・`フェーズ別計画_Phase0-1.md`・`フェーズ別計画_Phase2-3.md` だけで判断順、`Phase 1` の実装状態、`Phase 2` の実装順が読める状態に更新済み。
-- `運用資料/参考資料/AI向けシステムロジック全体整理.md` を 2026-03-13 04:43 JST 時点の現行実装へ更新し、`api / cli` 切替、`Phase 1`、`shadow_log.csv`、`daily-sync`、`logic_validated` まで反映済み。
-- Obsidian 側の `仕様書/Ver02判定ロジック早見表.md` を追加し、Ver02 の判定条件、通知条件、強ランク条件、実ログの読み方を1ページで確認できるようにした。
-- 運営ルールの正本は `AGENTS.md` とし、文書の役割分担と入口順はそこに従う。秘書メモは軽い入口、大きな報告は打ち合わせノート、全体計画はロードマップと `運用資料/計画/` に置く。
-- `運用資料/スレッド引き継ぎファイル.md` には、次スレッドでも `AGENTS.md` を確認してから再開する旨を追記済み。
-- 現在の版位置づけは `Ver02.1` で、`Phase 0` 実運用確認中。次の大型節目は `Ver03`。
-- `Ver03` は、`Phase 0` の通知後フロー一周完了と `Phase 1` 中核導入を両方満たしたときに昇格する。
-- 過去の Ver02 系ログ `logs/csv/`、`logs/signals/`、`logs/cache/` は本番 Ver02.1 側へ移行済み。
-- `signal_outcomes.csv` と `user_reviews.csv` はまだ未生成で、通知後 24 時間の本番確認待ち。
-- `Phase 1` の設計入口として、`src/trade/position_sizing.py` と `src/trade/exit_manager.py` を追加し、`main.py` からサイズ計画 / 出口計画の雛形ログを出せる土台を入れた。
-- `config.py` には `PHASE1_*` 設定値の入口を追加し、`trades.csv` へ `risk_percent_applied`、`planned_risk_usd`、`position_size_usd`、`tp1_price`、`exit_rule_version` などの保存列を追加した。
-- Phase 1 のテスト入口として `tests/test_phase1_trade_plans.py` を追加し、サイズ上限制御と TP 計算の最小確認は通過済み。
-- `loss_streak` は `signal_outcomes.csv` と `trades.csv` の完了済み通知履歴から自動計算するように変更し、履歴がまだ無い場合だけ `PHASE1_LOSS_STREAK` を予備値として使う構成にした。
-- `tools/log_feedback.py` は Phase 1 計画列を `shadow_log.csv` と週次/月次レポートへ流すよう更新済みで、現時点では件数 0 の空集計まで確認済み。
-- ただし、この空集計確認はローカル構造確認であり、Phase 1 の実データ評価は MBP2020 本番ログで行う前提に戻す。
-- `phase1_active` と `phase1_activation_reason` はコードに追加済みで、今後は `ready` 行だけを正式集計対象にしやすい状態になった。
-- 本番反映方法は、手動 tar 配備より「Git 管理下ファイルを rsync で反映」「本番ログは別 pull」で回す方針に整理し、`tools/deploy_ver021_prod.sh` と `tools/pull_ver021_prod_logs.sh` を入口にする。
+- 運用ブランチは `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` に整理済み。
+- 役割は固定済み（本番: `Ver02.1 API`、開発: `Ver02.1 CLI`、Ver01 は比較基準）。
+- 自然観測の最新確認は 2026-03-13 12:00 JST。開発側は `signals=20260313_020500`（11:05 JST）まで更新、直近 4 サイクルで `ai_decision` / `summary_body` は連続成功。
+- `logs/errors` の最新は `20260312_220848_ai_summary_error.log` で、07:08 JST 以降の新規エラーは未確認。
+- API 側は 10:50 JST 取得 snapshot（`20260312_220500`〜`20260313_010500`）までは確認済み。11:05 JST 帯の同時刻比較母数は未追加。
+- Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 
 ## 次のタスク
-- 1. 本番 Ver02.1 と開発 Ver02.1 の次回自然更新を観測し、直近 4 / 4 成功がさらに継続するか確認する。
-- 2. API 本番 / CLI 開発の比較通知が実際に来たら、件名・本文・AI助言・通知理由コードの差を確認する。
-- 2.5. 同時刻サイクルで `decision` / `quality` / `warnings` / `primary_reason` の一致率を追い、成功率とは別に AI 判断品質差を `cli_api定期比較レポート.md` へ追記する。
-- 3. 本番は API、開発は CLI の役割分担のまま、定期的に本番 snapshot を取り直して `運用資料/reports/cli_api定期比較レポート.md` の母数を増やす。
-- 3.5. CLI 側の `CODEX_CLI_DEFAULT_MODEL` をどう固定するかを将来比較項目に入れ、実行方式差とモデル差を分けて見られるようにする。
-- 4. 今後の本番反映は `zsh tools/deploy_ver021_prod.sh`、本番ログ確認は `zsh tools/pull_ver021_prod_logs.sh` を入口にする。
-- 4.5. 将来の軽改修候補として、「通知しない回は要約本文 AI を呼ばず、通知時だけメール作文 AI を回す」構成にできるか検討する。これは Ver03 昇格条件とは別の効率改善メモとして扱う。
-- 5. 次の通知発生サイクルを確認し、Ver02.1 の `trades.csv` と `logs/signals/*.json` に `was_notified=True` と `notify_reason_codes` が実データで入るか確認する。
-- 6. 通知が 1 件でも発生したら、Ver01 / Ver02.1 の通知メール件名・本文・`notify_reason_codes`・runtime ログが混線していないか確認する。
-- 7. 最初の通知から 24 時間経過後に、本番 Ver02.1 環境で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv`、`shadow_log.csv`、`📝通知レビュー.md` の初回本番更新を確認する。
-- 8. `📝通知レビュー.md` に 1 件以上 `actual_move_driver` を入れて `review_status=done` にし、`daily-sync` または `import-reviews` 後に `logic_validated` が `user_reviews.csv` / `shadow_log.csv` へ正しく反映されるか確認する。
-- 9. Phase 1 の有効条件は「`primary_setup_status=ready` を本有効、`watch` は参考ログのみ」として次の実装へ落とし込む。
-- 10. `loss_streak` の自動計算結果を将来 `user_reviews.csv` や別状態ファイルへ固定保存する必要があるかを判断する。
-- 11. Phase 1 の正式指標は、本有効件数 (`n`) / TP1 到達率 / `tp1_hit_first=false` 率 / `expired` 率 / 平均 `risk_percent_applied` / 連敗時平均 `risk_percent_applied` / `max_size_capped` 発生率を優先監視する。
-- 12. `phase1_active=true` の行だけで MBP2020 本番ログを集計し、正式指標の最初の母数 (`n`) を確認する。
-- 13. `expired` と `tp1_hit_first=false` は現状 proxy 指標なので、将来の timeout / stop 実測ログ化が必要かを判断する。
-- 14. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
+1. API 側 snapshot を追加 pull し、11:05 JST 帯の API/CLI 同時刻比較を 1 件以上増やす。
+2. 次回自然更新で CLI 側 `heartbeat` / `last_result` 継続更新と `ai_summary_error` 再発有無を確認する。
+3. 通知発生時に API/CLI の件名・本文・`notify_reason_codes`・`decision/quality/warnings` 差分を `運用資料/reports/cli_api定期比較レポート.md` に追記する。
+4. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
+5. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` 反映を確認する。
+6. Phase 1 の正式評価（`phase1_active=true` 母数、TP1到達率、`max_size_capped` 発生率）を開始する。
 
 ## ブロッカー
-- 2026-03-13 12:00 JST 時点でも 11:05 JST 以降の新規自然更新が開発側で未観測のため、比較母数の追加は次サイクル待ち。
-- 2026-03-13 11:16 JST 時点で開発 CLI 側の自然更新継続は確認できたが、API 側は 10:50 JST 取得の snapshot 以降の追加 pull がなく、同時刻帯の比較母数が増えていない。
-- この端末で即時に確認できた観測先は `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみで、API本番とCLI開発の2系統を同時に追跡する観測先整理が未完了。
-- 本番 Ver02.1 API 版は再起動済みだが、新件名形式と新 launchd ラベルでの最初の自然サイクル更新はまだ未観測。
-- sandbox では 6 サイクル連続成功したが、本流の常駐開発環境 `Ver02.1` で今回の再試行補強後ログがまだ自然観測できていない。
-- CLI は長めタイムアウトと再試行で安定度を上げたが、launchd 常駐での長時間認証持続までは未確認。
-- API 本番 / CLI 開発の実メール比較は、通知条件に達するまで待ちが必要。
-- 現在は通知済みシグナルが 0 件のため、`daily-sync` 初回本番確認と `logic_validated` 実データ確認は待ち状態。
-- 通知が止まっている直接原因は、現時点の実データではしきい値未達の可能性が高い。
-- `signal_outcomes.csv` と `user_reviews.csv` はまだ存在せず、`daily-sync` 初回本番確認には通知発生待ちが必要。
-- Ver01 / Ver02.1 の runtime ログはまだ 0 byte のため、実運用中にログが必要十分に残るかは引き続き観察が必要。
-- 強条件（🟡 / 🔥）は市場条件が厳しめに設定されているため、発火確認までに数サイクル必要。
-- `signal_outcomes.csv` / `shadow_log.csv` の本格評価は、通知から24時間経過した実データがたまるまで待ちが必要。
-- `Phase 1` はサイズ計画・出口計画・活性化判定の土台までは入ったが、実データでの有効化確認と正式評価はまだ未完了で、`Ver03` 昇格には通知後フロー確認とあわせて継続観測が必要。
-- `loss_streak` は自動反映に切り替わったが、履歴 0 件の間は `PHASE1_LOSS_STREAK` 予備値へフォールバックする。
-- `Phase 1` の追加ログ列は `shadow_log.csv` と週次レポートまで接続済みだが、件数 0 のため実データ評価はまだできない。
-- `phase1_active` は実装済みだが、MBP2020 本番ログ側でまだこの列を蓄積できていない。
-- `expired` と `tp1_hit_first=false` は、現状では timeout / stop の proxy であり、厳密な実測指標ではない。
+- API 側の追加 snapshot 未取得のため、同時刻比較の母数が不足。
+- 通知発生がまだ無く、`daily-sync` と `logic_validated` の本番評価に進めない。
+- `signal_outcomes.csv` / `user_reviews.csv` は未生成。
+- `phase1_active` は実装済みだが、本番データ蓄積がまだ無い。
 
 ## 完了条件
-- Ver01 を比較基準として維持しつつ、Ver02.1 の `Phase 0` 通知後フローが本番で一周完了し、あわせて `Phase 1` の有効条件と正式指標が文書と実装候補の両方で整理されていること。
+- Phase 0: 通知発生から 24 時間後評価まで（`daily-sync` + レビュー反映）を本番で 1 周完了。
+- Phase 1: `primary_setup_status=ready` を本有効として、正式指標を実データで確認できる状態にする。
