@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 15:57 JST
+- 実施内容: クレジット節約を優先する軽量運営へ切り替えるため、Mac 側の 2 時間ごとの軽量同期ジョブを追加した。`tools/sync_ver021_prod_status.sh` に失敗マーカーとローカルログ保存を追加し、`deploy/com.afrog.btc-monitor-status-sync.plist`、`tools/start_prod_status_sync.sh`、`tools/stop_prod_status_sync.sh` を新設した。`zsh tools/start_prod_status_sync.sh` を実行して `com.afrog.btc-monitor-status-sync` を登録し、`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0`、`state = not running` を確認した。`state = not running` は常駐ではなく 2 時間ごとの単発ジョブであるため正常。あわせて `AGENTS.md`、`記録ファイル運用ルール.md`、`README.md`、`今後の運用ルール.md`、`NEXT_TASK.md`、`スレッド引き継ぎファイル.md`、Automation 設定を軽量運営前提へ更新した。
+- 変更ファイル: `tools/sync_ver021_prod_status.sh`, `tools/start_prod_status_sync.sh`, `tools/stop_prod_status_sync.sh`, `deploy/com.afrog.btc-monitor-status-sync.plist`, `AGENTS.md`, `README.md`, `運用資料/運用/記録ファイル運用ルール.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `/Users/marupro/.codex/automations/btc/automation.toml`
+- 未解決事項: 次回の 2 時間後実行で `tmp/prod_status_sync_last_success.txt` と `tmp/prod_status_summary.md` が継続更新されるかは観測待ち。通知発生待ちのため `daily-sync` 初回本番確認と `logic_validated` 実データ確認も未完了。
+- メモ: 今回は軽量運営への切替と定期同期ジョブの登録のみ。閾値変更、本番コード反映、ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 15:38 JST
 - 実施内容: ユーザー判断を受けて、「デプロイ先データが必要なときは、先に Mac 側スクリプトで軽量同期し、ローカルへ落としてから AI が読む」を今後の正式原則として文書へ固定した。`AGENTS.md` に SSH 重読取を避ける原則と軽量同期優先の手順を追記し、`今後の運用ルール.md` にも「軽量同期 → ローカル要約生成 → 必要時だけフル取得 → AI が読む」を標準順として明記した。`NEXT_TASK.md` にも同じ前提を短く反映し、今後は重い SSH 読取を常態化しない運用へ寄せた。
 - 変更ファイル: `AGENTS.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`

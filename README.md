@@ -75,16 +75,31 @@ zsh tools/sync_ver021_prod_status.sh
 - 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
 - そのあと `tmp/prod_status_summary.json` と `tmp/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
 
+### 2時間ごとの軽量同期を登録する
+
+```bash
+cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+zsh tools/start_prod_status_sync.sh
+```
+
+補足:
+
+- Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
+- 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
+- `Codex Automation` は常用せず、必要時の手動作業へ寄せます。
+
 ### 本番 Ver02.1 ログをフル取得する
 
 ```bash
 cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/pull_ver021_prod_logs.sh
+zsh tools/pull_ver021_prod_logs_auto.sh
 ```
 
 補足:
 
 - これで「コード反映」と「実データ確認」を分けて扱えます。
+- 普段は使わず、通知発生後や詳細調査のときだけ使います。
+- `tools/pull_ver021_prod_logs.sh` は下位入口で、個別オプションを直接使いたいときだけ呼びます。
 - `--light` を付けると、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得します。
 - `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。
 - 件名は `SYSTEM_LABEL` に加えて実行モードも自動で付きます。

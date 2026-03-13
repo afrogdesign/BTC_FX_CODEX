@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.afrog.btc-monitor-status-sync</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/sync_ver021_prod_status.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>7200</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs/runtime/prod_status_sync.out</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs/runtime/prod_status_sync.err</string>
+</dict>
+</plist>
