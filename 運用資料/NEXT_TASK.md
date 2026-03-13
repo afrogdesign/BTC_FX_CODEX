@@ -1,8 +1,10 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 13:00 JST
+更新日: 2026-03-13 13:03 JST
+運用メモ: 実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 
 ## 現在の状況
+- `NEXT_TASK.md` は判断用、`progress.md` は履歴用として運用分離を明文化済み。
 - 運用ブランチは `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` に整理済み。
 - 役割は固定済み（本番: `Ver02.1 API`、開発: `Ver02.1 CLI`、Ver01 は比較基準）。
 - 自然観測の最新確認は 2026-03-13 12:00 JST。開発側は `signals=20260313_020500`（11:05 JST）まで更新、直近 4 サイクルで `ai_decision` / `summary_body` は連続成功。

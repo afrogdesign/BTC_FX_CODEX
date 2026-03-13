@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 13:03 JST
+- 実施内容: ユーザー指摘に合わせて、`NEXT_TASK.md` が実行履歴化しないための運用ルールを整理した。`AGENTS.md` の `NEXT_TASK.md` 節に「時系列ログは書かない」「重複を圧縮」「詳細は他資料へ分離」を追記し、`運用資料/運用/今後の運用ルール.md` に `NEXT_TASK と progress の分離ルール` を新設した。あわせて `NEXT_TASK.md` 冒頭に運用メモ（履歴は progress へ）を追加した。
+- 変更ファイル: `AGENTS.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は運用ルール整理のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 13:01 JST
 - 実施内容: ユーザー要望に合わせて `運用資料/NEXT_TASK.md` を圧縮し、重複していた履歴的記述を削って「現在の状況 / 次のタスク / ブロッカー / 完了条件」の最小構成へ再編した。あわせて `👩‍⚖️秘書.md` を短文要約へ更新し、今後は詳細履歴を `progress.md` 側へ寄せる方針を明記した。
 - 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
