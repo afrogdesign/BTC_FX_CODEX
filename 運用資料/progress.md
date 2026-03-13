@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 13:54 JST
+- 実施内容: `Global_BOX/開発環境仕様書.md` から BTC 固有の本番常駐情報を切り離し、共通原則だけを残す形へ整理した。あわせて `Global_BOX/本番常駐メモテンプレート.md` を追加し、`案件初期化スクリプト.sh` が `運用資料/運用/本番常駐メモ.md` も自動生成するよう更新した。BTC 側には `運用/本番常駐メモ.md` を新設し、Ver01 / Ver02.1 のラベル・配置先・確認対象を移した。仮ディレクトリで初期化スクリプトを再実行し、新しい本番常駐メモが生成されることも確認した。
+- 変更ファイル: `Global_BOX/開発環境仕様書.md`, `Global_BOX/本番常駐メモテンプレート.md`, `Global_BOX/README.md`, `Global_BOX/AGENTS_TEMPLATE.md`, `Global_BOX/案件初期構築テンプレート.md`, `Global_BOX/案件初期化スクリプト.sh`, `運用資料/運用/本番常駐メモ.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: 今回は資料整理と初期化スクリプト更新のみ。本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 13:46 JST
 - 実施内容: `Global_BOX` 側の共通運用を刷新した。`README.md` と `AGENTS_TEMPLATE.md` を今の入口構造に合わせて整理し、`記録ファイル運用ルールテンプレート.md`、`NEXT_TASKテンプレート.md`、`progressテンプレート.md`、`開発ロードマップテンプレート.md` を追加、既存の秘書・打ち合わせ・引き継ぎテンプレートも更新した。さらに `案件初期化スクリプト.sh` を新設し、新規案件で `AGENTS.md`、`運用資料/` 配下、Obsidian 側 `👩‍⚖️秘書.md` / `📒打ち合わせノート.md`、`進行状況/` のシンボリックリンクまで自動生成できることを仮ディレクトリで確認した。
 - 変更ファイル: `Global_BOX/README.md`, `Global_BOX/AGENTS_TEMPLATE.md`, `Global_BOX/案件初期構築テンプレート.md`, `Global_BOX/案件初期化スクリプト.sh`, `Global_BOX/秘書ノートテンプレート.md`, `Global_BOX/打ち合わせノートテンプレート.md`, `Global_BOX/スレッド引き継ぎファイルテンプレート.md`, `Global_BOX/NEXT_TASKテンプレート.md`, `Global_BOX/progressテンプレート.md`, `Global_BOX/開発ロードマップテンプレート.md`, `Global_BOX/記録ファイル運用ルールテンプレート.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
