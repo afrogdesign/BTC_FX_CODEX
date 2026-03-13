@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 14:39 JST
+- 実施内容: `/Users/marupro/.codex/automations/btc/memory.md` が履歴化しすぎていたため、再開用の圧縮メモへ整理した。詳細な経緯列挙を削り、現在の主対象、入口、`Global_BOX` の新構成、初期設置後の記録ルール、現行ブランチ構成、直近の未解決だけを残した。
+- 変更ファイル: `/Users/marupro/.codex/automations/btc/memory.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`
+- 未解決事項: API 側 snapshot の追加 pull と、11:05 JST 帯の API / CLI 同時刻比較母数追加は未着手のまま。
+- メモ: `memory.md` は今後も「次回すぐ再開するための圧縮メモ」として運用し、履歴は `progress.md` 側へ寄せる。
+
 - 日時: 2026-03-13 14:33 JST
 - 実施内容: ユーザー指摘を受けて、「初期ファイルたちの設置が終わった時点で、その完了自体が報告ファイル群へ記録されるべき」というルールを入口文書へ追加した。`Global_BOX/README.md` に `初期設置完了直後の記録` 節を新設し、`🔆 PROJECT開始指南書.md` の短縮版・基本版・API 版にも「初期設置完了を `👩‍⚖️秘書.md` / `NEXT_TASK.md` / `progress.md` へ最初の記録として書く」指示を追記した。
 - 変更ファイル: `Global_BOX/README.md`, `🔆 PROJECT開始指南書.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`, `/Users/marupro/.codex/automations/btc/memory.md`
