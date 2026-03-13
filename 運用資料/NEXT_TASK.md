@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 17:03 JST
+更新日: 2026-03-13 17:05 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -22,11 +22,12 @@
 - Obsidian 側 `資料/` に、現行運用整理・軽量運営モデル・Global_BOX反映設計の 3 本を追加し、次の共通化検討に入れる状態へ整理した。
 - `Global_BOX` 本体は軽量運営前提へ更新した。`AGENTS_TEMPLATE.md`、`記録ファイル運用ルールテンプレート.md`、`progressテンプレート.md`、`NEXT_TASKテンプレート.md`、`案件初期化スクリプト.sh` を見直し、`進行状況/` のシンボリックリンク運用も維持した。
 - `/Users/marupro/CODEX/` 配下の他案件 `AGENTS.md` も、軽量運営版の原則へ順次反映した。`IZUZYA_SP`、`インキャビラジオ`、`レシート処理`、`BTC_FX_Claude`、sandbox 側で入口順・軽量同期前提・更新条件・Git 粒度をそろえた。
+- `運用資料/運用/記録ファイル運用ルール.md` に、秘書メモを崩さないためのチェックを追加した。`👩‍⚖️秘書.md` も人向け入口の短い形へ再整理した。
 - Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 - この実行環境では外部 SSH が制限される場合があり、失敗時は `ssh: connect to host ... Operation not permitted` になる。疎通可能環境で再試行する。
 
 ## 次のタスク
-1. 次の作業では、他案件へ反映した `AGENTS.md` の軽量運営ルールに不足がないかを spot check し、必要なら `Global_BOX` 側テンプレートへ逆輸入する。
+1. 次の作業では、秘書メモが再び重くならないよう、必要なら `Global_BOX` 側のテンプレートにも同じチェック項目を逆輸入する。
 2. 次回は `tmp/status/prod_status_summary.md` の更新時刻と `tmp/status/prod_status_sync_last_success.txt` を見て、2 時間ごとの軽量同期が継続しているか確認する。
 3. 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` を見て、異常や通知があるときだけ `zsh tools/pull_ver021_prod_logs_auto.sh` で詳細を掘る。
 4. 鍵認証で詳細取得できない場面が出たときだけ、例外手順として `zsh tools/pull_ver021_prod_logs_with_password.sh` を使う。
