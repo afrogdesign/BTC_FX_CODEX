@@ -1,6 +1,6 @@
 # CLI と API の定期比較レポート
 
-更新日: 2026-03-13 11:16 JST
+更新日: 2026-03-13 14:43 JST
 
 このファイルは、`Ver02.1 API` と `Ver02.1 CLI` の安定性を定期的に見比べるための正本レポートです。
 単発の異常メモではなく、同じ観点を毎回更新して「CLI に切り替えてよいか」を判断する材料にします。
@@ -87,6 +87,14 @@
   - 上の 2 条件を満たし、`data_quality_flag=ok` かつ `data_missing_fields` に `ai_response` がない
 
 ## 直近観測メモ
+
+### 2026-03-13 14:43 JST 時点
+
+- 開発 `Ver02.1 CLI` 側は `20260313_050500.json`（14:05 JST）まで自然更新を確認した
+- `heartbeat.txt` / `last_result.json` も 14:05 JST へ追随し、`ai_decision=WAIT_FOR_SWEEP`、`data_quality_flag=ok` を確認した
+- `logs/errors/` の最新は引き続き `20260312_220848_ai_summary_error.log` で、07:08 JST 以降の新規エラーは確認されなかった
+- API 側 snapshot 追加取得のため `zsh tools/pull_ver021_prod_logs.sh` を試行したが、実行環境制約で `ssh: connect to host 192.168.1.38 port 22: Operation not permitted` となり取得失敗
+- そのため API 側の比較母数は 10:50 JST 取得分（`20260312_220500`〜`20260313_010500`）から増えていない
 
 ### 2026-03-13 11:16 JST 時点
 

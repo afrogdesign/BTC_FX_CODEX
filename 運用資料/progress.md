@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 14:43 JST
+- 実施内容: 優先順 1（自然観測結果の確認と整理）として、開発 `Ver02.1 CLI` の最新更新を読取確認した。`logs/signals` は `20260313_050500.json`（14:05 JST）まで進み、`heartbeat.txt` と `last_result.json` も 14:05 JST へ追随、`ai_decision=WAIT_FOR_SWEEP` と `data_quality_flag=ok` を確認した。`logs/errors` は `20260312_220848_ai_summary_error.log` が最新のままで新規追加なしを確認した。続いて最優先タスクの API 側 snapshot 追加取得として `zsh tools/pull_ver021_prod_logs.sh` を試行したが、この実行環境では外部 SSH が制限されており `ssh: connect to host 192.168.1.38 port 22: Operation not permitted` で停止したため、本番ログは未取得・未変更のままとした。あわせて `NEXT_TASK.md`、`cli_api定期比較レポート.md`、`スレッド引き継ぎファイル.md` を現状へ同期し、`👩‍⚖️秘書.md` は権限制約（`operation not permitted`）で更新不可だった。
+- 変更ファイル: `運用資料/NEXT_TASK.md`, `運用資料/reports/cli_api定期比較レポート.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`, `/Users/marupro/.codex/automations/btc/memory.md`
+- 未解決事項: API 側 snapshot はネットワーク制約で追加取得できず、11:05 JST 帯以降の API / CLI 同時刻比較母数を増やせていない。通知発生待ちのため `daily-sync` 初回本番確認と `logic_validated` 実データ確認も継続待ち。
+- メモ: 今回は読取確認と文書更新のみ。手動実行・本番反映・閾値変更・ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 14:39 JST
 - 実施内容: `/Users/marupro/.codex/automations/btc/memory.md` が履歴化しすぎていたため、再開用の圧縮メモへ整理した。詳細な経緯列挙を削り、現在の主対象、入口、`Global_BOX` の新構成、初期設置後の記録ルール、現行ブランチ構成、直近の未解決だけを残した。
 - 変更ファイル: `/Users/marupro/.codex/automations/btc/memory.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`, `👩‍⚖️秘書.md`

@@ -1,33 +1,20 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 14:39 JST
+更新日: 2026-03-13 14:43 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
 ## 現在の状況
-- `automation` 用 `memory.md` は履歴ではなく再開用の圧縮メモへ整理し、現在地・入口・未解決だけを残す形に削った。
-- 新規案件の初期設置が終わった時点で、その完了自体を `👩‍⚖️秘書.md` / `NEXT_TASK.md` / `progress.md` へ最初の記録として書くことを、`Global_BOX` の README と開始指南書へ追加した。
-- 新規案件の試行結果を踏まえ、`👩‍⚖️秘書.md` も `NEXT_TASK.md` / `progress.md` と同じく毎回更新することを、`Global_BOX` の README・共通 AGENTS・開始指南書で明文化した。
-- `🔆 PROJECT開始指南書.md` の目次リンクを Obsidian 向け `[[#見出し名]]` 形式へ修正し、8〜10番の目次ズレも解消した。
-- 新規案件ガイドを補強し、`Global_BOX/20_初期構築/案件初期化スクリプト.sh` を最初に実行して `CODEX案件ディレクトリ/AGENTS.md` の生成確認まで行う流れに修正した。
-- `Global_BOX` は `README.md` を入口にしつつ、`10_共通仕様` / `20_初期構築` / `30_テンプレート` へ用途別に再編した。初期化スクリプトも新配置で動作確認済み。
-- `Global_BOX/開発環境仕様書.md` は共通原則だけに整理し、BTC 固有の常駐ラベル・配置先・確認対象は `運用/本番常駐メモ.md` へ分離した。
-- `Global_BOX` 側へ共通運用を反映し、初期化スクリプトと各テンプレートから新規案件の標準セットを自動生成できる状態にした。
-- `📒打ち合わせノート.md` の更新タイミングは「一定の作業が終わったら行う定期更新」に整理した。
-- `📒打ち合わせノート.md` は「人が日々の作業要点を時系列で追う記録」として役割を再定義した。
-- `運用/記録ファイル運用ルール.md` の秘書メモ表現を調整し、「古い不要情報は残しすぎず、今も有効な前提だけを短く残す」に整理した。
-- 記録ファイルの相関ルールは `運用/記録ファイル運用ルール.md` へ分離し、`AGENTS.md` は要点参照に整理済み。
-- AI の日常入口は `NEXT_TASK.md` → `開発ロードマップ.md` に固定し、`👩‍⚖️秘書.md` は人向け資料へ分離済み。
-- `NEXT_TASK.md` は判断用、`progress.md` は履歴用として運用分離を明文化済み。
 - 運用ブランチは `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` に整理済み。
 - 役割は固定済み（本番: `Ver02.1 API`、開発: `Ver02.1 CLI`、Ver01 は比較基準）。
-- 自然観測の最新確認は 2026-03-13 12:00 JST。開発側は `signals=20260313_020500`（11:05 JST）まで更新、直近 4 サイクルで `ai_decision` / `summary_body` は連続成功。
-- `logs/errors` の最新は `20260312_220848_ai_summary_error.log` で、07:08 JST 以降の新規エラーは未確認。
-- API 側は 10:50 JST 取得 snapshot（`20260312_220500`〜`20260313_010500`）までは確認済み。11:05 JST 帯の同時刻比較母数は未追加。
+- 自然観測の最新確認は 2026-03-13 14:43 JST。開発側は `signals=20260313_050500`（14:05 JST）まで更新、`heartbeat.txt` / `last_result.json` も 14:05 JST へ追随を確認。
+- `logs/errors` の最新は `20260312_220848_ai_summary_error.log` のまま（2026-03-13 07:08 JST 以降の新規エラーなし）。
+- API 側 snapshot は `tmp/prod_ver021_snapshot_live/` の 10:50 JST 取得分（最終 `20260313_010500` = 10:05 JST）から更新できていない。
+- `tools/pull_ver021_prod_logs.sh` の実行は、現環境のネットワーク制限で `ssh: connect to host 192.168.1.38 port 22: Operation not permitted` となり停止。
 - Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 
 ## 次のタスク
-1. API 側 snapshot を追加 pull し、11:05 JST 帯の API/CLI 同時刻比較を 1 件以上増やす。
+1. ネットワーク制限のない実行環境で API 側 snapshot を追加 pull し、11:05 JST 帯以降の API/CLI 同時刻比較を 1 件以上増やす。
 2. 次回自然更新で CLI 側 `heartbeat` / `last_result` 継続更新と `ai_summary_error` 再発有無を確認する。
 3. 通知発生時に API/CLI の件名・本文・`notify_reason_codes`・`decision/quality/warnings` 差分を `運用資料/reports/cli_api定期比較レポート.md` に追記する。
 4. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
@@ -36,6 +23,8 @@
 
 ## ブロッカー
 - API 側の追加 snapshot 未取得のため、同時刻比較の母数が不足。
+- 現実行環境では外部 SSH（`192.168.1.38:22`）が禁止されており、`tools/pull_ver021_prod_logs.sh` が失敗する。
+- この実行環境から Obsidian 側 `👩‍⚖️秘書.md` へ書き込みできず（`operation not permitted`）、更新作業が完了できない。
 - 通知発生がまだ無く、`daily-sync` と `logic_validated` の本番評価に進めない。
 - `signal_outcomes.csv` / `user_reviews.csv` は未生成。
 - `phase1_active` は実装済みだが、本番データ蓄積がまだ無い。
