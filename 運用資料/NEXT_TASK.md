@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 15:34 JST
+更新日: 2026-03-13 15:38 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -12,6 +12,7 @@
 - API 側 snapshot は鍵認証で再取得済み。最新は `20260313_060501`（15:05 JST）で、同時刻比較母数をさらに追加できた。
 - `MBP2020` への標準接続は `mbp2020-btc` alias + 専用鍵 `~/.ssh/mbp2020_btc_monitor` へ切替済み。`pull_ver021_prod_logs_auto.sh` は鍵認証で自動取得できることを確認した。
 - 本番状態の普段使い入口は `zsh tools/sync_ver021_prod_status.sh` に切り替えた。軽量取得後に `tmp/prod_status_summary.json` / `tmp/prod_status_summary.md` を作る運用にする。
+- 今後は、デプロイ先データが必要でも AI がいきなり SSH の重いログを読むのではなく、先に Mac 側スクリプトで軽量同期してから参照する。
 - Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
 - この実行環境では外部 SSH が制限される場合があり、失敗時は `ssh: connect to host ... Operation not permitted` になる。疎通可能環境で再試行する。
 

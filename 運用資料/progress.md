@@ -1,5 +1,11 @@
 # Progress Log
 
+- 日時: 2026-03-13 15:38 JST
+- 実施内容: ユーザー判断を受けて、「デプロイ先データが必要なときは、先に Mac 側スクリプトで軽量同期し、ローカルへ落としてから AI が読む」を今後の正式原則として文書へ固定した。`AGENTS.md` に SSH 重読取を避ける原則と軽量同期優先の手順を追記し、`今後の運用ルール.md` にも「軽量同期 → ローカル要約生成 → 必要時だけフル取得 → AI が読む」を標準順として明記した。`NEXT_TASK.md` にも同じ前提を短く反映し、今後は重い SSH 読取を常態化しない運用へ寄せた。
+- 変更ファイル: `AGENTS.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/progress.md`
+- 未解決事項: 本番 `Ver02.1 API` の通知発生待ちは継続中。`daily-sync` 初回本番確認と `logic_validated` 実データ確認も未完了。
+- メモ: 今回は運用原則の固定のみ。コード変更、閾値変更、ChatGPT API 利用はしていない。
+
 - 日時: 2026-03-13 15:34 JST
 - 実施内容: 自動化の無駄を減らすため、本番ログ同期を「AI が読む前の軽量スクリプト処理」へ寄せた。`tools/pull_ver021_prod_logs.sh` に `--light` を追加し、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得できるようにした。さらに `tools/build_prod_status_summary.py` を追加して、API snapshot とローカル CLI の比較要点を `tmp/prod_status_summary.json` / `tmp/prod_status_summary.md` にまとめるようにした。普段使いの入口として `tools/sync_ver021_prod_status.sh` も追加し、README、`今後の運用ルール.md`、`NEXT_TASK.md` を「軽量同期優先」の運用へ更新した。確認として `zsh tools/pull_ver021_prod_logs.sh --help` と `./.venv312/bin/python tools/build_prod_status_summary.py` を実行し、`tmp/prod_status_summary.md` 生成まで確認した。
 - 変更ファイル: `tools/pull_ver021_prod_logs.sh`, `tools/build_prod_status_summary.py`, `tools/sync_ver021_prod_status.sh`, `README.md`, `運用資料/運用/今後の運用ルール.md`, `運用資料/NEXT_TASK.md`, `運用資料/スレッド引き継ぎファイル.md`, `運用資料/progress.md`
