@@ -56,7 +56,6 @@
 - 14. `Ver03` 昇格条件に照らして、`Phase 0` と `Phase 1` のどちらが未充足かを `運用資料/計画/フェーズ別計画_Phase0-1.md` で定期確認する。
 
 ## ブロッカー
-- この実行環境では Obsidian 側 `👩‍⚖️秘書.md`（`/Users/marupro/Library/Mobile Documents/...`）への書き込みが `Operation not permitted` で失敗するため、入口メモの最終整形は書き込み可能環境での反映が必要。
 - 2026-03-13 12:00 JST 時点でも 11:05 JST 以降の新規自然更新が開発側で未観測のため、比較母数の追加は次サイクル待ち。
 - 2026-03-13 11:16 JST 時点で開発 CLI 側の自然更新継続は確認できたが、API 側は 10:50 JST 取得の snapshot 以降の追加 pull がなく、同時刻帯の比較母数が増えていない。
 - この端末で即時に確認できた観測先は `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/logs` 側のみで、API本番とCLI開発の2系統を同時に追跡する観測先整理が未完了。
