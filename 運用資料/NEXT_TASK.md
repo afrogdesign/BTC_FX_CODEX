@@ -1,45 +1,28 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-13 22:39 JST
+更新日: 2026-03-15 15:08 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
 ## 現在の状況
-- 運用ブランチは `main` / `ver02.1-v1` / `snapshot/ver02.1` / `ver02.0-stable` / `ver01-baseline` に整理済み。
-- 役割は固定済み（本番: `Ver02.1 API`、開発: `Ver02.1 CLI`、Ver01 は比較基準）。
-- 自然観測と軽量同期の最新確認は 2026-03-13 17:53 JST。API / CLI ともに `signal_id=20260313_080500`（17:05 JST）まで更新し、`tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` の追随を確認した。
-- `logs/errors` の最新は `20260312_220848_ai_summary_error.log` のまま（2026-03-13 07:08 JST 以降の新規エラーなし）。
-- API 側 snapshot は鍵認証で再取得済み。最新は `20260313_060501`（15:05 JST）で、同時刻比較母数をさらに追加できた。
-- `MBP2020` への標準接続は `mbp2020-btc` alias + 専用鍵 `~/.ssh/mbp2020_btc_monitor` へ切替済み。`pull_ver021_prod_logs_auto.sh` は鍵認証で自動取得できることを確認した。
-- 本番状態の普段使い入口は `zsh tools/sync_ver021_prod_status.sh` に切り替えた。軽量取得後に `tmp/status/prod_status_summary.json` / `tmp/status/prod_status_summary.md` を作る運用にする。
-- `tmp/` は `status/`、`snapshots/`、`errors/` へ整理済み。日常確認は `tmp/status/` だけを見る。
-- `pull_ver021_prod_logs_auto.sh` は鍵認証専用を標準にした。パスワード fallback は `pull_ver021_prod_logs_with_password.sh` を明示的に使う例外手順へ分離した。
-- 今後は、デプロイ先データが必要でも AI がいきなり SSH の重いログを読むのではなく、先に Mac 側スクリプトで軽量同期してから参照する。
-- 定期処理は Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す前提へ切り替えた。
-- `com.afrog.btc-monitor-status-sync` は 2026-03-13 15:53 JST に登録済み。`launchctl print` で `run interval = 7200 seconds`、`last exit code = 0` を確認した。
-- 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見る。詳細ログは例外時だけ開く。
-- `progress.md` は軽い入口にし、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する運用へ切り替えた。
-- Obsidian 側 `資料/` に、現行運用整理・軽量運営モデル・Global_BOX反映設計の 3 本を追加し、次の共通化検討に入れる状態へ整理した。
-- `Global_BOX` 本体は軽量運営前提へ更新した。`AGENTS_TEMPLATE.md`、`記録ファイル運用ルールテンプレート.md`、`progressテンプレート.md`、`NEXT_TASKテンプレート.md`、`案件初期化スクリプト.sh` を見直し、`進行状況/` のシンボリックリンク運用も維持した。
-- `Global_BOX` 側の `AGENTS_TEMPLATE.md` と `記録ファイル運用ルールテンプレート.md` にも、秘書メモを重くしないための入口維持ルールとチェック項目が入っていることを再確認した。
-- `/Users/marupro/CODEX/` 配下の他案件 `AGENTS.md` も、軽量運営版の原則へ順次反映した。`IZUZYA_SP`、`インキャビラジオ`、`レシート処理`、`BTC_FX_Claude`、sandbox 側で入口順・軽量同期前提・更新条件・Git 粒度をそろえた。
-- `運用資料/運用/記録ファイル運用ルール.md` に、秘書メモを崩さないためのチェックを追加した。`👩‍⚖️秘書.md` も人向け入口の短い形へ再整理した。
-- `AGENTS.md` と `Global_BOX` 側テンプレートから、通常運転では不要な `共通 AGENTS テンプレート` 参照を削除した。
-- `AGENTS.md` 群から、毎回報告・毎回記録を連想させる文を削除し、sandbox / 隔離環境は「軽い方法優先」の表現へそろえた。
-- Phase 1 は土台実装済み（サイズ計画・出口計画・ログ列追加）。実データ評価は通知発生待ち。
-- 朝 `08:05` と `09:05` の `Ver02.1` 判定を追跡し、上昇初動の取り逃がし要因が `CONFIDENCE_LONG_MIN`、`MIN_RR_RATIO`、`sweep_incomplete` 加点にあることを確認した。
-- 実効設定を `CONFIDENCE_LONG_MIN=40`、`MIN_RR_RATIO=1.15`、`sweep_incomplete=+4` へ調整した。調整判断の入口として `運用資料/運用/採点調整シート.md` を新規追加した。
-- この実行環境では外部 SSH が制限される場合があり、失敗時は `ssh: connect to host ... Operation not permitted` になる。疎通可能環境で再試行する。
+- 現在の役割は固定済み。本番は `Ver02.1 API`、開発は `Ver02.1 CLI`、`Ver01` は比較対象として扱う。
+- 日常の本番確認は `zsh tools/sync_ver021_prod_status.sh` で軽量同期し、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見る。
+- 詳細取得は鍵認証の `tools/pull_ver021_prod_logs_auto.sh` を標準とし、パスワード版は例外手順に分離済み。
+- `Phase 1` の土台実装は完了しており、今は通知発生待ちで実データ評価にはまだ入っていない。
+- 上昇初動の取り逃がし対策として、実効設定を `CONFIDENCE_LONG_MIN=40`、`MIN_RR_RATIO=1.15`、`sweep_incomplete=+4` へ調整済み。確認入口は `運用資料/運用/採点調整シート.md`。
+- 本命通知とは別に `注意報メール` を追加済み。件名の強さレイヤーは `👀 [注意報]`、`🟡 好条件接近`、`🔥 ゴールデン条件`。
+- 注意報の閾値は `ATTENTION_ALERT_SCORE_MIN=55`、`ATTENTION_ALERT_GAP_MIN=15`、`ATTENTION_ALERT_COOLDOWN_MINUTES=60`。本命通知とは別履歴で管理する。
+- `Ver01` は初動センサー比較としてはまだ参考になるが、`Ver02.1` の注意報が同程度の頻度と早さを出せるなら停止候補。
+- この実行環境では外部 SSH が制限されることがあり、失敗時は疎通可能環境で再試行する。
 
 ## 次のタスク
-1. 次回自然更新で、今回の緩和後に `Ver02.1` のロング初動通知がどこまで拾えるかを確認する。対象は `bias / confidence / prelabel / suppress_reason_codes / no_trade_flags`。
-2. ロング寄りなのに通知されない回が出たら、まず `運用資料/運用/採点調整シート.md` を開き、`logs/csv/trades.csv` と `logs/signals/*.json` で該当パラメーターを照合する。
-3. 普段の本番確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` を見て、異常や通知があるときだけ `zsh tools/pull_ver021_prod_logs_auto.sh` で詳細を掘る。
-4. 鍵認証で詳細取得できない場面が出たときだけ、例外手順として `zsh tools/pull_ver021_prod_logs_with_password.sh` を使う。
-5. 通知発生時または比較材料がまとまって増えたときに、API/CLI の件名・本文・`notify_reason_codes`・`decision/quality/warnings` 差分を `運用資料/reports/cli_api定期比較レポート.md` に追記する。
+1. 次回自然更新で、緩和後の `Ver02.1` がロング初動をどこまで拾えるか確認する。対象は `bias / confidence / prelabel / suppress_reason_codes / no_trade_flags`。
+2. 注意報メールの頻度と実用性を自然観測で確認する。対象は `notification_kind=attention`、件名、方向、クールダウンの効き方。
+3. `Ver01` と `Ver02.1` 注意報の初動検知を比較し、頻度と早さが同程度なら `Ver01` 停止判断へ進める。比較対象は通知時刻、方向、実際の伸び。
+4. 本命通知されないロング回が出たら、`運用資料/運用/採点調整シート.md` を入口に `logs/csv/trades.csv` と `logs/signals/*.json` を照合する。
+5. 異常や通知が出たときだけ `zsh tools/pull_ver021_prod_logs_auto.sh` で詳細を掘り、材料が増えたら `運用資料/reports/cli_api定期比較レポート.md` を更新する。
 6. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
-7. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` 反映を確認する。
-8. Phase 1 の正式評価（`phase1_active=true` 母数、TP1到達率、`max_size_capped` 発生率）を開始する。
+7. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` と `Phase 1` の正式評価開始へつなげる。
 
 ## ブロッカー
 - 通知発生がまだ無く、`daily-sync` と `logic_validated` の本番評価に進めない。

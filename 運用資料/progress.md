@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-13 22:39 JST
+更新日: 2026-03-15 14:30 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,13 @@
 
 ## 最新の実作業
 
+- 2026-03-15 14:30 JST
+  - 本命通知とは別に、ロング・ショート両対応の `注意報メール` を実装した。
+  - 注意報は `notification_kind=attention` として本命通知と分離し、専用履歴 `logs/last_attention_notified.json` でクールダウン管理する形にした。
+  - 件名はロング `🟡 [注意報] ...`、ショート `🔵 [注意報] ...` で、本文冒頭にも「売買推奨ではなく注意報」と明記するようにした。
+  - 閾値は `ATTENTION_ALERT_SCORE_MIN=55`、`ATTENTION_ALERT_GAP_MIN=15`、`ATTENTION_ALERT_COOLDOWN_MINUTES=60` を追加した。
+  - `python3 -m unittest tests.test_notification_trigger tests.test_summary_format tests.test_funding_and_signal tests.test_phase1_activation` を実行し、11件成功を確認した。
+  - 実装はコミット `54376e4` `注意報メールを追加してロング・ショート初動を通知可能にする` として確定した。
 - 2026-03-13 22:39 JST
   - 朝 `08:05` と `09:05` の `Ver02.1` 判定を追跡し、上昇初動を取り逃がした主因が `CONFIDENCE_LONG_MIN`、`MIN_RR_RATIO`、`sweep_incomplete` 加点の厳しさにあることを確認した。
   - 実効設定を `CONFIDENCE_LONG_MIN=40`、`MIN_RR_RATIO=1.15`、`sweep_incomplete=+4` へ調整し、`.env` / `.env.example` / 関連テストまで反映した。
