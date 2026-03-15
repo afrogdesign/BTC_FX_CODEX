@@ -75,6 +75,41 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("ほぼ中立 (+0.0037%)", body)
         self.assertIn("🟡 好条件接近", body)
 
+    def test_attention_subject_and_body_are_clearly_marked(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-15T06:05:00+09:00",
+            "system_label": "Ver02.1",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "bias": "long",
+            "current_price": 70765.2,
+            "long_display_score": 59,
+            "short_display_score": 38,
+            "score_gap": 21,
+            "signals_4h": "wait",
+            "signals_1h": "wait",
+            "signals_15m": "wait",
+            "prelabel": "SWEEP_WAIT",
+            "confidence": 4,
+            "no_trade_flags": ["RR_insufficient", "sweep_incomplete"],
+        }
+
+        subject = build_summary_subject(payload)
+        body = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+        self.assertTrue(subject.startswith("🟡 [注意報]"))
+        self.assertIn("ロング寄り", subject)
+        self.assertIn("売買推奨メールではなく", body)
+        self.assertIn("Gap 21", subject)
+
 
 if __name__ == "__main__":
     unittest.main()

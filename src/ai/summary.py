@@ -116,6 +116,14 @@ def _format_pct(value: Any) -> str:
     return f"{pct:+.4f}%"
 
 
+def _attention_direction(result: dict[str, Any]) -> str:
+    return "ロング寄り" if str(result.get("bias", "")).lower() == "long" else "ショート寄り"
+
+
+def _attention_emoji(result: dict[str, Any]) -> str:
+    return "🟡" if str(result.get("bias", "")).lower() == "long" else "🔵"
+
+
 def _signal_intro(result: dict[str, Any]) -> str:
     tier = str(result.get("signal_tier", "normal"))
     badge = str(result.get("signal_badge", "")).strip()
@@ -212,6 +220,28 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         return f"{signal_intro}\n{body}"
     return body
 
+
+def _attention_summary(result: dict[str, Any]) -> str:
+    direction = _attention_direction(result)
+    current_price = _format_price(result.get("current_price"))
+    long_score = result.get("long_display_score")
+    short_score = result.get("short_display_score")
+    gap = abs(int(result.get("score_gap", 0) or 0))
+    prelabel = result.get("prelabel", "")
+    timestamp = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
+    return (
+        "これは売買推奨メールではなく、相場が傾き始めたことを知らせる注意報です。"
+        " 現時点ではエントリー推奨ではありません。\n"
+        f"時刻: {timestamp}\n"
+        f"現在価格: {current_price}\n"
+        f"方向感: {direction}\n"
+        f"スコア: long {long_score} / short {short_score} / gap {gap}\n"
+        f"時間足: 4h={result.get('signals_4h')}, 1h={result.get('signals_1h')}, 15m={result.get('signals_15m')}\n"
+        f"prelabel: {prelabel}\n"
+        f"confidence: {result.get('confidence')}\n"
+        f"補足: 本命通知条件は未達です。直近の注意点は {', '.join(result.get('no_trade_flags', [])) or '特になし'} です。"
+    )
+
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
@@ -222,6 +252,15 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     if mode_label:
         subject_labels.append(f"[{mode_label}]")
     label_prefix = f"{' '.join(subject_labels)} " if subject_labels else ""
+    notification_kind = str(result.get("notification_kind", "main")).lower()
+    if notification_kind == "attention":
+        direction = _attention_direction(result)
+        gap = abs(int(result.get("score_gap", 0) or 0))
+        current_price = _format_price(result.get("current_price"))
+        return (
+            f"{_attention_emoji(result)} [注意報] {label_prefix}[BTC監視] {jst_ts} "
+            f"{direction} / {current_price} / Gap {gap}"
+        )
     badge = str(result.get("signal_badge", "")).strip()
     badge_prefix = f"{badge} " if badge else ""
     current_price = _format_price(result.get("current_price"))
@@ -246,6 +285,8 @@ def build_summary_body(
     base_dir: Path,
     result_payload: dict[str, Any],
 ) -> str:
+    if str(result_payload.get("notification_kind", "main")).lower() == "attention":
+        return _attention_summary(result_payload)
     provider_name = str(provider or "api").strip().lower()
 
     if provider_name == "cli":

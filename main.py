@@ -46,6 +46,7 @@ from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
 from src.storage.csv_logger import append_trade_log
 from src.storage.json_store import (
+    get_last_attention_notified_path,
     get_last_notified_path,
     get_last_result_path,
     load_json,
@@ -616,6 +617,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "notify_reason_codes": [],
         "suppress_reason_codes": [],
         "reason_for_notification": [],
+        "notification_kind": "none",
     }
 
     ai_advice = request_ai_advice(
@@ -689,11 +691,13 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
-    notify_info = should_notify(result, last_result, last_notified, cfg)
+    last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
+    notify_info = should_notify(result, last_result, last_notified, last_attention_notified, cfg)
     notify = bool(notify_info["notify"])
     result["notify_reason_codes"] = notify_info["notify_reason_codes"]
     result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
     result["reason_for_notification"] = notify_info["notify_reason_codes"]
+    result["notification_kind"] = notify_info["notification_kind"]
 
     result["summary_subject"] = build_summary_subject(result)
     result["summary_body"] = build_summary_body(
@@ -708,10 +712,15 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
 
     if notify:
+        notify_path = (
+            get_last_attention_notified_path(base_dir)
+            if result["notification_kind"] == "attention"
+            else get_last_notified_path(base_dir)
+        )
         if cfg.DRYRUN_MODE:
             result["was_notified"] = True
             result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-            save_json(get_last_notified_path(base_dir), result)
+            save_json(notify_path, result)
         else:
             try:
                 send_email(
@@ -726,7 +735,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                 )
                 result["was_notified"] = True
                 result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                save_json(get_last_notified_path(base_dir), result)
+                save_json(notify_path, result)
             except Exception as exc:  # noqa: BLE001
                 save_pending_email(base_dir, result["summary_subject"], result["summary_body"])
                 _error_log(base_dir, "smtp_error", f"{exc}\n{traceback.format_exc()}")

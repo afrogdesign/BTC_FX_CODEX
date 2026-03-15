@@ -40,3 +40,7 @@ def get_last_result_path(base_dir: Path) -> Path:
 
 def get_last_notified_path(base_dir: Path) -> Path:
     return base_dir / "logs" / "last_notified.json"
+
+
+def get_last_attention_notified_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "last_attention_notified.json"
