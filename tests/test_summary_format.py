@@ -105,7 +105,7 @@ class SummaryFormatTest(unittest.TestCase):
             base_dir=BASE_DIR,
             result_payload=payload,
         )
-        self.assertTrue(subject.startswith("🟡 [注意報]"))
+        self.assertTrue(subject.startswith("👀 [注意報]"))
         self.assertIn("ロング寄り", subject)
         self.assertIn("売買推奨メールではなく", body)
         self.assertIn("Gap 21", subject)

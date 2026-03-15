@@ -120,8 +120,8 @@ def _attention_direction(result: dict[str, Any]) -> str:
     return "ロング寄り" if str(result.get("bias", "")).lower() == "long" else "ショート寄り"
 
 
-def _attention_emoji(result: dict[str, Any]) -> str:
-    return "🟡" if str(result.get("bias", "")).lower() == "long" else "🔵"
+def _attention_emoji() -> str:
+    return "👀"
 
 
 def _signal_intro(result: dict[str, Any]) -> str:
@@ -258,7 +258,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
         gap = abs(int(result.get("score_gap", 0) or 0))
         current_price = _format_price(result.get("current_price"))
         return (
-            f"{_attention_emoji(result)} [注意報] {label_prefix}[BTC監視] {jst_ts} "
+            f"{_attention_emoji()} [注意報] {label_prefix}[BTC監視] {jst_ts} "
             f"{direction} / {current_price} / Gap {gap}"
         )
     badge = str(result.get("signal_badge", "")).strip()
