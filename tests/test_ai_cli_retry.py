@@ -131,6 +131,8 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertIn("【結論】", result)
+        self.assertIn("【セットアップ】", result)
+        self.assertIn("・ロング:", result)
         error_log_mock.assert_called_once()
         self.assertIn("retry_count=2", error_log_mock.call_args.args[2])
 
