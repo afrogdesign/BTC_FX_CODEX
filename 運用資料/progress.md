@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-15 14:30 JST
+更新日: 2026-03-16 19:14 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,11 @@
 
 ## 最新の実作業
 
+- 2026-03-16 19:14 JST
+  - 本番 `Ver01` の比較役目完了を受けて、`mbp2020-btc` へ SSH し `com.afrog.btc-monitor-ver01` を `launchctl bootout` で安全停止した。
+  - 停止前は `launchctl print` で `state = running` と `pid = 91182` を確認し、停止後は `service not found` と実プロセス消滅を確認した。
+  - 同時に本番軽量同期を最新化し、`Ver02.1 API` が `2026-03-16 17:05 JST` 時点で `ok / WAIT_FOR_SWEEP / NO_TRADE_CANDIDATE / long / Confidence 73` を返していることを確認した。
+  - 今日の `CLI Ver02.1` 反応履歴を確認し、注意報 `16:27 JST` → 本命通知 `18:05 JST` の流れを確認したうえで、以後の主対象を `Ver02.1` 単独運用へ切り替えた。
 - 2026-03-15 14:30 JST
   - 本命通知とは別に、ロング・ショート両対応の `注意報メール` を実装した。
   - 注意報は `notification_kind=attention` として本命通知と分離し、専用履歴 `logs/last_attention_notified.json` でクールダウン管理する形にした。
