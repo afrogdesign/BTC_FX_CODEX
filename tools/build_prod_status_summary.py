@@ -62,37 +62,38 @@ def _build_side_summary(label: str, base_dir: Path) -> dict[str, Any]:
     }
 
 
-def _build_comparison(api_side: dict[str, Any], cli_side: dict[str, Any]) -> dict[str, Any]:
-    same_signal_id = bool(api_side.get("signal_id")) and api_side.get("signal_id") == cli_side.get("signal_id")
-    same_heartbeat = bool(api_side.get("heartbeat_text")) and api_side.get("heartbeat_text") == cli_side.get("heartbeat_text")
+def _build_comparison(prod_side: dict[str, Any], cli_side: dict[str, Any]) -> dict[str, Any]:
+    same_signal_id = bool(prod_side.get("signal_id")) and prod_side.get("signal_id") == cli_side.get("signal_id")
+    same_heartbeat = bool(prod_side.get("heartbeat_text")) and prod_side.get("heartbeat_text") == cli_side.get("heartbeat_text")
     return {
         "same_signal_id": same_signal_id,
         "same_heartbeat_text": same_heartbeat,
-        "api_signal_id": api_side.get("signal_id", ""),
+        "prod_signal_id": prod_side.get("signal_id", ""),
         "cli_signal_id": cli_side.get("signal_id", ""),
-        "api_data_quality_flag": api_side.get("data_quality_flag", ""),
+        "prod_data_quality_flag": prod_side.get("data_quality_flag", ""),
         "cli_data_quality_flag": cli_side.get("data_quality_flag", ""),
-        "api_latest_error_log": api_side.get("latest_error_log", ""),
+        "prod_latest_error_log": prod_side.get("latest_error_log", ""),
         "cli_latest_error_log": cli_side.get("latest_error_log", ""),
     }
 
 
 def _build_markdown(summary: dict[str, Any]) -> str:
     generated_at = summary["generated_at_jst"]
-    api_side = summary["api_snapshot"]
+    prod_side = summary["prod_snapshot"]
     cli_side = summary["cli_local"]
     comparison = summary["comparison"]
+    prod_mode = prod_side["system_mode_label"] or "不明"
     lines = [
         "# 本番状態サマリ",
         "",
         f"更新日: {generated_at}",
         "",
-        "## API 本番 snapshot",
-        f"- signal_id: `{api_side['signal_id'] or 'なし'}`",
-        f"- heartbeat: `{api_side['heartbeat_text'] or 'なし'}`",
-        f"- last_result: `{api_side['timestamp_jst'] or 'なし'}` / `{api_side['data_quality_flag'] or 'なし'}` / `{api_side['ai_decision'] or 'なし'}`",
-        f"- subject: `{api_side['summary_subject'] or 'なし'}`",
-        f"- latest_error: `{api_side['latest_error_log'] or 'なし'}`",
+        f"## 本番 snapshot (`{prod_mode}`)",
+        f"- signal_id: `{prod_side['signal_id'] or 'なし'}`",
+        f"- heartbeat: `{prod_side['heartbeat_text'] or 'なし'}`",
+        f"- last_result: `{prod_side['timestamp_jst'] or 'なし'}` / `{prod_side['data_quality_flag'] or 'なし'}` / `{prod_side['ai_decision'] or 'なし'}`",
+        f"- subject: `{prod_side['summary_subject'] or 'なし'}`",
+        f"- latest_error: `{prod_side['latest_error_log'] or 'なし'}`",
         "",
         "## CLI 開発 local",
         f"- signal_id: `{cli_side['signal_id'] or 'なし'}`",
@@ -109,7 +110,7 @@ def _build_markdown(summary: dict[str, Any]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="本番 API snapshot とローカル CLI の軽量サマリを生成します。")
+    parser = argparse.ArgumentParser(description="本番 snapshot とローカル CLI の軽量サマリを生成します。")
     parser.add_argument("--snapshot-dir", default="tmp/snapshots/prod_ver021_snapshot", help="本番 snapshot ディレクトリ")
     parser.add_argument("--local-logs-dir", default="logs", help="ローカル logs ディレクトリ")
     parser.add_argument("--output-json", default="tmp/status/prod_status_summary.json", help="出力 JSON パス")
@@ -121,14 +122,14 @@ def main() -> int:
     output_json = Path(args.output_json)
     output_md = Path(args.output_md)
 
-    api_side = _build_side_summary("api_snapshot", snapshot_dir)
+    prod_side = _build_side_summary("prod_snapshot", snapshot_dir)
     cli_side = _build_side_summary("cli_local", local_logs_dir)
 
     summary = {
         "generated_at_jst": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M JST"),
-        "api_snapshot": api_side,
+        "prod_snapshot": prod_side,
         "cli_local": cli_side,
-        "comparison": _build_comparison(api_side, cli_side),
+        "comparison": _build_comparison(prod_side, cli_side),
     }
 
     output_json.parent.mkdir(parents=True, exist_ok=True)

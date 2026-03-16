@@ -122,7 +122,7 @@ def _resolve_codex_bin() -> str:
     if discovered:
         return discovered
 
-    for candidate in ("/usr/local/bin/codex", "/opt/homebrew/bin/codex"):
+    for candidate in ("/Users/marupro/bin/codex", "/usr/local/bin/codex", "/opt/homebrew/bin/codex"):
         if Path(candidate).exists():
             return candidate
     return "codex"
