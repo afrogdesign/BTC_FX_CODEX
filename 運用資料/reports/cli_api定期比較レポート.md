@@ -177,5 +177,5 @@
 ## 関連資料
 
 - 履歴メモ: `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/reports/log_review_ver02_vs_ver021_20260312.md`
-- 打ち合わせノート: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/📒打ち合わせノート.md`
+- 打ち合わせノート: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️ デジタルスキル/00_🗃️ PROJECT/📁 FX/トレード支援システム/📒打ち合わせノート.md`
 - 直近タスク: `/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/NEXT_TASK.md`

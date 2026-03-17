@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import sys
 from collections import Counter
@@ -22,9 +23,57 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEW_NOTE = Path(
-    "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_デジタルスキル/00_PROJECT/FX/トレード支援システム/📝通知レビュー.md"
+    "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️ デジタルスキル/00_🗃️ PROJECT/📁 FX/トレード支援システム/📝通知レビュー.md"
 )
 JST = ZoneInfo("Asia/Tokyo")
+
+FORM_VERDICT_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "useful_entry", "label": "役に立った（入る判断）"},
+    {"value": "useful_wait", "label": "役に立った（待つ判断）"},
+    {"value": "useful_skip", "label": "役に立った（見送り判断）"},
+    {"value": "too_early", "label": "早すぎた"},
+    {"value": "too_late", "label": "遅すぎた"},
+    {"value": "low_value", "label": "価値が低かった"},
+]
+
+FORM_WOULD_TRADE_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "yes", "label": "自分なら入る"},
+    {"value": "no", "label": "自分なら入らない"},
+    {"value": "conditional", "label": "条件つきなら入る"},
+]
+
+FORM_MOVE_DRIVER_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "technical", "label": "テクニカル要因"},
+    {"value": "news", "label": "ニュース要因"},
+    {"value": "macro", "label": "マクロ要因"},
+    {"value": "unknown", "label": "よく分からない"},
+]
+
+FORM_REVIEW_STATUS_OPTIONS = [
+    {"value": "pending", "label": "未完了"},
+    {"value": "done", "label": "入力完了"},
+]
+
+FORM_USEFULNESS_OPTIONS = [{"value": "", "label": "未選択"}] + [
+    {"value": str(score), "label": f"{score}"} for score in range(1, 6)
+]
+
+FORM_MEMO_PRESET_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "位置は悪いが、注意喚起としては良かった。", "label": "位置は悪いが、注意喚起としては良かった"},
+    {"value": "方向は合っていたが、通知が少し早い。", "label": "方向は合っていたが、通知が少し早い"},
+    {"value": "方向は合っていたが、通知が少し遅い。", "label": "方向は合っていたが、通知が少し遅い"},
+    {"value": "待機判断として有効で、無理なエントリー回避に役立った。", "label": "待機判断として有効だった"},
+    {"value": "見送り判断として有効で、無駄なエントリー回避に役立った。", "label": "見送り判断として有効だった"},
+    {"value": "本文は分かりやすく、実務判断に使いやすかった。", "label": "本文は分かりやすかった"},
+    {"value": "本文が読みにくく、実務判断に使いにくかった。", "label": "本文が読みにくかった"},
+    {"value": "下側の流動性回収後なら、より使いやすい通知だった。", "label": "流動性回収後なら使いやすかった"},
+    {"value": "件名がやや強く見え、印象と実態に少しズレがあった。", "label": "件名がやや強すぎた"},
+    {"value": "特になし", "label": "特になし"},
+]
 
 OUTCOME_HEADER = [
     "signal_id",
@@ -675,6 +724,310 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def _review_form_path(review_note_path: Path) -> Path:
+    return review_note_path.with_name("レビュー入力フォーム.html")
+
+
+def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> str:
+    page_title = "通知レビュー入力フォーム"
+    options_payload = {
+        "verdict": FORM_VERDICT_OPTIONS,
+        "usefulness": FORM_USEFULNESS_OPTIONS,
+        "wouldTrade": FORM_WOULD_TRADE_OPTIONS,
+        "moveDriver": FORM_MOVE_DRIVER_OPTIONS,
+        "reviewStatus": FORM_REVIEW_STATUS_OPTIONS,
+        "memoPreset": FORM_MEMO_PRESET_OPTIONS,
+    }
+    rows_payload = []
+    for row in rows:
+        row_copy = {column: str(row.get(column, "")) for column in REVIEW_NOTE_COLUMNS}
+        row_copy["memo_preset"] = row_copy["memo"] if row_copy["memo"] in {
+            item["value"] for item in FORM_MEMO_PRESET_OPTIONS if item["value"]
+        } else ""
+        rows_payload.append(row_copy)
+
+    note_name = review_note_path.name
+    header_text = _render_review_note([])
+    intro = (
+        "この画面は選択式でレビューを付けるための入力フォームです。"
+        " 入力後に「Markdownをコピー」または「Markdownを保存」で "
+        f"{note_name} を更新できます。"
+    )
+
+    return f"""<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(page_title)}</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --bg: #f6f7f8;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --accent: #1d4ed8;
+    }}
+    body {{
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+      line-height: 1.5;
+    }}
+    .wrap {{
+      max-width: 980px;
+      margin: 0 auto;
+    }}
+    .hero, .card {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }}
+    h1, h2, h3 {{
+      margin: 0 0 10px;
+    }}
+    .muted {{
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .toolbar {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    button {{
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }}
+    button.secondary {{
+      background: #475569;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }}
+    label {{
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }}
+    select {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      color: #111827;
+      font-size: 14px;
+    }}
+    .meta {{
+      font-size: 14px;
+      color: var(--muted);
+    }}
+    .subject {{
+      font-weight: 700;
+      margin: 6px 0 2px;
+    }}
+    .preview {{
+      width: 100%;
+      min-height: 280px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      background: #fff;
+      color: #111827;
+      box-sizing: border-box;
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>{html.escape(page_title)}</h1>
+      <p>{html.escape(intro)}</p>
+      <p class="muted">使い方: 各通知でプルダウンを選ぶ → 下の「Markdownをコピー」または「Markdownを保存」を押す → {html.escape(note_name)} を更新する。</p>
+      <div class="toolbar">
+        <button type="button" onclick="copyMarkdown()">Markdownをコピー</button>
+        <button type="button" class="secondary" onclick="downloadMarkdown()">Markdownを保存</button>
+        <button type="button" class="secondary" onclick="resetSelections()">入力を初期化</button>
+      </div>
+    </div>
+
+    <div id="cards"></div>
+
+    <div class="card">
+      <h2>生成される Markdown</h2>
+      <p class="muted">この内容がそのまま {html.escape(note_name)} に入る想定です。</p>
+      <textarea id="preview" class="preview"></textarea>
+    </div>
+  </div>
+
+  <script>
+    const reviewColumns = {json.dumps(REVIEW_NOTE_COLUMNS, ensure_ascii=False)};
+    const options = {json.dumps(options_payload, ensure_ascii=False)};
+    const rows = {json.dumps(rows_payload, ensure_ascii=False)};
+    const noteName = {json.dumps(note_name, ensure_ascii=False)};
+    const noteHeader = {json.dumps(header_text, ensure_ascii=False)};
+
+    function createSelect(optionList, value, onChange) {{
+      const select = document.createElement('select');
+      optionList.forEach((item) => {{
+        const opt = document.createElement('option');
+        opt.value = item.value;
+        opt.textContent = item.label;
+        if (item.value === value) opt.selected = true;
+        select.appendChild(opt);
+      }});
+      select.addEventListener('change', onChange);
+      return select;
+    }}
+
+    function renderCards() {{
+      const root = document.getElementById('cards');
+      root.innerHTML = '';
+      rows.forEach((row, index) => {{
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const title = document.createElement('h3');
+        title.textContent = '通知 ' + String(index + 1);
+        card.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `${{row.timestamp_jst}} / ${{row.signal_id}}`;
+        card.appendChild(meta);
+
+        const subject = document.createElement('div');
+        subject.className = 'subject';
+        subject.textContent = row.subject;
+        card.appendChild(subject);
+
+        const autoEval = document.createElement('p');
+        autoEval.className = 'muted';
+        autoEval.textContent = `自動評価: ${{row.auto_eval_summary}}`;
+        card.appendChild(autoEval);
+
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        const fields = [
+          ['user_verdict', '人の評価', options.verdict],
+          ['usefulness_1to5', '役立ち度', options.usefulness],
+          ['would_trade', '自分ならどうするか', options.wouldTrade],
+          ['actual_move_driver', '値動きの主因', options.moveDriver],
+          ['memo_preset', 'メモ候補', options.memoPreset],
+          ['review_status', 'レビュー状態', options.reviewStatus],
+        ];
+
+        fields.forEach(([key, label, optionList]) => {{
+          const box = document.createElement('div');
+          const labelEl = document.createElement('label');
+          labelEl.textContent = label;
+          box.appendChild(labelEl);
+          box.appendChild(createSelect(optionList, row[key] || '', (event) => {{
+            row[key] = event.target.value;
+            if (key === 'memo_preset') {{
+              row.memo = event.target.value;
+            }}
+            updatePreview();
+          }}));
+          grid.appendChild(box);
+        }});
+
+        card.appendChild(grid);
+        root.appendChild(card);
+      }});
+    }}
+
+    function escapeMd(value) {{
+      return String(value ?? '').replaceAll('|', '\\\\|').replaceAll('\\n', ' ');
+    }}
+
+    function buildMarkdown() {{
+      const lines = noteHeader.split('\\n');
+      const tableHeader = `| ${{reviewColumns.join(' | ')}} |`;
+      const separator = `| ${{reviewColumns.map(() => '---').join(' | ')}} |`;
+      const body = rows.map((row) => {{
+        const cells = reviewColumns.map((column) => escapeMd(row[column] || ''));
+        return `| ${{cells.join(' | ')}} |`;
+      }});
+      return [...lines, tableHeader, separator, ...body, ''].join('\\n');
+    }}
+
+    function updatePreview() {{
+      document.getElementById('preview').value = buildMarkdown();
+    }}
+
+    async function copyMarkdown() {{
+      const content = buildMarkdown();
+      await navigator.clipboard.writeText(content);
+      alert('Markdown をコピーしました。');
+      updatePreview();
+    }}
+
+    function downloadMarkdown() {{
+      const content = buildMarkdown();
+      const blob = new Blob([content], {{ type: 'text/markdown;charset=utf-8' }});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = noteName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      updatePreview();
+    }}
+
+    function resetSelections() {{
+      rows.forEach((row) => {{
+        row.user_verdict = '';
+        row.usefulness_1to5 = '';
+        row.would_trade = '';
+        row.actual_move_driver = '';
+        row.memo_preset = '';
+        row.memo = '';
+        row.review_status = 'pending';
+      }});
+      renderCards();
+      updatePreview();
+    }}
+
+    renderCards();
+    updatePreview();
+  </script>
+</body>
+</html>
+"""
+
+
+def write_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> Path:
+    form_path = _review_form_path(review_note_path)
+    _ensure_parent(form_path)
+    form_path.write_text(_render_review_form_html(rows, review_note_path), encoding="utf-8")
+    return form_path
+
+
 def export_review_queue(
     *,
     base_dir: Path,
@@ -735,6 +1088,7 @@ def export_review_queue(
     ordered_rows = sorted(merged_rows.values(), key=lambda row: row.get("timestamp_jst", ""), reverse=True)
     _ensure_parent(review_note_path)
     review_note_path.write_text(_render_review_note(ordered_rows), encoding="utf-8")
+    write_review_form_html(ordered_rows, review_note_path)
     return review_note_path
 
 
@@ -1390,6 +1744,7 @@ def daily_sync(
         "reviews_path": reviews_path,
         "shadow_path": shadow_path,
         "review_note_path": review_note,
+        "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
     }
 

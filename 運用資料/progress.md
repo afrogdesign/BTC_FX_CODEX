@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-17 04:51 JST
+更新日: 2026-03-18 01:03 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,27 @@
 
 ## 最新の実作業
 
+- 2026-03-18 01:03 JST
+  - Obsidian 側レビュー運用を簡単にするため、`📝通知レビュー.md` と同じフォルダに選択式の `レビュー入力フォーム.html` を追加した。各通知ごとにプルダウンで `user_verdict`、`would_trade`、`actual_move_driver`、`review_status` などを選べる。
+  - あわせて `レビュー書き方.md` を新規作成し、各列の意味、選択肢の意味、最低限埋めればよい項目、記入例を日本語で整理した。
+  - `tools/log_feedback.py` を更新し、今後は `daily-sync` や `export-review-queue` 実行時に `レビュー入力フォーム.html` も自動生成されるようにした。本番へ反映後、実際に Obsidian フォルダへフォーム生成できることを確認した。
+  - 関連パスの更新として、プロジェクト内と `Global_BOX` 内の Obsidian 保存先表記を新しいベースパスへそろえた。
+- 2026-03-18 00:34 JST
+  - `daily-sync` の実行条件を確認し、最初の通知 `2026-03-16 07:05 JST` から 24 時間以上経過していることを確認したうえで、本番 `Ver02.1 CLI` で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行した。
+  - 実行は成功し、`logs/csv/signal_outcomes.csv`、`logs/csv/user_reviews.csv`、`運用資料/reports/feedback_daily_sync_20260318.md` の生成を確認した。`shadow_log.csv` も更新され、日次集計レポートには総観測件数 3、近似PF 5.58、通知品質 A=3 が出力された。
+  - `signal_outcomes.csv` の先頭確認では、`2026-03-17 23:05 JST` の `signal_id=20260317_140500` も評価対象へ入っていることを確認した。`user_reviews.csv` はヘッダーのみで、手動レビュー入力待ち。
+  - 次の実務は `📝通知レビュー.md` で `review_status=done` を 1 件以上作り、`logic_validated` の評価開始へ進める段階になった。
+- 2026-03-18 00:01 JST
+  - 03/17 23:05 JST の重複メールを調査した。件名は同一だが本文が大きく異なる 2 通が届いており、受信メール実物の比較では AI 作文が別々に走った形に近いことを確認した。
+  - 本番 `trades.csv` と `last_result.json` を直接確認したところ、`signal_id=20260317_140500` の保存記録は 1 件で、保存済み `summary_body` は受信した 2 通のうち 1 通分と一致した。23:05 台の `smtp_error`、`ai_summary_error`、`pending_email.json` は見つからなかった。
+  - 本番 Mac の `launchd` と実プロセスを再確認し、再起動前に `main.py` 系の残りプロセスが見えていたため、重複の主因は二重起動の再発が濃厚と判断した。
+  - 本番 `com.afrog.btc-monitor-ver021` を `bootout` → 残存 `main.py` 整理 → `bootstrap` / `kickstart` で再起動し、最終的に `main.py` 実プロセス 1 本、`pid = 29988` を確認した。`logs/runtime/monitor.pid` も `29988` へ更新して整合を取った。
+  - 未解決事項: 23:05 台の 2 通目がどの経路でログ保存をすり抜けたかは未特定。再発防止として、送信前に `signal_id` 単位で重複送信を止めるガード追加を今後の候補として残す。
+- 2026-03-17 05:17 JST
+  - 通知メールの可読性改善を完了し、本文は待機回でも再検討帯 / 損切り / TP1 / TP2 を残す形へ変更した。内部ラベルは本文で日本語に言い換えるよう整理した。
+  - 件名は `[BTC監視]` を廃止し、日本語の判断文 → `【BTC:価格】` → `信頼度xx` → 日時 → `[Ver02.1] [CLI]` の順へ変更した。AI 失敗時は先頭に `⚠️ 機械判定のみ` を出す形へそろえた。
+  - `python3 -m unittest tests.test_summary_format tests.test_ai_cli_retry` を実行し、8件成功を確認した。
+  - コミット `e7105e9` `通知メールの件名と本文を読みやすく改善` を作成し、`zsh tools/deploy_ver021_prod.sh` で本番へ反映した。再起動後の本番 `com.afrog.btc-monitor-ver021` は `state = running`、`pid = 24498` を確認した。
 - 2026-03-17 04:51 JST
   - 03/17 04時台の重複メールを調査し、本番 `Ver02.1 CLI` で `main.py` が二重起動していたことを確認した。同じ `signal_id` が本番 `trades.csv` に重複記録されており、04:05台の同内容メール2通はこの二重起動が主因と判断した。
   - 本番側の余分な `main.py` プロセスを停止し、`com.afrog.btc-monitor-ver021` の1本だけが残る状態を確認した。
