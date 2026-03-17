@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-18 00:34 JST
+更新日: 2026-03-18 01:21 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -19,6 +19,7 @@
 - 通知メールの本文と件名は 2026-03-17 05:17 JST 時点で改善版を本番へ反映済み。本文は待機回でも再検討帯 / 損切り / TP1 / TP2 を残し、件名は `【BTC:価格】` と `信頼度xx` を含む日本語中心の形へ変更した。
 - 2026-03-17 05:05 JST の実メール確認で、AI自由作文は改行・用語・見出し品質のブレがまだ大きいと判断した。次回改善は「AI作文なし、コード側テンプレート主導」を優先課題にする。
 - 現行の `sweep` 判定は、直近高安への接近を使った近似ロジックであり、「本当に狩って戻したか」までは見ていない。`sweep_incomplete` の精度には改善余地がある前提で扱う。
+- `運用資料/参考資料/BTC判定システム改善案_0317/` の採用判断を整理し、全面実装ではなく段階採用とした。正式方針は `運用資料/計画/評価システム改善仕様書_Ver02x-Ver05接続.md` を正本にし、直近は最終判定を変えない内部観測強化だけを次段候補として扱う。
 - この実行環境では外部 SSH が制限されることがあり、失敗時は疎通可能環境で再試行する。
 
 ## 次のタスク
@@ -27,13 +28,15 @@
 3. 次回の通知改善では、AI自由作文を外し、コード側テンプレート主導で本文を固定化する方向の設計を優先して検討する。あわせて `signal_id` 単位の重複送信防止ガードも候補に含める。
 4. `sweep_incomplete` は現在近似判定なので、次回の判定改善では「高安へ近づいた」だけでなく「狩って戻したか」まで見られるかを検討する。
 5. 本命通知されないロング回や違和感のある本文・件名が出たときだけ、`運用資料/運用/調整/採点調整シート.md` と `運用資料/参考資料/自然文章化設計書.md` を入口に見直す。
-6. 最初の通知から24時間後に本番で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行し、`signal_outcomes.csv` / `shadow_log.csv` / `user_reviews.csv` の初回更新を確認する。
-7. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` と `Phase 1` の正式評価開始へつなげる。
+6. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` と `Phase 1` の正式評価開始へつなげる。
+7. 重複メール再発が止まっていることと、通知本文の template 主導化方針を切り分けたうえで、`評価システム改善仕様書_Ver02x-Ver05接続.md` に沿った `evaluation_trace` 最小版の実装順を固める。
+8. `evaluation_trace` に入れる項目は、`direction_score_shadow`、`entry_quality_score_shadow`、`trigger_quality_score_shadow`、`trigger_reason_codes`、`risk_component_scores`、`confidence_components`、`setup_decision_reason_codes`、`signal_tier_inputs_summary` を初期候補とし、既存の `bias` / `prelabel` / `confidence` / `signal_tier` は変えない前提で進める。
 
 ## ブロッカー
 - 直近の急ぎブロッカーはない。現在は本番観測フェーズ。
 - `daily-sync` は 2026-03-18 00:33 JST に初回実行済み。`signal_outcomes.csv` と `user_reviews.csv` は生成されたが、`user_reviews.csv` はまだヘッダーのみで、レビュー反映が未実施のため `logic_validated` の本番評価にはまだ進み切れていない。
 - `phase1_active` は実装済みだが、本番 `CLI` へ切り替え直後のため、連続サイクルの母数がまだ無い。
+- `BTC判定システム改善案_0317` のうち shadow 指標追加は有望だが、着手前に `Phase 0` のレビュー反映と通知安定確認を先に満たす必要がある。
 
 ## 完了条件
 - Phase 0: 通知発生から 24 時間後評価まで（`daily-sync` + レビュー反映）を本番で 1 周完了。
