@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-18 01:21 JST
+更新日: 2026-03-18 01:45 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,20 +17,24 @@
 
 ## 最新の実作業
 
+- 2026-03-18 01:45 JST
+  - 評価導線の命名を安定化するため、repo 側では `通知評価シート.md`、`評価シート入力フォーム.html`、`評価シート書き方.md` に表記を統一した。`tools/log_feedback.py` の既定出力先、フォーム名、テスト見出し、関連ドキュメント参照も追従更新した。
+  - Obsidian 側でも評価シート関連の実ファイル名を同じ表記へ変更し、案件フォルダのパスは `10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム` のようにスペースなしへ整理した。
+  - 変更後、repo 内の旧パス / 旧ファイル名参照が残っていないことを検索で確認し、`.venv312/bin/python -m unittest tests.test_log_feedback` で 5 件成功を確認した。
 - 2026-03-18 01:21 JST
   - `運用資料/参考資料/BTC判定システム改善案_0317/` の内容を、現行の `NEXT_TASK.md`、`開発ロードマップ.md`、`計画/マイルストーン定義.md`、`計画/フェーズ別計画_Phase0-1.md` と照合し、全面実装ではなく段階採用と判断した。
   - 正式な受け皿として `運用資料/計画/評価システム改善仕様書_Ver02x-Ver05接続.md` を新設し、採用目的、非目的、`evaluation_trace` の初期対象、実装順、テスト方針を固定した。
   - あわせて `開発ロードマップ.md` と `NEXT_TASK.md` を更新し、直近は `Phase 0` 一周、重複メール再発確認、通知本文の安定化を優先し、その次段で「最終判定を変えない内部観測強化」に進む方針を明文化した。
 - 2026-03-18 01:03 JST
-  - Obsidian 側レビュー運用を簡単にするため、`📝通知レビュー.md` と同じフォルダに選択式の `レビュー入力フォーム.html` を追加した。各通知ごとにプルダウンで `user_verdict`、`would_trade`、`actual_move_driver`、`review_status` などを選べる。
-  - あわせて `レビュー書き方.md` を新規作成し、各列の意味、選択肢の意味、最低限埋めればよい項目、記入例を日本語で整理した。
-  - `tools/log_feedback.py` を更新し、今後は `daily-sync` や `export-review-queue` 実行時に `レビュー入力フォーム.html` も自動生成されるようにした。本番へ反映後、実際に Obsidian フォルダへフォーム生成できることを確認した。
+  - Obsidian 側レビュー運用を簡単にするため、`通知評価シート.md` と同じフォルダに選択式の `評価シート入力フォーム.html` を追加した。各通知ごとにプルダウンで `user_verdict`、`would_trade`、`actual_move_driver`、`review_status` などを選べる。
+  - あわせて `評価シート書き方.md` を新規作成し、各列の意味、選択肢の意味、最低限埋めればよい項目、記入例を日本語で整理した。
+  - `tools/log_feedback.py` を更新し、今後は `daily-sync` や `export-review-queue` 実行時に `評価シート入力フォーム.html` も自動生成されるようにした。本番へ反映後、実際に Obsidian フォルダへフォーム生成できることを確認した。
   - 関連パスの更新として、プロジェクト内と `Global_BOX` 内の Obsidian 保存先表記を新しいベースパスへそろえた。
 - 2026-03-18 00:34 JST
   - `daily-sync` の実行条件を確認し、最初の通知 `2026-03-16 07:05 JST` から 24 時間以上経過していることを確認したうえで、本番 `Ver02.1 CLI` で `./.venv312_prod/bin/python tools/log_feedback.py daily-sync` を実行した。
   - 実行は成功し、`logs/csv/signal_outcomes.csv`、`logs/csv/user_reviews.csv`、`運用資料/reports/feedback_daily_sync_20260318.md` の生成を確認した。`shadow_log.csv` も更新され、日次集計レポートには総観測件数 3、近似PF 5.58、通知品質 A=3 が出力された。
   - `signal_outcomes.csv` の先頭確認では、`2026-03-17 23:05 JST` の `signal_id=20260317_140500` も評価対象へ入っていることを確認した。`user_reviews.csv` はヘッダーのみで、手動レビュー入力待ち。
-  - 次の実務は `📝通知レビュー.md` で `review_status=done` を 1 件以上作り、`logic_validated` の評価開始へ進める段階になった。
+  - 次の実務は `通知評価シート.md` で `review_status=done` を 1 件以上作り、`logic_validated` の評価開始へ進める段階になった。
 - 2026-03-18 00:01 JST
   - 03/17 23:05 JST の重複メールを調査した。件名は同一だが本文が大きく異なる 2 通が届いており、受信メール実物の比較では AI 作文が別々に走った形に近いことを確認した。
   - 本番 `trades.csv` と `last_result.json` を直接確認したところ、`signal_id=20260317_140500` の保存記録は 1 件で、保存済み `summary_body` は受信した 2 通のうち 1 通分と一致した。23:05 台の `smtp_error`、`ai_summary_error`、`pending_email.json` は見つからなかった。

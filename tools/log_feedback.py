@@ -23,7 +23,7 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEW_NOTE = Path(
-    "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️ デジタルスキル/00_🗃️ PROJECT/📁 FX/トレード支援システム/📝通知レビュー.md"
+    "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/通知評価シート.md"
 )
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -702,7 +702,7 @@ def _load_review_note_rows(path: Path) -> list[dict[str, str]]:
 
 def _render_review_note(rows: list[dict[str, str]]) -> str:
     lines = [
-        "# 通知レビュー",
+        "# 通知評価シート",
         "",
         "このノートは、通知済みシグナルを翌日まとめてレビューするための専用ノートです。",
         "",
@@ -725,11 +725,11 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
 
 
 def _review_form_path(review_note_path: Path) -> Path:
-    return review_note_path.with_name("レビュー入力フォーム.html")
+    return review_note_path.with_name("評価シート入力フォーム.html")
 
 
 def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> str:
-    page_title = "通知レビュー入力フォーム"
+    page_title = "通知評価シート入力フォーム"
     options_payload = {
         "verdict": FORM_VERDICT_OPTIONS,
         "usefulness": FORM_USEFULNESS_OPTIONS,

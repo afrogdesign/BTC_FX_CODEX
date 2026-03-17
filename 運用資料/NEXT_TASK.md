@@ -28,7 +28,7 @@
 3. 次回の通知改善では、AI自由作文を外し、コード側テンプレート主導で本文を固定化する方向の設計を優先して検討する。あわせて `signal_id` 単位の重複送信防止ガードも候補に含める。
 4. `sweep_incomplete` は現在近似判定なので、次回の判定改善では「高安へ近づいた」だけでなく「狩って戻したか」まで見られるかを検討する。
 5. 本命通知されないロング回や違和感のある本文・件名が出たときだけ、`運用資料/運用/調整/採点調整シート.md` と `運用資料/参考資料/自然文章化設計書.md` を入口に見直す。
-6. `📝通知レビュー.md` で `review_status=done` を1件以上作り、`logic_validated` と `Phase 1` の正式評価開始へつなげる。
+6. `通知評価シート.md` で `review_status=done` を1件以上作り、`logic_validated` と `Phase 1` の正式評価開始へつなげる。
 7. 重複メール再発が止まっていることと、通知本文の template 主導化方針を切り分けたうえで、`評価システム改善仕様書_Ver02x-Ver05接続.md` に沿った `evaluation_trace` 最小版の実装順を固める。
 8. `evaluation_trace` に入れる項目は、`direction_score_shadow`、`entry_quality_score_shadow`、`trigger_quality_score_shadow`、`trigger_reason_codes`、`risk_component_scores`、`confidence_components`、`setup_decision_reason_codes`、`signal_tier_inputs_summary` を初期候補とし、既存の `bias` / `prelabel` / `confidence` / `signal_tier` は変えない前提で進める。
 

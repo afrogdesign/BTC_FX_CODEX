@@ -70,7 +70,7 @@ class LogFeedbackTest(unittest.TestCase):
             review_note.write_text(
                 "\n".join(
                     [
-                        "# 通知レビュー",
+                        "# 通知評価シート",
                         "",
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
@@ -142,7 +142,7 @@ class LogFeedbackTest(unittest.TestCase):
             review_note.write_text(
                 "\n".join(
                     [
-                        "# 通知レビュー",
+                        "# 通知評価シート",
                         "",
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",

@@ -107,7 +107,7 @@
 
 ### 打ち合わせノート
 
-- Obsidian 側の打ち合わせ・検討メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️ デジタルスキル/00_🗃️ PROJECT/📁 FX/トレード支援システム/📒打ち合わせノート.md` を使う。
+- Obsidian 側の打ち合わせ・検討メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md` を使う。
 - 役割と更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
 - ユーザーが「打ち合わせシートをみて」と言った場合は、まずこの Obsidian ノートを確認して文脈として使う。
 - ユーザーが「打ち合わせシートにメモして」と言った場合は、この Obsidian ノートへ追記する。
@@ -115,7 +115,7 @@
 
 ### 秘書ノート
 
-- Obsidian 側の入口メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️ デジタルスキル/00_🗃️ PROJECT/📁 FX/トレード支援システム/👩‍⚖️秘書.md` を使う。
+- Obsidian 側の入口メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/👩‍⚖️秘書.md` を使う。
 - `👩‍⚖️秘書.md` は人向け入口であり、AI の日常入口には含めない。
 - 役割、構成、更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
 
