@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-18 01:45 JST
+更新日: 2026-03-19 02:33 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,10 @@
 
 ## 最新の実作業
 
+- 2026-03-19 02:33 JST
+  - ユーザー依頼により、本番 `Ver02.1` の AI 実行方式を `CLI` から `API` へ戻した。本番 MBP2020 の `.env` で `AI_ADVICE_PROVIDER=api`、`AI_SUMMARY_PROVIDER=api` へ変更し、`com.afrog.btc-monitor-ver021` を再起動した。
+  - 再起動後は `launch_agent_started:com.afrog.btc-monitor-ver021` を確認し、`launchctl print` で `state = running`、`pid = 39245` を確認した。`logs/runtime/monitor.pid` も更新済み。
+  - `.venv312_prod/bin/python` から `config.load_config()` を読み、実行時設定が `AI_ADVICE_PROVIDER=api`、`AI_SUMMARY_PROVIDER=api` になっていることを確認した。
 - 2026-03-18 01:45 JST
   - 評価導線の命名を安定化するため、repo 側では `通知評価シート.md`、`評価シート入力フォーム.html`、`評価シート書き方.md` に表記を統一した。`tools/log_feedback.py` の既定出力先、フォーム名、テスト見出し、関連ドキュメント参照も追従更新した。
   - Obsidian 側でも評価シート関連の実ファイル名を同じ表記へ変更し、案件フォルダのパスは `10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム` のようにスペースなしへ整理した。
