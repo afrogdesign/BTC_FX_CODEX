@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-19 02:33 JST
+更新日: 2026-03-19 16:20 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,10 @@
 
 ## 最新の実作業
 
+- 2026-03-19 16:20 JST
+  - ユーザー報告の「API と CLI の 2 通が同時に届く」現象を調査したところ、本番 `Ver02.1 API` に加えて、ローカル開発の `com.afrog.btc-monitor` が実際には `state = running` で残っていたことを確認した。
+  - ローカル `launchctl print gui/$(id -u)/com.afrog.btc-monitor` では、`/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/.venv312/bin/python -u main.py` が `pid = 790` で常駐していた。
+  - `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.afrog.btc-monitor.plist` を実行し、停止後は `Could not find service "com.afrog.btc-monitor"` を確認した。重複メールの主因は「本番 API + ローカル CLI の同時送信」が濃厚。
 - 2026-03-19 02:33 JST
   - ユーザー依頼により、本番 `Ver02.1` の AI 実行方式を `CLI` から `API` へ戻した。本番 MBP2020 の `.env` で `AI_ADVICE_PROVIDER=api`、`AI_SUMMARY_PROVIDER=api` へ変更し、`com.afrog.btc-monitor-ver021` を再起動した。
   - 再起動後は `launch_agent_started:com.afrog.btc-monitor-ver021` を確認し、`launchctl print` で `state = running`、`pid = 39245` を確認した。`logs/runtime/monitor.pid` も更新済み。
