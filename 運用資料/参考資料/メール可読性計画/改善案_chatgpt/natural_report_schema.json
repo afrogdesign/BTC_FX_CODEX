@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NaturalReportSemanticData",
+  "type": "object",
+  "required": [
+    "summary_version",
+    "market",
+    "timestamp_jst",
+    "headline",
+    "direction",
+    "current_state",
+    "market_conditions",
+    "zones",
+    "liquidity_context",
+    "setups",
+    "risks",
+    "final_message_guide"
+  ],
+  "properties": {
+    "summary_version": {
+      "type": "string"
+    },
+    "market": {
+      "type": "string"
+    },
+    "timestamp_jst": {
+      "type": "string"
+    },
+    "headline": {
+      "type": "object"
+    },
+    "direction": {
+      "type": "object"
+    },
+    "current_state": {
+      "type": "object"
+    },
+    "market_conditions": {
+      "type": "object"
+    },
+    "zones": {
+      "type": "object"
+    },
+    "liquidity_context": {
+      "type": "object"
+    },
+    "setups": {
+      "type": "object"
+    },
+    "risks": {
+      "type": "object"
+    },
+    "final_message_guide": {
+      "type": "object"
+    }
+  }
+}

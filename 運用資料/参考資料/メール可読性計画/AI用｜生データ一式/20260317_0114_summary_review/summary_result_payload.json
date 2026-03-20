@@ -1,0 +1,471 @@
+{
+  "signal_id": "20260316_161415",
+  "timestamp_utc": "2026-03-16T16:14:15.408472Z",
+  "timestamp_jst": "2026-03-17T01:14:15.408472+09:00",
+  "system_label": "Ver02.1",
+  "system_mode_label": "CLI",
+  "current_price": 73240.2,
+  "was_notified": false,
+  "notified_at_utc": "",
+  "server_time_gap_sec": 0.37,
+  "bias": "long",
+  "phase": "pullback",
+  "market_regime": "uptrend",
+  "transition_direction": "",
+  "signals_4h": "long",
+  "signals_1h": "long",
+  "signals_15m": "wait",
+  "long_score": 100,
+  "short_score": 29,
+  "long_display_score": 100,
+  "short_display_score": 29,
+  "long_raw_score": 50.0,
+  "short_raw_score": -7.0,
+  "score_gap": 71,
+  "score_factor_breakdown_long": {
+    "ema20_slope_up": 5.0,
+    "ema_alignment_bullish": 10.0,
+    "near_resistance_penalty": -10.0,
+    "near_support": 8.0,
+    "price_above_ema50_4h": 5.0,
+    "regime_uptrend": 15.0,
+    "rr_long_penalty": -10.0,
+    "rsi_long_window": 5.0,
+    "structure_1h_hh_hl": 10.0,
+    "structure_4h_hh_hl": 12.0
+  },
+  "score_factor_breakdown_short": {
+    "near_resistance": 8.0,
+    "near_support_penalty": -10.0,
+    "rr_short_penalty": -10.0,
+    "rsi_short_window": 5.0
+  },
+  "top_positive_factors": [
+    {
+      "code": "regime_uptrend",
+      "score": 15.0
+    },
+    {
+      "code": "structure_4h_hh_hl",
+      "score": 12.0
+    },
+    {
+      "code": "ema_alignment_bullish",
+      "score": 10.0
+    }
+  ],
+  "top_negative_factors": [
+    {
+      "code": "near_resistance_penalty",
+      "score": -10.0
+    },
+    {
+      "code": "rr_long_penalty",
+      "score": -10.0
+    }
+  ],
+  "confidence": 71,
+  "agreement_with_machine": "agree",
+  "prelabel": "NO_TRADE_CANDIDATE",
+  "prelabel_primary_reason": "lower_liquidity_distance",
+  "location_risk": 100.0,
+  "critical_zone": true,
+  "support_zones": [
+    {
+      "low": 73080.89,
+      "high": 73243.11,
+      "strength": 7,
+      "source": "15m",
+      "distance_from_price": 0.0
+    },
+    {
+      "low": 72774.89,
+      "high": 73032.81,
+      "strength": 21,
+      "source": "1h",
+      "distance_from_price": 207.39
+    },
+    {
+      "low": 72164.49,
+      "high": 72463.91,
+      "strength": 24,
+      "source": "1h",
+      "distance_from_price": 776.29
+    }
+  ],
+  "resistance_zones": [
+    {
+      "low": 73094.29,
+      "high": 73256.51,
+      "strength": 16,
+      "source": "1h",
+      "distance_from_price": 0.0
+    },
+    {
+      "low": 73722.49,
+      "high": 74116.11,
+      "strength": 29,
+      "source": "4h",
+      "distance_from_price": 482.29
+    },
+    {
+      "low": 74146.99,
+      "high": 74569.11,
+      "strength": 24,
+      "source": "1h",
+      "distance_from_price": 906.79
+    }
+  ],
+  "support_zones_by_strength": [
+    {
+      "low": 70183.69,
+      "high": 70592.11,
+      "strength": 66,
+      "source": "4h"
+    },
+    {
+      "low": 71145.39,
+      "high": 71477.51,
+      "strength": 35,
+      "source": "1h"
+    },
+    {
+      "low": 66395.49,
+      "high": 66591.11,
+      "strength": 33,
+      "source": "4h"
+    }
+  ],
+  "resistance_zones_by_strength": [
+    {
+      "low": 68088.39,
+      "high": 68267.01,
+      "strength": 51,
+      "source": "4h"
+    },
+    {
+      "low": 71663.49,
+      "high": 72046.61,
+      "strength": 44,
+      "source": "4h"
+    },
+    {
+      "low": 71137.49,
+      "high": 71362.11,
+      "strength": 37,
+      "source": "4h"
+    }
+  ],
+  "support_zones_all": [
+    {
+      "low": 62901.29,
+      "high": 63063.51,
+      "strength": 6,
+      "source": "4h"
+    },
+    {
+      "low": 64929.89,
+      "high": 65092.11,
+      "strength": 9,
+      "source": "4h"
+    },
+    {
+      "low": 65158.79,
+      "high": 65321.01,
+      "strength": 10,
+      "source": "4h"
+    },
+    {
+      "low": 65493.99,
+      "high": 65656.21,
+      "strength": 11,
+      "source": "4h"
+    },
+    {
+      "low": 66043.89,
+      "high": 66206.11,
+      "strength": 14,
+      "source": "4h"
+    },
+    {
+      "low": 66395.49,
+      "high": 66591.11,
+      "strength": 33,
+      "source": "4h"
+    },
+    {
+      "low": 68852.19,
+      "high": 69014.41,
+      "strength": 15,
+      "source": "4h"
+    },
+    {
+      "low": 69086.69,
+      "high": 69248.91,
+      "strength": 14,
+      "source": "4h"
+    },
+    {
+      "low": 70183.69,
+      "high": 70592.11,
+      "strength": 66,
+      "source": "4h"
+    },
+    {
+      "low": 70729.89,
+      "high": 70892.11,
+      "strength": 12,
+      "source": "1h"
+    },
+    {
+      "low": 71145.39,
+      "high": 71477.51,
+      "strength": 35,
+      "source": "1h"
+    },
+    {
+      "low": 71607.39,
+      "high": 71769.61,
+      "strength": 11,
+      "source": "15m"
+    },
+    {
+      "low": 72164.49,
+      "high": 72463.91,
+      "strength": 24,
+      "source": "1h"
+    },
+    {
+      "low": 72774.89,
+      "high": 73032.81,
+      "strength": 21,
+      "source": "1h"
+    },
+    {
+      "low": 73080.89,
+      "high": 73243.11,
+      "strength": 7,
+      "source": "15m"
+    },
+    {
+      "low": 73338.29,
+      "high": 73647.11,
+      "strength": 13,
+      "source": "15m"
+    }
+  ],
+  "resistance_zones_all": [
+    {
+      "low": 68088.39,
+      "high": 68267.01,
+      "strength": 51,
+      "source": "4h"
+    },
+    {
+      "low": 68597.69,
+      "high": 68759.91,
+      "strength": 15,
+      "source": "4h"
+    },
+    {
+      "low": 69917.49,
+      "high": 70171.21,
+      "strength": 26,
+      "source": "4h"
+    },
+    {
+      "low": 70740.99,
+      "high": 70983.81,
+      "strength": 23,
+      "source": "1h"
+    },
+    {
+      "low": 71137.49,
+      "high": 71362.11,
+      "strength": 37,
+      "source": "4h"
+    },
+    {
+      "low": 71663.49,
+      "high": 72046.61,
+      "strength": 44,
+      "source": "4h"
+    },
+    {
+      "low": 72739.49,
+      "high": 73061.21,
+      "strength": 14,
+      "source": "15m"
+    },
+    {
+      "low": 73094.29,
+      "high": 73256.51,
+      "strength": 16,
+      "source": "1h"
+    },
+    {
+      "low": 73722.49,
+      "high": 74116.11,
+      "strength": 29,
+      "source": "4h"
+    },
+    {
+      "low": 74146.99,
+      "high": 74569.11,
+      "strength": 24,
+      "source": "1h"
+    }
+  ],
+  "long_setup": {
+    "status": "invalid",
+    "status_reason_code": "rr_below_min",
+    "entry_zone": {
+      "low": 73080.89,
+      "high": 73243.11
+    },
+    "entry_mid": 73162.0,
+    "stop_loss": 72472.57,
+    "tp1": 73722.49,
+    "tp2": 74540.86,
+    "rr_estimate": 0.81,
+    "entry_to_stop_pct": 1.7,
+    "entry_to_target_pct": 1.38,
+    "invalid_reason": "RR不足 / 位置が悪い",
+    "invalid_reason_codes": [
+      "rr_below_min"
+    ]
+  },
+  "short_setup": {
+    "status": "invalid",
+    "status_reason_code": "rr_below_min",
+    "entry_zone": {
+      "low": 73094.29,
+      "high": 73256.51
+    },
+    "entry_mid": 73175.4,
+    "stop_loss": 73864.83,
+    "tp1": 73032.81,
+    "tp2": 71796.54,
+    "rr_estimate": 0.21,
+    "entry_to_stop_pct": 1.7,
+    "entry_to_target_pct": 0.35,
+    "invalid_reason": "RR不足",
+    "invalid_reason_codes": [
+      "rr_below_min"
+    ]
+  },
+  "primary_setup_side": "long",
+  "primary_setup_status": "invalid",
+  "primary_setup_reason": "rr_below_min",
+  "invalid_reason": "RR不足 / 位置が悪い",
+  "primary_entry_mid": 73162.0,
+  "primary_stop_loss": 72472.57,
+  "primary_tp1": 73722.49,
+  "primary_tp2": 74540.86,
+  "risk_percent_applied": 0.5,
+  "planned_risk_usd": 50.0,
+  "position_size_usd": 3000.0,
+  "loss_streak_at_entry": 0,
+  "phase1_active": false,
+  "phase1_activation_reason": "setup_not_ready",
+  "max_size_capped": true,
+  "size_reduction_reasons": [
+    "max_position_size_capped"
+  ],
+  "tp1_price": 73851.43,
+  "tp2_price": 74540.86,
+  "breakeven_after_tp1": true,
+  "trail_atr_multiplier": 1.5,
+  "timeout_hours": 12,
+  "exit_rule_version": "phase1_v0",
+  "funding_rate": 2e-05,
+  "funding_rate_raw": 2e-05,
+  "funding_rate_pct": 0.002,
+  "funding_rate_label": "ほぼ中立",
+  "funding_rate_display": "ほぼ中立 (+0.0020%)",
+  "atr_15m_value": 405.5474,
+  "atr_ratio": 1.26,
+  "volume_ratio": 0.83,
+  "liquidity_above": 0.75,
+  "liquidity_below": 0.24,
+  "nearest_liquidity_above_price": 73544.3,
+  "nearest_liquidity_below_price": 73144.0,
+  "liquidity_swept_recently": false,
+  "liquidation_above": 0.0,
+  "liquidation_below": 0.141,
+  "largest_liquidation_price": 73241.86,
+  "distance_to_largest_liquidation": 1.66,
+  "liquidation_density_above": 0.0,
+  "liquidation_density_below": 0.141,
+  "oi_value": 87139.647,
+  "oi_change_pct": 0.79,
+  "cvd_value": 348.935,
+  "cvd_slope": 13.82,
+  "cvd_price_divergence": "bullish",
+  "orderbook_bid_wall_price": 73236.3,
+  "orderbook_ask_wall_price": 73246.4,
+  "orderbook_bid_wall_size": 2.279,
+  "orderbook_ask_wall_size": 4.542,
+  "orderbook_bias": "ask_heavy",
+  "rr_estimate": 0.81,
+  "ai_advice": {
+    "decision": "WAIT_FOR_SWEEP",
+    "final_action": "WAIT_FOR_SWEEP",
+    "quality": "A",
+    "confidence": 0.82,
+    "notes": "上位足はロング優勢だが、現在値がサポート/レジスタンス重複のクリティカルゾーンで両建てセットアップのRRが無効。liquidity・sweep系フラグ優先で見送りが妥当。",
+    "primary_reason": "上位足は上昇バイアスですが、現位置はクリティカルゾーンかつRR不足でエントリー品質が低いです。未回収流動性が近く、先に掃除が入るまで待つ局面です。",
+    "market_interpretation": "地合いは強めだが、直近は流動性回収待ちの調整局面。方向より位置が悪い。",
+    "entry_position_quality": "bad",
+    "warnings": [
+      "RR不足",
+      "クリティカルゾーン",
+      "下側流動性が近い",
+      "sweep未完了",
+      "板はask優勢"
+    ],
+    "next_condition": "73144〜73030付近の下側流動性スイープ後に、価格がサポートを再奪回できるか確認して再評価。"
+  },
+  "ai_decision": "WAIT_FOR_SWEEP",
+  "ai_confidence": 0.82,
+  "warning_flags": [],
+  "no_trade_flags": [
+    "Critical_zone_warning",
+    "RR_insufficient",
+    "RR_insufficient_long",
+    "RR_insufficient_short",
+    "ask_wall_close",
+    "cvd_bullish_divergence",
+    "lower_liquidity_close",
+    "orderbook_ask_heavy",
+    "sweep_incomplete"
+  ],
+  "risk_flags": [
+    "ask_wall_close",
+    "cvd_bullish_divergence",
+    "lower_liquidity_close",
+    "orderbook_ask_heavy",
+    "sweep_incomplete"
+  ],
+  "signal_tier": "normal",
+  "signal_badge": "",
+  "signal_tier_reason_codes": [
+    "no_trade_flags_present",
+    "prelabel_not_entry_ok",
+    "primary_setup_not_ready",
+    "risk_flags_present",
+    "rr_below_strong_threshold"
+  ],
+  "market_structure_missing_fields": [],
+  "data_missing_fields": [],
+  "data_quality_flag": "ok",
+  "notify_reason_codes": [],
+  "suppress_reason_codes": [
+    "multiple_no_trade_flags",
+    "primary_setup_invalid"
+  ],
+  "reason_for_notification": [],
+  "notification_kind": "none",
+  "summary_subject": "[Ver02.1] [CLI] [BTC監視] 2026-03-17 01:14 NO_TRADE_CANDIDATE / long / 73,240.20 / Confidence 71",
+  "summary_body": "【結論と信頼度】方向は上向き優勢ですが、今は入ってよい位置ではありません。信頼度は中高め（機械71、AI 0.82）で、判断は「待ち」が妥当です。現在価格は73,240.2。\n\n【機械判定】ロング優位（100対29、差71）。地合いは上昇トレンド、4時間・1時間は買い寄り、15分は様子見。prelabel は NO_TRADE_CANDIDATE、critical_zone 該当でエントリー品質が低下。\n\n【指標と環境】Funding は ほぼ中立 (+0.0020%)。ATRはやや高め、出来高はやや細い。近い支持は73,080.89-73,243.11、次いで72,774.89-73,032.81。近い抵抗は73,094.29-73,256.51、次いで73,722.49-74,116.11。下側流動性73,144付近が近く、清算は直下に偏り。OIは増加、CVDは強めだが、板は売り板厚め。\n\n【ロング/ショート案】ロングは73,080.89-73,243.11想定で、利確目安はまず73,722.49、その次に74,540.86。ショートは73,094.29-73,256.51想定で、利確目安はまず73,032.81、その次に71,796.54。どちらも損益比不足で無効判定。\n\n【AI審査とリスク】AIは WAIT_FOR_SWEEP。下側流動性の掃除（スイープ）未完了、RR不足、クリティカルゾーン、ask優勢が主因。no_trade_flags と risk_flags が複数点灯中のため、反転確認まで見送りが安全寄りです。"
+}
