@@ -1,6 +1,6 @@
 # BTC Monitor
 
-更新日: 2026-03-13 16:32 JST
+更新日: 2026-03-23 18:35 JST
 
 BTC監視システムの実行プロジェクトです。
 
@@ -88,7 +88,8 @@ zsh tools/start_prod_status_sync.sh
 
 補足:
 
-- Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
+- 基本は `iMac 2019` 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
+- `MBA M4` は持ち運び前提なので、常設先にはしません。
 - 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
 - 定期処理は `launchd` に固定し、AI の自動巡回は使いません。
 - 日常確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見ます。

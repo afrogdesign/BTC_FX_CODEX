@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-23 18:00 JST
+更新日: 2026-03-23 18:40 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,15 @@
 
 ## 最新の実作業
 
+- 2026-03-23 18:35 JST
+  - `iMac 2019` を本番軽量同期とログ取得の常設先、`MBA M4` を持ち運び前提の作業機に再整理した。
+  - `README.md`、`NEXT_TASK.md`、`開発ロードマップ.md`、`スレッド引き継ぎファイル.md`、運用ルール類を iMac 常設前提へ更新した。
+  - `com.afrog.btc-monitor-status-sync` を iMac 側へ登録し、`tmp/status/prod_status_sync_last_success.txt` が `2026-03-23 17:58 JST` へ更新されることを確認した。
+  - `MBA M4` 側では `com.afrog.btc-monitor-status-sync` を停止し、`~/Library/LaunchAgents/com.afrog.btc-monitor-status-sync.plist.disabled_20260323_1840` へ退避して常設を外した。
+- 2026-03-23 18:20 JST
+  - 今日以降 `iMac 2019` と `MBA M4` の両方で BTC を触る前提に合わせ、入口と運用ルールを再調整した。
+  - `運用資料/README.md`、`NEXT_TASK.md`、`今後の運用ルール.md`、`記録ファイル運用ルール.md` に、切替前の commit / push、開始前の `git pull --rebase`、記録ファイルの単独更新原則を追記した。
+  - 役割分担は `iMac 2019` を主な実装・テスト、`MBA M4` を軽量同期確認・ログ確認・軽い文書修正の優先機として整理した。
 - 2026-03-23 18:00 JST
   - `運用資料/運用/` 配下を棚卸しし、入口・ルール・実務・調整の各文書を軽量版へ整理した。
   - `運用/README.md` は「まず何を見るか」だけの入口に縮め、`今後の運用ルール.md` と `記録ファイル運用ルール.md` は長い補足を削って短い正本へ作り直した。
