@@ -145,7 +145,7 @@ def build_setup(
         invalid_reasons.append("confidence不足")
         invalid_reason_codes.append("confidence_below_min")
 
-    if warning_count >= 2:
+    if warning_count >= 3:
         invalid_reasons.append("warning多発")
         invalid_reason_codes.append("warning_cluster")
 
@@ -158,6 +158,9 @@ def build_setup(
         if inside_zone and trigger_ready:
             status = "ready"
             status_reason_code = "inside_entry_zone_with_trigger"
+        elif zone_distance <= atr * 0.08 and trigger_ready:
+            status = "ready"
+            status_reason_code = "near_entry_zone_with_trigger"
         elif zone_distance <= atr * 0.3:
             status = "watch"
             status_reason_code = "near_entry_zone_waiting_trigger"

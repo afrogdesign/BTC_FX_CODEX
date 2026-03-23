@@ -19,6 +19,16 @@ def _price_distance_atr(price: float, level: float | None, atr: float) -> float 
     return abs(level - price) / atr
 
 
+def _directional_liquidation_multiplier(bias: str, price: float, cluster_price: float | None) -> float:
+    if cluster_price is None:
+        return 1.0
+    if bias == "long":
+        return 1.0 if cluster_price < price else 0.3
+    if bias == "short":
+        return 1.0 if cluster_price > price else 0.3
+    return 1.0
+
+
 def _push_risk(
     breakdown: dict[str, float],
     flags: list[str],
@@ -73,14 +83,16 @@ def evaluate_position_risk(
         if above_liq is not None and above_liq <= 0.8:
             flags.append("upper_liquidity_close")
         bid_wall_atr = _price_distance_atr(price, bid_wall_price, atr)
-        delta = _score_from_distance(bid_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(bid_wall_atr, 0.45, 0.9)
         risk_score += delta
         if delta:
             breakdown["bid_wall_distance"] = round(delta, 4)
-        if bid_wall_atr is not None and bid_wall_atr <= 0.6:
+        if bid_wall_atr is not None and bid_wall_atr <= 0.45:
             flags.append("bid_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6) * _directional_liquidation_multiplier(
+            bias, price, largest_liq_price
+        )
         risk_score += delta
         if delta:
             breakdown["liquidation_cluster_distance"] = round(delta, 4)
@@ -94,14 +106,16 @@ def evaluate_position_risk(
         if below_liq is not None and below_liq <= 0.8:
             flags.append("lower_liquidity_close")
         ask_wall_atr = _price_distance_atr(price, ask_wall_price, atr)
-        delta = _score_from_distance(ask_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(ask_wall_atr, 0.45, 0.9)
         risk_score += delta
         if delta:
             breakdown["ask_wall_distance"] = round(delta, 4)
-        if ask_wall_atr is not None and ask_wall_atr <= 0.6:
+        if ask_wall_atr is not None and ask_wall_atr <= 0.45:
             flags.append("ask_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6) * _directional_liquidation_multiplier(
+            bias, price, largest_liq_price
+        )
         risk_score += delta
         if delta:
             breakdown["liquidation_cluster_distance"] = round(delta, 4)
@@ -109,10 +123,10 @@ def evaluate_position_risk(
             flags.append("liquidation_cluster_below")
 
     if liquidity_info.get("liquidity_swept_recently"):
-        breakdown["sweep_recent_bonus"] = -8.0
-        risk_score -= 8.0
+        breakdown["sweep_recent_bonus"] = -12.0
+        risk_score -= 12.0
     else:
-        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 4.0, flag="sweep_incomplete")
+        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 6.0, flag="sweep_incomplete")
 
     if oi_state in {"short_cover_risk", "long_flush_exhaustion"}:
         risk_score += _push_risk(breakdown, flags, oi_state, 12.0, flag=oi_state)
@@ -127,13 +141,14 @@ def evaluate_position_risk(
         risk_score += _push_risk(breakdown, flags, "orderbook_bid_heavy", 10.0, flag="orderbook_bid_heavy")
 
     risk_score = max(0.0, min(risk_score, 100.0))
+    risky_threshold = 33.0 if medium_threshold >= 55.0 else round(medium_threshold * 0.55, 2)
     if bias not in {"long", "short"}:
         prelabel = "RISKY_ENTRY"
     elif risk_score >= high_threshold:
         prelabel = "NO_TRADE_CANDIDATE"
     elif risk_score >= medium_threshold:
         prelabel = "SWEEP_WAIT"
-    elif risk_score >= medium_threshold * 0.55:
+    elif risk_score >= risky_threshold:
         prelabel = "RISKY_ENTRY"
     else:
         prelabel = "ENTRY_OK"

@@ -16,7 +16,7 @@ from src.analysis.signal_tier import compute_signal_tier
 
 class FundingAndSignalTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.cfg = SimpleNamespace(CONFIDENCE_LONG_MIN=40, CONFIDENCE_SHORT_MIN=70)
+        self.cfg = SimpleNamespace(CONFIDENCE_LONG_MIN=45, CONFIDENCE_SHORT_MIN=55)
 
     def test_funding_rate_conversion_and_label(self) -> None:
         pct = funding_rate_raw_to_pct(0.000037)
@@ -37,9 +37,9 @@ class FundingAndSignalTest(unittest.TestCase):
             "prelabel": "ENTRY_OK",
             "primary_setup_status": "ready",
             "confidence": 80,
-            "rr_estimate": 2.1,
+            "rr_estimate": 1.85,
             "no_trade_flags": [],
-            "risk_flags": [],
+            "risk_flags": ["ask_wall_close"],
             "warning_flags": [],
             "agreement_with_machine": "agree",
         }
@@ -48,7 +48,7 @@ class FundingAndSignalTest(unittest.TestCase):
         self.assertIn("primary_ready", tier_info["reason_codes"])
 
         ai_confirmed = dict(base_result)
-        ai_confirmed["ai_advice"] = {"decision": "LONG", "confidence": 0.75, "quality": "A"}
+        ai_confirmed["ai_advice"] = {"decision": "LONG", "confidence": 0.65, "quality": "A"}
         ai_tier_info = compute_signal_tier(ai_confirmed, self.cfg)
         self.assertEqual(ai_tier_info["tier"], "strong_ai_confirmed")
         self.assertIn("ai_direction_match", ai_tier_info["reason_codes"])

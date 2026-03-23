@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
 
 from config import load_config
+from src.analysis.breakout import previous_breakout_levels
 from src.analysis.confidence import compute_confidence
 from src.analysis.funding import funding_rate_raw_to_pct
 from src.analysis.liquidation import analyze_liquidation_clusters
@@ -77,8 +79,33 @@ def _slice_until(df: pd.DataFrame, ts: int) -> pd.DataFrame:
     return df[df["timestamp"] <= ts].copy()
 
 
-def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict[str, Any]]:
-    cfg = cfg or load_config(Path(__file__).resolve().parents[1])
+def build_backtest_profile(cfg: Any, profile: str = "rebalanced") -> Any:
+    data = dict(cfg.as_dict()) if hasattr(cfg, "as_dict") else dict(vars(cfg))
+    if profile == "baseline":
+        data.update(
+            {
+                "LONG_SHORT_DIFF_THRESHOLD": 10,
+                "SHORT_LONG_DIFF_THRESHOLD": 12,
+                "CONFIDENCE_LONG_MIN": 40,
+                "CONFIDENCE_SHORT_MIN": 70,
+                "MIN_RR_RATIO": 1.15,
+                "MIN_ACCEPTABLE_ATR_RATIO": 0.3,
+                "MAX_ACCEPTABLE_ATR_RATIO": 2.0,
+                "FUNDING_SHORT_WARNING": -0.03,
+                "FUNDING_SHORT_PROHIBITED": -0.05,
+                "FUNDING_LONG_WARNING": 0.05,
+                "FUNDING_LONG_PROHIBITED": 0.08,
+                "POSITION_RISK_HIGH_THRESHOLD": 70.0,
+                "POSITION_RISK_MEDIUM_THRESHOLD": 45.0,
+                "BREAKOUT_LOOKBACK_BARS": 20,
+                "TRIGGER_VOLUME_RATIO": 1.2,
+            }
+        )
+    return SimpleNamespace(**data)
+
+
+def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str = "rebalanced") -> list[dict[str, Any]]:
+    cfg = build_backtest_profile(cfg or load_config(Path(__file__).resolve().parents[1]), profile)
     results: list[dict[str, Any]] = []
     df_15m = input_data.df_15m
     start_idx = max(cfg.EMA_SLOW + 20, 220)
@@ -119,11 +146,12 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
         )
         near_support = nearest_zone_distance(price, all_support_zones) <= atr * 0.5
         near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr * 0.5
-        recent_high = float(part_15m["high"].tail(20).max())
-        recent_low = float(part_15m["low"].tail(20).min())
-        breakout_up = price > recent_high
-        breakout_down = price < recent_low
-        in_range_center = abs(price - (recent_high + recent_low) / 2) <= atr * 0.5
+        recent_high, recent_low = previous_breakout_levels(part_15m, int(cfg.BREAKOUT_LOOKBACK_BARS))
+        breakout_up = recent_high is not None and price > recent_high
+        breakout_down = recent_low is not None and price < recent_low
+        range_high = recent_high if recent_high is not None else price
+        range_low = recent_low if recent_low is not None else price
+        in_range_center = abs(price - (range_high + range_low) / 2) <= atr * 0.5
 
         pre_long, _ = build_setup(
             side="long",
@@ -184,6 +212,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
                 "breakout_up": breakout_up,
                 "breakout_down": breakout_down,
                 "in_range_center": in_range_center,
+                "transition_direction": regime["transition_direction"],
+                "signals_15m": tf_15m["signal"],
             },
             cfg,
         )
@@ -219,7 +249,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             bias=bias,
             market_regime=regime["market_regime"],
             pullback_depth_atr=abs(price - float(tf_4h["ema_mid"].iloc[-1])) / max(float(tf_4h["atr"].iloc[-1]), 1e-9),
-            breakout_confirmed=(breakout_up or breakout_down) and float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2,
+            breakout_confirmed=(breakout_up or breakout_down)
+            and float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO,
             reversal_risk_flag=False,
             price=price,
             ema50=float(tf_4h["ema_mid"].iloc[-1]),
@@ -245,10 +276,12 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
                 "rr_estimate": rr_conf,
                 "opposite_gap_atr": opposite_gap / atr if atr > 0 and opposite_gap != float("inf") else 10.0,
                 "critical_zone": critical_zone,
-                "warning_flags": scores["warning_flags"] + position_risk["risk_flags"],
+                "score_warning_flags": scores["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
+                "position_risk_flags": position_risk["risk_flags"],
             },
             cfg,
         )
+        trigger_ready = (breakout_up or breakout_down) or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
 
         long_setup, _ = build_setup(
             side="long",
@@ -266,7 +299,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             funding_rate=funding_rate_pct,
             funding_warning=999.0,
             funding_prohibited=999.0,
-            trigger_ready=True,
+            trigger_ready=trigger_ready,
             warning_count=len(scores["warning_flags"]),
         )
         long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
@@ -286,7 +319,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
             funding_rate=funding_rate_pct,
             funding_warning=-999.0,
             funding_prohibited=-999.0,
-            trigger_ready=True,
+            trigger_ready=trigger_ready,
             warning_count=len(scores["warning_flags"]),
         )
         short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
@@ -305,10 +338,12 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None) -> list[dict
                 "long_display_score": scores["long_display_score"],
                 "short_display_score": scores["short_display_score"],
                 "score_gap": scores["score_gap"],
+                "warning_flags": scores["warning_flags"],
                 "long_setup": long_setup,
                 "short_setup": short_setup,
                 "primary_setup_side": primary_side,
                 "primary_setup_status": primary_status,
+                "profile": profile,
             }
         )
 

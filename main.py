@@ -13,6 +13,7 @@ from src.ai.advice import request_ai_advice
 from src.ai.summary import build_summary_body, build_summary_subject
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
+from src.analysis.breakout import previous_breakout_levels
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
@@ -296,11 +297,12 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     near_support = nearest_zone_distance(price, all_support_zones) <= atr_15m * 0.5
     near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr_15m * 0.5
-    recent_high = float(df_15m["high"].tail(20).max())
-    recent_low = float(df_15m["low"].tail(20).min())
-    breakout_up = price > recent_high
-    breakout_down = price < recent_low
-    range_mid = (recent_high + recent_low) / 2
+    recent_high, recent_low = previous_breakout_levels(df_15m, int(cfg.BREAKOUT_LOOKBACK_BARS))
+    breakout_up = recent_high is not None and price > recent_high
+    breakout_down = recent_low is not None and price < recent_low
+    range_high = recent_high if recent_high is not None else price
+    range_low = recent_low if recent_low is not None else price
+    range_mid = (range_high + range_low) / 2
     in_range_center = abs(price - range_mid) <= atr_15m * 0.5
 
     pre_long_setup, _ = build_setup(
@@ -362,6 +364,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "breakout_up": breakout_up,
             "breakout_down": breakout_down,
             "in_range_center": in_range_center,
+            "transition_direction": transition_direction,
+            "signals_15m": tf_15m["signal"],
         },
         cfg,
     )
@@ -413,7 +417,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         bias=bias,
         market_regime=market_regime,
         pullback_depth_atr=pullback_depth_atr,
-        breakout_confirmed=(breakout_up or breakout_down) and float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2,
+        breakout_confirmed=(breakout_up or breakout_down)
+        and float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO,
         reversal_risk_flag=reversal_risk_flag,
         price=price,
         ema50=float(tf_4h["ema_mid"].iloc[-1]),
@@ -448,13 +453,14 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "rr_estimate": rr_for_conf,
             "opposite_gap_atr": opposite_gap_atr,
             "critical_zone": critical_zone,
-            "warning_flags": score_info["warning_flags"] + position_risk["risk_flags"],
+            "score_warning_flags": score_info["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
+            "position_risk_flags": position_risk["risk_flags"],
         },
         cfg,
     )
 
-    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2
-    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2
+    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
+    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
     long_setup, long_flags = build_setup(
         side="long",
         price=price,

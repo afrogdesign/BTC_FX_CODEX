@@ -3,6 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 
+_MAJOR_WARNING_FLAGS = {
+    "Funding_prohibited_long",
+    "Funding_prohibited_short",
+    "ATR_extreme",
+    "Critical_zone_warning",
+}
+
+
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
@@ -78,7 +86,8 @@ def compute_confidence(inputs: dict[str, Any], cfg: Any) -> int:
     rr_estimate = float(inputs["rr_estimate"])
     opposite_gap_atr = float(inputs["opposite_gap_atr"])
     critical_zone = bool(inputs["critical_zone"])
-    warning_flags = inputs.get("warning_flags", [])
+    score_warning_flags = [str(flag) for flag in inputs.get("score_warning_flags", [])]
+    position_risk_flags = [str(flag) for flag in inputs.get("position_risk_flags", [])]
 
     if bias == "long":
         confidence = float(long_display)
@@ -102,6 +111,8 @@ def compute_confidence(inputs: dict[str, Any], cfg: Any) -> int:
 
     if phase == "trend_following":
         confidence += 5
+    elif phase == "breakout":
+        confidence += 6
     elif phase == "pullback":
         confidence += 3
     elif phase == "range":
@@ -113,8 +124,12 @@ def compute_confidence(inputs: dict[str, Any], cfg: Any) -> int:
         confidence += 10
     elif rr_estimate >= 1.5:
         confidence += 5
+    elif rr_estimate < 1.1:
+        confidence -= 18
+    elif rr_estimate < 1.2:
+        confidence -= 10
     elif rr_estimate < 1.3:
-        confidence -= 15
+        confidence -= 5
 
     if opposite_gap_atr >= 1.5:
         confidence += 5
@@ -123,7 +138,13 @@ def compute_confidence(inputs: dict[str, Any], cfg: Any) -> int:
 
     if critical_zone:
         confidence -= 10
-    confidence -= 5 * len(warning_flags)
+    penalty = 0
+    for flag in score_warning_flags:
+        if flag == "Critical_zone_warning" and critical_zone:
+            continue
+        penalty += 6 if flag in _MAJOR_WARNING_FLAGS else 3
+    penalty += 3 * len(position_risk_flags)
+    confidence -= min(penalty, 18)
 
     return int(round(_clamp(confidence, 0, 100)))
 

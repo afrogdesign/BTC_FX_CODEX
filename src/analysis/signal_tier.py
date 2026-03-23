@@ -3,6 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 
+_MAJOR_WARNING_FLAGS = {
+    "Funding_prohibited_long",
+    "Funding_prohibited_short",
+    "ATR_extreme",
+    "Critical_zone_warning",
+}
+
+
 _TIER_RANK = {
     "normal": 0,
     "strong_machine": 1,
@@ -46,15 +54,18 @@ def compute_signal_tier(result: dict[str, Any], cfg: Any) -> dict[str, Any]:
     prelabel = result.get("prelabel")
     primary_status = result.get("primary_setup_status")
     reason_codes: list[str] = []
+    combined_warning_flags = [str(flag) for flag in warning_flags] + [str(flag) for flag in risk_flags]
+    major_warning_count = sum(1 for flag in combined_warning_flags if flag in _MAJOR_WARNING_FLAGS)
+    minor_warning_count = len(combined_warning_flags) - major_warning_count
 
     strong_machine = (
         prelabel == "ENTRY_OK"
         and primary_status == "ready"
         and confidence >= confidence_floor + 10
-        and rr_estimate >= 2.0
+        and rr_estimate >= 1.8
         and not no_trade_flags
-        and not risk_flags
-        and not warning_flags
+        and major_warning_count == 0
+        and minor_warning_count <= 1
         and agreement == "agree"
     )
     if not strong_machine:
@@ -64,14 +75,14 @@ def compute_signal_tier(result: dict[str, Any], cfg: Any) -> dict[str, Any]:
             reason_codes.append("primary_setup_not_ready")
         if confidence < confidence_floor + 10:
             reason_codes.append("confidence_buffer_missing")
-        if rr_estimate < 2.0:
+        if rr_estimate < 1.8:
             reason_codes.append("rr_below_strong_threshold")
         if no_trade_flags:
             reason_codes.append("no_trade_flags_present")
-        if risk_flags:
-            reason_codes.append("risk_flags_present")
-        if warning_flags:
-            reason_codes.append("warning_flags_present")
+        if major_warning_count:
+            reason_codes.append("major_warning_present")
+        if minor_warning_count > 1:
+            reason_codes.append("minor_warning_limit_exceeded")
         if agreement != "agree":
             reason_codes.append("machine_disagreement")
         return {"tier": "normal", "reason_codes": sorted(set(reason_codes)) or ["strong_machine_not_met"]}
@@ -82,7 +93,7 @@ def compute_signal_tier(result: dict[str, Any], cfg: Any) -> dict[str, Any]:
             "primary_ready",
             "confidence_buffer_met",
             "rr_strong_enough",
-            "clean_flags",
+            "warning_budget_ok",
             "machine_agree",
         ]
     )
@@ -96,14 +107,14 @@ def compute_signal_tier(result: dict[str, Any], cfg: Any) -> dict[str, Any]:
     ai_confidence = _as_float(ai_advice.get("confidence"))
     ai_quality = str(ai_advice.get("quality", "")).upper()
 
-    if ai_decision == expected_decision and ai_confidence >= 0.70 and ai_quality in {"A", "B"}:
+    if ai_decision == expected_decision and ai_confidence >= 0.65 and ai_quality in {"A", "B"}:
         return {
             "tier": "strong_ai_confirmed",
             "reason_codes": sorted(set(reason_codes + ["ai_direction_match", "ai_confidence_confirmed", "ai_quality_confirmed"])),
         }
     if ai_decision != expected_decision:
         reason_codes.append("ai_direction_mismatch")
-    if ai_confidence < 0.70:
+    if ai_confidence < 0.65:
         reason_codes.append("ai_confidence_low")
     if ai_quality not in {"A", "B"}:
         reason_codes.append("ai_quality_low")
