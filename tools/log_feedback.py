@@ -965,13 +965,11 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 
     function buildMarkdown() {{
       const lines = noteHeader.split('\\n');
-      const tableHeader = `| ${{reviewColumns.join(' | ')}} |`;
-      const separator = `| ${{reviewColumns.map(() => '---').join(' | ')}} |`;
       const body = rows.map((row) => {{
         const cells = reviewColumns.map((column) => escapeMd(row[column] || ''));
         return `| ${{cells.join(' | ')}} |`;
       }});
-      return [...lines, tableHeader, separator, ...body, ''].join('\\n');
+      return [...lines, ...body, ''].join('\\n');
     }}
 
     function updatePreview() {{

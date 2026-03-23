@@ -18,6 +18,7 @@ from tools.log_feedback import (
     _build_improvement_candidates,
     _load_csv_rows,
     _load_review_note_rows,
+    _render_review_form_html,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
@@ -165,6 +166,44 @@ class LogFeedbackTest(unittest.TestCase):
             signal_ids = [row["signal_id"] for row in rows]
             self.assertIn("sig_done", signal_ids)
             self.assertIn("sig_new", signal_ids)
+
+    def test_review_form_markdown_does_not_duplicate_table_header(self) -> None:
+        row = {column: "" for column in REVIEW_NOTE_COLUMNS}
+        row.update(
+            {
+                "signal_id": "sig_form",
+                "timestamp_jst": "2026-03-11T09:05:00+09:00",
+                "subject": "subject",
+                "auto_eval_summary": "auto",
+                "review_status": "pending",
+            }
+        )
+
+        html = _render_review_form_html([row], Path("/tmp/review.md"))
+
+        self.assertEqual(html.count("| signal_id |"), 1)
+
+    def test_load_review_note_rows_ignores_single_header_and_keeps_real_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            review_note = Path(tmpdir) / "review.md"
+            review_note.write_text(
+                "\n".join(
+                    [
+                        "# 通知評価シート",
+                        "",
+                        "## レビュー一覧",
+                        f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
+                        f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
+                        "| sig_form | 2026-03-11T09:05:00+09:00 | subject | auto |  |  |  |  |  |  | pending |",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            rows = _load_review_note_rows(review_note)
+
+            self.assertEqual([row["signal_id"] for row in rows], ["sig_form"])
+            self.assertNotIn("signal_id", [row["signal_id"] for row in rows])
 
     def test_improvement_candidates_have_expected_limits(self) -> None:
         rows = []

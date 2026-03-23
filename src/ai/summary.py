@@ -70,10 +70,21 @@ def _label_prelabel(value: Any) -> str:
     mapping = {
         "ENTRY_OK": "入る条件がかなりそろっています",
         "RISKY_ENTRY": "方向は合っていても新規は慎重です",
-        "SWEEP_WAIT": "一度下を試してからの反発待ちです",
+        "SWEEP_WAIT": "流動性回収後の反応待ちです",
         "NO_TRADE_CANDIDATE": "今は見送りが妥当です",
     }
     return mapping.get(str(value).upper(), str(value))
+
+
+def _label_prelabel_for_bias(value: Any, bias: Any) -> str:
+    prelabel = str(value).upper()
+    bias_label = str(bias).lower()
+    if prelabel == "SWEEP_WAIT":
+        if bias_label == "long":
+            return "一度下を試してからの反発待ちです"
+        if bias_label == "short":
+            return "一度上を試してからの反落待ちです"
+    return _label_prelabel(value)
 
 
 def _label_ai_decision(value: Any) -> str:
@@ -273,7 +284,7 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     resistance_text = _format_zone_summary("近いレジスタンス帯", result.get("resistance_zones", []))
     signal_intro = _signal_intro(result)
     direction = "相場は上向きです。" if str(result.get("bias", "")).lower() == "long" else "相場は下向きです。"
-    action = f"ただし今は入る位置としては良くないため、{_label_prelabel(prelabel)}"
+    action = f"ただし今は入る位置としては良くないため、{_label_prelabel_for_bias(prelabel, result.get('bias'))}"
 
     body = (
         f"【結論】{direction}{action} 信頼度は {confidence} です。\n"

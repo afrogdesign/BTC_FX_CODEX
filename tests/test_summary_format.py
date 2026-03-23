@@ -219,6 +219,66 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("信頼度66", subject)
         self.assertTrue(subject.endswith("[Ver02.1] [CLI]"))
 
+    def test_short_sweep_wait_uses_upside_sweep_wording_in_fallback(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-17T04:35:00+09:00",
+            "prelabel": "SWEEP_WAIT",
+            "bias": "short",
+            "current_price": 73883.0,
+            "confidence": 64,
+            "phase": "pullback",
+            "long_display_score": 44,
+            "short_display_score": 88,
+            "score_gap": -44,
+            "market_regime": "downtrend",
+            "signals_4h": "short",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "funding_rate_display": "ほぼ中立 (+0.0038%)",
+            "atr_ratio": 1.1,
+            "volume_ratio": 0.81,
+            "support_zones": [{"low": 73349.0, "high": 73683.0, "distance_from_price": 200.0}],
+            "resistance_zones": [{"low": 73734.0, "high": 74104.0, "distance_from_price": 0.0}],
+            "long_setup": {
+                "status": "invalid",
+                "entry_zone": {"low": 73349.0, "high": 73683.0},
+                "stop_loss": 73051.0,
+                "tp1": 73734.0,
+                "tp2": 74892.0,
+            },
+            "short_setup": {
+                "status": "watch",
+                "entry_zone": {"low": 73734.0, "high": 74104.0},
+                "stop_loss": 74557.0,
+                "tp1": 73683.0,
+                "tp2": 72506.0,
+            },
+            "ai_advice": {
+                "decision": "WAIT_FOR_SWEEP",
+                "quality": "B",
+                "confidence": 0.75,
+                "notes": "下向きでも位置が悪く、いったん振ってからの反落待ちです。",
+            },
+            "no_trade_flags": ["Critical_zone_warning", "RR_insufficient_short", "sweep_incomplete"],
+            "risk_flags": ["upper_liquidity_close", "sweep_incomplete"],
+        }
+
+        body, provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(provider_used, "api")
+        self.assertIn("相場は下向きです。", body)
+        self.assertIn("一度上を試してからの反落待ちです", body)
+        self.assertNotIn("一度下を試してからの反発待ちです", body)
+
 
 if __name__ == "__main__":
     unittest.main()
