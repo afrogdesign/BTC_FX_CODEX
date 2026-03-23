@@ -65,7 +65,7 @@ class SummaryFormatTest(unittest.TestCase):
         }
 
         subject = build_summary_subject(payload)
-        body = build_summary_body(
+        body, provider_used = build_summary_body(
             provider="api",
             api_key="",
             model="",
@@ -75,6 +75,7 @@ class SummaryFormatTest(unittest.TestCase):
             base_dir=BASE_DIR,
             result_payload=payload,
         )
+        self.assertEqual(provider_used, "api")
         self.assertTrue(subject.startswith("🟡 好条件接近"))
         self.assertIn("買い候補がそろい始め", subject)
         self.assertIn("【BTC:70,356】", subject)
@@ -113,7 +114,7 @@ class SummaryFormatTest(unittest.TestCase):
         }
 
         subject = build_summary_subject(payload)
-        body = build_summary_body(
+        body, provider_used = build_summary_body(
             provider="api",
             api_key="",
             model="",
@@ -123,6 +124,7 @@ class SummaryFormatTest(unittest.TestCase):
             base_dir=BASE_DIR,
             result_payload=payload,
         )
+        self.assertEqual(provider_used, "api")
         self.assertTrue(subject.startswith("👀 [注意報]"))
         self.assertIn("ロング寄りに傾き始め", subject)
         self.assertIn("【BTC:70,765】", subject)
@@ -176,7 +178,7 @@ class SummaryFormatTest(unittest.TestCase):
             "risk_flags": ["lower_liquidity_close", "sweep_incomplete"],
         }
 
-        body = build_summary_body(
+        body, provider_used = build_summary_body(
             provider="api",
             api_key="",
             model="",
@@ -186,6 +188,7 @@ class SummaryFormatTest(unittest.TestCase):
             base_dir=BASE_DIR,
             result_payload=payload,
         )
+        self.assertEqual(provider_used, "api")
 
         self.assertIn("相場は上向きです。", body)
         self.assertIn("一度下を試してからの反発待ちです", body)

@@ -33,7 +33,7 @@ class AiCliRetryTest(TestCase):
             },
         ]
 
-        result = request_ai_advice(
+        result, provider_used = request_ai_advice(
             provider="cli",
             api_key="",
             model="gpt-5.3-codex",
@@ -47,6 +47,7 @@ class AiCliRetryTest(TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result["decision"], "WAIT_FOR_SWEEP")
+        self.assertEqual(provider_used, "cli")
         self.assertEqual(run_cli_json_mock.call_count, 2)
         error_log_mock.assert_not_called()
 
@@ -58,7 +59,7 @@ class AiCliRetryTest(TestCase):
             "CLI summary body",
         ]
 
-        result = build_summary_body(
+        result, provider_used = build_summary_body(
             provider="cli",
             api_key="",
             model="gpt-5.3-codex",
@@ -70,13 +71,14 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertEqual(result, "CLI summary body")
+        self.assertEqual(provider_used, "cli")
         self.assertEqual(run_cli_text_mock.call_count, 2)
         error_log_mock.assert_not_called()
 
     @patch("src.ai.advice.write_ai_error_log")
     @patch("src.ai.advice.run_cli_json", side_effect=RuntimeError("always fail"))
     def test_request_ai_advice_logs_after_cli_retries_exhausted(self, _run_cli_json_mock: object, error_log_mock: object) -> None:
-        result = request_ai_advice(
+        result, provider_used = request_ai_advice(
             provider="cli",
             api_key="",
             model="gpt-5.3-codex",
@@ -89,13 +91,14 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertIsNone(result)
+        self.assertEqual(provider_used, "cli")
         error_log_mock.assert_called_once()
-        self.assertIn("retry_count=2", error_log_mock.call_args.args[2])
+        self.assertIn("retry_count=2", error_log_mock.call_args[0][2])
 
     @patch("src.ai.summary.write_ai_error_log")
     @patch("src.ai.summary.run_cli_text", side_effect=RuntimeError("always fail"))
     def test_build_summary_body_falls_back_after_cli_retries_exhausted(self, _run_cli_text_mock: object, error_log_mock: object) -> None:
-        result = build_summary_body(
+        result, provider_used = build_summary_body(
             provider="cli",
             api_key="",
             model="gpt-5.3-codex",
@@ -133,8 +136,73 @@ class AiCliRetryTest(TestCase):
         self.assertIn("【結論】", result)
         self.assertIn("【セットアップ】", result)
         self.assertIn("・ロング:", result)
+        self.assertEqual(provider_used, "cli")
         error_log_mock.assert_called_once()
-        self.assertIn("retry_count=2", error_log_mock.call_args.args[2])
+        self.assertIn("retry_count=2", error_log_mock.call_args[0][2])
+
+    @patch("src.ai.advice._request_ai_advice_via_api")
+    @patch("src.ai.advice.write_ai_error_log")
+    @patch("src.ai.advice.run_cli_json", side_effect=RuntimeError("401 Unauthorized"))
+    def test_request_ai_advice_falls_back_to_api_when_cli_fails(
+        self,
+        _run_cli_json_mock: object,
+        error_log_mock: object,
+        api_request_mock: object,
+    ) -> None:
+        api_request_mock.return_value = {
+            "decision": "WAIT",
+            "final_action": "WAIT",
+            "quality": "B",
+            "confidence": 0.41,
+            "notes": "api fallback",
+            "primary_reason": "api fallback",
+            "market_interpretation": "range",
+            "entry_position_quality": "C",
+            "warnings": [],
+            "next_condition": "wait",
+        }
+
+        result, provider_used = request_ai_advice(
+            provider="cli",
+            api_key="sk-test",
+            model="gpt-5.3-codex",
+            cli_command="/tmp/codex_cli_wrapper.py",
+            timeout_sec=30,
+            retry_count=2,
+            base_dir=BASE_DIR,
+            machine_payload={"bias": "long"},
+            qualitative_payload={"note": "sample"},
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["decision"], "WAIT")
+        self.assertEqual(provider_used, "api")
+        error_log_mock.assert_called_once()
+
+    @patch("src.ai.summary._build_summary_body_via_api", return_value="API summary body")
+    @patch("src.ai.summary.write_ai_error_log")
+    @patch("src.ai.summary.run_cli_text", side_effect=RuntimeError("401 Unauthorized"))
+    def test_build_summary_body_falls_back_to_api_when_cli_fails(
+        self,
+        _run_cli_text_mock: object,
+        error_log_mock: object,
+        api_summary_mock: object,
+    ) -> None:
+        result, provider_used = build_summary_body(
+            provider="cli",
+            api_key="sk-test",
+            model="gpt-5.3-codex",
+            cli_command="/tmp/codex_cli_wrapper.py",
+            timeout_sec=30,
+            retry_count=2,
+            base_dir=BASE_DIR,
+            result_payload={"bias": "long", "prelabel": "ENTRY_OK", "confidence": 80},
+        )
+
+        self.assertEqual(result, "API summary body")
+        self.assertEqual(provider_used, "api")
+        api_summary_mock.assert_called_once()
+        error_log_mock.assert_called_once()
 
 
 if __name__ == "__main__":

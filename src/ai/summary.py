@@ -291,6 +291,62 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     return body
 
 
+def _build_summary_body_via_api(
+    *,
+    api_key: str,
+    model: str,
+    timeout_sec: int,
+    retry_count: int,
+    base_dir: Path,
+    result_payload: dict[str, Any],
+) -> str | None:
+    if not api_key:
+        return None
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key, timeout=timeout_sec)
+    prompt = _load_prompt(base_dir)
+    last_error: str | None = None
+    for attempt in range(1, max(1, retry_count) + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0.2,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": json.dumps(result_payload, ensure_ascii=False)},
+                ],
+            )
+            content = response.choices[0].message.content
+            if content and content.strip():
+                body = content.strip()
+                signal_intro = _signal_intro(result_payload)
+                if signal_intro:
+                    return f"{signal_intro}\n{body}"
+                return body
+            last_error = "response content was empty"
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+    if last_error:
+        write_ai_error_log(
+            base_dir,
+            "ai_summary_error",
+            "\n".join(
+                [
+                    "provider=api",
+                    f"model={model}",
+                    f"timeout_sec={timeout_sec}",
+                    f"retry_count={retry_count}",
+                    f"last_attempt={attempt}",
+                    f"details={last_error}",
+                ]
+            ),
+        )
+    return None
+
+
 def _attention_summary(result: dict[str, Any]) -> str:
     direction = _attention_direction(result)
     current_price = _format_price(result.get("current_price"))
@@ -352,14 +408,24 @@ def build_summary_body(
     retry_count: int,
     base_dir: Path,
     result_payload: dict[str, Any],
-) -> str:
+) -> tuple[str, str]:
     if str(result_payload.get("notification_kind", "main")).lower() == "attention":
-        return _attention_summary(result_payload)
+        return _attention_summary(result_payload), str(provider or "api").strip().lower()
     provider_name = str(provider or "api").strip().lower()
 
     if provider_name == "cli":
         if not str(cli_command).strip():
-            return _fallback_summary(result_payload)
+            api_body = _build_summary_body_via_api(
+                api_key=api_key,
+                model=model,
+                timeout_sec=timeout_sec,
+                retry_count=retry_count,
+                base_dir=base_dir,
+                result_payload=result_payload,
+            )
+            if api_body is not None:
+                return api_body, "api"
+            return _fallback_summary(result_payload), "cli"
         last_error: str | None = None
         for attempt in range(1, max(1, retry_count) + 1):
             try:
@@ -373,7 +439,7 @@ def build_summary_body(
                         "result_payload": result_payload,
                     },
                 )
-                return content or _fallback_summary(result_payload)
+                return content or _fallback_summary(result_payload), "cli"
             except Exception as exc:  # noqa: BLE001
                 last_error = f"{type(exc).__name__}: {exc}"
                 continue
@@ -392,50 +458,26 @@ def build_summary_body(
                     ]
                 ),
             )
-        return _fallback_summary(result_payload)
-
-    if not api_key:
-        return _fallback_summary(result_payload)
-
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key, timeout=timeout_sec)
-    prompt = _load_prompt(base_dir)
-    last_error: str | None = None
-    for attempt in range(1, max(1, retry_count) + 1):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                temperature=0.2,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": json.dumps(result_payload, ensure_ascii=False)},
-                ],
-            )
-            content = response.choices[0].message.content
-            if content and content.strip():
-                body = content.strip()
-                signal_intro = _signal_intro(result_payload)
-                if signal_intro:
-                    return f"{signal_intro}\n{body}"
-                return body
-            last_error = "response content was empty"
-        except Exception as exc:  # noqa: BLE001
-            last_error = f"{type(exc).__name__}: {exc}"
-            continue
-    if last_error:
-        write_ai_error_log(
-            base_dir,
-            "ai_summary_error",
-            "\n".join(
-                [
-                    f"provider={provider_name}",
-                    f"model={model}",
-                    f"timeout_sec={timeout_sec}",
-                    f"retry_count={retry_count}",
-                    f"last_attempt={attempt}",
-                    f"details={last_error}",
-                ]
-            ),
+        api_body = _build_summary_body_via_api(
+            api_key=api_key,
+            model=model,
+            timeout_sec=timeout_sec,
+            retry_count=retry_count,
+            base_dir=base_dir,
+            result_payload=result_payload,
         )
-    return _fallback_summary(result_payload)
+        if api_body is not None:
+            return api_body, "api"
+        return _fallback_summary(result_payload), "cli"
+
+    api_body = _build_summary_body_via_api(
+        api_key=api_key,
+        model=model,
+        timeout_sec=timeout_sec,
+        retry_count=retry_count,
+        base_dir=base_dir,
+        result_payload=result_payload,
+    )
+    if api_body is not None:
+        return api_body, "api"
+    return _fallback_summary(result_payload), provider_name

@@ -62,59 +62,17 @@ def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
         "next_condition": str(payload.get("next_condition", "")).strip()[:200],
     }
 
-def request_ai_advice(
+
+def _request_ai_advice_via_api(
     *,
-    provider: str,
     api_key: str,
     model: str,
-    cli_command: str,
     timeout_sec: int,
     retry_count: int,
     base_dir: Path,
     machine_payload: dict[str, Any],
     qualitative_payload: dict[str, Any],
 ) -> dict[str, Any] | None:
-    provider_name = str(provider or "api").strip().lower()
-
-    if provider_name == "cli":
-        if not str(cli_command).strip():
-            write_ai_error_log(base_dir, "ai_advice_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
-            return None
-        last_error: str | None = None
-        for attempt in range(1, max(1, retry_count) + 1):
-            try:
-                parsed = run_cli_json(
-                    command=cli_command,
-                    timeout_sec=timeout_sec,
-                    payload={
-                        "task": "ai_advice",
-                        "model": model,
-                        "system_prompt": _load_prompt(base_dir),
-                        "machine": machine_payload,
-                        "qualitative": qualitative_payload,
-                    },
-                )
-                return _normalize_advice(parsed)
-            except Exception as exc:  # noqa: BLE001
-                last_error = f"{type(exc).__name__}: {exc}"
-                continue
-        if last_error:
-            write_ai_error_log(
-                base_dir,
-                "ai_advice_error",
-                "\n".join(
-                    [
-                        "provider=cli",
-                        f"model={model}",
-                        f"timeout_sec={timeout_sec}",
-                        f"retry_count={retry_count}",
-                        f"last_attempt={attempt}",
-                        f"details={last_error}",
-                    ]
-                ),
-            )
-        return None
-
     if not api_key:
         return None
 
@@ -153,7 +111,7 @@ def request_ai_advice(
             "ai_advice_error",
             "\n".join(
                 [
-                    f"provider={provider_name}",
+                    "provider=api",
                     f"model={model}",
                     f"timeout_sec={timeout_sec}",
                     f"retry_count={retry_count}",
@@ -163,3 +121,86 @@ def request_ai_advice(
             ),
         )
     return None
+
+
+def request_ai_advice(
+    *,
+    provider: str,
+    api_key: str,
+    model: str,
+    cli_command: str,
+    timeout_sec: int,
+    retry_count: int,
+    base_dir: Path,
+    machine_payload: dict[str, Any],
+    qualitative_payload: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str]:
+    provider_name = str(provider or "api").strip().lower()
+
+    if provider_name == "cli":
+        if not str(cli_command).strip():
+            write_ai_error_log(base_dir, "ai_advice_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
+            api_result = _request_ai_advice_via_api(
+                api_key=api_key,
+                model=model,
+                timeout_sec=timeout_sec,
+                retry_count=retry_count,
+                base_dir=base_dir,
+                machine_payload=machine_payload,
+                qualitative_payload=qualitative_payload,
+            )
+            return api_result, "api" if api_result is not None else "cli"
+        last_error: str | None = None
+        for attempt in range(1, max(1, retry_count) + 1):
+            try:
+                parsed = run_cli_json(
+                    command=cli_command,
+                    timeout_sec=timeout_sec,
+                    payload={
+                        "task": "ai_advice",
+                        "model": model,
+                        "system_prompt": _load_prompt(base_dir),
+                        "machine": machine_payload,
+                        "qualitative": qualitative_payload,
+                    },
+                )
+                return _normalize_advice(parsed), "cli"
+            except Exception as exc:  # noqa: BLE001
+                last_error = f"{type(exc).__name__}: {exc}"
+                continue
+        if last_error:
+            write_ai_error_log(
+                base_dir,
+                "ai_advice_error",
+                "\n".join(
+                    [
+                        "provider=cli",
+                        f"model={model}",
+                        f"timeout_sec={timeout_sec}",
+                        f"retry_count={retry_count}",
+                        f"last_attempt={attempt}",
+                        f"details={last_error}",
+                    ]
+                ),
+            )
+        api_result = _request_ai_advice_via_api(
+            api_key=api_key,
+            model=model,
+            timeout_sec=timeout_sec,
+            retry_count=retry_count,
+            base_dir=base_dir,
+            machine_payload=machine_payload,
+            qualitative_payload=qualitative_payload,
+        )
+        return api_result, "api" if api_result is not None else "cli"
+
+    api_result = _request_ai_advice_via_api(
+        api_key=api_key,
+        model=model,
+        timeout_sec=timeout_sec,
+        retry_count=retry_count,
+        base_dir=base_dir,
+        machine_payload=machine_payload,
+        qualitative_payload=qualitative_payload,
+    )
+    return api_result, "api" if api_result is not None else provider_name

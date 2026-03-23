@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-03-19 16:20 JST
+更新日: 2026-03-23 18:00 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -17,6 +17,14 @@
 
 ## 最新の実作業
 
+- 2026-03-23 18:00 JST
+  - `運用資料/運用/` 配下を棚卸しし、入口・ルール・実務・調整の各文書を軽量版へ整理した。
+  - `運用/README.md` は「まず何を見るか」だけの入口に縮め、`今後の運用ルール.md` と `記録ファイル運用ルール.md` は長い補足を削って短い正本へ作り直した。
+  - `運用コマンドメモ.md`、`ログ検証と改善運用ガイド.md`、`採点調整シート.md` も、日常で本当に使う内容だけを残し、重い説明や将来拡張の記述を外した。
+- 2026-03-23 17:30 JST
+  - `Global_BOX` の現行正本が iCloud 側 `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX` に移っていることを確認し、BTC 側の入口文書と運用スクリプトの参照先を新構成へ更新した。
+  - 実機確認として、iMac 2019 は BTC 常駐なし・`com.afrog.chatgptmdwatcher.plist` のみ、MBA M4 は `com.afrog.btc-monitor-status-sync` 常設・`com.afrog.btc-monitor` は未ロード、MBP2020 は `com.afrog.btc-monitor-ver021` 稼働中・`receiptbox` と `tweet-sync` も登録済みであることを取り直した。
+  - `Global_BOX/20_環境情報/実行ファイル/本番環境.md`、`Global_BOX/20_環境情報/実行ファイル/開発環境/MBA M4.md`、`Global_BOX/20_環境情報/実行ファイル/開発環境/iMac 2019.md` を実機状態へ更新し、BTC 側は Mac 横断一覧の複製をやめて案件固有メモだけを残す形へ整理した。
 - 2026-03-19 16:20 JST
   - ユーザー報告の「API と CLI の 2 通が同時に届く」現象を調査したところ、本番 `Ver02.1 API` に加えて、ローカル開発の `com.afrog.btc-monitor` が実際には `state = running` で残っていたことを確認した。
   - ローカル `launchctl print gui/$(id -u)/com.afrog.btc-monitor` では、`/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/.venv312/bin/python -u main.py` が `pid = 790` で常駐していた。

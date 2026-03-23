@@ -116,6 +116,14 @@ def _build_system_mode_label(cfg: Any) -> str:
     return f"{advice}/{summary}"
 
 
+def _build_system_mode_label_from_values(advice_provider: Any, summary_provider: Any) -> str:
+    advice = _normalize_provider_label(advice_provider)
+    summary = _normalize_provider_label(summary_provider)
+    if advice == summary:
+        return advice
+    return f"{advice}/{summary}"
+
+
 def _normalize_missing_data_fields(raw_fields: list[str], *, ai_missing: bool, funding_missing: bool) -> list[str]:
     mapped: list[str] = []
     if funding_missing:
@@ -620,7 +628,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "notification_kind": "none",
     }
 
-    ai_advice = request_ai_advice(
+    ai_advice, advice_provider_used = request_ai_advice(
         provider=cfg.AI_ADVICE_PROVIDER,
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_ADVICE_MODEL,
@@ -632,6 +640,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         qualitative_payload=qualitative_context,
     )
     result["ai_advice"] = ai_advice
+    result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
     if isinstance(ai_advice, dict):
         result["ai_decision"] = ai_advice.get("decision", "")
         result["ai_confidence"] = ai_advice.get("confidence", "")
@@ -699,8 +708,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     result["reason_for_notification"] = notify_info["notify_reason_codes"]
     result["notification_kind"] = notify_info["notification_kind"]
 
-    result["summary_subject"] = build_summary_subject(result)
-    result["summary_body"] = build_summary_body(
+    summary_body, summary_provider_used = build_summary_body(
         provider=cfg.AI_SUMMARY_PROVIDER,
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_SUMMARY_MODEL,
@@ -710,6 +718,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         base_dir=base_dir,
         result_payload=result,
     )
+    result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
+    result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
+    result["summary_subject"] = build_summary_subject(result)
+    result["summary_body"] = summary_body
 
     if notify:
         notify_path = (
