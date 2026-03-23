@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor Ver02.3 評価システム解説</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffaf2;
+      --ink: #1d2a33;
+      --muted: #55636d;
+      --line: #d6c6af;
+      --accent: #0b6e4f;
+      --accent-soft: #d9efe6;
+      --warn: #9f4d1c;
+      --warn-soft: #fde8d9;
+      --danger: #9c2f2f;
+      --danger-soft: #f9dfdf;
+      --gold: #8a6a12;
+      --gold-soft: #f7efca;
+      --shadow: 0 14px 36px rgba(45, 38, 20, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, rgba(11, 110, 79, 0.1), transparent 24rem),
+        linear-gradient(180deg, #efe4d2 0%, var(--bg) 18%, #f8f4ec 100%);
+      line-height: 1.75;
+    }
+
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(245, 234, 215, 0.92));
+      border: 1px solid rgba(214, 198, 175, 0.9);
+      border-radius: 28px;
+      padding: 36px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -40px -40px auto;
+      width: 180px;
+      height: 180px;
+      background: radial-gradient(circle, rgba(11, 110, 79, 0.12), rgba(11, 110, 79, 0));
+      border-radius: 50%;
+    }
+
+    h1, h2, h3 {
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+      letter-spacing: 0.01em;
+      line-height: 1.2;
+      margin: 0 0 14px;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+    }
+
+    h2 {
+      font-size: clamp(1.45rem, 3vw, 2rem);
+      margin-top: 38px;
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      margin-top: 24px;
+    }
+
+    p, li {
+      font-size: 1rem;
+      color: var(--ink);
+    }
+
+    .lead {
+      font-size: 1.08rem;
+      color: var(--muted);
+      max-width: 60rem;
+      margin-bottom: 0;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(214, 198, 175, 0.9);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-top: 28px;
+    }
+
+    .card {
+      grid-column: span 12;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .card.two {
+      grid-column: span 6;
+    }
+
+    .card.three {
+      grid-column: span 4;
+    }
+
+    .tone-good {
+      background: linear-gradient(180deg, #fbfff9, #eef9f2);
+    }
+
+    .tone-warn {
+      background: linear-gradient(180deg, #fffaf5, #fff0e2);
+    }
+
+    .tone-danger {
+      background: linear-gradient(180deg, #fff8f8, #fdeaea);
+    }
+
+    .tone-gold {
+      background: linear-gradient(180deg, #fffdf4, #f8f1d5);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .flow-step {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      min-height: 132px;
+    }
+
+    .flow-step strong {
+      display: block;
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.96rem;
+      background: rgba(255, 255, 255, 0.72);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(214, 198, 175, 0.7);
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(29, 42, 51, 0.05);
+      font-weight: 700;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .badge.ready { background: var(--accent-soft); color: var(--accent); }
+    .badge.watch { background: var(--warn-soft); color: var(--warn); }
+    .badge.invalid { background: var(--danger-soft); color: var(--danger); }
+    .badge.gold { background: var(--gold-soft); color: var(--gold); }
+
+    .note {
+      border-left: 5px solid var(--accent);
+      padding: 12px 14px;
+      background: rgba(11, 110, 79, 0.07);
+      border-radius: 14px;
+      margin-top: 14px;
+      color: var(--ink);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      font-size: 0.92em;
+      background: rgba(29, 42, 51, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    ul {
+      margin: 10px 0 0 0;
+      padding-left: 1.2rem;
+    }
+
+    .footer {
+      margin-top: 36px;
+      padding: 20px 24px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid var(--line);
+    }
+
+    @media (max-width: 920px) {
+      .card.two, .card.three {
+        grid-column: span 12;
+      }
+
+      .flow {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .wrap {
+        padding: 20px 14px 60px;
+      }
+
+      .hero, .card {
+        padding: 20px;
+      }
+
+      .flow {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">BTC Monitor</li>
+        <li class="chip">Ver02.3 現行仕様</li>
+        <li class="chip">更新日: 2026-03-24 JST</li>
+        <li class="chip">人向け解説</li>
+      </ul>
+      <h1>Ver02.3 評価システムの見方</h1>
+      <p class="lead">
+        この資料は「いまの BTC 監視システムが、何を見て、どういう順番で、なぜ <code>ready</code> / <code>watch</code> / <code>invalid</code> を決めているか」を、人が判断できる形にしたものです。
+        目的は、メールを見たときに「今は攻め場なのか、待つべきなのか、そもそも触らない方がいいのか」を体感で比較しやすくすることです。
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>まず全体像</h2>
+        <p>Ver02.3 は、単純にシグナルを増やすための緩和ではありません。方向判定は少し早めに出しつつ、位置が悪いところでの飛び乗りは別レイヤで止める設計です。</p>
+        <div class="flow">
+          <div class="flow-step">
+            <strong>1. Score</strong>
+            4時間足、1時間足、15分足、出来高、RSI、breakout などからロング / ショートの点数差を出します。
+          </div>
+          <div class="flow-step">
+            <strong>2. Confidence</strong>
+            3つの時間足が揃っているか、RR が十分か、危険フラグが多すぎないかで信頼度を 0〜100 に整えます。
+          </div>
+          <div class="flow-step">
+            <strong>3. Setup</strong>
+            entry zone の中か、近いか、trigger があるかで <code>ready</code> / <code>watch</code> / <code>invalid</code> を決めます。
+          </div>
+          <div class="flow-step">
+            <strong>4. Position Risk</strong>
+            流動性、板、清算クラスター、未 sweep を見て「入る位置の悪さ」を別評価します。
+          </div>
+          <div class="flow-step">
+            <strong>5. Tier</strong>
+            条件がかなりそろうと <code>strong_machine</code>、AI も一致すると <code>strong_ai_confirmed</code> になります。
+          </div>
+          <div class="flow-step">
+            <strong>6. Notify</strong>
+            bias 変化、setup 昇格、prelabel 改善、tier 昇格など、意味のある変化が出た時だけ通知します。
+          </div>
+        </div>
+      </article>
+
+      <article class="card two tone-good">
+        <h2>Ver02.3 の狙い</h2>
+        <ul>
+          <li><strong>取りこぼしを減らす:</strong> breakout と trigger の扱いを見直し、方向が出ているのに <code>wait</code> へ寄りすぎる問題を緩めています。</li>
+          <li><strong>雑な飛び乗りは止める:</strong> 位置リスクを別評価し、方向は合っていても場所が悪ければ <code>watch</code> や <code>invalid</code> へ落とします。</li>
+          <li><strong>短期の勢いを少し拾う:</strong> 15分足シグナル、breakout、出来高拡大を前より効かせています。</li>
+        </ul>
+      </article>
+
+      <article class="card two tone-warn">
+        <h2>Ver02.3 でまだ守っていること</h2>
+        <ul>
+          <li><strong>ショートは依然として慎重:</strong> bias の差分閾値も confidence 最低値も、ショート側の方が厳しめです。</li>
+          <li><strong>Funding と ATR は止める材料:</strong> 禁止域や極端値は、いまもかなり強いブレーキです。</li>
+          <li><strong>ready でも場所は重要:</strong> <code>prelabel</code> が悪いと、機械的な ready が watch / invalid に落ちます。</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>1. Score の仕組み</h2>
+        <p>ここでは「相場の方向」を決めます。ロング点数とショート点数を別々に作り、差分が大きい方を bias にします。最後は 0〜100 表示へ正規化されます。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>要素</th>
+              <th>ロング / ショートへの効き方</th>
+              <th>意味</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>4時間足トレンド</td>
+              <td>上昇基調 +15 / 下降基調 +15</td>
+              <td>大きな流れを最優先で見る部分です。</td>
+            </tr>
+            <tr>
+              <td>EMA 配列</td>
+              <td>強気 +12 / 弱気 +12</td>
+              <td>移動平均の並びがきれいかを見ています。</td>
+            </tr>
+            <tr>
+              <td>EMA20 の傾き</td>
+              <td>上向き +6 / 下向き +6</td>
+              <td>トレンドの勢いが続いているかを見る補助です。</td>
+            </tr>
+            <tr>
+              <td>4時間足構造</td>
+              <td><code>hh_hl</code> +14 / <code>lh_ll</code> +14</td>
+              <td>高値安値の切り上げ / 切り下げを強く評価します。</td>
+            </tr>
+            <tr>
+              <td>1時間足構造</td>
+              <td><code>hh_hl</code> +12 / <code>lh_ll</code> +12</td>
+              <td>中位足も同じ方向なら追い風です。</td>
+            </tr>
+            <tr>
+              <td>support / resistance 近接</td>
+              <td>support 近い long +7 / resistance 近い short +7</td>
+              <td>押し目・戻り売りの足場として見ています。</td>
+            </tr>
+            <tr>
+              <td>breakout</td>
+              <td>上抜け +10 / 下抜け +10</td>
+              <td>現在足を除く過去20本を抜けた時だけ効きます。</td>
+            </tr>
+            <tr>
+              <td>出来高拡大</td>
+              <td>両方向 +4</td>
+              <td>15分足の出来高比が <code>1.15</code> 以上で勢い材料になります。</td>
+            </tr>
+            <tr>
+              <td>15分足シグナル</td>
+              <td>一致方向 +3</td>
+              <td>直近の短期方向を少しだけ上乗せします。</td>
+            </tr>
+            <tr>
+              <td>transition 補助</td>
+              <td>転換帯で上向き +6 / 下向き +6</td>
+              <td>トレンド転換のヒントを軽く拾います。</td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>Score のブレーキ</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>ブレーキ要素</th>
+              <th>減点</th>
+              <th>意味</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>逆側ゾーンが近い</td>
+              <td>-6</td>
+              <td>ロングなのに resistance 直下、ショートなのに support 直上の時です。</td>
+            </tr>
+            <tr>
+              <td>RR 不足</td>
+              <td>-8</td>
+              <td>利幅より損切り幅が重すぎる時です。</td>
+            </tr>
+            <tr>
+              <td>レンジ中央</td>
+              <td>-10</td>
+              <td>上にも下にも伸びにくい真ん中を嫌います。</td>
+            </tr>
+            <tr>
+              <td>ATR 極端</td>
+              <td>-6</td>
+              <td>値動きが荒すぎる / 眠すぎる時です。</td>
+            </tr>
+            <tr>
+              <td>Funding warning</td>
+              <td>-4</td>
+              <td>表示だけでなく、今は raw score にも直接効きます。</td>
+            </tr>
+            <tr>
+              <td>Funding prohibited</td>
+              <td>-12</td>
+              <td>かなり強い逆風として扱います。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">bias 判定の現在値は、ロング差分 <code>+8</code> 以上で <code>long</code>、ショート差分 <code>-9</code> 以下で <code>short</code>、それ以外は <code>wait</code> です。</div>
+      </article>
+
+      <article class="card two">
+        <h2>2. Confidence の仕組み</h2>
+        <p>Confidence は「その方向をどれだけ信じるか」です。Score をそのまま使うのではなく、時間足一致、phase、RR、危険フラグを加味して 0〜100 にします。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>現在の効き方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>3時間足一致</td>
+              <td>3つ一致 +15、2つ一致 +8</td>
+            </tr>
+            <tr>
+              <td>market regime</td>
+              <td>トレンド +10、range -5、volatile -10</td>
+            </tr>
+            <tr>
+              <td>phase</td>
+              <td>breakout +6、trend_following +5、pullback +3、range -5、reversal_risk -10</td>
+            </tr>
+            <tr>
+              <td>RR</td>
+              <td>2.0以上 +10、1.5以上 +5、1.3未満から減点、1.1未満は -18</td>
+            </tr>
+            <tr>
+              <td>反対側までの余白</td>
+              <td>1.5ATR以上 +5、0.8ATR未満 -5</td>
+            </tr>
+            <tr>
+              <td>Critical zone</td>
+              <td>-10</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="small">warning は major / minor に分かれます。major は Funding 禁止、ATR extreme、Critical zone。minor は Funding warning や位置リスク由来の注意です。合計減点は最大 -18 に抑えています。</p>
+      </article>
+
+      <article class="card two tone-warn">
+        <h2>現在の confidence 最低ライン</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>方向</th>
+              <th>最低ライン</th>
+              <th>見方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>long</td>
+              <td><code>45</code></td>
+              <td>やや早めに拾う設定です。</td>
+            </tr>
+            <tr>
+              <td>short</td>
+              <td><code>55</code></td>
+              <td>ロングより慎重です。下方向は一段強い裏付けを要求しています。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card">
+        <h2>3. Setup の仕組み</h2>
+        <p>Setup は「今すぐ候補か、まだ待つか」を決める層です。entry zone と trigger の両方を使います。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>状態</th>
+              <th>条件</th>
+              <th>人間の見方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge ready">ready</span></td>
+              <td>entry zone 内で trigger がある、または zone まで <code>0.08 ATR</code> 以内で trigger がある</td>
+              <td>「候補としてかなり近い」です。メール比較でまず見たいのはここです。</td>
+            </tr>
+            <tr>
+              <td><span class="badge watch">watch</span></td>
+              <td>entry zone まで <code>0.3 ATR</code> 以内だが trigger 不足、または場所は近いが詰め切れていない</td>
+              <td>方向は見えているが、まだ飛びつかない方がいい状態です。</td>
+            </tr>
+            <tr>
+              <td><span class="badge invalid">invalid</span></td>
+              <td>RR 不足、ATR 異常、Funding 禁止、confidence 不足、warning 3件以上など</td>
+              <td>いま触らない方がいい状態です。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          trigger は現在、上方向なら <code>breakout_up</code> または 15分足の出来高比 <code>1.15</code> 以上、下方向なら <code>breakout_down</code> または出来高比 <code>1.15</code> 以上です。
+        </div>
+      </article>
+
+      <article class="card two">
+        <h2>4. Position Risk の仕組み</h2>
+        <p>ここは Ver02.3 の重要部分です。方向が合っていても「入る場所が悪い」なら強く止めます。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>見るもの</th>
+              <th>今の考え方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>上側 / 下側の流動性</td>
+              <td>近すぎると、その方向に走る前に一度刈られやすいと見ます。</td>
+            </tr>
+            <tr>
+              <td>板の壁</td>
+              <td><code>0.45 ATR</code> 以内はかなり近い壁、<code>0.9 ATR</code> 以内は注意帯です。</td>
+            </tr>
+            <tr>
+              <td>清算クラスター</td>
+              <td>ロングなら下側クラスター、ショートなら上側クラスターを重く見ます。逆側は 0.3 倍で軽く扱います。</td>
+            </tr>
+            <tr>
+              <td>未 sweep</td>
+              <td>最近 sweep 済みなら -12 の追い風、未 sweep なら +6 の不安要素です。</td>
+            </tr>
+            <tr>
+              <td>OI / CVD / 板偏り</td>
+              <td>偏りが逆風ならさらに加点され、location risk が上がります。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card two tone-danger">
+        <h2>prelabel の意味</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>prelabel</th>
+              <th>location risk</th>
+              <th>人間の解釈</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ENTRY_OK</code></td>
+              <td>33 未満</td>
+              <td>場所はかなり良いです。ready なら前向きに比較対象です。</td>
+            </tr>
+            <tr>
+              <td><code>RISKY_ENTRY</code></td>
+              <td>33〜55 未満</td>
+              <td>方向は合っていても、今入るには少し雑です。ready でも watch に落ちることがあります。</td>
+            </tr>
+            <tr>
+              <td><code>SWEEP_WAIT</code></td>
+              <td>55〜80 未満</td>
+              <td>一度振ってからの反応待ちです。今の Ver02.3 が特に注意して止める帯です。</td>
+            </tr>
+            <tr>
+              <td><code>NO_TRADE_CANDIDATE</code></td>
+              <td>80 以上</td>
+              <td>方向よりも場所が悪すぎるので、今は触らない判断です。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card two tone-gold">
+        <h2>5. signal tier の見方</h2>
+        <p>signal tier は「ただの候補」なのか「かなり条件が揃った候補」なのかを見分けるための追加ラベルです。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>tier</th>
+              <th>条件</th>
+              <th>意味</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>normal</code></td>
+              <td>通常状態</td>
+              <td>まずは本文を見て判断する通常メールです。</td>
+            </tr>
+            <tr>
+              <td><span class="badge gold">strong_machine</span></td>
+              <td><code>ENTRY_OK</code>、<code>ready</code>、最低 confidence +10、RR 1.8以上、重大 no_trade なし、major warning 0、minor warning 1 以下、機械一致</td>
+              <td>かなり条件が揃った機械評価です。</td>
+            </tr>
+            <tr>
+              <td><span class="badge gold">strong_ai_confirmed</span></td>
+              <td><code>strong_machine</code> に加えて AI も同方向、confidence 0.65 以上、quality A/B</td>
+              <td>機械と AI の両方が強く揃った状態です。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card two">
+        <h2>6. どんな時にメールが来るか</h2>
+        <ul>
+          <li><strong>bias が wait → long / short に変わった時:</strong> 方向が初めて出た時です。</li>
+          <li><strong>setup が watch / invalid → ready に昇格した時:</strong> いちばん重要な変化です。</li>
+          <li><strong>prelabel が改善した時:</strong> <code>SWEEP_WAIT → RISKY_ENTRY → ENTRY_OK</code> のような改善です。</li>
+          <li><strong>confidence が大きく変わった時:</strong> 現在は <code>10</code> 以上のジャンプで拾います。</li>
+          <li><strong>signal tier が昇格した時:</strong> <code>normal → strong_machine → strong_ai_confirmed</code> です。</li>
+        </ul>
+        <div class="note">
+          いまの観測では、本番 MBP2020 側は <code>[Ver02.1] [CLI]</code>、iMac 側は <code>[Ver02.3-OBS] [CLI]</code> の件名で届きます。見比べる時は、まずこのラベルで版を区別します。
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>どこをどう観察するとよいか</h2>
+        <h3>まずはメール件名だけで比較する</h3>
+        <ul>
+          <li><strong>Ver02.3-OBS の方が bias を早く出すか:</strong> 同じ時間帯で <code>wait</code> から抜けるタイミングを見ます。</li>
+          <li><strong>ready が増えすぎていないか:</strong> 増えるのは狙いどおりですが、雑な ready が増えすぎると危険です。</li>
+          <li><strong>ショートの出方:</strong> Ver02.3 は short を完全に緩めたわけではないので、出方が極端に多くなっていないか見ます。</li>
+        </ul>
+
+        <h3>次に本文で見るポイント</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>観察項目</th>
+              <th>見る理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>primary_setup_status</code></td>
+              <td>最重要です。Ver02.3 が watch 止まりを ready に押し上げたかを見ます。</td>
+            </tr>
+            <tr>
+              <td><code>prelabel</code></td>
+              <td>方向が良くても位置が悪い時は止められているかを確認できます。</td>
+            </tr>
+            <tr>
+              <td><code>signal_tier</code></td>
+              <td>「ただの候補」か「かなり条件が揃った候補」かを一段で見分けられます。</td>
+            </tr>
+            <tr>
+              <td><code>warning_flags</code> / <code>risk_flags</code></td>
+              <td>なぜ watch / invalid になったかの理由を読み解けます。</td>
+            </tr>
+            <tr>
+              <td><code>phase</code></td>
+              <td>pullback 狙いか breakout 狙いかで、期待する値動きの性格が変わります。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>ログで見るならここ</h3>
+        <ul>
+          <li><code>logs/runtime/monitor.out</code>: 本体の通常実行ログ</li>
+          <li><code>logs/runtime/monitor.err</code>: 実行エラー、CLI / API 失敗、SMTP 失敗など</li>
+          <li><code>logs/heartbeat.txt</code>: サイクルが回っているか</li>
+          <li><code>logs/last_result.json</code>: 最後の判定結果を生で確認したい時</li>
+          <li><code>logs/last_notified.json</code>: 実際に通知された内容</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>今の Ver02.3 が向いている取引スタイル</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>取引スタイル</th>
+              <th>相性</th>
+              <th>理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>押し目買い / 戻り売り</td>
+              <td>高い</td>
+              <td>support / resistance と entry zone を強く見ているので、ゾーン回帰型と相性が良いです。</td>
+            </tr>
+            <tr>
+              <td>breakout 追随</td>
+              <td>中〜高</td>
+              <td>Ver02.3 で breakout と出来高 trigger を拾いやすくしました。ただし位置リスクが悪いと止まります。</td>
+            </tr>
+            <tr>
+              <td>流動性 sweep 後の反転取り</td>
+              <td>中</td>
+              <td><code>SWEEP_WAIT</code> を持っているため、振った後の反応を見る前提とは相性があります。</td>
+            </tr>
+            <tr>
+              <td>超短期スキャルプ</td>
+              <td>低め</td>
+              <td>4時間足と1時間足をかなり重視するので、数分単位の瞬発だけを取る用途には重いです。</td>
+            </tr>
+            <tr>
+              <td>逆張りレンジ中央エントリー</td>
+              <td>低い</td>
+              <td>レンジ中央ははっきり減点されるので、このスタイルには向いていません。</td>
+            </tr>
+            <tr>
+              <td>ナンピン前提の裁量</td>
+              <td>低い</td>
+              <td>今の設計は「悪い位置では最初から入らない」思想なので、平均化前提とは噛み合いません。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card two tone-good">
+        <h2>いま期待したい変化</h2>
+        <ul>
+          <li>Ver02.1 では <code>watch</code> 止まりだった場面が、Ver02.3 では <code>ready</code> へ上がること</li>
+          <li>bias が <code>wait</code> から抜けるタイミングが少し早くなること</li>
+          <li>それでも <code>prelabel=SWEEP_WAIT</code> や <code>NO_TRADE_CANDIDATE</code> が適切に残ること</li>
+        </ul>
+      </article>
+
+      <article class="card two tone-warn">
+        <h2>警戒したい変化</h2>
+        <ul>
+          <li>ready が急増しすぎて、本文の warning が多いのにメールだけ強気になること</li>
+          <li><code>RISKY_ENTRY</code> や <code>SWEEP_WAIT</code> が減りすぎて、位置リスクが効いていないこと</li>
+          <li>ショートが不自然に増えて、下方向の判定が雑になっていること</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="footer">
+      <h2>最後に</h2>
+      <p>
+        このシステムは「未来を当てる機械」ではなく、「いま攻める価値があるかを層ごとに絞り込むフィルター」です。
+        Ver02.3 の価値は、単にシグナル数が増えることではなく、<strong>取りこぼしを減らしつつ、悪い場所はまだ止めているか</strong> にあります。
+        しばらくは <code>Ver02.1</code> と <code>Ver02.3-OBS</code> のメールを並べて、体感差を見るのが最も分かりやすい観察方法です。
+      </p>
+    </section>
+  </div>
+</body>
+</html>

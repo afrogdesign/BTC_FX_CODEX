@@ -7,6 +7,12 @@ from typing import Any
 import pandas as pd
 
 
+def _row_value(row: Any, key: str) -> Any:
+    if isinstance(row, dict):
+        return row[key]
+    return getattr(row, key)
+
+
 def _entry_zone_touched(row: Any, setup: dict[str, Any]) -> bool:
     zone = setup.get("entry_zone", {})
     entry_low = float(zone.get("low", 0.0))
@@ -36,10 +42,14 @@ def _missed_opportunity(sample: pd.DataFrame, bias: str, entry: float, risk: flo
 
 def _evaluate_one(
     signal: dict[str, Any],
+    current_row: Any,
     future_df: pd.DataFrame,
     horizon_bars: int = 32,
     missed_lookahead_bars: int = 16,
 ) -> dict[str, Any]:
+    if signal.get("profile") == "baseline":
+        return _evaluate_one_baseline(signal, future_df, horizon_bars)
+
     bias = signal["bias"]
     if bias not in {"long", "short"}:
         return {"result": "skip", "realized_rr": 0.0, "filled": False}
@@ -57,25 +67,17 @@ def _evaluate_one(
         return {"result": "skip", "realized_rr": 0.0, "filled": False, "fill_status": "invalid_risk"}
 
     sample = future_df.head(horizon_bars)
-    filled = False
-    fill_timestamp: int | None = None
-    bars_to_fill: int | None = None
+    filled = True
+    fill_timestamp: int | None = int(_row_value(current_row, "timestamp"))
+    bars_to_fill: int | None = 0
     tp1_hit = False
     breakeven_stop = entry
     tp1_rr = _safe_rr(abs(tp1 - entry), risk)
     tp2_rr = _safe_rr(abs(tp2 - entry), risk)
 
-    for bar_index, row in enumerate(sample.itertuples(index=False), start=1):
+    for row in sample.itertuples(index=False):
         high = float(getattr(row, "high"))
         low = float(getattr(row, "low"))
-        timestamp = int(getattr(row, "timestamp"))
-
-        if not filled:
-            if not _entry_zone_touched(row, setup):
-                continue
-            filled = True
-            fill_timestamp = timestamp
-            bars_to_fill = bar_index
 
         if bias == "long":
             if not tp1_hit:
@@ -172,20 +174,6 @@ def _evaluate_one(
                         "tp1_hit": True,
                     }
 
-    if not filled:
-        missed = _missed_opportunity(sample, bias, entry, risk, missed_lookahead_bars)
-        return {
-            "result": "no_fill",
-            "realized_rr": 0.0,
-            "filled": False,
-            "fill_status": "not_filled",
-            "fill_timestamp": "",
-            "bars_to_fill": "",
-            "tp1_hit": False,
-            "missed_ready_trade": True,
-            "missed_opportunity": missed,
-        }
-
     return {
         "result": "unresolved",
         "realized_rr": 0.0,
@@ -197,6 +185,49 @@ def _evaluate_one(
     }
 
 
+def _evaluate_one_baseline(signal: dict[str, Any], future_df: pd.DataFrame, horizon_bars: int = 32) -> dict[str, Any]:
+    bias = signal["bias"]
+    if bias not in {"long", "short"}:
+        return {"result": "skip", "realized_rr": 0.0, "filled": False}
+
+    setup = signal["long_setup"] if bias == "long" else signal["short_setup"]
+    if setup["status"] == "invalid":
+        return {"result": "skip", "realized_rr": 0.0, "filled": False, "fill_status": "invalid"}
+
+    tp1 = float(setup["tp1"])
+    stop = float(setup["stop_loss"])
+    entry = float(setup["entry_mid"])
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return {"result": "skip", "realized_rr": 0.0, "filled": False, "fill_status": "invalid_risk"}
+
+    sample = future_df.head(horizon_bars)
+    for row in sample.itertuples(index=False):
+        high = float(getattr(row, "high"))
+        low = float(getattr(row, "low"))
+        if bias == "long":
+            if low <= stop:
+                return {"result": "loss", "realized_rr": -1.0, "filled": True, "fill_status": "filled"}
+            if high >= tp1:
+                return {
+                    "result": "win",
+                    "realized_rr": _safe_rr(tp1 - entry, risk),
+                    "filled": True,
+                    "fill_status": "filled",
+                }
+        else:
+            if high >= stop:
+                return {"result": "loss", "realized_rr": -1.0, "filled": True, "fill_status": "filled"}
+            if low <= tp1:
+                return {
+                    "result": "win",
+                    "realized_rr": _safe_rr(entry - tp1, risk),
+                    "filled": True,
+                    "fill_status": "filled",
+                }
+    return {"result": "unresolved", "realized_rr": 0.0, "filled": True, "fill_status": "filled"}
+
+
 def evaluate_signals(signals: list[dict[str, Any]], df_15m: pd.DataFrame) -> list[dict[str, Any]]:
     ts_to_index = {int(ts): idx for idx, ts in enumerate(df_15m["timestamp"].tolist())}
     evaluated = []
@@ -204,8 +235,9 @@ def evaluate_signals(signals: list[dict[str, Any]], df_15m: pd.DataFrame) -> lis
         idx = ts_to_index.get(int(signal["timestamp"]))
         if idx is None:
             continue
+        current_row = df_15m.iloc[idx]
         future = df_15m.iloc[idx + 1 :].copy()
-        result = _evaluate_one(signal, future)
+        result = _evaluate_one(signal, current_row, future)
         merged = dict(signal)
         merged.update(
             {

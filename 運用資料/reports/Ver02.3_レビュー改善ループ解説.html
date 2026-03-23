@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor レビュー改善ループ解説</title>
+  <style>
+    :root {
+      --bg: #f4f0ea;
+      --paper: #fffdf9;
+      --ink: #20313b;
+      --muted: #5b6d77;
+      --line: #d8c9b8;
+      --green: #14684a;
+      --green-soft: #e2f1ea;
+      --orange: #9d561d;
+      --orange-soft: #fee9d8;
+      --red: #9a3f3f;
+      --red-soft: #f9e0e0;
+      --blue: #21556d;
+      --blue-soft: #deeff7;
+      --shadow: 0 14px 34px rgba(43, 34, 20, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(33, 85, 109, 0.08), transparent 24rem),
+        linear-gradient(180deg, #ede4d7 0%, var(--bg) 24%, #f7f3ee 100%);
+      color: var(--ink);
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      line-height: 1.8;
+    }
+
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 34px 18px 72px;
+    }
+
+    .hero, .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      background: linear-gradient(135deg, rgba(255,253,249,0.98), rgba(243,234,223,0.96));
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.15;
+      margin: 0 0 12px;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 58rem;
+      font-size: 1.06rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .card {
+      grid-column: span 12;
+      padding: 24px;
+    }
+
+    .half { grid-column: span 6; }
+    .third { grid-column: span 4; }
+
+    h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.25;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    h2 { font-size: clamp(1.45rem, 2.8vw, 2rem); }
+    h3 { font-size: 1.16rem; margin-top: 20px; }
+
+    p, li, td, th { font-size: 1rem; }
+
+    .soft-blue { background: linear-gradient(180deg, #fbfeff, #eef8fc); }
+    .soft-green { background: linear-gradient(180deg, #fbfffc, #eef8f1); }
+    .soft-orange { background: linear-gradient(180deg, #fffdf9, #fff1e5); }
+    .soft-red { background: linear-gradient(180deg, #fffafa, #fdeeee); }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.85);
+      padding: 14px;
+      min-height: 150px;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.78);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(216, 201, 184, 0.72);
+    }
+
+    th {
+      background: rgba(32, 49, 59, 0.05);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .pill.good { background: var(--green-soft); color: var(--green); }
+    .pill.warn { background: var(--orange-soft); color: var(--orange); }
+    .pill.bad { background: var(--red-soft); color: var(--red); }
+    .pill.info { background: var(--blue-soft); color: var(--blue); }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 5px solid var(--blue);
+      background: rgba(33, 85, 109, 0.07);
+      border-radius: 12px;
+    }
+
+    .big-quote {
+      margin: 0;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: rgba(20, 104, 74, 0.08);
+      border: 1px solid rgba(20, 104, 74, 0.15);
+      font-size: 1.08rem;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      background: rgba(32, 49, 59, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 1.2rem;
+    }
+
+    @media (max-width: 920px) {
+      .half, .third { grid-column: span 12; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 18px 14px 56px; }
+      .hero, .card { padding: 18px; }
+      .steps { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">BTC Monitor</li>
+        <li class="chip">レビュー改善ループ</li>
+        <li class="chip">更新日: 2026-03-24 JST</li>
+        <li class="chip">人向け説明</li>
+      </ul>
+      <h1>このシステムは、どうやって育っていくのか</h1>
+      <p>
+        BTC Monitor には、ただメールを出すだけではなく、「その判断が本当に役に立ったのか」を後から見直す仕組みがあります。
+        この資料は、そのレビューの流れ、なぜ精度向上につながるのか、最終的に何を目指しているのかを、できるだけ分かりやすくまとめたものです。
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>結論を先に言うと</h2>
+        <p class="big-quote">
+          このシステムは「通知を出して終わり」ではなく、<strong>出した通知をあとで採点し、その採点をもとにロジックを直していく</strong> 仕組みです。
+          ただし、いまは完全自動の自己調整ではなく、<strong>機械が記録し、人が見て、必要な調整だけを入れる半自動方式</strong> です。
+        </p>
+      </article>
+
+      <article class="card half soft-blue">
+        <h2>まず、この仕組みは何のためにあるのか</h2>
+        <ul>
+          <li>通知が多いか少ないかではなく、「役に立ったか」を見るためです。</li>
+          <li>あとから振り返った時に、「あの通知は早すぎた」「この見送りは正しかった」を残すためです。</li>
+          <li>思いつきではなく、実際の記録をもとに閾値や判定を直すためです。</li>
+        </ul>
+      </article>
+
+      <article class="card half soft-green">
+        <h2>この仕組みが防ぎたいこと</h2>
+        <ul>
+          <li>印象だけで「最近通知が少ないから緩めよう」としてしまうこと</li>
+          <li>勝った通知だけ覚えて、負けた通知を忘れてしまうこと</li>
+          <li>人によって「良かった / 悪かった」の基準が毎回ブレること</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>レビュー改善ループの全体像</h2>
+        <div class="steps">
+          <div class="step">
+            <strong>1. 判定して通知する</strong>
+            毎サイクルで BTC の状態を見て、方向、信頼度、setup、位置リスクを決めます。必要ならメールを送ります。
+          </div>
+          <div class="step">
+            <strong>2. その時の理由を保存する</strong>
+            ただ通知するだけでなく、なぜ通知したか、なぜ通知しなかったか、何が危険だったかも保存します。
+          </div>
+          <div class="step">
+            <strong>3. 24時間後に答え合わせする</strong>
+            そのあと実際にどう動いたかを見て、「方向は合っていたか」「入る価値はあったか」を自動で後追い評価します。
+          </div>
+          <div class="step">
+            <strong>4. 人がレビューを足す</strong>
+            役に立ったか、早すぎたか、遅すぎたか、自分なら入ったかなどを人が記録できます。
+          </div>
+          <div class="step">
+            <strong>5. ロジックを調整する</strong>
+            たまった記録を見て、「どこが過剰に厳しいか」「どこが甘いか」を判断し、必要な部分だけ直します。
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>何が自動で記録されているのか</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>記録されるもの</th>
+              <th>意味</th>
+              <th>何に使うか</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>last_result.json</code></td>
+              <td>最後の判定結果の生データ</td>
+              <td>その回で何を判断したかを見る入口です。</td>
+            </tr>
+            <tr>
+              <td><code>shadow_log.csv</code></td>
+              <td>判定時のスコア、confidence、prelabel、signal_tier、通知理由などの一覧</td>
+              <td>傾向を見るための主力ログです。</td>
+            </tr>
+            <tr>
+              <td><code>signal_outcomes.csv</code></td>
+              <td>24時間後の自動事後評価</td>
+              <td>方向や timing が実際にどうだったかを見ます。</td>
+            </tr>
+            <tr>
+              <td><code>user_reviews.csv</code></td>
+              <td>人の感想や採点</td>
+              <td>機械だけでは分からない「実務で役立ったか」を残します。</td>
+            </tr>
+            <tr>
+              <td><code>notify_reason_codes</code> / <code>suppress_reason_codes</code></td>
+              <td>通知した理由 / 通知しなかった理由</td>
+              <td>「なぜメールが来たのか」「なぜ来なかったのか」を説明できます。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card half soft-blue">
+        <h2>24時間後の自動評価とは何か</h2>
+        <p>これは、通知のあとに市場がどう動いたかを後追いで採点する仕組みです。</p>
+        <ul>
+          <li>方向は合っていたか</li>
+          <li>entry 候補として意味があったか</li>
+          <li>待機判断は正しかったか</li>
+          <li>見送り判断は正しかったか</li>
+        </ul>
+        <p>つまり、「その場ではもっともらしく見えた通知」が、あとで見ても本当に意味があったかを確認しています。</p>
+      </article>
+
+      <article class="card half soft-orange">
+        <h2>人のレビューとは何か</h2>
+        <p>自動評価だけでは分からないことを、人が補います。たとえば次のような視点です。</p>
+        <ul>
+          <li>方向は合っていたが、通知が早すぎた</li>
+          <li>実際には見送りで助かった</li>
+          <li>本文は分かりやすかったが、件名が強すぎた</li>
+          <li>自分なら条件付きで入った</li>
+        </ul>
+        <p>この層があることで、「値動きは正しいが、実務判断では使いにくい」ケースも拾えます。</p>
+      </article>
+
+      <article class="card">
+        <h2>なぜこの仕組みで、取引の精度が上がるのか</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>仕組み</th>
+              <th>精度向上につながる理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>通知時の理由を保存する</td>
+              <td>あとで「良かった通知」と「悪かった通知」を見比べた時に、共通する条件を見つけやすくなります。</td>
+            </tr>
+            <tr>
+              <td>24時間後に結果を採点する</td>
+              <td>その場の印象ではなく、実際の相場結果で良し悪しを見られます。</td>
+            </tr>
+            <tr>
+              <td>人のレビューを残す</td>
+              <td>機械では測れない「使いやすさ」「早すぎる / 遅すぎる」を補正できます。</td>
+            </tr>
+            <tr>
+              <td>比較運転をする</td>
+              <td>Ver02.1 と Ver02.3 を同時に見ることで、何が変わったかを感覚ではなく差分で確認できます。</td>
+            </tr>
+            <tr>
+              <td>単発ではなく複数件で見る</td>
+              <td>たまたまの当たり外れではなく、傾向として「厳しすぎる / 甘すぎる」を判断できます。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          重要なのは、「この仕組みがあるから必ず勝てる」という意味ではないことです。<br>
+          正確には、<strong>どこが悪かったかを言語化しやすくなるので、改善の質が上がる</strong>、というのが根拠です。
+        </div>
+      </article>
+
+      <article class="card half soft-green">
+        <h2>この仕組みで実際に得られるもの</h2>
+        <ul>
+          <li>通知の数ではなく、通知の質が見える</li>
+          <li>「どの条件が過剰に厳しいか」が分かる</li>
+          <li>「どの条件が甘すぎるか」が分かる</li>
+          <li>本文や件名の分かりやすさも改善できる</li>
+          <li>感覚ではなく、記録ベースで会話できる</li>
+        </ul>
+      </article>
+
+      <article class="card half soft-red">
+        <h2>この仕組みだけでは得られないもの</h2>
+        <ul>
+          <li>完全自動で最適値に育つ保証</li>
+          <li>どんな相場でも勝てる万能ロジック</li>
+          <li>少数サンプルだけで確実な結論</li>
+        </ul>
+        <p>だから今は、完全自動ではなく「記録を増やし、根拠を持って直す」やり方を取っています。</p>
+      </article>
+
+      <article class="card">
+        <h2>いまの段階で、どこまで自動で回っているか</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>今の状態</th>
+              <th>説明</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>判定結果の保存</td>
+              <td><span class="pill good">自動</span></td>
+              <td>毎サイクル自動で残ります。</td>
+            </tr>
+            <tr>
+              <td>通知理由の保存</td>
+              <td><span class="pill good">自動</span></td>
+              <td>なぜ通知したか / しなかったかが残ります。</td>
+            </tr>
+            <tr>
+              <td>24時間後の事後評価</td>
+              <td><span class="pill info">半自動</span></td>
+              <td><code>daily-sync</code> を回して同期します。</td>
+            </tr>
+            <tr>
+              <td>人のレビュー記入</td>
+              <td><span class="pill info">手動</span></td>
+              <td>役に立ったかは人が入れます。</td>
+            </tr>
+            <tr>
+              <td>閾値の自動変更</td>
+              <td><span class="pill warn">未採用</span></td>
+              <td>いまは自動で勝手に緩めたり厳しくしたりしません。</td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card">
+        <h2>どう観察すると、このレビュー仕組みが活きるのか</h2>
+        <h3>日常ではこの順で十分です</h3>
+        <ol>
+          <li>届いたメールを見て、「この通知は役に立ちそうか」を感覚で持つ</li>
+          <li>必要な通知だけ、あとで <code>last_result.json</code> や本文を見て理由を確認する</li>
+          <li>24時間後に <code>signal_outcomes.csv</code> で答え合わせする</li>
+          <li>必要なら <code>user_reviews.csv</code> に「早い / 遅い / 役に立った」を残す</li>
+          <li>数件たまってから、初めて閾値調整を検討する</li>
+        </ol>
+
+        <h3>特に見たい比較ポイント</h3>
+        <ul>
+          <li><strong>Ver02.1 は watch だったが Ver02.3 は ready になったか</strong></li>
+          <li><strong>Ver02.3 の方が早いが、早すぎていないか</strong></li>
+          <li><strong>Ver02.3 が ready を増やしても、位置が悪い場面は prelabel で止めているか</strong></li>
+          <li><strong>メールの見た目と実際の値動きが一致しているか</strong></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h2>この改善を続けると、最終的に何を目指しているのか</h2>
+        <p>目指している完成形は、「通知が多いシステム」ではありません。次の3つが揃った状態です。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>完成形の姿</th>
+              <th>意味</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>方向の質が安定する</td>
+              <td>long / short / wait の出し方が、相場に対して過剰でも鈍すぎでもなくなることです。</td>
+            </tr>
+            <tr>
+              <td>入る場所の質が安定する</td>
+              <td>方向は合っていても、悪い場所なら止める設計が育つことです。</td>
+            </tr>
+            <tr>
+              <td>人が使いやすい通知になる</td>
+              <td>本文、件名、強さの出し方が、実務判断に使いやすくなることです。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          もっと平たく言うと、完成形は<br>
+          <strong>「いい場面では早めに気づけて、悪い場面では無理に入らず、あとで振り返っても納得できる通知システム」</strong><br>
+          です。
+        </div>
+      </article>
+
+      <article class="card half soft-blue">
+        <h2>今後の自然な進み方</h2>
+        <ul>
+          <li>しばらく Ver02.1 と Ver02.3-OBS を並走観測する</li>
+          <li>通知例を数件ためる</li>
+          <li>24時間後評価を回す</li>
+          <li>「どこが良くなったか」「どこがまだズレているか」を整理する</li>
+          <li>必要な部分だけ次の Ver で直す</li>
+        </ul>
+      </article>
+
+      <article class="card half soft-green">
+        <h2>いまの段階で言えること</h2>
+        <ul>
+          <li>レビューの土台はすでにあります</li>
+          <li>自動保存と事後評価の仕組みもあります</li>
+          <li>Ver02.3 で比較観測しやすい状態まで来ています</li>
+          <li>ここからは「作る段階」より「観察して育てる段階」です</li>
+        </ul>
+      </article>
+    </section>
+  </div>
+</body>
+</html>

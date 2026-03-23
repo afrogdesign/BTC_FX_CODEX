@@ -65,6 +65,7 @@ class _MiniDataFrame:
 sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=_MiniDataFrame))
 
 from backtest.evaluator import evaluate_signals, summarize_evaluated_signals
+from backtest.runner import _backtest_breakout_state, _backtest_triggers
 from config import load_config
 from src.analysis.breakout import previous_breakout_levels
 from src.analysis.confidence import compute_confidence
@@ -278,22 +279,82 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertTrue(evaluated[0]["filled"])
         self.assertEqual(evaluated[0]["result"], "tp2")
 
-        missed_df = _MiniDataFrame(
+        unresolved_df = _MiniDataFrame(
             [
                 {"timestamp": 1, "open": 100.0, "high": 100.0, "low": 100.0, "close": 100.0, "volume": 1.0},
-                {"timestamp": 2, "open": 101.2, "high": 101.4, "low": 101.1, "close": 101.3, "volume": 1.0},
-                {"timestamp": 3, "open": 101.4, "high": 101.8, "low": 101.3, "close": 101.7, "volume": 1.0},
+                {"timestamp": 2, "open": 100.1, "high": 100.4, "low": 99.8, "close": 100.2, "volume": 1.0},
+                {"timestamp": 3, "open": 100.2, "high": 100.6, "low": 99.9, "close": 100.3, "volume": 1.0},
             ]
         )
-        missed_eval = evaluate_signals([signal], missed_df)
-        self.assertFalse(missed_eval[0]["filled"])
-        self.assertTrue(missed_eval[0]["missed_opportunity"])
+        unresolved_eval = evaluate_signals([signal], unresolved_df)
+        self.assertTrue(unresolved_eval[0]["filled"])
+        self.assertEqual(unresolved_eval[0]["result"], "unresolved")
 
-        summary = summarize_evaluated_signals(evaluated + missed_eval, "rebalanced")
+        summary = summarize_evaluated_signals(evaluated + unresolved_eval, "rebalanced")
         self.assertEqual(summary["ready_signals"], 2)
-        self.assertEqual(summary["filled_trades"], 1)
-        self.assertEqual(summary["missed_ready_trades"], 1)
-        self.assertEqual(summary["missed_opportunity_count"], 1)
+        self.assertEqual(summary["filled_trades"], 2)
+        self.assertEqual(summary["missed_ready_trades"], 0)
+        self.assertEqual(summary["missed_opportunity_count"], 0)
+
+    def test_ready_signal_fills_on_signal_bar_without_retouch(self) -> None:
+        signal = {
+            "timestamp": 1,
+            "price": 100.0,
+            "bias": "long",
+            "phase": "breakout",
+            "confidence": 80,
+            "market_regime": "uptrend",
+            "long_display_score": 70,
+            "short_display_score": 40,
+            "score_gap": 30,
+            "primary_setup_side": "long",
+            "primary_setup_status": "ready",
+            "long_setup": {
+                "status": "ready",
+                "status_reason_code": "inside_entry_zone_with_trigger",
+                "entry_zone": {"low": 99.5, "high": 100.5},
+                "entry_mid": 100.0,
+                "stop_loss": 99.0,
+                "tp1": 101.0,
+                "tp2": 102.0,
+            },
+            "short_setup": {"status": "watch"},
+            "profile": "rebalanced",
+        }
+        df = _MiniDataFrame(
+            [
+                {"timestamp": 1, "open": 100.0, "high": 100.4, "low": 99.8, "close": 100.2, "volume": 1.0},
+                {"timestamp": 2, "open": 101.1, "high": 102.2, "low": 101.0, "close": 102.0, "volume": 1.0},
+            ]
+        )
+        evaluated = evaluate_signals([signal], df)
+        self.assertTrue(evaluated[0]["filled"])
+        self.assertEqual(evaluated[0]["bars_to_fill"], 0)
+        self.assertEqual(evaluated[0]["result"], "tp2")
+
+    def test_backtest_triggers_are_directional_in_rebalanced_profile(self) -> None:
+        trigger_up, trigger_down = _backtest_triggers(
+            "rebalanced",
+            breakout_up=False,
+            breakout_down=True,
+            volume_ratio=1.0,
+            cfg=self.cfg,
+        )
+        self.assertFalse(trigger_up)
+        self.assertTrue(trigger_down)
+
+    def test_baseline_uses_old_breakout_window_including_current_bar(self) -> None:
+        df = _MiniDataFrame([{"high": 100.0, "low": 90.0} for _ in range(19)] + [{"high": 120.0, "low": 80.0}])
+        reb_breakout_up, reb_breakout_down, reb_high, reb_low = _backtest_breakout_state(df, self.cfg, "rebalanced", 110.0)
+        base_breakout_up, base_breakout_down, base_high, base_low = _backtest_breakout_state(df, self.cfg, "baseline", 110.0)
+        self.assertTrue(reb_breakout_up)
+        self.assertFalse(reb_breakout_down)
+        self.assertEqual(reb_high, 100.0)
+        self.assertEqual(reb_low, 90.0)
+        self.assertFalse(base_breakout_up)
+        self.assertFalse(base_breakout_down)
+        self.assertEqual(base_high, 120.0)
+        self.assertEqual(base_low, 80.0)
 
     def test_config_defaults_and_baseline_profile(self) -> None:
         required_env = {

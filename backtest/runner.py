@@ -79,6 +79,30 @@ def _slice_until(df: pd.DataFrame, ts: int) -> pd.DataFrame:
     return df[df["timestamp"] <= ts].copy()
 
 
+def _backtest_breakout_state(part_15m: pd.DataFrame, cfg: Any, profile: str, price: float) -> tuple[bool, bool, float, float]:
+    if profile == "baseline":
+        lookback = max(int(getattr(cfg, "BREAKOUT_LOOKBACK_BARS", 20)), 1)
+        recent_high = float(max(part_15m["high"][-lookback:]))
+        recent_low = float(min(part_15m["low"][-lookback:]))
+        return price > recent_high, price < recent_low, recent_high, recent_low
+
+    recent_high, recent_low = previous_breakout_levels(part_15m, int(cfg.BREAKOUT_LOOKBACK_BARS))
+    range_high = recent_high if recent_high is not None else price
+    range_low = recent_low if recent_low is not None else price
+    return (recent_high is not None and price > recent_high), (recent_low is not None and price < recent_low), range_high, range_low
+
+
+def _backtest_triggers(profile: str, breakout_up: bool, breakout_down: bool, volume_ratio: float, cfg: Any) -> tuple[bool, bool]:
+    if profile == "baseline":
+        return True, True
+    return breakout_up or volume_ratio >= cfg.TRIGGER_VOLUME_RATIO, breakout_down or volume_ratio >= cfg.TRIGGER_VOLUME_RATIO
+
+
+def _backtest_breakout_confirmed(profile: str, breakout_up: bool, breakout_down: bool, volume_ratio: float, cfg: Any) -> bool:
+    threshold = 1.2 if profile == "baseline" else cfg.TRIGGER_VOLUME_RATIO
+    return (breakout_up or breakout_down) and volume_ratio >= threshold
+
+
 def build_backtest_profile(cfg: Any, profile: str = "rebalanced") -> Any:
     data = dict(cfg.as_dict()) if hasattr(cfg, "as_dict") else dict(vars(cfg))
     if profile == "baseline":
@@ -146,11 +170,8 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
         )
         near_support = nearest_zone_distance(price, all_support_zones) <= atr * 0.5
         near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr * 0.5
-        recent_high, recent_low = previous_breakout_levels(part_15m, int(cfg.BREAKOUT_LOOKBACK_BARS))
-        breakout_up = recent_high is not None and price > recent_high
-        breakout_down = recent_low is not None and price < recent_low
-        range_high = recent_high if recent_high is not None else price
-        range_low = recent_low if recent_low is not None else price
+        volume_ratio_15m = float(tf_15m["volume_ratio"].iloc[-1])
+        breakout_up, breakout_down, range_high, range_low = _backtest_breakout_state(part_15m, cfg, profile, price)
         in_range_center = abs(price - (range_high + range_low) / 2) <= atr * 0.5
 
         pre_long, _ = build_setup(
@@ -249,8 +270,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
             bias=bias,
             market_regime=regime["market_regime"],
             pullback_depth_atr=abs(price - float(tf_4h["ema_mid"].iloc[-1])) / max(float(tf_4h["atr"].iloc[-1]), 1e-9),
-            breakout_confirmed=(breakout_up or breakout_down)
-            and float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO,
+            breakout_confirmed=_backtest_breakout_confirmed(profile, breakout_up, breakout_down, volume_ratio_15m, cfg),
             reversal_risk_flag=False,
             price=price,
             ema50=float(tf_4h["ema_mid"].iloc[-1]),
@@ -281,7 +301,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
             },
             cfg,
         )
-        trigger_ready = (breakout_up or breakout_down) or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
+        trigger_up, trigger_down = _backtest_triggers(profile, breakout_up, breakout_down, volume_ratio_15m, cfg)
 
         long_setup, _ = build_setup(
             side="long",
@@ -299,7 +319,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
             funding_rate=funding_rate_pct,
             funding_warning=999.0,
             funding_prohibited=999.0,
-            trigger_ready=trigger_ready,
+            trigger_ready=trigger_up,
             warning_count=len(scores["warning_flags"]),
         )
         long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
@@ -319,7 +339,7 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
             funding_rate=funding_rate_pct,
             funding_warning=-999.0,
             funding_prohibited=-999.0,
-            trigger_ready=trigger_ready,
+            trigger_ready=trigger_down,
             warning_count=len(scores["warning_flags"]),
         )
         short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
