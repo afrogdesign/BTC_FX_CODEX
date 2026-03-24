@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-24 12:53 JST
+更新日: 2026-03-24 13:07 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -24,16 +24,21 @@
 - `baseline` の `filled_trades` が多い主因は、backtest 上で `watch` も約定扱いにしているためです。標準区間は 15 件中 13 件、拡張区間は 45 件中 42 件が `watch` 起点でした。`rebalanced` は `ready` 限定 fill なので、回数は減る一方で PF / DD 改善が見えやすくなっています。
 - 状態変化では、拡張区間で `baseline` の `invalid -> rebalanced の watch` が 14 件、`invalid -> ready` が 1 件ありました。標準区間でも `invalid -> ready` が 1 件あり、以前は捨てていた場面の一部を監視・実行候補として拾えるようになっています。
 - `運用資料/計画/改善設計図_v1_チャートパターン拡張.md` は正式設計へ更新しました。v1 は `chart_pattern_shadow` wrapper 配下の `shadow-only` 保存に限定し、AI / notify payload から分離、live 保存先は `last_result.json` と `signals/*.json`、backtest 側は `run_backtest()` の返り値 dict のみと固定しました。
+- `chart_pattern_shadow` v1 を実装しました。`main.py` は `core_result` と永続化用 result を分離し、AI / notify / summary payload へ shadow を渡さず、保存直前にだけ merge する構成です。backtest 側も `run_backtest()` の返り値 dict に `chart_pattern_shadow` を載せるようにしました。
+- 追加モジュールは `src/analysis/chart_pattern_shadow.py`、`patterns.py`、`volume_structure.py`、`sr_context.py`、`fallback_context.py` です。config と `.env.example` に window / pattern 系定数も追加しました。
+- 実施確認は `.venv312/bin/python -m unittest tests.test_chart_pattern_shadow tests.test_eval_rebalance`、`.venv312/bin/python -m unittest tests.test_summary_format tests.test_notification_trigger tests.test_phase1_activation`、`.venv312/bin/python -m compileall main.py src backtest tests` です。
+- 実装コミットは `6b6ece0` (`chart_pattern_shadow の shadow 保存を実装`) です。
 
 ## 次のタスク
 1. `Ver02.3-OBS` の次回以降サイクルでも heartbeat / last_result 更新が継続するかを確認し、実メール受信有無は別途受信箱側で確認する。
 2. 本番 `Ver02.1` で通知発生から 24 時間後評価までを 1 周確認し、Phase 0 の完了条件を満たす。
-3. `chart_pattern_shadow` v1 を実装し、既存の `bias / prelabel / confidence / signal_tier / notify` を変えずに `last_result.json`、`signals/*.json`、`run_backtest()` の返り値へ載せる。
+3. `chart_pattern_shadow` の live 実データを `Ver02.3-OBS` で確認し、`last_result.json` と `signals/*.json` に期待 schema が自然に保存されるかを確認する。
 
 ## ブロッカー
 - 緊急ブロッカーはない。
 - 実メール受信結果は、この端末からは未確認です。`last_result.json` 上は 2026-03-24 12:05 JST サイクルでも `was_notified=False` でした。
 - `logs/runtime/monitor.out` は 0 byte のままで、通常ログからの追跡情報は弱いです。実害は未確認だが、必要なら出力設計の見直し余地があります。
+- `chart_pattern_shadow` はコード実装済みだが、定刻実行での live JSON 出力確認はまだです。
 - 2 台並行作業では、同じ記録ファイルを未 push のまま両方で触ると競合しやすいです。切替前の同期は引き続き必須です。
 
 ## 完了条件
