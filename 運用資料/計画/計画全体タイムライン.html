@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor 計画全体タイムライン</title>
+  <style>
+    :root {
+      --bg: #f4efe8;
+      --paper: #fffdf8;
+      --ink: #1f2d36;
+      --muted: #5f707a;
+      --line: #d9cab6;
+      --rail: #b79d73;
+      --done: #1a6a4b;
+      --done-soft: #e5f3eb;
+      --current: #255b72;
+      --current-soft: #e3f0f8;
+      --next: #9c5a1a;
+      --next-soft: #feedd9;
+      --future: #8a4d8f;
+      --future-soft: #f2e6f4;
+      --design: #8a6a13;
+      --design-soft: #f8f0cf;
+      --danger: #9a3f3f;
+      --danger-soft: #f9e2e2;
+      --shadow: 0 16px 38px rgba(48, 38, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      line-height: 1.8;
+      background:
+        radial-gradient(circle at top right, rgba(37, 91, 114, 0.08), transparent 24rem),
+        linear-gradient(180deg, #ece1d2 0%, var(--bg) 24%, #f8f4ee 100%);
+    }
+
+    .wrap {
+      max-width: 1260px;
+      margin: 0 auto;
+      padding: 34px 18px 80px;
+    }
+
+    .hero, .panel, .entry, .doc-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      background: linear-gradient(135deg, rgba(255,253,248,0.98), rgba(243,232,216,0.95));
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.45rem);
+      line-height: 1.1;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 68rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .meta, .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .chip, .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.78);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .tag.done { background: var(--done-soft); color: var(--done); }
+    .tag.current { background: var(--current-soft); color: var(--current); }
+    .tag.next { background: var(--next-soft); color: var(--next); }
+    .tag.future { background: var(--future-soft); color: var(--future); }
+    .tag.design { background: var(--design-soft); color: var(--design); }
+
+    .panel {
+      margin-top: 22px;
+      padding: 26px;
+    }
+
+    h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.24;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    h2 { font-size: clamp(1.45rem, 2.8vw, 2.05rem); }
+    h3 { font-size: 1.16rem; }
+
+    p, li, th, td { font-size: 1rem; }
+
+    .overview {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .overview-box {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.84);
+      min-height: 122px;
+    }
+
+    .overview-box strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .timeline {
+      position: relative;
+      margin-top: 10px;
+      padding-left: 120px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 54px;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      border-radius: 999px;
+      background:
+        linear-gradient(
+          180deg,
+          rgba(183,157,115,0.25) 0%,
+          rgba(183,157,115,0.95) 10%,
+          rgba(183,157,115,0.95) 90%,
+          rgba(183,157,115,0.25) 100%
+        );
+    }
+
+    .entry {
+      position: relative;
+      margin: 0 0 18px;
+      padding: 22px 22px 20px;
+      background: rgba(255,253,248,0.96);
+    }
+
+    .entry::before {
+      content: "";
+      position: absolute;
+      left: -78px;
+      top: 30px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 5px solid var(--paper);
+      box-shadow: 0 0 0 3px var(--line);
+      background: var(--rail);
+    }
+
+    .entry.done::before { background: var(--done); box-shadow: 0 0 0 3px rgba(26,106,75,0.25); }
+    .entry.current::before { background: var(--current); box-shadow: 0 0 0 3px rgba(37,91,114,0.25); }
+    .entry.next::before { background: var(--next); box-shadow: 0 0 0 3px rgba(156,90,26,0.25); }
+    .entry.future::before { background: var(--future); box-shadow: 0 0 0 3px rgba(138,77,143,0.22); }
+    .entry.design::before { background: var(--design); box-shadow: 0 0 0 3px rgba(138,106,19,0.22); }
+
+    .entry-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .entry-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .entry-title h3 {
+      margin: 0;
+      font-size: 1.34rem;
+    }
+
+    .entry-sub {
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    .bands {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .band {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.84);
+      min-height: 126px;
+    }
+
+    .band strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.98rem;
+    }
+
+    .band.done { background: linear-gradient(180deg, #fbfffc, #eef8f1); }
+    .band.current { background: linear-gradient(180deg, #fbfeff, #eef8fc); }
+    .band.next { background: linear-gradient(180deg, #fffdf9, #fff2e6); }
+    .band.future { background: linear-gradient(180deg, #fffbfd, #f5ebf6); }
+    .band.design { background: linear-gradient(180deg, #fffef8, #faf4dc); }
+
+    .branch {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(37,91,114,0.06);
+      border-left: 5px solid var(--current);
+    }
+
+    .branch strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .doc-card {
+      padding: 20px;
+      background: rgba(255,253,248,0.96);
+    }
+
+    .doc-card h3 {
+      margin-bottom: 8px;
+    }
+
+    .doc-card p {
+      margin: 0 0 10px;
+      color: var(--muted);
+    }
+
+    .doc-card ul {
+      margin: 8px 0 0;
+      padding-left: 1.2rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.78);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(217, 202, 182, 0.72);
+    }
+
+    th {
+      background: rgba(31, 45, 54, 0.05);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 5px solid var(--next);
+      background: rgba(156, 90, 26, 0.08);
+      border-radius: 12px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      background: rgba(31,45,54,0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 1.2rem;
+    }
+
+    @media (max-width: 1100px) {
+      .overview { grid-template-columns: 1fr 1fr; }
+      .bands { grid-template-columns: 1fr; }
+      .doc-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .wrap { padding: 18px 14px 56px; }
+      .hero, .panel, .entry, .doc-card { padding: 18px; }
+      .timeline { padding-left: 72px; }
+      .timeline::before { left: 25px; }
+      .entry::before { left: -58px; width: 20px; height: 20px; }
+      .overview { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">BTC Monitor</li>
+        <li class="chip">運用資料 / 計画</li>
+        <li class="chip">更新日: 2026-03-24 11:00 JST</li>
+        <li class="chip">目的: 過去・現在・未来を 1 枚で把握する</li>
+      </ul>
+      <h1>BTC Monitor 計画全体タイムライン</h1>
+      <p>
+        このページは、<code>運用資料/計画/</code> に分かれている複数の計画書を、
+        人間が一目で理解できるように時系列へ並べ直した総覧です。
+        左の太い縦線を「大きな歴史の流れ」とし、その節目ごとに
+        「何が完了したか」「いま何をしているか」「次に何をするか」「将来どうつながるか」を
+        見える化しています。
+      </p>
+      <ul class="legend">
+        <li class="tag done">完了・土台化</li>
+        <li class="tag current">現在進行</li>
+        <li class="tag next">次にやること</li>
+        <li class="tag design">設計固定</li>
+        <li class="tag future">将来フェーズ</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>いまの全体像</h2>
+      <div class="overview">
+        <div class="overview-box">
+          <strong>現在版</strong>
+          <p><code>Ver02.3</code></p>
+          <p>Phase 0 の本番観測と、Phase 1 の実データ確認準備が中心です。</p>
+        </div>
+        <div class="overview-box">
+          <strong>いまの主戦場</strong>
+          <p><code>Phase 0</code> 本番観測中</p>
+          <p><code>Ver02.3-OBS</code> の定刻実行確認と comparison 説明整理が直近課題です。</p>
+        </div>
+        <div class="overview-box">
+          <strong>次の大型節目</strong>
+          <p><code>Ver03</code></p>
+          <p>Phase 0 一周完了と Phase 1 中核導入確認の両方が必要です。</p>
+        </div>
+        <div class="overview-box">
+          <strong>新しい改善枝</strong>
+          <p>チャートパターン拡張 v1</p>
+          <p>これは本流を置き換える案ではなく、将来の分析基盤へ接続する設計枝です。</p>
+        </div>
+      </div>
+      <div class="note">
+        このタイムラインでは、過去の土台づくりを上、現在を中央、未来を下へ並べています。
+        「いま実装してよいもの」と「まだ設計だけのもの」が混ざらないよう、色で分けています。
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>大きな歴史の流れ</h2>
+      <div class="timeline">
+        <article class="entry done">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag done">完了</span>
+              <h3>土台形成期: Ver02.x の観測基盤</h3>
+            </div>
+            <div class="entry-sub">過去から現在へつながる基礎</div>
+          </div>
+          <p>
+            まず最初に整えたのは、「通知が良かったか悪かったかを後から追える土台」です。
+            ここで観測基盤とログ基盤が先にできたことで、今後の改善が比較可能になりました。
+          </p>
+          <div class="bands">
+            <div class="band done">
+              <strong>大きな流れ</strong>
+              <ul>
+                <li><code>shadow_log.csv</code></li>
+                <li><code>signal_outcomes.csv</code> / <code>user_reviews.csv</code></li>
+                <li><code>notify_reason_codes</code> / <code>suppress_reason_codes</code></li>
+                <li><code>data_quality_flag</code></li>
+              </ul>
+            </div>
+            <div class="band done">
+              <strong>小さな流れ</strong>
+              <ul>
+                <li>signal_based / entry_ready_based の事後評価基盤</li>
+                <li>週次・月次レポート基盤</li>
+                <li>Phase 1 計画値保存列</li>
+              </ul>
+            </div>
+            <div class="band done">
+              <strong>意味</strong>
+              <p>
+                まだ賢くする前に、「何が効いて、何が悪かったか」を記録できる状態を作った段階です。
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="entry current">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag current">現在</span>
+              <h3>Phase 0 本番観測と Ver02.3 再調整</h3>
+            </div>
+            <div class="entry-sub">いまいちばん実務に近い流れ</div>
+          </div>
+          <p>
+            いまの中心は、<code>Ver02.3</code> を観測用に走らせながら、
+            breakout、score、confidence、setup、position_risk、signal_tier の調整結果を
+            comparison と実観測の両方で確かめることです。
+          </p>
+          <div class="bands">
+            <div class="band current">
+              <strong>現在できていること</strong>
+              <ul>
+                <li><code>Ver02.3-OBS</code> が iMac 2019 で定刻実行中</li>
+                <li><code>heartbeat.txt</code> と <code>last_result.json</code> の更新確認済み</li>
+                <li>comparison 再生成済み</li>
+                <li><code>rebalanced</code> が PF / DD で優位と説明可能</li>
+              </ul>
+            </div>
+            <div class="band current">
+              <strong>いま詰めていること</strong>
+              <ul>
+                <li>実メール受信確認</li>
+                <li>baseline の filled_trades が多い理由の説明</li>
+                <li><code>invalid → watch</code> の代表ケース分析</li>
+              </ul>
+            </div>
+            <div class="band next">
+              <strong>この流れの完了条件</strong>
+              <ul>
+                <li>Phase 0 の通知後フローを本番で 1 周完了</li>
+                <li>comparison の差分内容を説明可能にする</li>
+                <li>Phase 1 正式指標を実データで確認可能にする</li>
+              </ul>
+            </div>
+          </div>
+          <div class="branch">
+            <strong>この節目の下にぶら下がる計画書</strong>
+            <p>
+              <code>フェーズ別計画_Phase0-1.md</code>、
+              <code>マイルストーン定義.md</code>、
+              <code>NEXT_TASK.md</code>、
+              <code>開発ロードマップ.md</code>
+              が、この実務線の主な正本です。
+            </p>
+          </div>
+        </article>
+
+        <article class="entry design">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag design">設計固定</span>
+              <h3>内部観測強化の枝: evaluation_trace / shadow 観測</h3>
+            </div>
+            <div class="entry-sub">本流を壊さずに比較材料を増やす流れ</div>
+          </div>
+          <p>
+            この枝は、今の最終判定を変えずに「なぜそう判定したか」を後から比較できるようにするものです。
+            すぐに賢くするのではなく、先に説明可能な内部観測を増やす位置づけです。
+          </p>
+          <div class="bands">
+            <div class="band design">
+              <strong>設計済み</strong>
+              <ul>
+                <li><code>evaluation_trace.direction_score_shadow</code></li>
+                <li><code>entry_quality_score_shadow</code></li>
+                <li><code>trigger_quality_score_shadow</code></li>
+                <li><code>risk_component_scores</code></li>
+              </ul>
+            </div>
+            <div class="band next">
+              <strong>まだ未着手</strong>
+              <ul>
+                <li>JSON 保存の最小実装</li>
+                <li>既存判定不変の検証</li>
+                <li>comparison での活用確認</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>将来の役割</strong>
+              <p>
+                Ver04 / Ver05 で、A/B 比較や内部スコア化へつながる橋渡しになります。
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="entry design">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag design">新設計</span>
+              <h3>チャートパターン拡張 v1</h3>
+            </div>
+            <div class="entry-sub">人間のチャート読みへ近づけるための未来枝</div>
+          </div>
+          <p>
+            これは今回新しく固定した改善設計図です。上昇フラッグや三角持ち合いのような
+            名前つきパターンを、いきなり本採用せず、まずは <code>shadow</code> 観測として取り込む計画です。
+          </p>
+          <div class="bands">
+            <div class="band design">
+              <strong>最初に扱う類型</strong>
+              <ul>
+                <li><code>bull_flag</code></li>
+                <li><code>bear_flag</code></li>
+                <li><code>ascending_triangle</code></li>
+                <li><code>descending_triangle</code></li>
+                <li><code>failed_breakout</code></li>
+              </ul>
+            </div>
+            <div class="band next">
+              <strong>v1 の導入順</strong>
+              <ul>
+                <li>Step 0: 設計固定</li>
+                <li>Step 1: pattern_context などを JSON 保存</li>
+                <li>Step 2: shadow score 化</li>
+                <li>Step 3: segmented comparison</li>
+                <li>Step 4: 効いたものだけ controlled adoption</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>この枝の意味</strong>
+              <p>
+                「人間のようなチャート読み」をいきなり本番へ入れず、
+                比較可能な設計枝として先に増やす流れです。
+              </p>
+            </div>
+          </div>
+          <div class="branch">
+            <strong>本流との関係</strong>
+            <p>
+              この枝は現在の Phase 0 実務線の横にぶら下がる設計線です。
+              本流を置き換えるのではなく、将来の Phase 3 / Ver05 側の分析枝へ接続します。
+            </p>
+          </div>
+        </article>
+
+        <article class="entry next">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag next">次の大型節目</span>
+              <h3>Ver03: 観測システムから損益管理つき監視システムへ</h3>
+            </div>
+            <div class="entry-sub">Ver02.x の次に超えるべき線</div>
+          </div>
+          <p>
+            Ver03 は、見た目の番号上げではなく、
+            <strong>Phase 0 一周完了 + Phase 1 中核導入確認</strong> を満たした時だけ名乗る節目です。
+          </p>
+          <div class="bands">
+            <div class="band next">
+              <strong>必要条件</strong>
+              <ul>
+                <li><code>was_notified=True</code> の本番確認</li>
+                <li><code>daily-sync</code> 本番完走</li>
+                <li><code>phase1_active</code> 系の本番記録確認</li>
+                <li>サイズ計画 / 出口計画の本番ログ確認</li>
+              </ul>
+            </div>
+            <div class="band current">
+              <strong>すでにある土台</strong>
+              <ul>
+                <li><code>position_sizing</code></li>
+                <li><code>exit_manager</code></li>
+                <li><code>phase1_active</code> / <code>phase1_activation_reason</code></li>
+                <li><code>risk_percent_applied</code> などの保存列</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>意味</strong>
+              <p>
+                Ver03 は「ただ通知する」から「損益管理を伴う監視」へ進んだことを示す節目です。
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="entry future">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag future">未来</span>
+              <h3>Phase 2: 通知品質と危険回避の強化</h3>
+            </div>
+            <div class="entry-sub">Ver04 側へつながる安全装置の流れ</div>
+          </div>
+          <p>
+            Phase 2 は、通知の質と「危ない時に止まる力」を増やす層です。
+            人が次に見る価格や、異常時の警戒を返せるようにします。
+          </p>
+          <div class="bands">
+            <div class="band future">
+              <strong>大きな流れ</strong>
+              <ul>
+                <li><code>watch_prices</code></li>
+                <li>価格乖離監視</li>
+                <li>blackout</li>
+                <li>構造化 AI 審査出力</li>
+                <li><code>config_change_log</code></li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>小さな流れ</strong>
+              <ul>
+                <li>通知前の危険警告</li>
+                <li>人向け再評価価格の提示</li>
+                <li>イベント前後の停止</li>
+                <li>AI 自由文依存の削減</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>到達先</strong>
+              <p>
+                Phase 2 が live で回ると、Ver04 の「通知品質と安全性を備えた世代」へつながります。
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="entry future">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag future">未来</span>
+              <h3>Phase 3: 分析して改善できる世代へ</h3>
+            </div>
+            <div class="entry-sub">Ver05 側へつながる分析枝</div>
+          </div>
+          <p>
+            Phase 3 は「感覚で改善する」段階を終わらせ、
+            比較ログを根拠にロジックを改善するための分析層です。
+          </p>
+          <div class="bands">
+            <div class="band future">
+              <strong>分析基盤</strong>
+              <ul>
+                <li>因子相関分析</li>
+                <li>A/B 比較モード</li>
+                <li>prelabel 内部スコア化</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>ロジック改善</strong>
+              <ul>
+                <li><code>build_setup()</code> 精密化</li>
+                <li>シナリオ分岐出力</li>
+                <li>比較根拠つきの変更運用</li>
+              </ul>
+            </div>
+            <div class="band future">
+              <strong>チャート拡張との接点</strong>
+              <p>
+                今回のチャートパターン拡張 v1 は、この Phase 3 の比較・分析枝と強く接続します。
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="entry future">
+          <div class="entry-head">
+            <div class="entry-title">
+              <span class="tag future">遠い未来</span>
+              <h3>Ver04 / Ver05 の見取り図</h3>
+            </div>
+            <div class="entry-sub">未来の節目そのもの</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>版</th>
+                <th>意味</th>
+                <th>主な条件</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Ver04</code></td>
+                <td>通知品質と安全性を備えた世代</td>
+                <td>watch_prices、価格乖離、blackout、構造化 AI 審査出力が live で回る</td>
+              </tr>
+              <tr>
+                <td><code>Ver05</code></td>
+                <td>分析結果を根拠にロジック改善できる世代</td>
+                <td>因子相関分析、A/B 比較、内部スコア化、比較可能な setup 精密化がそろう</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>文書ごとの位置づけ</h2>
+      <div class="doc-grid">
+        <article class="doc-card">
+          <h3>マイルストーン定義</h3>
+          <p><code>Ver02.x → Ver03 → Ver04 → Ver05</code> の昇格条件を決める主軸です。</p>
+          <ul>
+            <li>何ができたら版を上げるか</li>
+            <li>どの大型節目が将来にあるか</li>
+            <li>歴史の「節目」を決める文書</li>
+          </ul>
+        </article>
+
+        <article class="doc-card">
+          <h3>フェーズ別計画 Phase0-1</h3>
+          <p>現在の実務線に最も近い計画です。</p>
+          <ul>
+            <li>Phase 0 本番観測</li>
+            <li>Phase 1 の本有効確認</li>
+            <li>Ver03 へ進むための足場</li>
+          </ul>
+        </article>
+
+        <article class="doc-card">
+          <h3>フェーズ別計画 Phase2-3</h3>
+          <p>Ver04 / Ver05 側へつながる中期計画です。</p>
+          <ul>
+            <li>通知品質・安全性の強化</li>
+            <li>分析と A/B 比較の基盤</li>
+            <li>改善を根拠ベースへ移す流れ</li>
+          </ul>
+        </article>
+
+        <article class="doc-card">
+          <h3>評価システム改善仕様書</h3>
+          <p>いきなり判定を変えず、shadow 観測から入るための接続仕様です。</p>
+          <ul>
+            <li><code>evaluation_trace</code> の追加</li>
+            <li>既存判定不変の原則</li>
+            <li>将来の分析基盤への橋渡し</li>
+          </ul>
+        </article>
+
+        <article class="doc-card">
+          <h3>改善設計図 v1</h3>
+          <p>人間のチャート読みへ近づけるための、新しい未来枝の設計書です。</p>
+          <ul>
+            <li>チャートパターン拡張</li>
+            <li>短期 / 長期窓の分離</li>
+            <li>パターン別 comparison への拡張</li>
+          </ul>
+        </article>
+
+        <article class="doc-card">
+          <h3>ロードマップ / NEXT_TASK</h3>
+          <p>この大きな流れの中で、「いま、どこを掘っているか」を示す入口です。</p>
+          <ul>
+            <li>現在地の確認</li>
+            <li>次の 1 手</li>
+            <li>ブロッカーと完了条件</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>いま人が見るべき順番</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>目的</th>
+            <th>最初に見る文書</th>
+            <th>次に見る文書</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>いま何をしているか知りたい</td>
+            <td><code>NEXT_TASK.md</code></td>
+            <td><code>開発ロードマップ.md</code></td>
+          </tr>
+          <tr>
+            <td>Ver03 までの現在線を知りたい</td>
+            <td><code>フェーズ別計画_Phase0-1.md</code></td>
+            <td><code>マイルストーン定義.md</code></td>
+          </tr>
+          <tr>
+            <td>Ver04 / Ver05 の未来線を知りたい</td>
+            <td><code>フェーズ別計画_Phase2-3.md</code></td>
+            <td><code>マイルストーン定義.md</code></td>
+          </tr>
+          <tr>
+            <td>改善をどう安全に入れるか知りたい</td>
+            <td><code>評価システム改善仕様書_Ver02x-Ver05接続.md</code></td>
+            <td><code>改善設計図_v1_チャートパターン拡張.md</code></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note">
+        この 1 枚の役目は、計画書を置き換えることではありません。
+        ばらばらの計画書を「時間軸のどこにある話か」で直感的に整理することです。
+      </div>
+    </section>
+  </div>
+</body>
+</html>

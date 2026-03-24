@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor Ver02.3 比較 CSV 解説</title>
+  <style>
+    :root {
+      --bg: #f3efe8;
+      --paper: #fffdf8;
+      --ink: #1f2d36;
+      --muted: #5e6f79;
+      --line: #d9ccba;
+      --green: #126348;
+      --green-soft: #e2f2ea;
+      --blue: #245a71;
+      --blue-soft: #e1f0f7;
+      --amber: #9a5a19;
+      --amber-soft: #feecd8;
+      --red: #983a3a;
+      --red-soft: #f9e1e1;
+      --shadow: 0 16px 36px rgba(50, 39, 23, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      line-height: 1.8;
+      background:
+        radial-gradient(circle at top right, rgba(36, 90, 113, 0.09), transparent 24rem),
+        linear-gradient(180deg, #ece2d4 0%, var(--bg) 24%, #f7f4ef 100%);
+    }
+
+    .wrap {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 34px 18px 72px;
+    }
+
+    .hero, .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      background: linear-gradient(135deg, rgba(255,253,248,0.98), rgba(243,232,218,0.95));
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.12;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 60rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.78);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .card {
+      grid-column: span 12;
+      padding: 24px;
+    }
+
+    .half { grid-column: span 6; }
+    .third { grid-column: span 4; }
+
+    h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.25;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    h2 { font-size: clamp(1.45rem, 2.8vw, 2rem); }
+    h3 { font-size: 1.15rem; margin-top: 22px; }
+
+    p, li, th, td { font-size: 1rem; }
+
+    .soft-blue { background: linear-gradient(180deg, #fbfeff, #eef7fb); }
+    .soft-green { background: linear-gradient(180deg, #fbfffc, #edf8f1); }
+    .soft-amber { background: linear-gradient(180deg, #fffdf9, #fff2e6); }
+    .soft-red { background: linear-gradient(180deg, #fffafa, #fdf0f0); }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .summary-box {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.8);
+      padding: 14px;
+      min-height: 118px;
+    }
+
+    .summary-box strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.84);
+      padding: 14px;
+      min-height: 154px;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.78);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(217, 204, 186, 0.74);
+    }
+
+    th {
+      background: rgba(31, 45, 54, 0.05);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .pill.auto { background: var(--red-soft); color: var(--red); }
+    .pill.manual { background: var(--green-soft); color: var(--green); }
+    .pill.info { background: var(--blue-soft); color: var(--blue); }
+    .pill.warn { background: var(--amber-soft); color: var(--amber); }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 5px solid var(--blue);
+      background: rgba(36, 90, 113, 0.07);
+      border-radius: 12px;
+    }
+
+    .quote {
+      margin: 0;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: rgba(18, 99, 72, 0.08);
+      border: 1px solid rgba(18, 99, 72, 0.14);
+      font-size: 1.06rem;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      background: rgba(31, 45, 54, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 1.2rem;
+    }
+
+    @media (max-width: 960px) {
+      .half, .third { grid-column: span 12; }
+      .summary-strip { grid-template-columns: 1fr 1fr; }
+      .flow { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 18px 14px 56px; }
+      .hero, .card { padding: 18px; }
+      .summary-strip, .flow { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">BTC Monitor</li>
+        <li class="chip">Ver02.3</li>
+        <li class="chip">更新日: 2026-03-24 10:12 JST</li>
+        <li class="chip">対象: 比較 CSV の意味と使い方</li>
+      </ul>
+      <h1>比較 CSV は「本番の成績表」ではなく、<br>ロジック比較の検証メモです</h1>
+      <p>
+        <code>comparison_summary.csv</code> は、同じ相場データに対して
+        <code>baseline</code> と <code>rebalanced</code> の 2 つの判定ロジックを当て、
+        どちらが「雑に入りやすいか」「損益効率が良いか」「崩れにくいか」を見比べるための比較表です。
+        毎時の本番通知に自動反映されるものではなく、主に改善判断のために人と AI が読む資料です。
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="card soft-red half">
+        <h2>最初の結論</h2>
+        <p class="quote">
+          比較 CSV は、通常運用のたびに自動で反映されるものではありません。必要なタイミングで
+          Codex が backtest を再実行して作り直し、「新ロジックが本当に良くなったか」を確認するためのものです。
+        </p>
+        <div class="summary-strip">
+          <div class="summary-box">
+            <strong>これは何か</strong>
+            <p>旧ロジックと新ロジックの成績比較表です。</p>
+          </div>
+          <div class="summary-box">
+            <strong>自動反映か</strong>
+            <p><span class="pill auto">いいえ</span> 本番の毎時実行とは別です。</p>
+          </div>
+          <div class="summary-box">
+            <strong>誰が見るか</strong>
+            <p>ロジック改善の判断をしたい人と AI です。</p>
+          </div>
+          <div class="summary-box">
+            <strong>いつ使うか</strong>
+            <p>閾値調整後、レビュー修正後、版の昇格判断前です。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card soft-green half">
+        <h2>本番運用との違い</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>本番の定刻実行</th>
+              <th>比較 CSV</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>目的</td>
+              <td>今この時点での判定と通知を出す</td>
+              <td>旧ロジックと新ロジックの良し悪しを比べる</td>
+            </tr>
+            <tr>
+              <td>主な出力</td>
+              <td><code>last_result.json</code>、メール、<code>signals/*.json</code></td>
+              <td><code>evaluation_*.csv</code>、<code>comparison_summary.csv</code></td>
+            </tr>
+            <tr>
+              <td>更新タイミング</td>
+              <td>毎時 :05 の定刻</td>
+              <td>必要時だけ手動再生成</td>
+            </tr>
+            <tr>
+              <td>意味</td>
+              <td>いまの実運用判断</td>
+              <td>改善方針が正しいかの検証</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <strong>補足:</strong>
+          たとえば今回確認した <code>Ver02.3-OBS</code> の 10:05 JST サイクルは本番寄りの観測です。
+          一方で比較 CSV は、そのサイクルとは別に、まとめて過去データへ判定ロジックを当て直して比較しています。
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>何をどう比べているか</h2>
+        <div class="flow">
+          <div class="step">
+            <strong>1. 同じ相場データを用意</strong>
+            <p>4時間足、1時間足、15分足のローソク足を同じ区間でそろえます。</p>
+          </div>
+          <div class="step">
+            <strong>2. 旧判定を実行</strong>
+            <p><code>baseline</code> として、以前寄りの閾値や breakout 条件で判定します。</p>
+          </div>
+          <div class="step">
+            <strong>3. 新判定を実行</strong>
+            <p><code>rebalanced</code> として、今回調整したロジックで同じ区間を判定します。</p>
+          </div>
+          <div class="step">
+            <strong>4. 仮想成績を計算</strong>
+            <p>ready になった場面で、TP 到達、損切り、見送りなどを後ろの足で評価します。</p>
+          </div>
+          <div class="step">
+            <strong>5. 集計して比較</strong>
+            <p>取引回数、平均 RR、利益効率、最大崩れ幅をまとめて見比べます。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card half soft-blue">
+        <h2>CSV に入っている主な項目</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>列名</th>
+              <th>意味</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>total_signals</code></td>
+              <td>比較対象になった全シグナル数です。</td>
+            </tr>
+            <tr>
+              <td><code>ready_signals</code></td>
+              <td>実際にエントリー候補まで整った回数です。</td>
+            </tr>
+            <tr>
+              <td><code>watch_signals</code></td>
+              <td>すぐには入らず、監視止まりだった回数です。</td>
+            </tr>
+            <tr>
+              <td><code>filled_trades</code></td>
+              <td>仮想的に約定した扱いになった回数です。</td>
+            </tr>
+            <tr>
+              <td><code>avg_realized_rr</code></td>
+              <td>平均の損益効率です。高いほど効率が良いと読めます。</td>
+            </tr>
+            <tr>
+              <td><code>profit_factor</code></td>
+              <td>利益合計 ÷ 損失合計です。1 より大きいほど収支の形が良いです。</td>
+            </tr>
+            <tr>
+              <td><code>max_drawdown_rr</code></td>
+              <td>途中でどれだけ崩れたかです。小さいほど崩れにくいです。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card half soft-amber">
+        <h2>読み方のコツ</h2>
+        <ul>
+          <li><code>filled_trades</code> が多いほど良いとは限りません。無駄打ちが多いだけのことがあります。</li>
+          <li><code>profit_factor</code> は「勝ちやすさ」ではなく「利益と損失の釣り合い」を見る指標です。</li>
+          <li><code>max_drawdown_rr</code> は大きいほど、途中で苦しい時間が長かった可能性があります。</li>
+          <li>新ロジックが優秀でも、<code>ready_signals</code> はむしろ減ることがあります。</li>
+          <li>大事なのは「数を増やしたか」より「悪い場面を減らせたか」です。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>今回の再検証で何が分かったか</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>区間</th>
+              <th>ロジック</th>
+              <th>ready</th>
+              <th>filled</th>
+              <th>avg RR</th>
+              <th>PF</th>
+              <th>最大 DD</th>
+              <th>読み方</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>標準区間</td>
+              <td><code>baseline</code></td>
+              <td>2</td>
+              <td>15</td>
+              <td>-0.2222</td>
+              <td>0.697</td>
+              <td>6.0</td>
+              <td>約定は多いが、雑に入りすぎて全体成績が悪化している読みです。</td>
+            </tr>
+            <tr>
+              <td>標準区間</td>
+              <td><code>rebalanced</code></td>
+              <td>3</td>
+              <td>3</td>
+              <td>0.9626</td>
+              <td>3.8877</td>
+              <td>1.0</td>
+              <td>回数は少ないが、入る場面を絞れており効率が良いです。</td>
+            </tr>
+            <tr>
+              <td>拡張区間</td>
+              <td><code>baseline</code></td>
+              <td>3</td>
+              <td>45</td>
+              <td>0.1818</td>
+              <td>1.3408</td>
+              <td>8.4452</td>
+              <td>長い区間でも回数先行で、崩れ幅が大きめです。</td>
+            </tr>
+            <tr>
+              <td>拡張区間</td>
+              <td><code>rebalanced</code></td>
+              <td>4</td>
+              <td>4</td>
+              <td>0.4719</td>
+              <td>1.9438</td>
+              <td>1.0</td>
+              <td>長い区間でも、損益効率と安定性で優位でした。</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <strong>今回の要点:</strong>
+          旧メモでは「差分が出ていない」と読める書き方が残っていましたが、再生成後の現状はそうではありません。
+          今回の比較では、<code>rebalanced</code> は取引数を絞る代わりに
+          <code>profit_factor</code> と <code>max_drawdown_rr</code> が良い方向へ出ています。
+        </div>
+      </section>
+
+      <section class="card third soft-green">
+        <h2>自動で反映されるもの</h2>
+        <p><span class="pill info">毎時</span></p>
+        <ul>
+          <li><code>logs/heartbeat.txt</code></li>
+          <li><code>logs/last_result.json</code></li>
+          <li><code>logs/signals/*.json</code></li>
+          <li>必要条件を満たした時の通知メール</li>
+        </ul>
+      </section>
+
+      <section class="card third soft-red">
+        <h2>自動で反映されないもの</h2>
+        <p><span class="pill auto">手動</span></p>
+        <ul>
+          <li><code>tmp/backtest/comparison_summary.csv</code></li>
+          <li><code>tmp/backtest_extended/comparison_summary.csv</code></li>
+          <li><code>evaluation_baseline.csv</code></li>
+          <li><code>evaluation_rebalanced.csv</code></li>
+        </ul>
+      </section>
+
+      <section class="card third soft-blue">
+        <h2>誰が確認するか</h2>
+        <p><span class="pill manual">Codex + 人</span></p>
+        <ul>
+          <li>閾値を変えた後の確認</li>
+          <li>レビュー修正後の妥当性確認</li>
+          <li><code>Ver03</code> へ進める前の判断材料</li>
+          <li>資料化するときの根拠</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>では、毎回 Codex で確認するのか</h2>
+        <p>
+          「毎時毎回」ではありません。ですが、ロジックを変えた直後や、結果の説明が必要な節目では、
+          Codex が再実行して確認する運用が妥当です。
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>場面</th>
+              <th>比較 CSV を見るべきか</th>
+              <th>理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>通常の毎時運用確認</td>
+              <td>基本は不要</td>
+              <td>heartbeat と last_result の確認が優先です。</td>
+            </tr>
+            <tr>
+              <td>評価ロジックを変えた直後</td>
+              <td>必要</td>
+              <td>改善のつもりが改悪になっていないかを見るためです。</td>
+            </tr>
+            <tr>
+              <td>レビュー指摘を直した直後</td>
+              <td>必要</td>
+              <td>修正で挙動がどう変わったかを数値で確認できます。</td>
+            </tr>
+            <tr>
+              <td>版の昇格判断前</td>
+              <td>強く推奨</td>
+              <td>説明責任を果たしやすくなります。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card soft-amber">
+        <h2>誤解しやすい点</h2>
+        <ul>
+          <li>比較 CSV の数字が良いからといって、そのまま将来の利益を保証するわけではありません。</li>
+          <li>これは実注文の損益ではなく、「この条件で入っていたらどうだったか」の検証結果です。</li>
+          <li>期間によって見え方は変わるため、1 回だけで断定しない方が安全です。</li>
+          <li>本番で通知が出るかどうかと、比較 CSV の良し悪しは別問題です。</li>
+        </ul>
+      </section>
+
+      <section class="card soft-green">
+        <h2>この資料を読んだあとの実務判断</h2>
+        <p class="quote">
+          比較 CSV は「日常運用の監視表」ではなく、「改善判断のための検証表」と覚えると混乱しにくいです。
+          まず本番運用では <code>heartbeat</code> と <code>last_result</code> を見て、
+          ロジック改善の節目だけ比較 CSV を再生成して確認する、という役割分担がいちばん実務的です。
+        </p>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

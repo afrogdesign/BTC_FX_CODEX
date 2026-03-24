@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor Ver02.3 指標の履歴長と改善方針</title>
+  <style>
+    :root {
+      --bg: #f3efe8;
+      --paper: #fffdf8;
+      --ink: #1f2d36;
+      --muted: #5d6f79;
+      --line: #d8cab8;
+      --green: #166749;
+      --green-soft: #e4f2ea;
+      --blue: #255a72;
+      --blue-soft: #e2f0f8;
+      --amber: #9b5a1a;
+      --amber-soft: #feedd9;
+      --red: #9a4040;
+      --red-soft: #f9e2e2;
+      --shadow: 0 16px 36px rgba(48, 38, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      line-height: 1.8;
+      background:
+        radial-gradient(circle at top right, rgba(37, 90, 114, 0.08), transparent 24rem),
+        linear-gradient(180deg, #ece2d4 0%, var(--bg) 24%, #f8f4ee 100%);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 34px 18px 72px;
+    }
+
+    .hero, .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 34px;
+      background: linear-gradient(135deg, rgba(255,253,248,0.98), rgba(242,232,218,0.95));
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.3rem);
+      line-height: 1.12;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 62rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 0 18px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.78);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .card {
+      grid-column: span 12;
+      padding: 24px;
+    }
+
+    .half { grid-column: span 6; }
+    .third { grid-column: span 4; }
+
+    h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.24;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+
+    h2 { font-size: clamp(1.45rem, 2.8vw, 2rem); }
+    h3 { font-size: 1.15rem; margin-top: 22px; }
+
+    p, li, th, td { font-size: 1rem; }
+
+    .soft-blue { background: linear-gradient(180deg, #fbfeff, #eef8fc); }
+    .soft-green { background: linear-gradient(180deg, #fbfffc, #edf8f1); }
+    .soft-amber { background: linear-gradient(180deg, #fffdf9, #fff2e6); }
+    .soft-red { background: linear-gradient(180deg, #fffafa, #fdf0f0); }
+
+    .answer {
+      margin: 0;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: rgba(22, 103, 73, 0.08);
+      border: 1px solid rgba(22, 103, 73, 0.16);
+      font-size: 1.07rem;
+    }
+
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.82);
+      padding: 14px;
+      min-height: 122px;
+    }
+
+    .box strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.78);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(216, 202, 184, 0.72);
+    }
+
+    th {
+      background: rgba(31, 45, 54, 0.05);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .pill.good { background: var(--green-soft); color: var(--green); }
+    .pill.warn { background: var(--amber-soft); color: var(--amber); }
+    .pill.bad { background: var(--red-soft); color: var(--red); }
+    .pill.info { background: var(--blue-soft); color: var(--blue); }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-left: 5px solid var(--blue);
+      background: rgba(37, 90, 114, 0.07);
+      border-radius: 12px;
+    }
+
+    code {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      background: rgba(31, 45, 54, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.92em;
+    }
+
+    ul {
+      margin: 8px 0 0;
+      padding-left: 1.2rem;
+    }
+
+    @media (max-width: 960px) {
+      .half, .third { grid-column: span 12; }
+      .strip { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { padding: 18px 14px 56px; }
+      .hero, .card { padding: 18px; }
+      .strip { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">BTC Monitor</li>
+        <li class="chip">Ver02.3</li>
+        <li class="chip">更新日: 2026-03-24 10:36 JST</li>
+        <li class="chip">テーマ: 履歴長 / 用途 / 改善方針</li>
+      </ul>
+      <h1>いま保持している過去データは、<br>「大局観」と「直近判断」で使い分けられています</h1>
+      <p>
+        現在の BTC Monitor は、過去データを無制限に持っているわけではありません。
+        4時間足、1時間足、15分足ごとに取得本数を決め、その中で
+        EMA、RSI、ATR、スイング構造、ブレイクアウト、流動性、OI/CVD、板、清算情報を
+        それぞれ別の長さで見ています。
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="card soft-green">
+        <h2>最初の結論</h2>
+        <p class="answer">
+          今のシステムは、<strong>4h で約 50 日、1h で約 21 日、15m で約 5 日ぶん</strong>を土台にしています。
+          ただし、全部を同じ重みでは見ていません。大局観は長い履歴、エントリー可否は直近 20 本前後、
+          板や清算のような補助材料はもっと短い断面で読んでいます。
+        </p>
+        <div class="strip">
+          <div class="box">
+            <strong>4時間足</strong>
+            <p><code>300本</code><br>約 50 日</p>
+          </div>
+          <div class="box">
+            <strong>1時間足</strong>
+            <p><code>500本</code><br>約 21 日</p>
+          </div>
+          <div class="box">
+            <strong>15分足</strong>
+            <p><code>500本</code><br>約 5 日</p>
+          </div>
+          <div class="box">
+            <strong>外部補助データ</strong>
+            <p>OI / CVD / 板 / 清算は、数本から数十分の短い断面が中心です。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>まず全体の保持量</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>データ</th>
+              <th>保持量</th>
+              <th>時間換算</th>
+              <th>主な用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>4時間足</td>
+              <td><code>FETCH_LIMIT_4H=300</code></td>
+              <td>約 50 日</td>
+              <td>大局トレンド、EMA200、上位足構造、転換帯判定</td>
+            </tr>
+            <tr>
+              <td>1時間足</td>
+              <td><code>FETCH_LIMIT_1H=500</code></td>
+              <td>約 21 日</td>
+              <td>中期の構造、サポレジ、上位足との整合確認</td>
+            </tr>
+            <tr>
+              <td>15分足</td>
+              <td><code>FETCH_LIMIT_15M=500</code></td>
+              <td>約 5 日</td>
+              <td>直近判断、breakout、出来高、流動性、実エントリー候補</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          補足すると、取得本数が 500 本あっても、すべての指標が 500 本ぶんを同じように使うわけではありません。
+          指標ごとに「実際に効いている見る長さ」はかなり違います。
+        </div>
+      </section>
+
+      <section class="card half soft-blue">
+        <h2>価格系の主要指標</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>指標</th>
+              <th>実質見る長さ</th>
+              <th>何に使うか</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>EMA20 / EMA50 / EMA200</td>
+              <td><code>20 / 50 / 200本</code> 以上</td>
+              <td>トレンド方向、EMA配列、EMA50上下、押し目か追随かの判断</td>
+            </tr>
+            <tr>
+              <td>EMA20 の傾き</td>
+              <td>直近 <code>3本</code> 比較</td>
+              <td>上向きか下向きかの勢い判定</td>
+            </tr>
+            <tr>
+              <td>RSI</td>
+              <td><code>14本</code></td>
+              <td>過熱すぎないか、ロング・ショートに無理がないか</td>
+            </tr>
+            <tr>
+              <td>ATR</td>
+              <td><code>14本</code></td>
+              <td>損切り距離、サポレジ幅、相場が荒すぎないか</td>
+            </tr>
+            <tr>
+              <td>ATR Ratio</td>
+              <td>ATR の直近値 vs 直近 <code>50本平均</code></td>
+              <td>平常より荒れているか、静かすぎるか</td>
+            </tr>
+            <tr>
+              <td>Volume Ratio</td>
+              <td>直近出来高 vs <code>20本平均</code></td>
+              <td>ブレイクに出来高が伴っているか</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card half soft-green">
+        <h2>構造系の指標</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>指標</th>
+              <th>実質見る長さ</th>
+              <th>何に使うか</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>スイング検出</td>
+              <td>左右 <code>N本</code> 比較<br>4h=<code>3</code>、1h=<code>2</code>、15m=<code>2</code></td>
+              <td>山谷を抜き出して高値安値の更新関係を作る</td>
+            </tr>
+            <tr>
+              <td>構造判定</td>
+              <td>直近のスイング高値 2 個 + 安値 2 個</td>
+              <td><code>hh_hl</code>、<code>lh_ll</code>、<code>mixed</code> 判定</td>
+            </tr>
+            <tr>
+              <td>Breakout</td>
+              <td>直近 <code>20本</code></td>
+              <td>レンジ上抜け・下抜け判定</td>
+            </tr>
+            <tr>
+              <td>Range Center</td>
+              <td>Breakout と同じ直近 <code>20本</code></td>
+              <td>レンジ中央の中途半端な位置かどうか</td>
+            </tr>
+            <tr>
+              <td>Market Regime</td>
+              <td>4h 構造 + EMA + RSI + ATR の合成</td>
+              <td><code>uptrend</code>、<code>downtrend</code>、<code>transition</code>、<code>range</code></td>
+            </tr>
+            <tr>
+              <td>Transition Direction</td>
+              <td>EMA20/50 と RSI、4h 構造の組み合わせ</td>
+              <td>転換帯が上向きか下向きか</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>サポレジ・流動性・位置リスク</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>項目</th>
+              <th>実質見る長さ</th>
+              <th>何に使うか</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>サポート / レジスタンス</td>
+              <td>各時間足の直近スイング最大 <code>10個</code></td>
+              <td>近い抵抗帯・支持帯、TP/SL 設計、危険ゾーン判定</td>
+            </tr>
+            <tr>
+              <td>ゾーン反応回数</td>
+              <td>各時間足データ全体のヒット回数</td>
+              <td>ゾーン強度の重みづけ</td>
+            </tr>
+            <tr>
+              <td>流動性レベル</td>
+              <td>スイング直近 <code>8個</code> + 15m 直近 <code>20本</code> 高安値 + 直近 <code>8本</code> 高安値</td>
+              <td>上側 / 下側の流動性が近いか、sweep 済みか</td>
+            </tr>
+            <tr>
+              <td>sweep 判定</td>
+              <td>15m 直近 <code>6本</code> の高値安値</td>
+              <td>流動性回収がすでに起きたかどうか</td>
+            </tr>
+            <tr>
+              <td>Position Risk</td>
+              <td>流動性、板、清算、OI/CVD の距離と状態</td>
+              <td><code>ENTRY_OK</code>、<code>RISKY_ENTRY</code>、<code>SWEEP_WAIT</code>、<code>NO_TRADE_CANDIDATE</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card half soft-amber">
+        <h2>外部の補助データ</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>データ</th>
+              <th>保持量</th>
+              <th>何に使うか</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Open Interest 現在値</td>
+              <td>単発</td>
+              <td>現在の建玉規模の把握</td>
+            </tr>
+            <tr>
+              <td>OI 変化率</td>
+              <td><code>BINANCE_OI_LIMIT=12</code> 本</td>
+              <td>増加 / 減少からトレンド支援か踏み上げ / 投げ売りかを見る</td>
+            </tr>
+            <tr>
+              <td>OI trend values</td>
+              <td>取得は 12、本当に保持するのは末尾 <code>5本</code></td>
+              <td>直近の OI の向きだけを見る</td>
+            </tr>
+            <tr>
+              <td>Taker Volume / CVD</td>
+              <td><code>BINANCE_TAKER_LIMIT=12</code> 本</td>
+              <td>買い優勢 / 売り優勢と価格の逆行を見る</td>
+            </tr>
+            <tr>
+              <td>Orderbook</td>
+              <td><code>BINANCE_ORDERBOOK_LIMIT=100</code> レベル</td>
+              <td>板の厚い壁、bid/ask 偏りを見る</td>
+            </tr>
+            <tr>
+              <td>Liquidation Events</td>
+              <td>ライブ取得 + キャッシュ最大 <code>500件</code></td>
+              <td>近い清算クラスターが逆噴射 / 吸い上げ要因になるかを見る</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card half soft-red">
+        <h2>今の弱点</h2>
+        <ul>
+          <li>保持量はあるが、価格パターンの「形そのもの」を読むレイヤーはまだ弱いです。</li>
+          <li>長い履歴を持っていても、判断の多くは直近 20 本前後に寄っています。</li>
+          <li>OI/CVD や板は短期の断面中心で、中期の文脈まではまだ薄いです。</li>
+          <li>出来高や breakout は見ているが、「上昇フラッグ」「ペナント」といった形状認識はありません。</li>
+          <li>外部データが欠けた時は中立寄りに落ちるため、強い読みを出しにくい場面があります。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>実務でいうと、何にどれだけ効いているか</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>判断レイヤー</th>
+              <th>主に効く履歴長</th>
+              <th>役割</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>大局観</td>
+              <td>4h の 50 日、1h の 21 日</td>
+              <td>上昇相場か、下降相場か、レンジか、転換帯かを決める</td>
+            </tr>
+            <tr>
+              <td>中期構造</td>
+              <td>直近スイング数個、EMA50 / EMA200</td>
+              <td>高値安値の更新関係、押し目か戻り売りかを見る</td>
+            </tr>
+            <tr>
+              <td>直近のトリガー</td>
+              <td>15m 直近 20 本前後</td>
+              <td>breakout、レンジ中央、volume_ratio、entry zone 到達を判断</td>
+            </tr>
+            <tr>
+              <td>危険度調整</td>
+              <td>板、清算、流動性、OI/CVD の短期断面</td>
+              <td>今すぐ入ると危ないか、sweep 待ちかを決める</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card third soft-green">
+        <h2>いま強いところ</h2>
+        <ul>
+          <li>トレンド方向</li>
+          <li>上位足と下位足の整合</li>
+          <li>レンジ中央回避</li>
+          <li>危険ゾーン回避</li>
+          <li>無駄打ち抑制</li>
+        </ul>
+      </section>
+
+      <section class="card third soft-amber">
+        <h2>いま足りないところ</h2>
+        <ul>
+          <li>形状認識</li>
+          <li>文脈の長期記憶</li>
+          <li>パターンの再現性集計</li>
+          <li>出来高構造の深掘り</li>
+          <li>相場局面ごとの最適化</li>
+        </ul>
+      </section>
+
+      <section class="card third soft-blue">
+        <h2>改善の方向</h2>
+        <ul>
+          <li>特徴量を増やす</li>
+          <li>長短の履歴を分ける</li>
+          <li>パターン専用層を追加</li>
+          <li>検証母数を増やす</li>
+          <li>市場局面別に比較する</li>
+        </ul>
+      </section>
+
+      <section class="card soft-green">
+        <h2>予測を上げたいなら、まず何をするべきか</h2>
+        <p class="answer">
+          優先順位でいうと、<strong>1. パターン認識の追加</strong>、
+          <strong>2. 履歴窓の分離</strong>、<strong>3. 検証の細分化</strong> が効果的です。
+          いまのシステムは「方向感と危険回避」は比較的強い一方、
+          「チャート形状から継続 / 失敗を読む」部分が弱いです。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>具体的な改善案</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>優先度</th>
+              <th>やること</th>
+              <th>ねらい</th>
+              <th>期待効果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>高</td>
+              <td>上昇フラッグ、下降フラッグ、ペナント、ダブルトップなどの専用検出を追加</td>
+              <td>人間が見る形をそのまま特徴量にする</td>
+              <td>「雰囲気で分かるのに取り逃がす」を減らせる</td>
+            </tr>
+            <tr>
+              <td>高</td>
+              <td>短期窓と長期窓を分離してスコア化</td>
+              <td>直近ノイズに引っ張られすぎないようにする</td>
+              <td>トレンド継続局面での誤判定を減らしやすい</td>
+            </tr>
+            <tr>
+              <td>高</td>
+              <td>comparison を市場局面別に分ける</td>
+              <td>レンジ、トレンド、転換帯で勝ち方が違うことを可視化する</td>
+              <td>閾値調整の精度が上がる</td>
+            </tr>
+            <tr>
+              <td>中</td>
+              <td>出来高構造を強化する</td>
+              <td>単発の出来高比率だけでなく、出来高の積み上がり方を見る</td>
+              <td>ブレイク失敗の見分けに効く</td>
+            </tr>
+            <tr>
+              <td>中</td>
+              <td>support / resistance の文脈を長めに持つ</td>
+              <td>最近だけでなく、週足級に近い節目を意識する</td>
+              <td>逆行しやすい場所の回避に効く</td>
+            </tr>
+            <tr>
+              <td>中</td>
+              <td>external data 欠損時の代替ロジックを整える</td>
+              <td>板や清算が欠けても判断が鈍りすぎないようにする</td>
+              <td>安定性が上がる</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card soft-amber">
+        <h2>いちばん実務的な次の一手</h2>
+        <ul>
+          <li><strong>第一段階:</strong> 今のルールの上に、旗型や持ち合い型などの「形状フラグ」を追加する</li>
+          <li><strong>第二段階:</strong> comparison CSV を「局面別」「パターン別」に分けて比較する</li>
+          <li><strong>第三段階:</strong> 良かったパターンだけを score / confidence に本採用する</li>
+        </ul>
+        <div class="note">
+          つまり、いきなり AI に丸投げするより、
+          <strong>今の説明可能なルールへ、名前つきチャートパターンを少しずつ追加する</strong>方が安全で実務的です。
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

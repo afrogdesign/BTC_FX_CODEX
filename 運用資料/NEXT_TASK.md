@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-24 05:02 JST
+更新日: 2026-03-24 10:12 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -16,20 +16,24 @@
 - backtest レビュー指摘 3 件を反映しました。主内容は「ready の signal bar fill」「方向別 trigger」「baseline の旧 breakout / fill 近似復元」です。
 - 人向け資料として `運用資料/reports/Ver02.3_評価システム解説.html` と `運用資料/reports/Ver02.3_レビュー改善ループ解説.html` を追加しました。
 - 本番は引き続き `MBP2020` の `com.afrog.btc-monitor-ver021` を観測対象にし、開発側は `btc_monitor` ローカルで Ver02.3 を進めます。
+- `Ver02.3-OBS` は 2026-03-24 10:05 JST の定刻実行まで確認できました。`logs/heartbeat.txt` は 10:05 JST、`logs/last_result.json` は 10:05:40 JST へ更新され、`signal_id=20260324_010500`、`system_label=Ver02.3-OBS`、`system_mode_label=CLI` を確認しました。
+- 同サイクルの `was_notified` は `False` で、実通知フラグは立っていません。`monitor.out` は 0 byte のまま、`monitor.err` は 3 月 9 日の LibreSSL 警告のみで、新しい実行エラーは見えていません。
+- backtest comparison は MEXC 再取得で再生成しました。標準区間では `baseline` が `filled_trades=15 / avg_realized_rr=-0.2222 / profit_factor=0.697 / max_drawdown_rr=6.0`、`rebalanced` が `filled_trades=3 / avg_realized_rr=0.9626 / profit_factor=3.8877 / max_drawdown_rr=1.0` でした。
+- 拡張区間 `tmp/backtest_extended/comparison_summary.csv` でも差が出ました。`baseline` は `filled_trades=45 / avg_realized_rr=0.1818 / profit_factor=1.3408 / max_drawdown_rr=8.4452`、`rebalanced` は `filled_trades=4 / avg_realized_rr=0.4719 / profit_factor=1.9438 / max_drawdown_rr=1.0` でした。
+- 旧メモにあった「今回の取得区間では差分は出ていない」は、再生成後の現状とは不一致です。現状は「取引数は減るが、rebalanced のほうが損益効率とドローダウンで優位」です。
 
 ## 次のタスク
-1. 開発用 `iMac 2019` の `Ver02.3-OBS` が次回定刻実行で正常に 1 サイクル回り、比較用メールが届くかを `monitor.out`、`monitor.err`、heartbeat、受信結果で確認する。
-2. `tmp/backtest/comparison_summary.csv` の結果を前提に、より長い取得区間や別期間で差分が出るか再確認する。
-3. 人向け HTML 2 本の内容を実際の観測結果に合わせて追記するか判断する。
+1. `Ver02.3-OBS` の次回以降サイクルでも heartbeat / last_result 更新が継続するかを確認し、実メール受信有無は別途受信箱側で確認する。
+2. `tmp/backtest/comparison_summary.csv` と `tmp/backtest_extended/comparison_summary.csv` の結果を前提に、「rebalanced は取引数を絞る代わりに PF と DD を改善している」という説明を資料へ反映する。
+3. 標準区間と拡張区間で `baseline` の `filled_trades` が多い理由と、`invalid -> watch` へ変わる代表ケースを追加確認する。
 
 ## ブロッカー
 - 緊急ブロッカーはない。
-- 比較 CSV は作成できたが、今回の取得区間では `baseline / rebalanced` の差が出ていません。差分確認には別区間の再検証が必要です。
-- 開発用比較ジョブは起動済みですが、次回定刻実行前のため heartbeat 更新と実メール送信はまだ確認していません。
-- backtest レビュー指摘は修正済みだが、修正後 comparison を広い区間でまだ再確認していません。
+- 実メール受信結果は、この端末からは未確認です。`last_result.json` 上は 2026-03-24 10:05 JST サイクルで `was_notified=False` でした。
+- `monitor.out` は 0 byte のままで、通常ログからの追跡情報は弱いです。実害は未確認だが、必要なら出力設計の見直し余地があります。
 - 2 台並行作業では、同じ記録ファイルを未 push のまま両方で触ると競合しやすいです。切替前の同期は引き続き必須です。
 
 ## 完了条件
-- Ver02.3: 比較 CSV を踏まえて、差分が出る区間を含む再検証か、差が出なかった理由の説明を残せる状態にする。
+- Ver02.3: 比較 CSV を踏まえて、`baseline / rebalanced` の差分内容を説明できる状態にする。
 - Phase 0: 通知発生から 24 時間後評価までを本番で 1 周完了する。
 - Phase 1: `primary_setup_status=ready` を本有効として、正式指標を実データで確認できる状態にする。
