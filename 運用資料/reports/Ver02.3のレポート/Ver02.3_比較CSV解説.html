@@ -462,6 +462,20 @@
           今回の比較では、<code>rebalanced</code> は取引数を絞る代わりに
           <code>profit_factor</code> と <code>max_drawdown_rr</code> が良い方向へ出ています。
         </div>
+        <div class="note">
+          <strong>filled_trades が増えた理由:</strong>
+          <code>baseline</code> は backtest 上で <code>watch</code> の場面も約定扱いに含むため、
+          標準区間では 15 件中 13 件、拡張区間では 45 件中 42 件が <code>watch</code> 起点でした。
+          <code>rebalanced</code> は <code>ready</code> 限定で約定扱いにするため、
+          回数は減る代わりに、無駄打ちを減らした結果が PF と DD の改善として見えています。
+        </div>
+        <div class="note">
+          <strong>状態変化の代表例:</strong>
+          拡張区間では、<code>baseline</code> で <code>invalid</code> だった 14 件が
+          <code>rebalanced</code> で <code>watch</code> へ、1 件が <code>ready</code> へ変わりました。
+          近いエントリー帯で score / trigger 条件がそろうと、
+          以前は捨てていた場面を「監視継続」や「実行候補」として拾えるようになっています。
+        </div>
       </section>
 
       <section class="card third soft-green">
