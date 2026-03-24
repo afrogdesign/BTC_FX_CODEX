@@ -134,7 +134,13 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("信頼度4", subject)
         self.assertTrue(subject.endswith("[Ver02.1] [CLI]"))
         self.assertNotIn("[BTC監視]", subject)
+        self.assertIn("【注意報】", body)
         self.assertIn("売買推奨メールではなく", body)
+        self.assertIn("【今の見立て】", body)
+        self.assertIn("【まだ本命通知でない理由】", body)
+        self.assertIn("方向感: ロング寄り", body)
+        self.assertIn("いまの扱い: 一度下を試してからの反発待ちです", body)
+        self.assertNotIn("prelabel:", body)
         self.assertNotIn("Gap 21", subject)
 
     def test_wait_case_keeps_numbers_and_translates_internal_terms(self) -> None:

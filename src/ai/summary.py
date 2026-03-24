@@ -398,18 +398,34 @@ def _attention_summary(result: dict[str, Any]) -> str:
     gap = abs(int(result.get("score_gap", 0) or 0))
     prelabel = result.get("prelabel", "")
     timestamp = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
-    return (
-        "これは売買推奨メールではなく、相場が傾き始めたことを知らせる注意報です。"
-        " 現時点ではエントリー推奨ではありません。\n"
-        f"時刻: {timestamp}\n"
-        f"現在価格: {current_price}\n"
-        f"方向感: {direction}\n"
-        f"スコア: long {long_score} / short {short_score} / gap {gap}\n"
-        f"時間足: 4h={result.get('signals_4h')}, 1h={result.get('signals_1h')}, 15m={result.get('signals_15m')}\n"
-        f"prelabel: {prelabel}\n"
-        f"confidence: {result.get('confidence')}\n"
-        f"補足: 本命通知条件は未達です。直近の注意点は {', '.join(result.get('no_trade_flags', [])) or '特になし'} です。"
-    )
+    waiting_reason = _label_prelabel_for_bias(prelabel, result.get("bias"))
+    risk_text = _format_flags(result.get("no_trade_flags", []))
+    lines = [
+        "【注意報】",
+        "これは売買推奨メールではなく、相場が傾き始めたことを知らせる早期注意です。",
+        "現時点では、まだ本命通知の条件はそろっていません。",
+        "",
+        "【今の見立て】",
+        f"- 方向感: {direction}",
+        f"- 現在価格: {current_price}",
+        f"- 信頼度: {result.get('confidence')}",
+        f"- いまの扱い: {waiting_reason}",
+        "",
+        "【機械判定の要点】",
+        f"- スコア: ロング {long_score} / ショート {short_score} / 差 {gap}",
+        (
+            f"- 時間軸: 4時間足 {_label_signal(result.get('signals_4h'))} / "
+            f"1時間足 {_label_signal(result.get('signals_1h'))} / "
+            f"15分足 {_label_signal(result.get('signals_15m'))}"
+        ),
+        "",
+        "【まだ本命通知でない理由】",
+        risk_text,
+        "",
+        "【観測時刻】",
+        timestamp,
+    ]
+    return "\n".join(lines)
 
 def build_summary_subject(result: dict[str, Any]) -> str:
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
