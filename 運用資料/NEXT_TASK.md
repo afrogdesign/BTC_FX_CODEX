@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-24 12:22 JST
+更新日: 2026-03-24 12:53 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
@@ -23,11 +23,12 @@
 - 旧メモにあった「今回の取得区間では差分は出ていない」は、再生成後の現状とは不一致です。現状は「取引数は減るが、rebalanced のほうが損益効率とドローダウンで優位」です。
 - `baseline` の `filled_trades` が多い主因は、backtest 上で `watch` も約定扱いにしているためです。標準区間は 15 件中 13 件、拡張区間は 45 件中 42 件が `watch` 起点でした。`rebalanced` は `ready` 限定 fill なので、回数は減る一方で PF / DD 改善が見えやすくなっています。
 - 状態変化では、拡張区間で `baseline` の `invalid -> rebalanced の watch` が 14 件、`invalid -> ready` が 1 件ありました。標準区間でも `invalid -> ready` が 1 件あり、以前は捨てていた場面の一部を監視・実行候補として拾えるようになっています。
+- `運用資料/計画/改善設計図_v1_チャートパターン拡張.md` は正式設計へ更新しました。v1 は `chart_pattern_shadow` wrapper 配下の `shadow-only` 保存に限定し、AI / notify payload から分離、live 保存先は `last_result.json` と `signals/*.json`、backtest 側は `run_backtest()` の返り値 dict のみと固定しました。
 
 ## 次のタスク
 1. `Ver02.3-OBS` の次回以降サイクルでも heartbeat / last_result 更新が継続するかを確認し、実メール受信有無は別途受信箱側で確認する。
 2. 本番 `Ver02.1` で通知発生から 24 時間後評価までを 1 周確認し、Phase 0 の完了条件を満たす。
-3. `logs/runtime/monitor.out` が空のままでも追跡に困らないかを判断し、必要なら常駐ログの出力設計を見直す。
+3. `chart_pattern_shadow` v1 を実装し、既存の `bias / prelabel / confidence / signal_tier / notify` を変えずに `last_result.json`、`signals/*.json`、`run_backtest()` の返り値へ載せる。
 
 ## ブロッカー
 - 緊急ブロッカーはない。
