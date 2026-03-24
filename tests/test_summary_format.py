@@ -82,9 +82,12 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("信頼度79", subject)
         self.assertTrue(subject.endswith("[Ver02.1] [API]"))
         self.assertNotIn("[BTC監視]", subject)
+        self.assertIn("【結論】", body)
         self.assertIn("ほぼ中立 (+0.0037%)", body)
         self.assertIn("🟡 好条件接近", body)
         self.assertIn("【セットアップ】", body)
+        self.assertIn("【価格と環境】", body)
+        self.assertIn("- 現在価格: 70,356.30", body)
         self.assertIn("再検討帯は 70,000.00 - 70,100.00", body)
         self.assertIn("損切り目安は 69,700.00", body)
         self.assertIn("利確目安は TP1 70,800.00 / TP2 71,200.00", body)
@@ -191,9 +194,10 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertEqual(provider_used, "api")
 
         self.assertIn("相場は上向きです。", body)
-        self.assertIn("一度下を試してからの反発待ちです", body)
+        self.assertIn("いまの扱い: 一度下を試してからの反発待ちです", body)
         self.assertIn("・ロング: 監視継続。再検討帯は 73,349.00 - 73,683.00", body)
         self.assertIn("・ショート: 現状は見送り。再検討帯は 73,734.00 - 74,104.00", body)
+        self.assertIn("【AI補足】", body)
         self.assertIn("AI判断は「いったん振ってからの反発待ち」", body)
         self.assertIn("重要な価格帯", body)
         self.assertNotIn("SWEEP_WAIT", body)
@@ -276,7 +280,7 @@ class SummaryFormatTest(unittest.TestCase):
 
         self.assertEqual(provider_used, "api")
         self.assertIn("相場は下向きです。", body)
-        self.assertIn("一度上を試してからの反落待ちです", body)
+        self.assertIn("いまの扱い: 一度上を試してからの反落待ちです", body)
         self.assertNotIn("一度下を試してからの反発待ちです", body)
 
 

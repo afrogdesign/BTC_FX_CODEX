@@ -51,14 +51,7 @@ class AiCliRetryTest(TestCase):
         self.assertEqual(run_cli_json_mock.call_count, 2)
         error_log_mock.assert_not_called()
 
-    @patch("src.ai.summary.write_ai_error_log")
-    @patch("src.ai.summary.run_cli_text")
-    def test_build_summary_body_retries_cli_and_recovers(self, run_cli_text_mock: object, error_log_mock: object) -> None:
-        run_cli_text_mock.side_effect = [
-            RuntimeError("temporary failure"),
-            "CLI summary body",
-        ]
-
+    def test_build_summary_body_uses_template_layout(self) -> None:
         result, provider_used = build_summary_body(
             provider="cli",
             api_key="",
@@ -70,10 +63,9 @@ class AiCliRetryTest(TestCase):
             result_payload={"bias": "long", "prelabel": "ENTRY_OK", "confidence": 80},
         )
 
-        self.assertEqual(result, "CLI summary body")
+        self.assertIn("【結論】", result)
+        self.assertIn("【機械判定サマリー】", result)
         self.assertEqual(provider_used, "cli")
-        self.assertEqual(run_cli_text_mock.call_count, 2)
-        error_log_mock.assert_not_called()
 
     @patch("src.ai.advice.write_ai_error_log")
     @patch("src.ai.advice.run_cli_json", side_effect=RuntimeError("always fail"))
@@ -95,9 +87,7 @@ class AiCliRetryTest(TestCase):
         error_log_mock.assert_called_once()
         self.assertIn("retry_count=2", error_log_mock.call_args[0][2])
 
-    @patch("src.ai.summary.write_ai_error_log")
-    @patch("src.ai.summary.run_cli_text", side_effect=RuntimeError("always fail"))
-    def test_build_summary_body_falls_back_after_cli_retries_exhausted(self, _run_cli_text_mock: object, error_log_mock: object) -> None:
+    def test_build_summary_body_keeps_setup_lines_in_template(self) -> None:
         result, provider_used = build_summary_body(
             provider="cli",
             api_key="",
@@ -137,8 +127,6 @@ class AiCliRetryTest(TestCase):
         self.assertIn("【セットアップ】", result)
         self.assertIn("・ロング:", result)
         self.assertEqual(provider_used, "cli")
-        error_log_mock.assert_called_once()
-        self.assertIn("retry_count=2", error_log_mock.call_args[0][2])
 
     @patch("src.ai.advice._request_ai_advice_via_api")
     @patch("src.ai.advice.write_ai_error_log")
@@ -179,15 +167,7 @@ class AiCliRetryTest(TestCase):
         self.assertEqual(provider_used, "api")
         error_log_mock.assert_called_once()
 
-    @patch("src.ai.summary._build_summary_body_via_api", return_value="API summary body")
-    @patch("src.ai.summary.write_ai_error_log")
-    @patch("src.ai.summary.run_cli_text", side_effect=RuntimeError("401 Unauthorized"))
-    def test_build_summary_body_falls_back_to_api_when_cli_fails(
-        self,
-        _run_cli_text_mock: object,
-        error_log_mock: object,
-        api_summary_mock: object,
-    ) -> None:
+    def test_build_summary_body_provider_label_is_preserved(self) -> None:
         result, provider_used = build_summary_body(
             provider="cli",
             api_key="sk-test",
@@ -199,10 +179,8 @@ class AiCliRetryTest(TestCase):
             result_payload={"bias": "long", "prelabel": "ENTRY_OK", "confidence": 80},
         )
 
-        self.assertEqual(result, "API summary body")
-        self.assertEqual(provider_used, "api")
-        api_summary_mock.assert_called_once()
-        error_log_mock.assert_called_once()
+        self.assertIn("【結論】", result)
+        self.assertEqual(provider_used, "cli")
 
 
 if __name__ == "__main__":

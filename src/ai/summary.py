@@ -252,7 +252,7 @@ def _format_risk_flags(flags: list[Any]) -> str:
     return " ".join(mapping.get(str(flag), str(flag)) for flag in flags)
 
 
-def _fallback_summary(result: dict[str, Any]) -> str:
+def _ai_review_line(result: dict[str, Any]) -> str:
     ai_advice = result.get("ai_advice")
     ai_line = "AI審査は今回は使わず、機械判定を中心に整理しています。"
     if isinstance(ai_advice, dict):
@@ -264,7 +264,10 @@ def _fallback_summary(result: dict[str, Any]) -> str:
         notes = str(ai_advice.get("notes", "")).strip()
         if notes:
             ai_line += f" 補足: {notes}"
+    return ai_line
 
+
+def _build_summary_layout(result: dict[str, Any]) -> str:
     prelabel = result.get("prelabel", "RISKY_ENTRY")
     long_score = result.get("long_display_score")
     short_score = result.get("short_display_score")
@@ -284,22 +287,51 @@ def _fallback_summary(result: dict[str, Any]) -> str:
     resistance_text = _format_zone_summary("近いレジスタンス帯", result.get("resistance_zones", []))
     signal_intro = _signal_intro(result)
     direction = "相場は上向きです。" if str(result.get("bias", "")).lower() == "long" else "相場は下向きです。"
-    action = f"ただし今は入る位置としては良くないため、{_label_prelabel_for_bias(prelabel, result.get('bias'))}"
+    action = _label_prelabel_for_bias(prelabel, result.get("bias"))
 
-    body = (
-        f"【結論】{direction}{action} 信頼度は {confidence} です。\n"
-        f"【機械判定サマリー】総合は {_label_bias(result.get('bias'))} で、ロング {long_score} / ショート {short_score}、差は {gap} です。"
-        f"相場環境は「{_label_regime(result.get('market_regime'))}」で、局面は「{_label_phase(result.get('phase'))}」です。"
-        f"時間軸は 4時間足が {_label_signal(result.get('signals_4h'))}、1時間足が {_label_signal(result.get('signals_1h'))}、15分足が {_label_signal(result.get('signals_15m'))} です。\n"
-        f"【指標・環境】現在価格は {current_price}、Funding は {funding_display}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
-        f"{support_text} {resistance_text}\n"
-        f"【セットアップ】\n{_format_setup_levels('ロング側', long_setup, 'long')}\n{_format_setup_levels('ショート側', short_setup, 'short')}\n"
-        f"【AI審査】{ai_line}\n"
-        f"【リスク】{_format_flags(result.get('no_trade_flags', []))} {_format_risk_flags(result.get('risk_flags', []))}"
-    )
+    lines = [
+        "【結論】",
+        direction,
+        f"いまの扱い: {action}",
+        f"信頼度: {confidence}",
+        "",
+        "【機械判定サマリー】",
+        f"- 総合判断: {_label_bias(result.get('bias'))}",
+        f"- スコア: ロング {long_score} / ショート {short_score} / 差 {gap}",
+        f"- 相場環境: {_label_regime(result.get('market_regime'))}",
+        f"- 局面: {_label_phase(result.get('phase'))}",
+        (
+            f"- 時間軸: 4時間足 {_label_signal(result.get('signals_4h'))} / "
+            f"1時間足 {_label_signal(result.get('signals_1h'))} / "
+            f"15分足 {_label_signal(result.get('signals_15m'))}"
+        ),
+        "",
+        "【価格と環境】",
+        f"- 現在価格: {current_price}",
+        f"- Funding: {funding_display}",
+        f"- ATR比 / 出来高比: {atr_ratio} / {volume_ratio}",
+        f"- {support_text}",
+        f"- {resistance_text}",
+        "",
+        "【セットアップ】",
+        _format_setup_levels("ロング側", long_setup, "long"),
+        _format_setup_levels("ショート側", short_setup, "short"),
+        "",
+        "【AI補足】",
+        _ai_review_line(result),
+        "",
+        "【注意点】",
+        _format_flags(result.get("no_trade_flags", [])),
+        _format_risk_flags(result.get("risk_flags", [])),
+    ]
+    body = "\n".join(lines)
     if signal_intro:
         return f"{signal_intro}\n{body}"
     return body
+
+
+def _fallback_summary(result: dict[str, Any]) -> str:
+    return _build_summary_layout(result)
 
 
 def _build_summary_body_via_api(
@@ -423,72 +455,4 @@ def build_summary_body(
     if str(result_payload.get("notification_kind", "main")).lower() == "attention":
         return _attention_summary(result_payload), str(provider or "api").strip().lower()
     provider_name = str(provider or "api").strip().lower()
-
-    if provider_name == "cli":
-        if not str(cli_command).strip():
-            api_body = _build_summary_body_via_api(
-                api_key=api_key,
-                model=model,
-                timeout_sec=timeout_sec,
-                retry_count=retry_count,
-                base_dir=base_dir,
-                result_payload=result_payload,
-            )
-            if api_body is not None:
-                return api_body, "api"
-            return _fallback_summary(result_payload), "cli"
-        last_error: str | None = None
-        for attempt in range(1, max(1, retry_count) + 1):
-            try:
-                content = run_cli_text(
-                    command=cli_command,
-                    timeout_sec=timeout_sec,
-                    payload={
-                        "task": "summary",
-                        "model": model,
-                        "system_prompt": _load_prompt(base_dir),
-                        "result_payload": result_payload,
-                    },
-                )
-                return content or _fallback_summary(result_payload), "cli"
-            except Exception as exc:  # noqa: BLE001
-                last_error = f"{type(exc).__name__}: {exc}"
-                continue
-        if last_error:
-            write_ai_error_log(
-                base_dir,
-                "ai_summary_error",
-                "\n".join(
-                    [
-                        "provider=cli",
-                        f"model={model}",
-                        f"timeout_sec={timeout_sec}",
-                        f"retry_count={retry_count}",
-                        f"last_attempt={attempt}",
-                        f"details={last_error}",
-                    ]
-                ),
-            )
-        api_body = _build_summary_body_via_api(
-            api_key=api_key,
-            model=model,
-            timeout_sec=timeout_sec,
-            retry_count=retry_count,
-            base_dir=base_dir,
-            result_payload=result_payload,
-        )
-        if api_body is not None:
-            return api_body, "api"
-        return _fallback_summary(result_payload), "cli"
-
-    api_body = _build_summary_body_via_api(
-        api_key=api_key,
-        model=model,
-        timeout_sec=timeout_sec,
-        retry_count=retry_count,
-        base_dir=base_dir,
-        result_payload=result_payload,
-    )
-    if api_body is not None:
-        return api_body, "api"
-    return _fallback_summary(result_payload), provider_name
+    return _build_summary_layout(result_payload), provider_name
