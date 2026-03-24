@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from config import load_config
+from src.analysis.chart_pattern_shadow import build_chart_pattern_shadow
 from src.analysis.breakout import previous_breakout_levels
 from src.analysis.confidence import compute_confidence
 from src.analysis.funding import funding_rate_raw_to_pct
@@ -363,6 +364,18 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
                 "short_setup": short_setup,
                 "primary_setup_side": primary_side,
                 "primary_setup_status": primary_status,
+                **build_chart_pattern_shadow(
+                    price=price,
+                    atr=atr,
+                    df_15m=part_15m,
+                    swings_15m=tf_15m["swings"],
+                    breakout_up=breakout_up,
+                    breakout_down=breakout_down,
+                    support_zones_all=sort_zones_by_distance(price, all_support_zones),
+                    resistance_zones_all=sort_zones_by_distance(price, all_resistance_zones),
+                    raw_missing_fields=[],
+                    cfg=cfg,
+                ),
                 "profile": profile,
             }
         )

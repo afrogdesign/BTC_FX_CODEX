@@ -372,6 +372,9 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertEqual(cfg.BREAKOUT_LOOKBACK_BARS, 20)
         self.assertAlmostEqual(cfg.TRIGGER_VOLUME_RATIO, 1.15)
         self.assertEqual(cfg.SHORT_LONG_DIFF_THRESHOLD, 9)
+        self.assertEqual(cfg.WINDOW_MICRO_15M_BARS, 96)
+        self.assertAlmostEqual(cfg.PATTERN_FLAG_IMPULSE_ATR_MIN, 2.2)
+        self.assertEqual(cfg.PATTERN_FAILED_BREAKOUT_RETURN_BARS, 4)
 
 
 if __name__ == "__main__":

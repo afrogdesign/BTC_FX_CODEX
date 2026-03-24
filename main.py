@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from config import load_config
 from src.ai.advice import request_ai_advice
 from src.ai.summary import build_summary_body, build_summary_subject
+from src.analysis.chart_pattern_shadow import build_chart_pattern_shadow
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
 from src.analysis.breakout import previous_breakout_levels
@@ -533,7 +534,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         funding_rate=funding_rate_pct,
     )
 
-    result: dict[str, Any] = {
+    core_result: dict[str, Any] = {
         "signal_id": signal_id,
         "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
         "timestamp_jst": now_jst.isoformat(),
@@ -642,34 +643,34 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         timeout_sec=cfg.AI_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,
-        machine_payload=result,
+        machine_payload=core_result,
         qualitative_payload=qualitative_context,
     )
-    result["ai_advice"] = ai_advice
-    result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
+    core_result["ai_advice"] = ai_advice
+    core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
     if isinstance(ai_advice, dict):
-        result["ai_decision"] = ai_advice.get("decision", "")
-        result["ai_confidence"] = ai_advice.get("confidence", "")
+        core_result["ai_decision"] = ai_advice.get("decision", "")
+        core_result["ai_confidence"] = ai_advice.get("confidence", "")
 
     data_missing_fields = _normalize_missing_data_fields(
         market_structure.missing_fields or [],
         ai_missing=bool(getattr(cfg, "OPENAI_API_KEY", "")) and ai_advice is None,
         funding_missing=funding_missing,
     )
-    result["data_missing_fields"] = data_missing_fields
-    result["data_quality_flag"] = _data_quality_flag(data_missing_fields)
+    core_result["data_missing_fields"] = data_missing_fields
+    core_result["data_quality_flag"] = _data_quality_flag(data_missing_fields)
 
-    signal_tier_info = compute_signal_tier(result, cfg)
-    result["signal_tier"] = signal_tier_info["tier"]
-    result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
-    result["signal_badge"] = signal_tier_badge(result["signal_tier"])
+    signal_tier_info = compute_signal_tier(core_result, cfg)
+    core_result["signal_tier"] = signal_tier_info["tier"]
+    core_result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
+    core_result["signal_badge"] = signal_tier_badge(core_result["signal_tier"])
 
     if primary_setup_side in {"long", "short"}:
         phase1_activation = determine_phase1_activation(
             bias=bias,
             primary_setup_side=primary_setup_side,
             primary_setup_status=primary_setup_status,
-            data_quality_flag=result["data_quality_flag"],
+            data_quality_flag=core_result["data_quality_flag"],
             entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
             stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
         )
@@ -681,7 +682,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             account_balance=float(cfg.PHASE1_ACCOUNT_BALANCE_USD),
             entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
             stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
-            signal_tier=result["signal_tier"],
+            signal_tier=core_result["signal_tier"],
             loss_streak=loss_streak,
             base_risk_pct=float(cfg.PHASE1_BASE_RISK_PCT),
             loss_streak_step_pct=float(cfg.PHASE1_LOSS_STREAK_STEP_PCT),
@@ -699,20 +700,20 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
             exit_rule_version="phase1_v0",
         )
-        result["loss_streak_at_entry"] = loss_streak
-        result.update(phase1_activation)
-        result.update(position_size_plan)
-        result.update(exit_plan)
+        core_result["loss_streak_at_entry"] = loss_streak
+        core_result.update(phase1_activation)
+        core_result.update(position_size_plan)
+        core_result.update(exit_plan)
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
-    notify_info = should_notify(result, last_result, last_notified, last_attention_notified, cfg)
+    notify_info = should_notify(core_result, last_result, last_notified, last_attention_notified, cfg)
     notify = bool(notify_info["notify"])
-    result["notify_reason_codes"] = notify_info["notify_reason_codes"]
-    result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
-    result["reason_for_notification"] = notify_info["notify_reason_codes"]
-    result["notification_kind"] = notify_info["notification_kind"]
+    core_result["notify_reason_codes"] = notify_info["notify_reason_codes"]
+    core_result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
+    core_result["reason_for_notification"] = notify_info["notify_reason_codes"]
+    core_result["notification_kind"] = notify_info["notification_kind"]
 
     summary_body, summary_provider_used = build_summary_body(
         provider=cfg.AI_SUMMARY_PROVIDER,
@@ -722,23 +723,23 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         timeout_sec=cfg.AI_SUMMARY_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,
-        result_payload=result,
+        result_payload=core_result,
     )
-    result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
-    result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
-    result["summary_subject"] = build_summary_subject(result)
-    result["summary_body"] = summary_body
+    core_result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
+    core_result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
+    core_result["summary_subject"] = build_summary_subject(core_result)
+    core_result["summary_body"] = summary_body
 
     if notify:
         notify_path = (
             get_last_attention_notified_path(base_dir)
-            if result["notification_kind"] == "attention"
+            if core_result["notification_kind"] == "attention"
             else get_last_notified_path(base_dir)
         )
         if cfg.DRYRUN_MODE:
-            result["was_notified"] = True
-            result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-            save_json(notify_path, result)
+            core_result["was_notified"] = True
+            core_result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+            save_json(notify_path, core_result)
         else:
             try:
                 send_email(
@@ -748,21 +749,37 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                     smtp_password=cfg.SMTP_PASSWORD,
                     mail_from=cfg.MAIL_FROM,
                     mail_to=cfg.MAIL_TO,
-                    subject=result["summary_subject"],
-                    body=result["summary_body"],
+                    subject=core_result["summary_subject"],
+                    body=core_result["summary_body"],
                 )
-                result["was_notified"] = True
-                result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                save_json(notify_path, result)
+                core_result["was_notified"] = True
+                core_result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                save_json(notify_path, core_result)
             except Exception as exc:  # noqa: BLE001
-                save_pending_email(base_dir, result["summary_subject"], result["summary_body"])
+                save_pending_email(base_dir, core_result["summary_subject"], core_result["summary_body"])
                 _error_log(base_dir, "smtp_error", f"{exc}\n{traceback.format_exc()}")
 
-    save_signal_snapshot(base_dir, result)
-    append_trade_log(base_dir, result)
-    save_json(get_last_result_path(base_dir), result)
+    persisted_result = dict(core_result)
+    persisted_result.update(
+        build_chart_pattern_shadow(
+            price=price,
+            atr=atr_15m,
+            df_15m=df_15m,
+            swings_15m=tf_15m["swings"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+            support_zones_all=sort_zones_by_distance(price, all_support_zones),
+            resistance_zones_all=sort_zones_by_distance(price, all_resistance_zones),
+            raw_missing_fields=market_structure.missing_fields or [],
+            cfg=cfg,
+        )
+    )
 
-    return result
+    save_signal_snapshot(base_dir, persisted_result)
+    append_trade_log(base_dir, persisted_result)
+    save_json(get_last_result_path(base_dir), persisted_result)
+
+    return persisted_result
 
 
 def _run_cycle_safe(cfg: Any, base_dir: Path) -> None:
