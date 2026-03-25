@@ -14,10 +14,13 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from tools.log_feedback import (
+    DEFAULT_REVIEW_FORM,
+    DEFAULT_REVIEW_NOTE,
     REVIEW_NOTE_COLUMNS,
     _build_improvement_candidates,
     _load_csv_rows,
     _load_review_note_rows,
+    _review_form_path,
     _render_review_form_html,
     build_shadow_log,
     evaluate_trade_row,
@@ -76,8 +79,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_done | 2026-03-11T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical |  | good | done |",
-                        "| sig_pending | 2026-03-11T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  |  | pending |",
+                        "| sig_done | 2026-03-25T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical |  | good | done |",
+                        "| sig_pending | 2026-03-25T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  |  | pending |",
                     ]
                 ),
                 encoding="utf-8",
@@ -175,13 +178,171 @@ class LogFeedbackTest(unittest.TestCase):
                 "timestamp_jst": "2026-03-11T09:05:00+09:00",
                 "subject": "subject",
                 "auto_eval_summary": "auto",
+                "bias": "long",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "ready",
+                "signal_tier": "strong_machine",
+                "notify_reason": '["status_upgraded"]',
+                "data_quality_flag": "ok",
+                "evaluation_status": "complete",
                 "review_status": "pending",
             }
         )
 
         html = _render_review_form_html([row], Path("/tmp/review.md"))
 
-        self.assertEqual(html.count("| signal_id |"), 1)
+        self.assertGreaterEqual(html.count("| signal_id |"), 1)
+        self.assertIn("今の確認軸", html)
+        self.assertIn("signal_tier", html)
+        self.assertIn("notify_reason", html)
+        self.assertIn("localStorage", html)
+        self.assertIn("restoreDraft()", html)
+        self.assertIn("draft-status", html)
+        self.assertIn("getDraftStorage()", html)
+        self.assertIn("renderCards();\n    restoreDraft();\n    renderCards();", html)
+        self.assertIn("通知 1", html)
+        self.assertIn('data-row-index="0"', html)
+        self.assertIn(">subject<", html)
+        self.assertIn("おすすめ", html)
+        self.assertIn("03/11 09:05", html)
+        self.assertIn("ロング寄り", html)
+        self.assertNotIn("??", html)
+        self.assertNotIn("replaceAll", html)
+        self.assertIn("syncRowsFromDom()", html)
+        self.assertIn("bindSelectHandlers()", html)
+        self.assertIn("全文を選択", html)
+        self.assertNotIn("Markdownを保存", html)
+
+    def test_import_reviews_ignores_rows_before_review_cutoff(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            review_note = base_dir / "review.md"
+            review_note.write_text(
+                "\n".join(
+                    [
+                        "# 通知評価シート",
+                        "",
+                        "## レビュー一覧",
+                        f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
+                        f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
+                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical |  | old | done |",
+                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro |  | new | done |",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            reviews_path = import_reviews(base_dir=base_dir, review_note_path=review_note, reviews_path=base_dir / "user_reviews.csv")
+            rows = _load_csv_rows(reviews_path)
+
+            self.assertEqual([row["signal_id"] for row in rows], ["new_sig"])
+
+    def test_default_review_form_path_uses_repo_tmp(self) -> None:
+        self.assertEqual(_review_form_path(DEFAULT_REVIEW_NOTE), DEFAULT_REVIEW_FORM)
+
+    def test_export_review_queue_includes_recent_notified_trade_without_complete_outcome(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            outcomes_path = base_dir / "outcomes.csv"
+            trades_path = base_dir / "trades.csv"
+            reviews_path = base_dir / "user_reviews.csv"
+            review_note = base_dir / "review.md"
+
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "evaluation_status"])
+                writer.writeheader()
+
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "was_notified",
+                        "summary_subject",
+                        "bias",
+                        "prelabel",
+                        "primary_setup_status",
+                        "signal_tier",
+                        "notify_reason_codes",
+                        "data_quality_flag",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_recent",
+                        "timestamp_jst": "2026-03-25T00:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "recent subject",
+                        "bias": "short",
+                        "prelabel": "ENTRY_OK",
+                        "primary_setup_status": "ready",
+                        "signal_tier": "normal",
+                        "notify_reason_codes": '["status_upgraded"]',
+                        "data_quality_flag": "ok",
+                    }
+                )
+
+            export_review_queue(
+                base_dir=base_dir,
+                review_note_path=review_note,
+                outcomes_path=outcomes_path,
+                reviews_path=reviews_path,
+                trades_path=trades_path,
+            )
+
+            rows = _load_review_note_rows(review_note)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["signal_id"], "sig_recent")
+            self.assertIn("事後評価待ち", rows[0]["auto_eval_summary"])
+
+    def test_export_review_queue_hides_old_rows_from_form_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            outcomes_path = base_dir / "outcomes.csv"
+            trades_path = base_dir / "trades.csv"
+            reviews_path = base_dir / "user_reviews.csv"
+            review_note = base_dir / "review.md"
+
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "evaluation_status"])
+                writer.writeheader()
+
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject"])
+                writer.writeheader()
+
+            review_note.write_text(
+                "\n".join(
+                    [
+                        "# 通知評価シート",
+                        "",
+                        "## レビュー一覧",
+                        f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
+                        f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
+                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical |  | old | done |",
+                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro |  | new | done |",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            export_review_queue(
+                base_dir=base_dir,
+                review_note_path=review_note,
+                outcomes_path=outcomes_path,
+                reviews_path=reviews_path,
+                trades_path=trades_path,
+            )
+
+            note_text = review_note.read_text(encoding="utf-8")
+            form_text = _review_form_path(review_note).read_text(encoding="utf-8")
+
+            self.assertIn("old_sig", note_text)
+            self.assertIn("new_sig", note_text)
+            self.assertNotIn("old_sig", form_text)
+            self.assertIn("new_sig", form_text)
 
     def test_load_review_note_rows_ignores_single_header_and_keeps_real_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:

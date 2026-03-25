@@ -1,31 +1,30 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-24 13:40 JST
+更新日: 2026-03-25 06:40 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 
 ## 現在の状況
-- `Ver02.3` は、評価ロジック再調整、backtest の `ready` 限定 fill、比較説明資料、`chart_pattern_shadow` v1 実装まで反映済みです。
-- 比較 backtest は再生成済みで、標準区間・拡張区間の両方で `rebalanced` が取引数を絞る代わりに PF と DD で優位でした。主因は `baseline` が `watch` も約定扱いにしている点です。
-- `chart_pattern_shadow` は `shadow-only` で実装済みです。`main.py` では AI / notify / summary payload と分離し、`last_result.json` と `signals/*.json` へだけ保存する設計です。backtest 側は `run_backtest()` の返り値 dict にだけ載せます。
-- 実装確認は `.venv312` での unit test と `compileall` まで完了しています。実装コミットは `6b6ece0` (`chart_pattern_shadow の shadow 保存を実装`) です。
-- 開発用 `iMac 2019` の `Ver02.3-OBS` は 2026-03-24 13:38 JST に再起動し、`com.afrog.btc-monitor` は新 PID `68086` で `running` を確認しました。
-- 直前に確認できている定刻実行は 2026-03-24 13:05 JST サイクルです。この時点の `last_result.json` には `chart_pattern_shadow` は未保存で、常駐再起動前の出力でした。
-- 本番観測対象は引き続き `MBP2020` の `com.afrog.btc-monitor-ver021`、開発観測対象は `iMac 2019` の `Ver02.3-OBS` です。
+- 通知評価フォーム運用を見直し、`評価シート入力フォーム.html` は repo 配下 `tmp/評価シート入力フォーム.html` を正本に変更しました。iCloud 配下では JavaScript が不安定で、repo 配下の `js_probe.html` では正常動作を確認済みです。
+- レビュー入力運用は「フォームで入力し、下のプレビュー全文を `通知評価シート.md` に貼り付ける」に固定しました。`Markdownを保存` は廃止し、`通知評価シート.md` を唯一の正本として扱います。
+- フォーム画面では `2026-03-25 JST` 以降のレビュー対象だけを表示し、同じ境界より前の低精度レビューは `import_reviews()` と集計からも除外する実装にしました。
+- フォーム UI は、通知時刻の大表示 `MM/DD HH:MM`、優先入力項目の強調、日本語ラベル化まで反映済みです。
+- 直近の repo 検証として `.venv312/bin/python -m unittest tests.test_log_feedback` を実行し、11 件成功を確認しました。
+- `tools/log_feedback.py`、`tests/test_log_feedback.py`、`運用資料/運用/実務/ログ検証と改善運用ガイド.md` を更新済みで、`js_probe.html` を追加しています。
+- `tests/test_codex_cli_wrapper.py` は別件で未整理の変更が残っているため、今回のコミットには含めない前提で扱います。
 
 ## 次のタスク
-1. `Ver02.3-OBS` の次回以降サイクルでも heartbeat / last_result 更新が継続するかを確認し、実メール受信有無は別途受信箱側で確認する。
-2. 次回の `Ver02.3-OBS` 定刻実行で `chart_pattern_shadow` が `last_result.json` と `signals/*.json` に保存されるかを確認する。
-3. 本番 `Ver02.1` で通知発生から 24 時間後評価までを 1 周確認し、Phase 0 の完了条件を満たす。
+1. repo 配下の [tmp/評価シート入力フォーム.html](tmp/評価シート入力フォーム.html) を使って、気になる通知だけレビューし、プレビュー全文を iCloud 側 `通知評価シート.md` に貼り付ける。
+2. レビューがたまった段階で `daily-sync` もしくは AI への「集計して」で `user_reviews.csv` と集計を更新する。
+3. `Ver02.3-OBS` の観測と `chart_pattern_shadow` の live 保存確認は別トラックで継続する。
+4. `tests/test_codex_cli_wrapper.py` の不一致は、通知評価フォーム運用が落ち着いたあとに切り分けて整合化する。
 
 ## ブロッカー
-- 緊急ブロッカーはない。
-- 実メール受信結果は、この端末からは未確認です。直近確認済みの `last_result.json` は 2026-03-24 13:05 JST サイクルのものでした。
-- `logs/runtime/monitor.out` は 0 byte のままで、通常ログからの追跡情報は弱いです。実害は未確認だが、必要なら出力設計の見直し余地があります。
-- `chart_pattern_shadow` はコード実装と常駐再起動までは完了したが、再起動後の定刻実行での live JSON 出力確認はまだです。
-- 2 台並行作業では、同じ記録ファイルを未 push のまま両方で触ると競合しやすいです。切替前の同期は引き続き必須です。
+- iCloud 配下で開いた HTML は JavaScript が不安定で、ボタン操作とプレビュー更新に使えません。レビュー入力は repo 配下フォームを使う必要があります。
+- フォームは表示と入力導線までは安定したが、最終反映は `通知評価シート.md` への全文貼り付け前提です。完全自動保存にはしていません。
+- repo の別件として `tests/test_codex_cli_wrapper.py` の不一致が残っていますが、今回のレビュー運用とは切り離して扱います。
 
 ## 完了条件
-- Ver02.3: 比較 CSV を踏まえて、`baseline / rebalanced` の差分内容を説明できる状態にする。
+- レビュー運用: repo 配下フォームからの入力と `通知評価シート.md` への全文貼り付けで、通知評価を迷わず継続できる状態にする。
 - Phase 0: 通知発生から 24 時間後評価までを本番で 1 周完了する。
 - Phase 1: `primary_setup_status=ready` を本有効として、正式指標を実データで確認できる状態にする。

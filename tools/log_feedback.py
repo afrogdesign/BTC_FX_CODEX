@@ -25,7 +25,9 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEW_NOTE = Path(
     "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/通知評価シート.md"
 )
+DEFAULT_REVIEW_FORM = BASE_DIR / "tmp" / "評価シート入力フォーム.html"
 JST = ZoneInfo("Asia/Tokyo")
+REVIEW_START_CUTOFF_JST = "2026-03-25T00:00:00+09:00"
 
 FORM_VERDICT_OPTIONS = [
     {"value": "", "label": "未選択"},
@@ -63,6 +65,12 @@ FORM_USEFULNESS_OPTIONS = [{"value": "", "label": "未選択"}] + [
 
 FORM_MEMO_PRESET_OPTIONS = [
     {"value": "", "label": "未選択"},
+    {"value": "ready だが位置はまだ良くなく、次の確認足待ち。", "label": "ready だが次の確認足待ち"},
+    {"value": "watch 通知として有効で、飛び乗り防止に役立った。", "label": "watch として有効だった"},
+    {"value": "notify_reason の格上げは妥当だが、件名ほどの優位性は感じない。", "label": "通知理由は妥当だが件名が強い"},
+    {"value": "signal_tier は normal のままで、注意喚起として見るのが妥当。", "label": "normal tier の注意喚起として妥当"},
+    {"value": "signal_tier は強くないが、監視価値のある変化だった。", "label": "強くないが監視価値あり"},
+    {"value": "data_quality に問題はなく、判断材料として使えた。", "label": "データ品質は問題なかった"},
     {"value": "位置は悪いが、注意喚起としては良かった。", "label": "位置は悪いが、注意喚起としては良かった"},
     {"value": "方向は合っていたが、通知が少し早い。", "label": "方向は合っていたが、通知が少し早い"},
     {"value": "方向は合っていたが、通知が少し遅い。", "label": "方向は合っていたが、通知が少し遅い"},
@@ -228,6 +236,51 @@ VALID_USER_VERDICTS = {
 VALID_WOULD_TRADE = {"", "yes", "no", "conditional"}
 VALID_REVIEW_STATUS = {"pending", "done"}
 VALID_MOVE_DRIVERS = {"", "technical", "news", "macro", "unknown"}
+
+BIAS_LABELS = {
+    "long": "long / ロング寄り",
+    "short": "short / ショート寄り",
+    "wait": "wait / 様子見",
+}
+PRELABEL_LABELS = {
+    "ENTRY_OK": "ENTRY_OK / 入る条件がほぼそろった",
+    "RISKY_ENTRY": "RISKY_ENTRY / 方向はあるが位置が悪い",
+    "SWEEP_WAIT": "SWEEP_WAIT / 先に振り落とし確認を待ちたい",
+    "NO_TRADE_CANDIDATE": "NO_TRADE_CANDIDATE / 見送り候補",
+}
+EVALUATION_LABELS = {
+    "complete": "complete / 24時間後評価まで完了",
+    "pending": "pending / 24時間後評価待ち",
+}
+SETUP_LABELS = {
+    "ready": "ready / エントリー条件がそろった状態",
+    "watch": "watch / 方向はあるが待ちたい状態",
+    "invalid": "invalid / 今は見送りが妥当な状態",
+    "none": "none / セットアップ未形成",
+}
+TIER_LABELS = {
+    "normal": "normal / 通常通知",
+    "strong_machine": "strong_machine / 機械的にかなり好条件",
+    "strong_ai_confirmed": "strong_ai_confirmed / AI確認込みの強条件",
+}
+QUALITY_LABELS = {
+    "ok": "ok / データ欠損なし",
+    "partial_missing": "partial_missing / 一部データ欠損あり",
+    "degraded": "degraded / 品質低下あり",
+    "unknown": "unknown / 品質未判定",
+}
+NOTIFY_REASON_LABELS = {
+    "status_upgraded": "status_upgraded / setup が昇格した",
+    "bias_changed": "bias_changed / 方向感が wait から long または short に変わった",
+    "prelabel_improved": "prelabel_improved / 位置評価が改善した",
+    "confidence_jump": "confidence_jump / 信頼度が大きく変化した",
+    "agreement_changed": "agreement_changed / AI と機械の一致状況が変わった",
+    "signal_tier_upgraded": "signal_tier_upgraded / signal_tier が昇格した",
+    "attention_bias_changed": "attention_bias_changed / 注意報の方向が切り替わった",
+    "attention_score_crossed": "attention_score_crossed / 注意報スコア条件を超えた",
+    "attention_gap_crossed": "attention_gap_crossed / ロングショート差が閾値を超えた",
+    "attention_first_detection": "attention_first_detection / 初回の注意報検知",
+}
 
 TECHNICAL_REASON_CODES = {
     "balanced_location",
@@ -707,6 +760,7 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
         "このノートは、通知済みシグナルを翌日まとめてレビューするための専用ノートです。",
         "",
         "## 入力ルール",
+        "- まず `primary_setup_status` / `signal_tier` / `notify_reason` を見て、通知の種類を確認します。",
         "- `user_verdict`: useful_entry / useful_wait / useful_skip / too_early / too_late / low_value",
         "- `would_trade`: yes / no / conditional",
         "- `actual_move_driver`: technical / news / macro / unknown",
@@ -725,7 +779,172 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
 
 
 def _review_form_path(review_note_path: Path) -> Path:
+    if review_note_path == DEFAULT_REVIEW_NOTE:
+        return DEFAULT_REVIEW_FORM
     return review_note_path.with_name("評価シート入力フォーム.html")
+
+
+def _pending_auto_eval_summary(trade: dict[str, str]) -> str:
+    parts = ["事後評価待ち"]
+    bias = str(trade.get("bias", "")).strip()
+    prelabel = str(trade.get("prelabel", "")).strip()
+    setup = str(trade.get("primary_setup_status", "")).strip()
+    tier = str(trade.get("signal_tier", "")).strip()
+    if bias:
+        parts.append(f"bias:{bias}")
+    if prelabel:
+        parts.append(f"prelabel:{prelabel}")
+    if setup:
+        parts.append(f"setup:{setup}")
+    if tier:
+        parts.append(f"tier:{tier}")
+    return " / ".join(parts)
+
+
+def _describe_code(value: str, labels: dict[str, str]) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "未記録"
+    return labels.get(raw, f"{raw} / 未定義コード")
+
+
+def _parse_maybe_json_array(value: str) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _describe_notify_reason(value: str) -> str:
+    items = _parse_maybe_json_array(value)
+    if not items:
+        return "未記録"
+    return " / ".join(_describe_code(item, NOTIFY_REASON_LABELS) for item in items)
+
+
+def _format_time_badge(timestamp_jst: str) -> str:
+    raw = str(timestamp_jst or "").strip()
+    if len(raw) >= 16 and "T" in raw:
+        return raw[5:10].replace("-", "/") + " " + raw[11:16]
+    return raw or "--:--"
+
+
+def _is_review_target(timestamp_jst: str) -> bool:
+    cutoff = _parse_dt(REVIEW_START_CUTOFF_JST)
+    current = _parse_dt(str(timestamp_jst or "").strip())
+    if cutoff is None or current is None:
+        return False
+    return current >= cutoff
+
+
+def _describe_auto_eval_summary(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "未記録"
+    return (
+        raw.replace("bias:long", f"bias:{BIAS_LABELS['long']}")
+        .replace("bias:short", f"bias:{BIAS_LABELS['short']}")
+        .replace("bias:wait", f"bias:{BIAS_LABELS['wait']}")
+        .replace("prelabel:ENTRY_OK", f"prelabel:{PRELABEL_LABELS['ENTRY_OK']}")
+        .replace("prelabel:RISKY_ENTRY", f"prelabel:{PRELABEL_LABELS['RISKY_ENTRY']}")
+        .replace("prelabel:SWEEP_WAIT", f"prelabel:{PRELABEL_LABELS['SWEEP_WAIT']}")
+        .replace("prelabel:NO_TRADE_CANDIDATE", f"prelabel:{PRELABEL_LABELS['NO_TRADE_CANDIDATE']}")
+        .replace("setup:ready", f"setup:{SETUP_LABELS['ready']}")
+        .replace("setup:watch", f"setup:{SETUP_LABELS['watch']}")
+        .replace("setup:invalid", f"setup:{SETUP_LABELS['invalid']}")
+        .replace("setup:none", f"setup:{SETUP_LABELS['none']}")
+        .replace("tier:normal", f"tier:{TIER_LABELS['normal']}")
+        .replace("tier:strong_machine", f"tier:{TIER_LABELS['strong_machine']}")
+        .replace("tier:strong_ai_confirmed", f"tier:{TIER_LABELS['strong_ai_confirmed']}")
+    )
+
+
+def _render_select_html(
+    option_list: list[dict[str, str]],
+    value: str,
+    row_index: int,
+    key: str,
+) -> str:
+    selected_value = str(value or "")
+    options_html: list[str] = []
+    for item in option_list:
+        item_value = str(item.get("value", ""))
+        selected = ' selected="selected"' if item_value == selected_value else ""
+        options_html.append(
+            f'<option value="{html.escape(item_value, quote=True)}"{selected}>{html.escape(str(item.get("label", "")))}</option>'
+        )
+    return (
+        f'<select data-row-index="{row_index}" data-key="{html.escape(key, quote=True)}">'
+        + "".join(options_html)
+        + "</select>"
+    )
+
+
+def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dict[str, list[dict[str, str]]]) -> str:
+    cards: list[str] = []
+    field_defs = [
+        ("user_verdict", "実務評価", "verdict", "入る価値・待つ価値・見送る価値、または早い/遅い/低価値を選ぶ", True),
+        ("usefulness_1to5", "総合価値", "usefulness", "5 が最も実務価値あり。迷ったら 3 を基準にする"),
+        ("would_trade", "自分ならどうするか", "wouldTrade", "今のルールと別に、自分の実行判断を残す", True),
+        ("actual_move_driver", "値動きの主因", "moveDriver", ""),
+        ("memo_preset", "メモ候補", "memoPreset", "最近の通知軸に合わせた短文をそのまま使える"),
+        ("review_status", "レビュー状態", "reviewStatus", "入力し終えたら done にする", True),
+    ]
+    for index, row in enumerate(rows, start=1):
+        time_badge = _format_time_badge(str(row.get("timestamp_jst", "")))
+        chips = [
+            f'<span class="chip">方向感: {html.escape(_describe_code(str(row.get("bias", "")), BIAS_LABELS))}</span>',
+            f'<span class="chip">位置評価: {html.escape(_describe_code(str(row.get("prelabel", "")), PRELABEL_LABELS))}</span>',
+            f'<span class="chip">24時間後評価: {html.escape(_describe_code(str(row.get("evaluation_status", "") or "pending"), EVALUATION_LABELS))}</span>',
+        ]
+        context_boxes = [
+            ("セットアップ状態", _describe_code(str(row.get("primary_setup_status", "")), SETUP_LABELS)),
+            ("通知の強さ", _describe_code(str(row.get("signal_tier", "")), TIER_LABELS)),
+            ("通知理由", _describe_notify_reason(str(row.get("notify_reason", "")))),
+            ("データ品質", _describe_code(str(row.get("data_quality_flag", "")), QUALITY_LABELS)),
+        ]
+        fields_html: list[str] = []
+        for key, label, option_key, help_text, *extra in field_defs:
+            is_recommended = bool(extra[0]) if extra else False
+            field_class = "field recommended" if is_recommended else "field"
+            label_html = html.escape(label) + (' <span class="recommended-badge">おすすめ</span>' if is_recommended else "")
+            fields_html.append(
+                f'<div class="{field_class}">'
+                f"<label>{label_html}</label>"
+                f"{_render_select_html(options_payload[option_key], str(row.get(key, "")), index - 1, key)}"
+                + (
+                    f'<div class="field-help">{html.escape(help_text)}</div>'
+                    if help_text
+                    else ""
+                )
+                + "</div>"
+            )
+        context_html = "".join(
+            '<div class="context-box">'
+            f'<span class="context-label">{html.escape(label)}</span>'
+            f'<div class="context-value{" empty" if not str(value or "").strip() else ""}">{html.escape(str(value or "未記録"))}</div>'
+            "</div>"
+            for label, value in context_boxes
+        )
+        cards.append(
+            '<div class="card">'
+            f'<div class="card-top"><h3>通知 {index}</h3><div class="time-badge">{html.escape(time_badge)}</div></div>'
+            f'<div class="meta">{html.escape(str(row.get("timestamp_jst", "")))} / {html.escape(str(row.get("signal_id", "")))}</div>'
+            f'<div class="subject">{html.escape(str(row.get("subject", "")))}</div>'
+            f'<div class="chips">{"".join(chips)}</div>'
+            f'<p class="muted">自動評価: {html.escape(_describe_auto_eval_summary(str(row.get("auto_eval_summary", ""))))}</p>'
+            f'<div class="context-grid">{context_html}</div>'
+            f'<div class="grid">{"".join(fields_html)}</div>'
+            "</div>"
+        )
+    return "".join(cards)
 
 
 def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> str:
@@ -741,17 +960,30 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     rows_payload = []
     for row in rows:
         row_copy = {column: str(row.get(column, "")) for column in REVIEW_NOTE_COLUMNS}
+        for extra_key in (
+            "bias",
+            "prelabel",
+            "primary_setup_status",
+            "signal_tier",
+            "notify_reason",
+            "data_quality_flag",
+            "evaluation_status",
+        ):
+            row_copy[extra_key] = str(row.get(extra_key, ""))
         row_copy["memo_preset"] = row_copy["memo"] if row_copy["memo"] in {
             item["value"] for item in FORM_MEMO_PRESET_OPTIONS if item["value"]
         } else ""
         rows_payload.append(row_copy)
 
     note_name = review_note_path.name
+    note_key = str(review_note_path)
     header_text = _render_review_note([])
+    initial_cards_html = _render_static_review_cards(rows_payload, options_payload)
+    initial_preview = _render_review_note(rows)
     intro = (
-        "この画面は選択式でレビューを付けるための入力フォームです。"
-        " 入力後に「Markdownをコピー」または「Markdownを保存」で "
-        f"{note_name} を更新できます。"
+        "この画面は、最近の通知を今の評価軸でレビューするための入力フォームです。"
+        " 入力後は下のプレビュー全文を "
+        f"{note_name} に貼り付けて更新します。"
     )
 
     return f"""<!doctype html>
@@ -769,6 +1001,10 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       --muted: #6b7280;
       --line: #d1d5db;
       --accent: #1d4ed8;
+      --accent-soft: #dbeafe;
+      --chip: #eef2ff;
+      --chip-text: #334155;
+      --hero-bg: linear-gradient(135deg, #eff6ff 0%, #f8fafc 55%, #ecfeff 100%);
     }}
     body {{
       margin: 0;
@@ -790,6 +1026,9 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     }}
+    .hero {{
+      background: var(--hero-bg);
+    }}
     h1, h2, h3 {{
       margin: 0 0 10px;
     }}
@@ -797,11 +1036,40 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       color: var(--muted);
       font-size: 14px;
     }}
+    .hero-grid {{
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }}
+    .hero-panel {{
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      padding: 14px;
+    }}
+    .hero-panel h2 {{
+      font-size: 15px;
+      margin-bottom: 8px;
+    }}
+    .hero-panel ul {{
+      margin: 0;
+      padding-left: 18px;
+    }}
+    .hero-panel li {{
+      margin-bottom: 6px;
+      color: var(--chip-text);
+    }}
     .toolbar {{
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin-top: 14px;
+      align-items: center;
+    }}
+    .draft-status {{
+      font-size: 13px;
+      color: var(--muted);
     }}
     button {{
       border: 0;
@@ -840,9 +1108,96 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       font-size: 14px;
       color: var(--muted);
     }}
+    .card-top {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }}
+    .time-badge {{
+      min-width: 84px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: 0.04em;
+    }}
+    .context-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin: 12px 0 8px;
+    }}
+    .context-box {{
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #f8fafc;
+    }}
+    .context-label {{
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }}
+    .context-value {{
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      word-break: break-word;
+    }}
     .subject {{
       font-weight: 700;
       margin: 6px 0 2px;
+    }}
+    .chips {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 4px;
+    }}
+    .chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--chip-text);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #cbd5e1;
+    }}
+    .empty {{
+      color: var(--muted);
+      font-weight: 500;
+    }}
+    .field-help {{
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .field.recommended {{
+      padding: 12px;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      background: #fffbeb;
+    }}
+    .recommended-badge {{
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #f59e0b;
+      color: #fff;
+      font-size: 11px;
+      vertical-align: middle;
     }}
     .preview {{
       width: 100%;
@@ -857,41 +1212,139 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       color: #111827;
       box-sizing: border-box;
     }}
+    @media (max-width: 760px) {{
+      body {{
+        padding: 16px;
+      }}
+      .hero-grid {{
+        grid-template-columns: 1fr;
+      }}
+    }}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
-      <h1>{html.escape(page_title)}</h1>
-      <p>{html.escape(intro)}</p>
-      <p class="muted">使い方: 各通知でプルダウンを選ぶ → 下の「Markdownをコピー」または「Markdownを保存」を押す → {html.escape(note_name)} を更新する。</p>
+      <div class="hero-grid">
+        <div>
+          <h1>{html.escape(page_title)}</h1>
+          <p>{html.escape(intro)}</p>
+          <p class="muted">使い方: まず通知の種類と理由を見る → 実務価値を選ぶ → 下のプレビュー全文を {html.escape(note_name)} に貼り付ける。</p>
+          <p class="muted">このブラウザでは入力内容を自動で下書き保存します。ページを開き直しても、同じ端末・同じブラウザなら復元されます。</p>
+        </div>
+        <div class="hero-panel">
+          <h2>今の確認軸</h2>
+          <ul>
+            <li><strong>通知の種類:</strong> `primary_setup_status` と `signal_tier` を先に見る</li>
+            <li><strong>通知理由:</strong> `notify_reason` で何が変化した通知かを見る</li>
+            <li><strong>実務価値:</strong> `user_verdict` と `would_trade` で使えたかを残す</li>
+            <li><strong>事後整合:</strong> 24時間後評価と `actual_move_driver` のズレを `memo` に残す</li>
+          </ul>
+        </div>
+      </div>
       <div class="toolbar">
         <button type="button" onclick="copyMarkdown()">Markdownをコピー</button>
-        <button type="button" class="secondary" onclick="downloadMarkdown()">Markdownを保存</button>
+        <button type="button" class="secondary" onclick="selectPreviewText()">全文を選択</button>
         <button type="button" class="secondary" onclick="resetSelections()">入力を初期化</button>
+        <span id="draft-status" class="draft-status">下書き未保存</span>
       </div>
     </div>
 
-    <div id="cards"></div>
+    <div id="cards">{initial_cards_html}</div>
 
     <div class="card">
       <h2>生成される Markdown</h2>
-      <p class="muted">この内容がそのまま {html.escape(note_name)} に入る想定です。</p>
-      <textarea id="preview" class="preview"></textarea>
+      <p class="muted">この全文をそのまま {html.escape(note_name)} に貼り付けます。保存ボタンは使わず、この欄を正本として扱います。</p>
+      <textarea id="preview" class="preview">{html.escape(initial_preview)}</textarea>
     </div>
   </div>
 
   <script>
-    const reviewColumns = {json.dumps(REVIEW_NOTE_COLUMNS, ensure_ascii=False)};
-    const options = {json.dumps(options_payload, ensure_ascii=False)};
-    const rows = {json.dumps(rows_payload, ensure_ascii=False)};
-    const noteName = {json.dumps(note_name, ensure_ascii=False)};
-    const noteHeader = {json.dumps(header_text, ensure_ascii=False)};
+    var reviewColumns = {json.dumps(REVIEW_NOTE_COLUMNS, ensure_ascii=False)};
+    var options = {json.dumps(options_payload, ensure_ascii=False)};
+    var rows = {json.dumps(rows_payload, ensure_ascii=False)};
+    var noteName = {json.dumps(note_name, ensure_ascii=False)};
+    var noteKey = {json.dumps(note_key, ensure_ascii=False)};
+    var noteHeader = {json.dumps(header_text, ensure_ascii=False)};
+    var draftStorageKey = 'btc-monitor-review-form:' + noteKey;
+    var contextHeadings = {{
+      setup: 'SETUP / セットアップ状態',
+      signal_tier: 'SIGNAL_TIER / 通知の強さ',
+      notify_reason: 'NOTIFY_REASON / 通知理由',
+      data_quality: 'DATA_QUALITY / データ品質',
+    }};
+    var biasLabels = {{
+      long: 'long / ロング寄り',
+      short: 'short / ショート寄り',
+      wait: 'wait / 様子見',
+    }};
+    var prelabelLabels = {{
+      ENTRY_OK: 'ENTRY_OK / 入る条件がほぼそろった',
+      RISKY_ENTRY: 'RISKY_ENTRY / 方向はあるが位置が悪い',
+      SWEEP_WAIT: 'SWEEP_WAIT / 先に振り落とし確認を待ちたい',
+      NO_TRADE_CANDIDATE: 'NO_TRADE_CANDIDATE / 見送り候補',
+    }};
+    var evaluationLabels = {{
+      complete: 'complete / 24時間後評価まで完了',
+      pending: 'pending / 24時間後評価待ち',
+    }};
+    var autoEvalLabels = {{
+      correct: 'correct / 方向は合っていた',
+      wrong: 'wrong / 方向は外れた',
+      unclear: 'unclear / 判定しきれない',
+      pending: 'pending / 評価待ち',
+      not_applicable: 'not_applicable / 対象外',
+      good_entry: 'good_entry / 入る価値があった',
+      poor_entry: 'poor_entry / 入るには弱かった',
+      wait_was_good: 'wait_was_good / 待機判断が良かった',
+      wait_too_strict: 'wait_too_strict / 待機が厳しすぎた',
+      skip_was_good: 'skip_was_good / 見送りが良かった',
+      skip_too_strict: 'skip_too_strict / 見送りが厳しすぎた',
+      win: 'win / 勝ち相当',
+      loss: 'loss / 負け相当',
+      breakeven: 'breakeven / 建値相当',
+      expired: 'expired / 時間切れ',
+      untouched: 'untouched / 未接触',
+      held: 'held / 守られた',
+      broken: 'broken / 抜けた',
+      touched: 'touched / 接触した',
+      touched_only: 'touched_only / 接触のみ',
+      n/a: 'n/a / 対象外',
+    }};
+    var setupLabels = {{
+      ready: 'ready / エントリー条件がそろった状態',
+      watch: 'watch / 方向はあるが待ちたい状態',
+      invalid: 'invalid / 今は見送りが妥当な状態',
+      none: 'none / セットアップ未形成',
+    }};
+    var tierLabels = {{
+      normal: 'normal / 通常通知',
+      strong_machine: 'strong_machine / 機械的にかなり好条件',
+      strong_ai_confirmed: 'strong_ai_confirmed / AI確認込みの強条件',
+    }};
+    var qualityLabels = {{
+      ok: 'ok / データ欠損なし',
+      partial_missing: 'partial_missing / 一部データ欠損あり',
+      degraded: 'degraded / 品質低下あり',
+      unknown: 'unknown / 品質未判定',
+    }};
+    var notifyReasonLabels = {{
+      status_upgraded: 'status_upgraded / setup が昇格した',
+      bias_changed: 'bias_changed / 方向感が wait から long または short に変わった',
+      prelabel_improved: 'prelabel_improved / 位置評価が改善した',
+      confidence_jump: 'confidence_jump / 信頼度が大きく変化した',
+      agreement_changed: 'agreement_changed / AI と機械の一致状況が変わった',
+      signal_tier_upgraded: 'signal_tier_upgraded / signal_tier が昇格した',
+      attention_bias_changed: 'attention_bias_changed / 注意報の方向が切り替わった',
+      attention_score_crossed: 'attention_score_crossed / 注意報スコア条件を超えた',
+      attention_gap_crossed: 'attention_gap_crossed / ロングショート差が閾値を超えた',
+      attention_first_detection: 'attention_first_detection / 初回の注意報検知',
+    }};
 
     function createSelect(optionList, value, onChange) {{
-      const select = document.createElement('select');
-      optionList.forEach((item) => {{
-        const opt = document.createElement('option');
+      var select = document.createElement('select');
+      optionList.forEach(function(item) {{
+        var opt = document.createElement('option');
         opt.value = item.value;
         opt.textContent = item.label;
         if (item.value === value) opt.selected = true;
@@ -901,104 +1354,380 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       return select;
     }}
 
+    function formatContext(value, fallback = '未記録') {{
+      return value && String(value).trim() ? String(value) : fallback;
+    }}
+
+    function parseMaybeJsonArray(value) {{
+      var raw = String(value || '').trim();
+      if (!raw) return [];
+      if (raw.charAt(0) === '[') {{
+        try {{
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(function(item) {{ return String(item); }});
+        }} catch (_error) {{
+        }}
+      }}
+      return raw.split(',').map(function(item) {{ return item.trim(); }}).filter(Boolean);
+    }}
+
+    function describeCode(value, labels) {{
+      var raw = String(value || '').trim();
+      if (!raw) return '未記録';
+      return labels[raw] || (raw + ' / 未定義コード');
+    }}
+
+    function describeNotifyReason(value) {{
+      var items = parseMaybeJsonArray(value);
+      if (!items.length) return '未記録';
+      return items.map(function(item) {{ return describeCode(item, notifyReasonLabels); }}).join(' / ');
+    }}
+
+    function describeSetup(value) {{
+      return describeCode(value, setupLabels);
+    }}
+
+    function describeBias(value) {{
+      return describeCode(value, biasLabels);
+    }}
+
+    function describePrelabel(value) {{
+      return describeCode(value, prelabelLabels);
+    }}
+
+    function describeEvaluation(value) {{
+      return describeCode(value, evaluationLabels);
+    }}
+
+    function describeAutoEvalSummary(value) {{
+      var raw = String(value || '').trim();
+      if (!raw) return '未記録';
+      return raw
+        .replace(/bias:([A-Za-z_]+)/g, function(_m, code) {{ return 'bias:' + describeBias(code); }})
+        .replace(/prelabel:([A-Z_]+)/g, function(_m, code) {{ return 'prelabel:' + describePrelabel(code); }})
+        .replace(/setup:([A-Za-z_]+)/g, function(_m, code) {{ return 'setup:' + describeSetup(code); }})
+        .replace(/tier:([A-Za-z_]+)/g, function(_m, code) {{ return 'tier:' + describeTier(code); }})
+        .replace(/方向:([A-Za-z_]+)/g, function(_m, code) {{ return '方向:' + describeCode(code, autoEvalLabels); }})
+        .replace(/ENTRY:([A-Za-z_]+)/g, function(_m, code) {{ return 'ENTRY:' + describeCode(code, autoEvalLabels); }})
+        .replace(/WAIT:([A-Za-z_]+)/g, function(_m, code) {{ return 'WAIT:' + describeCode(code, autoEvalLabels); }})
+        .replace(/SKIP:([A-Za-z_]+)/g, function(_m, code) {{ return 'SKIP:' + describeCode(code, autoEvalLabels); }})
+        .replace(/結果:([A-Za-z_]+)/g, function(_m, code) {{ return '結果:' + describeCode(code, autoEvalLabels); }})
+        .replace(/S:([A-Za-z_]+)/g, function(_m, code) {{ return 'S:' + describeCode(code, autoEvalLabels); }})
+        .replace(/R:([A-Za-z_]+)/g, function(_m, code) {{ return 'R:' + describeCode(code, autoEvalLabels); }});
+    }}
+
+    function describeTier(value) {{
+      return describeCode(value, tierLabels);
+    }}
+
+    function describeQuality(value) {{
+      return describeCode(value, qualityLabels);
+    }}
+
+    function createContextBox(label, value) {{
+      var box = document.createElement('div');
+      box.className = 'context-box';
+      var labelEl = document.createElement('span');
+      labelEl.className = 'context-label';
+      labelEl.textContent = contextHeadings[label] || label;
+      var valueEl = document.createElement('div');
+      var displayValue = formatContext(value);
+      if (label === 'setup') displayValue = describeSetup(value);
+      if (label === 'signal_tier') displayValue = describeTier(value);
+      if (label === 'notify_reason') displayValue = describeNotifyReason(value);
+      if (label === 'data_quality') displayValue = describeQuality(value);
+      valueEl.className = 'context-value' + (!value || !String(value).trim() ? ' empty' : '');
+      valueEl.textContent = displayValue;
+      box.appendChild(labelEl);
+      box.appendChild(valueEl);
+      return box;
+    }}
+
+    function createChip(text) {{
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = text;
+      return chip;
+    }}
+
+    function extractTime(value) {{
+      var raw = String(value || '').trim();
+      if (raw.length >= 16 && raw.indexOf('T') !== -1) return raw.slice(5, 10).replace('-', '/') + ' ' + raw.slice(11, 16);
+      return raw || '--:--';
+    }}
+
     function renderCards() {{
-      const root = document.getElementById('cards');
+      var root = document.getElementById('cards');
       root.innerHTML = '';
-      rows.forEach((row, index) => {{
-        const card = document.createElement('div');
+      rows.forEach(function(row, index) {{
+        var card = document.createElement('div');
         card.className = 'card';
 
-        const title = document.createElement('h3');
+        var cardTop = document.createElement('div');
+        cardTop.className = 'card-top';
+        var title = document.createElement('h3');
         title.textContent = '通知 ' + String(index + 1);
-        card.appendChild(title);
+        cardTop.appendChild(title);
 
-        const meta = document.createElement('div');
+        var timeBadge = document.createElement('div');
+        timeBadge.className = 'time-badge';
+        timeBadge.textContent = extractTime(row.timestamp_jst);
+        cardTop.appendChild(timeBadge);
+        card.appendChild(cardTop);
+
+        var meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `${{row.timestamp_jst}} / ${{row.signal_id}}`;
+        meta.textContent = row.timestamp_jst + ' / ' + row.signal_id;
         card.appendChild(meta);
 
-        const subject = document.createElement('div');
+        var subject = document.createElement('div');
         subject.className = 'subject';
         subject.textContent = row.subject;
         card.appendChild(subject);
 
-        const autoEval = document.createElement('p');
+        var chips = document.createElement('div');
+        chips.className = 'chips';
+        chips.appendChild(createChip('方向感: ' + describeBias(row.bias)));
+        chips.appendChild(createChip('位置評価: ' + describePrelabel(row.prelabel)));
+        chips.appendChild(createChip('24時間後評価: ' + describeEvaluation(row.evaluation_status || 'pending')));
+        card.appendChild(chips);
+
+        var autoEval = document.createElement('p');
         autoEval.className = 'muted';
-        autoEval.textContent = `自動評価: ${{row.auto_eval_summary}}`;
+        autoEval.textContent = '自動評価: ' + describeAutoEvalSummary(row.auto_eval_summary);
         card.appendChild(autoEval);
 
-        const grid = document.createElement('div');
+        var contextGrid = document.createElement('div');
+        contextGrid.className = 'context-grid';
+        contextGrid.appendChild(createContextBox('setup', row.primary_setup_status));
+        contextGrid.appendChild(createContextBox('signal_tier', row.signal_tier));
+        contextGrid.appendChild(createContextBox('notify_reason', row.notify_reason));
+        contextGrid.appendChild(createContextBox('data_quality', row.data_quality_flag));
+        card.appendChild(contextGrid);
+
+        var grid = document.createElement('div');
         grid.className = 'grid';
 
-        const fields = [
-          ['user_verdict', '人の評価', options.verdict],
-          ['usefulness_1to5', '役立ち度', options.usefulness],
-          ['would_trade', '自分ならどうするか', options.wouldTrade],
+        var fields = [
+          ['user_verdict', '実務評価', options.verdict, '入る価値・待つ価値・見送る価値、または早い/遅い/低価値を選ぶ', true],
+          ['usefulness_1to5', '総合価値', options.usefulness, '5 が最も実務価値あり。迷ったら 3 を基準にする'],
+          ['would_trade', '自分ならどうするか', options.wouldTrade, '今のルールと別に、自分の実行判断を残す', true],
           ['actual_move_driver', '値動きの主因', options.moveDriver],
-          ['memo_preset', 'メモ候補', options.memoPreset],
-          ['review_status', 'レビュー状態', options.reviewStatus],
+          ['memo_preset', 'メモ候補', options.memoPreset, '最近の通知軸に合わせた短文をそのまま使える'],
+          ['review_status', 'レビュー状態', options.reviewStatus, '入力し終えたら done にする', true],
         ];
 
-        fields.forEach(([key, label, optionList]) => {{
-          const box = document.createElement('div');
-          const labelEl = document.createElement('label');
+        fields.forEach(function(fieldDef) {{
+          var key = fieldDef[0];
+          var label = fieldDef[1];
+          var optionList = fieldDef[2];
+          var helpText = fieldDef[3];
+          var isRecommended = fieldDef[4];
+          var box = document.createElement('div');
+          box.className = isRecommended ? 'field recommended' : 'field';
+          var labelEl = document.createElement('label');
           labelEl.textContent = label;
+          if (isRecommended) {{
+            var badge = document.createElement('span');
+            badge.className = 'recommended-badge';
+            badge.textContent = 'おすすめ';
+            labelEl.appendChild(badge);
+          }}
           box.appendChild(labelEl);
-          box.appendChild(createSelect(optionList, row[key] || '', (event) => {{
+          box.appendChild(createSelect(optionList, row[key] || '', function(event) {{
             row[key] = event.target.value;
             if (key === 'memo_preset') {{
               row.memo = event.target.value;
             }}
+            saveDraft();
             updatePreview();
           }}));
+          if (helpText) {{
+            var helpEl = document.createElement('div');
+            helpEl.className = 'field-help';
+            helpEl.textContent = helpText;
+            box.appendChild(helpEl);
+          }}
           grid.appendChild(box);
         }});
 
         card.appendChild(grid);
         root.appendChild(card);
       }});
+      bindSelectHandlers();
+    }}
+
+    function syncRowsFromDom() {{
+      var selects = document.querySelectorAll('select[data-row-index][data-key]');
+      Array.prototype.forEach.call(selects, function(selectEl) {{
+        var rowIndex = parseInt(selectEl.getAttribute('data-row-index') || '', 10);
+        var key = selectEl.getAttribute('data-key') || '';
+        if (isNaN(rowIndex) || !rows[rowIndex] || !key) return;
+        rows[rowIndex][key] = selectEl.value;
+        if (key === 'memo_preset') {{
+          rows[rowIndex].memo = selectEl.value;
+        }}
+      }});
+    }}
+
+    function bindSelectHandlers() {{
+      var selects = document.querySelectorAll('select[data-row-index][data-key]');
+      Array.prototype.forEach.call(selects, function(selectEl) {{
+        if (selectEl.getAttribute('data-bound') === 'true') return;
+        selectEl.setAttribute('data-bound', 'true');
+        selectEl.addEventListener('change', function(event) {{
+          var rowIndex = parseInt(event.target.getAttribute('data-row-index') || '', 10);
+          var key = event.target.getAttribute('data-key') || '';
+          if (isNaN(rowIndex) || !rows[rowIndex] || !key) return;
+          rows[rowIndex][key] = event.target.value;
+          if (key === 'memo_preset') {{
+            rows[rowIndex].memo = event.target.value;
+          }}
+          saveDraft();
+          updatePreview();
+        }});
+      }});
     }}
 
     function escapeMd(value) {{
-      return String(value ?? '').replaceAll('|', '\\\\|').replaceAll('\\n', ' ');
+      return String(value == null ? '' : value).split('|').join('\\\\|').split('\\n').join(' ');
     }}
 
     function buildMarkdown() {{
-      const lines = noteHeader.split('\\n');
-      const body = rows.map((row) => {{
-        const cells = reviewColumns.map((column) => escapeMd(row[column] || ''));
-        return `| ${{cells.join(' | ')}} |`;
+      syncRowsFromDom();
+      var lines = noteHeader.split('\\n');
+      var body = rows.map(function(row) {{
+        var cells = reviewColumns.map(function(column) {{ return escapeMd(row[column] || ''); }});
+        return '| ' + cells.join(' | ') + ' |';
       }});
-      return [...lines, ...body, ''].join('\\n');
+      return lines.concat(body).concat(['']).join('\\n');
     }}
 
     function updatePreview() {{
       document.getElementById('preview').value = buildMarkdown();
     }}
 
-    async function copyMarkdown() {{
-      const content = buildMarkdown();
-      await navigator.clipboard.writeText(content);
-      alert('Markdown をコピーしました。');
+    function updateDraftStatus(message) {{
+      var el = document.getElementById('draft-status');
+      if (el) el.textContent = message;
+    }}
+
+    function getDraftStorage() {{
+      try {{
+        if (!window.localStorage) return null;
+        var probeKey = draftStorageKey + ':probe';
+        window.localStorage.setItem(probeKey, 'ok');
+        window.localStorage.removeItem(probeKey);
+        return window.localStorage;
+      }} catch (_error) {{
+        return null;
+      }}
+    }}
+
+    function editableDraftFields(row) {{
+      return {{
+        signal_id: String(row.signal_id || ''),
+        user_verdict: String(row.user_verdict || ''),
+        usefulness_1to5: String(row.usefulness_1to5 || ''),
+        would_trade: String(row.would_trade || ''),
+        actual_move_driver: String(row.actual_move_driver || ''),
+        memo: String(row.memo || ''),
+        memo_preset: String(row.memo_preset || ''),
+        review_status: String(row.review_status || 'pending'),
+      }};
+    }}
+
+    function saveDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      var payload = {{
+        version: 1,
+        saved_at: new Date().toISOString(),
+        rows: rows.map(function(row) {{ return editableDraftFields(row); }}),
+      }};
+      storage.setItem(draftStorageKey, JSON.stringify(payload));
+      updateDraftStatus('下書き保存済み');
+    }}
+
+    function restoreDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      var raw = storage.getItem(draftStorageKey);
+      if (!raw) {{
+        updateDraftStatus('下書きなし');
+        return;
+      }}
+      try {{
+        var parsed = JSON.parse(raw);
+        var savedRows = Array.isArray(parsed.rows) ? parsed.rows : [];
+        var restored = 0;
+        rows.forEach(function(row) {{
+          var saved = null;
+          savedRows.forEach(function(item) {{
+            if (!saved && String(item.signal_id || '') === String(row.signal_id || '')) saved = item;
+          }});
+          if (!saved) return;
+          row.user_verdict = String(saved.user_verdict || '');
+          row.usefulness_1to5 = String(saved.usefulness_1to5 || '');
+          row.would_trade = String(saved.would_trade || '');
+          row.actual_move_driver = String(saved.actual_move_driver || '');
+          row.memo = String(saved.memo || '');
+          row.memo_preset = String(saved.memo_preset || '');
+          row.review_status = String(saved.review_status || 'pending');
+          restored += 1;
+        }});
+        updateDraftStatus(restored ? ('下書きを復元しました: ' + restored + '件') : '下書きはありましたが一致行なし');
+      }} catch (_error) {{
+        updateDraftStatus('下書き復元に失敗');
+      }}
+    }}
+
+    function clearDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      storage.removeItem(draftStorageKey);
+      updateDraftStatus('下書きを削除');
+    }}
+
+    function copyMarkdown() {{
+      var content = buildMarkdown();
+      saveDraft();
+      if (navigator.clipboard && navigator.clipboard.writeText) {{
+        navigator.clipboard.writeText(content);
+        alert('Markdown をコピーしました。');
+      }} else {{
+        var preview = document.getElementById('preview');
+        preview.focus();
+        preview.select();
+        try {{
+          document.execCommand('copy');
+          alert('Markdown をコピーしました。');
+        }} catch (_error) {{
+          alert('コピーに失敗しました。下の Markdown を手動でコピーしてください。');
+        }}
+      }}
       updatePreview();
     }}
 
-    function downloadMarkdown() {{
-      const content = buildMarkdown();
-      const blob = new Blob([content], {{ type: 'text/markdown;charset=utf-8' }});
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = noteName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+    function selectPreviewText() {{
+      var preview = document.getElementById('preview');
+      buildMarkdown();
+      preview.focus();
+      preview.select();
       updatePreview();
     }}
 
     function resetSelections() {{
-      rows.forEach((row) => {{
+      rows.forEach(function(row) {{
         row.user_verdict = '';
         row.usefulness_1to5 = '';
         row.would_trade = '';
@@ -1007,11 +1736,15 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         row.memo = '';
         row.review_status = 'pending';
       }});
+      clearDraft();
       renderCards();
       updatePreview();
     }}
 
     renderCards();
+    restoreDraft();
+    renderCards();
+    bindSelectHandlers();
     updatePreview();
   </script>
 </body>
@@ -1022,7 +1755,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 def write_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> Path:
     form_path = _review_form_path(review_note_path)
     _ensure_parent(form_path)
-    form_path.write_text(_render_review_form_html(rows, review_note_path), encoding="utf-8")
+    target_rows = [row for row in rows if _is_review_target(str(row.get("timestamp_jst", "")))]
+    form_path.write_text(_render_review_form_html(target_rows, review_note_path), encoding="utf-8")
     return form_path
 
 
@@ -1048,11 +1782,15 @@ def export_review_queue(
     }
 
     for signal_id, row in review_rows.items():
+        trade = trades.get(signal_id, {})
+        outcome = outcomes.get(signal_id, {})
         merged_rows[signal_id] = {
             "signal_id": signal_id,
             "timestamp_jst": row.get("timestamp_jst", ""),
             "subject": row.get("subject", ""),
-            "auto_eval_summary": row.get("auto_eval_summary", ""),
+            "auto_eval_summary": row.get("auto_eval_summary", "") or (
+                _auto_eval_summary(outcome) if outcome.get("evaluation_status") == "complete" else _pending_auto_eval_summary(trade)
+            ),
             "user_verdict": row.get("user_verdict", ""),
             "usefulness_1to5": row.get("usefulness_1to5", ""),
             "would_trade": row.get("would_trade", ""),
@@ -1060,20 +1798,31 @@ def export_review_queue(
             "logic_validated": row.get("logic_validated", ""),
             "memo": row.get("memo", ""),
             "review_status": row.get("review_status", "pending") or "pending",
+            "bias": trade.get("bias", ""),
+            "prelabel": trade.get("prelabel", ""),
+            "primary_setup_status": trade.get("primary_setup_status", ""),
+            "signal_tier": trade.get("signal_tier", ""),
+            "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
+            "data_quality_flag": trade.get("data_quality_flag", ""),
+            "evaluation_status": outcome.get("evaluation_status", ""),
         }
 
-    for signal_id, outcome in outcomes.items():
-        trade = trades.get(signal_id, {})
+    for signal_id, trade in trades.items():
         if not _parse_bool(trade.get("was_notified")):
             continue
-        if outcome.get("evaluation_status") != "complete":
-            continue
         current = merged_rows.get(signal_id, {})
+        outcome = outcomes.get(signal_id, {})
+        auto_eval_summary = current.get("auto_eval_summary", "")
+        if not auto_eval_summary:
+            if outcome.get("evaluation_status") == "complete":
+                auto_eval_summary = _auto_eval_summary(outcome)
+            else:
+                auto_eval_summary = _pending_auto_eval_summary(trade)
         merged_rows[signal_id] = {
             "signal_id": signal_id,
             "timestamp_jst": current.get("timestamp_jst", trade.get("timestamp_jst", outcome.get("timestamp_jst", ""))),
             "subject": current.get("subject", trade.get("summary_subject", "")),
-            "auto_eval_summary": current.get("auto_eval_summary", _auto_eval_summary(outcome)),
+            "auto_eval_summary": auto_eval_summary,
             "user_verdict": current.get("user_verdict", ""),
             "usefulness_1to5": current.get("usefulness_1to5", ""),
             "would_trade": current.get("would_trade", ""),
@@ -1081,6 +1830,13 @@ def export_review_queue(
             "logic_validated": current.get("logic_validated", ""),
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
+            "bias": trade.get("bias", ""),
+            "prelabel": trade.get("prelabel", ""),
+            "primary_setup_status": trade.get("primary_setup_status", ""),
+            "signal_tier": trade.get("signal_tier", ""),
+            "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
+            "data_quality_flag": trade.get("data_quality_flag", ""),
+            "evaluation_status": outcome.get("evaluation_status", ""),
         }
 
     ordered_rows = sorted(merged_rows.values(), key=lambda row: row.get("timestamp_jst", ""), reverse=True)
@@ -1109,6 +1865,8 @@ def import_reviews(
         usefulness = str(row.get("usefulness_1to5", "")).strip()
         actual_move_driver = str(row.get("actual_move_driver", "")).strip()
         if not signal_id or review_status != "done":
+            continue
+        if not _is_review_target(str(row.get("timestamp_jst", ""))):
             continue
         if user_verdict not in VALID_USER_VERDICTS:
             raise ValueError(f"invalid user_verdict: {signal_id} -> {user_verdict}")
