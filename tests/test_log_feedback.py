@@ -237,7 +237,7 @@ class LogFeedbackTest(unittest.TestCase):
 
             self.assertEqual([row["signal_id"] for row in rows], ["new_sig"])
 
-    def test_default_review_form_path_uses_repo_tmp(self) -> None:
+    def test_default_review_form_path_uses_review_note_sibling(self) -> None:
         self.assertEqual(_review_form_path(DEFAULT_REVIEW_NOTE), DEFAULT_REVIEW_FORM)
 
     def test_export_review_queue_includes_recent_notified_trade_without_complete_outcome(self) -> None:

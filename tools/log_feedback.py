@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEW_NOTE = Path(
     "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/通知評価シート.md"
 )
-DEFAULT_REVIEW_FORM = BASE_DIR / "tmp" / "評価シート入力フォーム.html"
+DEFAULT_REVIEW_FORM = DEFAULT_REVIEW_NOTE.with_name("評価シート入力フォーム.html")
 JST = ZoneInfo("Asia/Tokyo")
 REVIEW_START_CUTOFF_JST = "2026-03-25T00:00:00+09:00"
 
@@ -779,8 +779,6 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
 
 
 def _review_form_path(review_note_path: Path) -> Path:
-    if review_note_path == DEFAULT_REVIEW_NOTE:
-        return DEFAULT_REVIEW_FORM
     return review_note_path.with_name("評価シート入力フォーム.html")
 
 
@@ -1309,7 +1307,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       broken: 'broken / 抜けた',
       touched: 'touched / 接触した',
       touched_only: 'touched_only / 接触のみ',
-      n/a: 'n/a / 対象外',
+      'n/a': 'n/a / 対象外',
     }};
     var setupLabels = {{
       ready: 'ready / エントリー条件がそろった状態',
