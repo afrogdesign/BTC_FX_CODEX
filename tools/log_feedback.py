@@ -46,6 +46,12 @@ FORM_WOULD_TRADE_OPTIONS = [
     {"value": "conditional", "label": "条件つきなら入る"},
 ]
 
+FORM_MISLEADING_ENTRY_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "no", "label": "誤読しにくかった"},
+    {"value": "yes", "label": "エントリー寄りに誤読した"},
+]
+
 FORM_MOVE_DRIVER_OPTIONS = [
     {"value": "", "label": "未選択"},
     {"value": "technical", "label": "テクニカル要因"},
@@ -110,6 +116,7 @@ OUTCOME_HEADER = [
     "direction_outcome",
     "entry_outcome",
     "wait_outcome",
+    "misleading_entry_like_wording",
     "skip_outcome",
     "tp1_hit_first",
     "outcome",
@@ -130,6 +137,7 @@ USER_REVIEW_HEADER = [
     "usefulness_1to5",
     "would_trade",
     "actual_move_driver",
+    "misleading_entry_like_wording",
     "logic_validated",
     "memo",
     "review_status",
@@ -145,6 +153,7 @@ REVIEW_NOTE_COLUMNS = [
     "usefulness_1to5",
     "would_trade",
     "actual_move_driver",
+    "misleading_entry_like_wording",
     "logic_validated",
     "memo",
     "review_status",
@@ -161,6 +170,10 @@ SHADOW_HEADER = [
     "short_score",
     "score_gap",
     "confidence",
+    "raw_confidence",
+    "confidence_direction_shadow",
+    "confidence_execution_shadow",
+    "confidence_wait_shadow",
     "top_positive_factors",
     "top_negative_factors",
     "prelabel",
@@ -200,6 +213,9 @@ SHADOW_HEADER = [
     "warning_flags",
     "no_trade_flags",
     "summary_subject",
+    "summary_variant",
+    "advice_variant",
+    "evaluation_trace_version",
     "actual_move_driver",
     "logic_validated",
     "review_status",
@@ -236,6 +252,7 @@ VALID_USER_VERDICTS = {
 VALID_WOULD_TRADE = {"", "yes", "no", "conditional"}
 VALID_REVIEW_STATUS = {"pending", "done"}
 VALID_MOVE_DRIVERS = {"", "technical", "news", "macro", "unknown"}
+VALID_MISLEADING_ENTRY = {"", "yes", "no"}
 
 BIAS_LABELS = {
     "long": "long / ロング寄り",
@@ -243,10 +260,10 @@ BIAS_LABELS = {
     "wait": "wait / 様子見",
 }
 PRELABEL_LABELS = {
-    "ENTRY_OK": "ENTRY_OK / 入る条件がほぼそろった",
-    "RISKY_ENTRY": "RISKY_ENTRY / 方向はあるが位置が悪い",
-    "SWEEP_WAIT": "SWEEP_WAIT / 先に振り落とし確認を待ちたい",
-    "NO_TRADE_CANDIDATE": "NO_TRADE_CANDIDATE / 見送り候補",
+    "ENTRY_OK": "ENTRY_OK / 位置条件は悪くない",
+    "RISKY_ENTRY": "RISKY_ENTRY / 位置はやや注意",
+    "SWEEP_WAIT": "SWEEP_WAIT / 流動性回収待ち",
+    "NO_TRADE_CANDIDATE": "NO_TRADE_CANDIDATE / 現状は見送り",
 }
 EVALUATION_LABELS = {
     "complete": "complete / 24時間後評価まで完了",
@@ -671,6 +688,7 @@ def evaluate_trade_row(trade_row: dict[str, str], future_df: pd.DataFrame) -> di
         "direction_outcome": direction_outcome,
         "entry_outcome": _evaluate_entry(prelabel, signal_mfe_4h, signal_mae_4h),
         "wait_outcome": _evaluate_wait(prelabel, bias, base_price, atr_value, future_4h),
+        "misleading_entry_like_wording": "",
         "skip_outcome": _evaluate_skip(prelabel, signal_mfe_4h, signal_mae_4h),
         "tp1_hit_first": tp1_hit_first,
         "outcome": outcome,
@@ -1793,6 +1811,7 @@ def export_review_queue(
             "usefulness_1to5": row.get("usefulness_1to5", ""),
             "would_trade": row.get("would_trade", ""),
             "actual_move_driver": row.get("actual_move_driver", ""),
+            "misleading_entry_like_wording": row.get("misleading_entry_like_wording", ""),
             "logic_validated": row.get("logic_validated", ""),
             "memo": row.get("memo", ""),
             "review_status": row.get("review_status", "pending") or "pending",
@@ -1803,6 +1822,9 @@ def export_review_queue(
             "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
             "data_quality_flag": trade.get("data_quality_flag", ""),
             "evaluation_status": outcome.get("evaluation_status", ""),
+            "summary_variant": trade.get("summary_variant", ""),
+            "advice_variant": trade.get("advice_variant", ""),
+            "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
         }
 
     for signal_id, trade in trades.items():
@@ -1825,6 +1847,7 @@ def export_review_queue(
             "usefulness_1to5": current.get("usefulness_1to5", ""),
             "would_trade": current.get("would_trade", ""),
             "actual_move_driver": current.get("actual_move_driver", ""),
+            "misleading_entry_like_wording": current.get("misleading_entry_like_wording", ""),
             "logic_validated": current.get("logic_validated", ""),
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
@@ -1835,6 +1858,9 @@ def export_review_queue(
             "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
             "data_quality_flag": trade.get("data_quality_flag", ""),
             "evaluation_status": outcome.get("evaluation_status", ""),
+            "summary_variant": trade.get("summary_variant", ""),
+            "advice_variant": trade.get("advice_variant", ""),
+            "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
         }
 
     ordered_rows = sorted(merged_rows.values(), key=lambda row: row.get("timestamp_jst", ""), reverse=True)
@@ -1862,6 +1888,7 @@ def import_reviews(
         would_trade = str(row.get("would_trade", "")).strip()
         usefulness = str(row.get("usefulness_1to5", "")).strip()
         actual_move_driver = str(row.get("actual_move_driver", "")).strip()
+        misleading_entry_like_wording = str(row.get("misleading_entry_like_wording", "")).strip()
         if not signal_id or review_status != "done":
             continue
         if not _is_review_target(str(row.get("timestamp_jst", ""))):
@@ -1872,6 +1899,8 @@ def import_reviews(
             raise ValueError(f"invalid would_trade: {signal_id} -> {would_trade}")
         if actual_move_driver not in VALID_MOVE_DRIVERS:
             raise ValueError(f"invalid actual_move_driver: {signal_id} -> {actual_move_driver}")
+        if misleading_entry_like_wording not in VALID_MISLEADING_ENTRY:
+            raise ValueError(f"invalid misleading_entry_like_wording: {signal_id} -> {misleading_entry_like_wording}")
         if usefulness:
             usefulness_int = int(usefulness)
             if usefulness_int < 1 or usefulness_int > 5:
@@ -1886,6 +1915,7 @@ def import_reviews(
                 "usefulness_1to5": usefulness,
                 "would_trade": would_trade,
                 "actual_move_driver": actual_move_driver,
+                "misleading_entry_like_wording": misleading_entry_like_wording,
                 "logic_validated": row.get("logic_validated", ""),
                 "memo": row.get("memo", ""),
                 "review_status": review_status,
@@ -1949,6 +1979,10 @@ def build_shadow_log(
                 "short_score": trade.get("short_score", trade.get("short_display_score", "")),
                 "score_gap": trade.get("score_gap", ""),
                 "confidence": trade.get("confidence", ""),
+                "raw_confidence": trade.get("raw_confidence", ""),
+                "confidence_direction_shadow": trade.get("confidence_direction_shadow", ""),
+                "confidence_execution_shadow": trade.get("confidence_execution_shadow", ""),
+                "confidence_wait_shadow": trade.get("confidence_wait_shadow", ""),
                 "top_positive_factors": trade.get("top_positive_factors", ""),
                 "top_negative_factors": trade.get("top_negative_factors", ""),
                 "prelabel": trade.get("prelabel", ""),
@@ -1988,7 +2022,11 @@ def build_shadow_log(
                 "warning_flags": trade.get("warning_flags", ""),
                 "no_trade_flags": trade.get("no_trade_flags", ""),
                 "summary_subject": trade.get("summary_subject", ""),
+                "summary_variant": trade.get("summary_variant", ""),
+                "advice_variant": trade.get("advice_variant", ""),
+                "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
                 "actual_move_driver": actual_move_driver,
+                "misleading_entry_like_wording": review.get("misleading_entry_like_wording", ""),
                 "logic_validated": logic_validated or review.get("logic_validated", ""),
                 "review_status": review.get("review_status", ""),
                 "user_verdict": review.get("user_verdict", ""),

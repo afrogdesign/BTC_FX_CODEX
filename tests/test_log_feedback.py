@@ -79,8 +79,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_done | 2026-03-25T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical |  | good | done |",
-                        "| sig_pending | 2026-03-25T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  |  | pending |",
+                        "| sig_done | 2026-03-25T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical | no |  | good | done |",
+                        "| sig_pending | 2026-03-25T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  |  |  | pending |",
                     ]
                 ),
                 encoding="utf-8",
@@ -151,7 +151,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_done | 2026-03-10T09:05:00+09:00 | subject | auto | useful_skip | 4 | no | technical |  | ok | done |",
+                        "| sig_done | 2026-03-10T09:05:00+09:00 | subject | auto | useful_skip | 4 | no | technical | no |  | ok | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -225,8 +225,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical |  | old | done |",
-                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro |  | new | done |",
+                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | no |  | old | done |",
+                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | no |  | new | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -321,8 +321,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical |  | old | done |",
-                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro |  | new | done |",
+                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | no |  | old | done |",
+                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | no |  | new | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -355,7 +355,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_form | 2026-03-11T09:05:00+09:00 | subject | auto |  |  |  |  |  |  | pending |",
+                        "| sig_form | 2026-03-11T09:05:00+09:00 | subject | auto |  |  |  |  |  |  |  | pending |",
                     ]
                 ),
                 encoding="utf-8",

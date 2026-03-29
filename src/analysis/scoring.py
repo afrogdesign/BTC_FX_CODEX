@@ -12,6 +12,10 @@ def _normalize_display(raw: float) -> int:
     return int(round(_clamp(display, 0, 100)))
 
 
+def _bucket_display(value: float) -> float:
+    return round(_clamp((value + 20.0) / 60.0 * 100.0, 0.0, 100.0), 2)
+
+
 def _add_factor(bucket: dict[str, float], code: str, delta: float) -> None:
     bucket[code] = round(bucket.get(code, 0.0) + delta, 4)
 
@@ -214,6 +218,36 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         cfg.SHORT_LONG_DIFF_THRESHOLD,
     )
     selected_factors = long_factors if bias != "short" else short_factors
+    direction_shadow_long = 0.0
+    direction_shadow_short = 0.0
+    for code, value in long_factors.items():
+        if code.startswith(("regime_", "ema_", "price_above", "structure_", "transition_")):
+            direction_shadow_long += value
+    for code, value in short_factors.items():
+        if code.startswith(("regime_", "ema_", "price_below", "structure_", "transition_")):
+            direction_shadow_short += value
+
+    activity_shadow_long = 0.0
+    activity_shadow_short = 0.0
+    for code, value in long_factors.items():
+        if code.startswith(("breakout_", "volume_", "signal_15m_")):
+            activity_shadow_long += value
+    for code, value in short_factors.items():
+        if code.startswith(("breakout_", "volume_", "signal_15m_")):
+            activity_shadow_short += value
+
+    entry_shadow_long = 0.0
+    entry_shadow_short = 0.0
+    for code, value in long_factors.items():
+        if code.startswith(("near_support", "near_resistance", "rr_", "range_center", "atr_", "funding_")):
+            entry_shadow_long += value
+    for code, value in short_factors.items():
+        if code.startswith(("near_support", "near_resistance", "rr_", "range_center", "atr_", "funding_")):
+            entry_shadow_short += value
+
+    selected_direction_shadow = direction_shadow_long if bias != "short" else direction_shadow_short
+    selected_activity_shadow = activity_shadow_long if bias != "short" else activity_shadow_short
+    selected_entry_shadow = entry_shadow_long if bias != "short" else entry_shadow_short
 
     return {
         "long_raw_score": long_raw,
@@ -228,4 +262,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         "top_negative_factors": _top_factors(selected_factors, positive=False),
         "no_trade_flags": sorted(set(no_trade_flags)),
         "warning_flags": sorted(set(warning_flags)),
+        "direction_score_shadow": _bucket_display(selected_direction_shadow),
+        "activity_score_shadow": _bucket_display(selected_activity_shadow),
+        "entry_quality_score_shadow": _bucket_display(selected_entry_shadow),
     }

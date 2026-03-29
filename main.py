@@ -20,7 +20,8 @@ from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
 from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
-from src.analysis.confidence import compute_confidence, compute_machine_agreement
+from src.analysis.confidence import compute_confidence_details, compute_machine_agreement
+from src.analysis.evaluation_trace import build_evaluation_trace
 from src.analysis.phase import determine_phase
 from src.analysis.qualitative import build_qualitative_context
 from src.analysis.regime import classify_market_regime
@@ -59,6 +60,13 @@ from src.trade.activation import determine_phase1_activation
 from src.trade.exit_manager import build_exit_plan
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
+from src.presentation.sanitize import (
+    ADVICE_VARIANT,
+    EVALUATION_TRACE_VERSION,
+    PROMPT_VARIANT,
+    SUMMARY_VARIANT,
+    build_display_context,
+)
 
 
 def _base_dir() -> Path:
@@ -441,24 +449,24 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     opposite_gap_atr = opposite_gap / atr_15m if atr_15m > 0 and opposite_gap != float("inf") else 10.0
 
-    confidence = compute_confidence(
-        {
-            "bias": bias,
-            "long_display_score": score_info["long_display_score"],
-            "short_display_score": score_info["short_display_score"],
-            "signals_4h": tf_4h["signal"],
-            "signals_1h": tf_1h["signal"],
-            "signals_15m": tf_15m["signal"],
-            "market_regime": market_regime,
-            "phase": phase,
-            "rr_estimate": rr_for_conf,
-            "opposite_gap_atr": opposite_gap_atr,
-            "critical_zone": critical_zone,
-            "score_warning_flags": score_info["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
-            "position_risk_flags": position_risk["risk_flags"],
-        },
-        cfg,
-    )
+    confidence_inputs = {
+        "bias": bias,
+        "long_display_score": score_info["long_display_score"],
+        "short_display_score": score_info["short_display_score"],
+        "signals_4h": tf_4h["signal"],
+        "signals_1h": tf_1h["signal"],
+        "signals_15m": tf_15m["signal"],
+        "market_regime": market_regime,
+        "phase": phase,
+        "rr_estimate": rr_for_conf,
+        "opposite_gap_atr": opposite_gap_atr,
+        "critical_zone": critical_zone,
+        "score_warning_flags": score_info["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
+        "position_risk_flags": position_risk["risk_flags"],
+        "prelabel": position_risk["prelabel"],
+    }
+    confidence_details = compute_confidence_details(confidence_inputs, cfg)
+    confidence = int(confidence_details["confidence"])
 
     trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
     trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
@@ -614,15 +622,27 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "orderbook_bid_wall_size": _round_optional(orderbook_info.get("orderbook_bid_wall_size"), 4),
         "orderbook_ask_wall_size": _round_optional(orderbook_info.get("orderbook_ask_wall_size"), 4),
         "orderbook_bias": orderbook_info.get("orderbook_bias"),
+        "breakout_up": breakout_up,
+        "breakout_down": breakout_down,
+        "trigger_volume_ratio_threshold": _round_optional(cfg.TRIGGER_VOLUME_RATIO, 4),
         "rr_estimate": _round2(
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
         "ai_decision": "",
         "ai_confidence": "",
+        "raw_confidence": confidence_details["raw_confidence"],
+        "confidence_direction_shadow": confidence_details["confidence_direction_shadow"],
+        "confidence_execution_shadow": confidence_details["confidence_execution_shadow"],
+        "confidence_wait_shadow": confidence_details["confidence_wait_shadow"],
+        "confidence_components": confidence_details["confidence_components"],
         "warning_flags": score_info["warning_flags"],
         "no_trade_flags": all_flags,
         "risk_flags": position_risk["risk_flags"],
+        "summary_variant": SUMMARY_VARIANT,
+        "advice_variant": ADVICE_VARIANT,
+        "prompt_variant": PROMPT_VARIANT,
+        "evaluation_trace_version": EVALUATION_TRACE_VERSION,
         "signal_tier": "normal",
         "signal_badge": "",
         "signal_tier_reason_codes": [],
@@ -634,6 +654,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "reason_for_notification": [],
         "notification_kind": "none",
     }
+    core_result["display_context"] = build_display_context(core_result)
 
     ai_advice, advice_provider_used = request_ai_advice(
         provider=cfg.AI_ADVICE_PROVIDER,
@@ -651,6 +672,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     if isinstance(ai_advice, dict):
         core_result["ai_decision"] = ai_advice.get("decision", "")
         core_result["ai_confidence"] = ai_advice.get("confidence", "")
+        core_result["advice_variant"] = ai_advice.get("advice_variant", ADVICE_VARIANT)
 
     data_missing_fields = _normalize_missing_data_fields(
         market_structure.missing_fields or [],
@@ -727,8 +749,16 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     core_result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
     core_result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
+    core_result["display_context"] = build_display_context(core_result)
     core_result["summary_subject"] = build_summary_subject(core_result)
     core_result["summary_body"] = summary_body
+    core_result["evaluation_trace"] = build_evaluation_trace(
+        result=core_result,
+        score_info=score_info,
+        position_risk=position_risk,
+        confidence_details=confidence_details,
+        display_context=core_result["display_context"],
+    )
 
     if notify:
         notify_path = (

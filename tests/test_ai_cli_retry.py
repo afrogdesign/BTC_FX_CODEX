@@ -49,6 +49,7 @@ class AiCliRetryTest(TestCase):
         self.assertEqual(result["decision"], "WAIT_FOR_SWEEP")
         self.assertEqual(provider_used, "cli")
         self.assertEqual(run_cli_json_mock.call_count, 2)
+        self.assertEqual(result["advice_variant"], "direction_execution_split_v1")
         error_log_mock.assert_not_called()
 
     def test_build_summary_body_uses_template_layout(self) -> None:
@@ -64,7 +65,8 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertIn("【結論】", result)
-        self.assertIn("【機械判定サマリー】", result)
+        self.assertIn("方向判断:", result)
+        self.assertIn("いまの扱い:", result)
         self.assertEqual(provider_used, "cli")
 
     @patch("src.ai.advice.write_ai_error_log")
@@ -124,7 +126,7 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertIn("【結論】", result)
-        self.assertIn("【セットアップ】", result)
+        self.assertIn("【ロング/ショートのセットアップ状況】", result)
         self.assertIn("・ロング:", result)
         self.assertEqual(provider_used, "cli")
 

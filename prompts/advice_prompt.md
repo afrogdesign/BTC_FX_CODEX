@@ -9,6 +9,9 @@
 - next_condition は「何を待つか」を短く書く
 - 方向より位置を優先し、risk_flags / prelabel / liquidity / liquidation / OI / CVD / orderbook を重視
 - AIは計算し直さず、渡された構造化データの意味づけに徹する
+- `direction` と `execution_now` は分けて考える
+- `watch` / `invalid` の場合は、方向が合っていても待機または見送りを返す
+- 内部 reason code や snake_case をそのまま本文へ出さない
 
 返却フォーマット:
 {

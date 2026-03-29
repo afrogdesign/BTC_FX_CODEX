@@ -6,6 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from src.ai.cli_provider import run_cli_json, write_ai_error_log
+from src.presentation.sanitize import (
+    ADVICE_VARIANT,
+    build_display_context,
+    sanitize_flag_list,
+    sanitize_user_text,
+)
 
 
 def _load_prompt(base_dir: Path) -> str:
@@ -48,18 +54,23 @@ def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
     confidence_raw = float(payload.get("confidence", 0.0))
     confidence = confidence_raw / 100.0 if confidence_raw > 1 else confidence_raw
     confidence = max(0.0, min(1.0, confidence))
-    notes = str(payload.get("notes") or payload.get("primary_reason", "")).strip()[:200]
+    notes = sanitize_user_text(payload.get("notes") or payload.get("primary_reason", ""))[:200]
+    primary_reason = sanitize_user_text(payload.get("primary_reason", notes))[:200]
+    market_interpretation = sanitize_user_text(payload.get("market_interpretation", ""))[:200]
+    next_condition = sanitize_user_text(payload.get("next_condition", ""))[:200]
+    warnings = sanitize_flag_list(payload.get("warnings", []) if isinstance(payload.get("warnings"), list) else [])
     return {
         "decision": decision,
         "final_action": decision,
         "quality": quality,
         "confidence": round(confidence, 2),
         "notes": notes,
-        "primary_reason": str(payload.get("primary_reason", notes)).strip()[:200],
-        "market_interpretation": str(payload.get("market_interpretation", "")).strip()[:200],
+        "primary_reason": primary_reason,
+        "market_interpretation": market_interpretation,
         "entry_position_quality": str(payload.get("entry_position_quality", "")).strip()[:50],
-        "warnings": payload.get("warnings", []) if isinstance(payload.get("warnings"), list) else [],
-        "next_condition": str(payload.get("next_condition", "")).strip()[:200],
+        "warnings": warnings,
+        "next_condition": next_condition,
+        "advice_variant": ADVICE_VARIANT,
     }
 
 
@@ -83,6 +94,7 @@ def _request_ai_advice_via_api(
     user_payload = {
         "machine": machine_payload,
         "qualitative": qualitative_payload,
+        "display_context": build_display_context(machine_payload),
     }
 
     last_error: str | None = None
@@ -162,6 +174,7 @@ def request_ai_advice(
                         "system_prompt": _load_prompt(base_dir),
                         "machine": machine_payload,
                         "qualitative": qualitative_payload,
+                        "display_context": build_display_context(machine_payload),
                     },
                 )
                 return _normalize_advice(parsed), "cli"

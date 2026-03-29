@@ -13,18 +13,15 @@ from src.ai.summary import build_summary_body, build_summary_subject
 
 
 class SummaryFormatTest(unittest.TestCase):
-    def test_subject_and_body_include_badge_and_funding_display(self) -> None:
+    def test_ready_case_separates_direction_and_execution(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-11T09:05:00+09:00",
-            "system_label": "Ver02.1",
+            "system_label": "Ver02.3",
             "system_mode_label": "API",
-            "signal_badge": "🟡 好条件接近",
-            "signal_tier": "strong_machine",
             "prelabel": "ENTRY_OK",
             "bias": "long",
             "current_price": 70356.3,
             "confidence": 79,
-            "location_risk": 12.0,
             "phase": "pullback",
             "long_display_score": 72,
             "short_display_score": 55,
@@ -32,12 +29,10 @@ class SummaryFormatTest(unittest.TestCase):
             "market_regime": "uptrend",
             "signals_4h": "long",
             "signals_1h": "long",
-            "signals_15m": "wait",
+            "signals_15m": "long",
             "funding_rate_display": "ほぼ中立 (+0.0037%)",
-            "funding_rate_label": "ほぼ中立",
-            "funding_rate_pct": 0.0037,
             "atr_ratio": 0.85,
-            "volume_ratio": 0.75,
+            "volume_ratio": 1.21,
             "support_zones": [{"low": 69900.0, "high": 70010.0, "distance_from_price": 346.3}],
             "resistance_zones": [{"low": 70450.0, "high": 70600.0, "distance_from_price": 93.7}],
             "long_setup": {
@@ -54,14 +49,18 @@ class SummaryFormatTest(unittest.TestCase):
                 "tp1": 70000.0,
                 "tp2": 69500.0,
             },
+            "primary_setup_status": "ready",
+            "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "risk_flags": [],
+            "no_trade_flags": [],
             "ai_advice": {
                 "decision": "LONG",
                 "quality": "A",
                 "confidence": 0.82,
-                "notes": "方向は上向きです。",
+                "primary_reason": "上方向は維持だが断定ではなく条件付きで見る局面。",
+                "next_condition": "出来高維持を確認",
+                "warnings": [],
             },
-            "no_trade_flags": [],
-            "risk_flags": [],
         }
 
         subject = build_summary_subject(payload)
@@ -75,45 +74,36 @@ class SummaryFormatTest(unittest.TestCase):
             base_dir=BASE_DIR,
             result_payload=payload,
         )
-        self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith("🟡 好条件接近"))
-        self.assertIn("買い候補がそろい始め", subject)
-        self.assertIn("【BTC:70,356】", subject)
-        self.assertIn("信頼度79", subject)
-        self.assertTrue(subject.endswith("[Ver02.1] [API]"))
-        self.assertNotIn("[BTC監視]", subject)
-        self.assertIn("【結論】", body)
-        self.assertIn("ほぼ中立 (+0.0037%)", body)
-        self.assertIn("🟡 好条件接近", body)
-        self.assertIn("【セットアップ】", body)
-        self.assertIn("【価格と環境】", body)
-        self.assertIn("- 現在価格: 70,356.30", body)
-        self.assertIn("再検討帯は 70,000.00 - 70,100.00", body)
-        self.assertIn("損切り目安は 69,700.00", body)
-        self.assertIn("利確目安は TP1 70,800.00 / TP2 71,200.00", body)
-        self.assertIn("・ロング: 提案候補。", body)
-        self.assertIn("・ショート: 監視継続。", body)
-        self.assertNotIn("SWEEP_WAIT", body)
-        self.assertNotIn("critical_zone", body)
-        self.assertNotIn("RR不足", body)
 
-    def test_attention_subject_and_body_are_clearly_marked(self) -> None:
+        self.assertEqual(provider_used, "api")
+        self.assertIn("上方向バイアス", subject)
+        self.assertIn("条件付きで検討", subject)
+        self.assertIn("総合強度79", subject)
+        self.assertIn("方向判断: 相場は上方向バイアスです", body)
+        self.assertIn("いまの扱い: ロングは条件付きで検討", body)
+        self.assertIn("位置評価: 位置条件は悪くない", body)
+        self.assertIn("【ロング/ショートのセットアップ状況】", body)
+
+    def test_attention_subject_and_body_are_wait_first(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-15T06:05:00+09:00",
-            "system_label": "Ver02.1",
+            "system_label": "Ver02.3",
             "system_mode_label": "CLI",
             "notification_kind": "attention",
-            "bias": "long",
+            "bias": "short",
             "current_price": 70765.2,
-            "long_display_score": 59,
-            "short_display_score": 38,
-            "score_gap": 21,
+            "long_display_score": 38,
+            "short_display_score": 59,
+            "score_gap": -21,
             "signals_4h": "wait",
-            "signals_1h": "wait",
+            "signals_1h": "short",
             "signals_15m": "wait",
             "prelabel": "SWEEP_WAIT",
-            "confidence": 4,
-            "no_trade_flags": ["RR_insufficient", "sweep_incomplete"],
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence": 41,
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
         }
 
         subject = build_summary_subject(payload)
@@ -129,152 +119,32 @@ class SummaryFormatTest(unittest.TestCase):
         )
         self.assertEqual(provider_used, "api")
         self.assertTrue(subject.startswith("👀 [注意報]"))
-        self.assertIn("ロング寄りに傾き始め", subject)
-        self.assertIn("【BTC:70,765】", subject)
-        self.assertIn("信頼度4", subject)
-        self.assertTrue(subject.endswith("[Ver02.1] [CLI]"))
-        self.assertNotIn("[BTC監視]", subject)
-        self.assertIn("【注意報】", body)
-        self.assertIn("売買推奨メールではなく", body)
-        self.assertIn("【今の見立て】", body)
-        self.assertIn("【まだ本命通知でない理由】", body)
-        self.assertIn("方向感: ロング寄り", body)
-        self.assertIn("いまの扱い: 一度下を試してからの反発待ちです", body)
-        self.assertNotIn("prelabel:", body)
-        self.assertNotIn("Gap 21", subject)
+        self.assertIn("下方向バイアス", subject)
+        self.assertIn("上側流動性回収待ち", body)
+        self.assertIn("方向判断: 相場は下方向バイアスです", body)
+        self.assertNotIn("入る条件がかなりそろっています", body)
 
-    def test_wait_case_keeps_numbers_and_translates_internal_terms(self) -> None:
-        payload = {
-            "timestamp_jst": "2026-03-17T04:05:00+09:00",
-            "prelabel": "SWEEP_WAIT",
-            "bias": "long",
-            "current_price": 73883.0,
-            "confidence": 66,
-            "phase": "pullback",
-            "long_display_score": 90,
-            "short_display_score": 41,
-            "score_gap": 49,
-            "market_regime": "uptrend",
-            "signals_4h": "long",
-            "signals_1h": "long",
-            "signals_15m": "wait",
-            "funding_rate_display": "ほぼ中立 (+0.0038%)",
-            "atr_ratio": 1.2,
-            "volume_ratio": 0.77,
-            "support_zones": [{"low": 73349.0, "high": 73683.0, "distance_from_price": 200.0}],
-            "resistance_zones": [{"low": 73734.0, "high": 74104.0, "distance_from_price": 0.0}],
-            "long_setup": {
-                "status": "watch",
-                "entry_zone": {"low": 73349.0, "high": 73683.0},
-                "stop_loss": 73051.0,
-                "tp1": 73734.0,
-                "tp2": 74892.0,
-            },
-            "short_setup": {
-                "status": "invalid",
-                "entry_zone": {"low": 73734.0, "high": 74104.0},
-                "stop_loss": 74557.0,
-                "tp1": 73683.0,
-                "tp2": 72506.0,
-            },
-            "ai_advice": {
-                "decision": "WAIT_FOR_SWEEP",
-                "quality": "B",
-                "confidence": 0.78,
-                "notes": "上向きでも位置が悪く、いったん振ってからの反発待ちです。",
-            },
-            "no_trade_flags": ["Critical_zone_warning", "RR_insufficient", "sweep_incomplete"],
-            "risk_flags": ["lower_liquidity_close", "sweep_incomplete"],
-        }
-
-        body, provider_used = build_summary_body(
-            provider="api",
-            api_key="",
-            model="",
-            cli_command="",
-            timeout_sec=1,
-            retry_count=1,
-            base_dir=BASE_DIR,
-            result_payload=payload,
-        )
-        self.assertEqual(provider_used, "api")
-
-        self.assertIn("相場は上向きです。", body)
-        self.assertIn("いまの扱い: 一度下を試してからの反発待ちです", body)
-        self.assertIn("・ロング: 監視継続。再検討帯は 73,349.00 - 73,683.00", body)
-        self.assertIn("・ショート: 現状は見送り。再検討帯は 73,734.00 - 74,104.00", body)
-        self.assertIn("【AI補足】", body)
-        self.assertIn("AI判断は「いったん振ってからの反発待ち」", body)
-        self.assertIn("重要な価格帯", body)
-        self.assertNotIn("SWEEP_WAIT", body)
-        self.assertNotIn("critical_zone", body)
-
-    def test_subject_warns_first_when_ai_is_unavailable(self) -> None:
+    def test_machine_only_subject_warns_and_body_hides_internal_codes(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-17T03:05:00+09:00",
-            "system_label": "Ver02.1",
+            "system_label": "Ver02.3",
             "system_mode_label": "CLI",
             "prelabel": "SWEEP_WAIT",
-            "bias": "long",
+            "bias": "short",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
             "current_price": 73911.8,
             "confidence": 66,
+            "risk_flags": ["bid_wall_close", "upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
+            "long_setup": {"status": "invalid", "entry_zone": {"low": 73349.0, "high": 73683.0}, "stop_loss": 73051.0, "tp1": 73734.0, "tp2": 74892.0},
+            "short_setup": {"status": "watch", "entry_zone": {"low": 73734.0, "high": 74104.0}, "stop_loss": 74557.0, "tp1": 73683.0, "tp2": 72506.0},
             "ai_advice": None,
         }
 
         subject = build_summary_subject(payload)
-
-        self.assertTrue(subject.startswith("⚠️ 機械判定のみ "))
-        self.assertIn("上向きだが今は待機", subject)
-        self.assertIn("【BTC:73,912】", subject)
-        self.assertIn("信頼度66", subject)
-        self.assertTrue(subject.endswith("[Ver02.1] [CLI]"))
-
-    def test_short_sweep_wait_uses_upside_sweep_wording_in_fallback(self) -> None:
-        payload = {
-            "timestamp_jst": "2026-03-17T04:35:00+09:00",
-            "prelabel": "SWEEP_WAIT",
-            "bias": "short",
-            "current_price": 73883.0,
-            "confidence": 64,
-            "phase": "pullback",
-            "long_display_score": 44,
-            "short_display_score": 88,
-            "score_gap": -44,
-            "market_regime": "downtrend",
-            "signals_4h": "short",
-            "signals_1h": "short",
-            "signals_15m": "wait",
-            "funding_rate_display": "ほぼ中立 (+0.0038%)",
-            "atr_ratio": 1.1,
-            "volume_ratio": 0.81,
-            "support_zones": [{"low": 73349.0, "high": 73683.0, "distance_from_price": 200.0}],
-            "resistance_zones": [{"low": 73734.0, "high": 74104.0, "distance_from_price": 0.0}],
-            "long_setup": {
-                "status": "invalid",
-                "entry_zone": {"low": 73349.0, "high": 73683.0},
-                "stop_loss": 73051.0,
-                "tp1": 73734.0,
-                "tp2": 74892.0,
-            },
-            "short_setup": {
-                "status": "watch",
-                "entry_zone": {"low": 73734.0, "high": 74104.0},
-                "stop_loss": 74557.0,
-                "tp1": 73683.0,
-                "tp2": 72506.0,
-            },
-            "ai_advice": {
-                "decision": "WAIT_FOR_SWEEP",
-                "quality": "B",
-                "confidence": 0.75,
-                "notes": "下向きでも位置が悪く、いったん振ってからの反落待ちです。",
-            },
-            "no_trade_flags": ["Critical_zone_warning", "RR_insufficient_short", "sweep_incomplete"],
-            "risk_flags": ["upper_liquidity_close", "sweep_incomplete"],
-        }
-
-        body, provider_used = build_summary_body(
-            provider="api",
+        body, _provider_used = build_summary_body(
+            provider="cli",
             api_key="",
             model="",
             cli_command="",
@@ -284,11 +154,10 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertEqual(provider_used, "api")
-        self.assertIn("相場は下向きです。", body)
-        self.assertIn("いまの扱い: 一度上を試してからの反落待ちです", body)
-        self.assertNotIn("一度下を試してからの反発待ちです", body)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertTrue(subject.startswith("⚠️ 機械判定のみ "))
+        self.assertIn("下方向バイアス", body)
+        self.assertIn("上側流動性回収待ち", body)
+        self.assertIn("近い買い板があり短期ノイズに注意", body)
+        self.assertIn("上側流動性が近く先に振られやすい", body)
+        self.assertNotIn("bid_wall_close", body)
+        self.assertNotIn("upper_liquidity_close", body)
