@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import sys
 from pathlib import Path
@@ -18,12 +19,12 @@ class CodexCliWrapperTest(TestCase):
     @patch.dict("os.environ", {}, clear=True)
     @patch("tools.codex_cli_wrapper.shutil.which", return_value=None)
     @patch("tools.codex_cli_wrapper.Path.exists")
-    def test_resolve_codex_bin_falls_back_to_common_absolute_path(self, exists_mock: object, _which: object) -> None:
+    def test_resolve_codex_bin_falls_back_to_first_existing_absolute_path(self, exists_mock: object, _which: object) -> None:
         exists_mock.side_effect = lambda: False
         with patch("tools.codex_cli_wrapper.Path.exists", side_effect=[True, False]):
             from tools.codex_cli_wrapper import _resolve_codex_bin
 
-            self.assertEqual(_resolve_codex_bin(), "/usr/local/bin/codex")
+            self.assertEqual(_resolve_codex_bin(), "/Users/marupro/bin/codex")
 
     def test_build_prompt_for_summary_includes_result_payload(self) -> None:
         prompt = _build_prompt(
@@ -56,8 +57,10 @@ class CodexCliWrapperTest(TestCase):
     @patch("tools.codex_cli_wrapper._run_codex", return_value='{"decision":"SHORT","quality":"B","confidence":0.7,"notes":"test"}')
     @patch("sys.stdin.read", return_value='{"task":"ai_advice"}')
     def test_main_outputs_normalized_json_for_advice(self, _stdin_read: object, _run_codex: object) -> None:
-        with patch("sys.stdout.write") as stdout_write:
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
             exit_code = main()
-        written = "".join(call.args[0] for call in stdout_write.call_args_list)
         self.assertEqual(exit_code, 0)
-        self.assertEqual(json.loads(written), {"decision": "SHORT", "quality": "B", "confidence": 0.7, "notes": "test"})
+        self.assertEqual(
+            json.loads(stdout.getvalue()),
+            {"decision": "SHORT", "quality": "B", "confidence": 0.7, "notes": "test"},
+        )
