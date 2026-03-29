@@ -20,8 +20,11 @@ from tools.log_feedback import (
     _build_improvement_candidates,
     _load_csv_rows,
     _load_review_note_rows,
+    _load_review_state_rows,
+    _review_state_path,
     _review_form_path,
     _render_review_form_html,
+    build_feedback_report,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
@@ -79,8 +82,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_done | 2026-03-25T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical | no |  | good | done |",
-                        "| sig_pending | 2026-03-25T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  |  |  | pending |",
+                        "| sig_done | 2026-03-30T09:05:00+09:00 | subject | auto | useful_entry | 5 | yes | technical | good | done |",
+                        "| sig_pending | 2026-03-30T13:05:00+09:00 | subject2 | auto2 |  |  |  |  |  | pending |",
                     ]
                 ),
                 encoding="utf-8",
@@ -118,7 +121,7 @@ class LogFeedbackTest(unittest.TestCase):
                 writer.writerow(
                     {
                         "signal_id": "sig_new",
-                        "timestamp_jst": "2026-03-11T09:05:00+09:00",
+                        "timestamp_jst": "2026-03-30T09:05:00+09:00",
                         "evaluation_status": "complete",
                         "outcome": "win",
                         "direction_outcome": "correct",
@@ -137,7 +140,7 @@ class LogFeedbackTest(unittest.TestCase):
                 writer.writerow(
                     {
                         "signal_id": "sig_new",
-                        "timestamp_jst": "2026-03-11T09:05:00+09:00",
+                        "timestamp_jst": "2026-03-30T09:05:00+09:00",
                         "was_notified": "true",
                         "summary_subject": "new subject",
                     }
@@ -151,7 +154,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_done | 2026-03-10T09:05:00+09:00 | subject | auto | useful_skip | 4 | no | technical | no |  | ok | done |",
+                        "| sig_done | 2026-03-30T07:05:00+09:00 | subject | auto | useful_skip | 4 | no | technical | ok | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -165,7 +168,7 @@ class LogFeedbackTest(unittest.TestCase):
                 trades_path=trades_path,
             )
 
-            rows = _load_review_note_rows(review_note)
+            rows = _load_review_state_rows(_review_state_path(base_dir))
             signal_ids = [row["signal_id"] for row in rows]
             self.assertIn("sig_done", signal_ids)
             self.assertIn("sig_new", signal_ids)
@@ -175,7 +178,7 @@ class LogFeedbackTest(unittest.TestCase):
         row.update(
             {
                 "signal_id": "sig_form",
-                "timestamp_jst": "2026-03-11T09:05:00+09:00",
+                "timestamp_jst": "2026-03-30T09:05:00+09:00",
                 "subject": "subject",
                 "auto_eval_summary": "auto",
                 "bias": "long",
@@ -183,17 +186,19 @@ class LogFeedbackTest(unittest.TestCase):
                 "primary_setup_status": "ready",
                 "signal_tier": "strong_machine",
                 "notify_reason": '["status_upgraded"]',
-                "data_quality_flag": "ok",
                 "evaluation_status": "complete",
+                "confidence_direction_shadow": "88",
+                "confidence_execution_shadow": "63",
+                "confidence_wait_shadow": "24",
                 "review_status": "pending",
             }
         )
 
         html = _render_review_form_html([row], Path("/tmp/review.md"))
 
-        self.assertGreaterEqual(html.count("| signal_id |"), 1)
+        self.assertNotIn("| signal_id |", html)
         self.assertIn("今の確認軸", html)
-        self.assertIn("signal_tier", html)
+        self.assertIn("direction_strength", html)
         self.assertIn("notify_reason", html)
         self.assertIn("localStorage", html)
         self.assertIn("restoreDraft()", html)
@@ -201,17 +206,21 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("getDraftStorage()", html)
         self.assertIn("renderCards();\n    restoreDraft();\n    renderCards();", html)
         self.assertIn("通知 1", html)
-        self.assertIn('data-row-index="0"', html)
         self.assertIn(">subject<", html)
-        self.assertIn("おすすめ", html)
-        self.assertIn("03/11 09:05", html)
+        self.assertIn("この通知、役に立った？", html)
+        self.assertIn("レビュー進捗", html)
+        self.assertIn("完了にする", html)
+        self.assertIn("saveToServer()", html)
+        self.assertIn("reloadFromServer()", html)
+        self.assertIn("03/30 09:05", html)
         self.assertIn("ロング寄り", html)
+        self.assertIn("2026-03-30 05:05 JST 以降の通知だけを見る", html)
         self.assertNotIn("??", html)
         self.assertNotIn("replaceAll", html)
         self.assertIn("syncRowsFromDom()", html)
         self.assertIn("bindSelectHandlers()", html)
-        self.assertIn("全文を選択", html)
-        self.assertNotIn("Markdownを保存", html)
+        self.assertIn("保存先", html)
+        self.assertNotIn("Markdownをコピー", html)
 
     def test_import_reviews_ignores_rows_before_review_cutoff(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -225,8 +234,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | no |  | old | done |",
-                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | no |  | new | done |",
+                        "| old_sig | 2026-03-30T05:04:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | old | done |",
+                        "| new_sig | 2026-03-30T05:05:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | new | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -266,13 +275,16 @@ class LogFeedbackTest(unittest.TestCase):
                         "signal_tier",
                         "notify_reason_codes",
                         "data_quality_flag",
+                        "confidence_direction_shadow",
+                        "confidence_execution_shadow",
+                        "confidence_wait_shadow",
                     ],
                 )
                 writer.writeheader()
                 writer.writerow(
                     {
                         "signal_id": "sig_recent",
-                        "timestamp_jst": "2026-03-25T00:05:00+09:00",
+                        "timestamp_jst": "2026-03-30T05:05:00+09:00",
                         "was_notified": "true",
                         "summary_subject": "recent subject",
                         "bias": "short",
@@ -280,7 +292,9 @@ class LogFeedbackTest(unittest.TestCase):
                         "primary_setup_status": "ready",
                         "signal_tier": "normal",
                         "notify_reason_codes": '["status_upgraded"]',
-                        "data_quality_flag": "ok",
+                        "confidence_direction_shadow": "71",
+                        "confidence_execution_shadow": "44",
+                        "confidence_wait_shadow": "22",
                     }
                 )
 
@@ -292,12 +306,12 @@ class LogFeedbackTest(unittest.TestCase):
                 trades_path=trades_path,
             )
 
-            rows = _load_review_note_rows(review_note)
+            rows = _load_review_state_rows(_review_state_path(base_dir))
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["signal_id"], "sig_recent")
             self.assertIn("事後評価待ち", rows[0]["auto_eval_summary"])
 
-    def test_export_review_queue_hides_old_rows_from_form_only(self) -> None:
+    def test_export_review_queue_hides_old_rows_from_note_and_form(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             outcomes_path = base_dir / "outcomes.csv"
@@ -321,8 +335,8 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| old_sig | 2026-03-24T23:59:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | no |  | old | done |",
-                        "| new_sig | 2026-03-25T00:00:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | no |  | new | done |",
+                        "| old_sig | 2026-03-30T05:04:00+09:00 | old subject | auto | useful_entry | 5 | yes | technical | old | done |",
+                        "| new_sig | 2026-03-30T05:05:00+09:00 | new subject | auto | useful_wait | 4 | no | macro | new | done |",
                     ]
                 ),
                 encoding="utf-8",
@@ -339,8 +353,8 @@ class LogFeedbackTest(unittest.TestCase):
             note_text = review_note.read_text(encoding="utf-8")
             form_text = _review_form_path(review_note).read_text(encoding="utf-8")
 
-            self.assertIn("old_sig", note_text)
-            self.assertIn("new_sig", note_text)
+            self.assertNotIn("old_sig", note_text)
+            self.assertIn("new subject", note_text)
             self.assertNotIn("old_sig", form_text)
             self.assertIn("new_sig", form_text)
 
@@ -355,7 +369,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "## レビュー一覧",
                         f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
                         f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
-                        "| sig_form | 2026-03-11T09:05:00+09:00 | subject | auto |  |  |  |  |  |  |  | pending |",
+                        "| sig_form | 2026-03-30T09:05:00+09:00 | subject | auto |  |  |  |  |  | pending |",
                     ]
                 ),
                 encoding="utf-8",
@@ -585,6 +599,82 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["logic_validated"], "true")
             self.assertEqual(rows[0]["risk_percent_applied"], "")
             self.assertEqual(rows[0]["phase1_active"], "")
+
+    def test_build_feedback_report_starts_with_human_summary(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "evaluation_status",
+                        "data_quality_flag",
+                        "signal_based_MFE_24h",
+                        "signal_based_MAE_24h",
+                        "entry_ready_based_MFE_24h",
+                        "entry_ready_based_MAE_24h",
+                        "outcome",
+                        "direction_outcome",
+                        "entry_outcome",
+                        "wait_outcome",
+                        "skip_outcome",
+                        "support_hold_result",
+                        "resistance_hold_result",
+                        "tp1_hit_first",
+                        "was_notified",
+                        "user_verdict",
+                        "usefulness_1to5",
+                        "actual_move_driver",
+                        "prelabel",
+                        "signal_tier",
+                        "bias",
+                        "regime",
+                        "risk_flags",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_report",
+                        "timestamp_jst": "2026-03-30T09:05:00+09:00",
+                        "evaluation_status": "complete",
+                        "data_quality_flag": "ok",
+                        "signal_based_MFE_24h": "1.2",
+                        "signal_based_MAE_24h": "0.4",
+                        "entry_ready_based_MFE_24h": "1.0",
+                        "entry_ready_based_MAE_24h": "0.3",
+                        "outcome": "win",
+                        "direction_outcome": "correct",
+                        "entry_outcome": "not_applicable",
+                        "wait_outcome": "wait_was_good",
+                        "skip_outcome": "not_applicable",
+                        "support_hold_result": "untouched",
+                        "resistance_hold_result": "held",
+                        "tp1_hit_first": "true",
+                        "was_notified": "true",
+                        "user_verdict": "useful_wait",
+                        "usefulness_1to5": "4",
+                        "actual_move_driver": "technical",
+                        "prelabel": "SWEEP_WAIT",
+                        "signal_tier": "normal",
+                        "bias": "short",
+                        "regime": "downtrend",
+                        "risk_flags": "",
+                    }
+                )
+
+            report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
+
+            self.assertIn("## 1. まず結論", report)
+            self.assertIn("## 3. 人のレビュー要約", report)
+            self.assertIn("待つ判断に使えた", report)
+            self.assertIn("平均の役立ち度", report)
 
 
 if __name__ == "__main__":
