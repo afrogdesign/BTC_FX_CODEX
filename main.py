@@ -19,6 +19,7 @@ from src.analysis.funding import format_funding_pct, funding_rate_label, funding
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
+from src.analysis.result_flags import assemble_result_flags
 from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
 from src.analysis.confidence import compute_confidence_details, compute_machine_agreement
 from src.analysis.evaluation_trace import build_evaluation_trace
@@ -514,10 +515,15 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     primary_setup = (
         long_setup if primary_setup_side == "long" else short_setup if primary_setup_side == "short" else {}
     )
-    all_flags = sorted(set(score_info["no_trade_flags"] + long_flags + short_flags + position_risk["risk_flags"]))
-    if critical_zone:
-        all_flags.append("Critical_zone_warning")
-        all_flags = sorted(set(all_flags))
+    result_flags = assemble_result_flags(
+        bias=bias,
+        score_no_trade_flags=score_info["no_trade_flags"],
+        score_warning_flags=score_info["warning_flags"],
+        long_setup_flags=long_flags,
+        short_setup_flags=short_flags,
+        position_risk_flags=position_risk["risk_flags"],
+        critical_zone=critical_zone,
+    )
 
     qualitative_context = build_qualitative_context(
         now_ms=now_ms,
@@ -525,7 +531,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         df_15m=df_15m,
         market_regime=market_regime,
         bias=bias,
-        no_trade_flags=all_flags,
+        blocking_flags=result_flags["no_trade_flags"],
         price=price,
         ema50=float(tf_15m["ema_mid"].iloc[-1]),
         atr=atr_15m,
@@ -636,9 +642,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "confidence_execution_shadow": confidence_details["confidence_execution_shadow"],
         "confidence_wait_shadow": confidence_details["confidence_wait_shadow"],
         "confidence_components": confidence_details["confidence_components"],
-        "warning_flags": score_info["warning_flags"],
-        "no_trade_flags": all_flags,
-        "risk_flags": position_risk["risk_flags"],
+        "warning_flags": result_flags["warning_flags"],
+        "no_trade_flags": result_flags["no_trade_flags"],
+        "risk_flags": result_flags["risk_flags"],
         "summary_variant": SUMMARY_VARIANT,
         "advice_variant": ADVICE_VARIANT,
         "prompt_variant": PROMPT_VARIANT,

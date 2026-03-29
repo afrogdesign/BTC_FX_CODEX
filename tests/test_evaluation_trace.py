@@ -24,6 +24,9 @@ class EvaluationTraceTest(unittest.TestCase):
                 "signals_15m": "wait",
                 "breakout_down": False,
                 "breakout_up": False,
+                "no_trade_flags": ["RR_insufficient_short"],
+                "warning_flags": ["Critical_zone_warning"],
+                "risk_flags": ["upper_liquidity_close"],
                 "long_setup": {"invalid_reason_codes": []},
                 "short_setup": {"invalid_reason_codes": ["confidence_below_min"]},
             },
@@ -44,11 +47,18 @@ class EvaluationTraceTest(unittest.TestCase):
                 "action_label": "戻り売り待ち",
                 "entry_quality_label": "位置条件は悪くない",
                 "setup_status_label": "監視継続",
-                "confidence_display_name": "総合強度",
+                "confidence_metric_labels": {
+                    "direction": "方向の強さ",
+                    "execution": "実行しやすさ",
+                    "wait": "待機圧力",
+                },
             },
         )
-        self.assertEqual(trace["evaluation_trace_version"], "v0.1")
+        self.assertEqual(trace["evaluation_trace_version"], "v0.2")
         self.assertIn("direction_score_shadow", trace)
         self.assertIn("trigger_reason_codes", trace)
         self.assertIn("display_label_mapping", trace)
-        self.assertEqual(trace["summary_variant"], "direction_execution_split_v1")
+        self.assertEqual(trace["summary_variant"], "direction_execution_split_v2")
+        self.assertEqual(trace["blocking_reason_codes"], ["RR_insufficient_short"])
+        self.assertEqual(trace["warning_reason_codes"], ["Critical_zone_warning"])
+        self.assertEqual(trace["position_risk_flags"], ["upper_liquidity_close"])

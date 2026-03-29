@@ -184,6 +184,7 @@ def build_setup(
         "entry_to_target_pct": _round2(entry_to_target_pct),
         "invalid_reason": " / ".join(invalid_reasons),
         "invalid_reason_codes": invalid_reason_codes,
+        "blocking_flags": sorted(set(no_trade_flags)),
     }
     return setup, sorted(set(no_trade_flags))
 

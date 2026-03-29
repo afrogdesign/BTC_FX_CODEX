@@ -143,6 +143,29 @@ class NotificationTriggerTest(unittest.TestCase):
         self.assertEqual(decision["notification_kind"], "attention")
         self.assertIn("attention_bias_changed", decision["notify_reason_codes"])
 
+    def test_position_risk_only_does_not_count_as_multiple_no_trade_flags(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "short",
+            "confidence": 78,
+            "primary_setup_status": "invalid",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "agree",
+            "no_trade_flags": [],
+            "risk_flags": ["upper_liquidity_close", "bid_wall_close"],
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "short",
+            "primary_setup_status": "watch",
+            "prelabel": "SWEEP_WAIT",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+        self.assertFalse(decision["notify"])
+        self.assertNotIn("multiple_no_trade_flags", decision["suppress_reason_codes"])
+
 
 if __name__ == "__main__":
     unittest.main()

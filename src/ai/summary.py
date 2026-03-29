@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.presentation.sanitize import (
-    CONFIDENCE_DISPLAY_NAME,
+    CONFIDENCE_METRIC_LABELS,
     build_display_context,
     sanitize_flag_list,
     sanitize_user_text,
@@ -88,11 +88,14 @@ def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
 
 
 def _root_summary_lines(result: dict[str, Any], display_context: dict[str, Any]) -> list[str]:
+    metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【結論】",
         f"方向判断: {display_context['direction_label']}",
         f"いまの扱い: {display_context['action_label']}",
-        f"{CONFIDENCE_DISPLAY_NAME}: {result.get('confidence')}",
+        f"{metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
+        f"{metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
+        f"{metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
         f"位置評価: {display_context['entry_quality_label']}",
         "",
         "【根拠要約】",
@@ -141,6 +144,7 @@ def _ai_review_lines(result: dict[str, Any]) -> list[str]:
 
 
 def _attention_summary(result: dict[str, Any], display_context: dict[str, Any]) -> str:
+    metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【注意報】",
         "これは売買推奨メールではなく、方向の変化を早めに共有する注意通知です。",
@@ -148,7 +152,9 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any]) 
         "【今の見立て】",
         f"- 方向判断: {display_context['direction_label']}",
         f"- いまの扱い: {display_context['action_label']}",
-        f"- {CONFIDENCE_DISPLAY_NAME}: {result.get('confidence')}",
+        f"- {metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
+        f"- {metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
+        f"- {metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
         f"- 現在価格: {_format_price(result.get('current_price'))}",
         "",
         "【まだ本命通知でない理由】",
@@ -185,7 +191,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     prefix = "👀 [注意報] " if notification_kind == "attention" else ""
     subject = (
         f"{prefix}{display_context['direction_compact_label']} / {display_context['action_compact_label']} "
-        f"【BTC:{price_text}】 {CONFIDENCE_DISPLAY_NAME}{result.get('confidence')} {jst_ts}{suffix}"
+        f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()
     if result.get("ai_advice") is None and notification_kind != "attention":
         subject = f"⚠️ 機械判定のみ {subject}"

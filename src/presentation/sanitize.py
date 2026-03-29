@@ -4,11 +4,15 @@ import re
 from typing import Any
 
 
-SUMMARY_VARIANT = "direction_execution_split_v1"
-ADVICE_VARIANT = "direction_execution_split_v1"
-PROMPT_VARIANT = "summary_template_split_v1+advice_prompt_split_v1"
-EVALUATION_TRACE_VERSION = "v0.1"
-CONFIDENCE_DISPLAY_NAME = "総合強度"
+SUMMARY_VARIANT = "direction_execution_split_v2"
+ADVICE_VARIANT = "direction_execution_split_v2"
+PROMPT_VARIANT = "summary_template_split_v2+advice_prompt_split_v2"
+EVALUATION_TRACE_VERSION = "v0.2"
+CONFIDENCE_METRIC_LABELS = {
+    "direction": "方向の強さ",
+    "execution": "実行しやすさ",
+    "wait": "待機圧力",
+}
 
 
 _DIRECTION_LABELS = {
@@ -86,6 +90,9 @@ _CODE_LABELS = {
     "ask_wall_distance": "近い売り板が抵抗になりやすい",
     "bid_wall_distance": "近い買い板が支持になりやすい",
     "liquidation_cluster_distance": "清算クラスターが近く乱高下に注意",
+    "direction_strength": "方向の強さ",
+    "execution_readiness": "実行しやすさ",
+    "wait_pressure": "待機圧力",
 }
 
 _UNKNOWN_CODE_PATTERN = re.compile(r"\b[A-Za-z]+(?:_[A-Za-z0-9]+)+\b")
@@ -226,6 +233,7 @@ def _subject_action_label(action_label: str) -> str:
 def _reason_sources(result: dict[str, Any]) -> list[str]:
     setup = (result.get("long_setup") or {}) if str(result.get("bias", "")).lower() == "long" else (result.get("short_setup") or {})
     reasons: list[str] = []
+    reasons.extend(str(flag) for flag in result.get("warning_flags", []) if str(flag).strip())
     reasons.extend(str(flag) for flag in result.get("risk_flags", []) if str(flag).strip())
     reasons.extend(str(flag) for flag in result.get("no_trade_flags", []) if str(flag).strip())
     reasons.extend(str(code) for code in setup.get("invalid_reason_codes", []) if str(code).strip())
@@ -259,7 +267,7 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
         "action_compact_label": _subject_action_label(action),
         "entry_quality_label": prelabel_label(prelabel),
         "setup_status_label": setup_status_label(status),
-        "confidence_display_name": CONFIDENCE_DISPLAY_NAME,
+        "confidence_metric_labels": dict(CONFIDENCE_METRIC_LABELS),
         "wait_reason_labels": _dedupe_preserve(reason_labels),
         "prelabel_display_label": prelabel_label(prelabel),
         "primary_setup_status": status,

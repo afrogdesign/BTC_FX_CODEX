@@ -49,7 +49,7 @@ class AiCliRetryTest(TestCase):
         self.assertEqual(result["decision"], "WAIT_FOR_SWEEP")
         self.assertEqual(provider_used, "cli")
         self.assertEqual(run_cli_json_mock.call_count, 2)
-        self.assertEqual(result["advice_variant"], "direction_execution_split_v1")
+        self.assertEqual(result["advice_variant"], "direction_execution_split_v2")
         error_log_mock.assert_not_called()
 
     def test_build_summary_body_uses_template_layout(self) -> None:

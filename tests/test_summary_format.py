@@ -22,6 +22,9 @@ class SummaryFormatTest(unittest.TestCase):
             "bias": "long",
             "current_price": 70356.3,
             "confidence": 79,
+            "confidence_direction_shadow": 88.0,
+            "confidence_execution_shadow": 72.0,
+            "confidence_wait_shadow": 18.0,
             "phase": "pullback",
             "long_display_score": 72,
             "short_display_score": 55,
@@ -51,6 +54,7 @@ class SummaryFormatTest(unittest.TestCase):
             },
             "primary_setup_status": "ready",
             "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "warning_flags": [],
             "risk_flags": [],
             "no_trade_flags": [],
             "ai_advice": {
@@ -78,9 +82,12 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertEqual(provider_used, "api")
         self.assertIn("上方向バイアス", subject)
         self.assertIn("条件付きで検討", subject)
-        self.assertIn("総合強度79", subject)
+        self.assertNotIn("総合強度", subject)
         self.assertIn("方向判断: 相場は上方向バイアスです", body)
         self.assertIn("いまの扱い: ロングは条件付きで検討", body)
+        self.assertIn("方向の強さ: 88.0", body)
+        self.assertIn("実行しやすさ: 72.0", body)
+        self.assertIn("待機圧力: 18.0", body)
         self.assertIn("位置評価: 位置条件は悪くない", body)
         self.assertIn("【ロング/ショートのセットアップ状況】", body)
 
@@ -102,6 +109,10 @@ class SummaryFormatTest(unittest.TestCase):
             "primary_setup_status": "watch",
             "primary_setup_reason": "near_entry_zone_waiting_trigger",
             "confidence": 41,
+            "confidence_direction_shadow": 62.0,
+            "confidence_execution_shadow": 28.0,
+            "confidence_wait_shadow": 64.0,
+            "warning_flags": ["Critical_zone_warning"],
             "risk_flags": ["upper_liquidity_close"],
             "no_trade_flags": ["sweep_incomplete"],
         }
@@ -120,7 +131,11 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertEqual(provider_used, "api")
         self.assertTrue(subject.startswith("👀 [注意報]"))
         self.assertIn("下方向バイアス", subject)
+        self.assertNotIn("総合強度", subject)
         self.assertIn("上側流動性回収待ち", body)
+        self.assertIn("方向の強さ: 62.0", body)
+        self.assertIn("実行しやすさ: 28.0", body)
+        self.assertIn("待機圧力: 64.0", body)
         self.assertIn("方向判断: 相場は下方向バイアスです", body)
         self.assertNotIn("入る条件がかなりそろっています", body)
 
@@ -135,6 +150,10 @@ class SummaryFormatTest(unittest.TestCase):
             "primary_setup_reason": "near_entry_zone_waiting_trigger",
             "current_price": 73911.8,
             "confidence": 66,
+            "confidence_direction_shadow": 74.0,
+            "confidence_execution_shadow": 31.0,
+            "confidence_wait_shadow": 58.0,
+            "warning_flags": [],
             "risk_flags": ["bid_wall_close", "upper_liquidity_close"],
             "no_trade_flags": ["sweep_incomplete"],
             "long_setup": {"status": "invalid", "entry_zone": {"low": 73349.0, "high": 73683.0}, "stop_loss": 73051.0, "tp1": 73734.0, "tp2": 74892.0},
@@ -156,6 +175,7 @@ class SummaryFormatTest(unittest.TestCase):
 
         self.assertTrue(subject.startswith("⚠️ 機械判定のみ "))
         self.assertIn("下方向バイアス", body)
+        self.assertNotIn("総合強度", subject)
         self.assertIn("上側流動性回収待ち", body)
         self.assertIn("近い買い板があり短期ノイズに注意", body)
         self.assertIn("上側流動性が近く先に振られやすい", body)
