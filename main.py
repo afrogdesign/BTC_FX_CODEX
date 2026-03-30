@@ -46,6 +46,11 @@ from src.indicators.ema import calculate_ema, get_ema20_slope, get_ema_alignment
 from src.indicators.rsi import calculate_rsi
 from src.indicators.volume import calculate_volume_ratio
 from src.notification.email_sender import resend_pending_email, save_pending_email, send_email
+from src.notification.detail_page import (
+    append_detail_page_url,
+    detail_page_enabled,
+    publish_notification_detail,
+)
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
 from src.storage.csv_logger import append_trade_log
@@ -659,6 +664,11 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "suppress_reason_codes": [],
         "reason_for_notification": [],
         "notification_kind": "none",
+        "detail_page_enabled": False,
+        "detail_page_status": "disabled",
+        "detail_page_url": "",
+        "detail_page_local_path": "",
+        "detail_page_published_at_utc": "",
     }
     core_result["display_context"] = build_display_context(core_result)
 
@@ -767,6 +777,18 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
 
     if notify:
+        if detail_page_enabled(cfg, core_result):
+            try:
+                detail_page_info = publish_notification_detail(base_dir, cfg, core_result)
+                core_result["summary_body"] = append_detail_page_url(
+                    core_result["summary_body"],
+                    detail_page_info.get("detail_page_url", ""),
+                )
+                core_result.update(detail_page_info)
+            except Exception as exc:  # noqa: BLE001
+                core_result["detail_page_enabled"] = True
+                core_result["detail_page_status"] = "failed"
+                _error_log(base_dir, "notification_detail_page_error", f"{exc}\n{traceback.format_exc()}")
         notify_path = (
             get_last_attention_notified_path(base_dir)
             if core_result["notification_kind"] == "attention"

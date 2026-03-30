@@ -1,8 +1,9 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-30 21:10 JST
+更新日: 2026-03-31 00:33 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
+評価シート更新の定型手順: [運用資料/運用/実務/評価シート更新_AI手順.md](運用/実務/評価シート更新_AI手順.md)
 
 ## 現在の状況
 - `iMac 2019` の観測常駐 `com.afrog.btc-monitor` は、今回の要約層改善を反映した `Ver02.3v2-OBS` へ更新しました。`.env` の `SYSTEM_LABEL` は `Ver02.3v2-OBS`、launchd 再起動後の実 PID は `90461` です。
@@ -21,6 +22,9 @@
 - フォーム画面と `通知評価シート.md` は、新体制の比較を崩さないため `2026-03-30 05:05 JST` 以降の通知だけを対象にするよう切り替えました。それより前の通知はレビュー画面から非表示にし、`import_reviews()` と集計からも除外する実装に更新しました。
 - フォーム UI は、通知時刻の大表示 `MM/DD HH:MM`、優先入力項目の強調、日本語ラベル化まで反映済みです。
 - フォーム UI は旧 `signal_tier` / `data_quality` 中心の確認欄を隠し、`方向の強さ` `実行しやすさ` `待機圧力` と通知理由を見る新体制向けカードに変更しました。
+- 通知本文とは別ユニットとして、通知ごとの詳細HTMLページを生成し、公開成功時だけメール本文末尾へ URL を追記できる仕組みを実装しました。実装は `src/notification/detail_page.py` と `tools/render_notification_detail_page.py` に分離し、本文本体は従来のプレーンテキストのまま維持しています。
+- 通知詳細HTMLは `NOTIFICATION_HTML_*` 設定で完全に ON/OFF でき、公開失敗時もメール送信は止めず従来本文のまま継続する設計にしました。`core_result` には `detail_page_status` `detail_page_url` などの状態も保存します。
+- 直近の repo 検証として `.venv312/bin/python -m unittest tests.test_notification_detail_page tests.test_summary_format tests.test_chart_pattern_shadow` と `.venv312/bin/python -m py_compile main.py config.py src/notification/detail_page.py tools/render_notification_detail_page.py tests/test_notification_detail_page.py` を実行し、成功を確認しました。
 - 直近の repo 検証として `.venv312/bin/python -m unittest tests.test_log_feedback` と `.venv312/bin/python -m py_compile tools/log_feedback.py tests/test_log_feedback.py` を実行し、成功を確認しました。
 - 本番 MBP2020 の接続先は `100.104.218.101` に更新しました。実務では引き続き `mbp2020-btc` alias を正本として使います。
 - `mbp2020-btc` alias の実体を `100.104.218.101` へ更新し、Global_BOX と Obsidian 側の接続メモも同じ前提にそろえました。
@@ -34,9 +38,11 @@
 2. `watch / invalid` 相当の通知で、位置リスクだけでは main 通知抑止にならないことと、実行 blocker があるときだけ抑止されることを live ログでも確認する。
 3. `./.venv312/bin/python tools/log_feedback.py serve-review-form` でローカル補助を起動し、`http://127.0.0.1:8765/` から HTML 保存が実運用で問題ないか確認する。
 4. iCloud 側の `評価シート入力フォーム.html` を使って、`2026-03-30 05:05 JST` 以降の通知だけを対象に、件名の印象と本文 3 指標表示が誤読防止に効いたかをレビューする。
-5. レビューがたまった段階で `daily-sync` もしくは AI への「集計して」で `user_reviews.csv` と集計を更新する。
-6. `Phase 0` 完了条件を、通知後 24 時間評価の一周完了とレビュー蓄積で判断する。満たすまでは `Phase 1` へ上げない。
-7. `tests/test_codex_cli_wrapper.py` の不一致は、通知評価フォーム運用が落ち着いたあとに切り分けて整合化する。
+5. `.env` で `NOTIFICATION_HTML_ENABLED=true` を入れたうえで、次回通知時に詳細HTMLページの公開とメール本文末尾 URL 追記が実運用で通るか確認する。
+6. `tools/render_notification_detail_page.py --input logs/signals/<signal_id>.json` で、メール通知と切り離してHTML単体の磨き込みが回せることを確認する。
+7. レビューがたまった段階で `daily-sync` もしくは AI への「集計して」で `user_reviews.csv` と集計を更新する。
+8. `Phase 0` 完了条件を、通知後 24 時間評価の一周完了とレビュー蓄積で判断する。満たすまでは `Phase 1` へ上げない。
+9. `tests/test_codex_cli_wrapper.py` の不一致は、通知評価フォーム運用が落ち着いたあとに切り分けて整合化する。
 
 ## ブロッカー
 - 過去に iCloud 配下 HTML を不安定と判断したが、主因は JavaScript 構文エラーでした。現在は iCloud 側フォームを正式運用に戻しています。

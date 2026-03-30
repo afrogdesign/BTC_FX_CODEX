@@ -106,7 +106,12 @@ def _coerce_value(key: str, value: str) -> Any:
         "PATTERN_FAILED_BREAKOUT_EXCESS_ATR_MIN",
         "PATTERN_FAILED_BREAKOUT_WICK_RATIO_MIN",
     }
-    bool_keys = {"AI_CACHE_ENABLED", "DRYRUN_MODE"}
+    bool_keys = {
+        "AI_CACHE_ENABLED",
+        "DRYRUN_MODE",
+        "NOTIFICATION_HTML_ENABLED",
+        "NOTIFICATION_HTML_INCLUDE_ATTENTION",
+    }
 
     if key in int_keys:
         return int(value)
@@ -176,6 +181,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
             or key.startswith("MEXC_")
             or key.startswith("OPENAI_")
             or key.startswith("BINANCE_")
+            or key.startswith("NOTIFICATION_HTML_")
         ):
             merged[key] = _coerce_value(key, value)
 
@@ -273,6 +279,12 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "AI_SUMMARY_TIMEOUT_SEC": 10,
         "AI_RETRY_COUNT": 3,
         "AI_CACHE_ENABLED": False,
+        "NOTIFICATION_HTML_ENABLED": False,
+        "NOTIFICATION_HTML_INCLUDE_ATTENTION": True,
+        "NOTIFICATION_HTML_PUBLIC_BASE_URL": "https://server.afrog.jp/btc-monitor/notifications",
+        "NOTIFICATION_HTML_REMOTE_SSH_HOST": "maruPro@macserver.afrog.jp",
+        "NOTIFICATION_HTML_REMOTE_DIR": "/Volumes/Server_HD2/site/btc-monitor/notifications",
+        "NOTIFICATION_HTML_LOCAL_DIR": "logs/notifications_html",
         "HEARTBEAT_FILE": "logs/heartbeat.txt",
         "HEALTH_CHECK_MAX_HOURS": 6,
         "LOG_RETENTION_SIGNALS_DAYS": 90,
