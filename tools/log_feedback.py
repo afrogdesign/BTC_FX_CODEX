@@ -385,6 +385,24 @@ def _load_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fp))
 
 
+def _is_stale_file(target: Path, sources: list[Path]) -> bool:
+    if not target.exists():
+        return True
+    try:
+        target_mtime = target.stat().st_mtime
+    except OSError:
+        return True
+    for source in sources:
+        if not source.exists():
+            continue
+        try:
+            if source.stat().st_mtime > target_mtime:
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> Path:
     _ensure_parent(path)
     with path.open("w", newline="", encoding="utf-8") as fp:
@@ -2630,6 +2648,105 @@ def _negative_outcome(row: dict[str, Any]) -> bool:
     )
 
 
+_COUNTERTREND_LONG_CLUSTER_FLAGS = {
+    "lower_liquidity_close",
+    "orderbook_ask_heavy",
+    "long_flush_exhaustion",
+    "cvd_bullish_divergence",
+    "sweep_incomplete",
+}
+
+
+def _direction_execution_conflict(row: dict[str, Any]) -> bool:
+    return (
+        _parse_float(row.get("confidence_direction_shadow"), 0.0) >= 60.0
+        and _parse_float(row.get("confidence_execution_shadow"), 999.0) <= 20.0
+        and _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0
+    )
+
+
+def _entry_ok_invalid_conflict(row: dict[str, Any]) -> bool:
+    return row.get("prelabel") == "ENTRY_OK" and row.get("primary_setup_status") == "invalid"
+
+
+def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
+    if row.get("bias") != "long":
+        return False
+    flags = set(_split_values(str(row.get("risk_flags", ""))))
+    return len(flags & _COUNTERTREND_LONG_CLUSTER_FLAGS) >= 2
+
+
+def _recent_rows(rows: list[dict[str, Any]], *, hours: int = 12) -> list[dict[str, Any]]:
+    start = datetime.now(tz=JST) - timedelta(hours=hours)
+    recent: list[dict[str, Any]] = []
+    for row in rows:
+        dt = _parse_dt(row.get("timestamp_jst", ""))
+        if dt is None:
+            continue
+        if dt >= start:
+            recent.append(row)
+    return recent
+
+
+def _bias_direction_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
+    for bias in ("long", "short", "wait"):
+        subset = [row for row in rows if row.get("bias") == bias]
+        if not subset:
+            continue
+        counts = Counter(row.get("direction_outcome", "") for row in subset if row.get("direction_outcome", ""))
+        total = len(subset)
+        summary.append(
+            {
+                "bias": bias,
+                "count": total,
+                "correct": counts.get("correct", 0),
+                "wrong": counts.get("wrong", 0),
+                "unclear": counts.get("unclear", 0),
+                "wrong_rate": _ratio(counts.get("wrong", 0), total),
+            }
+        )
+    return summary
+
+
+def _risk_flag_wrong_rate_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: Counter[str] = Counter()
+    wrongs: Counter[str] = Counter()
+    for row in rows:
+        flags = _split_values(row.get("risk_flags", ""))
+        is_wrong = row.get("direction_outcome") == "wrong"
+        for flag in flags:
+            counts[flag] += 1
+            if is_wrong:
+                wrongs[flag] += 1
+    summary: list[dict[str, Any]] = []
+    for flag, count in counts.items():
+        if count < 5:
+            continue
+        summary.append(
+            {
+                "flag": flag,
+                "count": count,
+                "wrong_count": wrongs[flag],
+                "wrong_rate": _ratio(wrongs[flag], count),
+            }
+        )
+    summary.sort(key=lambda item: (item["wrong_rate"], item["count"]), reverse=True)
+    return summary
+
+
+def _recent_live_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    direction_conflicts = [row for row in rows if _direction_execution_conflict(row)]
+    entry_invalid_rows = [row for row in rows if _entry_ok_invalid_conflict(row)]
+    countertrend_rows = [row for row in rows if _countertrend_long_cluster(row)]
+    return {
+        "count": len(rows),
+        "direction_execution_conflict_count": len(direction_conflicts),
+        "entry_ok_invalid_count": len(entry_invalid_rows),
+        "countertrend_long_cluster_count": len(countertrend_rows),
+    }
+
+
 def _risk_flag_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter()
     negatives: Counter[str] = Counter()
@@ -2675,8 +2792,16 @@ def _profit_factor_proxy(rows: list[dict[str, Any]]) -> float:
     return gross_profit / gross_loss
 
 
-def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) -> list[dict[str, Any]]:
+def _build_improvement_candidates(
+    rows: list[dict[str, Any]],
+    *,
+    monthly: bool,
+    period_rows: list[dict[str, Any]] | None = None,
+    recent_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    period_rows = period_rows or []
+    recent_rows = recent_rows or []
 
     entry_rows = [row for row in rows if row.get("prelabel") == "ENTRY_OK"]
     if entry_rows:
@@ -2722,6 +2847,66 @@ def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) 
                     "touchpoints": "config.py, src/analysis/position_risk.py",
                 }
             )
+
+    long_rows = [row for row in rows if row.get("bias") == "long"]
+    short_rows = [row for row in rows if row.get("bias") == "short"]
+    if len(long_rows) >= 20 and short_rows:
+        long_wrong_count = sum(1 for row in long_rows if row.get("direction_outcome") == "wrong")
+        short_wrong_count = sum(1 for row in short_rows if row.get("direction_outcome") == "wrong")
+        long_wrong_rate = _ratio(long_wrong_count, len(long_rows))
+        short_wrong_rate = _ratio(short_wrong_count, len(short_rows))
+        if long_wrong_rate >= 0.55 and (long_wrong_rate - short_wrong_rate) >= 0.15:
+            candidates.append(
+                {
+                    "title": "ロング方向スコアが強すぎる",
+                    "reason": (
+                        f"bias=long の wrong が {long_wrong_count}/{len(long_rows)} 件 ({_format_pct(long_wrong_rate)}) "
+                        f"で、short より {_format_pct(long_wrong_rate - short_wrong_rate)} 悪い"
+                    ),
+                    "evidence_count": long_wrong_count,
+                    "category": "direction/confidence 補正",
+                    "touchpoints": "main.py, src/analysis/confidence.py",
+                }
+            )
+
+    cluster_rows = [row for row in rows if _countertrend_long_cluster(row)]
+    if len(cluster_rows) >= 8:
+        wrong_count = sum(1 for row in cluster_rows if row.get("direction_outcome") == "wrong")
+        wrong_rate = _ratio(wrong_count, len(cluster_rows))
+        if wrong_rate >= 0.6:
+            candidates.append(
+                {
+                    "title": "反発示唆の過大評価",
+                    "reason": f"countertrend_long_cluster の wrong が {wrong_count}/{len(cluster_rows)} 件 ({_format_pct(wrong_rate)})",
+                    "evidence_count": wrong_count,
+                    "category": "risk_flag と direction の整合",
+                    "touchpoints": "src/analysis/confidence.py, src/analysis/position_risk.py",
+                }
+            )
+
+    entry_invalid_rows = [row for row in period_rows if _entry_ok_invalid_conflict(row)]
+    if len(entry_invalid_rows) >= 3:
+        candidates.append(
+            {
+                "title": "ENTRY_OK と setup invalid の整合性崩れ",
+                "reason": f"期間内で ENTRY_OK + invalid が {len(entry_invalid_rows)} 件あります",
+                "evidence_count": len(entry_invalid_rows),
+                "category": "評価整合性",
+                "touchpoints": "main.py, src/analysis/confidence.py, src/analysis/position_risk.py",
+            }
+        )
+
+    direction_conflicts = [row for row in recent_rows if _direction_execution_conflict(row)]
+    if len(direction_conflicts) >= 2:
+        candidates.append(
+            {
+                "title": "速報で方向/実行不整合が継続",
+                "reason": f"直近12時間で direction_execution_conflict が {len(direction_conflicts)} 件あります",
+                "evidence_count": len(direction_conflicts),
+                "category": "速報監視",
+                "touchpoints": "tools/log_feedback.py",
+            }
+        )
 
     normal_rows = [row for row in rows if row.get("signal_tier", "normal") == "normal"]
     strong_ai_rows = [row for row in rows if row.get("signal_tier") == "strong_ai_confirmed"]
@@ -2790,8 +2975,7 @@ def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) 
             )
 
     candidates.sort(key=lambda item: item["evidence_count"], reverse=True)
-    limit = 2 if monthly else 3
-    return candidates[:limit]
+    return candidates
 
 
 def build_feedback_report(
@@ -2802,14 +2986,30 @@ def build_feedback_report(
     shadow_path: Path | None = None,
 ) -> str:
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
-    if not shadow_path.exists():
-        build_shadow_log(base_dir=base_dir, shadow_path=shadow_path)
+    trades_path = base_dir / "logs" / "csv" / "trades.csv"
+    outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    reviews_path = base_dir / "logs" / "csv" / "user_reviews.csv"
+    if _is_stale_file(shadow_path, [trades_path, outcomes_path, reviews_path]):
+        build_shadow_log(
+            base_dir=base_dir,
+            shadow_path=shadow_path,
+            trades_path=trades_path,
+            outcomes_path=outcomes_path,
+            reviews_path=reviews_path,
+        )
     all_rows = _load_csv_rows(shadow_path)
     rows, previous_rows = _period_filter(all_rows, period)
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
     previous_completed = [row for row in previous_rows if row.get("evaluation_status") == "complete"]
     review_summary = _review_summary(completed)
-    improvements = _build_improvement_candidates(completed, monthly=(period == "monthly"))
+    recent_rows = _recent_rows(all_rows, hours=12)
+    live_summary = _recent_live_summary(recent_rows)
+    improvements = _build_improvement_candidates(
+        completed,
+        monthly=(period == "monthly"),
+        period_rows=rows,
+        recent_rows=recent_rows,
+    )
 
     lines = [f"# フィードバック分析レポート ({period})", ""]
     lines.append("## 1. まず結論")
@@ -2887,6 +3087,17 @@ def build_feedback_report(
         lines.append("- まだ十分なデータがありません")
     lines.append("")
 
+    lines.append("### bias別 direction 正誤")
+    bias_direction_summary = _bias_direction_summary(completed)
+    if bias_direction_summary:
+        for item in bias_direction_summary:
+            lines.append(
+                f"- {item['bias']}: correct={item['correct']}, wrong={item['wrong']}, unclear={item['unclear']} / wrong_rate={_format_pct(item['wrong_rate'])} (n={item['count']})"
+            )
+    else:
+        lines.append("- まだ十分なデータがありません")
+    lines.append("")
+
     lines.append("### 成績指標")
     lines.append(f"- 全体勝率: {_format_pct(_ratio(sum(1 for row in completed if _success_flag(row) is True), sum(1 for row in completed if _success_flag(row) is not None)))}")
     lines.append(f"- 平均MFE(signal_based): {_mean_value(completed, 'signal_based_MFE_24h'):.2f}")
@@ -2903,6 +3114,24 @@ def build_feedback_report(
     lines.append(f"- B: 通知したが微妙 = {audit['B']}件")
     lines.append(f"- C: 通知しなかったが本当は良かった = {audit['C']}件")
     lines.append(f"- D: 通知しなかったので正解 = {audit['D']}件")
+    lines.append("")
+
+    lines.append("### risk flag 群別 wrong rate")
+    wrong_rate_summary = _risk_flag_wrong_rate_summary(completed)
+    if wrong_rate_summary:
+        for item in wrong_rate_summary:
+            lines.append(
+                f"- {item['flag']}: wrong_rate={_format_pct(item['wrong_rate'])} (wrong={item['wrong_count']}/{item['count']})"
+            )
+    else:
+        lines.append("- 比較対象となる risk_flag はまだありません")
+    lines.append("")
+
+    lines.append("### 直近12時間速報")
+    lines.append(f"- 対象件数: {live_summary['count']}件")
+    lines.append(f"- direction_execution_conflict: {live_summary['direction_execution_conflict_count']}件")
+    lines.append(f"- ENTRY_OK + invalid: {live_summary['entry_ok_invalid_count']}件")
+    lines.append(f"- countertrend_long_cluster: {live_summary['countertrend_long_cluster_count']}件")
     lines.append("")
 
     lines.append("### Phase 1 計画ログ")

@@ -10,6 +10,14 @@ _MAJOR_WARNING_FLAGS = {
     "Critical_zone_warning",
 }
 
+_COUNTERTREND_LONG_CLUSTER_FLAGS = {
+    "lower_liquidity_close",
+    "orderbook_ask_heavy",
+    "long_flush_exhaustion",
+    "cvd_bullish_divergence",
+    "sweep_incomplete",
+}
+
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -84,6 +92,10 @@ def compute_machine_agreement(
     return "disagree"
 
 
+def _flag_overlap_count(flags: list[str], targets: set[str]) -> int:
+    return sum(1 for flag in flags if flag in targets)
+
+
 def compute_confidence_details(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     bias = inputs["bias"]
     long_display = int(inputs["long_display_score"])
@@ -99,6 +111,7 @@ def compute_confidence_details(inputs: dict[str, Any], cfg: Any) -> dict[str, An
     score_warning_flags = [str(flag) for flag in inputs.get("score_warning_flags", [])]
     position_risk_flags = [str(flag) for flag in inputs.get("position_risk_flags", [])]
     prelabel = str(inputs.get("prelabel", "")).upper()
+    primary_setup_status = str(inputs.get("primary_setup_status", "")).lower()
 
     components: list[dict[str, Any]] = []
     direction_value = 0.0
@@ -213,6 +226,56 @@ def compute_confidence_details(inputs: dict[str, Any], cfg: Any) -> dict[str, An
         execution_value -= prelabel_penalty
         wait_pressure += prelabel_penalty
     components.append(_component("prelabel_penalty", "位置評価の減点", "wait", -prelabel_penalty, prelabel))
+
+    entry_ok_invalid_penalty = 0.0
+    if prelabel == "ENTRY_OK" and primary_setup_status == "invalid":
+        entry_ok_invalid_penalty = 8.0
+        confidence -= entry_ok_invalid_penalty
+        execution_value -= entry_ok_invalid_penalty
+        wait_pressure += entry_ok_invalid_penalty
+    components.append(
+        _component(
+            "entry_ok_invalid_penalty",
+            "ENTRY_OK と setup invalid の整合補正",
+            "execution",
+            -entry_ok_invalid_penalty,
+            primary_setup_status,
+        )
+    )
+
+    countertrend_long_cluster_count = _flag_overlap_count(position_risk_flags, _COUNTERTREND_LONG_CLUSTER_FLAGS)
+    if bias == "long" and signals_4h != "long" and countertrend_long_cluster_count >= 2:
+        confidence -= 10.0
+        direction_value -= 10.0
+        execution_value -= 6.0
+        wait_pressure += 16.0
+        components.append(
+            _component(
+                "countertrend_long_cluster_direction",
+                "ロング逆張りクラスター補正",
+                "direction",
+                -10.0,
+                countertrend_long_cluster_count,
+            )
+        )
+        components.append(
+            _component(
+                "countertrend_long_cluster_execution",
+                "ロング逆張りクラスター補正",
+                "execution",
+                -6.0,
+                countertrend_long_cluster_count,
+            )
+        )
+        components.append(
+            _component(
+                "countertrend_long_cluster_wait",
+                "ロング逆張りクラスター補正",
+                "wait",
+                -16.0,
+                countertrend_long_cluster_count,
+            )
+        )
 
     raw_confidence = round(confidence, 2)
     final_confidence = int(round(_clamp(confidence, 0, 100)))

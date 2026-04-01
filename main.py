@@ -455,6 +455,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     opposite_gap_atr = opposite_gap / atr_15m if atr_15m > 0 and opposite_gap != float("inf") else 10.0
 
+    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
+    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
     confidence_inputs = {
         "bias": bias,
         "long_display_score": score_info["long_display_score"],
@@ -470,52 +472,64 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "score_warning_flags": score_info["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
         "position_risk_flags": position_risk["risk_flags"],
         "prelabel": position_risk["prelabel"],
+        "primary_setup_status": "none",
     }
+    confidence_details = compute_confidence_details(confidence_inputs, cfg)
+    preliminary_confidence = int(confidence_details["confidence"])
+
+    def _build_directional_setups(selected_confidence: int) -> tuple[dict[str, Any], list[str], dict[str, Any], list[str]]:
+        long_setup_local, long_flags_local = build_setup(
+            side="long",
+            price=price,
+            atr=atr_15m,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
+            sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
+            min_rr_ratio=cfg.MIN_RR_RATIO,
+            confidence=selected_confidence,
+            confidence_min=cfg.CONFIDENCE_LONG_MIN,
+            atr_ratio=atr_ratio,
+            atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
+            atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
+            funding_rate=funding_rate_pct,
+            funding_warning=cfg.FUNDING_LONG_WARNING,
+            funding_prohibited=cfg.FUNDING_LONG_PROHIBITED,
+            trigger_ready=trigger_up,
+            warning_count=len(score_info["warning_flags"]),
+        )
+        short_setup_local, short_flags_local = build_setup(
+            side="short",
+            price=price,
+            atr=atr_15m,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
+            sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
+            min_rr_ratio=cfg.MIN_RR_RATIO,
+            confidence=selected_confidence,
+            confidence_min=cfg.CONFIDENCE_SHORT_MIN,
+            atr_ratio=atr_ratio,
+            atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
+            atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
+            funding_rate=funding_rate_pct,
+            funding_warning=cfg.FUNDING_SHORT_WARNING,
+            funding_prohibited=cfg.FUNDING_SHORT_PROHIBITED,
+            trigger_ready=trigger_down,
+            warning_count=len(score_info["warning_flags"]),
+        )
+        return (
+            apply_prelabel_to_setup(long_setup_local, position_risk["prelabel"], "long", bias),
+            long_flags_local,
+            apply_prelabel_to_setup(short_setup_local, position_risk["prelabel"], "short", bias),
+            short_flags_local,
+        )
+
+    long_setup, long_flags, short_setup, short_flags = _build_directional_setups(preliminary_confidence)
+    primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
+    confidence_inputs["primary_setup_status"] = primary_setup_status
     confidence_details = compute_confidence_details(confidence_inputs, cfg)
     confidence = int(confidence_details["confidence"])
 
-    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
-    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
-    long_setup, long_flags = build_setup(
-        side="long",
-        price=price,
-        atr=atr_15m,
-        support_zones=all_support_zones,
-        resistance_zones=all_resistance_zones,
-        sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
-        min_rr_ratio=cfg.MIN_RR_RATIO,
-        confidence=confidence,
-        confidence_min=cfg.CONFIDENCE_LONG_MIN,
-        atr_ratio=atr_ratio,
-        atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
-        atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate_pct,
-        funding_warning=cfg.FUNDING_LONG_WARNING,
-        funding_prohibited=cfg.FUNDING_LONG_PROHIBITED,
-        trigger_ready=trigger_up,
-        warning_count=len(score_info["warning_flags"]),
-    )
-    short_setup, short_flags = build_setup(
-        side="short",
-        price=price,
-        atr=atr_15m,
-        support_zones=all_support_zones,
-        resistance_zones=all_resistance_zones,
-        sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
-        min_rr_ratio=cfg.MIN_RR_RATIO,
-        confidence=confidence,
-        confidence_min=cfg.CONFIDENCE_SHORT_MIN,
-        atr_ratio=atr_ratio,
-        atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
-        atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate_pct,
-        funding_warning=cfg.FUNDING_SHORT_WARNING,
-        funding_prohibited=cfg.FUNDING_SHORT_PROHIBITED,
-        trigger_ready=trigger_down,
-        warning_count=len(score_info["warning_flags"]),
-    )
-    long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
-    short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
+    long_setup, long_flags, short_setup, short_flags = _build_directional_setups(confidence)
     primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
     primary_setup = (
         long_setup if primary_setup_side == "long" else short_setup if primary_setup_side == "short" else {}
