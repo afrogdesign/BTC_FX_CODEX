@@ -1,56 +1,36 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-03-31 00:33 JST
+更新日: 2026-04-02 03:25 JST
 運用メモ: このファイルを AI の日常入口にする。実行履歴は `progress.md` に記録し、ここには「次の判断に必要な情報」だけを残す。
 補足: フェーズや大型節目の確認が必要になったときだけ [開発ロードマップ.md](開発ロードマップ.md) を開く。
 評価シート更新の定型手順: [運用資料/運用/実務/評価シート更新_AI手順.md](運用/実務/評価シート更新_AI手順.md)
 
 ## 現在の状況
-- `iMac 2019` の観測常駐 `com.afrog.btc-monitor` は、今回の要約層改善を反映した `Ver02.3v2-OBS` へ更新しました。`.env` の `SYSTEM_LABEL` は `Ver02.3v2-OBS`、launchd 再起動後の実 PID は `90461` です。
-- `2026-03-30 05:05 JST` の定刻出力で、`logs/last_result.json` / `logs/last_notified.json` / `heartbeat.txt` の更新を確認しました。`system_label` は `Ver02.3v2-OBS`、件名は `下方向バイアス / 下目線/見送り` で、再起動後の新ラベル反映は確認済みです。
-- `Ver02.3v3` 向けの本格改善として、`no_trade_flags` と `risk_flags` の責務分離、`Critical_zone_warning` の warning 側移動、`long_setup/short_setup.blocking_flags` 追加、`evaluation_trace` の分離観測強化まで実装しました。
-- 通知件名から単独の `総合強度` 表示を外し、本文と注意報本文は `方向の強さ` `実行しやすさ` `待機圧力` の 3 指標表示へ切り替えました。内部の `confidence` 数値は gate とログ互換のため維持しています。
-- iMac 2019 の観測常駐へ最新版を反映するため、`.env` の `SYSTEM_LABEL` を `Ver02.3v3-OBS` へ更新し、`com.afrog.btc-monitor` を再起動しました。現在の PID は `96401` です。次は定刻出力で `last_result.json` と件名が `Ver02.3v3-OBS` へ切り替わることを確認します。
-- 今回の変更は scoring 本体の全面改造ではなく、`summary / advice` の誤読防止、`confidence` 分解、`evaluation_trace` 追加が中心です。
-- `summary / advice` は `方向判断` と `いまの扱い` を分離し、`watch / invalid` では待機・見送り優先の文面へ切り替えました。
-- `confidence_components`、`confidence_direction_shadow`、`confidence_execution_shadow`、`confidence_wait_shadow`、`evaluation_trace` を保存する実装まで反映済みです。
-- live の `last_result.json` / `last_notified.json` で `evaluation_trace` と `chart_pattern_shadow` も出力済みです。次回観測では `evaluation_trace_version=v0.2` と件名の数値削除後フォーマットを確認する段階です。
-- フェーズ判定はまだ `Ver02.3 / Phase 0 本番観測中` のままです。今回の更新は運用復旧と評価導線の安定化であり、`Phase 1` へはまだ昇格していません。
-- 通知評価フォームは、JavaScript 構文エラー修正後の見直しをさらに進め、`HTML + JSON` を正本にする形へ切り替えました。入力正本は `logs/review/review_form_state.json`、集計互換は `logs/csv/user_reviews.csv`、Obsidian 側 `通知評価シート.md` は進捗要約ノートです。
-- iCloud 側 `評価シート入力フォーム.html` はコピペ前提をやめ、`保存` / `再読込` ボタン付きに更新しました。保存時は JSON 正本、`user_reviews.csv`、Obsidian 要約を自動更新する設計です。
-- レビュー保存のローカル補助として `./.venv312/bin/python tools/log_feedback.py serve-review-form` を追加しました。`http://127.0.0.1:8765/` でフォームを開けば HTML だけで完結できます。
-- フォーム画面と `通知評価シート.md` は、新体制の比較を崩さないため `2026-03-30 05:05 JST` 以降の通知だけを対象にするよう切り替えました。それより前の通知はレビュー画面から非表示にし、`import_reviews()` と集計からも除外する実装に更新しました。
-- フォーム UI は、通知時刻の大表示 `MM/DD HH:MM`、優先入力項目の強調、日本語ラベル化まで反映済みです。
-- フォーム UI は旧 `signal_tier` / `data_quality` 中心の確認欄を隠し、`方向の強さ` `実行しやすさ` `待機圧力` と通知理由を見る新体制向けカードに変更しました。
-- 通知本文とは別ユニットとして、通知ごとの詳細HTMLページを生成し、公開成功時だけメール本文末尾へ URL を追記できる仕組みを実装しました。実装は `src/notification/detail_page.py` と `tools/render_notification_detail_page.py` に分離し、本文本体は従来のプレーンテキストのまま維持しています。
-- 通知詳細HTMLは `NOTIFICATION_HTML_*` 設定で完全に ON/OFF でき、公開失敗時もメール送信は止めず従来本文のまま継続する設計にしました。`core_result` には `detail_page_status` `detail_page_url` などの状態も保存します。
-- 直近の repo 検証として `.venv312/bin/python -m unittest tests.test_notification_detail_page tests.test_summary_format tests.test_chart_pattern_shadow` と `.venv312/bin/python -m py_compile main.py config.py src/notification/detail_page.py tools/render_notification_detail_page.py tests/test_notification_detail_page.py` を実行し、成功を確認しました。
-- 直近の repo 検証として `.venv312/bin/python -m unittest tests.test_log_feedback` と `.venv312/bin/python -m py_compile tools/log_feedback.py tests/test_log_feedback.py` を実行し、成功を確認しました。
-- 本番 MBP2020 の接続先は `100.104.218.101` に更新しました。実務では引き続き `mbp2020-btc` alias を正本として使います。
-- `mbp2020-btc` alias の実体を `100.104.218.101` へ更新し、Global_BOX と Obsidian 側の接続メモも同じ前提にそろえました。
-- `tools/log_feedback.py`、`tests/test_log_feedback.py`、`運用資料/運用/実務/ログ検証と改善運用ガイド.md`、`Global_BOX/本番環境.md` を更新済みです。
-- `tests/test_codex_cli_wrapper.py` は別件で未整理の変更が残っているため、今回のコミットには含めない前提で扱います。
-- 旧 `Ver02.1` の待機系本文は「方向感は様子見」の中に方向判断と行動指示が混在していましたが、`Ver02.3v2-OBS` では件名と本文冒頭で `下方向バイアス` と `下目線だが現状は見送り` を分離できていることを実ログで確認しました。
-- 今回の v3 実装で、通知抑止や signal tier 判定に位置リスクが `no_trade_flags` 経由で再混入しない構造へ修正しました。
+- 主対象は `iMac 2019` で動かしている `Ver02.3v4`。日常の通知観測と品質判断はこの 1 本で進める。
+- `MBP2020` の `Ver02.1` は `2026-03-31 03:39 JST` に停止し、`/Users/marupro/CODEX/archive/BTC_FX_CODEX_ver02_20260331_0339.tgz` へ凍結退避済み。`mbp2020-btc` は archive 参照用。
+- フェーズはまだ `Ver02.3 / Phase 0 本番観測中`。`Phase 1` へは未昇格。
+- 通知表示は `方向判断` と `いまの扱い` を分離し、本文は `方向の強さ` `実行しやすさ` `待機圧力` の 3 指標表示へ切り替え済み。
+- 通知評価は `HTML + JSON` 正本に切り替え済み。入力正本は `logs/review/review_form_state.json`、集計互換は `logs/csv/user_reviews.csv`、Obsidian 側 `通知評価シート.md` は進捗要約ノート。
+- レビュー対象は `2026-03-30 05:05 JST` 以降の通知だけ。古い通知はレビュー画面と集計から外す。
+- `2026-03-31 03:24 JST` の `daily-sync` 結果では、完了データ 32 件、全体勝率 71.9%、近似PF 0.75、レビュー要約は `useful_entry=3`、`too_late=1`、平均役立ち度 2.25 / 5。
+- `Ver02.3v4` では、`ENTRY_OK + invalid` の整合補正、`long` 側の反発示唆過大評価の抑制、feedback report の `bias別 direction 正誤` / `risk flag 群別 wrong rate` / `直近12時間速報` を追加済み。
+- 直近確認では `direction_execution_conflict=3件`、`countertrend_long_cluster=4件` を速報で拾える状態になった。
 
 ## 次のタスク
-1. 次回以降の `Ver02.3v3` 通知で、件名が数値なしフォーマットへ切り替わり、本文が 3 指標表示になっていることを数件確認する。
-2. `watch / invalid` 相当の通知で、位置リスクだけでは main 通知抑止にならないことと、実行 blocker があるときだけ抑止されることを live ログでも確認する。
-3. `./.venv312/bin/python tools/log_feedback.py serve-review-form` でローカル補助を起動し、`http://127.0.0.1:8765/` から HTML 保存が実運用で問題ないか確認する。
-4. iCloud 側の `評価シート入力フォーム.html` を使って、`2026-03-30 05:05 JST` 以降の通知だけを対象に、件名の印象と本文 3 指標表示が誤読防止に効いたかをレビューする。
-5. `.env` で `NOTIFICATION_HTML_ENABLED=true` を入れたうえで、次回通知時に詳細HTMLページの公開とメール本文末尾 URL 追記が実運用で通るか確認する。
-6. `tools/render_notification_detail_page.py --input logs/signals/<signal_id>.json` で、メール通知と切り離してHTML単体の磨き込みが回せることを確認する。
-7. レビューがたまった段階で `daily-sync` もしくは AI への「集計して」で `user_reviews.csv` と集計を更新する。
-8. `Phase 0` 完了条件を、通知後 24 時間評価の一周完了とレビュー蓄積で判断する。満たすまでは `Phase 1` へ上げない。
-9. `tests/test_codex_cli_wrapper.py` の不一致は、通知評価フォーム運用が落ち着いたあとに切り分けて整合化する。
+1. 次回以降の `Ver02.3v4` 通知で、件名が数値なしフォーマットになっていることと、本文 3 指標表示が誤読防止として機能しているかを数件確認する。
+2. iCloud 側 `評価シート入力フォーム.html` で `2026-03-30 05:05 JST` 以降の通知レビューをためる。保存・再生成だけなら [評価シート更新_AI手順.md](運用/実務/評価シート更新_AI手順.md) を使う。
+3. `ENTRY_OK` で `too_late` が再発するかを観測し、`confidence_jump` / `prelabel_improved` / `status_upgraded` の 1 本前で通知できる余地があるかを見る。
+4. `NO_TRADE_CANDIDATE` で `skip_too_strict` が再発するかを観測し、再現したら `src/analysis/position_risk.py` の閾値見直し候補として切り出す。
+5. `lower_liquidity_close` / `upper_liquidity_close` / `sweep_incomplete` が付いた通知を優先レビューし、risk flag の重みと通知文面の納得感を照合する。
+6. レビューがあと 3 件以上たまった段階で `daily-sync` を再実行し、`ロング方向スコアが強すぎる` / `反発示唆の過大評価` / `ENTRY_OK と setup invalid の整合性崩れ` が統計条件に乗るかを再判定する。
+7. `NOTIFICATION_HTML_ENABLED=true` で詳細HTMLページ公開とメール末尾 URL 追記が実運用で通るか確認する。
+8. `Phase 0` 完了条件は「通知後 24 時間評価の一周完了」と「レビュー蓄積」。満たすまでは `Phase 1` へ上げない。
 
 ## ブロッカー
-- 過去に iCloud 配下 HTML を不安定と判断したが、主因は JavaScript 構文エラーでした。現在は iCloud 側フォームを正式運用に戻しています。
-- フォームの保存先は JSON 正本へ切り替わったが、ワンクリック保存には localhost 補助 (`serve-review-form`) の起動が必要です。未起動時は localStorage 下書きまでです。
-- MBP2020 本番は LaunchAgent 復旧までは完了したが、復旧後の heartbeat 更新確認は別系統で継続中です。
-- repo の別件として `tests/test_codex_cli_wrapper.py` の不一致が残っていますが、今回のレビュー運用とは切り離して扱います。
+- フォームのワンクリック保存には localhost 補助 (`serve-review-form`) の起動が必要。未起動時は localStorage 下書きまで。
+- `tests/test_codex_cli_wrapper.py` の不一致は別件として残っているが、通知評価運用より優先度は下げる。
 
 ## 完了条件
-- レビュー運用: iCloud 側フォームまたは localhost フォームから保存し、`review_form_state.json` / `user_reviews.csv` / Obsidian 要約が自動でそろう状態にする。
-- Phase 0: 通知発生から 24 時間後評価までを本番で 1 周完了し、`2026-03-25 JST` 以降レビューを数件ためて傾向を読める状態にする。
+- レビュー運用: フォーム保存から `review_form_state.json` / `user_reviews.csv` / Obsidian 要約がそろう状態を維持する。
+- Phase 0: 通知発生から 24 時間後評価までを本番で 1 周完了し、レビューを数件ためて傾向を読める状態にする。
 - Phase 1: `primary_setup_status=ready` を本有効として、正式指標を実データで確認できる状態にする。現時点では未到達。
