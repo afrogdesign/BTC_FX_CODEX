@@ -2800,6 +2800,7 @@ def _build_improvement_candidates(
     recent_rows: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    max_candidates = 2 if monthly else 3
     period_rows = period_rows or []
     recent_rows = recent_rows or []
 
@@ -2975,7 +2976,7 @@ def _build_improvement_candidates(
             )
 
     candidates.sort(key=lambda item: item["evidence_count"], reverse=True)
-    return candidates
+    return candidates[:max_candidates]
 
 
 def build_feedback_report(
