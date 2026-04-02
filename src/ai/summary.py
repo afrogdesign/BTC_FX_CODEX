@@ -32,6 +32,17 @@ def _format_pct(value: Any) -> str:
         return str(value)
 
 
+def _subject_status_emoji(status_code: str) -> str:
+    mapping = {
+        "attention": "👀",
+        "actionable": "✅",
+        "monitor": "👀",
+        "invalid": "🛑",
+        "neutral": "🧭",
+    }
+    return mapping.get(str(status_code or "").lower(), "🧭")
+
+
 def _label_bias(value: Any) -> str:
     mapping = {"long": "ロング寄り", "short": "ショート寄り", "wait": "様子見", "no_trade": "見送り"}
     return mapping.get(str(value).lower(), str(value))
@@ -229,8 +240,9 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
     headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
+    status_emoji = _subject_status_emoji(notification_context.get("status_code", ""))
     subject = (
-        f"[{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} | "
+        f"{status_emoji} [{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} | "
         f"{display_context['direction_compact_label']} | {headline_reason} "
         f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()

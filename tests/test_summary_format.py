@@ -80,7 +80,7 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertEqual(provider_used, "api")
-        self.assertIn("[執行可]", subject)
+        self.assertIn("✅ [執行可]", subject)
         self.assertIn("上方向バイアス", subject)
         self.assertIn("条件付きで検討", subject)
         self.assertNotIn("総合強度", subject)
@@ -132,7 +132,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith("[機械判定のみ] [注意報] 見送り |"))
+        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報] 見送り |"))
         self.assertIn("下方向バイアス", subject)
         self.assertNotIn("総合強度", subject)
         self.assertIn("ステータス: 注意報（方向変化の早期共有）", body)
