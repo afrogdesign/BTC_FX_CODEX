@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-02 15:20 JST
+更新日: 2026-04-03 04:31 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,11 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-03 04:31 JST
+  - `serve-review-form` を `com.afrog.btc-review-form` として LaunchAgent 化し、iMac 2019 のログイン後に自動起動する構成へ切り替えた。
+  - 追加ファイルは `deploy/com.afrog.btc-review-form.plist` と `tools/start_review_form.sh`。`~/Library/LaunchAgents/com.afrog.btc-review-form.plist` へ配置し、`launchctl print` で `state = running` を確認した。
+  - これにより、通知評価フォームの `保存` ボタンから `review_form_state.json` / `user_reviews.csv` / `通知評価シート.md` へ正本保存できる前提を常時満たす状態にした。
 
 - 2026-04-02 15:20 JST
   - 詳細HTMLの視認性改善を進め、再検討ラインチャートを主役にした視覚寄りレイアウトへ更新した。
