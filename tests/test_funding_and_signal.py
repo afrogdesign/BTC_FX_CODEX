@@ -31,7 +31,7 @@ class FundingAndSignalTest(unittest.TestCase):
         )
         self.assertEqual(label, "ほぼ中立")
 
-    def test_signal_tier_machine_and_ai_confirmed(self) -> None:
+    def test_signal_tier_is_machine_only(self) -> None:
         base_result = {
             "bias": "long",
             "prelabel": "ENTRY_OK",
@@ -50,8 +50,8 @@ class FundingAndSignalTest(unittest.TestCase):
         ai_confirmed = dict(base_result)
         ai_confirmed["ai_advice"] = {"decision": "LONG", "confidence": 0.65, "quality": "A"}
         ai_tier_info = compute_signal_tier(ai_confirmed, self.cfg)
-        self.assertEqual(ai_tier_info["tier"], "strong_ai_confirmed")
-        self.assertIn("ai_direction_match", ai_tier_info["reason_codes"])
+        self.assertEqual(ai_tier_info["tier"], "strong_machine")
+        self.assertNotIn("ai_direction_match", ai_tier_info["reason_codes"])
 
         not_strong = dict(base_result)
         not_strong["prelabel"] = "SWEEP_WAIT"

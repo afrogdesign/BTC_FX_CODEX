@@ -13,6 +13,8 @@ from src.presentation.sanitize import (
     sanitize_user_text,
 )
 
+AI_AUDIT_VARIANT = "notification_audit_v1"
+
 
 def _load_prompt(base_dir: Path) -> str:
     prompt_path = base_dir / "prompts" / "advice_prompt.md"
@@ -59,7 +61,34 @@ def _normalize_advice(payload: dict[str, Any]) -> dict[str, Any]:
     market_interpretation = sanitize_user_text(payload.get("market_interpretation", ""))[:200]
     next_condition = sanitize_user_text(payload.get("next_condition", ""))[:200]
     warnings = sanitize_flag_list(payload.get("warnings", []) if isinstance(payload.get("warnings"), list) else [])
+    verdict = str(payload.get("verdict", "")).strip().lower()
+    if verdict not in {"appropriate", "borderline", "likely_noise"}:
+        if decision in {"LONG", "SHORT"} and quality in {"A", "B"} and confidence >= 0.65:
+            verdict = "appropriate"
+        elif decision in {"WAIT", "NO_TRADE", "WAIT_FOR_SWEEP", "WAIT_FOR_BREAK_RETEST"}:
+            verdict = "borderline"
+        else:
+            verdict = "likely_noise"
+    agreement = str(payload.get("agreement", "")).strip().lower()
+    if agreement not in {"agree", "caution", "disagree"}:
+        if verdict == "appropriate":
+            agreement = "agree"
+        elif verdict == "borderline":
+            agreement = "caution"
+        else:
+            agreement = "disagree"
+    reason = sanitize_user_text(payload.get("reason") or primary_reason or notes)[:200]
+    unique_risks = sanitize_flag_list(
+        payload.get("unique_risks", []) if isinstance(payload.get("unique_risks"), list) else []
+    )
+    next_review_focus = sanitize_user_text(payload.get("next_review_focus", next_condition))[:200]
     return {
+        "verdict": verdict,
+        "agreement": agreement,
+        "reason": reason,
+        "unique_risks": unique_risks,
+        "next_review_focus": next_review_focus,
+        "audit_variant": AI_AUDIT_VARIANT,
         "decision": decision,
         "final_action": decision,
         "quality": quality,

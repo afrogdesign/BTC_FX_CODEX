@@ -243,9 +243,6 @@ def _reason_sources(result: dict[str, Any]) -> list[str]:
     invalid_reason = sanitize_user_text(result.get("invalid_reason", ""))
     if invalid_reason:
         reasons.append(invalid_reason)
-    ai_advice = result.get("ai_advice")
-    if isinstance(ai_advice, dict):
-        reasons.extend(str(flag) for flag in ai_advice.get("warnings", []) if str(flag).strip())
     return reasons
 
 
@@ -321,8 +318,6 @@ def _next_condition_label(result: dict[str, Any]) -> str:
     prelabel = str(result.get("prelabel", "")).upper()
     risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
     reason_code = _primary_setup_reason(result)
-    ai_advice = result.get("ai_advice")
-
     if prelabel == "SWEEP_WAIT" or "sweep_incomplete" in risk_flags:
         if bias == "short" or "upper_liquidity_close" in risk_flags:
             return "上側流動性スイープ完了後に再評価"
@@ -333,10 +328,6 @@ def _next_condition_label(result: dict[str, Any]) -> str:
         return "発火条件確認後に再評価"
     if reason_code == "entry_zone_not_reached":
         return "再検討帯到達後に再評価"
-    if isinstance(ai_advice, dict):
-        next_condition = sanitize_user_text(ai_advice.get("next_condition", ""))
-        if next_condition:
-            return next_condition
     return "次回更新で再評価"
 
 

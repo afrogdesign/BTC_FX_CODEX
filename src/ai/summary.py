@@ -149,20 +149,27 @@ def _root_summary_lines(
     return lines
 
 
-def _ai_review_lines(result: dict[str, Any]) -> list[str]:
-    ai_advice = result.get("ai_advice")
-    if not isinstance(ai_advice, dict):
+def _ai_audit_lines(result: dict[str, Any]) -> list[str]:
+    ai_audit = result.get("ai_audit")
+    if not isinstance(ai_audit, dict):
         return []
-    primary_reason = sanitize_user_text(ai_advice.get("primary_reason") or ai_advice.get("notes") or "")
-    next_condition = sanitize_user_text(ai_advice.get("next_condition", ""))
-    warnings = sanitize_flag_list(ai_advice.get("warnings", []))
-    lines = ["", "【AI補足】"]
-    if primary_reason:
-        lines.append(f"- 補足判断: {primary_reason}")
-    if next_condition:
-        lines.append(f"- 次の確認条件: {next_condition}")
-    for warning in warnings:
-        lines.append(f"- 注意: {warning}")
+    agreement = str(ai_audit.get("agreement", "")).strip().lower()
+    unique_risks = sanitize_flag_list(ai_audit.get("unique_risks", []))
+    if agreement in {"", "agree"} and not unique_risks:
+        return []
+    reason = sanitize_user_text(ai_audit.get("reason", ""))
+    next_review_focus = sanitize_user_text(ai_audit.get("next_review_focus", ""))
+    headline = {
+        "disagree": "【AI監査メモ】 通知判断の再確認を推奨",
+        "caution": "【AI監査メモ】 通知は妥当だが注意点あり",
+    }.get(agreement, "【AI監査メモ】")
+    lines = ["", headline]
+    if reason:
+        lines.append(f"- 監査理由: {reason}")
+    for risk in unique_risks:
+        lines.append(f"- 追加リスク: {risk}")
+    if next_review_focus:
+        lines.append(f"- 次の確認観点: {next_review_focus}")
     return lines
 
 
@@ -250,5 +257,5 @@ def build_summary_body(
     if str(result_payload.get("notification_kind", "main")).lower() == "attention":
         return _attention_summary(result_payload, display_context, notification_context), provider_name
     lines = _root_summary_lines(result_payload, display_context, notification_context)
-    lines.extend(_ai_review_lines(result_payload))
+    lines.extend(_ai_audit_lines(result_payload))
     return "\n".join(lines), provider_name

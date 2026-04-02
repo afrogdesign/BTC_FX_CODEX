@@ -157,7 +157,7 @@ class ChartPatternShadowTests(unittest.TestCase):
                 result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
 
         self.assertIn("chart_pattern_shadow", result)
-        self.assertNotIn("chart_pattern_shadow", captured["advice_payload"])
+        self.assertNotIn("advice_payload", captured)
         self.assertNotIn("chart_pattern_shadow", captured["summary_payload"])
 
 

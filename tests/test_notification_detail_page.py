@@ -118,8 +118,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("待機圧力", html)
         self.assertIn("スコア差", html)
         self.assertIn("ロング / ショートの再検討ライン", html)
-        self.assertIn("&lt;強い下方向&gt;", html)
-        self.assertNotIn("<強い下方向>", html)
+        self.assertNotIn("AI補足の読み解き", html)
+        self.assertNotIn("&lt;強い下方向&gt;", html)
 
     def test_detail_page_paths_use_slug_and_kind(self) -> None:
         cfg = SimpleNamespace(
@@ -187,10 +187,11 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "main.request_ai_advice",
                 return_value=(
                     {
-                        "decision": "LONG",
-                        "quality": "B",
-                        "confidence": 0.7,
-                        "notes": "stub",
+                        "verdict": "caution",
+                        "agreement": "caution",
+                        "reason": "stub",
+                        "unique_risks": ["誤読リスク"],
+                        "next_review_focus": "出来高確認",
                     },
                     "api",
                 ),
@@ -256,10 +257,11 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "main.request_ai_advice",
                 return_value=(
                     {
-                        "decision": "LONG",
-                        "quality": "B",
-                        "confidence": 0.7,
-                        "notes": "stub",
+                        "verdict": "caution",
+                        "agreement": "caution",
+                        "reason": "stub",
+                        "unique_risks": ["誤読リスク"],
+                        "next_review_focus": "出来高確認",
                     },
                     "api",
                 ),

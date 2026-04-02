@@ -655,8 +655,15 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
+        "ai_audit": None,
+        "ai_audit_status": "skipped_non_notify",
         "ai_decision": "",
         "ai_confidence": "",
+        "ai_audit_verdict": "",
+        "ai_audit_agreement": "",
+        "ai_audit_reason": "",
+        "ai_audit_unique_risks": [],
+        "ai_audit_next_review_focus": "",
         "raw_confidence": confidence_details["raw_confidence"],
         "confidence_direction_shadow": confidence_details["confidence_direction_shadow"],
         "confidence_execution_shadow": confidence_details["confidence_execution_shadow"],
@@ -688,27 +695,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     }
     core_result["display_context"] = build_display_context(core_result)
 
-    ai_advice, advice_provider_used = request_ai_advice(
-        provider=cfg.AI_ADVICE_PROVIDER,
-        api_key=cfg.OPENAI_API_KEY,
-        model=cfg.OPENAI_ADVICE_MODEL,
-        cli_command=cfg.AI_ADVICE_CLI_COMMAND,
-        timeout_sec=cfg.AI_TIMEOUT_SEC,
-        retry_count=cfg.AI_RETRY_COUNT,
-        base_dir=base_dir,
-        machine_payload=core_result,
-        qualitative_payload=qualitative_context,
-    )
-    core_result["ai_advice"] = ai_advice
-    core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
-    if isinstance(ai_advice, dict):
-        core_result["ai_decision"] = ai_advice.get("decision", "")
-        core_result["ai_confidence"] = ai_advice.get("confidence", "")
-        core_result["advice_variant"] = ai_advice.get("advice_variant", ADVICE_VARIANT)
-
     data_missing_fields = _normalize_missing_data_fields(
         market_structure.missing_fields or [],
-        ai_missing=bool(getattr(cfg, "OPENAI_API_KEY", "")) and ai_advice is None,
+        ai_missing=False,
         funding_missing=funding_missing,
     )
     core_result["data_missing_fields"] = data_missing_fields
@@ -769,6 +758,36 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result["reason_for_notification"] = notify_info["notify_reason_codes"]
     core_result["notification_kind"] = notify_info["notification_kind"]
     core_result["notification_context"] = build_notification_context(core_result)
+    advice_provider_used = getattr(cfg, "AI_ADVICE_PROVIDER", "api")
+    if notify:
+        ai_advice, advice_provider_used = request_ai_advice(
+            provider=cfg.AI_ADVICE_PROVIDER,
+            api_key=cfg.OPENAI_API_KEY,
+            model=cfg.OPENAI_ADVICE_MODEL,
+            cli_command=cfg.AI_ADVICE_CLI_COMMAND,
+            timeout_sec=cfg.AI_TIMEOUT_SEC,
+            retry_count=cfg.AI_RETRY_COUNT,
+            base_dir=base_dir,
+            machine_payload=core_result,
+            qualitative_payload=qualitative_context,
+        )
+        core_result["ai_advice"] = ai_advice
+        core_result["ai_audit"] = ai_advice
+        core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
+        if isinstance(ai_advice, dict):
+            core_result["ai_audit_status"] = "completed"
+            core_result["ai_decision"] = ai_advice.get("decision", "")
+            core_result["ai_confidence"] = ai_advice.get("confidence", "")
+            core_result["advice_variant"] = ai_advice.get("advice_variant", ADVICE_VARIANT)
+            core_result["ai_audit_verdict"] = ai_advice.get("verdict", "")
+            core_result["ai_audit_agreement"] = ai_advice.get("agreement", "")
+            core_result["ai_audit_reason"] = ai_advice.get("reason", "")
+            core_result["ai_audit_unique_risks"] = list(ai_advice.get("unique_risks", []) or [])
+            core_result["ai_audit_next_review_focus"] = ai_advice.get("next_review_focus", "")
+        else:
+            core_result["ai_audit_status"] = "unavailable"
+    else:
+        core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
 
     summary_body, summary_provider_used = build_summary_body(
         provider=cfg.AI_SUMMARY_PROVIDER,
@@ -781,7 +800,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         result_payload=core_result,
     )
     core_result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
-    core_result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
+    core_result["system_mode_label"] = _build_system_mode_label(cfg)
     core_result["display_context"] = build_display_context(core_result)
     core_result["notification_context"] = build_notification_context(core_result)
     core_result["summary_subject"] = build_summary_subject(core_result)

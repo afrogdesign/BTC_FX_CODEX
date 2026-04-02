@@ -18,7 +18,7 @@ def _empty_plan(reason: str) -> dict[str, Any]:
 
 
 def _is_strong_tier(signal_tier: str) -> bool:
-    return str(signal_tier).strip() in {"strong_machine", "strong_ai_confirmed"}
+    return str(signal_tier).strip() in {"strong_machine"}
 
 
 def build_position_size_plan(

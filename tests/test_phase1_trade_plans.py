@@ -27,7 +27,7 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
         self.assertIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
 
-    def test_position_sizing_treats_strong_ai_confirmed_as_strong_tier(self) -> None:
+    def test_position_sizing_does_not_treat_removed_ai_tier_as_strong(self) -> None:
         plan = build_position_size_plan(
             account_balance=10000,
             entry_price=70000,
@@ -40,7 +40,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             max_position_size_usd=3000,
         )
 
-        self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
+        self.assertNotIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
         self.assertNotIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
 
     def test_exit_plan_builds_prices_from_r_multiple(self) -> None:

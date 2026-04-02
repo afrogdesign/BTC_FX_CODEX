@@ -463,9 +463,6 @@ def _build_wait_reasons(display_context: dict[str, Any], result: dict[str, Any])
     reasons = [str(item) for item in display_context.get("wait_reason_labels", []) if str(item).strip()]
     if reasons:
         return reasons
-    ai_advice = result.get("ai_advice")
-    if isinstance(ai_advice, dict):
-        return sanitize_flag_list(ai_advice.get("warnings", []))
     return ["大きな待機理由は出ていません"]
 
 
@@ -493,10 +490,11 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         f"{display_context.get('direction_compact_label', '中立')}"
     )
     wait_reasons = _build_wait_reasons(display_context, result)
-    ai_advice = result.get("ai_advice") if isinstance(result.get("ai_advice"), dict) else {}
-    ai_reason = sanitize_user_text(ai_advice.get("primary_reason") or ai_advice.get("notes") or "")
-    ai_next = sanitize_user_text(ai_advice.get("next_condition", ""))
-    ai_warnings = sanitize_flag_list(ai_advice.get("warnings", []))
+    ai_audit = result.get("ai_audit") if isinstance(result.get("ai_audit"), dict) else {}
+    audit_agreement = str(ai_audit.get("agreement", "")).strip().lower()
+    audit_reason = sanitize_user_text(ai_audit.get("reason", ""))
+    audit_next = sanitize_user_text(ai_audit.get("next_review_focus", ""))
+    audit_unique_risks = sanitize_flag_list(ai_audit.get("unique_risks", []))
     funding_display = str(result.get("funding_rate_display") or "").strip() or f"{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})"
     summary_chips = [
         notification_context.get("status_label", "中立"),
@@ -567,11 +565,13 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     display_reasons = notification_context.get("reason_labels_full", wait_reasons)
     wait_reason_html = "".join(f"<li>{esc(reason)}</li>" for reason in display_reasons)
     reason_cards_html = _reason_cards_html(display_reasons)
-    ai_warning_html = "".join(f"<li>{esc(reason)}</li>" for reason in ai_warnings)
     raw_mail = _raw_mail_text(result, display_context)
     score_compare_html = _score_compare_rows(result)
     status_emoji = _status_emoji(str(notification_context.get("status_code", "")))
     price_map_svg = _price_map_svg(result)
+    show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
+    ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
+    ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
 
     return f"""<!doctype html>
 <html lang="ja">
@@ -1090,21 +1090,27 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       <ul>{wait_reason_html}</ul>
     </section>
 
+    {(
+      f'''
     <section class="section">
-      <h2>AI補足の読み解き</h2>
+      <h2>AI監査メモ</h2>
       <div class="two-col">
         <div class="panel">
-          <h3>補足判断</h3>
-          <p>{esc(ai_reason or '補足判断はありません')}</p>
-          <h3>次の確認条件</h3>
-          <p>{esc(ai_next or '次条件の指定はありません')}</p>
+          <h3>{esc(ai_audit_headline)}</h3>
+          <p>{esc(audit_reason or '監査理由はありません')}</p>
+          <h3>次の確認観点</h3>
+          <p>{esc(audit_next or '追加の確認観点はありません')}</p>
         </div>
         <div class="panel">
-          <h3>注意</h3>
-          <ul>{ai_warning_html or '<li>追加の注意表示はありません</li>'}</ul>
+          <h3>追加リスク</h3>
+          <ul>{ai_audit_unique_risk_html or '<li>追加リスクはありません</li>'}</ul>
         </div>
       </div>
     </section>
+      '''
+      if show_ai_audit
+      else ''
+    )}
 
     <section class="section">
       <h2>主要ファクト</h2>

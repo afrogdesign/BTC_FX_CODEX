@@ -14,13 +14,11 @@ _MAJOR_WARNING_FLAGS = {
 _TIER_RANK = {
     "normal": 0,
     "strong_machine": 1,
-    "strong_ai_confirmed": 2,
 }
 
 _TIER_BADGE = {
     "normal": "",
     "strong_machine": "🟡 好条件接近",
-    "strong_ai_confirmed": "🔥 ゴールデン条件",
 }
 
 
@@ -98,24 +96,4 @@ def compute_signal_tier(result: dict[str, Any], cfg: Any) -> dict[str, Any]:
         ]
     )
 
-    ai_advice = result.get("ai_advice")
-    if not isinstance(ai_advice, dict):
-        return {"tier": "strong_machine", "reason_codes": sorted(set(reason_codes + ["ai_review_unavailable"]))}
-
-    ai_decision = str(ai_advice.get("decision", "")).upper()
-    expected_decision = "LONG" if bias == "long" else "SHORT"
-    ai_confidence = _as_float(ai_advice.get("confidence"))
-    ai_quality = str(ai_advice.get("quality", "")).upper()
-
-    if ai_decision == expected_decision and ai_confidence >= 0.65 and ai_quality in {"A", "B"}:
-        return {
-            "tier": "strong_ai_confirmed",
-            "reason_codes": sorted(set(reason_codes + ["ai_direction_match", "ai_confidence_confirmed", "ai_quality_confirmed"])),
-        }
-    if ai_decision != expected_decision:
-        reason_codes.append("ai_direction_mismatch")
-    if ai_confidence < 0.65:
-        reason_codes.append("ai_confidence_low")
-    if ai_quality not in {"A", "B"}:
-        reason_codes.append("ai_quality_low")
     return {"tier": "strong_machine", "reason_codes": sorted(set(reason_codes))}
