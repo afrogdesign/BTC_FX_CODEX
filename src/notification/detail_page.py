@@ -10,6 +10,7 @@ from typing import Any
 from src.presentation.sanitize import (
     CONFIDENCE_METRIC_LABELS,
     build_display_context,
+    build_notification_context,
     sanitize_flag_list,
     sanitize_user_text,
 )
@@ -159,9 +160,13 @@ def _raw_mail_text(result: dict[str, Any], display_context: dict[str, Any]) -> s
 
 def build_notification_detail_html(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
+    notification_context = build_notification_context(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
-    subject = str(result.get("summary_subject", "")).strip() or f"{display_context.get('direction_compact_label', '中立')} / {display_context.get('action_compact_label', '見送り')}"
+    subject = str(result.get("summary_subject", "")).strip() or (
+        f"[{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} / "
+        f"{display_context.get('direction_compact_label', '中立')}"
+    )
     wait_reasons = _build_wait_reasons(display_context, result)
     ai_advice = result.get("ai_advice") if isinstance(result.get("ai_advice"), dict) else {}
     ai_reason = sanitize_user_text(ai_advice.get("primary_reason") or ai_advice.get("notes") or "")
@@ -169,8 +174,9 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     ai_warnings = sanitize_flag_list(ai_advice.get("warnings", []))
     funding_display = str(result.get("funding_rate_display") or "").strip() or f"{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})"
     summary_chips = [
+        notification_context.get("status_label", "中立"),
+        notification_context.get("execution_label", "見送り"),
         display_context.get("direction_compact_label", "中立"),
-        display_context.get("action_compact_label", "見送り"),
         display_context.get("entry_quality_label", "内部評価あり"),
     ]
 
@@ -196,8 +202,11 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         )
 
     root_cards = [
+        ("ステータス", f"{notification_context.get('status_label', '')} / {notification_context.get('status_explanation', '')}"),
+        ("執行判断", notification_context.get("execution_label", "")),
+        ("現値帯の扱い", notification_context.get("entry_window_label", "")),
+        ("有効目安", notification_context.get("validity_label", "")),
         ("方向判断", display_context.get("direction_label", "")),
-        ("いまの扱い", display_context.get("action_label", "")),
         ("位置評価", display_context.get("entry_quality_label", "")),
         ("総合判断", _label_signal(result.get("bias"))),
         ("相場環境", _label_regime(result.get("market_regime"))),
@@ -219,7 +228,9 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         for label, value in root_cards
     )
 
-    wait_reason_html = "".join(f"<li>{esc(reason)}</li>" for reason in wait_reasons)
+    wait_reason_html = "".join(
+        f"<li>{esc(reason)}</li>" for reason in notification_context.get("reason_labels_full", wait_reasons)
+    )
     ai_warning_html = "".join(f"<li>{esc(reason)}</li>" for reason in ai_warnings)
     raw_mail = _raw_mail_text(result, display_context)
 
@@ -348,13 +359,15 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     <section class="hero">
       <p class="muted">{esc(timestamp_jst)} / signal_id {esc(result.get('signal_id', ''))}</p>
       <h1>{esc(subject)}</h1>
-      <p>{esc(display_context.get('direction_label', ''))}。ただし今の扱いは「{display_context.get('action_label', '')}」で、方向とタイミングを分けて読む必要がある通知です。</p>
+      <p>{esc(display_context.get('direction_label', ''))}。ただし今の扱いは「{notification_context.get('execution_label', '')}」で、方向とタイミングを分けて読む必要がある通知です。</p>
       <div>{chips_html(summary_chips)}</div>
       <div class="hero-grid">
         <div class="panel">
           <h2>最初に読む結論</h2>
+          <p class="strong">ステータス: {esc(notification_context.get('status_label', ''))}</p>
+          <p class="strong">今の行動: {esc(notification_context.get('execution_label', ''))}</p>
+          <p class="strong">現値帯の扱い: {esc(notification_context.get('entry_window_label', ''))}</p>
           <p class="strong">相場の向き: {esc(display_context.get('direction_label', ''))}</p>
-          <p class="strong">今の行動: {esc(display_context.get('action_label', ''))}</p>
           <p>今回の見どころは、「方向の強さ」と「実行しやすさ」が分離されている点です。方向が強くても、実際に入るにはまだ不利というケースを見分けやすくしています。</p>
         </div>
         <div class="panel">
@@ -362,6 +375,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
           <p><strong>{esc(metric_labels['direction'])}</strong> は相場の向きの明確さです。</p>
           <p><strong>{esc(metric_labels['execution'])}</strong> は今この価格で仕掛ける条件の良さです。</p>
           <p><strong>{esc(metric_labels['wait'])}</strong> は待った方がよい圧力です。</p>
+          <p><strong>次に見る条件:</strong> {esc(notification_context.get('next_condition_label', '次回更新で再評価'))}</p>
         </div>
       </div>
     </section>

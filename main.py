@@ -72,6 +72,7 @@ from src.presentation.sanitize import (
     PROMPT_VARIANT,
     SUMMARY_VARIANT,
     build_display_context,
+    build_notification_context,
 )
 
 
@@ -678,6 +679,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "suppress_reason_codes": [],
         "reason_for_notification": [],
         "notification_kind": "none",
+        "notification_context": {},
         "detail_page_enabled": False,
         "detail_page_status": "disabled",
         "detail_page_url": "",
@@ -766,6 +768,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
     core_result["reason_for_notification"] = notify_info["notify_reason_codes"]
     core_result["notification_kind"] = notify_info["notification_kind"]
+    core_result["notification_context"] = build_notification_context(core_result)
 
     summary_body, summary_provider_used = build_summary_body(
         provider=cfg.AI_SUMMARY_PROVIDER,
@@ -780,6 +783,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
     core_result["system_mode_label"] = _build_system_mode_label_from_values(advice_provider_used, summary_provider_used)
     core_result["display_context"] = build_display_context(core_result)
+    core_result["notification_context"] = build_notification_context(core_result)
     core_result["summary_subject"] = build_summary_subject(core_result)
     core_result["summary_body"] = summary_body
     core_result["evaluation_trace"] = build_evaluation_trace(

@@ -111,6 +111,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         html = build_notification_detail_html(payload)
 
         self.assertIn("3つの数字を丁寧に読む", html)
+        self.assertIn("ステータス", html)
+        self.assertIn("今の行動", html)
         self.assertIn("方向の強さ", html)
         self.assertIn("実行しやすさ", html)
         self.assertIn("待機圧力", html)

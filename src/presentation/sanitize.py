@@ -272,3 +272,151 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
         "prelabel_display_label": prelabel_label(prelabel),
         "primary_setup_status": status,
     }
+
+
+def _headline_reason_labels(result: dict[str, Any], limit: int = 3) -> list[str]:
+    labels = sanitize_reason_codes(_reason_sources(result))
+    if labels:
+        return labels[:limit]
+    fallback_reason = sanitize_user_text(result.get("invalid_reason", "")) or "大きな待機理由は出ていません"
+    return [fallback_reason]
+
+
+def _notification_status(result: dict[str, Any]) -> tuple[str, str, str]:
+    notification_kind = str(result.get("notification_kind", "none")).lower()
+    bias = str(result.get("bias", "")).lower()
+    setup_status = _primary_setup_status(result)
+
+    if notification_kind == "attention":
+        return "attention", "注意報", "方向変化の早期共有"
+    if setup_status == "ready":
+        return "actionable", "執行可", "条件成立"
+    if setup_status == "watch":
+        return "monitor", "監視", "条件接近"
+    if bias in {"long", "short"}:
+        return "invalid", "無効", "執行不可"
+    return "neutral", "中立", "方向優位なし"
+
+
+def _execution_label(status_code: str) -> str:
+    if status_code == "actionable":
+        return "条件付きで検討"
+    if status_code == "monitor":
+        return "監視継続"
+    return "見送り"
+
+
+def _entry_window_label(reason_code: str) -> str:
+    mapping = {
+        "inside_entry_zone_with_trigger": "現値帯のみ条件付き",
+        "near_entry_zone_with_trigger": "近接帯のみ条件付き",
+        "near_entry_zone_waiting_trigger": "発火条件待ち",
+        "entry_zone_not_reached": "価格到達待ち",
+    }
+    return mapping.get(reason_code, "不可")
+
+
+def _next_condition_label(result: dict[str, Any]) -> str:
+    bias = str(result.get("bias", "")).lower()
+    prelabel = str(result.get("prelabel", "")).upper()
+    risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
+    reason_code = _primary_setup_reason(result)
+    ai_advice = result.get("ai_advice")
+
+    if prelabel == "SWEEP_WAIT" or "sweep_incomplete" in risk_flags:
+        if bias == "short" or "upper_liquidity_close" in risk_flags:
+            return "上側流動性スイープ完了後に再評価"
+        return "下側流動性スイープ完了後に再評価"
+    if reason_code in {"inside_entry_zone_with_trigger", "near_entry_zone_with_trigger"}:
+        return "条件継続を確認できるか再評価"
+    if reason_code == "near_entry_zone_waiting_trigger":
+        return "発火条件確認後に再評価"
+    if reason_code == "entry_zone_not_reached":
+        return "再検討帯到達後に再評価"
+    if isinstance(ai_advice, dict):
+        next_condition = sanitize_user_text(ai_advice.get("next_condition", ""))
+        if next_condition:
+            return next_condition
+    return "次回更新で再評価"
+
+
+def _invalidation_label(result: dict[str, Any]) -> str:
+    bias = str(result.get("bias", "")).lower()
+    stop_loss = result.get("primary_stop_loss")
+    try:
+        stop_loss_value = float(stop_loss)
+    except (TypeError, ValueError):
+        stop_loss_value = None
+
+    if stop_loss_value and stop_loss_value > 0:
+        if bias == "long":
+            return f"{stop_loss_value:,.2f} を明確に割れたら無効寄り"
+        if bias == "short":
+            return f"{stop_loss_value:,.2f} を明確に上抜けたら無効寄り"
+
+    support_zones = result.get("support_zones", [])
+    resistance_zones = result.get("resistance_zones", [])
+    if bias == "long" and support_zones:
+        zone = support_zones[0]
+        return f"主要サポート {float(zone.get('low', 0.0)):,.2f} - {float(zone.get('high', 0.0)):,.2f} 割れで無効寄り"
+    if bias == "short" and resistance_zones:
+        zone = resistance_zones[0]
+        return f"主要レジスタンス {float(zone.get('low', 0.0)):,.2f} - {float(zone.get('high', 0.0)):,.2f} 上抜けで無効寄り"
+    return "主要価格帯の反応崩れで無効寄り"
+
+
+def _validity_label(result: dict[str, Any]) -> str:
+    notification_kind = str(result.get("notification_kind", "none")).lower()
+    if notification_kind == "attention":
+        return "次の1時間足確定までを目安"
+    return "次回更新までを目安"
+
+
+def _rr_summary_label(result: dict[str, Any]) -> str:
+    try:
+        rr_value = float(result.get("rr_estimate", 0.0))
+    except (TypeError, ValueError):
+        return "RR評価は未計算"
+    if rr_value >= 1.5:
+        grade = "良好"
+    elif rr_value >= 1.1:
+        grade = "基準付近"
+    else:
+        grade = "低い"
+    return f"想定RR {rr_value:.2f}（{grade}）"
+
+
+def _format_zone_label(name: str, zones: Any) -> str:
+    if not isinstance(zones, list) or not zones:
+        return f"{name}: 抽出なし"
+    zone = zones[0] or {}
+    try:
+        low = float(zone.get("low", 0.0))
+        high = float(zone.get("high", 0.0))
+        return f"{name}: {low:,.2f} - {high:,.2f}"
+    except (TypeError, ValueError):
+        return f"{name}: 抽出なし"
+
+
+def build_notification_context(result: dict[str, Any]) -> dict[str, Any]:
+    display_context = build_display_context(result)
+    status_code, status_label, status_explanation = _notification_status(result)
+    primary_reason = _primary_setup_reason(result)
+    headline_reasons = _headline_reason_labels(result, limit=3)
+    return {
+        "status_code": status_code,
+        "status_label": status_label,
+        "status_explanation": status_explanation,
+        "execution_label": _execution_label(status_code),
+        "entry_window_label": _entry_window_label(primary_reason),
+        "reason_labels": headline_reasons,
+        "reason_labels_full": display_context["wait_reason_labels"],
+        "next_condition_label": _next_condition_label(result),
+        "invalidation_label": _invalidation_label(result),
+        "validity_label": _validity_label(result),
+        "rr_summary_label": _rr_summary_label(result),
+        "price_map": {
+            "support_label": _format_zone_label("サポート", result.get("support_zones", [])),
+            "resistance_label": _format_zone_label("レジスタンス", result.get("resistance_zones", [])),
+        },
+    }

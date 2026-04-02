@@ -5,6 +5,7 @@ from typing import Any
 from src.presentation.sanitize import (
     CONFIDENCE_METRIC_LABELS,
     build_display_context,
+    build_notification_context,
     sanitize_flag_list,
     sanitize_user_text,
 )
@@ -87,12 +88,33 @@ def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     )
 
 
-def _root_summary_lines(result: dict[str, Any], display_context: dict[str, Any]) -> list[str]:
+def _root_summary_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【結論】",
+        f"ステータス: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
         f"方向判断: {display_context['direction_label']}",
-        f"いまの扱い: {display_context['action_label']}",
+        f"執行判断: {notification_context.get('execution_label', '見送り')}",
+        f"現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
+        f"有効目安: {notification_context.get('validity_label', '次回更新までを目安')}",
+        "",
+        "【いま重視する理由】",
+    ]
+    for reason in notification_context.get("reason_labels", []):
+        lines.append(f"- {reason}")
+    lines.extend(
+        [
+        f"- 次に見る条件: {notification_context.get('next_condition_label', '次回更新で再評価')}",
+        f"- 無効化目安: {notification_context.get('invalidation_label', '主要価格帯の反応崩れで無効寄り')}",
+        f"- {notification_context.get('price_map', {}).get('support_label', 'サポート: 抽出なし')}",
+        f"- {notification_context.get('price_map', {}).get('resistance_label', 'レジスタンス: 抽出なし')}",
+        f"- RR評価: {notification_context.get('rr_summary_label', 'RR評価は未計算')}",
+        "",
+        "【3つの判断指標】",
         f"{metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
         f"{metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
         f"{metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
@@ -120,7 +142,8 @@ def _root_summary_lines(result: dict[str, Any], display_context: dict[str, Any])
         _format_setup_levels(result.get("short_setup", {}), "short"),
         "",
         "【待機理由または注意点】",
-    ]
+        ]
+    )
     for reason in display_context["wait_reason_labels"]:
         lines.append(f"- {reason}")
     return lines
@@ -143,15 +166,18 @@ def _ai_review_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _attention_summary(result: dict[str, Any], display_context: dict[str, Any]) -> str:
+def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], notification_context: dict[str, Any]) -> str:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【注意報】",
         "これは売買推奨メールではなく、方向の変化を早めに共有する注意通知です。",
         "",
         "【今の見立て】",
+        f"- ステータス: {notification_context.get('status_label', '注意報')}（{notification_context.get('status_explanation', '方向変化の早期共有')}）",
         f"- 方向判断: {display_context['direction_label']}",
-        f"- いまの扱い: {display_context['action_label']}",
+        f"- 執行判断: {notification_context.get('execution_label', '見送り')}",
+        f"- 現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
+        f"- 有効目安: {notification_context.get('validity_label', '次の1時間足確定までを目安')}",
         f"- {metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
         f"- {metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
         f"- {metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
@@ -159,10 +185,17 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any]) 
         "",
         "【まだ本命通知でない理由】",
     ]
-    for reason in display_context["wait_reason_labels"]:
+    for reason in notification_context.get("reason_labels", []):
         lines.append(f"- {reason}")
     lines.extend(
         [
+            "",
+            "【次に見る条件】",
+            f"- {notification_context.get('next_condition_label', '次回更新で再評価')}",
+            f"- 無効化目安: {notification_context.get('invalidation_label', '主要価格帯の反応崩れで無効寄り')}",
+            f"- {notification_context.get('price_map', {}).get('support_label', 'サポート: 抽出なし')}",
+            f"- {notification_context.get('price_map', {}).get('resistance_label', 'レジスタンス: 抽出なし')}",
+            f"- RR評価: {notification_context.get('rr_summary_label', 'RR評価は未計算')}",
             "",
             "【観測要点】",
             f"- スコア: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {abs(int(result.get('score_gap', 0) or 0))}",
@@ -177,6 +210,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any]) 
 
 def build_summary_subject(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
+    notification_context = build_notification_context(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
     mode_label = str(result.get("system_mode_label", "")).strip()
@@ -187,14 +221,14 @@ def build_summary_subject(result: dict[str, Any]) -> str:
         labels.append(f"[{mode_label}]")
     suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
-    notification_kind = str(result.get("notification_kind", "main")).lower()
-    prefix = "👀 [注意報] " if notification_kind == "attention" else ""
+    headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
     subject = (
-        f"{prefix}{display_context['direction_compact_label']} / {display_context['action_compact_label']} "
+        f"[{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} | "
+        f"{display_context['direction_compact_label']} | {headline_reason} "
         f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()
-    if result.get("ai_advice") is None and notification_kind != "attention":
-        subject = f"⚠️ 機械判定のみ {subject}"
+    if result.get("ai_advice") is None:
+        subject = f"[機械判定のみ] {subject}"
     return subject
 
 
@@ -212,8 +246,9 @@ def build_summary_body(
     del api_key, model, cli_command, timeout_sec, retry_count, base_dir
     provider_name = str(provider or "api").strip().lower()
     display_context = build_display_context(result_payload)
+    notification_context = build_notification_context(result_payload)
     if str(result_payload.get("notification_kind", "main")).lower() == "attention":
-        return _attention_summary(result_payload, display_context), provider_name
-    lines = _root_summary_lines(result_payload, display_context)
+        return _attention_summary(result_payload, display_context, notification_context), provider_name
+    lines = _root_summary_lines(result_payload, display_context, notification_context)
     lines.extend(_ai_review_lines(result_payload))
     return "\n".join(lines), provider_name

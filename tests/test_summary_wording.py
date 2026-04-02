@@ -41,7 +41,8 @@ class SummaryWordingTest(unittest.TestCase):
             }
         )
         self.assertIn("方向判断: 相場は下方向バイアスです", body)
-        self.assertRegex(body, "いまの扱い: (上側流動性回収待ち|戻り売り待ち|再失速確認待ち|下目線で待機)")
+        self.assertIn("執行判断: 監視継続", body)
+        self.assertIn("現値帯の扱い: 価格到達待ち", body)
         self.assertNotIn("入る条件がかなりそろっています", body)
 
     def test_case_b_short_ready_allows_conditional_review(self) -> None:
@@ -58,7 +59,8 @@ class SummaryWordingTest(unittest.TestCase):
                 "long_setup": {},
             }
         )
-        self.assertIn("いまの扱い: ショートは条件付きで検討", body)
+        self.assertIn("執行判断: 条件付きで検討", body)
+        self.assertIn("現値帯の扱い: 現値帯のみ条件付き", body)
         self.assertNotIn("今すぐ入ってよい", body)
 
     def test_case_d_wait_bias_stays_neutral(self) -> None:
@@ -75,7 +77,7 @@ class SummaryWordingTest(unittest.TestCase):
             }
         )
         self.assertIn("方向判断: 相場は中立です", body)
-        self.assertIn("いまの扱い: 見送り", body)
+        self.assertIn("執行判断: 見送り", body)
 
     def test_case_e_direction_and_entry_quality_are_separated(self) -> None:
         body = self._build(

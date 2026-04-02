@@ -66,7 +66,7 @@ class AiCliRetryTest(TestCase):
 
         self.assertIn("【結論】", result)
         self.assertIn("方向判断:", result)
-        self.assertIn("いまの扱い:", result)
+        self.assertIn("執行判断:", result)
         self.assertEqual(provider_used, "cli")
 
     @patch("src.ai.advice.write_ai_error_log")
