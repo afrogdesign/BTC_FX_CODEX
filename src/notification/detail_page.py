@@ -53,6 +53,13 @@ def _format_price(value: Any) -> str:
         return str(value or "未記録")
 
 
+def _format_price_int(value: Any) -> str:
+    try:
+        return f"{float(value):,.0f}"
+    except (TypeError, ValueError):
+        return str(value or "未記録")
+
+
 def _format_pct(value: Any) -> str:
     try:
         return f"{float(value):+.4f}%"
@@ -258,64 +265,172 @@ def _price_position(value: float, chart_min: float, chart_max: float, left: floa
 
 def _price_map_svg(result: dict[str, Any]) -> str:
     current_price = _safe_float(result.get("current_price"))
+    long_setup = result.get("long_setup", {}) or {}
+    short_setup = result.get("short_setup", {}) or {}
     support_zones = result.get("support_zones", [])[:3]
     resistance_zones = result.get("resistance_zones", [])[:3]
     values = [current_price]
+    long_entry = long_setup.get("entry_zone") or {}
+    short_entry = short_setup.get("entry_zone") or {}
+    for zone in (long_entry, short_entry):
+        values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
+    for setup in (long_setup, short_setup):
+        values.extend(
+            [
+                _safe_float(setup.get("stop_loss")),
+                _safe_float(setup.get("tp1")),
+                _safe_float(setup.get("tp2")),
+            ]
+        )
     for zone in support_zones + resistance_zones:
         values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
+    values = [value for value in values if value > 0]
     chart_min = min(values) if values else 0.0
     chart_max = max(values) if values else 1.0
-    padding = max((chart_max - chart_min) * 0.08, 120.0)
+    padding = max((chart_max - chart_min) * 0.1, 160.0)
     chart_min -= padding
     chart_max += padding
 
     width = 860
-    height = 220
-    left = 72
-    usable_w = width - left - 40
+    height = 440
+    top = 36
+    bottom = 42
+    left = 34
+    right = 132
+    usable_h = height - top - bottom
+    chart_left = left
+    chart_right = width - right
+    chart_width = chart_right - chart_left
 
-    zone_elements: list[str] = []
-    y_positions = [62, 102, 142]
-    for idx, zone in enumerate(resistance_zones):
+    def y_for_price(value: float) -> float:
+        if chart_max <= chart_min:
+            return top + usable_h / 2
+        ratio = (chart_max - value) / (chart_max - chart_min)
+        ratio = max(0.0, min(1.0, ratio))
+        return top + ratio * usable_h
+
+    horizontal_grid: list[str] = []
+    price_ticks: list[str] = []
+    for idx in range(6):
+        tick_value = chart_min + (chart_max - chart_min) * idx / 5
+        y = y_for_price(tick_value)
+        horizontal_grid.append(
+            f'<line x1="{chart_left}" y1="{y:.1f}" x2="{chart_right}" y2="{y:.1f}" class="price-grid-h" />'
+        )
+        price_ticks.append(
+            f'<text x="{width - 16}" y="{y + 4:.1f}" text-anchor="end" class="price-axis">{_format_price_int(tick_value)}</text>'
+        )
+
+    vertical_grid = []
+    for idx in range(1, 5):
+        x = chart_left + chart_width * idx / 5
+        vertical_grid.append(
+            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{height - bottom}" class="price-grid-v" />'
+        )
+
+    background_bands: list[str] = []
+    for zone in resistance_zones:
         low = _safe_float(zone.get("low"))
         high = _safe_float(zone.get("high"))
-        x1 = _price_position(low, chart_min, chart_max, left, usable_w)
-        x2 = _price_position(high, chart_min, chart_max, left, usable_w)
-        y = y_positions[idx]
-        zone_elements.append(
-            f'<rect x="{x1:.1f}" y="{y}" width="{max(x2 - x1, 6):.1f}" height="20" rx="10" class="zone-resistance" />'
-            f'<text x="{x1:.1f}" y="{y - 8}" class="zone-caption">R{idx + 1} {_format_price(low)} - {_format_price(high)}</text>'
+        y1 = y_for_price(high)
+        y2 = y_for_price(low)
+        background_bands.append(
+            f'<rect x="{chart_left}" y="{y1:.1f}" width="{chart_width}" height="{max(y2 - y1, 8):.1f}" class="band-resistance" />'
         )
-    for idx, zone in enumerate(support_zones):
+    for zone in support_zones:
         low = _safe_float(zone.get("low"))
         high = _safe_float(zone.get("high"))
-        x1 = _price_position(low, chart_min, chart_max, left, usable_w)
-        x2 = _price_position(high, chart_min, chart_max, left, usable_w)
-        y = y_positions[idx] + 26
-        zone_elements.append(
-            f'<rect x="{x1:.1f}" y="{y}" width="{max(x2 - x1, 6):.1f}" height="20" rx="10" class="zone-support" />'
-            f'<text x="{x1:.1f}" y="{y + 38}" class="zone-caption">S{idx + 1} {_format_price(low)} - {_format_price(high)}</text>'
+        y1 = y_for_price(high)
+        y2 = y_for_price(low)
+        background_bands.append(
+            f'<rect x="{chart_left}" y="{y1:.1f}" width="{chart_width}" height="{max(y2 - y1, 8):.1f}" class="band-support" />'
         )
 
-    current_x = _price_position(current_price, chart_min, chart_max, left, usable_w)
-    ticks: list[str] = []
-    for idx in range(5):
-        tick_value = chart_min + (chart_max - chart_min) * idx / 4
-        tick_x = _price_position(tick_value, chart_min, chart_max, left, usable_w)
-        ticks.append(
-            f'<line x1="{tick_x:.1f}" y1="26" x2="{tick_x:.1f}" y2="194" class="price-grid" />'
-            f'<text x="{tick_x:.1f}" y="212" text-anchor="middle" class="price-axis">{_format_price(tick_value)}</text>'
+    current_y = y_for_price(current_price)
+    emphasis_lines: list[str] = [
+        f'<line x1="{chart_left}" y1="{current_y:.1f}" x2="{chart_right}" y2="{current_y:.1f}" class="current-price-line" />',
+        f'<rect x="{chart_right - 102:.1f}" y="{current_y - 18:.1f}" width="96" height="36" rx="12" class="current-price-box" />',
+        f'<text x="{chart_right - 54:.1f}" y="{current_y - 4:.1f}" text-anchor="middle" class="current-price-box-label">現在値</text>',
+        f'<text x="{chart_right - 54:.1f}" y="{current_y + 12:.1f}" text-anchor="middle" class="current-price-box-value">{_format_price_int(current_price)}</text>',
+    ]
+
+    def setup_band(zone: dict[str, Any], side: str, status: Any, x: float, width_ratio: float) -> list[str]:
+        low = _safe_float(zone.get("low"))
+        high = _safe_float(zone.get("high"))
+        if low <= 0 and high <= 0:
+            return []
+        y1 = y_for_price(high)
+        y2 = y_for_price(low)
+        band_width = chart_right - (chart_left + chart_width * x)
+        band_x = chart_left + chart_width * x
+        label = "LONG 再検討帯" if side == "long" else "SHORT 再検討帯"
+        status_label = _setup_status_label(status)
+        band_class = "setup-band-long" if side == "long" else "setup-band-short"
+        text_class = "setup-band-text-long" if side == "long" else "setup-band-text-short"
+        callout_class = "setup-callout-long" if side == "long" else "setup-callout-short"
+        callout_text_class = "setup-callout-text-long" if side == "long" else "setup-callout-text-short"
+        callout_value_class = "setup-callout-value"
+        callout_width = 236
+        callout_height = 52
+        callout_x = chart_left + 16 if side == "long" else chart_left + 92
+        callout_y = y1 - callout_height - 12 if side == "long" else y1 - callout_height - 28
+        axis_value_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
+        return [
+            f'<rect x="{band_x:.1f}" y="{y1:.1f}" width="{band_width:.1f}" height="{max(y2 - y1, 14):.1f}" rx="12" class="{band_class}" />',
+            f'<rect x="{callout_x:.1f}" y="{callout_y:.1f}" width="{callout_width}" height="{callout_height}" rx="12" class="{callout_class}" />',
+            f'<text x="{callout_x + 14:.1f}" y="{callout_y + 20:.1f}" class="{text_class}">{label}</text>',
+            f'<text x="{callout_x + 14:.1f}" y="{callout_y + 38:.1f}" class="{callout_text_class}">{html.escape(status_label)}</text>',
+            f'<text x="{callout_x + callout_width - 14:.1f}" y="{callout_y + 38:.1f}" text-anchor="end" class="{callout_value_class}">{_format_price_int(low)} - {_format_price_int(high)}</text>',
+            f'<text x="{chart_right + 6:.1f}" y="{y1 + 6:.1f}" class="{axis_value_class}">{_format_price_int(high)}</text>',
+            f'<text x="{chart_right + 6:.1f}" y="{y2 + 6:.1f}" class="{axis_value_class}">{_format_price_int(low)}</text>',
+        ]
+
+    setup_elements = []
+    setup_elements.extend(setup_band(long_entry, "long", long_setup.get("status"), 0.30, 0.58))
+    setup_elements.extend(setup_band(short_entry, "short", short_setup.get("status"), 0.30, 0.58))
+
+    def marker_line(
+        price: Any,
+        label: str,
+        tone: str,
+        x1_ratio: float,
+        x2_ratio: float,
+        *,
+        label_anchor: str = "start",
+        label_offset: float = 8.0,
+        label_dy: float = 4.0,
+    ) -> str:
+        value = _safe_float(price)
+        if value <= 0:
+            return ""
+        y = y_for_price(value)
+        x1 = chart_left + chart_width * x1_ratio
+        x2 = chart_left + chart_width * x2_ratio
+        label_x = x2 + label_offset if label_anchor == "start" else x1 - label_offset
+        return (
+            f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="marker-line {tone}" />'
+            f'<text x="{label_x:.1f}" y="{y + label_dy:.1f}" text-anchor="{label_anchor}" class="marker-label {tone}">{html.escape(label)} {_format_price_int(value)}</text>'
         )
+
+    markers = [
+        marker_line(long_setup.get("stop_loss"), "Long SL", "marker-long", 0.04, 0.16, label_dy=16),
+        marker_line(long_setup.get("tp1"), "Long TP1", "marker-long", 0.04, 0.16, label_dy=-8),
+        marker_line(short_setup.get("stop_loss"), "Short SL", "marker-short", 0.84, 0.96, label_anchor="end", label_dy=-8),
+        marker_line(short_setup.get("tp1"), "Short TP1", "marker-short", 0.84, 0.96, label_anchor="end", label_dy=16),
+    ]
 
     return (
-        f'<svg viewBox="0 0 {width} {height}" class="price-map" aria-label="価格帯マップ">'
-        '<rect x="0" y="0" width="860" height="220" rx="18" class="price-map-bg" />'
-        f"{''.join(ticks)}"
-        '<line x1="72" y1="110" x2="820" y2="110" class="price-midline" />'
-        f"{''.join(zone_elements)}"
-        f'<line x1="{current_x:.1f}" y1="24" x2="{current_x:.1f}" y2="188" class="price-current-line" />'
-        f'<circle cx="{current_x:.1f}" cy="110" r="8" class="price-current-dot" />'
-        f'<text x="{current_x:.1f}" y="20" text-anchor="middle" class="price-current-label">現在値 {_format_price(current_price)}</text>'
+        f'<svg viewBox="0 0 {width} {height}" class="price-map" aria-label="再検討ラインチャート">'
+        f'<rect x="0" y="0" width="{width}" height="{height}" rx="18" class="price-map-bg" />'
+        '<text x="24" y="24" class="chart-title">BTCUSDT 再検討ライン</text>'
+        '<text x="24" y="44" class="chart-subtitle">ロング / ショートの再検討帯を主役にし、サポートとレジスタンスは背景帯として表示</text>'
+        f"{''.join(horizontal_grid)}"
+        f"{''.join(vertical_grid)}"
+        f"{''.join(background_bands)}"
+        f"{''.join(setup_elements)}"
+        f"{''.join(marker for marker in markers if marker)}"
+        f"{''.join(emphasis_lines)}"
+        f"{''.join(price_ticks)}"
         "</svg>"
     )
 
@@ -536,7 +651,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     .hero-grid {{ grid-template-columns: 1.4fr 1fr; margin-top: 18px; }}
     .overview-grid {{ grid-template-columns: 1.2fr 0.8fr; margin-top: 16px; }}
     .fact-grid {{ grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }}
-    .metric-grid {{ grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }}
+    .metric-grid {{ grid-template-columns: 1fr; }}
     .two-col {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .reason-grid {{ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }}
     .panel {{
@@ -745,6 +860,8 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     }}
     .price-map-wrap {{
       padding: 10px 0 0;
+      background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%);
+      border-color: #263148;
     }}
     .price-map {{
       width: 100%;
@@ -752,52 +869,135 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       display: block;
     }}
     .price-map-bg {{
-      fill: #fbfdff;
-      stroke: #d8dfe6;
+      fill: #0f1728;
+      stroke: #263148;
       stroke-width: 1;
     }}
-    .price-grid {{
-      stroke: #e3e9f0;
+    .chart-title {{
+      fill: #eff6ff;
+      font-size: 16px;
+      font-weight: 700;
+    }}
+    .chart-subtitle {{
+      fill: #93a4bf;
+      font-size: 11px;
+      font-weight: 500;
+    }}
+    .price-grid-h {{
+      stroke: rgba(148, 163, 184, 0.24);
       stroke-width: 1;
     }}
-    .price-midline {{
-      stroke: #c8d3df;
-      stroke-dasharray: 6 6;
+    .price-grid-v {{
+      stroke: rgba(148, 163, 184, 0.16);
+      stroke-width: 1;
+    }}
+    .band-support {{
+      fill: rgba(34, 197, 94, 0.14);
+    }}
+    .band-resistance {{
+      fill: rgba(248, 113, 113, 0.14);
+    }}
+    .setup-band-long {{
+      fill: rgba(34, 197, 94, 0.26);
+      stroke: #4ade80;
       stroke-width: 2;
     }}
-    .zone-support {{
-      fill: rgba(15, 118, 110, 0.22);
-      stroke: #0f766e;
-      stroke-width: 1.5;
+    .setup-band-short {{
+      fill: rgba(248, 113, 113, 0.26);
+      stroke: #f87171;
+      stroke-width: 2;
     }}
-    .zone-resistance {{
-      fill: rgba(180, 35, 24, 0.18);
-      stroke: #b42318;
-      stroke-width: 1.5;
+    .setup-band-text-long {{
+      fill: #dcfce7;
+      font-size: 13px;
+      font-weight: 700;
     }}
-    .zone-caption {{
-      fill: #51616d;
+    .setup-band-text-short {{
+      fill: #fee2e2;
+      font-size: 13px;
+      font-weight: 700;
+    }}
+    .setup-callout-long, .setup-callout-short {{
+      stroke-width: 1;
+    }}
+    .setup-callout-long {{
+      fill: rgba(7, 20, 34, 0.92);
+      stroke: rgba(74, 222, 128, 0.45);
+    }}
+    .setup-callout-short {{
+      fill: rgba(7, 20, 34, 0.92);
+      stroke: rgba(248, 113, 113, 0.45);
+    }}
+    .setup-callout-text-long {{
+      fill: #bbf7d0;
+      font-size: 12px;
+      font-weight: 500;
+    }}
+    .setup-callout-text-short {{
+      fill: #fecaca;
+      font-size: 12px;
+      font-weight: 500;
+    }}
+    .setup-callout-value {{
+      fill: #dbe7f7;
+      font-size: 12px;
+      font-weight: 500;
+    }}
+    .setup-axis-value-long {{
+      fill: #4ade80;
+      font-size: 12px;
+      font-weight: 700;
+    }}
+    .setup-axis-value-short {{
+      fill: #f87171;
       font-size: 12px;
       font-weight: 700;
     }}
     .price-axis {{
-      fill: #60707c;
+      fill: #9db0ca;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 500;
     }}
-    .price-current-line {{
-      stroke: #2f6fed;
-      stroke-width: 3;
+    .current-price-line {{
+      stroke: #60a5fa;
+      stroke-width: 2.5;
+      stroke-dasharray: 5 5;
     }}
-    .price-current-dot {{
-      fill: #ffffff;
-      stroke: #2f6fed;
-      stroke-width: 4;
-    }}
-    .price-current-label {{
-      fill: #1e3a8a;
+    .current-price-label {{
+      fill: #bfdbfe;
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 600;
+    }}
+    .current-price-box {{
+      fill: #1d4ed8;
+      stroke: #60a5fa;
+      stroke-width: 1;
+    }}
+    .current-price-box-label {{
+      fill: #eff6ff;
+      font-size: 11px;
+      font-weight: 600;
+    }}
+    .current-price-box-value {{
+      fill: #bfdbfe;
+      font-size: 11px;
+      font-weight: 500;
+    }}
+    .marker-line {{
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+    }}
+    .marker-label {{
+      font-size: 10px;
+      font-weight: 500;
+    }}
+    .marker-long {{
+      stroke: #4ade80;
+      fill: #bbf7d0;
+    }}
+    .marker-short {{
+      stroke: #f87171;
+      fill: #fecaca;
     }}
     .price-list p {{ margin-bottom: 8px; }}
     @media (max-width: 820px) {{
@@ -843,17 +1043,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     </section>
 
     <section class="section">
-      <h2>主要ファクト</h2>
-      <div class="fact-grid">{root_cards_html}</div>
-    </section>
-
-    <section class="section">
       <h2>3つの数字を丁寧に読む</h2>
       <div class="metric-grid">{''.join(metric_blocks)}</div>
     </section>
 
     <section class="section">
-      <h2>価格帯マップ</h2>
+      <h2>再検討ラインチャート</h2>
       <div class="panel price-map-wrap">
         {price_map_svg}
       </div>
@@ -866,9 +1061,10 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         <div class="panel">
           <h3>図の読み方</h3>
           <ul>
-            <li>青い縦線が現在価格です。</li>
-            <li>緑帯がサポート、赤帯がレジスタンスです。</li>
-            <li>現在値と帯の位置関係で、次にぶつかりやすい価格帯を直感で見ます。</li>
+            <li>青い横線が現在価格です。</li>
+            <li>緑帯がロング再検討帯、赤帯がショート再検討帯です。</li>
+            <li>帯の近くの吹き出しに、`監視継続` や `現状は見送り` などの扱いを出します。</li>
+            <li>薄い背景帯はサポートとレジスタンスで、主役は再検討ラインです。</li>
           </ul>
         </div>
       </div>
@@ -908,6 +1104,11 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
           <ul>{ai_warning_html or '<li>追加の注意表示はありません</li>'}</ul>
         </div>
       </div>
+    </section>
+
+    <section class="section">
+      <h2>主要ファクト</h2>
+      <div class="fact-grid">{root_cards_html}</div>
     </section>
 
     <section class="section">
