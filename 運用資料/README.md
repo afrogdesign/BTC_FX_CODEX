@@ -46,5 +46,4 @@
 - `iMac 2019` と `MBA M4` を同日に並行利用してよい
 - ただし、作業開始前に `git status` と `git pull --rebase` を確認し、切替前に commit / push まで終える
 - 次の Mac へ渡す判断は `NEXT_TASK.md`、実施事実は `progress.md` に残す
-- 本番軽量同期 `com.afrog.btc-monitor-status-sync` の常設先は `iMac 2019` に寄せる
 - `MBA M4` は持ち運び前提なので、常設ジョブを前提にしない

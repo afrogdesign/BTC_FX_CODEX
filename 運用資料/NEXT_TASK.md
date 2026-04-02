@@ -8,7 +8,7 @@
 ## 現在の状況
 - 主対象は `iMac 2019` で動かしている `Ver02.3-v5`。日常の通知観測と品質判断はこの 1 本で進める。
 - `MBP2020` の `Ver02.1` は `2026-03-31 03:39 JST` に停止し、`/Users/marupro/CODEX/archive/BTC_FX_CODEX_ver02_20260331_0339.tgz` へ凍結退避済み。`mbp2020-btc` は archive 参照用。
-- `iMac 2019` の旧 `Ver02.1` 状態同期ジョブ `com.afrog.btc-monitor-status-sync` は `2026-04-02 04:32 JST` に停止し、plist を `~/Library/LaunchAgents/com.afrog.btc-monitor-status-sync.plist.disabled_20260402_0432` へ退避済み。日常運用から外した。
+- `iMac 2019` の旧 `Ver02.1` 状態同期ジョブ `com.afrog.btc-monitor-status-sync` は停止後に定義ごと整理し、現行運用から外した。旧版参照が必要なときだけ `tools/sync_ver021_prod_status.sh` を手動実行する。
 - フェーズはまだ `Ver02.3 / Phase 0 本番観測中`。`Phase 1` へは未昇格。
 - ブランチ整理として、`Ver02.3v4` は v5 着手直前の安定点 `7b8c02b` に戻し、AI役割再設計を含む継続作業は `Ver02.3-v5` (`347aea1`) で進める。
 - 通知表示は `notification_context` を共通層にして、件名・本文・詳細 HTML・`evaluation_trace` で `ステータス` `執行判断` `方向判断` を同じ順番で出す形へ更新済み。説明メモは [通知共通層_notification_contextメモ.md](運用/実務/通知共通層_notification_contextメモ.md)。
@@ -21,7 +21,7 @@
 - `Ver02.3-v5` では、AI の役割を「全サイクル補足」から「通知時監査」へ切り替え、通知時だけ `ai_audit` を保存する実装まで完了済み。
 - `Ver02.3v4` と `Ver02.3-v5` の差分要約メモを [Ver02.3v4とVer02.3-v5の差分要約.md](計画/Ver02.3v4とVer02.3-v5の差分要約.md) として保存済み。
 - 直近確認では `direction_execution_conflict=3件`、`countertrend_long_cluster=4件` を速報で拾える状態になった。
-- Global_BOX の `開発環境/iMac 2019` は `2026-04-02 04:33 JST` 時点の実測へ更新済み。現在ロード中として残すのは `com.afrog.btc-monitor` が主、`status-sync` は未ロードへ移した。
+- Global_BOX の `開発環境/iMac 2019` は `2026-04-02 15:28 JST` 時点の実測へ更新済み。現在ロード中は `com.afrog.btc-monitor` のみ。
 
 ## 次のタスク
 1. AI を通知時のみの監査役に切り替えた後、`main` / `attention` 通知でだけ `ai_audit` が保存され、非通知サイクルでは `skipped_non_notify` になることを確認する。

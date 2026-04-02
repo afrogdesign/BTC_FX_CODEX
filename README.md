@@ -75,24 +75,10 @@ zsh tools/sync_ver021_prod_status.sh
 
 補足:
 
-- まずはこちらを普段使いの入口にします。
+- これは archive や旧版本番を確認したいときだけ使う手動入口です。
 - 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
 - そのあと `tmp/status/prod_status_summary.json` と `tmp/status/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
-
-### 2時間ごとの軽量同期を登録する
-
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/start_prod_status_sync.sh
-```
-
-補足:
-
-- 基本は `iMac 2019` 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
-- `MBA M4` は持ち運び前提なので、常設先にはしません。
-- 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
-- 定期処理は `launchd` に固定し、AI の自動巡回は使いません。
-- 日常確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見ます。
+- 現行運用では `launchd` 常設ジョブは使いません。
 
 ### 本番 Ver02.1 ログをフル取得する
 
