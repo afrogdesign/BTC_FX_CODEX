@@ -1139,8 +1139,6 @@ def slugify_label(value: Any) -> str:
 def detail_page_enabled(cfg: Any, result: dict[str, Any]) -> bool:
     if not bool(getattr(cfg, "NOTIFICATION_HTML_ENABLED", False)):
         return False
-    if str(result.get("notification_kind", "main")).lower() == "attention":
-        return bool(getattr(cfg, "NOTIFICATION_HTML_INCLUDE_ATTENTION", True))
     return True
 
 

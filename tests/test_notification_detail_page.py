@@ -138,7 +138,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("ver02-3v3-obs/attention/20260331_020500.html", str(local_path))
         self.assertTrue(public_url.endswith("/ver02-3v3-obs/attention/20260331_020500.html"))
 
-    def test_detail_page_enabled_can_skip_attention(self) -> None:
+    def test_detail_page_enabled_includes_attention_when_html_is_enabled(self) -> None:
         required_env = {
             "OPENAI_API_KEY": "x",
             "SMTP_HOST": "smtp",
@@ -148,13 +148,12 @@ class NotificationDetailPageTests(unittest.TestCase):
             "MAIL_FROM": "a@example.com",
             "MAIL_TO": "b@example.com",
             "NOTIFICATION_HTML_ENABLED": "true",
-            "NOTIFICATION_HTML_INCLUDE_ATTENTION": "false",
         }
         with tempfile.TemporaryDirectory() as tmp_dir:
             with patch.dict(os.environ, required_env, clear=False):
                 cfg = load_config(Path(tmp_dir))
 
-        self.assertFalse(detail_page_enabled(cfg, {"notification_kind": "attention"}))
+        self.assertTrue(detail_page_enabled(cfg, {"notification_kind": "attention"}))
         self.assertTrue(detail_page_enabled(cfg, {"notification_kind": "main"}))
 
     def test_run_cycle_appends_detail_page_url_on_publish_success(self) -> None:

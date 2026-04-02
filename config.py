@@ -110,7 +110,6 @@ def _coerce_value(key: str, value: str) -> Any:
         "AI_CACHE_ENABLED",
         "DRYRUN_MODE",
         "NOTIFICATION_HTML_ENABLED",
-        "NOTIFICATION_HTML_INCLUDE_ATTENTION",
     }
 
     if key in int_keys:
@@ -280,7 +279,6 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "AI_RETRY_COUNT": 3,
         "AI_CACHE_ENABLED": False,
         "NOTIFICATION_HTML_ENABLED": False,
-        "NOTIFICATION_HTML_INCLUDE_ATTENTION": True,
         "NOTIFICATION_HTML_PUBLIC_BASE_URL": "https://server.afrog.jp/btc-monitor/notifications",
         "NOTIFICATION_HTML_REMOTE_SSH_HOST": "maruPro@macserver.afrog.jp",
         "NOTIFICATION_HTML_REMOTE_DIR": "/Volumes/Server_HD2/site/btc-monitor/notifications",
