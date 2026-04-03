@@ -37,7 +37,7 @@ def _subject_status_emoji(status_code: str) -> str:
         "attention": "👀",
         "actionable": "✅",
         "monitor": "👀",
-        "invalid": "🛑",
+        "invalid": "⛔️",
         "neutral": "🧭",
     }
     return mapping.get(str(status_code or "").lower(), "🧭")

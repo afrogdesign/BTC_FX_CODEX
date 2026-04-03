@@ -133,7 +133,7 @@ def _status_emoji(status_code: str) -> str:
         "actionable": "✅",
         "monitor": "👀",
         "attention": "🚨",
-        "invalid": "🛑",
+        "invalid": "⛔️",
         "neutral": "🧭",
     }.get(str(status_code), "🧭")
 
@@ -287,13 +287,13 @@ def _price_map_svg(result: dict[str, Any]) -> str:
     values = [value for value in values if value > 0]
     chart_min = min(values) if values else 0.0
     chart_max = max(values) if values else 1.0
-    padding = max((chart_max - chart_min) * 0.1, 160.0)
+    padding = max((chart_max - chart_min) * 0.06, 80.0)
     chart_min -= padding
     chart_max += padding
 
     width = 860
-    height = 440
-    top = 36
+    height = 670
+    top = 42
     bottom = 42
     left = 34
     right = 132
@@ -373,7 +373,7 @@ def _price_map_svg(result: dict[str, Any]) -> str:
         callout_width = 236
         callout_height = 52
         callout_x = chart_left + 16 if side == "long" else chart_left + 92
-        callout_y = y1 - callout_height - 12 if side == "long" else y1 - callout_height - 28
+        callout_y = y2 + 12 if side == "long" else y1 - callout_height - 28
         axis_value_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
         return [
             f'<rect x="{band_x:.1f}" y="{y1:.1f}" width="{band_width:.1f}" height="{max(y2 - y1, 14):.1f}" rx="12" class="{band_class}" />',
@@ -864,7 +864,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       line-height: 1.6;
     }}
     .price-map-wrap {{
-      padding: 10px 0 0;
+      padding: 14px 0 6px;
       background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%);
       border-color: #263148;
     }}
@@ -880,12 +880,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     }}
     .chart-title {{
       fill: #eff6ff;
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 700;
     }}
     .chart-subtitle {{
       fill: #93a4bf;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
     }}
     .price-grid-h {{
@@ -914,12 +914,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     }}
     .setup-band-text-long {{
       fill: #dcfce7;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
     }}
     .setup-band-text-short {{
       fill: #fee2e2;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
     }}
     .setup-callout-long, .setup-callout-short {{
@@ -935,32 +935,32 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     }}
     .setup-callout-text-long {{
       fill: #bbf7d0;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
     }}
     .setup-callout-text-short {{
       fill: #fecaca;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
     }}
     .setup-callout-value {{
       fill: #dbe7f7;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
     }}
     .setup-axis-value-long {{
       fill: #4ade80;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
     }}
     .setup-axis-value-short {{
       fill: #f87171;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
     }}
     .price-axis {{
       fill: #9db0ca;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
     }}
     .current-price-line {{
@@ -980,12 +980,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     }}
     .current-price-box-label {{
       fill: #eff6ff;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
     }}
     .current-price-box-value {{
       fill: #bfdbfe;
-      font-size: 11px;
+      font-size: 13px;
       font-weight: 500;
     }}
     .marker-line {{
@@ -1013,6 +1013,8 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       .takeaway {{ font-size: 18px; }}
       .wrap {{ padding: 16px 12px 42px; }}
       .hero, .section {{ border-radius: 18px; }}
+      .price-map-wrap {{ padding: 12px 0 10px; }}
+      .panel.price-map-wrap {{ padding-left: 0; padding-right: 0; }}
     }}
   </style>
 </head>
