@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor Ver02.3 通知レベルの見方ガイド</title>
+  <style>
+    :root {
+      --bg: #f5efe7;
+      --paper: #fffdf9;
+      --ink: #1e2933;
+      --muted: #5c6972;
+      --line: #d7ccbd;
+      --blue: #1d4ed8;
+      --blue-soft: #dbeafe;
+      --amber: #c97316;
+      --amber-soft: #fdebd8;
+      --green: #0f766e;
+      --green-soft: #daf1ee;
+      --red: #b42318;
+      --red-soft: #fde2df;
+      --gray: #6b7280;
+      --gray-soft: #eef1f5;
+      --shadow: 0 16px 36px rgba(29, 41, 51, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(29, 78, 216, 0.07), transparent 25rem),
+        radial-gradient(circle at top right, rgba(201, 115, 22, 0.08), transparent 24rem),
+        linear-gradient(180deg, #ebe4d8 0%, var(--bg) 18%, #f9f6f0 100%);
+      line-height: 1.7;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 36px 20px 72px; }
+    .hero, .panel, .table-wrap {
+      background: rgba(255, 253, 249, 0.95);
+      border: 1px solid rgba(215, 204, 189, 0.95);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+    }
+    .hero { padding: 34px; margin-bottom: 24px; }
+    .panel { padding: 22px; }
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      line-height: 1.18;
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.1rem); }
+    h2 { font-size: clamp(1.35rem, 2.7vw, 2rem); margin-top: 34px; }
+    h3 { font-size: 1.14rem; }
+    p, li, td, th { font-size: 0.98rem; }
+    .lead { color: var(--muted); font-size: 1.06rem; max-width: 64rem; margin: 0; }
+    .meta, .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      list-style: none;
+      padding: 0;
+      margin: 0 0 16px;
+    }
+    .chip, .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(215, 204, 189, 0.95);
+      background: rgba(255,255,255,0.82);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      margin-top: 20px;
+    }
+    .rank-card { border-top: 8px solid var(--blue); }
+    .state-card { border-top: 8px solid var(--amber); }
+    .mail-card { border-top: 8px solid var(--green); }
+    .tag-blue { background: var(--blue-soft); color: var(--blue); border-color: rgba(29, 78, 216, 0.18); }
+    .tag-amber { background: var(--amber-soft); color: var(--amber); border-color: rgba(201, 115, 22, 0.18); }
+    .tag-green { background: var(--green-soft); color: var(--green); border-color: rgba(15, 118, 110, 0.18); }
+    .tag-red { background: var(--red-soft); color: var(--red); border-color: rgba(180, 35, 24, 0.18); }
+    .tag-gray { background: var(--gray-soft); color: var(--gray); border-color: rgba(107, 114, 128, 0.18); }
+    .big { font-size: 1.9rem; font-weight: 800; line-height: 1; margin-bottom: 10px; }
+    .table-wrap { margin-top: 18px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; vertical-align: top; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: 0.88rem; letter-spacing: 0.03em; background: rgba(247, 241, 233, 0.9); }
+    tr:last-child td { border-bottom: none; }
+    .callout {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.76);
+    }
+    .mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.94em; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">更新日: 2026-04-03 JST</li>
+        <li class="chip">対象: Ver02.3-v5</li>
+        <li class="chip">正本コード: <span class="mono">src/notification/trigger.py</span> / <span class="mono">src/presentation/sanitize.py</span></li>
+      </ul>
+      <h1>通知レベルの見方ガイド</h1>
+      <p class="lead">いま人間が見るべき主ラベルは、<strong>最終ランク</strong>の5段階だけです。旧来の <strong>執行可 / 監視 / 無効 / 注意報 / 中立</strong> は残っていますが、これはもうランクではなく、最終ランクの中身を補足する説明用ラベルです。</p>
+    </section>
+
+    <section class="grid">
+      <article class="panel rank-card">
+        <div class="big">最終ランク</div>
+        <p><span class="badge tag-blue">主表示</span> 件名、本文、詳細HTMLの先頭で使う、人間向けの最終分類です。</p>
+        <ul>
+          <li>🔥 強い本通知</li>
+          <li>🟠 高め本通知</li>
+          <li>📊 通常の本通知</li>
+          <li>👀 注意報</li>
+          <li>⚪ 送信なし</li>
+        </ul>
+      </article>
+      <article class="panel state-card">
+        <div class="big">補足状態</div>
+        <p><span class="badge tag-amber">補足説明</span> 「なぜそのランクか」を補足する意味ラベルです。</p>
+        <ul>
+          <li>執行可 = 条件成立</li>
+          <li>監視 = 条件接近</li>
+          <li>無効 = 執行不可</li>
+          <li>注意報 = 方向変化の早期共有</li>
+          <li>中立 = 方向優位なし</li>
+        </ul>
+      </article>
+      <article class="panel mail-card">
+        <div class="big">メール送信</div>
+        <p><span class="badge tag-green">送る / 送らない</span> の判定は最終ランクで読みます。</p>
+        <ul>
+          <li>🔥 / 🟠 / 📊 / 👀 はメールあり</li>
+          <li>⚪ はメールなし</li>
+          <li>補足状態だけでは送信有無は決まらない</li>
+        </ul>
+      </article>
+    </section>
+
+    <h2>一番大事な見方</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>見出し</th>
+            <th>いまの意味</th>
+            <th>メールが来るか</th>
+            <th>人間の読み方</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge tag-blue">🔥 強い本通知</span></td>
+            <td>条件がかなり整った main</td>
+            <td><span class="badge tag-green">来る</span></td>
+            <td>かなり有力な本通知として扱う</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-blue">🟠 高め本通知</span></td>
+            <td>一段強い main</td>
+            <td><span class="badge tag-green">来る</span></td>
+            <td>本通知だが最上位ではない</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-blue">📊 通常の本通知</span></td>
+            <td>標準的な main</td>
+            <td><span class="badge tag-green">来る</span></td>
+            <td>通常の本通知として扱う</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-blue">👀 注意報</span></td>
+            <td>early warning の attention</td>
+            <td><span class="badge tag-green">来る</span></td>
+            <td>売買推奨ではなく早め共有として扱う</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-gray">⚪ 送信なし</span></td>
+            <td>メール条件未成立</td>
+            <td><span class="badge tag-red">来ない</span></td>
+            <td>ここはログだけ残る</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <strong>重要:</strong> <span class="mono">監視</span> はもうランクではありません。たとえば「🟠 高め本通知 + 監視」は普通にありえます。読み方は「ランクは高め本通知、その中身は監視段階」です。
+    </div>
+
+    <h2>具体例</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ケース</th>
+            <th>最終ランク</th>
+            <th>補足状態</th>
+            <th>読み方</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>条件がかなり整った本通知</td>
+            <td><span class="badge tag-blue">🔥 強い本通知</span></td>
+            <td><span class="badge tag-amber">執行可</span></td>
+            <td>かなり有力で、条件も成立している</td>
+          </tr>
+          <tr>
+            <td>条件が寄ってきた本通知</td>
+            <td><span class="badge tag-blue">🟠 高め本通知</span></td>
+            <td><span class="badge tag-amber">監視</span></td>
+            <td>本通知だが、まだ監視段階</td>
+          </tr>
+          <tr>
+            <td>方向はあるが今は入れない</td>
+            <td><span class="badge tag-blue">📊 通常の本通知</span></td>
+            <td><span class="badge tag-amber">無効</span></td>
+            <td>本通知は来るが、現時点では執行不可</td>
+          </tr>
+          <tr>
+            <td>早めの注意だけ共有</td>
+            <td><span class="badge tag-blue">👀 注意報</span></td>
+            <td><span class="badge tag-amber">注意報</span></td>
+            <td>本通知ではなく、早めの注意共有</td>
+          </tr>
+          <tr>
+            <td>材料不足で送らない</td>
+            <td><span class="badge tag-gray">⚪ 送信なし</span></td>
+            <td><span class="badge tag-gray">中立など</span></td>
+            <td>メール自体が来ない</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>短く言うと</h2>
+    <section class="panel">
+      <ul>
+        <li>最初に見るのは <strong>最終ランク</strong></li>
+        <li>次に見るのは <strong>補足状態</strong></li>
+        <li>補足状態は「主ラベル」ではなく、ランクの理由説明</li>
+      </ul>
+      <p><strong>式で書くと:</strong> <span class="mono">最終ランク = 人間向けの出口</span>、<span class="mono">補足状態 = その出口の中身の説明</span> です。</p>
+    </section>
+  </div>
+</body>
+</html>

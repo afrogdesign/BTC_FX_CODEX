@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTC Monitor Ver02.3 通知発動リーグ表</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --paper: #fffdf8;
+      --ink: #1f2a33;
+      --muted: #58656f;
+      --line: #d8cfbf;
+      --blue: #155eef;
+      --blue-soft: #dbe8ff;
+      --amber: #c76c15;
+      --amber-soft: #fde9d7;
+      --green: #0f766e;
+      --green-soft: #daf2ef;
+      --gray: #6b7280;
+      --gray-soft: #eceff3;
+      --shadow: 0 16px 40px rgba(28, 36, 44, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Hiragino Sans", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(21, 94, 239, 0.08), transparent 26rem),
+        radial-gradient(circle at top right, rgba(199, 108, 21, 0.09), transparent 24rem),
+        linear-gradient(180deg, #ece7dc 0%, var(--bg) 20%, #f8f5ee 100%);
+      line-height: 1.7;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 38px 20px 72px; }
+    .hero, .panel, .table-wrap {
+      background: rgba(255, 253, 248, 0.94);
+      border: 1px solid rgba(216, 207, 191, 0.95);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+    .hero { padding: 34px; margin-bottom: 24px; }
+    .panel { padding: 22px; }
+    h1, h2, h3 {
+      font-family: "Avenir Next Condensed", "Hiragino Sans", sans-serif;
+      line-height: 1.18;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { font-size: clamp(1.35rem, 2.8vw, 2rem); margin-top: 34px; }
+    h3 { font-size: 1.15rem; }
+    p, li, td, th { font-size: 0.98rem; }
+    .lead { color: var(--muted); font-size: 1.05rem; max-width: 62rem; margin: 0; }
+    .meta, .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      list-style: none;
+      padding: 0;
+      margin: 0 0 16px;
+    }
+    .chip, .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 7px 12px;
+      border: 1px solid rgba(216, 207, 191, 0.95);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      margin-top: 20px;
+    }
+    .tag-blue { background: var(--blue-soft); color: var(--blue); border-color: rgba(21, 94, 239, 0.18); }
+    .tag-amber { background: var(--amber-soft); color: var(--amber); border-color: rgba(199, 108, 21, 0.2); }
+    .tag-green { background: var(--green-soft); color: var(--green); border-color: rgba(15, 118, 110, 0.18); }
+    .tag-gray { background: var(--gray-soft); color: #49505a; border-color: rgba(107, 114, 128, 0.18); }
+    .table-wrap { margin-top: 18px; overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      font-size: 0.88rem;
+      color: var(--muted);
+      background: rgba(248, 244, 236, 0.92);
+    }
+    tr:last-child td { border-bottom: none; }
+    .mono { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.94em; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <ul class="meta">
+        <li class="chip">更新日: 2026-04-03 JST</li>
+        <li class="chip">対象: Ver02.3-v5 の最新通知判定</li>
+        <li class="chip">正本コード: <span class="mono">src/notification/trigger.py</span> / <span class="mono">src/presentation/sanitize.py</span> / <span class="mono">src/analysis/signal_tier.py</span></li>
+      </ul>
+      <h1>通知発動リーグ表</h1>
+      <p class="lead">いまのリーグ表は <strong>最終ランク</strong> を基準に読みます。補足状態はランクではなく説明用です。したがって「どのメールが来るか」は、この表の最終ランク列だけ見れば判断できます。</p>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h3>最終ランクの5段階</h3>
+        <ul>
+          <li>🔥 強い本通知</li>
+          <li>🟠 高め本通知</li>
+          <li>📊 通常の本通知</li>
+          <li>👀 注意報</li>
+          <li>⚪ 送信なし</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>送信あり / なし</h3>
+        <div class="legend">
+          <span class="badge tag-green">送信あり: 🔥 / 🟠 / 📊 / 👀</span>
+          <span class="badge tag-gray">送信なし: ⚪</span>
+        </div>
+        <p>旧ラベルの <span class="mono">執行可 / 監視 / 無効 / 注意報 / 中立</span> は、この判定を上書きしません。</p>
+      </article>
+      <article class="panel">
+        <h3>強い本通知の条件</h3>
+        <p><span class="badge tag-blue">signal_tier = strong_machine</span> のときだけ 🔥 になります。</p>
+        <ul>
+          <li><span class="mono">prelabel = ENTRY_OK</span></li>
+          <li><span class="mono">primary_setup_status = ready</span></li>
+          <li>confidence が方向下限 + 10 以上</li>
+          <li><span class="mono">rr_estimate ≥ 1.8</span></li>
+        </ul>
+      </article>
+    </section>
+
+    <h2>最終ランク決定表</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>最終ランク</th>
+            <th>決定条件</th>
+            <th>メール</th>
+            <th>補足状態の例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge tag-blue">🔥 強い本通知</span></td>
+            <td><span class="mono">notification_kind = main</span> かつ <span class="mono">signal_tier = strong_machine</span></td>
+            <td><span class="badge tag-green">送る</span></td>
+            <td>執行可 が典型</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-blue">🟠 高め本通知</span></td>
+            <td><span class="mono">main</span> で、ready / ENTRY_OK / confidence 高め / RR改善 / score_gap 大 のどれか</td>
+            <td><span class="badge tag-green">送る</span></td>
+            <td>監視、執行可、無効 のいずれもありうる</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-blue">📊 通常の本通知</span></td>
+            <td><span class="mono">main</span> だが、上の強化条件までは未達</td>
+            <td><span class="badge tag-green">送る</span></td>
+            <td>無効 や 監視 が典型</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-amber">👀 注意報</span></td>
+            <td><span class="mono">notification_kind = attention</span></td>
+            <td><span class="badge tag-green">送る</span></td>
+            <td>補足状態も 注意報</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-gray">⚪ 送信なし</span></td>
+            <td><span class="mono">notification_kind != main/attention</span>、または bias/変化/条件不足</td>
+            <td><span class="badge tag-gray">送らない</span></td>
+            <td>中立 など</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>補足状態の位置づけ</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>補足状態</th>
+            <th>意味</th>
+            <th>最終ランクとの関係</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge tag-amber">執行可</span></td>
+            <td>条件成立</td>
+            <td>🔥 / 🟠 / 📊 のどれにも付きうる</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-amber">監視</span></td>
+            <td>条件接近</td>
+            <td>🟠 や 📊 と組み合わさりやすい</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-amber">無効</span></td>
+            <td>執行不可</td>
+            <td>📊 や 🟠 で出ることがある</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-amber">注意報</span></td>
+            <td>方向変化の早期共有</td>
+            <td>最終ランク 👀 の中身説明</td>
+          </tr>
+          <tr>
+            <td><span class="badge tag-gray">中立</span></td>
+            <td>方向優位なし</td>
+            <td>最終ランク ⚪ の中身説明</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

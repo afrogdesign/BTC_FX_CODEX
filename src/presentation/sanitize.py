@@ -303,6 +303,48 @@ def _execution_label(status_code: str) -> str:
     return "見送り"
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str, str]:
+    notification_kind = str(result.get("notification_kind", "")).lower().strip()
+    bias = str(result.get("bias", "")).lower()
+    is_main_context = notification_kind == "main" or (
+        notification_kind not in {"main", "attention", "none"} and status_code in {"actionable", "monitor", "invalid"} and bias in {"long", "short"}
+    )
+
+    if notification_kind == "attention":
+        return "attention", "注意報", "👀", "方向変化の早期共有"
+
+    if not is_main_context:
+        return "no_send", "送信なし", "⚪", "メール送信条件は未成立"
+
+    signal_tier = str(result.get("signal_tier", "normal")).strip().lower()
+    if signal_tier == "strong_machine":
+        return "strong_main", "強い本通知", "🔥", "条件がかなり整った本通知"
+
+    confidence = _safe_float(result.get("confidence"))
+    confidence_floor = 45.0 if bias == "long" else 55.0 if bias == "short" else 50.0
+    prelabel = str(result.get("prelabel", "")).upper()
+    rr_estimate = _safe_float(result.get("rr_estimate"))
+    score_gap = abs(_safe_float(result.get("score_gap")))
+
+    is_high = (
+        status_code == "actionable"
+        or prelabel == "ENTRY_OK"
+        or confidence >= confidence_floor + 8.0
+        or rr_estimate >= 1.3
+        or score_gap >= 25.0
+    )
+    if is_high:
+        return "high_main", "高め本通知", "🟠", "条件が一段強い本通知"
+    return "normal_main", "通常の本通知", "📊", "標準的な本通知"
+
+
 def _entry_window_label(reason_code: str) -> str:
     mapping = {
         "inside_entry_zone_with_trigger": "現値帯のみ条件付き",
@@ -392,12 +434,17 @@ def _format_zone_label(name: str, zones: Any) -> str:
 def build_notification_context(result: dict[str, Any]) -> dict[str, Any]:
     display_context = build_display_context(result)
     status_code, status_label, status_explanation = _notification_status(result)
+    final_rank_code, final_rank_label, final_rank_emoji, final_rank_explanation = _final_rank(result, status_code)
     primary_reason = _primary_setup_reason(result)
     headline_reasons = _headline_reason_labels(result, limit=3)
     return {
         "status_code": status_code,
         "status_label": status_label,
         "status_explanation": status_explanation,
+        "final_rank_code": final_rank_code,
+        "final_rank_label": final_rank_label,
+        "final_rank_emoji": final_rank_emoji,
+        "final_rank_explanation": final_rank_explanation,
         "execution_label": _execution_label(status_code),
         "entry_window_label": _entry_window_label(primary_reason),
         "reason_labels": headline_reasons,

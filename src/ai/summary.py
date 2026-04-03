@@ -107,7 +107,8 @@ def _root_summary_lines(
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【結論】",
-        f"ステータス: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
+        f"最終ランク: {notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}（{notification_context.get('final_rank_explanation', 'メール送信条件は未成立')}）",
+        f"補足状態: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
         f"方向判断: {display_context['direction_label']}",
         f"執行判断: {notification_context.get('execution_label', '見送り')}",
         f"現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
@@ -191,7 +192,8 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
         "これは売買推奨メールではなく、方向の変化を早めに共有する注意通知です。",
         "",
         "【今の見立て】",
-        f"- ステータス: {notification_context.get('status_label', '注意報')}（{notification_context.get('status_explanation', '方向変化の早期共有')}）",
+        f"- 最終ランク: {notification_context.get('final_rank_emoji', '👀')} {notification_context.get('final_rank_label', '注意報')}（{notification_context.get('final_rank_explanation', '方向変化の早期共有')}）",
+        f"- 補足状態: {notification_context.get('status_label', '注意報')}（{notification_context.get('status_explanation', '方向変化の早期共有')}）",
         f"- 方向判断: {display_context['direction_label']}",
         f"- 執行判断: {notification_context.get('execution_label', '見送り')}",
         f"- 現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
@@ -240,9 +242,10 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
     headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
-    status_emoji = _subject_status_emoji(notification_context.get("status_code", ""))
+    rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
+    rank_label = str(notification_context.get("final_rank_label", "送信なし")).strip()
     subject = (
-        f"{status_emoji} [{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} | "
+        f"{rank_emoji} [{rank_label}] "
         f"{display_context['direction_compact_label']} | {headline_reason} "
         f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()

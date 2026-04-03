@@ -139,6 +139,8 @@ def build_evaluation_trace(
             "confidence_metric_labels": display_context.get("confidence_metric_labels", {}),
         },
         "notification_status_code": ((result.get("notification_context") or {}).get("status_code", "")),
+        "notification_final_rank_code": ((result.get("notification_context") or {}).get("final_rank_code", "")),
+        "notification_final_rank_label": ((result.get("notification_context") or {}).get("final_rank_label", "")),
         "notification_execution_label": ((result.get("notification_context") or {}).get("execution_label", "")),
         "notification_reason_headline": (((result.get("notification_context") or {}).get("reason_labels") or [""])[0]),
         "notification_validity_label": ((result.get("notification_context") or {}).get("validity_label", "")),

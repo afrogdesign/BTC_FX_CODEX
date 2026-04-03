@@ -19,9 +19,11 @@ class SummaryFormatTest(unittest.TestCase):
             "system_label": "Ver02.3",
             "system_mode_label": "API",
             "prelabel": "ENTRY_OK",
+            "signal_tier": "strong_machine",
             "bias": "long",
             "current_price": 70356.3,
             "confidence": 79,
+            "rr_estimate": 1.85,
             "confidence_direction_shadow": 88.0,
             "confidence_execution_shadow": 72.0,
             "confidence_wait_shadow": 18.0,
@@ -80,11 +82,12 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertEqual(provider_used, "api")
-        self.assertIn("✅ [執行可]", subject)
+        self.assertIn("🔥 [強い本通知]", subject)
         self.assertIn("上方向バイアス", subject)
-        self.assertIn("条件付きで検討", subject)
+        self.assertNotIn("条件付きで検討 |", subject)
         self.assertNotIn("総合強度", subject)
-        self.assertIn("ステータス: 執行可（条件成立）", body)
+        self.assertIn("最終ランク: 🔥 強い本通知（条件がかなり整った本通知）", body)
+        self.assertIn("補足状態: 執行可（条件成立）", body)
         self.assertIn("方向判断: 相場は上方向バイアスです", body)
         self.assertIn("執行判断: 条件付きで検討", body)
         self.assertIn("現値帯の扱い: 現値帯のみ条件付き", body)
@@ -132,10 +135,14 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報] 見送り |"))
+        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報] "))
         self.assertIn("下方向バイアス", subject)
+        self.assertNotIn("🔥", subject)
+        self.assertNotIn("🟠", subject)
+        self.assertNotIn("📊", subject)
         self.assertNotIn("総合強度", subject)
-        self.assertIn("ステータス: 注意報（方向変化の早期共有）", body)
+        self.assertIn("最終ランク: 👀 注意報（方向変化の早期共有）", body)
+        self.assertIn("補足状態: 注意報（方向変化の早期共有）", body)
         self.assertIn("上側流動性スイープ完了後に再評価", body)
         self.assertIn("方向の強さ: 62.0", body)
         self.assertIn("実行しやすさ: 28.0", body)
@@ -150,10 +157,12 @@ class SummaryFormatTest(unittest.TestCase):
             "system_mode_label": "CLI",
             "prelabel": "SWEEP_WAIT",
             "bias": "short",
+            "signal_tier": "normal",
             "primary_setup_status": "watch",
             "primary_setup_reason": "near_entry_zone_waiting_trigger",
             "current_price": 73911.8,
             "confidence": 66,
+            "rr_estimate": 1.18,
             "confidence_direction_shadow": 74.0,
             "confidence_execution_shadow": 31.0,
             "confidence_wait_shadow": 58.0,
@@ -178,7 +187,10 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertTrue(subject.startswith("[機械判定のみ] "))
+        self.assertIn("🟠 [高め本通知]", subject)
         self.assertIn("下方向バイアス", body)
+        self.assertIn("最終ランク: 🟠 高め本通知（条件が一段強い本通知）", body)
+        self.assertIn("補足状態: 監視（条件接近）", body)
         self.assertNotIn("総合強度", subject)
         self.assertIn("上側流動性スイープ完了後に再評価", body)
         self.assertIn("近い買い板があり短期ノイズに注意", body)

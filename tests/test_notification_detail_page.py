@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -22,6 +23,7 @@ from src.notification.detail_page import (
     build_notification_detail_html,
     detail_page_enabled,
     detail_page_paths,
+    publish_notification_detail,
 )
 
 
@@ -63,6 +65,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             "summary_subject": "下方向バイアス / 上側流動性回収待ち",
             "system_label": "Ver02.3v3-OBS",
             "notification_kind": "main",
+            "signal_tier": "normal",
             "bias": "short",
             "prelabel": "SWEEP_WAIT",
             "market_regime": "downtrend",
@@ -74,6 +77,8 @@ class NotificationDetailPageTests(unittest.TestCase):
             "short_display_score": 100,
             "score_gap": -49,
             "current_price": 65817.7,
+            "confidence": 66,
+            "rr_estimate": 1.18,
             "funding_rate_display": "ほぼ中立 (+0.0028%)",
             "atr_ratio": 1.75,
             "volume_ratio": 4.53,
@@ -111,12 +116,15 @@ class NotificationDetailPageTests(unittest.TestCase):
         html = build_notification_detail_html(payload)
 
         self.assertIn("3つの数字を丁寧に読む", html)
-        self.assertIn("ステータス", html)
+        self.assertIn("最終ランク", html)
         self.assertIn("今の行動", html)
         self.assertIn("方向の強さ", html)
         self.assertIn("実行しやすさ", html)
         self.assertIn("待機圧力", html)
         self.assertIn("スコア差", html)
+        self.assertIn("最終ランク", html)
+        self.assertIn("🟠 高め本通知", html)
+        self.assertIn("補足状態", html)
         self.assertIn("ロング / ショートの再検討ライン", html)
         self.assertNotIn("AI補足の読み解き", html)
         self.assertNotIn("&lt;強い下方向&gt;", html)
@@ -287,6 +295,52 @@ class NotificationDetailPageTests(unittest.TestCase):
 
         self.assertEqual(captured["body"], "summary body")
         self.assertEqual(result["detail_page_status"], "failed")
+
+    def test_publish_notification_detail_uses_stable_ip_host(self) -> None:
+        cfg = SimpleNamespace(
+            NOTIFICATION_HTML_LOCAL_DIR="logs/notifications_html",
+            NOTIFICATION_HTML_PUBLIC_BASE_URL="https://server.afrog.jp/btc-monitor/notifications",
+            NOTIFICATION_HTML_REMOTE_SSH_HOST="maruPro@192.168.50.5",
+            NOTIFICATION_HTML_REMOTE_SSH_KEY="~/.ssh/id_ed25519_afrog_lan",
+            NOTIFICATION_HTML_REMOTE_DIR="/Volumes/Server_HD2/site/btc-monitor/notifications",
+        )
+        result = {
+            "signal_id": "20260403_090500",
+            "system_label": "Ver02.3-v5",
+            "notification_kind": "main",
+            "summary_subject": "subject",
+        }
+        calls: list[list[str]] = []
+
+        def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            with patch("src.notification.detail_page.subprocess.run", side_effect=_fake_run):
+                publish_info = publish_notification_detail(base_dir, cfg, result)
+
+        self.assertEqual(publish_info["detail_page_status"], "published")
+        self.assertEqual(publish_info["detail_page_remote_host"], "maruPro@192.168.50.5")
+        self.assertIn(
+            [
+                "ssh",
+                "-o",
+                "IdentitiesOnly=yes",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=5",
+                "-i",
+                str(Path("~/.ssh/id_ed25519_afrog_lan").expanduser()),
+                "maruPro@192.168.50.5",
+                "mkdir",
+                "-p",
+                "/Volumes/Server_HD2/site/btc-monitor/notifications/ver02-3-v5/main",
+            ],
+            calls,
+        )
 
 
 if __name__ == "__main__":

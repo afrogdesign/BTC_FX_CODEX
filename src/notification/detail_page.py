@@ -486,7 +486,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
     subject = str(result.get("summary_subject", "")).strip() or (
-        f"[{notification_context.get('status_label', '中立')}] {notification_context.get('execution_label', '見送り')} / "
+        f"{notification_context.get('final_rank_emoji', '')} [{notification_context.get('final_rank_label', '送信なし')}] / "
         f"{display_context.get('direction_compact_label', '中立')}"
     )
     wait_reasons = _build_wait_reasons(display_context, result)
@@ -497,11 +497,13 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     audit_unique_risks = sanitize_flag_list(ai_audit.get("unique_risks", []))
     funding_display = str(result.get("funding_rate_display") or "").strip() or f"{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})"
     summary_chips = [
+        notification_context.get("final_rank_label", "送信なし"),
         notification_context.get("status_label", "中立"),
-        notification_context.get("execution_label", "見送り"),
         display_context.get("direction_compact_label", "中立"),
         display_context.get("entry_quality_label", "内部評価あり"),
     ]
+    if notification_context.get("final_rank_emoji"):
+        summary_chips[0] = f"{notification_context.get('final_rank_emoji', '')} {summary_chips[0]}".strip()
 
     def esc(value: Any) -> str:
         return html.escape(str(value or "未記録"))
@@ -536,7 +538,11 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         )
 
     root_cards = [
-        ("ステータス", f"{notification_context.get('status_label', '')} / {notification_context.get('status_explanation', '')}"),
+        ("最終ランク", f"{notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '')} / {notification_context.get('final_rank_explanation', '')}".strip(" /")),
+        (
+            "補足状態",
+            f"{notification_context.get('status_label', '')} / {notification_context.get('status_explanation', '')}",
+        ),
         ("執行判断", notification_context.get("execution_label", "")),
         ("現値帯の扱い", notification_context.get("entry_window_label", "")),
         ("有効目安", notification_context.get("validity_label", "")),
@@ -567,7 +573,6 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     reason_cards_html = _reason_cards_html(display_reasons)
     raw_mail = _raw_mail_text(result, display_context)
     score_compare_html = _score_compare_rows(result)
-    status_emoji = _status_emoji(str(notification_context.get("status_code", "")))
     price_map_svg = _price_map_svg(result)
     show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
@@ -1015,9 +1020,9 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
   <div class="wrap">
     <section class="hero">
       <p class="muted">{esc(timestamp_jst)} / signal_id {esc(result.get('signal_id', ''))}</p>
-      <div class="hero-kicker">{status_emoji} {esc(notification_context.get('status_label', '中立'))} / {esc(notification_context.get('execution_label', '見送り'))}</div>
+      <div class="hero-kicker">{esc(notification_context.get('final_rank_emoji', ''))} {esc(notification_context.get('final_rank_label', '送信なし'))} / {esc(notification_context.get('status_label', '中立'))}</div>
       <h1>{esc(subject)}</h1>
-      <p class="hero-summary">{status_emoji} {esc(display_context.get('direction_label', ''))}。ただし今回の行動は「{esc(notification_context.get('execution_label', ''))}」です。</p>
+      <p class="hero-summary">{esc(display_context.get('direction_label', ''))}。今回の最終ランクは「{esc(notification_context.get('final_rank_label', '送信なし'))}」で、補足状態は「{esc(notification_context.get('status_label', '中立'))}」です。</p>
       <p class="hero-sub">方向とタイミングを分けて読むため、まずは「入っていいか」を先に判断できる構成にしています。</p>
       <div>{chips_html(summary_chips)}</div>
       <div class="overview-grid">
@@ -1156,37 +1161,74 @@ def detail_page_paths(base_dir: Path, cfg: Any, result: dict[str, Any]) -> tuple
     return local_path, public_url
 
 
+def _notification_remote_hosts(cfg: Any) -> list[str]:
+    configured = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_SSH_HOST", "maruPro@192.168.50.5")).strip()
+    candidates = [
+        configured,
+        "maruPro@macserver.afrog.jp",
+        "maruPro@192.168.50.5",
+    ]
+    hosts: list[str] = []
+    seen: set[str] = set()
+    for host in candidates:
+        normalized = str(host).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        hosts.append(normalized)
+    return hosts
+
+
+def _notification_ssh_args(cfg: Any) -> list[str]:
+    args = ["-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+    key_path = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_SSH_KEY", "~/.ssh/id_ed25519_afrog_lan")).strip()
+    if key_path:
+        expanded = str(Path(key_path).expanduser())
+        args.extend(["-i", expanded])
+    return args
+
+
 def publish_notification_detail(base_dir: Path, cfg: Any, result: dict[str, Any]) -> dict[str, Any]:
     local_path, public_url = detail_page_paths(base_dir, cfg, result)
     local_path.parent.mkdir(parents=True, exist_ok=True)
     local_path.write_text(build_notification_detail_html(result), encoding="utf-8")
 
-    remote_host = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_SSH_HOST", "maruPro@macserver.afrog.jp")).strip()
     remote_root = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_DIR", "/Volumes/Server_HD2/site/btc-monitor/notifications")).strip()
     system_slug = slugify_label(result.get("system_label"))
     notification_kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
     remote_dir = f"{remote_root.rstrip('/')}/{system_slug}/{notification_kind}"
-    remote_path = f"{remote_dir}/{local_path.name}"
-
-    subprocess.run(
-        ["ssh", remote_host, "mkdir", "-p", remote_dir],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
-    subprocess.run(
-        ["rsync", "-a", str(local_path), f"{remote_host}:{remote_path}"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=20,
-    )
+    publish_errors: list[str] = []
+    remote_host_used = ""
+    ssh_args = _notification_ssh_args(cfg)
+    for remote_host in _notification_remote_hosts(cfg):
+        remote_path = f"{remote_dir}/{local_path.name}"
+        try:
+            subprocess.run(
+                ["ssh", *ssh_args, remote_host, "mkdir", "-p", remote_dir],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            subprocess.run(
+                ["rsync", "-a", "-e", " ".join(["ssh", *ssh_args]), str(local_path), f"{remote_host}:{remote_path}"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            remote_host_used = remote_host
+            break
+        except Exception as exc:  # noqa: BLE001
+            publish_errors.append(f"{remote_host}: {exc}")
+    if not remote_host_used:
+        raise RuntimeError(" / ".join(publish_errors) or "notification detail publish failed")
     return {
         "detail_page_enabled": True,
         "detail_page_status": "published",
         "detail_page_url": public_url,
         "detail_page_local_path": str(local_path),
+        "detail_page_remote_host": remote_host_used,
         "detail_page_published_at_utc": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
