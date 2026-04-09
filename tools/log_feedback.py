@@ -1408,7 +1408,7 @@ def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dic
 
 
 def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> str:
-    page_title = "通知評価シート入力フォーム"
+    page_title = "AI事後評価の確認・修正フォーム"
     options_payload = {
         "verdict": FORM_VERDICT_OPTIONS,
         "usefulness": FORM_USEFULNESS_OPTIONS,
@@ -1440,8 +1440,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     header_text = _render_review_note([])
     initial_cards_html = _render_static_review_cards(rows_payload, options_payload)
     intro = (
-        "この画面は、新体制の通知を人が直感的にレビューするための入力フォームです。"
-        " 保存すると JSON 正本と CSV、Obsidian 要約が自動で更新されます。"
+        "この画面は、AI が付けた事後評価を人が確認し、必要なときだけ修正するための入力フォームです。"
+        " 保存すると JSON 正本と CSV、Obsidian 要約が自動で更新され、人が保存した行は以後 AI で上書きしません。"
     )
 
     return f"""<!doctype html>
@@ -1756,7 +1756,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         <div>
           <h1>{html.escape(page_title)}</h1>
           <p>{html.escape(intro)}</p>
-          <p class="muted">使い方: まず `この通知、役に立った？` を選ぶ → 補足が必要なら詳細を見る → 完了にする → `保存` を押す。</p>
+          <p class="muted">使い方: まず AI の評価内容を確認 → 修正が必要なら `この通知、役に立った？` などを直す → 完了にする → `保存` を押す。</p>
           <p class="muted">このブラウザでは入力内容を自動で下書き保存します。ページを開き直しても、同じ端末・同じブラウザなら復元されます。</p>
         </div>
         <div class="hero-panel">
@@ -1784,7 +1784,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 
     <div class="card status-panel">
       <h2>保存先</h2>
-      <p class="muted">この画面の保存先は JSON 正本です。保存時に CSV と {html.escape(note_name)} の要約も自動更新します。</p>
+      <p class="muted">この画面は AI 事後評価の確認・修正用です。保存先は JSON 正本で、保存時に CSV と {html.escape(note_name)} の要約も自動更新します。保存した行は `human_override` として固定されます。</p>
       <div id="server-status">ローカル補助への接続を確認中です。</div>
     </div>
   </div>
