@@ -340,7 +340,7 @@
       <ul class="meta">
         <li class="chip">BTC Monitor</li>
         <li class="chip">運用資料 / 計画</li>
-        <li class="chip">更新日: 2026-03-24 11:00 JST</li>
+        <li class="chip">更新日: 2026-04-10 04:20 JST</li>
         <li class="chip">目的: 過去・現在・未来を 1 枚で把握する</li>
       </ul>
       <h1>BTC Monitor 計画全体タイムライン</h1>
@@ -351,6 +351,11 @@
         「何が完了したか」「いま何をしているか」「次に何をするか」「将来どうつながるか」を
         見える化しています。
       </p>
+      <div class="note">
+        このページでは、英語の変数名や内部用語が出てきたら、できるだけその場で
+        「日本語でいうと何か」「その数字や状態が出ると何が分かるか」を添えています。
+        つまり、コードを知らなくても「今は前に進める段階か」を判断できるようにした版です。
+      </div>
       <ul class="legend">
         <li class="tag done">完了・土台化</li>
         <li class="tag current">現在進行</li>
@@ -365,29 +370,107 @@
       <div class="overview">
         <div class="overview-box">
           <strong>現在版</strong>
-          <p><code>Ver02.3</code></p>
-          <p>Phase 0 の本番観測と、Phase 1 の実データ確認準備が中心です。</p>
+          <p><code>Ver02.4-v1</code></p>
+          <p>いま実際に動かして観察している中心の版です。通知の方向だけでなく、入る価格・SL・TP の精度まで後から評価する版になりました。</p>
         </div>
         <div class="overview-box">
           <strong>いまの主戦場</strong>
           <p><code>Phase 0</code> 本番観測中</p>
-          <p><code>Ver02.3-OBS</code> の定刻実行確認と comparison 説明整理が直近課題です。</p>
+          <p>人のレビューを大量にためる段階ではなく、「この仕組みが本番で次の段階に進める状態か」を先に確かめている段階です。</p>
         </div>
         <div class="overview-box">
           <strong>次の大型節目</strong>
           <p><code>Ver03</code></p>
-          <p>Phase 0 一周完了と Phase 1 中核導入確認の両方が必要です。</p>
+          <p>通知を出すだけでなく、サイズ管理や出口管理まで含めて「運用の骨格が本当に入った」と言えるところが次の節目です。</p>
         </div>
         <div class="overview-box">
-          <strong>新しい改善枝</strong>
-          <p>チャートパターン拡張 v1</p>
-          <p>これは本流を置き換える案ではなく、将来の分析基盤へ接続する設計枝です。</p>
+          <strong>いま見る数字</strong>
+          <p><code>daily-sync</code> の Phase 1 判定と価格精度評価</p>
+          <p><code>ready</code> と <code>phase1_active=true</code> に加え、<code>SL評価</code> と <code>TP評価</code>、<code>15分足評価</code> を見れば、今どこを改善すべきかが分かります。</p>
         </div>
       </div>
       <div class="note">
-        このタイムラインでは、過去の土台づくりを上、現在を中央、未来を下へ並べています。
-        「いま実装してよいもの」と「まだ設計だけのもの」が混ざらないよう、色で分けています。
+        いま大事なのは「レビューを何件ためたか」より、
+        「<code>ready</code> と <code>phase1_active=true</code> が live で出たか」と、
+        「通知した価格帯・SL・TP が実務上使えたか」です。
+        <code>live</code> は「本番で実際に動かした結果」という意味です。
+        このタイムラインでは、その判断がどの段階にある話かを迷わず見分けられるようにしています。
       </div>
+    </section>
+
+    <section class="panel">
+      <h2>先に読んでおく用語の意味</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>用語</th>
+            <th>日本語でいうと</th>
+            <th>これが分かると何を判断できるか</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>daily-sync</code></td>
+            <td>毎日の状況をまとめる日次レポート処理</td>
+            <td>今日の運用状況を、細かいログを見なくても先頭だけで把握できます。</td>
+          </tr>
+          <tr>
+            <td><code>ready</code></td>
+            <td>次の段階に進めそうな条件がそろった状態</td>
+            <td>Phase 1 に進む候補が本番で出始めたかを確認できます。</td>
+          </tr>
+          <tr>
+            <td><code>phase1_active=true</code></td>
+            <td>Phase 1 の判断が実際に有効になった状態</td>
+            <td>「候補が出た」だけでなく、「本当に次段階が動いた」かを確認できます。</td>
+          </tr>
+          <tr>
+            <td><code>primary_setup_status</code></td>
+            <td>その通知候補がどの段階まで整っていたかを示す状態名</td>
+            <td><code>ready</code> が増えると、次段階の候補が増えていると判断できます。</td>
+          </tr>
+          <tr>
+            <td><code>ai_audit</code></td>
+            <td>AI がその通知をどう見たか残す監査メモ</td>
+            <td>最終的な通知文や順位づけが直感に合っているか確認できます。</td>
+          </tr>
+          <tr>
+            <td><code>AI事後評価</code></td>
+            <td>通知を出した数時間後から 24 時間後までの結果を、AI が後追いで採点する仕組み</td>
+            <td>「方向が合っていたか」だけでなく、「どの価格で入るべきだったか、SL と TP は妥当だったか」を振り返れます。</td>
+          </tr>
+          <tr>
+            <td><code>4時間足 / 1時間足 / 15分足</code></td>
+            <td>大きな流れ、帯の妥当性、実際の執行価格を分けて見る3段チャート</td>
+            <td>上段で方向、中段で再検討帯、下段で入る価格・SL・TP を確認できます。いちばん重要なのは下段の 15 分足です。</td>
+          </tr>
+          <tr>
+            <td><code>shadow</code></td>
+            <td>本番の判定にはまだ使わず、裏で記録だけする試験観測</td>
+            <td>既存の判定を壊さずに、新しい見方が有効かを比べられます。</td>
+          </tr>
+          <tr>
+            <td><code>was_notified=True</code></td>
+            <td>その通知が実際に送られた状態</td>
+            <td>机上ではなく、本番でユーザーへ届いたケースかを見分けられます。</td>
+          </tr>
+          <tr>
+            <td><code>position_sizing</code></td>
+            <td>どれくらいの大きさで入るか決める仕組み</td>
+            <td>通知だけでなく、実運用のリスク管理が入っているか確認できます。</td>
+          </tr>
+          <tr>
+            <td><code>exit_manager</code></td>
+            <td>どこで利確・撤退するかを管理する仕組み</td>
+            <td>入口だけでなく出口まで運用設計が入ったか確認できます。</td>
+          </tr>
+          <tr>
+            <td><code>watch_prices</code></td>
+            <td>人が次に見るべき価格帯を示す監視情報</td>
+            <td>将来、通知の後に何を注視するべきかを案内できるようになります。</td>
+          </tr>
+        </tbody>
+      </table>
     </section>
 
     <section class="panel">
@@ -409,18 +492,18 @@
             <div class="band done">
               <strong>大きな流れ</strong>
               <ul>
-                <li><code>shadow_log.csv</code></li>
-                <li><code>signal_outcomes.csv</code> / <code>user_reviews.csv</code></li>
-                <li><code>notify_reason_codes</code> / <code>suppress_reason_codes</code></li>
-                <li><code>data_quality_flag</code></li>
+                <li><code>shadow_log.csv</code>: 裏で試験記録をためる観測台帳</li>
+                <li><code>signal_outcomes.csv</code> / <code>user_reviews.csv</code>: 通知結果と人の感想を残す台帳</li>
+                <li><code>notify_reason_codes</code> / <code>suppress_reason_codes</code>: 通知した理由、しなかった理由の記録</li>
+                <li><code>data_quality_flag</code>: その時のデータが信用できるかの印</li>
               </ul>
             </div>
             <div class="band done">
               <strong>小さな流れ</strong>
               <ul>
-                <li>signal_based / entry_ready_based の事後評価基盤</li>
-                <li>週次・月次レポート基盤</li>
-                <li>Phase 1 計画値保存列</li>
+                <li><code>signal_based</code> / <code>entry_ready_based</code>: 通知直後だけでなく、後から結果を振り返る基盤</li>
+                <li>週次・月次レポート基盤: 日々の結果を後からまとめて比較できる</li>
+                <li>Phase 1 計画値保存列: 将来必要になる数字を先に保存しておく土台</li>
               </ul>
             </div>
             <div class="band done">
@@ -436,39 +519,42 @@
           <div class="entry-head">
             <div class="entry-title">
               <span class="tag current">現在</span>
-              <h3>Phase 0 本番観測と Ver02.3 再調整</h3>
+              <h3>Phase 0 本番観測と Phase 1 前倒し確認</h3>
             </div>
             <div class="entry-sub">いまいちばん実務に近い流れ</div>
           </div>
           <p>
-            いまの中心は、<code>Ver02.3</code> を観測用に走らせながら、
-            breakout、score、confidence、setup、position_risk、signal_tier の調整結果を
-            comparison と実観測の両方で確かめることです。
+            いまの中心は、<code>Ver02.4-v1</code> を本番観測しながら、
+            通知後 24 時間評価の一周確認と、
+            <code>Phase 1</code> の本有効条件が実データで立つかを先に見ることです。
           </p>
           <div class="bands">
             <div class="band current">
               <strong>現在できていること</strong>
               <ul>
-                <li><code>Ver02.3-OBS</code> が iMac 2019 で定刻実行中</li>
-                <li><code>heartbeat.txt</code> と <code>last_result.json</code> の更新確認済み</li>
-                <li>comparison 再生成済み</li>
-                <li><code>rebalanced</code> が PF / DD で優位と説明可能</li>
+                <li><code>Ver02.4-v1</code> を主系統として運用中: いま見るべき中心版はこれ</li>
+                <li>通知時だけ <code>ai_audit</code> を保存する形へ切替済み: 必要な場面だけ AI 監査メモを残す運用に整理済み</li>
+                <li>通知時の詳細 HTML は 3 段チャート化済み: 上段 4 時間足、中段 1 時間足、下段 15 分足で価格帯・SL・TP を確認できる</li>
+                <li>通知後は AI 事後評価が自動で走る: 通知で示した価格帯・SL・TP が実務上妥当だったかを後から採点できる</li>
+                <li><code>daily-sync</code> に <code>Phase 1 判定サマリー</code> と判定文を追加済み: 今日進めてよいかを日次レポートで即確認できる</li>
+                <li>レビューは JSON 正本 + HTML フォームで維持できる: 人の感想も残せるが、主役は AI 事後評価に切り替わった</li>
               </ul>
             </div>
             <div class="band current">
               <strong>いま詰めていること</strong>
               <ul>
-                <li>実メール受信確認</li>
-                <li>baseline の filled_trades が多い理由の説明</li>
-                <li><code>invalid → watch</code> の代表ケース分析</li>
+                <li><code>primary_setup_status=ready</code> が live で何件出るか: 次段階に進めそうな候補が、本番で出始めたかを見る</li>
+                <li><code>phase1_active=true</code> の初回ケース確認: 候補ではなく、本当に次段階の判断が有効になった回が出たかを見る</li>
+                <li>実メールで最終ランクと 3 段チャートが直感に合うかの確認: 人が読んで「どこで入るべきか」が分かる通知になっているか確認する</li>
+                <li><code>SL評価</code> / <code>TP評価</code> / <code>15分足評価</code> の偏り確認: 価格精度のどこを優先改善するかを絞る</li>
               </ul>
             </div>
             <div class="band next">
               <strong>この流れの完了条件</strong>
               <ul>
-                <li>Phase 0 の通知後フローを本番で 1 周完了</li>
-                <li>comparison の差分内容を説明可能にする</li>
-                <li>Phase 1 正式指標を実データで確認可能にする</li>
+                <li>Phase 0 の通知後フローを本番で 1 周完了: 通知して終わりではなく、後追い評価まで一巡させる</li>
+                <li>レビューは最低 5 件あれば補助観測として十分にする: 人の感想は残すが、それ以上は前進の足止めにしない</li>
+                <li>Phase 1 正式指標を実データで確認可能にする: 実際の数字で次段階を判定できる状態にする</li>
               </ul>
             </div>
           </div>
@@ -478,7 +564,8 @@
               <code>フェーズ別計画_Phase0-1.md</code>、
               <code>マイルストーン定義.md</code>、
               <code>NEXT_TASK.md</code>、
-              <code>開発ロードマップ.md</code>
+              <code>開発ロードマップ.md</code>、
+              <code>feedback_daily_sync_20260410.md</code>
               が、この実務線の主な正本です。
             </p>
           </div>
@@ -500,18 +587,18 @@
             <div class="band design">
               <strong>設計済み</strong>
               <ul>
-                <li><code>evaluation_trace.direction_score_shadow</code></li>
-                <li><code>entry_quality_score_shadow</code></li>
-                <li><code>trigger_quality_score_shadow</code></li>
-                <li><code>risk_component_scores</code></li>
+                <li><code>evaluation_trace.direction_score_shadow</code>: 方向感が合っていたかを裏で採点する記録</li>
+                <li><code>entry_quality_score_shadow</code>: 入る場所の良さを裏で点数化する記録</li>
+                <li><code>trigger_quality_score_shadow</code>: 通知を出したきっかけの良さを裏で点数化する記録</li>
+                <li><code>risk_component_scores</code>: 危険度を分解して見るための部品点数</li>
               </ul>
             </div>
             <div class="band next">
               <strong>まだ未着手</strong>
               <ul>
-                <li>JSON 保存の最小実装</li>
-                <li>既存判定不変の検証</li>
-                <li>comparison での活用確認</li>
+                <li>通知停止権限のような強い介入はまだやらない</li>
+                <li>既存判定を壊さないまま補助観測だけ増やす</li>
+                <li>実データ確認後にだけ次段階を再検討する</li>
               </ul>
             </div>
             <div class="band future">
@@ -527,33 +614,33 @@
           <div class="entry-head">
             <div class="entry-title">
               <span class="tag design">新設計</span>
-              <h3>チャートパターン拡張 v1</h3>
+              <h3>将来分析の枝: チャートパターン拡張 v1</h3>
             </div>
             <div class="entry-sub">人間のチャート読みへ近づけるための未来枝</div>
           </div>
           <p>
-            これは今回新しく固定した改善設計図です。上昇フラッグや三角持ち合いのような
-            名前つきパターンを、いきなり本採用せず、まずは <code>shadow</code> 観測として取り込む計画です。
+            これは今すぐ着手中の本線ではありません。上昇フラッグや三角持ち合いのような
+            名前つきパターンを、将来の分析材料として <code>shadow</code> 観測へつなぐための設計枝です。
           </p>
           <div class="bands">
             <div class="band design">
               <strong>最初に扱う類型</strong>
               <ul>
-                <li><code>bull_flag</code></li>
-                <li><code>bear_flag</code></li>
-                <li><code>ascending_triangle</code></li>
-                <li><code>descending_triangle</code></li>
-                <li><code>failed_breakout</code></li>
+                <li><code>bull_flag</code>: 上昇途中の一時休みのような形</li>
+                <li><code>bear_flag</code>: 下落途中の一時戻しのような形</li>
+                <li><code>ascending_triangle</code>: 上に抜けやすい三角持ち合い</li>
+                <li><code>descending_triangle</code>: 下に抜けやすい三角持ち合い</li>
+                <li><code>failed_breakout</code>: 抜けたように見えて失敗した形</li>
               </ul>
             </div>
             <div class="band next">
-              <strong>v1 の導入順</strong>
+              <strong>将来やる順番</strong>
               <ul>
-                <li>Step 0: 設計固定</li>
-                <li>Step 1: pattern_context などを JSON 保存</li>
-                <li>Step 2: shadow score 化</li>
-                <li>Step 3: segmented comparison</li>
-                <li>Step 4: 効いたものだけ controlled adoption</li>
+                <li>Step 0: 設計固定。何を見たいか先に決める</li>
+                <li>Step 1: <code>pattern_context</code> などを JSON 保存。形の情報を後から読めるよう残す</li>
+                <li>Step 2: shadow score 化。本番判定に使わず裏で点数化する</li>
+                <li>Step 3: segmented comparison。パターン別に効果を比較する</li>
+                <li>Step 4: 効いたものだけ controlled adoption。本当に効いたものだけ慎重に採用する</li>
               </ul>
             </div>
             <div class="band future">
@@ -567,8 +654,8 @@
           <div class="branch">
             <strong>本流との関係</strong>
             <p>
-              この枝は現在の Phase 0 実務線の横にぶら下がる設計線です。
-              本流を置き換えるのではなく、将来の Phase 3 / Ver05 側の分析枝へ接続します。
+              この枝は現在の実務線を止めてまで進めるものではありません。
+              本流を置き換えず、将来の Phase 3 / Ver05 側の分析枝へ接続します。
             </p>
           </div>
         </article>
@@ -587,27 +674,28 @@
           </p>
           <div class="bands">
             <div class="band next">
-              <strong>必要条件</strong>
+            <strong>必要条件</strong>
               <ul>
-                <li><code>was_notified=True</code> の本番確認</li>
-                <li><code>daily-sync</code> 本番完走</li>
-                <li><code>phase1_active</code> 系の本番記録確認</li>
-                <li>サイズ計画 / 出口計画の本番ログ確認</li>
+                <li><code>was_notified=True</code> の本番確認: 通知が机上ではなく本当に送られていること</li>
+                <li><code>daily-sync</code> 本番完走: 日次まとめが毎日安定して出せること</li>
+                <li><code>phase1_active=true</code> と <code>ready</code> の本番記録確認: 次段階の候補と実発動の両方が確認できること</li>
+                <li>サイズ計画 / 出口計画の本番ログ確認: どれくらい入るか、どこで終えるかも本番ログに残ること</li>
               </ul>
             </div>
             <div class="band current">
               <strong>すでにある土台</strong>
               <ul>
-                <li><code>position_sizing</code></li>
-                <li><code>exit_manager</code></li>
-                <li><code>phase1_active</code> / <code>phase1_activation_reason</code></li>
-                <li><code>risk_percent_applied</code> などの保存列</li>
+                <li><code>position_sizing</code>: どれくらいの大きさで入るか決める仕組み</li>
+                <li><code>exit_manager</code>: 利確や撤退の管理をする仕組み</li>
+                <li><code>phase1_active</code> / <code>phase1_activation_reason</code>: Phase 1 が動いたか、その理由は何かを残す列</li>
+                <li><code>risk_percent_applied</code> などの保存列: どれくらいのリスク設定を使ったか後から確認できる</li>
               </ul>
             </div>
             <div class="band future">
               <strong>意味</strong>
               <p>
                 Ver03 は「ただ通知する」から「損益管理を伴う監視」へ進んだことを示す節目です。
+                ただし、今はまだその手前で、Phase 1 の本有効確認を前倒ししている段階です。
               </p>
             </div>
           </div>
@@ -629,11 +717,11 @@
             <div class="band future">
               <strong>大きな流れ</strong>
               <ul>
-                <li><code>watch_prices</code></li>
-                <li>価格乖離監視</li>
-                <li>blackout</li>
-                <li>構造化 AI 審査出力</li>
-                <li><code>config_change_log</code></li>
+                <li><code>watch_prices</code>: 次に人が見るべき価格帯を示す</li>
+                <li>価格乖離監視: 参照価格とずれすぎた時に気づけるようにする</li>
+                <li><code>blackout</code>: 危険な時間帯やイベント前後に通知を止める仕組み</li>
+                <li>構造化 AI 審査出力: AI の判断理由を決まった形で残す</li>
+                <li><code>config_change_log</code>: 設定変更の履歴を残す台帳</li>
               </ul>
             </div>
             <div class="band future">
@@ -678,9 +766,9 @@
             <div class="band future">
               <strong>ロジック改善</strong>
               <ul>
-                <li><code>build_setup()</code> 精密化</li>
-                <li>シナリオ分岐出力</li>
-                <li>比較根拠つきの変更運用</li>
+                <li><code>build_setup()</code> 精密化: 通知の組み立てロジックをより現実に合わせて細かくする</li>
+                <li>シナリオ分岐出力: どういう場合分けで見ているかを出せるようにする</li>
+                <li>比較根拠つきの変更運用: 勘ではなく比較結果を根拠に改善する</li>
               </ul>
             </div>
             <div class="band future">
@@ -730,7 +818,7 @@
       <div class="doc-grid">
         <article class="doc-card">
           <h3>マイルストーン定義</h3>
-          <p><code>Ver02.x → Ver03 → Ver04 → Ver05</code> の昇格条件を決める主軸です。</p>
+          <p><code>Ver02.x → Ver03 → Ver04 → Ver05</code> の昇格条件を決める主軸です。「何ができたら次の世代に進んだと言えるか」を決めています。</p>
           <ul>
             <li>何ができたら版を上げるか</li>
             <li>どの大型節目が将来にあるか</li>
@@ -740,7 +828,7 @@
 
         <article class="doc-card">
           <h3>フェーズ別計画 Phase0-1</h3>
-          <p>現在の実務線に最も近い計画です。</p>
+          <p>現在の実務線に最も近い計画です。今まさに何を確かめているかを知りたい時の主文書です。</p>
           <ul>
             <li>Phase 0 本番観測</li>
             <li>Phase 1 の本有効確認</li>
@@ -750,7 +838,7 @@
 
         <article class="doc-card">
           <h3>フェーズ別計画 Phase2-3</h3>
-          <p>Ver04 / Ver05 側へつながる中期計画です。</p>
+          <p>Ver04 / Ver05 側へつながる中期計画です。今すぐではないが、次の世代で何を入れるかを見る文書です。</p>
           <ul>
             <li>通知品質・安全性の強化</li>
             <li>分析と A/B 比較の基盤</li>
@@ -760,7 +848,7 @@
 
         <article class="doc-card">
           <h3>評価システム改善仕様書</h3>
-          <p>いきなり判定を変えず、shadow 観測から入るための接続仕様です。</p>
+          <p>いきなり判定を変えず、shadow 観測から入るための接続仕様です。「まず裏で試してから採用する」という安全策の文書です。</p>
           <ul>
             <li><code>evaluation_trace</code> の追加</li>
             <li>既存判定不変の原則</li>
@@ -770,7 +858,7 @@
 
         <article class="doc-card">
           <h3>改善設計図 v1</h3>
-          <p>人間のチャート読みへ近づけるための、新しい未来枝の設計書です。</p>
+          <p>人間のチャート読みへ近づけるための、新しい未来枝の設計書です。今の本線ではなく、将来の分析強化案です。</p>
           <ul>
             <li>チャートパターン拡張</li>
             <li>短期 / 長期窓の分離</li>
@@ -779,12 +867,13 @@
         </article>
 
         <article class="doc-card">
-          <h3>ロードマップ / NEXT_TASK</h3>
-          <p>この大きな流れの中で、「いま、どこを掘っているか」を示す入口です。</p>
+          <h3>ロードマップ / NEXT_TASK / daily-sync</h3>
+          <p>この大きな流れの中で、「いま何を見れば進めるか」を示す入口です。迷ったらまずここを見る想定です。</p>
           <ul>
             <li>現在地の確認</li>
             <li>次の 1 手</li>
             <li>ブロッカーと完了条件</li>
+            <li>今日の Phase 1 判定</li>
           </ul>
         </article>
       </div>
@@ -807,6 +896,11 @@
             <td><code>開発ロードマップ.md</code></td>
           </tr>
           <tr>
+            <td>今すぐ進めてよい段階か知りたい</td>
+            <td><code>feedback_daily_sync_20260410.md</code></td>
+            <td><code>NEXT_TASK.md</code></td>
+          </tr>
+          <tr>
             <td>Ver03 までの現在線を知りたい</td>
             <td><code>フェーズ別計画_Phase0-1.md</code></td>
             <td><code>マイルストーン定義.md</code></td>
@@ -826,6 +920,7 @@
       <div class="note">
         この 1 枚の役目は、計画書を置き換えることではありません。
         ばらばらの計画書を「時間軸のどこにある話か」で直感的に整理することです。
+        細かい変数名は出てきますが、このページでは「その言葉の意味」と「今の判断への使い道」が分かるように寄せています。
       </div>
     </section>
   </div>

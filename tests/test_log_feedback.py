@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -17,7 +18,9 @@ from tools.log_feedback import (
     DEFAULT_REVIEW_FORM,
     DEFAULT_REVIEW_NOTE,
     REVIEW_NOTE_COLUMNS,
+    USER_REVIEW_HEADER,
     _build_improvement_candidates,
+    _normalize_ai_post_review,
     _load_csv_rows,
     _load_review_note_rows,
     _load_review_state_rows,
@@ -29,10 +32,43 @@ from tools.log_feedback import (
     evaluate_trade_row,
     export_review_queue,
     import_reviews,
+    sync_ai_post_reviews,
 )
 
 
 class LogFeedbackTest(unittest.TestCase):
+    def test_normalize_ai_post_review_applies_defaults(self) -> None:
+        row = _normalize_ai_post_review(
+            {
+                "user_verdict": "invalid",
+                "usefulness_1to5": 9,
+                "would_trade": "maybe",
+                "actual_move_driver": "other",
+                "misleading_entry_like_wording": "",
+                "sl_eval": "bad",
+                "tp_eval": "",
+                "tf_4h_eval": "bad",
+                "tf_1h_eval": "",
+                "tf_15m_eval": "oops",
+                "memo": "メモ",
+            },
+            model="gpt-test",
+            image_mode="price_map_svg",
+        )
+
+        self.assertEqual(row["user_verdict"], "low_value")
+        self.assertEqual(row["usefulness_1to5"], "1")
+        self.assertEqual(row["would_trade"], "no")
+        self.assertEqual(row["actual_move_driver"], "unknown")
+        self.assertEqual(row["misleading_entry_like_wording"], "no")
+        self.assertEqual(row["sl_eval"], "good")
+        self.assertEqual(row["tp_eval"], "good")
+        self.assertEqual(row["tf_4h_eval"], "good")
+        self.assertEqual(row["tf_1h_eval"], "good")
+        self.assertEqual(row["tf_15m_eval"], "good")
+        self.assertEqual(row["review_source"], "ai")
+        self.assertEqual(row["review_model"], "gpt-test")
+
     def test_evaluate_trade_row_computes_outcomes_and_zone_results(self) -> None:
         trade_row = {
             "signal_id": "20260311_090500",
@@ -423,6 +459,378 @@ class LogFeedbackTest(unittest.TestCase):
 
         self.assertLessEqual(len(weekly), 3)
         self.assertLessEqual(len(monthly), 2)
+
+    def test_improvement_candidates_include_sl_tp_feedback(self) -> None:
+        rows = [
+            {"signal_id": f"tp_close_{idx}", "tp_eval": "too_close", "sl_eval": "good"}
+            for idx in range(4)
+        ] + [
+            {"signal_id": f"sl_tight_{idx}", "tp_eval": "good", "sl_eval": "too_tight"}
+            for idx in range(4)
+        ] + [
+            {"signal_id": f"filler_{idx}", "tp_eval": "good", "sl_eval": "good"}
+            for idx in range(2)
+        ]
+
+        candidates = _build_improvement_candidates(rows, monthly=False)
+        titles = {item["title"] for item in candidates}
+
+        self.assertIn("TP が近すぎるケースが多い", titles)
+        self.assertIn("SL が狭すぎるケースが多い", titles)
+
+    def test_improvement_candidates_include_tf15_feedback(self) -> None:
+        rows = [
+            {"signal_id": f"tf_bad_{idx}", "tf_15m_eval": "poor"}
+            for idx in range(4)
+        ] + [
+            {"signal_id": f"tf_good_{idx}", "tf_15m_eval": "good"}
+            for idx in range(2)
+        ]
+
+        candidates = _build_improvement_candidates(rows, monthly=False)
+        titles = {item["title"] for item in candidates}
+
+        self.assertIn("15分足の執行価格精度が弱い", titles)
+
+    def test_sync_ai_post_reviews_writes_ai_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_ai",
+                        "timestamp_jst": "2026-04-10T01:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_ai", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            (base_dir / "logs" / "signals" / "sig_ai.json").write_text(
+                '{"signal_id":"sig_ai","summary_subject":"subject","current_price":100,"long_setup":{"status":"watch","entry_zone":{"low":99,"high":101},"stop_loss":97,"tp1":104,"tp2":106},"short_setup":{"status":"invalid","entry_zone":{"low":102,"high":103},"stop_loss":104,"tp1":98,"tp2":96},"support_zones":[],"resistance_zones":[],"chart_snapshot":{"intervals":["4h","1h","15m"],"candles_4h":[{"timestamp":1,"open":98,"high":102,"low":96,"close":100.5}],"candles_1h":[{"timestamp":1,"open":99,"high":101,"low":98,"close":100.2}],"candles_15m":[{"timestamp":1,"open":100,"high":101,"low":99,"close":100.5}]}}',
+                encoding="utf-8",
+            )
+
+            with patch("tools.log_feedback.run_cli_json") as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None):
+                mocked_cli.return_value = {
+                    "user_verdict": "useful_wait",
+                    "usefulness_1to5": 4,
+                    "would_trade": "conditional",
+                    "actual_move_driver": "technical",
+                    "misleading_entry_like_wording": "no",
+                    "sl_eval": "good",
+                    "tp_eval": "too_far",
+                    "tf_4h_eval": "good",
+                    "tf_1h_eval": "mixed",
+                    "tf_15m_eval": "poor",
+                    "memo": "監視として有効",
+                }
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {"AI_ADVICE_CLI_COMMAND": "echo", "OPENAI_ADVICE_MODEL": "gpt-test", "AI_TIMEOUT_SEC": 30},
+                )()
+
+                sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                )
+
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["review_source"], "ai")
+            self.assertEqual(rows[0]["sl_eval"], "good")
+            self.assertEqual(rows[0]["tp_eval"], "too_far")
+            self.assertEqual(rows[0]["tf_4h_eval"], "good")
+            self.assertEqual(rows[0]["tf_1h_eval"], "mixed")
+            self.assertEqual(rows[0]["tf_15m_eval"], "poor")
+            self.assertEqual(rows[0]["logic_validated"], "true")
+
+    def test_sync_ai_post_reviews_reuses_snapshot_without_cli(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "review" / "ai_post_reviews").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_cached",
+                        "timestamp_jst": "2026-04-10T02:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "cached subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_cached", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            snapshot_path = base_dir / "logs" / "review" / "ai_post_reviews" / "sig_cached.json"
+            snapshot_path.write_text(
+                """{
+  "signal_id": "sig_cached",
+  "review": {
+    "signal_id": "sig_cached",
+    "timestamp_jst": "2026-04-10T02:05:00+09:00",
+    "subject": "cached subject",
+    "auto_eval_summary": "summary",
+    "user_verdict": "useful_wait",
+    "usefulness_1to5": "4",
+    "would_trade": "no",
+    "actual_move_driver": "technical",
+    "misleading_entry_like_wording": "no",
+    "logic_validated": "true",
+    "sl_eval": "good",
+    "tp_eval": "good",
+    "tf_4h_eval": "good",
+    "tf_1h_eval": "mixed",
+    "tf_15m_eval": "poor",
+    "review_source": "ai",
+    "review_model": "gpt-test",
+    "review_image_mode": "price_map_svg",
+    "review_variant": "ai_post_review_v1",
+    "memo": "cached",
+    "review_status": "done",
+    "reviewed_at_utc": "2026-04-10T00:00:00Z"
+  }
+}""",
+                encoding="utf-8",
+            )
+
+            with patch("tools.log_feedback.run_cli_json") as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
+                mocked_cfg.return_value = type("Cfg", (), {})()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=1,
+                )
+
+            mocked_cli.assert_not_called()
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["review_source"], "ai")
+            self.assertEqual(rows[0]["tf_15m_eval"], "poor")
+            self.assertEqual(stats["reused"], 1)
+
+    def test_sync_ai_post_reviews_skips_existing_ai_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_ai_done",
+                        "timestamp_jst": "2026-04-10T01:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_ai_done", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_ai_done",
+                        "timestamp_jst": "2026-04-10T01:05:00+09:00",
+                        "subject": "subject",
+                        "auto_eval_summary": "summary",
+                        "user_verdict": "useful_wait",
+                        "usefulness_1to5": "4",
+                        "would_trade": "no",
+                        "actual_move_driver": "technical",
+                        "misleading_entry_like_wording": "no",
+                        "logic_validated": "true",
+                        "sl_eval": "good",
+                        "tp_eval": "good",
+                        "tf_4h_eval": "good",
+                        "tf_1h_eval": "good",
+                        "tf_15m_eval": "good",
+                        "review_source": "ai",
+                        "review_model": "gpt-test",
+                        "review_image_mode": "price_map_svg",
+                        "review_variant": "ai_post_review_v1",
+                        "memo": "done",
+                        "review_status": "done",
+                        "reviewed_at_utc": "2026-04-10T00:00:00Z",
+                    }
+                )
+
+            with patch("tools.log_feedback.run_cli_json") as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
+                mocked_cfg.return_value = type("Cfg", (), {})()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=1,
+                )
+
+            mocked_cli.assert_not_called()
+            self.assertEqual(stats["skipped_existing_ai"], 1)
+
+    def test_sync_ai_post_reviews_respects_daily_cap(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_today_cap",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_today_cap", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            today_utc = "2026-04-10T00:00:00Z"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "already_today",
+                        "review_source": "ai",
+                        "review_variant": "ai_post_review_v1",
+                        "reviewed_at_utc": today_utc,
+                    }
+                )
+
+            with patch("tools.log_feedback.run_cli_json") as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg, patch("tools.log_feedback._reviewed_on_jst", return_value=True):
+                mocked_cfg.return_value = type("Cfg", (), {"AI_POST_REVIEW_DAILY_MAX": 1, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True})()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_not_called()
+            self.assertEqual(stats["already_reviewed_today"], 1)
+            self.assertEqual(stats["skipped_daily_cap"], 1)
+
+    def test_sync_ai_post_reviews_filters_attention_when_main_only_enabled(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_attention",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "attention",
+                        "signal_tier": "strong_ai_confirmed",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_attention", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            with patch("tools.log_feedback.run_cli_json") as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
+                mocked_cfg.return_value = type("Cfg", (), {"AI_POST_REVIEW_DAILY_MAX": 2, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True})()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_not_called()
+            self.assertEqual(stats["skipped_priority_filter"], 1)
 
     def test_build_shadow_log_sets_logic_validated(self) -> None:
         with TemporaryDirectory() as tmpdir:

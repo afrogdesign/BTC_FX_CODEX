@@ -263,44 +263,53 @@ def _price_position(value: float, chart_min: float, chart_max: float, left: floa
     return left + ratio * width
 
 
-def _price_map_svg(result: dict[str, Any]) -> str:
-    current_price = _safe_float(result.get("current_price"))
-    long_setup = result.get("long_setup", {}) or {}
-    short_setup = result.get("short_setup", {}) or {}
-    support_zones = result.get("support_zones", [])[:3]
-    resistance_zones = result.get("resistance_zones", [])[:3]
+def _snapshot_candles(chart_snapshot: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    candles = chart_snapshot.get(key, [])
+    if not isinstance(candles, list):
+        return []
+    return [candle for candle in candles if isinstance(candle, dict)]
+
+
+def _panel_price_map_svg(
+    *,
+    title: str,
+    subtitle: str,
+    candles: list[dict[str, Any]],
+    current_price: float,
+    long_setup: dict[str, Any],
+    short_setup: dict[str, Any],
+    support_zones: list[dict[str, Any]],
+    resistance_zones: list[dict[str, Any]],
+    width: int,
+    height: int,
+    origin_y: int,
+    show_markers: bool,
+    emphasize_setup: bool,
+) -> str:
+    top = origin_y + 26
+    bottom = origin_y + height - 26
+    left = 30
+    right = width - 112
+    usable_h = max(bottom - top, 1)
+    chart_width = right - left
+
     values = [current_price]
     long_entry = long_setup.get("entry_zone") or {}
     short_entry = short_setup.get("entry_zone") or {}
     for zone in (long_entry, short_entry):
         values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
     for setup in (long_setup, short_setup):
-        values.extend(
-            [
-                _safe_float(setup.get("stop_loss")),
-                _safe_float(setup.get("tp1")),
-                _safe_float(setup.get("tp2")),
-            ]
-        )
+        values.extend([_safe_float(setup.get("stop_loss")), _safe_float(setup.get("tp1")), _safe_float(setup.get("tp2"))])
     for zone in support_zones + resistance_zones:
         values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
+    for candle in candles:
+        values.extend([_safe_float(candle.get("high")), _safe_float(candle.get("low"))])
     values = [value for value in values if value > 0]
     chart_min = min(values) if values else 0.0
     chart_max = max(values) if values else 1.0
-    padding = max((chart_max - chart_min) * 0.06, 80.0)
+    padding = max((chart_max - chart_min) * 0.08, 40.0)
     chart_min -= padding
     chart_max += padding
-
-    width = 860
-    height = 670
-    top = 42
-    bottom = 42
-    left = 34
-    right = 132
-    usable_h = height - top - bottom
-    chart_left = left
-    chart_right = width - right
-    chart_width = chart_right - chart_left
 
     def y_for_price(value: float) -> float:
         if chart_max <= chart_min:
@@ -309,128 +318,191 @@ def _price_map_svg(result: dict[str, Any]) -> str:
         ratio = max(0.0, min(1.0, ratio))
         return top + ratio * usable_h
 
-    horizontal_grid: list[str] = []
-    price_ticks: list[str] = []
-    for idx in range(6):
-        tick_value = chart_min + (chart_max - chart_min) * idx / 5
+    grid_lines: list[str] = []
+    axis_labels: list[str] = []
+    for idx in range(5):
+        tick_value = chart_min + (chart_max - chart_min) * idx / 4
         y = y_for_price(tick_value)
-        horizontal_grid.append(
-            f'<line x1="{chart_left}" y1="{y:.1f}" x2="{chart_right}" y2="{y:.1f}" class="price-grid-h" />'
-        )
-        price_ticks.append(
-            f'<text x="{width - 16}" y="{y + 4:.1f}" text-anchor="end" class="price-axis">{_format_price_int(tick_value)}</text>'
+        grid_lines.append(f'<line x1="{left}" y1="{y:.1f}" x2="{right}" y2="{y:.1f}" class="price-grid-h" />')
+        axis_labels.append(
+            f'<text x="{width - 14}" y="{y + 4:.1f}" text-anchor="end" class="price-axis">{_format_price_int(tick_value)}</text>'
         )
 
-    vertical_grid = []
+    vertical_grid: list[str] = []
     for idx in range(1, 5):
-        x = chart_left + chart_width * idx / 5
-        vertical_grid.append(
-            f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{height - bottom}" class="price-grid-v" />'
-        )
+        x = left + chart_width * idx / 5
+        vertical_grid.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" class="price-grid-v" />')
+
+    candle_elements: list[str] = []
+    candle_left = left + 6
+    candle_width = max(chart_width - 12, 20)
+    if candles:
+        slot = candle_width / max(len(candles), 1)
+        body_width = max(min(slot * 0.56, 10.0), 2.5)
+        for idx, candle in enumerate(candles):
+            open_price = _safe_float(candle.get("open"))
+            high_price = _safe_float(candle.get("high"))
+            low_price = _safe_float(candle.get("low"))
+            close_price = _safe_float(candle.get("close"))
+            if min(open_price, high_price, low_price, close_price) <= 0:
+                continue
+            center_x = candle_left + slot * idx + slot / 2
+            wick_y1 = y_for_price(high_price)
+            wick_y2 = y_for_price(low_price)
+            body_top = y_for_price(max(open_price, close_price))
+            body_bottom = y_for_price(min(open_price, close_price))
+            tone = "candle-up" if close_price >= open_price else "candle-down"
+            candle_elements.append(
+                f'<line x1="{center_x:.1f}" y1="{wick_y1:.1f}" x2="{center_x:.1f}" y2="{wick_y2:.1f}" class="candle-wick {tone}" />'
+            )
+            candle_elements.append(
+                f'<rect x="{center_x - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{max(body_bottom - body_top, 2.0):.1f}" rx="1.3" class="candle-body {tone}" />'
+            )
 
     background_bands: list[str] = []
     for zone in resistance_zones:
         low = _safe_float(zone.get("low"))
         high = _safe_float(zone.get("high"))
-        y1 = y_for_price(high)
-        y2 = y_for_price(low)
         background_bands.append(
-            f'<rect x="{chart_left}" y="{y1:.1f}" width="{chart_width}" height="{max(y2 - y1, 8):.1f}" class="band-resistance" />'
+            f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-resistance" />'
         )
     for zone in support_zones:
         low = _safe_float(zone.get("low"))
         high = _safe_float(zone.get("high"))
+        background_bands.append(
+            f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-support" />'
+        )
+
+    setup_elements: list[str] = []
+    for side, setup in (("long", long_setup), ("short", short_setup)):
+        entry = setup.get("entry_zone") or {}
+        low = _safe_float(entry.get("low"))
+        high = _safe_float(entry.get("high"))
+        if min(low, high) <= 0:
+            continue
+        band_class = "setup-band-long" if side == "long" else "setup-band-short"
+        axis_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
+        opacity = "0.28" if emphasize_setup else "0.16"
         y1 = y_for_price(high)
         y2 = y_for_price(low)
-        background_bands.append(
-            f'<rect x="{chart_left}" y="{y1:.1f}" width="{chart_width}" height="{max(y2 - y1, 8):.1f}" class="band-support" />'
+        setup_elements.append(
+            f'<rect x="{left + chart_width * 0.18:.1f}" y="{y1:.1f}" width="{chart_width * 0.78:.1f}" height="{max(y2 - y1, 10):.1f}" rx="10" class="{band_class}" style="opacity:{opacity};" />'
+        )
+        setup_elements.append(
+            f'<text x="{right + 6:.1f}" y="{y1 + 5:.1f}" class="{axis_class}">{_format_price_int(high)}</text>'
+        )
+        setup_elements.append(
+            f'<text x="{right + 6:.1f}" y="{y2 + 5:.1f}" class="{axis_class}">{_format_price_int(low)}</text>'
         )
 
     current_y = y_for_price(current_price)
     emphasis_lines: list[str] = [
-        f'<line x1="{chart_left}" y1="{current_y:.1f}" x2="{chart_right}" y2="{current_y:.1f}" class="current-price-line" />',
-        f'<rect x="{chart_right - 102:.1f}" y="{current_y - 18:.1f}" width="96" height="36" rx="12" class="current-price-box" />',
-        f'<text x="{chart_right - 54:.1f}" y="{current_y - 4:.1f}" text-anchor="middle" class="current-price-box-label">現在値</text>',
-        f'<text x="{chart_right - 54:.1f}" y="{current_y + 12:.1f}" text-anchor="middle" class="current-price-box-value">{_format_price_int(current_price)}</text>',
+        f'<line x1="{left}" y1="{current_y:.1f}" x2="{right}" y2="{current_y:.1f}" class="current-price-line" />',
+        f'<text x="{right - 6:.1f}" y="{current_y - 6:.1f}" text-anchor="end" class="current-price-box-label">現在値 {_format_price_int(current_price)}</text>',
     ]
 
-    def setup_band(zone: dict[str, Any], side: str, status: Any, x: float, width_ratio: float) -> list[str]:
-        low = _safe_float(zone.get("low"))
-        high = _safe_float(zone.get("high"))
-        if low <= 0 and high <= 0:
-            return []
-        y1 = y_for_price(high)
-        y2 = y_for_price(low)
-        band_width = chart_right - (chart_left + chart_width * x)
-        band_x = chart_left + chart_width * x
-        label = "LONG 再検討帯" if side == "long" else "SHORT 再検討帯"
-        status_label = _setup_status_label(status)
-        band_class = "setup-band-long" if side == "long" else "setup-band-short"
-        text_class = "setup-band-text-long" if side == "long" else "setup-band-text-short"
-        callout_class = "setup-callout-long" if side == "long" else "setup-callout-short"
-        callout_text_class = "setup-callout-text-long" if side == "long" else "setup-callout-text-short"
-        callout_value_class = "setup-callout-value"
-        callout_width = 236
-        callout_height = 52
-        callout_x = chart_left + 16 if side == "long" else chart_left + 92
-        callout_y = y2 + 12 if side == "long" else y1 - callout_height - 28
-        axis_value_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
-        return [
-            f'<rect x="{band_x:.1f}" y="{y1:.1f}" width="{band_width:.1f}" height="{max(y2 - y1, 14):.1f}" rx="12" class="{band_class}" />',
-            f'<rect x="{callout_x:.1f}" y="{callout_y:.1f}" width="{callout_width}" height="{callout_height}" rx="12" class="{callout_class}" />',
-            f'<text x="{callout_x + 14:.1f}" y="{callout_y + 20:.1f}" class="{text_class}">{label}</text>',
-            f'<text x="{callout_x + 14:.1f}" y="{callout_y + 38:.1f}" class="{callout_text_class}">{html.escape(status_label)}</text>',
-            f'<text x="{callout_x + callout_width - 14:.1f}" y="{callout_y + 38:.1f}" text-anchor="end" class="{callout_value_class}">{_format_price_int(low)} - {_format_price_int(high)}</text>',
-            f'<text x="{chart_right + 6:.1f}" y="{y1 + 6:.1f}" class="{axis_value_class}">{_format_price_int(high)}</text>',
-            f'<text x="{chart_right + 6:.1f}" y="{y2 + 6:.1f}" class="{axis_value_class}">{_format_price_int(low)}</text>',
-        ]
+    markers: list[str] = []
+    if show_markers:
+        def marker_line(price: Any, label: str, tone: str, x1_ratio: float, x2_ratio: float, anchor: str) -> str:
+            value = _safe_float(price)
+            if value <= 0:
+                return ""
+            y = y_for_price(value)
+            x1 = left + chart_width * x1_ratio
+            x2 = left + chart_width * x2_ratio
+            label_x = x2 + 8 if anchor == "start" else x1 - 8
+            return (
+                f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="marker-line {tone}" />'
+                f'<text x="{label_x:.1f}" y="{y + 4:.1f}" text-anchor="{anchor}" class="marker-label {tone}">{html.escape(label)} {_format_price_int(value)}</text>'
+            )
 
-    setup_elements = []
-    setup_elements.extend(setup_band(long_entry, "long", long_setup.get("status"), 0.30, 0.58))
-    setup_elements.extend(setup_band(short_entry, "short", short_setup.get("status"), 0.30, 0.58))
-
-    def marker_line(
-        price: Any,
-        label: str,
-        tone: str,
-        x1_ratio: float,
-        x2_ratio: float,
-        *,
-        label_anchor: str = "start",
-        label_offset: float = 8.0,
-        label_dy: float = 4.0,
-    ) -> str:
-        value = _safe_float(price)
-        if value <= 0:
-            return ""
-        y = y_for_price(value)
-        x1 = chart_left + chart_width * x1_ratio
-        x2 = chart_left + chart_width * x2_ratio
-        label_x = x2 + label_offset if label_anchor == "start" else x1 - label_offset
-        return (
-            f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="marker-line {tone}" />'
-            f'<text x="{label_x:.1f}" y="{y + label_dy:.1f}" text-anchor="{label_anchor}" class="marker-label {tone}">{html.escape(label)} {_format_price_int(value)}</text>'
+        markers.extend(
+            [
+                marker_line(long_setup.get("stop_loss"), "Long SL", "marker-long", 0.03, 0.16, "start"),
+                marker_line(long_setup.get("tp1"), "Long TP1", "marker-long", 0.03, 0.16, "start"),
+                marker_line(long_setup.get("tp2"), "Long TP2", "marker-long", 0.03, 0.16, "start"),
+                marker_line(short_setup.get("stop_loss"), "Short SL", "marker-short", 0.84, 0.97, "end"),
+                marker_line(short_setup.get("tp1"), "Short TP1", "marker-short", 0.84, 0.97, "end"),
+                marker_line(short_setup.get("tp2"), "Short TP2", "marker-short", 0.84, 0.97, "end"),
+            ]
         )
 
-    markers = [
-        marker_line(long_setup.get("stop_loss"), "Long SL", "marker-long", 0.04, 0.16, label_dy=16),
-        marker_line(long_setup.get("tp1"), "Long TP1", "marker-long", 0.04, 0.16, label_dy=-8),
-        marker_line(short_setup.get("stop_loss"), "Short SL", "marker-short", 0.84, 0.96, label_anchor="end", label_dy=-8),
-        marker_line(short_setup.get("tp1"), "Short TP1", "marker-short", 0.84, 0.96, label_anchor="end", label_dy=16),
-    ]
-
     return (
-        f'<svg viewBox="0 0 {width} {height}" class="price-map" aria-label="再検討ラインチャート">'
-        f'<rect x="0" y="0" width="{width}" height="{height}" rx="18" class="price-map-bg" />'
-        '<text x="24" y="24" class="chart-title">BTCUSDT 再検討ライン</text>'
-        '<text x="24" y="44" class="chart-subtitle">ロング / ショートの再検討帯を主役にし、サポートとレジスタンスは背景帯として表示</text>'
-        f"{''.join(horizontal_grid)}"
+        f'<g class="price-map-panel {"price-map-panel-focus" if show_markers else ""}">'
+        f'<rect x="0" y="{origin_y}" width="{width}" height="{height}" rx="18" class="price-map-bg" />'
+        f'<text x="22" y="{origin_y + 22}" class="chart-title">{html.escape(title)}</text>'
+        f'<text x="22" y="{origin_y + 40}" class="chart-subtitle">{html.escape(subtitle)}</text>'
+        f"{''.join(grid_lines)}"
         f"{''.join(vertical_grid)}"
         f"{''.join(background_bands)}"
+        f"{''.join(candle_elements)}"
         f"{''.join(setup_elements)}"
         f"{''.join(marker for marker in markers if marker)}"
         f"{''.join(emphasis_lines)}"
-        f"{''.join(price_ticks)}"
+        f"{''.join(axis_labels)}"
+        "</g>"
+    )
+
+
+def _price_map_svg(result: dict[str, Any]) -> str:
+    current_price = _safe_float(result.get("current_price"))
+    long_setup = result.get("long_setup", {}) or {}
+    short_setup = result.get("short_setup", {}) or {}
+    support_zones = result.get("support_zones", [])[:3]
+    resistance_zones = result.get("resistance_zones", [])[:3]
+    chart_snapshot = result.get("chart_snapshot", {}) if isinstance(result.get("chart_snapshot"), dict) else {}
+    width = 860
+    panels = [
+        _panel_price_map_svg(
+            title="4時間足: 大局方向",
+            subtitle="大きな流れと主要なサポート / レジスタンスを見る段です",
+            candles=_snapshot_candles(chart_snapshot, "candles_4h"),
+            current_price=current_price,
+            long_setup=long_setup,
+            short_setup=short_setup,
+            support_zones=support_zones,
+            resistance_zones=resistance_zones,
+            width=width,
+            height=206,
+            origin_y=0,
+            show_markers=False,
+            emphasize_setup=False,
+        ),
+        _panel_price_map_svg(
+            title="1時間足: 帯の妥当性",
+            subtitle="押し目 / 戻りとして監視帯が自然かを確認する段です",
+            candles=_snapshot_candles(chart_snapshot, "candles_1h"),
+            current_price=current_price,
+            long_setup=long_setup,
+            short_setup=short_setup,
+            support_zones=support_zones,
+            resistance_zones=resistance_zones,
+            width=width,
+            height=206,
+            origin_y=220,
+            show_markers=False,
+            emphasize_setup=True,
+        ),
+        _panel_price_map_svg(
+            title="15分足: 入る価格 / SL / TP",
+            subtitle="実際の執行精度を見る主役の段です。再検討帯、SL、TP1、TP2 を重ねています",
+            candles=_snapshot_candles(chart_snapshot, "candles_15m"),
+            current_price=current_price,
+            long_setup=long_setup,
+            short_setup=short_setup,
+            support_zones=support_zones,
+            resistance_zones=resistance_zones,
+            width=width,
+            height=286,
+            origin_y=440,
+            show_markers=True,
+            emphasize_setup=True,
+        ),
+    ]
+
+    return (
+        f'<svg viewBox="0 0 {width} 740" class="price-map" aria-label="再検討ラインチャート">'
+        f"{''.join(panels)}"
         "</svg>"
     )
 
@@ -868,6 +940,18 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%);
       border-color: #263148;
     }}
+    .price-map-wrap h3 {{
+      margin: 0 18px 10px;
+      color: #eff6ff;
+      font-size: 18px;
+      font-weight: 800;
+    }}
+    .price-map-wrap p {{
+      margin: 0 18px 14px;
+      color: #b9c7dc;
+      font-size: 13px;
+      line-height: 1.6;
+    }}
     .price-map {{
       width: 100%;
       height: auto;
@@ -877,6 +961,9 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       fill: #0f1728;
       stroke: #263148;
       stroke-width: 1;
+    }}
+    .price-map-panel-focus .price-map-bg {{
+      stroke: #385072;
     }}
     .chart-title {{
       fill: #eff6ff;
@@ -896,6 +983,22 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       stroke: rgba(148, 163, 184, 0.16);
       stroke-width: 1;
     }}
+    .candle-wick {{
+      stroke-width: 1.2;
+      opacity: 0.86;
+    }}
+    .candle-body {{
+      stroke-width: 0.8;
+      opacity: 0.92;
+    }}
+    .candle-up {{
+      fill: rgba(74, 222, 128, 0.62);
+      stroke: rgba(74, 222, 128, 0.95);
+    }}
+    .candle-down {{
+      fill: rgba(248, 113, 113, 0.58);
+      stroke: rgba(248, 113, 113, 0.94);
+    }}
     .band-support {{
       fill: rgba(34, 197, 94, 0.14);
     }}
@@ -905,12 +1008,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     .setup-band-long {{
       fill: rgba(34, 197, 94, 0.26);
       stroke: #4ade80;
-      stroke-width: 2;
+      stroke-width: 1.7;
     }}
     .setup-band-short {{
       fill: rgba(248, 113, 113, 0.26);
       stroke: #f87171;
-      stroke-width: 2;
+      stroke-width: 1.7;
     }}
     .setup-band-text-long {{
       fill: #dcfce7;
@@ -1057,6 +1160,8 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     <section class="section">
       <h2>再検討ラインチャート</h2>
       <div class="panel price-map-wrap">
+        <h3>4時間足 → 1時間足 → 15分足 の順で見ます</h3>
+        <p>上段は大きな流れ、中段は再検討帯の妥当性、下段は実際に入る価格と SL / TP の精度を見る段です。いちばん重要なのは下段の 15 分足です。</p>
         {price_map_svg}
       </div>
       <div class="two-col" style="margin-top:14px;">
@@ -1070,8 +1175,8 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
           <ul>
             <li>青い横線が現在価格です。</li>
             <li>緑帯がロング再検討帯、赤帯がショート再検討帯です。</li>
-            <li>帯の近くの吹き出しに、`監視継続` や `現状は見送り` などの扱いを出します。</li>
-            <li>薄い背景帯はサポートとレジスタンスで、主役は再検討ラインです。</li>
+            <li>上段と中段は「その帯が自然か」を見る段、下段は「その価格で実際に入れるか」を見る段です。</li>
+            <li>点線は SL と TP で、15分足ではどこで切るか・利確するかを直接確認できます。</li>
           </ul>
         </div>
       </div>

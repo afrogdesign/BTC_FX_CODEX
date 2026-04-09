@@ -125,6 +125,41 @@ def _normalize_provider_label(value: Any) -> str:
     return label.upper() or "API"
 
 
+def _build_chart_candles(df: Any, *, limit: int) -> list[dict[str, Any]]:
+    if df is None or len(df) <= 0:
+        return []
+    subset = df.tail(limit)
+    candles: list[dict[str, Any]] = []
+    for row in subset.itertuples(index=False):
+        timestamp = getattr(row, "timestamp", None)
+        if timestamp is None:
+            continue
+        try:
+            ts_ms = int(timestamp)
+        except (TypeError, ValueError):
+            continue
+        candles.append(
+            {
+                "timestamp": ts_ms,
+                "open": _round_optional(getattr(row, "open", None), 2),
+                "high": _round_optional(getattr(row, "high", None), 2),
+                "low": _round_optional(getattr(row, "low", None), 2),
+                "close": _round_optional(getattr(row, "close", None), 2),
+                "volume": _round_optional(getattr(row, "volume", None), 4),
+            }
+        )
+    return candles
+
+
+def _build_chart_snapshot(df_4h: Any, df_1h: Any, df_15m: Any) -> dict[str, Any]:
+    return {
+        "intervals": ["4h", "1h", "15m"],
+        "candles_4h": _build_chart_candles(df_4h, limit=80),
+        "candles_1h": _build_chart_candles(df_1h, limit=96),
+        "candles_15m": _build_chart_candles(df_15m, limit=96),
+    }
+
+
 def _build_system_mode_label(cfg: Any) -> str:
     advice = _normalize_provider_label(getattr(cfg, "AI_ADVICE_PROVIDER", "api"))
     summary = _normalize_provider_label(getattr(cfg, "AI_SUMMARY_PROVIDER", "api"))
@@ -608,6 +643,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "resistance_zones_by_strength": resistance_zones,
         "support_zones_all": all_support_zones,
         "resistance_zones_all": all_resistance_zones,
+        "chart_snapshot": _build_chart_snapshot(df_4h, df_1h, df_15m),
         "long_setup": long_setup,
         "short_setup": short_setup,
         "primary_setup_side": primary_setup_side,

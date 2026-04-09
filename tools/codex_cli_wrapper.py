@@ -42,6 +42,40 @@ ADVICE_SCHEMA = {
     ],
 }
 
+POST_REVIEW_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "user_verdict": {
+            "type": "string",
+            "enum": ["useful_entry", "useful_wait", "useful_skip", "too_early", "too_late", "low_value"],
+        },
+        "usefulness_1to5": {"type": "integer", "minimum": 1, "maximum": 5},
+        "would_trade": {"type": "string", "enum": ["yes", "no", "conditional"]},
+        "actual_move_driver": {"type": "string", "enum": ["technical", "news", "macro", "unknown"]},
+        "misleading_entry_like_wording": {"type": "string", "enum": ["yes", "no"]},
+        "sl_eval": {"type": "string", "enum": ["good", "too_tight", "too_loose"]},
+        "tp_eval": {"type": "string", "enum": ["good", "too_close", "too_far"]},
+        "tf_4h_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
+        "tf_1h_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
+        "tf_15m_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
+        "memo": {"type": "string"},
+    },
+    "required": [
+        "user_verdict",
+        "usefulness_1to5",
+        "would_trade",
+        "actual_move_driver",
+        "misleading_entry_like_wording",
+        "sl_eval",
+        "tp_eval",
+        "tf_4h_eval",
+        "tf_1h_eval",
+        "tf_15m_eval",
+        "memo",
+    ],
+}
+
 
 def _read_payload() -> dict[str, Any]:
     raw = sys.stdin.read().strip()
@@ -88,12 +122,34 @@ def _build_advice_prompt(payload: dict[str, Any]) -> str:
     )
 
 
+def _build_post_review_prompt(payload: dict[str, Any]) -> str:
+    user_payload = {
+        "signal": payload.get("signal", {}),
+        "outcome": payload.get("outcome", {}),
+        "auto_eval_summary": payload.get("auto_eval_summary", ""),
+    }
+    return "\n\n".join(
+        [
+            "あなたは BTC 監視システムの通知事後評価担当です。",
+            "通知後24時間の結果と、通知時の価格ライン画像を見て、この通知が実務上どう役立ったかを評価してください。",
+            "画像は 4時間足 / 1時間足 / 15分足 の順で並び、15分足が実際のエントリー価格・SL・TP の精度確認の主役です。",
+            "必ず JSON オブジェクトだけを返してください。余計な文章やコードブロックは禁止です。",
+            "system_prompt:",
+            str(payload.get("system_prompt", "")).strip(),
+            "入力データ(JSON):",
+            json.dumps(user_payload, ensure_ascii=False, indent=2),
+        ]
+    )
+
+
 def _build_prompt(payload: dict[str, Any]) -> str:
     task = str(payload.get("task", "")).strip().lower()
     if task == "summary":
         return _build_summary_prompt(payload)
     if task == "ai_advice":
         return _build_advice_prompt(payload)
+    if task == "ai_post_review":
+        return _build_post_review_prompt(payload)
     raise ValueError(f"未対応の task です: {task}")
 
 
@@ -135,6 +191,7 @@ def _build_command(
     model: str,
     output_path: Path,
     schema_path: Path | None,
+    image_paths: list[str] | None,
 ) -> list[str]:
     command = [
         codex_bin,
@@ -152,6 +209,8 @@ def _build_command(
         command[2:2] = ["--model", model]
     if schema_path is not None:
         command[2:2] = ["--output-schema", str(schema_path)]
+    for image_path in image_paths or []:
+        command[2:2] = ["--image", str(image_path)]
     return command
 
 
@@ -170,6 +229,9 @@ def _run_codex(payload: dict[str, Any]) -> str:
         if task == "ai_advice":
             schema_path = tmp_path / "advice_schema.json"
             schema_path.write_text(json.dumps(ADVICE_SCHEMA, ensure_ascii=False, indent=2), encoding="utf-8")
+        elif task == "ai_post_review":
+            schema_path = tmp_path / "post_review_schema.json"
+            schema_path.write_text(json.dumps(POST_REVIEW_SCHEMA, ensure_ascii=False, indent=2), encoding="utf-8")
 
         command = _build_command(
             codex_bin=codex_bin,
@@ -177,6 +239,11 @@ def _run_codex(payload: dict[str, Any]) -> str:
             model=model,
             output_path=output_path,
             schema_path=schema_path,
+            image_paths=[
+                str(path)
+                for path in payload.get("image_paths", [])
+                if str(path).strip()
+            ],
         )
 
         completed = subprocess.run(
@@ -199,7 +266,7 @@ def main() -> int:
         payload = _read_payload()
         task = str(payload.get("task", "")).strip().lower()
         output = _run_codex(payload)
-        if task == "ai_advice":
+        if task in {"ai_advice", "ai_post_review"}:
             print(json.dumps(_extract_json_object(output), ensure_ascii=False))
         elif task == "summary":
             print(output.strip())

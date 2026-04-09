@@ -126,6 +126,9 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("🟠 高め本通知", html)
         self.assertIn("補足状態", html)
         self.assertIn("ロング / ショートの再検討ライン", html)
+        self.assertIn("4時間足: 大局方向", html)
+        self.assertIn("1時間足: 帯の妥当性", html)
+        self.assertIn("15分足: 入る価格 / SL / TP", html)
         self.assertNotIn("AI補足の読み解き", html)
         self.assertNotIn("&lt;強い下方向&gt;", html)
 
@@ -219,7 +222,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 return_value={
                     "detail_page_enabled": True,
                     "detail_page_status": "published",
-                    "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/ver02/main/20260331_030500.html",
+            "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/ver02-4-v1/main/20260331_030500.html",
                     "detail_page_local_path": "/tmp/20260331_030500.html",
                     "detail_page_published_at_utc": "2026-03-30T18:05:00Z",
                 },
@@ -231,7 +234,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
 
         self.assertIn("【詳細ページ】", captured["body"])
-        self.assertIn("https://server.afrog.jp/btc-monitor/notifications/ver02/main/20260331_030500.html", captured["body"])
+        self.assertIn("https://server.afrog.jp/btc-monitor/notifications/ver02-4-v1/main/20260331_030500.html", captured["body"])
         self.assertEqual(result["detail_page_status"], "published")
 
     def test_run_cycle_keeps_plain_body_when_detail_page_publish_fails(self) -> None:
@@ -306,7 +309,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         )
         result = {
             "signal_id": "20260403_090500",
-            "system_label": "Ver02.3-v5",
+            "system_label": "Ver02.4-v1",
             "notification_kind": "main",
             "summary_subject": "subject",
         }
@@ -337,7 +340,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "maruPro@192.168.50.5",
                 "mkdir",
                 "-p",
-                "/Volumes/Server_HD2/site/btc-monitor/notifications/ver02-3-v5/main",
+                "/Volumes/Server_HD2/site/btc-monitor/notifications/ver02-4-v1/main",
             ],
             calls,
         )

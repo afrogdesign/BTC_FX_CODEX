@@ -4,7 +4,9 @@ import argparse
 import csv
 import html
 import json
+import re
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +22,10 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import load_config
+from src.ai.cli_provider import run_cli_json, write_ai_error_log
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
+from src.notification.detail_page import build_notification_detail_html
+from src.storage.json_store import load_json
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -33,6 +38,8 @@ REVIEW_START_CUTOFF_JST = "2026-03-30T05:05:00+09:00"
 REVIEW_SERVER_HOST = "127.0.0.1"
 REVIEW_SERVER_PORT = 8765
 REVIEW_STATE_VERSION = 1
+AI_POST_REVIEW_VARIANT = "ai_post_review_v1"
+AI_POST_REVIEW_TASK = "ai_post_review"
 
 FORM_VERDICT_OPTIONS = [
     {"value": "", "label": "未選択"},
@@ -63,6 +70,20 @@ FORM_MOVE_DRIVER_OPTIONS = [
     {"value": "news", "label": "ニュース要因"},
     {"value": "macro", "label": "マクロ要因"},
     {"value": "unknown", "label": "よく分からない"},
+]
+
+FORM_SL_EVAL_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "good", "label": "妥当"},
+    {"value": "too_tight", "label": "狭すぎた"},
+    {"value": "too_loose", "label": "広すぎた"},
+]
+
+FORM_TP_EVAL_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "good", "label": "妥当"},
+    {"value": "too_close", "label": "近すぎた"},
+    {"value": "too_far", "label": "遠すぎた"},
 ]
 
 FORM_REVIEW_STATUS_OPTIONS = [
@@ -138,6 +159,15 @@ USER_REVIEW_HEADER = [
     "actual_move_driver",
     "misleading_entry_like_wording",
     "logic_validated",
+    "sl_eval",
+    "tp_eval",
+    "tf_4h_eval",
+    "tf_1h_eval",
+    "tf_15m_eval",
+    "review_source",
+    "review_model",
+    "review_image_mode",
+    "review_variant",
     "memo",
     "review_status",
     "reviewed_at_utc",
@@ -217,7 +247,13 @@ SHADOW_HEADER = [
     "advice_variant",
     "evaluation_trace_version",
     "actual_move_driver",
+    "sl_eval",
+    "tp_eval",
+    "tf_4h_eval",
+    "tf_1h_eval",
+    "tf_15m_eval",
     "logic_validated",
+    "review_source",
     "review_status",
     "user_verdict",
     "usefulness_1to5",
@@ -253,6 +289,10 @@ VALID_WOULD_TRADE = {"", "yes", "no", "conditional"}
 VALID_REVIEW_STATUS = {"pending", "done"}
 VALID_MOVE_DRIVERS = {"", "technical", "news", "macro", "unknown"}
 VALID_MISLEADING_ENTRY = {"", "yes", "no"}
+VALID_SL_EVAL = {"", "good", "too_tight", "too_loose"}
+VALID_TP_EVAL = {"", "good", "too_close", "too_far"}
+VALID_TF_EVAL = {"", "good", "mixed", "poor"}
+VALID_REVIEW_SOURCE = {"", "ai", "human_override"}
 
 USER_VERDICT_LABELS = {
     "useful_entry": "入る判断に使えた",
@@ -261,6 +301,21 @@ USER_VERDICT_LABELS = {
     "too_early": "通知が早すぎた",
     "too_late": "通知が遅すぎた",
     "low_value": "価値が低かった",
+}
+SL_EVAL_LABELS = {
+    "good": "SL は妥当",
+    "too_tight": "SL が狭すぎた",
+    "too_loose": "SL が広すぎた",
+}
+TP_EVAL_LABELS = {
+    "good": "TP は妥当",
+    "too_close": "TP が近すぎた",
+    "too_far": "TP が遠すぎた",
+}
+TF_EVAL_LABELS = {
+    "good": "妥当",
+    "mixed": "一部弱い",
+    "poor": "弱い",
 }
 
 BIAS_LABELS = {
@@ -414,6 +469,210 @@ def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
     return path
+
+
+def _user_reviews_archive_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "csv" / "user_reviews_human_archive.csv"
+
+
+def _ai_post_review_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review" / "ai_post_reviews"
+
+
+def _archive_existing_reviews(base_dir: Path, reviews_path: Path) -> Path | None:
+    rows = _load_csv_rows(reviews_path)
+    if not rows:
+        return None
+    archive_path = _user_reviews_archive_path(base_dir)
+    if archive_path.exists():
+        return archive_path
+    fieldnames = list(rows[0].keys())
+    _write_csv_rows(archive_path, fieldnames, rows)
+    return archive_path
+
+
+def _review_source_value(row: dict[str, Any]) -> str:
+    source = str(row.get("review_source", "")).strip()
+    if source in VALID_REVIEW_SOURCE:
+        return source
+    if str(row.get("review_status", "")).strip() == "done":
+        return "human_override"
+    return ""
+
+
+def _extract_price_map_svg(html_text: str) -> str:
+    match = re.search(r'(<svg[^>]*class="price-map"[\s\S]*?</svg>)', html_text)
+    return match.group(1) if match else ""
+
+
+def _signal_snapshot_path(base_dir: Path, signal_id: str) -> Path:
+    return base_dir / "logs" / "signals" / f"{signal_id}.json"
+
+
+def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path) -> Path | None:
+    signal_path = _signal_snapshot_path(base_dir, signal_id)
+    payload = load_json(signal_path)
+    if not isinstance(payload, dict):
+        return None
+    svg = _extract_price_map_svg(build_notification_detail_html(payload))
+    if not svg:
+        return None
+    out_path = temp_dir / f"{signal_id}_price_map.svg"
+    out_path.write_text(svg, encoding="utf-8")
+    return out_path
+
+
+def _normalize_ai_post_review(
+    payload: dict[str, Any],
+    *,
+    model: str,
+    image_mode: str,
+) -> dict[str, str]:
+    verdict = str(payload.get("user_verdict", "")).strip()
+    if verdict not in VALID_USER_VERDICTS or not verdict:
+        verdict = "low_value"
+    verdict_defaults = VERDICT_DEFAULTS.get(verdict, {"would_trade": "no", "usefulness_1to5": "3"})
+    usefulness_raw = str(payload.get("usefulness_1to5", verdict_defaults["usefulness_1to5"])).strip()
+    usefulness = usefulness_raw if usefulness_raw.isdigit() and 1 <= int(usefulness_raw) <= 5 else verdict_defaults["usefulness_1to5"]
+    would_trade = str(payload.get("would_trade", verdict_defaults["would_trade"])).strip()
+    if would_trade not in VALID_WOULD_TRADE or not would_trade:
+        would_trade = verdict_defaults["would_trade"]
+    actual_move_driver = str(payload.get("actual_move_driver", "unknown")).strip()
+    if actual_move_driver not in VALID_MOVE_DRIVERS or not actual_move_driver:
+        actual_move_driver = "unknown"
+    misleading = str(payload.get("misleading_entry_like_wording", "no")).strip()
+    if misleading not in VALID_MISLEADING_ENTRY or not misleading:
+        misleading = "no"
+    sl_eval = str(payload.get("sl_eval", "good")).strip()
+    if sl_eval not in VALID_SL_EVAL or not sl_eval:
+        sl_eval = "good"
+    tp_eval = str(payload.get("tp_eval", "good")).strip()
+    if tp_eval not in VALID_TP_EVAL or not tp_eval:
+        tp_eval = "good"
+    tf_4h_eval = str(payload.get("tf_4h_eval", "good")).strip()
+    if tf_4h_eval not in VALID_TF_EVAL or not tf_4h_eval:
+        tf_4h_eval = "good"
+    tf_1h_eval = str(payload.get("tf_1h_eval", "good")).strip()
+    if tf_1h_eval not in VALID_TF_EVAL or not tf_1h_eval:
+        tf_1h_eval = "good"
+    tf_15m_eval = str(payload.get("tf_15m_eval", "good")).strip()
+    if tf_15m_eval not in VALID_TF_EVAL or not tf_15m_eval:
+        tf_15m_eval = "good"
+    memo = str(payload.get("memo", "")).strip()[:200]
+    return {
+        "user_verdict": verdict,
+        "usefulness_1to5": usefulness,
+        "would_trade": would_trade,
+        "actual_move_driver": actual_move_driver,
+        "misleading_entry_like_wording": misleading,
+        "sl_eval": sl_eval,
+        "tp_eval": tp_eval,
+        "tf_4h_eval": tf_4h_eval,
+        "tf_1h_eval": tf_1h_eval,
+        "tf_15m_eval": tf_15m_eval,
+        "memo": memo,
+        "review_source": "ai",
+        "review_model": str(model or "").strip(),
+        "review_image_mode": image_mode,
+        "review_variant": AI_POST_REVIEW_VARIANT,
+    }
+
+
+def _request_ai_post_review(
+    *,
+    base_dir: Path,
+    cfg: Any,
+    signal_id: str,
+    signal_row: dict[str, Any],
+    outcome_row: dict[str, Any],
+    auto_eval_summary: str,
+) -> dict[str, str] | None:
+    cli_command = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")).strip()
+    if not cli_command:
+        write_ai_error_log(base_dir, "ai_post_review_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
+        return None
+    model = str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip() or "gpt-5.3-codex"
+    timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
+    with tempfile.TemporaryDirectory(prefix="btc-post-review-") as tmpdir:
+        tmp_path = Path(tmpdir)
+        image_path = _build_review_chart_svg_path(base_dir, signal_id, tmp_path)
+        payload = {
+            "task": AI_POST_REVIEW_TASK,
+            "model": model,
+            "system_prompt": (BASE_DIR / "prompts" / "post_review_prompt.md").read_text(encoding="utf-8"),
+            "signal": signal_row,
+            "outcome": outcome_row,
+            "auto_eval_summary": auto_eval_summary,
+        }
+        try:
+            if image_path is not None:
+                with_image = dict(payload)
+                with_image["image_paths"] = [str(image_path)]
+                parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=with_image)
+                return _normalize_ai_post_review(parsed, model=model, image_mode="price_map_svg")
+            parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
+            return _normalize_ai_post_review(parsed, model=model, image_mode="no_chart")
+        except Exception as exc:  # noqa: BLE001
+            if image_path is not None:
+                try:
+                    parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
+                    return _normalize_ai_post_review(parsed, model=model, image_mode="numeric_only_fallback")
+                except Exception as fallback_exc:  # noqa: BLE001
+                    write_ai_error_log(
+                        base_dir,
+                        "ai_post_review_error",
+                        f"signal_id={signal_id}\nimage_error={type(exc).__name__}: {exc}\nfallback_error={type(fallback_exc).__name__}: {fallback_exc}",
+                    )
+                    return None
+            write_ai_error_log(
+                base_dir,
+                "ai_post_review_error",
+                f"signal_id={signal_id}\nerror={type(exc).__name__}: {exc}",
+            )
+            return None
+
+
+def _write_ai_post_review_snapshot(base_dir: Path, signal_id: str, row: dict[str, str]) -> Path:
+    out_path = _ai_post_review_dir(base_dir) / f"{signal_id}.json"
+    _ensure_parent(out_path)
+    payload = {
+        "signal_id": signal_id,
+        "saved_at_utc": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "review": row,
+    }
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
+
+
+def _load_ai_post_review_snapshot(base_dir: Path, signal_id: str) -> dict[str, str] | None:
+    path = _ai_post_review_dir(base_dir) / f"{signal_id}.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    review = payload.get("review")
+    if not isinstance(review, dict):
+        return None
+    return {str(key): str(value or "") for key, value in review.items()}
+
+
+def _reviewed_on_jst(row: dict[str, str], day_key: str) -> bool:
+    reviewed_at = _parse_dt(str(row.get("reviewed_at_utc", "")).strip())
+    if reviewed_at is None:
+        return False
+    return reviewed_at.astimezone(JST).strftime("%Y-%m-%d") == day_key
+
+
+def _ai_post_review_priority(trade: dict[str, str]) -> tuple[int, int, str]:
+    notification_kind = str(trade.get("notification_kind", "")).strip()
+    signal_tier = str(trade.get("signal_tier", "")).strip()
+    main_rank = 0 if notification_kind == "main" else 1
+    tier_rank = {"strong_ai_confirmed": 0, "strong_machine": 1, "normal": 2}.get(signal_tier, 3)
+    timestamp = str(trade.get("timestamp_jst", "")).strip()
+    inverted_ts = "".join(chr(255 - ord(ch)) for ch in timestamp)
+    return (main_rank, tier_rank, inverted_ts)
 
 
 def _load_review_state_rows(path: Path) -> list[dict[str, str]]:
@@ -1984,6 +2243,12 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         actual_move_driver: String(row.actual_move_driver || ''),
         misleading_entry_like_wording: String(row.misleading_entry_like_wording || ''),
         logic_validated: String(row.logic_validated || ''),
+        sl_eval: String(row.sl_eval || ''),
+        tp_eval: String(row.tp_eval || ''),
+        review_source: String(row.review_source || ''),
+        review_model: String(row.review_model || ''),
+        review_image_mode: String(row.review_image_mode || ''),
+        review_variant: String(row.review_variant || ''),
         memo: String(row.memo || ''),
         review_status: String(row.review_status || 'pending'),
       }};
@@ -2031,6 +2296,12 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
           row.actual_move_driver = String(saved.actual_move_driver || '');
           row.misleading_entry_like_wording = String(saved.misleading_entry_like_wording || '');
           row.logic_validated = String(saved.logic_validated || '') || deriveLogicValidated(row);
+          row.sl_eval = String(saved.sl_eval || '');
+          row.tp_eval = String(saved.tp_eval || '');
+          row.review_source = String(saved.review_source || '');
+          row.review_model = String(saved.review_model || '');
+          row.review_image_mode = String(saved.review_image_mode || '');
+          row.review_variant = String(saved.review_variant || '');
           row.memo = String(saved.memo || '');
           row.review_status = String(saved.review_status || 'pending');
           restored += 1;
@@ -2148,6 +2419,15 @@ def _review_rows_to_csv_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]
                 "actual_move_driver": str(row.get("actual_move_driver", "")),
                 "misleading_entry_like_wording": str(row.get("misleading_entry_like_wording", "")),
                 "logic_validated": str(row.get("logic_validated", "")),
+                "sl_eval": str(row.get("sl_eval", "")),
+                "tp_eval": str(row.get("tp_eval", "")),
+                "tf_4h_eval": str(row.get("tf_4h_eval", "")),
+                "tf_1h_eval": str(row.get("tf_1h_eval", "")),
+                "tf_15m_eval": str(row.get("tf_15m_eval", "")),
+                "review_source": _review_source_value(row),
+                "review_model": str(row.get("review_model", "")),
+                "review_image_mode": str(row.get("review_image_mode", "")),
+                "review_variant": str(row.get("review_variant", "")),
                 "memo": str(row.get("memo", "")),
                 "review_status": "done",
                 "reviewed_at_utc": str(row.get("reviewed_at_utc", "")).strip() or reviewed_at,
@@ -2220,6 +2500,15 @@ def export_review_queue(
             "actual_move_driver": actual_move_driver,
             "misleading_entry_like_wording": current.get("misleading_entry_like_wording", ""),
             "logic_validated": logic_validated,
+            "sl_eval": current.get("sl_eval", ""),
+            "tp_eval": current.get("tp_eval", ""),
+            "tf_4h_eval": current.get("tf_4h_eval", ""),
+            "tf_1h_eval": current.get("tf_1h_eval", ""),
+            "tf_15m_eval": current.get("tf_15m_eval", ""),
+            "review_source": _review_source_value(current),
+            "review_model": current.get("review_model", ""),
+            "review_image_mode": current.get("review_image_mode", ""),
+            "review_variant": current.get("review_variant", ""),
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
             "bias": trade.get("bias", ""),
@@ -2269,6 +2558,12 @@ def import_reviews(
         usefulness = str(row.get("usefulness_1to5", "")).strip()
         actual_move_driver = str(row.get("actual_move_driver", "")).strip()
         misleading_entry_like_wording = str(row.get("misleading_entry_like_wording", "")).strip()
+        sl_eval = str(row.get("sl_eval", "")).strip()
+        tp_eval = str(row.get("tp_eval", "")).strip()
+        tf_4h_eval = str(row.get("tf_4h_eval", "")).strip()
+        tf_1h_eval = str(row.get("tf_1h_eval", "")).strip()
+        tf_15m_eval = str(row.get("tf_15m_eval", "")).strip()
+        review_source = _review_source_value(row)
         if user_verdict not in VALID_USER_VERDICTS:
             raise ValueError(f"invalid user_verdict: {signal_id} -> {user_verdict}")
         if would_trade not in VALID_WOULD_TRADE:
@@ -2277,6 +2572,18 @@ def import_reviews(
             raise ValueError(f"invalid actual_move_driver: {signal_id} -> {actual_move_driver}")
         if misleading_entry_like_wording not in VALID_MISLEADING_ENTRY:
             raise ValueError(f"invalid misleading_entry_like_wording: {signal_id} -> {misleading_entry_like_wording}")
+        if sl_eval not in VALID_SL_EVAL:
+            raise ValueError(f"invalid sl_eval: {signal_id} -> {sl_eval}")
+        if tp_eval not in VALID_TP_EVAL:
+            raise ValueError(f"invalid tp_eval: {signal_id} -> {tp_eval}")
+        if tf_4h_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_4h_eval: {signal_id} -> {tf_4h_eval}")
+        if tf_1h_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_1h_eval: {signal_id} -> {tf_1h_eval}")
+        if tf_15m_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_15m_eval: {signal_id} -> {tf_15m_eval}")
+        if review_source not in VALID_REVIEW_SOURCE:
+            raise ValueError(f"invalid review_source: {signal_id} -> {review_source}")
         if usefulness:
             usefulness_int = int(usefulness)
             if usefulness_int < 1 or usefulness_int > 5:
@@ -2323,6 +2630,15 @@ def _save_review_rows(
             "actual_move_driver",
             "misleading_entry_like_wording",
             "logic_validated",
+            "sl_eval",
+            "tp_eval",
+            "tf_4h_eval",
+            "tf_1h_eval",
+            "tf_15m_eval",
+            "review_source",
+            "review_model",
+            "review_image_mode",
+            "review_variant",
             "memo",
             "review_status",
         ):
@@ -2332,6 +2648,7 @@ def _save_review_rows(
             trade_map.get(signal_id, {}).get("prelabel_primary_reason", ""),
             current.get("actual_move_driver", ""),
         ) or str(current.get("logic_validated", "") or "")
+        current["review_source"] = "human_override"
         current["reviewed_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
         current_map[signal_id] = current
 
@@ -2523,12 +2840,21 @@ def build_shadow_log(
                 "advice_variant": trade.get("advice_variant", ""),
                 "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
                 "actual_move_driver": actual_move_driver,
+                "sl_eval": review.get("sl_eval", ""),
+                "tp_eval": review.get("tp_eval", ""),
+                "tf_4h_eval": review.get("tf_4h_eval", ""),
+                "tf_1h_eval": review.get("tf_1h_eval", ""),
+                "tf_15m_eval": review.get("tf_15m_eval", ""),
                 "misleading_entry_like_wording": review.get("misleading_entry_like_wording", ""),
                 "logic_validated": logic_validated or review.get("logic_validated", ""),
+                "review_source": _review_source_value(review),
                 "review_status": review.get("review_status", ""),
                 "user_verdict": review.get("user_verdict", ""),
                 "usefulness_1to5": review.get("usefulness_1to5", ""),
                 "would_trade": review.get("would_trade", ""),
+                "review_model": review.get("review_model", ""),
+                "review_image_mode": review.get("review_image_mode", ""),
+                "review_variant": review.get("review_variant", ""),
                 "memo": review.get("memo", ""),
                 "evaluation_status": outcome.get("evaluation_status", ""),
                 "risk_percent_applied": trade.get("risk_percent_applied", ""),
@@ -2650,6 +2976,11 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     misleading_yes_count = sum(1 for row in misleading_marked if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
     logic_marked = [row for row in rows if str(row.get("logic_validated", "")).strip() in {"true", "false"}]
     logic_true_count = sum(1 for row in logic_marked if str(row.get("logic_validated", "")).strip() == "true")
+    sl_marked = [row for row in rows if str(row.get("sl_eval", "")).strip() in {"good", "too_tight", "too_loose"}]
+    tp_marked = [row for row in rows if str(row.get("tp_eval", "")).strip() in {"good", "too_close", "too_far"}]
+    tf_4h_marked = [row for row in rows if str(row.get("tf_4h_eval", "")).strip() in {"good", "mixed", "poor"}]
+    tf_1h_marked = [row for row in rows if str(row.get("tf_1h_eval", "")).strip() in {"good", "mixed", "poor"}]
+    tf_15m_marked = [row for row in rows if str(row.get("tf_15m_eval", "")).strip() in {"good", "mixed", "poor"}]
     return {
         "verdicts": verdicts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
@@ -2658,6 +2989,11 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "misleading_entry_coverage": _ratio(len(misleading_marked), len(rows)),
         "logic_validated_true_rate": _ratio(logic_true_count, len(logic_marked)),
         "logic_validated_coverage": _ratio(len(logic_marked), len(rows)),
+        "sl_eval_counts": Counter(str(row.get("sl_eval", "")).strip() for row in sl_marked),
+        "tp_eval_counts": Counter(str(row.get("tp_eval", "")).strip() for row in tp_marked),
+        "tf_4h_eval_counts": Counter(str(row.get("tf_4h_eval", "")).strip() for row in tf_4h_marked),
+        "tf_1h_eval_counts": Counter(str(row.get("tf_1h_eval", "")).strip() for row in tf_1h_marked),
+        "tf_15m_eval_counts": Counter(str(row.get("tf_15m_eval", "")).strip() for row in tf_15m_marked),
     }
 
 
@@ -2692,7 +3028,7 @@ def _headline_findings(
     verdicts: Counter[str] = review_summary["verdicts"]
     if verdicts:
         top_verdict, top_count = verdicts.most_common(1)[0]
-        findings.append(f"- 人のレビューでは「{USER_VERDICT_LABELS.get(top_verdict, top_verdict)}」が最も多く、{top_count} 件でした。")
+        findings.append(f"- 事後評価では「{USER_VERDICT_LABELS.get(top_verdict, top_verdict)}」が最も多く、{top_count} 件でした。")
         if review_summary["avg_usefulness"] > 0:
             findings.append(f"- 平均の役立ち度は {review_summary['avg_usefulness']:.2f} / 5 でした。")
         if review_summary["logic_validated_coverage"] > 0:
@@ -2704,7 +3040,7 @@ def _headline_findings(
                 f"- エントリー寄り誤読の入力率は {_format_pct(review_summary['misleading_entry_coverage'])}、誤読ありは {_format_pct(review_summary['misleading_entry_rate'])} でした。"
             )
     else:
-        findings.append("- 人のレビューはまだ十分に集まっていません。")
+        findings.append("- 事後評価はまだ十分に集まっていません。")
     if improvements:
         findings.append(f"- 今回の改善候補の最上位は「{improvements[0]['title']}」です。")
     else:
@@ -3123,6 +3459,75 @@ def _build_improvement_candidates(
                 }
             )
 
+    tp_marked_rows = [row for row in rows if row.get("tp_eval") in {"good", "too_close", "too_far"}]
+    if len(tp_marked_rows) >= 5:
+        too_close_count = sum(1 for row in tp_marked_rows if row.get("tp_eval") == "too_close")
+        too_far_count = sum(1 for row in tp_marked_rows if row.get("tp_eval") == "too_far")
+        too_close_rate = _ratio(too_close_count, len(tp_marked_rows))
+        too_far_rate = _ratio(too_far_count, len(tp_marked_rows))
+        if too_close_count >= 3 and too_close_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "TP が近すぎるケースが多い",
+                    "reason": f"tp_eval=too_close が {too_close_count}/{len(tp_marked_rows)} 件 ({_format_pct(too_close_rate)})",
+                    "evidence_count": too_close_count,
+                    "category": "TP/出口精度",
+                    "touchpoints": "src/analysis/rr.py, src/trade/exit_manager.py",
+                }
+            )
+        if too_far_count >= 3 and too_far_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "TP が遠すぎるケースが多い",
+                    "reason": f"tp_eval=too_far が {too_far_count}/{len(tp_marked_rows)} 件 ({_format_pct(too_far_rate)})",
+                    "evidence_count": too_far_count,
+                    "category": "TP/出口精度",
+                    "touchpoints": "src/analysis/rr.py, src/trade/exit_manager.py",
+                }
+            )
+
+    sl_marked_rows = [row for row in rows if row.get("sl_eval") in {"good", "too_tight", "too_loose"}]
+    if len(sl_marked_rows) >= 5:
+        too_tight_count = sum(1 for row in sl_marked_rows if row.get("sl_eval") == "too_tight")
+        too_loose_count = sum(1 for row in sl_marked_rows if row.get("sl_eval") == "too_loose")
+        too_tight_rate = _ratio(too_tight_count, len(sl_marked_rows))
+        too_loose_rate = _ratio(too_loose_count, len(sl_marked_rows))
+        if too_tight_count >= 3 and too_tight_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "SL が狭すぎるケースが多い",
+                    "reason": f"sl_eval=too_tight が {too_tight_count}/{len(sl_marked_rows)} 件 ({_format_pct(too_tight_rate)})",
+                    "evidence_count": too_tight_count,
+                    "category": "SL精度",
+                    "touchpoints": "src/analysis/rr.py",
+                }
+            )
+        if too_loose_count >= 3 and too_loose_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "SL が広すぎるケースが多い",
+                    "reason": f"sl_eval=too_loose が {too_loose_count}/{len(sl_marked_rows)} 件 ({_format_pct(too_loose_rate)})",
+                    "evidence_count": too_loose_count,
+                    "category": "SL精度",
+                    "touchpoints": "src/analysis/rr.py",
+                }
+            )
+
+    tf_15m_marked_rows = [row for row in rows if row.get("tf_15m_eval") in {"good", "mixed", "poor"}]
+    if len(tf_15m_marked_rows) >= 5:
+        poor_count = sum(1 for row in tf_15m_marked_rows if row.get("tf_15m_eval") == "poor")
+        poor_rate = _ratio(poor_count, len(tf_15m_marked_rows))
+        if poor_count >= 3 and poor_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "15分足の執行価格精度が弱い",
+                    "reason": f"tf_15m_eval=poor が {poor_count}/{len(tf_15m_marked_rows)} 件 ({_format_pct(poor_rate)})",
+                    "evidence_count": poor_count,
+                    "category": "価格帯/執行精度",
+                    "touchpoints": "src/analysis/rr.py, src/notification/detail_page.py",
+                }
+            )
+
     touched_zone_rows = [
         row
         for row in rows
@@ -3222,7 +3627,7 @@ def build_feedback_report(
             )
     lines.append("")
 
-    lines.append("## 4. 人のレビュー要約")
+    lines.append("## 4. 人のレビュー要約 / AI事後評価")
     lines.extend(_verdict_summary_lines(review_summary))
     if review_summary["verdicts"]:
         lines.append(f"- 平均の役立ち度: {review_summary['avg_usefulness']:.2f} / 5")
@@ -3233,6 +3638,36 @@ def build_feedback_report(
         lines.append(
             f"- 根拠整合の入力率: {_format_pct(review_summary['logic_validated_coverage'])} / 整合率: {_format_pct(review_summary['logic_validated_true_rate'])}"
         )
+        sl_counts: Counter[str] = review_summary["sl_eval_counts"]
+        tp_counts: Counter[str] = review_summary["tp_eval_counts"]
+        tf_4h_counts: Counter[str] = review_summary["tf_4h_eval_counts"]
+        tf_1h_counts: Counter[str] = review_summary["tf_1h_eval_counts"]
+        tf_15m_counts: Counter[str] = review_summary["tf_15m_eval_counts"]
+        if sl_counts:
+            lines.append(
+                "- SL評価: "
+                + ", ".join(f"{SL_EVAL_LABELS.get(key, key)}={value}件" for key, value in sl_counts.items())
+            )
+        if tp_counts:
+            lines.append(
+                "- TP評価: "
+                + ", ".join(f"{TP_EVAL_LABELS.get(key, key)}={value}件" for key, value in tp_counts.items())
+            )
+        if tf_4h_counts:
+            lines.append(
+                "- 4時間足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_4h_counts.items())
+            )
+        if tf_1h_counts:
+            lines.append(
+                "- 1時間足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_1h_counts.items())
+            )
+        if tf_15m_counts:
+            lines.append(
+                "- 15分足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_15m_counts.items())
+            )
     lines.append("")
 
     lines.append("## 5. 改善候補")
@@ -3388,14 +3823,140 @@ def build_feedback_report(
     return report
 
 
+def sync_ai_post_reviews(
+    *,
+    base_dir: Path,
+    outcomes_path: Path | None = None,
+    reviews_path: Path | None = None,
+    trades_path: Path | None = None,
+    max_new_reviews: int | None = None,
+) -> tuple[Path, dict[str, int]]:
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    _archive_existing_reviews(base_dir, reviews_path)
+    cfg = load_config(base_dir)
+    daily_max = int(max_new_reviews if max_new_reviews is not None else getattr(cfg, "AI_POST_REVIEW_DAILY_MAX", 2))
+    main_only = bool(getattr(cfg, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY", True))
+    outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
+    review_map = {row.get("signal_id", ""): row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")}
+    ai_rows: list[dict[str, str]] = []
+    stats = {
+        "eligible": 0,
+        "reused": 0,
+        "created": 0,
+        "skipped_existing_ai": 0,
+        "skipped_human_override": 0,
+        "skipped_daily_cap": 0,
+        "skipped_priority_filter": 0,
+        "daily_cap": max(0, daily_max),
+    }
+
+    reviewed_today = sum(
+        1
+        for row in review_map.values()
+        if _review_source_value(row) == "ai"
+        and str(row.get("review_variant", "")).strip() == AI_POST_REVIEW_VARIANT
+        and _reviewed_on_jst(row, datetime.now(tz=JST).strftime("%Y-%m-%d"))
+    )
+    new_review_budget = max(0, daily_max - reviewed_today)
+    stats["already_reviewed_today"] = reviewed_today
+
+    trades = sorted(_load_csv_rows(trades_path), key=_ai_post_review_priority)
+
+    for trade in trades:
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id or not _parse_bool(trade.get("was_notified")):
+            continue
+        if main_only and str(trade.get("notification_kind", "")).strip() != "main":
+            stats["skipped_priority_filter"] += 1
+            continue
+        outcome = outcomes.get(signal_id, {})
+        if str(outcome.get("evaluation_status", "")).strip() != "complete":
+            continue
+        stats["eligible"] += 1
+        current = review_map.get(signal_id, {})
+        current_source = _review_source_value(current)
+        if current_source == "human_override":
+            stats["skipped_human_override"] += 1
+            continue
+        if current_source == "ai" and str(current.get("review_variant", "")).strip() == AI_POST_REVIEW_VARIANT:
+            stats["skipped_existing_ai"] += 1
+            continue
+        cached_review = _load_ai_post_review_snapshot(base_dir, signal_id)
+        if cached_review is not None:
+            ai_rows.append(cached_review)
+            review_map[signal_id] = cached_review
+            stats["reused"] += 1
+            continue
+        if new_review_budget <= 0:
+            stats["skipped_daily_cap"] += 1
+            continue
+        signal_payload = load_json(_signal_snapshot_path(base_dir, signal_id))
+        if not isinstance(signal_payload, dict):
+            signal_payload = {"signal_id": signal_id}
+        auto_eval_summary = _auto_eval_summary(outcome)
+        ai_review = _request_ai_post_review(
+            base_dir=base_dir,
+            cfg=cfg,
+            signal_id=signal_id,
+            signal_row=signal_payload,
+            outcome_row=outcome,
+            auto_eval_summary=auto_eval_summary,
+        )
+        if ai_review is None:
+            continue
+        reviewed_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        row = {
+            "signal_id": signal_id,
+            "timestamp_jst": str(current.get("timestamp_jst", trade.get("timestamp_jst", outcome.get("timestamp_jst", "")))),
+            "subject": str(current.get("subject", trade.get("summary_subject", signal_payload.get("summary_subject", "")))),
+            "auto_eval_summary": auto_eval_summary,
+            "user_verdict": ai_review["user_verdict"],
+            "usefulness_1to5": ai_review["usefulness_1to5"],
+            "would_trade": ai_review["would_trade"],
+            "actual_move_driver": ai_review["actual_move_driver"],
+            "misleading_entry_like_wording": ai_review["misleading_entry_like_wording"],
+            "logic_validated": _logic_validated(trade.get("prelabel_primary_reason", ""), ai_review["actual_move_driver"]),
+            "sl_eval": ai_review["sl_eval"],
+            "tp_eval": ai_review["tp_eval"],
+            "tf_4h_eval": ai_review["tf_4h_eval"],
+            "tf_1h_eval": ai_review["tf_1h_eval"],
+            "tf_15m_eval": ai_review["tf_15m_eval"],
+            "review_source": ai_review["review_source"],
+            "review_model": ai_review["review_model"],
+            "review_image_mode": ai_review["review_image_mode"],
+            "review_variant": ai_review["review_variant"],
+            "memo": ai_review["memo"],
+            "review_status": "done",
+            "reviewed_at_utc": reviewed_at,
+        }
+        ai_rows.append(row)
+        review_map[signal_id] = row
+        _write_ai_post_review_snapshot(base_dir, signal_id, row)
+        stats["created"] += 1
+        new_review_budget -= 1
+
+    if ai_rows:
+        _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, ai_rows, "signal_id")
+    return reviews_path, stats
+
+
 def daily_sync(
     *,
     base_dir: Path,
     review_note_path: Path = DEFAULT_REVIEW_NOTE,
     output_md: Path | None = None,
-) -> dict[str, Path]:
+    max_new_reviews: int | None = 0,
+) -> dict[str, Path | int]:
     outcomes_path = update_outcomes(base_dir=base_dir)
     reviews_path = import_reviews(base_dir=base_dir, review_note_path=review_note_path)
+    reviews_path, sync_stats = sync_ai_post_reviews(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        max_new_reviews=max_new_reviews,
+    )
     shadow_path = build_shadow_log(base_dir=base_dir, outcomes_path=outcomes_path, reviews_path=reviews_path)
     review_note = export_review_queue(
         base_dir=base_dir,
@@ -3414,6 +3975,11 @@ def daily_sync(
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
+        "ai_post_review_eligible": sync_stats["eligible"],
+        "ai_post_review_reused": sync_stats["reused"],
+        "ai_post_review_created": sync_stats["created"],
+        "ai_post_review_skipped_existing_ai": sync_stats["skipped_existing_ai"],
+        "ai_post_review_skipped_human_override": sync_stats["skipped_human_override"],
     }
 
 
@@ -3447,6 +4013,10 @@ def _build_parser() -> argparse.ArgumentParser:
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
+    sync_parser.add_argument("--max-new-ai-reviews", type=int, default=0)
+
+    ai_sync_parser = subparsers.add_parser("sync-ai-post-reviews")
+    ai_sync_parser.add_argument("--max-new-ai-reviews", type=int)
 
     serve_parser = subparsers.add_parser("serve-review-form")
     serve_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
@@ -3501,9 +4071,24 @@ def main() -> None:
 
     if args.command == "daily-sync":
         output_md = Path(args.output_md) if args.output_md else None
-        paths = daily_sync(base_dir=base_dir, review_note_path=Path(args.review_note), output_md=output_md)
+        paths = daily_sync(
+            base_dir=base_dir,
+            review_note_path=Path(args.review_note),
+            output_md=output_md,
+            max_new_reviews=int(args.max_new_ai_reviews),
+        )
         for key, path in paths.items():
             print(f"{key}={path}")
+        return
+
+    if args.command == "sync-ai-post-reviews":
+        reviews_path, stats = sync_ai_post_reviews(
+            base_dir=base_dir,
+            max_new_reviews=int(args.max_new_ai_reviews),
+        )
+        print(f"reviews_path={reviews_path}")
+        for key, value in stats.items():
+            print(f"{key}={value}")
         return
 
 

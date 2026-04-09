@@ -317,6 +317,8 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "PHASE1_TRAIL_ATR_MULTIPLIER": 1.5,
         "PHASE1_TIMEOUT_HOURS": 12,
         "PHASE1_LOSS_STREAK": 0,
+        "AI_POST_REVIEW_DAILY_MAX": 2,
+        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
     }
 
     for key, value in defaults.items():
