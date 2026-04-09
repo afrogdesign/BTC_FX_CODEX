@@ -20,6 +20,7 @@
 - 通知評価は `HTML + JSON` 正本で維持しつつ、主軸を `AI事後評価` に切り替えた。`user_reviews.csv` は AI 正本、人の修正は `human_override` として保護する。
 - AI事後評価の現行運用を [AI事後評価運用_Ver02.4-v1.md](計画/AI事後評価運用_Ver02.4-v1.md) に整理した。`daily-sync` は既定で新規AI評価を走らせず、`sync-ai-post-reviews` だけで少量追加する。
 - クレジット制御として、既定は `1日最大2件`、`main通知優先` にした。保存済み `ai_post_reviews` は再利用し、既存AI評価の再実行はしない。
+- 実運用は `launchd` に切り出した。`03:20 JST` に `daily-sync`、`03:35 JST` に `sync-ai-post-reviews` を回す構成にした。
 - レビュー対象は `2026-03-30 05:05 JST` 以降の通知だけ。古い通知はレビュー画面と集計から外す。
 - `2026-03-31 03:24 JST` の `daily-sync` 結果では、完了データ 32 件、全体勝率 71.9%、近似PF 0.75、レビュー要約は `useful_entry=3`、`too_late=1`、平均役立ち度 2.25 / 5。
 - `Ver02.3v4` までは、`ENTRY_OK + invalid` の整合補正、`long` 側の反発示唆過大評価の抑制、feedback report の `bias別 direction 正誤` / `risk flag 群別 wrong rate` / `直近12時間速報` を追加済み。
@@ -32,7 +33,7 @@
 
 ## 次のタスク
 1. `daily-sync` で `Phase 1 判定サマリー` を見て、`phase1_active=true` と `primary_setup_status=ready` の本番母数を先に確認する。
-2. `sync-ai-post-reviews` を `1〜2件` ずつ回し、`main` 通知から優先して AI 事後評価を増やす。
+2. `launchd` の `com.afrog.btc-feedback-daily-sync` と `com.afrog.btc-ai-post-reviews` が動いていることを確認する。
 3. `15分足評価=poor` や `tp_eval=too_far / too_close` がどの通知で出るかを見て、価格帯・SL・TP の改善対象を切り出す。
 4. `ENTRY_OK` で `too_late` が再発するかを観測し、`confidence_jump` / `prelabel_improved` / `status_upgraded` の 1 本前で通知できる余地があるかを見る。
 5. `NO_TRADE_CANDIDATE` で `skip_too_strict` が再発するかを観測し、再現したら `src/analysis/position_risk.py` の閾値見直し候補として切り出す。
