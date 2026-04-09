@@ -632,17 +632,20 @@ class LogFeedbackTest(unittest.TestCase):
                         "usefulness_1to5",
                         "actual_move_driver",
                         "prelabel",
+                        "primary_setup_status",
                         "signal_tier",
                         "bias",
                         "regime",
                         "risk_flags",
+                        "phase1_active",
+                        "max_size_capped",
                     ],
                 )
                 writer.writeheader()
                 writer.writerow(
                     {
                         "signal_id": "sig_report",
-                        "timestamp_jst": "2026-03-30T09:05:00+09:00",
+                        "timestamp_jst": "2026-04-09T09:05:00+09:00",
                         "evaluation_status": "complete",
                         "data_quality_flag": "ok",
                         "signal_based_MFE_24h": "1.2",
@@ -662,19 +665,116 @@ class LogFeedbackTest(unittest.TestCase):
                         "usefulness_1to5": "4",
                         "actual_move_driver": "technical",
                         "prelabel": "SWEEP_WAIT",
+                        "primary_setup_status": "ready",
                         "signal_tier": "normal",
                         "bias": "short",
                         "regime": "downtrend",
                         "risk_flags": "",
+                        "phase1_active": "true",
+                        "max_size_capped": "false",
+                        "outcome": "win",
                     }
                 )
 
             report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
 
             self.assertIn("## 1. まず結論", report)
-            self.assertIn("## 3. 人のレビュー要約", report)
+            self.assertIn("Phase 1 判定では ready=1 件、phase1_active=true=1 件です。", report)
+            self.assertIn("判定: Phase 1 の本有効確認を進めてよい", report)
+            self.assertIn("## 3. Phase 1 判定サマリー", report)
+            self.assertIn("## 4. 人のレビュー要約", report)
             self.assertIn("待つ判断に使えた", report)
             self.assertIn("平均の役立ち度", report)
+            self.assertIn("`primary_setup_status=ready` 件数: 1", report)
+            self.assertIn("`phase1_active=true` 件数: 1", report)
+
+    def test_build_feedback_report_keeps_phase1_summary_without_reviews(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "evaluation_status",
+                        "data_quality_flag",
+                        "signal_based_MFE_24h",
+                        "signal_based_MAE_24h",
+                        "entry_ready_based_MFE_24h",
+                        "entry_ready_based_MAE_24h",
+                        "outcome",
+                        "direction_outcome",
+                        "entry_outcome",
+                        "wait_outcome",
+                        "skip_outcome",
+                        "support_hold_result",
+                        "resistance_hold_result",
+                        "tp1_hit_first",
+                        "was_notified",
+                        "user_verdict",
+                        "usefulness_1to5",
+                        "actual_move_driver",
+                        "prelabel",
+                        "primary_setup_status",
+                        "signal_tier",
+                        "bias",
+                        "regime",
+                        "risk_flags",
+                        "phase1_active",
+                        "max_size_capped",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_phase1_only",
+                        "timestamp_jst": "2026-04-09T09:05:00+09:00",
+                        "evaluation_status": "complete",
+                        "data_quality_flag": "ok",
+                        "signal_based_MFE_24h": "1.2",
+                        "signal_based_MAE_24h": "0.4",
+                        "entry_ready_based_MFE_24h": "1.0",
+                        "entry_ready_based_MAE_24h": "0.3",
+                        "outcome": "expired",
+                        "direction_outcome": "correct",
+                        "entry_outcome": "good_entry",
+                        "wait_outcome": "not_applicable",
+                        "skip_outcome": "not_applicable",
+                        "support_hold_result": "untouched",
+                        "resistance_hold_result": "held",
+                        "tp1_hit_first": "false",
+                        "was_notified": "true",
+                        "user_verdict": "",
+                        "usefulness_1to5": "",
+                        "actual_move_driver": "",
+                        "prelabel": "ENTRY_OK",
+                        "primary_setup_status": "ready",
+                        "signal_tier": "normal",
+                        "bias": "long",
+                        "regime": "range",
+                        "risk_flags": "",
+                        "phase1_active": "true",
+                        "max_size_capped": "true",
+                    }
+                )
+
+            report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
+
+            self.assertIn("## 3. Phase 1 判定サマリー", report)
+            self.assertIn("判定: Phase 1 の本有効確認を進めてよい", report)
+            self.assertIn("直近の観測対象:", report)
+            self.assertIn("sig_phase1_only / setup=ready / phase1_active=true / outcome=expired", report)
+            self.assertIn("TP1 到達率: 0.0%", report)
+            self.assertIn("`tp1_hit_first=false` 率: 100.0%", report)
+            self.assertIn("`expired` 率: 100.0%", report)
+            self.assertIn("`max_size_capped` 発生率: 100.0%", report)
+            self.assertIn("## 4. 人のレビュー要約", report)
+            self.assertIn("完了レビューはまだありません", report)
 
 
 if __name__ == "__main__":

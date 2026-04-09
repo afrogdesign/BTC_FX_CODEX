@@ -1040,7 +1040,18 @@ def _card_is_ready(row: dict[str, str]) -> bool:
 
 
 def _detail_open(row: dict[str, str]) -> bool:
-    return any(str(row.get(key, "")).strip() for key in ("user_verdict", "would_trade", "usefulness_1to5", "memo", "actual_move_driver"))
+    return any(
+        str(row.get(key, "")).strip()
+        for key in (
+            "user_verdict",
+            "would_trade",
+            "usefulness_1to5",
+            "memo",
+            "actual_move_driver",
+            "misleading_entry_like_wording",
+            "logic_validated",
+        )
+    )
 
 
 def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dict[str, list[dict[str, str]]]) -> str:
@@ -1069,11 +1080,21 @@ def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dic
             for item in FORM_MOVE_DRIVER_OPTIONS
             if item["value"]
         )
+        misleading_buttons = "".join(
+            f'<button type="button" class="choice-pill{" active" if item["value"] == str(row.get("misleading_entry_like_wording", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_MISLEADING_ENTRY_OPTIONS
+            if item["value"]
+        )
         memo_buttons = "".join(
             f'<button type="button" class="memo-chip{" active" if item["value"] == str(row.get("memo", "")) else ""}">{html.escape(str(item["label"]))}</button>'
             for item in FORM_MEMO_PRESET_OPTIONS
             if item["value"]
         )
+        logic_validated = str(row.get("logic_validated", "")).strip()
+        logic_validated_label = {
+            "true": "根拠整合: 合っていた",
+            "false": "根拠整合: ずれていた",
+        }.get(logic_validated, "根拠整合: 未判定")
         metric_cards = "".join(
             '<div class="metric-card">'
             f'<div class="metric-top"><span class="context-label">{html.escape(label)}</span><span class="metric-hint">{html.escape(_metric_hint(key, value))}</span></div>'
@@ -1114,6 +1135,9 @@ def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dic
             f'<div class="detail-text"><strong>自動評価:</strong> {html.escape(_describe_auto_eval_summary(str(row.get("auto_eval_summary", ""))))}</div>'
             '<div class="compact-field"><div class="field-title">値動きの主因</div>'
             f'<div class="choice-row">{move_driver_buttons}</div></div>'
+            '<div class="compact-field"><div class="field-title">エントリー寄りに誤読した？</div>'
+            f'<div class="choice-row">{misleading_buttons}</div></div>'
+            f'<div class="detail-text"><strong>{html.escape(logic_validated_label)}</strong></div>'
             '<div class="compact-field"><div class="field-title">一言メモ</div>'
             f'<div class="memo-chip-row">{memo_buttons}</div>'
             f'<textarea class="memo-input" rows="3">{html.escape(str(row.get("memo", "")))}</textarea></div>'
@@ -1131,6 +1155,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         "usefulness": FORM_USEFULNESS_OPTIONS,
         "wouldTrade": FORM_WOULD_TRADE_OPTIONS,
         "moveDriver": FORM_MOVE_DRIVER_OPTIONS,
+        "misleadingEntry": FORM_MISLEADING_ENTRY_OPTIONS,
         "memoPreset": FORM_MEMO_PRESET_OPTIONS,
     }
     rows_payload = []
@@ -1830,7 +1855,15 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 
         var details = document.createElement('details');
         details.className = 'detail-box';
-        if (String(row.user_verdict || '').trim() || String(row.would_trade || '').trim() || String(row.usefulness_1to5 || '').trim() || String(row.memo || '').trim()) {{
+        if (
+          String(row.user_verdict || '').trim() ||
+          String(row.would_trade || '').trim() ||
+          String(row.usefulness_1to5 || '').trim() ||
+          String(row.memo || '').trim() ||
+          String(row.actual_move_driver || '').trim() ||
+          String(row.misleading_entry_like_wording || '').trim() ||
+          String(row.logic_validated || '').trim()
+        ) {{
           details.open = true;
         }}
         var summary = document.createElement('summary');
@@ -1859,8 +1892,23 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         moveDriverField.innerHTML = '<div class="field-title">値動きの主因</div>';
         moveDriverField.appendChild(buildButtonRow(options.moveDriver, row.actual_move_driver || '', 'choice-pill', function(value) {{
           row.actual_move_driver = value;
+          row.logic_validated = deriveLogicValidated(row);
         }}));
         details.appendChild(moveDriverField);
+
+        var misleadingField = document.createElement('div');
+        misleadingField.className = 'compact-field';
+        misleadingField.innerHTML = '<div class="field-title">エントリー寄りに誤読した？</div>';
+        misleadingField.appendChild(buildButtonRow(options.misleadingEntry, row.misleading_entry_like_wording || '', 'choice-pill', function(value) {{
+          row.misleading_entry_like_wording = value;
+        }}));
+        details.appendChild(misleadingField);
+
+        var logicField = document.createElement('div');
+        logicField.className = 'detail-text';
+        var logicValidated = String(row.logic_validated || '').trim();
+        logicField.innerHTML = '<strong>根拠整合:</strong> ' + (logicValidated === 'true' ? '合っていた' : logicValidated === 'false' ? 'ずれていた' : '未判定');
+        details.appendChild(logicField);
 
         var memoField = document.createElement('div');
         memoField.className = 'compact-field';
@@ -1899,6 +1947,17 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       return;
     }}
 
+    function deriveLogicValidated(row) {{
+      var driver = String(row.actual_move_driver || '').trim();
+      if (!driver || driver === 'unknown') return '';
+      var summary = String(row.auto_eval_summary || '').trim();
+      var match = summary.match(/prelabel:([A-Z_]+)/);
+      var prelabel = match ? String(match[1] || '').trim() : '';
+      if (!prelabel) return '';
+      if (driver === 'technical') return prelabel === 'ENTRY_OK' || prelabel === 'SWEEP_WAIT' ? 'true' : 'false';
+      return 'false';
+    }}
+
     function updateDraftStatus(message) {{
       var el = document.getElementById('draft-status');
       if (el) el.textContent = message;
@@ -1923,6 +1982,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         usefulness_1to5: String(row.usefulness_1to5 || ''),
         would_trade: String(row.would_trade || ''),
         actual_move_driver: String(row.actual_move_driver || ''),
+        misleading_entry_like_wording: String(row.misleading_entry_like_wording || ''),
+        logic_validated: String(row.logic_validated || ''),
         memo: String(row.memo || ''),
         review_status: String(row.review_status || 'pending'),
       }};
@@ -1968,6 +2029,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
           row.usefulness_1to5 = String(saved.usefulness_1to5 || '');
           row.would_trade = String(saved.would_trade || '');
           row.actual_move_driver = String(saved.actual_move_driver || '');
+          row.misleading_entry_like_wording = String(saved.misleading_entry_like_wording || '');
+          row.logic_validated = String(saved.logic_validated || '') || deriveLogicValidated(row);
           row.memo = String(saved.memo || '');
           row.review_status = String(saved.review_status || 'pending');
           restored += 1;
@@ -2034,6 +2097,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         row.usefulness_1to5 = '';
         row.would_trade = '';
         row.actual_move_driver = '';
+        row.misleading_entry_like_wording = '';
+        row.logic_validated = '';
         row.memo = '';
         row.review_status = 'pending';
         row._auto_would_trade = '';
@@ -2136,6 +2201,8 @@ def export_review_queue(
             continue
         current = merged_rows.get(signal_id, {})
         outcome = outcomes.get(signal_id, {})
+        actual_move_driver = current.get("actual_move_driver", "")
+        logic_validated = _logic_validated(trade.get("prelabel_primary_reason", ""), actual_move_driver) or current.get("logic_validated", "")
         auto_eval_summary = current.get("auto_eval_summary", "")
         if not auto_eval_summary:
             if outcome.get("evaluation_status") == "complete":
@@ -2150,9 +2217,9 @@ def export_review_queue(
             "user_verdict": current.get("user_verdict", ""),
             "usefulness_1to5": current.get("usefulness_1to5", ""),
             "would_trade": current.get("would_trade", ""),
-            "actual_move_driver": current.get("actual_move_driver", ""),
+            "actual_move_driver": actual_move_driver,
             "misleading_entry_like_wording": current.get("misleading_entry_like_wording", ""),
-            "logic_validated": current.get("logic_validated", ""),
+            "logic_validated": logic_validated,
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
             "bias": trade.get("bias", ""),
@@ -2229,6 +2296,7 @@ def _save_review_rows(
     trades_path: Path | None = None,
 ) -> list[dict[str, str]]:
     reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
     export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -2239,6 +2307,7 @@ def _save_review_rows(
     state_path = _review_state_path(base_dir)
     current_rows = _load_review_state_rows(state_path)
     current_map = {str(row.get("signal_id", "")): row for row in current_rows if str(row.get("signal_id", "")).strip()}
+    trade_map = {str(row.get("signal_id", "")).strip(): row for row in _load_csv_rows(trades_path) if str(row.get("signal_id", "")).strip()}
     for raw_row in incoming_rows:
         signal_id = str(raw_row.get("signal_id", "")).strip()
         if not signal_id:
@@ -2252,11 +2321,17 @@ def _save_review_rows(
             "usefulness_1to5",
             "would_trade",
             "actual_move_driver",
+            "misleading_entry_like_wording",
+            "logic_validated",
             "memo",
             "review_status",
         ):
             if key in raw_row:
                 current[key] = str(raw_row.get(key, "") or "")
+        current["logic_validated"] = _logic_validated(
+            trade_map.get(signal_id, {}).get("prelabel_primary_reason", ""),
+            current.get("actual_move_driver", ""),
+        ) or str(current.get("logic_validated", "") or "")
         current["reviewed_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
         current_map[signal_id] = current
 
@@ -2571,10 +2646,18 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     verdicts = Counter(row.get("user_verdict", "") for row in rows if row.get("user_verdict"))
     usefulness = [int(row.get("usefulness_1to5", "0")) for row in rows if str(row.get("usefulness_1to5", "")).isdigit()]
     actual_move_driver_count = sum(1 for row in rows if row.get("actual_move_driver"))
+    misleading_marked = [row for row in rows if str(row.get("misleading_entry_like_wording", "")).strip() in {"yes", "no"}]
+    misleading_yes_count = sum(1 for row in misleading_marked if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
+    logic_marked = [row for row in rows if str(row.get("logic_validated", "")).strip() in {"true", "false"}]
+    logic_true_count = sum(1 for row in logic_marked if str(row.get("logic_validated", "")).strip() == "true")
     return {
         "verdicts": verdicts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
         "actual_move_driver_rate": _ratio(actual_move_driver_count, len(rows)),
+        "misleading_entry_rate": _ratio(misleading_yes_count, len(misleading_marked)),
+        "misleading_entry_coverage": _ratio(len(misleading_marked), len(rows)),
+        "logic_validated_true_rate": _ratio(logic_true_count, len(logic_marked)),
+        "logic_validated_coverage": _ratio(len(logic_marked), len(rows)),
     }
 
 
@@ -2612,6 +2695,14 @@ def _headline_findings(
         findings.append(f"- 人のレビューでは「{USER_VERDICT_LABELS.get(top_verdict, top_verdict)}」が最も多く、{top_count} 件でした。")
         if review_summary["avg_usefulness"] > 0:
             findings.append(f"- 平均の役立ち度は {review_summary['avg_usefulness']:.2f} / 5 でした。")
+        if review_summary["logic_validated_coverage"] > 0:
+            findings.append(
+                f"- 根拠整合の入力率は {_format_pct(review_summary['logic_validated_coverage'])}、整合した比率は {_format_pct(review_summary['logic_validated_true_rate'])} でした。"
+            )
+        if review_summary["misleading_entry_coverage"] > 0:
+            findings.append(
+                f"- エントリー寄り誤読の入力率は {_format_pct(review_summary['misleading_entry_coverage'])}、誤読ありは {_format_pct(review_summary['misleading_entry_rate'])} でした。"
+            )
     else:
         findings.append("- 人のレビューはまだ十分に集まっていません。")
     if improvements:
@@ -2645,6 +2736,51 @@ def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cap_rate": _ratio(capped_count, len(active_rows)),
         "avg_timeout_hours": _mean_value(timeout_rows, "timeout_hours"),
     }
+
+
+def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    ready_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() == "ready"]
+    active_rows = [row for row in rows if _parse_bool(row.get("phase1_active"))]
+    tp1_pool = [row for row in active_rows if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    expired_pool = [row for row in active_rows if str(row.get("outcome", "")).strip()]
+    return {
+        "ready_count": len(ready_rows),
+        "active_count": len(active_rows),
+        "tp1_first_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "true"), len(tp1_pool)),
+        "tp1_missed_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "false"), len(tp1_pool)),
+        "expired_rate": _ratio(sum(1 for row in expired_pool if row.get("outcome") == "expired"), len(expired_pool)),
+        "cap_rate": _ratio(sum(1 for row in active_rows if _parse_bool(row.get("max_size_capped"))), len(active_rows)),
+    }
+
+
+def _phase1_gate_decision(summary: dict[str, Any]) -> tuple[str, str]:
+    active_count = int(summary.get("active_count", 0) or 0)
+    ready_count = int(summary.get("ready_count", 0) or 0)
+    if active_count >= 1:
+        return (
+            "Phase 1 の本有効確認を進めてよい",
+            "phase1_active=true の実データが出ているため、正式指標の観測を優先する",
+        )
+    if ready_count >= 1:
+        return (
+            "Phase 1 の準備観測を進める",
+            "ready は出ているが本有効はまだ無いため、次の phase1_active=true を待って観測を続ける",
+        )
+    return (
+        "Phase 1 の本有効待ち",
+        "ready / phase1_active ともに未検出のため、通知観測を継続する",
+    )
+
+
+def _phase1_focus_rows(rows: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
+    focus = [
+        row
+        for row in rows
+        if _parse_bool(row.get("phase1_active"))
+        or str(row.get("primary_setup_status", "")).strip() == "ready"
+    ]
+    focus.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return focus[:limit]
 
 
 def _negative_outcome(row: dict[str, Any]) -> bool:
@@ -2957,6 +3093,36 @@ def _build_improvement_candidates(
                 }
             )
 
+    misleading_marked_rows = [row for row in rows if row.get("misleading_entry_like_wording") in {"yes", "no"}]
+    if len(misleading_marked_rows) >= 5:
+        misleading_yes_count = sum(1 for row in misleading_marked_rows if row.get("misleading_entry_like_wording") == "yes")
+        misleading_rate = _ratio(misleading_yes_count, len(misleading_marked_rows))
+        if misleading_yes_count >= 3 and misleading_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "件名または本文がエントリー寄りに誤読されやすい",
+                    "reason": f"misleading_entry_like_wording=yes が {misleading_yes_count}/{len(misleading_marked_rows)} 件 ({_format_pct(misleading_rate)})",
+                    "evidence_count": misleading_yes_count,
+                    "category": "通知文面",
+                    "touchpoints": "src/notification/detail_page.py, src/ai/summary.py",
+                }
+            )
+
+    logic_marked_rows = [row for row in rows if row.get("logic_validated") in {"true", "false"}]
+    if len(logic_marked_rows) >= 5:
+        logic_false_count = sum(1 for row in logic_marked_rows if row.get("logic_validated") == "false")
+        logic_false_rate = _ratio(logic_false_count, len(logic_marked_rows))
+        if logic_false_count >= 3 and logic_false_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "通知根拠と実際の値動き要因がずれやすい",
+                    "reason": f"logic_validated=false が {logic_false_count}/{len(logic_marked_rows)} 件 ({_format_pct(logic_false_rate)})",
+                    "evidence_count": logic_false_count,
+                    "category": "根拠整合",
+                    "touchpoints": "main.py, src/ai/summary.py, tools/log_feedback.py",
+                }
+            )
+
     touched_zone_rows = [
         row
         for row in rows
@@ -3009,6 +3175,9 @@ def build_feedback_report(
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
     previous_completed = [row for row in previous_rows if row.get("evaluation_status") == "complete"]
     review_summary = _review_summary(completed)
+    phase1_gate = _phase1_gate_summary(completed)
+    phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
+    phase1_focus = _phase1_focus_rows(completed)
     recent_rows = _recent_rows(all_rows, hours=12)
     live_summary = _recent_live_summary(recent_rows)
     improvements = _build_improvement_candidates(
@@ -3021,6 +3190,10 @@ def build_feedback_report(
     lines = [f"# フィードバック分析レポート ({period})", ""]
     lines.append("## 1. まず結論")
     lines.extend(_headline_findings(completed, review_summary, improvements))
+    lines.append(
+        f"- Phase 1 判定では ready={phase1_gate['ready_count']} 件、phase1_active=true={phase1_gate['active_count']} 件です。"
+    )
+    lines.append(f"- 判定: {phase1_decision} ({phase1_reason})")
     lines.append("")
 
     lines.append("## 2. 今回の対象")
@@ -3032,14 +3205,37 @@ def build_feedback_report(
     lines.append(f"- 近似PF: {_profit_factor_proxy(completed):.2f}")
     lines.append("")
 
-    lines.append("## 3. 人のレビュー要約")
+    lines.append("## 3. Phase 1 判定サマリー")
+    lines.append(f"- `primary_setup_status=ready` 件数: {phase1_gate['ready_count']}")
+    lines.append(f"- `phase1_active=true` 件数: {phase1_gate['active_count']}")
+    lines.append(f"- 判定: {phase1_decision}")
+    lines.append(f"- 補足: {phase1_reason}")
+    lines.append(f"- TP1 到達率: {_format_pct(phase1_gate['tp1_first_rate'])}")
+    lines.append(f"- `tp1_hit_first=false` 率: {_format_pct(phase1_gate['tp1_missed_rate'])}")
+    lines.append(f"- `expired` 率: {_format_pct(phase1_gate['expired_rate'])}")
+    lines.append(f"- `max_size_capped` 発生率: {_format_pct(phase1_gate['cap_rate'])}")
+    if phase1_focus:
+        lines.append("- 直近の観測対象:")
+        for row in phase1_focus:
+            lines.append(
+                f"  - {str(row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / {row.get('signal_id', '')} / setup={row.get('primary_setup_status', '')} / phase1_active={row.get('phase1_active', '') or 'false'} / outcome={row.get('outcome', '') or 'pending'}"
+            )
+    lines.append("")
+
+    lines.append("## 4. 人のレビュー要約")
     lines.extend(_verdict_summary_lines(review_summary))
     if review_summary["verdicts"]:
         lines.append(f"- 平均の役立ち度: {review_summary['avg_usefulness']:.2f} / 5")
         lines.append(f"- 値動きの主因の入力率: {_format_pct(review_summary['actual_move_driver_rate'])}")
+        lines.append(
+            f"- エントリー寄り誤読の入力率: {_format_pct(review_summary['misleading_entry_coverage'])} / 誤読あり率: {_format_pct(review_summary['misleading_entry_rate'])}"
+        )
+        lines.append(
+            f"- 根拠整合の入力率: {_format_pct(review_summary['logic_validated_coverage'])} / 整合率: {_format_pct(review_summary['logic_validated_true_rate'])}"
+        )
     lines.append("")
 
-    lines.append("## 4. 改善候補")
+    lines.append("## 5. 改善候補")
     if improvements:
         for idx, item in enumerate(improvements, start=1):
             lines.append(f"{idx}. {item['title']}")
@@ -3049,7 +3245,7 @@ def build_feedback_report(
         lines.append("- まだ改善候補を絞れるだけのデータがありません")
     lines.append("")
 
-    lines.append("## 5. 技術集計")
+    lines.append("## 6. 技術集計")
     lines.append("")
 
     lines.append("### regime別件数・勝率・平均MFE・平均MAE")
