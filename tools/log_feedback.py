@@ -479,6 +479,10 @@ def _ai_post_review_dir(base_dir: Path) -> Path:
     return base_dir / "logs" / "review" / "ai_post_reviews"
 
 
+def _ai_post_review_chart_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review" / "chart_snapshots"
+
+
 def _archive_existing_reviews(base_dir: Path, reviews_path: Path) -> Path | None:
     rows = _load_csv_rows(reviews_path)
     if not rows:
@@ -509,7 +513,7 @@ def _signal_snapshot_path(base_dir: Path, signal_id: str) -> Path:
     return base_dir / "logs" / "signals" / f"{signal_id}.json"
 
 
-def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path) -> Path | None:
+def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
     signal_path = _signal_snapshot_path(base_dir, signal_id)
     payload = load_json(signal_path)
     if not isinstance(payload, dict):
@@ -519,6 +523,10 @@ def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path)
         return None
     out_path = temp_dir / f"{signal_id}_price_map.svg"
     out_path.write_text(svg, encoding="utf-8")
+    if persist_dir is not None:
+        persist_path = persist_dir / out_path.name
+        _ensure_parent(persist_path)
+        persist_path.write_text(svg, encoding="utf-8")
     return out_path
 
 
@@ -593,9 +601,11 @@ def _request_ai_post_review(
         return None
     model = str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip() or "gpt-5.3-codex"
     timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
+    save_chart_snapshots = bool(getattr(cfg, "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS", True))
+    persist_dir = _ai_post_review_chart_dir(base_dir) if save_chart_snapshots else None
     with tempfile.TemporaryDirectory(prefix="btc-post-review-") as tmpdir:
         tmp_path = Path(tmpdir)
-        image_path = _build_review_chart_svg_path(base_dir, signal_id, tmp_path)
+        image_path = _build_review_chart_svg_path(base_dir, signal_id, tmp_path, persist_dir=persist_dir)
         payload = {
             "task": AI_POST_REVIEW_TASK,
             "model": model,

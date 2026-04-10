@@ -110,6 +110,7 @@ def _coerce_value(key: str, value: str) -> Any:
         "AI_CACHE_ENABLED",
         "DRYRUN_MODE",
         "NOTIFICATION_HTML_ENABLED",
+        "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS",
     }
 
     if key in int_keys:
@@ -319,6 +320,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "PHASE1_LOSS_STREAK": 0,
         "AI_POST_REVIEW_DAILY_MAX": 2,
         "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+        "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS": True,
     }
 
     for key, value in defaults.items():

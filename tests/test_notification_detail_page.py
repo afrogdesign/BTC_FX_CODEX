@@ -111,6 +111,23 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "next_condition": "upper_liquidity_close 解消を確認",
                 "warnings": ["sweep_incomplete"],
             },
+            "chart_snapshot": {
+                "candles_4h": [
+                    {"timestamp": 1_775_746_800_000, "open": 65900, "high": 66120, "low": 65780, "close": 66040},
+                    {"timestamp": 1_775_761_200_000, "open": 66040, "high": 66190, "low": 65880, "close": 65960},
+                    {"timestamp": 1_775_775_600_000, "open": 65960, "high": 66080, "low": 65790, "close": 65830},
+                ],
+                "candles_1h": [
+                    {"timestamp": 1_775_775_600_000, "open": 65920, "high": 66030, "low": 65890, "close": 65980},
+                    {"timestamp": 1_775_779_200_000, "open": 65980, "high": 66040, "low": 65830, "close": 65870},
+                    {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65790, "close": 65820},
+                ],
+                "candles_15m": [
+                    {"timestamp": 1_775_781_000_000, "open": 65840, "high": 65890, "low": 65810, "close": 65870},
+                    {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65820, "close": 65835},
+                    {"timestamp": 1_775_789_100_000, "open": 65835, "high": 65860, "low": 65795, "close": 65818},
+                ],
+            },
         }
 
         html = build_notification_detail_html(payload)
@@ -129,6 +146,9 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("4時間足: 大局方向", html)
         self.assertIn("1時間足: 帯の妥当性", html)
         self.assertIn("15分足: 入る価格 / SL / TP", html)
+        self.assertIn("time-axis-label", html)
+        self.assertIn("04/10 00:00", html)
+        self.assertIn("11:45", html)
         self.assertNotIn("AI補足の読み解き", html)
         self.assertNotIn("&lt;強い下方向&gt;", html)
 

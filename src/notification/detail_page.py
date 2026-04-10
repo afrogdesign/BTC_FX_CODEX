@@ -270,6 +270,28 @@ def _snapshot_candles(chart_snapshot: dict[str, Any], key: str) -> list[dict[str
     return [candle for candle in candles if isinstance(candle, dict)]
 
 
+def _format_candle_time(timestamp_ms: Any, panel_mode: str) -> str:
+    try:
+        value = float(timestamp_ms)
+    except (TypeError, ValueError):
+        return ""
+    dt = datetime.fromtimestamp(value / 1000.0, tz=timezone.utc).astimezone()
+    if panel_mode == "execution":
+        return dt.strftime("%H:%M")
+    return dt.strftime("%m/%d %H:%M")
+
+
+def _trim_candles(candles: list[dict[str, Any]], panel_mode: str) -> list[dict[str, Any]]:
+    limit = {
+        "context": 28,
+        "zone": 36,
+        "execution": 48,
+    }.get(panel_mode, 36)
+    if len(candles) <= limit:
+        return candles
+    return candles[-limit:]
+
+
 def _panel_price_map_svg(
     *,
     title: str,
@@ -283,25 +305,32 @@ def _panel_price_map_svg(
     width: int,
     height: int,
     origin_y: int,
-    show_markers: bool,
-    emphasize_setup: bool,
+    panel_mode: str,
 ) -> str:
     top = origin_y + 26
-    bottom = origin_y + height - 26
+    bottom = origin_y + height - 38
     left = 30
     right = width - 112
     usable_h = max(bottom - top, 1)
     chart_width = right - left
+    candles = _trim_candles(candles, panel_mode)
+    show_markers = panel_mode == "execution"
+    show_setup_bands = panel_mode in {"zone", "execution"}
+    show_background_bands = panel_mode != "execution"
+    emphasize_setup = panel_mode == "execution"
 
     values = [current_price]
     long_entry = long_setup.get("entry_zone") or {}
     short_entry = short_setup.get("entry_zone") or {}
-    for zone in (long_entry, short_entry):
-        values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
-    for setup in (long_setup, short_setup):
-        values.extend([_safe_float(setup.get("stop_loss")), _safe_float(setup.get("tp1")), _safe_float(setup.get("tp2"))])
-    for zone in support_zones + resistance_zones:
-        values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
+    if show_setup_bands:
+        for zone in (long_entry, short_entry):
+            values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
+    if show_markers:
+        for setup in (long_setup, short_setup):
+            values.extend([_safe_float(setup.get("stop_loss")), _safe_float(setup.get("tp1")), _safe_float(setup.get("tp2"))])
+    if show_background_bands:
+        for zone in support_zones + resistance_zones:
+            values.extend([_safe_float(zone.get("low")), _safe_float(zone.get("high"))])
     for candle in candles:
         values.extend([_safe_float(candle.get("high")), _safe_float(candle.get("low"))])
     values = [value for value in values if value > 0]
@@ -334,11 +363,12 @@ def _panel_price_map_svg(
         vertical_grid.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{bottom}" class="price-grid-v" />')
 
     candle_elements: list[str] = []
+    time_labels: list[str] = []
     candle_left = left + 6
     candle_width = max(chart_width - 12, 20)
     if candles:
         slot = candle_width / max(len(candles), 1)
-        body_width = max(min(slot * 0.56, 10.0), 2.5)
+        body_width = max(min(slot * 0.82, 15.0), 4.6)
         for idx, candle in enumerate(candles):
             open_price = _safe_float(candle.get("open"))
             high_price = _safe_float(candle.get("high"))
@@ -358,42 +388,59 @@ def _panel_price_map_svg(
             candle_elements.append(
                 f'<rect x="{center_x - body_width / 2:.1f}" y="{body_top:.1f}" width="{body_width:.1f}" height="{max(body_bottom - body_top, 2.0):.1f}" rx="1.3" class="candle-body {tone}" />'
             )
+        label_indexes = sorted({0, len(candles) // 2, len(candles) - 1})
+        for idx in label_indexes:
+            candle = candles[idx]
+            center_x = candle_left + slot * idx + slot / 2
+            label = _format_candle_time(candle.get("timestamp"), panel_mode)
+            if not label:
+                continue
+            time_labels.append(
+                f'<text x="{center_x:.1f}" y="{origin_y + height - 14:.1f}" text-anchor="middle" class="time-axis-label">{html.escape(label)}</text>'
+            )
+        time_labels.append(
+            f'<line x1="{left}" y1="{bottom:.1f}" x2="{right}" y2="{bottom:.1f}" class="time-axis-line" />'
+        )
 
     background_bands: list[str] = []
-    for zone in resistance_zones:
-        low = _safe_float(zone.get("low"))
-        high = _safe_float(zone.get("high"))
-        background_bands.append(
-            f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-resistance" />'
-        )
-    for zone in support_zones:
-        low = _safe_float(zone.get("low"))
-        high = _safe_float(zone.get("high"))
-        background_bands.append(
-            f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-support" />'
-        )
+    if show_background_bands:
+        for zone in resistance_zones:
+            low = _safe_float(zone.get("low"))
+            high = _safe_float(zone.get("high"))
+            background_bands.append(
+                f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-resistance" />'
+            )
+        for zone in support_zones:
+            low = _safe_float(zone.get("low"))
+            high = _safe_float(zone.get("high"))
+            background_bands.append(
+                f'<rect x="{left}" y="{y_for_price(high):.1f}" width="{chart_width}" height="{max(y_for_price(low) - y_for_price(high), 8):.1f}" class="band-support" />'
+            )
 
     setup_elements: list[str] = []
-    for side, setup in (("long", long_setup), ("short", short_setup)):
-        entry = setup.get("entry_zone") or {}
-        low = _safe_float(entry.get("low"))
-        high = _safe_float(entry.get("high"))
-        if min(low, high) <= 0:
-            continue
-        band_class = "setup-band-long" if side == "long" else "setup-band-short"
-        axis_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
-        opacity = "0.28" if emphasize_setup else "0.16"
-        y1 = y_for_price(high)
-        y2 = y_for_price(low)
-        setup_elements.append(
-            f'<rect x="{left + chart_width * 0.18:.1f}" y="{y1:.1f}" width="{chart_width * 0.78:.1f}" height="{max(y2 - y1, 10):.1f}" rx="10" class="{band_class}" style="opacity:{opacity};" />'
-        )
-        setup_elements.append(
-            f'<text x="{right + 6:.1f}" y="{y1 + 5:.1f}" class="{axis_class}">{_format_price_int(high)}</text>'
-        )
-        setup_elements.append(
-            f'<text x="{right + 6:.1f}" y="{y2 + 5:.1f}" class="{axis_class}">{_format_price_int(low)}</text>'
-        )
+    if show_setup_bands:
+        setup_x = left + chart_width * (0.12 if panel_mode == "zone" else 0.16)
+        setup_w = chart_width * (0.84 if panel_mode == "zone" else 0.8)
+        for side, setup in (("long", long_setup), ("short", short_setup)):
+            entry = setup.get("entry_zone") or {}
+            low = _safe_float(entry.get("low"))
+            high = _safe_float(entry.get("high"))
+            if min(low, high) <= 0:
+                continue
+            band_class = "setup-band-long" if side == "long" else "setup-band-short"
+            axis_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
+            opacity = "0.34" if emphasize_setup else "0.18"
+            y1 = y_for_price(high)
+            y2 = y_for_price(low)
+            setup_elements.append(
+                f'<rect x="{setup_x:.1f}" y="{y1:.1f}" width="{setup_w:.1f}" height="{max(y2 - y1, 10):.1f}" rx="10" class="{band_class}" style="opacity:{opacity};" />'
+            )
+            setup_elements.append(
+                f'<text x="{right + 6:.1f}" y="{y1 + 5:.1f}" class="{axis_class}">{_format_price_int(high)}</text>'
+            )
+            setup_elements.append(
+                f'<text x="{right + 6:.1f}" y="{y2 + 5:.1f}" class="{axis_class}">{_format_price_int(low)}</text>'
+            )
 
     current_y = y_for_price(current_price)
     emphasis_lines: list[str] = [
@@ -440,6 +487,7 @@ def _panel_price_map_svg(
         f"{''.join(marker for marker in markers if marker)}"
         f"{''.join(emphasis_lines)}"
         f"{''.join(axis_labels)}"
+        f"{''.join(time_labels)}"
         "</g>"
     )
 
@@ -455,7 +503,7 @@ def _price_map_svg(result: dict[str, Any]) -> str:
     panels = [
         _panel_price_map_svg(
             title="4時間足: 大局方向",
-            subtitle="大きな流れと主要なサポート / レジスタンスを見る段です",
+            subtitle="大きな流れと主要なサポート / レジスタンスだけを見ます。入る価格の判断は下段です",
             candles=_snapshot_candles(chart_snapshot, "candles_4h"),
             current_price=current_price,
             long_setup=long_setup,
@@ -463,14 +511,13 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=206,
+            height=309,
             origin_y=0,
-            show_markers=False,
-            emphasize_setup=False,
+            panel_mode="context",
         ),
         _panel_price_map_svg(
             title="1時間足: 帯の妥当性",
-            subtitle="押し目 / 戻りとして監視帯が自然かを確認する段です",
+            subtitle="再検討帯が押し目 / 戻りとして自然かを見る段です。TP / SL はここでは見ません",
             candles=_snapshot_candles(chart_snapshot, "candles_1h"),
             current_price=current_price,
             long_setup=long_setup,
@@ -478,14 +525,13 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=206,
-            origin_y=220,
-            show_markers=False,
-            emphasize_setup=True,
+            height=309,
+            origin_y=329,
+            panel_mode="zone",
         ),
         _panel_price_map_svg(
             title="15分足: 入る価格 / SL / TP",
-            subtitle="実際の執行精度を見る主役の段です。再検討帯、SL、TP1、TP2 を重ねています",
+            subtitle="実際に入る価格を見る主役の段です。再検討帯、SL、TP1、TP2 をここに集約しています",
             candles=_snapshot_candles(chart_snapshot, "candles_15m"),
             current_price=current_price,
             long_setup=long_setup,
@@ -493,15 +539,14 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=286,
-            origin_y=440,
-            show_markers=True,
-            emphasize_setup=True,
+            height=429,
+            origin_y=658,
+            panel_mode="execution",
         ),
     ]
 
     return (
-        f'<svg viewBox="0 0 {width} 740" class="price-map" aria-label="再検討ラインチャート">'
+        f'<svg viewBox="0 0 {width} 1097" class="price-map" aria-label="再検討ラインチャート">'
         f"{''.join(panels)}"
         "</svg>"
     )
@@ -984,12 +1029,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       stroke-width: 1;
     }}
     .candle-wick {{
-      stroke-width: 1.2;
-      opacity: 0.86;
+      stroke-width: 1.35;
+      opacity: 0.92;
     }}
     .candle-body {{
-      stroke-width: 0.8;
-      opacity: 0.92;
+      stroke-width: 0.95;
+      opacity: 0.96;
     }}
     .candle-up {{
       fill: rgba(74, 222, 128, 0.62);
@@ -1065,6 +1110,15 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       fill: #9db0ca;
       font-size: 12px;
       font-weight: 500;
+    }}
+    .time-axis-line {{
+      stroke: rgba(148, 163, 184, 0.3);
+      stroke-width: 1;
+    }}
+    .time-axis-label {{
+      fill: #8fa2bf;
+      font-size: 11px;
+      font-weight: 600;
     }}
     .current-price-line {{
       stroke: #60a5fa;

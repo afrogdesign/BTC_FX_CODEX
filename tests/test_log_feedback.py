@@ -19,6 +19,8 @@ from tools.log_feedback import (
     DEFAULT_REVIEW_NOTE,
     REVIEW_NOTE_COLUMNS,
     USER_REVIEW_HEADER,
+    _ai_post_review_chart_dir,
+    _build_review_chart_svg_path,
     _build_improvement_candidates,
     _normalize_ai_post_review,
     _load_csv_rows,
@@ -68,6 +70,28 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertEqual(row["tf_15m_eval"], "good")
         self.assertEqual(row["review_source"], "ai")
         self.assertEqual(row["review_model"], "gpt-test")
+
+    def test_build_review_chart_svg_path_persists_snapshot_when_enabled(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            signal_path = base_dir / "logs" / "signals" / "sig_1.json"
+            signal_path.parent.mkdir(parents=True, exist_ok=True)
+            signal_path.write_text(
+                '{"signal_id":"sig_1","current_price":100,"long_setup":{"entry_zone":{"low":95,"high":97},"stop_loss":92,"tp1":103,"tp2":106},"short_setup":{"entry_zone":{"low":103,"high":105},"stop_loss":108,"tp1":99,"tp2":96},"support_zones":[{"low":95,"high":97}],"resistance_zones":[{"low":103,"high":105}],"chart_snapshot":{"candles_4h":[{"timestamp":1775746800000,"open":101,"high":102,"low":99,"close":100}],"candles_1h":[{"timestamp":1775781000000,"open":100,"high":101,"low":99,"close":100}],"candles_15m":[{"timestamp":1775782800000,"open":100,"high":101,"low":99,"close":100}]}}',
+                encoding="utf-8",
+            )
+            temp_dir = base_dir / "tmp"
+            temp_dir.mkdir()
+            persist_dir = _ai_post_review_chart_dir(base_dir)
+
+            image_path = _build_review_chart_svg_path(base_dir, "sig_1", temp_dir, persist_dir=persist_dir)
+
+            self.assertIsNotNone(image_path)
+            assert image_path is not None
+            self.assertTrue(image_path.exists())
+            saved_path = persist_dir / "sig_1_price_map.svg"
+            self.assertTrue(saved_path.exists())
+            self.assertIn('class="price-map"', saved_path.read_text(encoding="utf-8"))
 
     def test_evaluate_trade_row_computes_outcomes_and_zone_results(self) -> None:
         trade_row = {
