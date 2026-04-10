@@ -18,6 +18,7 @@
 - `NOTIFICATION_HTML_ENABLED=true` の実運用確認を実施し、MacServer 公開は `maruPro@192.168.50.5` + `~/.ssh/id_ed25519_afrog_lan` 明示で成功する形へ修正済み。確認用の実送信ではメール本文末尾の `【詳細ページ】` URL と公開 HTML の `200 OK` まで確認した。
 - AI の役割は「全サイクル補足」から「通知時監査」へ再設計する方針で整理した。検証と新方針の履歴メモは [AI役割再設計_通知監査移行設計.md](計画/履歴/AI役割再設計_通知監査移行設計.md)。
 - 通知評価は `HTML + JSON` 正本で維持しつつ、主軸を `AI事後評価` に切り替えた。`user_reviews.csv` は AI 正本、人の修正は `human_override` として保護する。
+- 評価フォームでは、各通知カードの上部で `24時間後機械評価` `AIレビュー` `人が確認` の3段階進捗が見えるようにし、`未完了だけ表示` も `ON / OFF` が視覚的に分かる形へ更新した。
 - AI事後評価の現行運用を [AI事後評価運用_Ver02.4-v1.md](計画/AI事後評価運用_Ver02.4-v1.md) に整理した。`daily-sync` は既定で新規AI評価を走らせず、`sync-ai-post-reviews` だけで少量追加する。
 - クレジット制御として、既定は `1日最大2件`、`main通知優先` にした。保存済み `ai_post_reviews` は再利用し、既存AI評価の再実行はしない。
 - `primary_setup_status=ready` と `phase1_active=true` の意味と実測発生率は [Phase1条件の見方.md](計画/Phase1条件の見方.md) に整理した。

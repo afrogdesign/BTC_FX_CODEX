@@ -504,6 +504,66 @@ def _review_source_value(row: dict[str, Any]) -> str:
     return ""
 
 
+def _review_source_badge(row: dict[str, Any]) -> tuple[str, str]:
+    source = _review_source_value(row)
+    if source == "ai":
+        model = str(row.get("review_model", "")).strip()
+        image_mode = str(row.get("review_image_mode", "")).strip()
+        detail_parts: list[str] = []
+        if model:
+            detail_parts.append(model)
+        if image_mode == "price_map_svg":
+            detail_parts.append("画像あり")
+        elif image_mode == "numeric_only_fallback":
+            detail_parts.append("数値のみ")
+        detail = " / ".join(detail_parts)
+        label = "AI評価済み"
+        return label, detail
+    if source == "human_override":
+        return "人が確認・修正済み", ""
+    if str(row.get("evaluation_status", "")).strip() == "complete":
+        return "AIレビュー待ち", ""
+    return "24時間後評価待ち", ""
+
+
+def _review_source_badge_class(row: dict[str, Any]) -> str:
+    source = _review_source_value(row)
+    if source == "ai":
+        return "ai"
+    if source == "human_override":
+        return "human_override"
+    if str(row.get("evaluation_status", "")).strip() == "complete":
+        return "awaiting_ai"
+    return "awaiting_outcome"
+
+
+def _review_workflow_steps(row: dict[str, Any]) -> list[tuple[str, str, str]]:
+    evaluation_complete = str(row.get("evaluation_status", "")).strip() == "complete"
+    source = _review_source_value(row)
+
+    machine_status = "完了" if evaluation_complete else "待ち"
+    machine_class = "done" if evaluation_complete else "waiting"
+
+    if source in {"ai", "human_override"}:
+        ai_status = "完了"
+        ai_class = "done"
+    elif evaluation_complete:
+        ai_status = "待ち"
+        ai_class = "waiting"
+    else:
+        ai_status = "未着手"
+        ai_class = "idle"
+
+    human_status = "済" if source == "human_override" else "未"
+    human_class = "done" if source == "human_override" else "idle"
+
+    return [
+        ("24時間後機械評価", machine_status, machine_class),
+        ("AIレビュー", ai_status, ai_class),
+        ("人が確認", human_status, human_class),
+    ]
+
+
 def _extract_price_map_svg(html_text: str) -> str:
     match = re.search(r'(<svg[^>]*class="price-map"[\s\S]*?</svg>)', html_text)
     return match.group(1) if match else ""
@@ -1375,15 +1435,22 @@ def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dic
                 ("wait_pressure", "待機圧力", str(row.get("confidence_wait_shadow", "")) or "未記録"),
             )
         )
+        source_badge, source_detail = _review_source_badge(row)
+        source_detail_chip = f'<span class="chip">評価詳細: {html.escape(source_detail)}</span>' if source_detail else ""
+        workflow_chips = "".join(
+            f'<span class="workflow-chip {html.escape(step_class)}"><span>{html.escape(step_label)}</span><strong>{html.escape(step_status)}</strong></span>'
+            for step_label, step_status, step_class in _review_workflow_steps(row)
+        )
         cards.append(
             '<div class="card">'
-            f'<div class="card-top"><h3>通知 {index}</h3><div class="time-badge">{html.escape(time_badge)}</div></div>'
+            f'<div class="card-top"><h3>通知 {index}</h3><div class="card-top-right"><div class="workflow-badges">{workflow_chips}</div><div class="time-badge">{html.escape(time_badge)}</div></div></div>'
             f'<div class="meta">{html.escape(str(row.get("timestamp_jst", "")))} / {html.escape(str(row.get("signal_id", "")))}</div>'
             f'<div class="subject">{html.escape(str(row.get("subject", "")))}</div>'
             '<div class="summary-row">'
+            f'<span class="source-chip {html.escape(_review_source_badge_class(row))}">{html.escape(source_badge)}</span>'
+            f'{source_detail_chip}'
             f'<span class="chip">方向感: {html.escape(_describe_code(str(row.get("bias", "")), BIAS_LABELS))}</span>'
             f'<span class="chip">位置評価: {html.escape(_describe_code(str(row.get("prelabel", "")), PRELABEL_LABELS))}</span>'
-            f'<span class="chip">24時間後評価: {html.escape(_describe_code(str(row.get("evaluation_status", "") or "pending"), EVALUATION_LABELS))}</span>'
             f'<span class="status-chip{" done" if status_done else ""}">{"完了" if status_done else "未完了"}</span>'
             "</div>"
             '<div class="primary-question">'
@@ -1563,6 +1630,10 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     button.secondary {{
       background: #475569;
     }}
+    button.secondary.active-toggle {{
+      background: #0f766e;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
+    }}
     .meta {{
       font-size: 14px;
       color: var(--muted);
@@ -1572,6 +1643,48 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       justify-content: space-between;
       align-items: flex-start;
       gap: 12px;
+    }}
+    .card-top-right {{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }}
+    .workflow-badges {{
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }}
+    .workflow-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+    }}
+    .workflow-chip strong {{
+      font-weight: 800;
+    }}
+    .workflow-chip.done {{
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }}
+    .workflow-chip.waiting {{
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
+    }}
+    .workflow-chip.idle {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
     }}
     .time-badge {{
       min-width: 84px;
@@ -1624,6 +1737,40 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       background: var(--soft-green);
       border-color: #86efac;
       color: #166534;
+    }}
+    .source-chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      font-size: 12px;
+      font-weight: 800;
+    }}
+    .source-chip.ai {{
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }}
+    .source-chip.human_override {{
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #92400e;
+    }}
+    .source-chip.pending {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }}
+    .source-chip.awaiting_outcome {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }}
+    .source-chip.awaiting_ai {{
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
     }}
     .primary-question, .detail-panel {{
       margin-top: 12px;
@@ -1750,6 +1897,10 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       .subject {{
         font-size: 18px;
       }}
+      .card-top-right, .workflow-badges {{
+        align-items: stretch;
+        justify-content: flex-start;
+      }}
       .choice-pill, .score-pill, .memo-chip, button {{
         width: 100%;
       }}
@@ -1781,7 +1932,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       </div>
       <div class="toolbar">
         <span id="progress-chip" class="progress-chip">レビュー進捗: 0 / 0 完了</span>
-        <button type="button" class="secondary" onclick="togglePendingOnly()">未完了だけ表示</button>
+        <button type="button" id="pending-toggle-button" class="secondary" onclick="togglePendingOnly()">未完了だけ表示: OFF</button>
         <button type="button" class="secondary" onclick="focusNextPending()">次の未完了へ</button>
         <button type="button" onclick="saveToServer()">保存</button>
         <button type="button" class="secondary" onclick="reloadFromServer()">再読込</button>
@@ -1889,6 +2040,46 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       var items = parseMaybeJsonArray(value);
       if (!items.length) return '未記録';
       return items.map(function(item) {{ return describeCode(item, notifyReasonLabels); }}).join(' / ');
+    }}
+
+    function reviewSourceInfo(row) {{
+      var source = String(row.review_source || '').trim();
+      if (source === 'ai') {{
+        var detailParts = [];
+        if (String(row.review_model || '').trim()) detailParts.push(String(row.review_model || '').trim());
+        if (String(row.review_image_mode || '').trim() === 'price_map_svg') detailParts.push('画像あり');
+        if (String(row.review_image_mode || '').trim() === 'numeric_only_fallback') detailParts.push('数値のみ');
+        return {{ label: 'AI評価済み', className: 'ai', detail: detailParts.join(' / ') }};
+      }}
+      if (source === 'human_override') {{
+        return {{ label: '人が確認・修正済み', className: 'human_override', detail: '' }};
+      }}
+      if (String(row.evaluation_status || '').trim() === 'complete') {{
+        return {{ label: 'AIレビュー待ち', className: 'awaiting_ai', detail: '' }};
+      }}
+      return {{ label: '24時間後評価待ち', className: 'awaiting_outcome', detail: '' }};
+    }}
+
+    function workflowStepInfo(row) {{
+      var source = String(row.review_source || '').trim();
+      var evaluationComplete = String(row.evaluation_status || '').trim() === 'complete';
+      return [
+        {{
+          label: '24時間後機械評価',
+          status: evaluationComplete ? '完了' : '待ち',
+          className: evaluationComplete ? 'done' : 'waiting'
+        }},
+        {{
+          label: 'AIレビュー',
+          status: source === 'ai' || source === 'human_override' ? '完了' : (evaluationComplete ? '待ち' : '未着手'),
+          className: source === 'ai' || source === 'human_override' ? 'done' : (evaluationComplete ? 'waiting' : 'idle')
+        }},
+        {{
+          label: '人が確認',
+          status: source === 'human_override' ? '済' : '未',
+          className: source === 'human_override' ? 'done' : 'idle'
+        }}
+      ];
     }}
 
     function describeAutoEvalSummary(value) {{
@@ -2018,6 +2209,17 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       if (el) el.textContent = message;
     }}
 
+    function updatePendingToggleButton() {{
+      var button = document.getElementById('pending-toggle-button');
+      if (!button) return;
+      button.textContent = showPendingOnly ? '未完了だけ表示: ON' : '未完了だけ表示: OFF';
+      if (showPendingOnly) {{
+        button.classList.add('active-toggle');
+      }} else {{
+        button.classList.remove('active-toggle');
+      }}
+    }}
+
     function togglePendingOnly() {{
       showPendingOnly = !showPendingOnly;
       renderCards();
@@ -2045,10 +2247,22 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         var title = document.createElement('h3');
         title.textContent = '通知 ' + String(index + 1);
         cardTop.appendChild(title);
+        var cardTopRight = document.createElement('div');
+        cardTopRight.className = 'card-top-right';
+        var workflowBadges = document.createElement('div');
+        workflowBadges.className = 'workflow-badges';
+        workflowStepInfo(row).forEach(function(step) {{
+          var chip = document.createElement('span');
+          chip.className = 'workflow-chip ' + step.className;
+          chip.innerHTML = '<span>' + step.label + '</span><strong>' + step.status + '</strong>';
+          workflowBadges.appendChild(chip);
+        }});
         var timeBadge = document.createElement('div');
         timeBadge.className = 'time-badge';
         timeBadge.textContent = extractTime(row.timestamp_jst);
-        cardTop.appendChild(timeBadge);
+        cardTopRight.appendChild(workflowBadges);
+        cardTopRight.appendChild(timeBadge);
+        cardTop.appendChild(cardTopRight);
         card.appendChild(cardTop);
 
         var meta = document.createElement('div');
@@ -2063,9 +2277,13 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 
         var summaryRow = document.createElement('div');
         summaryRow.className = 'summary-row';
+        var sourceInfo = reviewSourceInfo(row);
+        summaryRow.appendChild(createChip(sourceInfo.label, 'source-chip ' + sourceInfo.className));
+        if (sourceInfo.detail) {{
+          summaryRow.appendChild(createChip('評価詳細: ' + sourceInfo.detail));
+        }}
         summaryRow.appendChild(createChip('方向感: ' + describeBias(row.bias)));
         summaryRow.appendChild(createChip('位置評価: ' + describePrelabel(row.prelabel)));
-        summaryRow.appendChild(createChip('24時間後評価: ' + describeEvaluation(row.evaluation_status || 'pending')));
         summaryRow.appendChild(createChip(String(row.review_status || 'pending') === 'done' ? '完了' : '未完了', 'status-chip' + (String(row.review_status || 'pending') === 'done' ? ' done' : '')));
         card.appendChild(summaryRow);
 
@@ -2200,6 +2418,7 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         root.appendChild(card);
       }});
       updateProgress();
+      updatePendingToggleButton();
     }}
 
     function syncRowsFromDom() {{
