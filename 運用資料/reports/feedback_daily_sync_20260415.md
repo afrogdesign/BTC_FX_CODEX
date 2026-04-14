@@ -2,9 +2,9 @@
 
 ## 1. まず結論
 - 今回の完了データは 41 件です。近似PF は 1.15、全体勝率は 75.6% でした。
-- 事後評価では「待つ判断に使えた」が最も多く、12 件でした。
-- 平均の役立ち度は 3.79 / 5 でした。
-- 根拠整合の入力率は 34.1%、整合した比率は 100.0% でした。
+- 事後評価では「待つ判断に使えた」が最も多く、16 件でした。
+- 平均の役立ち度は 3.78 / 5 でした。
+- 根拠整合の入力率は 41.5%、整合した比率は 100.0% でした。
 - 今回の改善候補の最上位は「ENTRY_OK と setup invalid の整合性崩れ」です。
 - Phase 1 判定では ready=0 件、phase1_active=true=0 件です。
 - 判定: Phase 1 の本有効待ち (ready / phase1_active ともに未検出のため、通知観測を継続する)
@@ -26,28 +26,28 @@
 - `max_size_capped` 発生率: 0.0%
 
 ## 4. 人のレビュー要約 / AI事後評価
-- 待つ判断に使えた: 12件
+- 待つ判断に使えた: 16件
 - 入る判断に使えた: 7件
-- 平均の役立ち度: 3.79 / 5
-- 値動きの主因の入力率: 34.1%
+- 平均の役立ち度: 3.78 / 5
+- 値動きの主因の入力率: 43.9%
 - エントリー寄り誤読の入力率: 0.0% / 誤読あり率: 0.0%
-- 根拠整合の入力率: 34.1% / 整合率: 100.0%
-- SL評価: SL は妥当=4件, SL が狭すぎた=1件, SL が広すぎた=5件
-- TP評価: TP が近すぎた=7件, TP は妥当=2件, TP が遠すぎた=1件
-- 4時間足評価: 妥当=6件, 一部弱い=3件, 弱い=1件
-- 1時間足評価: 妥当=4件, 一部弱い=6件
-- 15分足評価: 一部弱い=5件, 妥当=2件, 弱い=3件
+- 根拠整合の入力率: 41.5% / 整合率: 100.0%
+- SL評価: SL は妥当=6件, SL が狭すぎた=3件, SL が広すぎた=5件
+- TP評価: TP が遠すぎた=2件, TP が近すぎた=9件, TP は妥当=3件
+- 4時間足評価: 弱い=2件, 妥当=8件, 一部弱い=4件
+- 1時間足評価: 一部弱い=10件, 妥当=4件
+- 15分足評価: 妥当=4件, 一部弱い=7件, 弱い=3件
 
 ## 5. 改善候補
 1. ENTRY_OK と setup invalid の整合性崩れ
-   理由: 期間内で ENTRY_OK + invalid が 12 件あります
+   理由: 期間内で ENTRY_OK + invalid が 11 件あります。主理由: rr_below_min=11件
    主に触る場所: main.py, src/analysis/confidence.py, src/analysis/position_risk.py
-2. ENTRY_OK が甘め
-   理由: ENTRY_OK の poor_entry が 7/7 件 (100.0%)
-   主に触る場所: config.py, src/analysis/position_risk.py
-3. TP が近すぎるケースが多い
-   理由: tp_eval=too_close が 7/10 件 (70.0%)
+2. TP が近すぎるケースが多い
+   理由: tp_eval=too_close が 9/14 件 (64.3%)
    主に触る場所: src/analysis/rr.py, src/trade/exit_manager.py
+3. 速報で方向/実行不整合が継続
+   理由: 直近12時間で direction_execution_conflict が 5 件あります
+   主に触る場所: tools/log_feedback.py
 
 ## 6. 技術集計
 
@@ -96,9 +96,9 @@
 
 ### 直近12時間速報
 - 対象件数: 12件
-- direction_execution_conflict: 3件
+- direction_execution_conflict: 5件
 - ENTRY_OK + invalid: 1件
-- countertrend_long_cluster: 10件
+- countertrend_long_cluster: 11件
 
 ### Phase 1 計画ログ
 - Phase 1 計画付き件数: 41

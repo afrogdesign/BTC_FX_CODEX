@@ -518,6 +518,37 @@ class LogFeedbackTest(unittest.TestCase):
 
         self.assertIn("15分足の執行価格精度が弱い", titles)
 
+    def test_improvement_candidates_split_entry_ok_invalid_from_poor_entry(self) -> None:
+        rows = [
+            {
+                "signal_id": f"invalid_{idx}",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "invalid",
+                "primary_setup_reason": "rr_below_min" if idx < 3 else "",
+                "invalid_reason": "RR不足" if idx == 3 else "",
+                "entry_outcome": "poor_entry",
+            }
+            for idx in range(4)
+        ]
+        rows.extend(
+            {
+                "signal_id": f"ready_{idx}",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "ready",
+                "entry_outcome": "good_entry",
+            }
+            for idx in range(3)
+        )
+
+        candidates = _build_improvement_candidates(rows, monthly=False, period_rows=rows)
+        titles = {item["title"] for item in candidates}
+        conflict = next(item for item in candidates if item["title"] == "ENTRY_OK と setup invalid の整合性崩れ")
+
+        self.assertIn("ENTRY_OK と setup invalid の整合性崩れ", titles)
+        self.assertNotIn("ENTRY_OK が甘め", titles)
+        self.assertIn("rr_below_min=3件", conflict["reason"])
+        self.assertIn("RR不足=1件", conflict["reason"])
+
     def test_sync_ai_post_reviews_writes_ai_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)

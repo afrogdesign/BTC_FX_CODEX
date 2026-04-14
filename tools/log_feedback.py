@@ -207,6 +207,7 @@ SHADOW_HEADER = [
     "prelabel_primary_reason",
     "location_risk",
     "primary_setup_status",
+    "primary_setup_reason",
     "invalid_reason",
     "signal_tier",
     "ai_decision",
@@ -3038,6 +3039,7 @@ def build_shadow_log(
                 "prelabel_primary_reason": trade.get("prelabel_primary_reason", ""),
                 "location_risk": trade.get("location_risk", ""),
                 "primary_setup_status": trade.get("primary_setup_status", ""),
+                "primary_setup_reason": trade.get("primary_setup_reason", ""),
                 "invalid_reason": trade.get("invalid_reason", ""),
                 "signal_tier": trade.get("signal_tier", "normal"),
                 "ai_decision": trade.get("ai_decision", ""),
@@ -3385,6 +3387,16 @@ def _entry_ok_invalid_conflict(row: dict[str, Any]) -> bool:
     return row.get("prelabel") == "ENTRY_OK" and row.get("primary_setup_status") == "invalid"
 
 
+def _entry_ok_invalid_reason_text(rows: list[dict[str, Any]]) -> str:
+    reasons = Counter(
+        str(row.get("primary_setup_reason", "")).strip() or str(row.get("invalid_reason", "")).strip() or "unknown"
+        for row in rows
+    )
+    if not reasons:
+        return "理由コードなし"
+    return ", ".join(f"{reason}={count}件" for reason, count in reasons.most_common(3))
+
+
 def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
     if row.get("bias") != "long":
         return False
@@ -3520,7 +3532,22 @@ def _build_improvement_candidates(
     period_rows = period_rows or []
     recent_rows = recent_rows or []
 
-    entry_rows = [row for row in rows if row.get("prelabel") == "ENTRY_OK"]
+    entry_invalid_rows = [row for row in period_rows if _entry_ok_invalid_conflict(row)]
+    if len(entry_invalid_rows) >= 3:
+        candidates.append(
+            {
+                "title": "ENTRY_OK と setup invalid の整合性崩れ",
+                "reason": (
+                    f"期間内で ENTRY_OK + invalid が {len(entry_invalid_rows)} 件あります"
+                    f"。主理由: {_entry_ok_invalid_reason_text(entry_invalid_rows)}"
+                ),
+                "evidence_count": len(entry_invalid_rows),
+                "category": "評価整合性",
+                "touchpoints": "main.py, src/analysis/confidence.py, src/analysis/position_risk.py",
+            }
+        )
+
+    entry_rows = [row for row in rows if row.get("prelabel") == "ENTRY_OK" and not _entry_ok_invalid_conflict(row)]
     if entry_rows:
         poor_count = sum(1 for row in entry_rows if row.get("entry_outcome") == "poor_entry")
         poor_rate = _ratio(poor_count, len(entry_rows))
@@ -3600,18 +3627,6 @@ def _build_improvement_candidates(
                     "touchpoints": "src/analysis/confidence.py, src/analysis/position_risk.py",
                 }
             )
-
-    entry_invalid_rows = [row for row in period_rows if _entry_ok_invalid_conflict(row)]
-    if len(entry_invalid_rows) >= 3:
-        candidates.append(
-            {
-                "title": "ENTRY_OK と setup invalid の整合性崩れ",
-                "reason": f"期間内で ENTRY_OK + invalid が {len(entry_invalid_rows)} 件あります",
-                "evidence_count": len(entry_invalid_rows),
-                "category": "評価整合性",
-                "touchpoints": "main.py, src/analysis/confidence.py, src/analysis/position_risk.py",
-            }
-        )
 
     direction_conflicts = [row for row in recent_rows if _direction_execution_conflict(row)]
     if len(direction_conflicts) >= 2:

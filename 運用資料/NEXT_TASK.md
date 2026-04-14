@@ -1,6 +1,6 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-04-13 11:45 JST
+更新日: 2026-04-15 JST
 
 運用メモ: AI の日常入口として使う。履歴は `履歴/progress.md` に残し、ここには次の判断に必要な情報だけを書く。
 
@@ -11,15 +11,17 @@
 - 現在フェーズは `Phase 0` 本番観測中。主判断は `Phase 1` の本有効確認へ移している。
 - 事後評価運用は `daily-sync` と `sync-ai-post-reviews` の 2 段構成。レビューの主軸は AI、必要なケースだけ `human_override` を使う。
 - `sync-ai-post-reviews` の自動失敗は修正済み。`com.afrog.btc-ai-post-reviews` は `last exit code = 0` を確認した。
-- AI 事後評価の 1 日上限は `AI_POST_REVIEW_DAILY_MAX=4`。現在の進捗は `完了 38 / 未完了 26`、いま未処理だが 24 時間後評価済みの backlog は 19 件。
+- `daily-sync` の最新レポートは `運用資料/reports/feedback_daily_sync_20260415.md`。完了データは 41 件、近似PF は 1.15、全体勝率は 75.6%。
+- AI 事後評価の最新集計では `待つ判断に使えた=16件`、`入る判断に使えた=7件`、平均役立ち度は `3.78 / 5`。
+- `ENTRY_OK + invalid` は改善候補として独立集計するように修正済み。期間内 11 件の主理由は `rr_below_min=11件`。
 - 直近の通知発生は `1日8〜9件` が続いており、全件追随より `main` 通知の代表例を優先して改善観測する前提で進める。
 
 ## 次のタスク
 
 1. `daily-sync` の最新結果どおり `primary_setup_status=ready=0` と `phase1_active=true=0` が続いているため、`Phase 1` 本有効待ちを維持しつつ通知観測を継続する。
-2. `15分足評価=poor` が 14 件、`tp_eval=too_close` が 28 件、`sl_eval=too_loose` が 14 件あるため、まず `15分足のRR不足` と `TP近すぎ / SL広すぎ` の組み合わせを主論点にする。
-3. `ENTRY_OK` が期間レポートで `poor_entry 7/7` と出ているため、`ENTRY_OK + invalid` や `direction_execution_conflict` の対象通知を切り出し、`position_risk` と `confidence` 側の閾値見直し候補を詰める。
-4. 実送信メールの `📊 / 🟠 / 🔥 / 👀` 表示と 3 段チャートを見て、直感とズレる通知がないか確認する。
+2. 次の実装論点は `ENTRY_OK + invalid` の発生源を `rr_below_min` 中心に絞り、`position_risk` と `confidence` 側の閾値見直し候補を詰める。
+3. 次点の改善候補は `TP が近すぎるケースが多い`。最新レポートでは `tp_eval=too_close` が 9/14 件。
+4. 直近12時間では `direction_execution_conflict=5件` が出ているため、ENTRY_OK整合性の次に速報監視側の扱いを確認する。
 
 ## ブロッカー
 
