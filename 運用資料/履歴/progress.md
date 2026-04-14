@@ -27,6 +27,18 @@
 
 ## 重要な節目ログ
 
+- 2026-04-13 11:40 JST
+  - `sync-ai-post-reviews` が LaunchAgent 経由で `int(None)` により毎日失敗していたため、`tools/log_feedback.py` の引数処理を修正し、`max_new_ai_reviews` 未指定でも既定値へ流れるようにした。
+  - 旧ログ互換として、`was_notified=true` なのに `notification_kind` が空の行を `main` 扱いで AI 事後評価対象に含めるようにした。
+  - `export_review_queue()` のレビューソース統合順を修正し、`user_reviews.csv` の新しい AI 評価が古い `review_form_state.json` の `pending` に上書きされないようにした。
+  - `tests/test_log_feedback.py` に、LaunchAgent 相当の未指定引数、`notification_kind` 欠落互換、CSV 優先マージのテストを追加し、`unittest` 4本で確認した。
+  - 手動で `sync-ai-post-reviews` と `daily-sync` を実行し、通知評価の進捗を `完了 21 / 未完了 43` から `完了 38 / 未完了 26` へ更新した。
+  - `launchctl kickstart -k "gui/$(id -u)/com.afrog.btc-ai-post-reviews"` 後に `last exit code = 0` を確認し、自動 AI レビューの復旧を確認した。
+  - `.env` の `AI_POST_REVIEW_DAILY_MAX` を `2 -> 4` へ変更し、当日分は `already_reviewed_today=4` に達するまで追加消化されることを確認した。
+  - 直近レビュー分析では `ENTRY_OK` が `primary_setup_status=invalid` と同居するケースが多く、件名と本文でエントリー寄りに誤読されやすかったため、`src/presentation/sanitize.py` を調整した。
+  - `ENTRY_OK + invalid` のときは表示ラベルを `位置は悪くないが条件未成立` に抑え、`高め本通知` へ昇格しないようにした。ロジック値そのものは維持しつつ、表示上の誤読だけを減らす修正にとどめた。
+  - `tests/test_summary_format.py` に回帰テストを追加し、`unittest` 3本で確認した。
+
 - 2026-04-10 18:40 JST
   - 通知評価フォームの状態表示を整理し、各通知カードの上部で `24時間後機械評価` `AIレビュー` `人が確認` の3段階が見えるようにした。
   - `未完了だけ表示` ボタンは `ON / OFF` が文言と色で分かるトグル表示に変更した。

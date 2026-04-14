@@ -127,6 +127,12 @@ def prelabel_label(value: Any) -> str:
     return _PRELABEL_LABELS.get(str(value).upper(), "内部評価あり")
 
 
+def _entry_quality_label(result: dict[str, Any], prelabel: str, status: str) -> str:
+    if prelabel == "ENTRY_OK" and status == "invalid":
+        return "位置は悪くないが条件未成立"
+    return prelabel_label(prelabel)
+
+
 def setup_status_label(value: Any) -> str:
     return _SETUP_LABELS.get(str(value).lower(), "未形成")
 
@@ -262,11 +268,11 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
         "direction_compact_label": direction_compact_label(bias),
         "action_label": action,
         "action_compact_label": _subject_action_label(action),
-        "entry_quality_label": prelabel_label(prelabel),
+        "entry_quality_label": _entry_quality_label(result, prelabel, status),
         "setup_status_label": setup_status_label(status),
         "confidence_metric_labels": dict(CONFIDENCE_METRIC_LABELS),
         "wait_reason_labels": _dedupe_preserve(reason_labels),
-        "prelabel_display_label": prelabel_label(prelabel),
+        "prelabel_display_label": _entry_quality_label(result, prelabel, status),
         "primary_setup_status": status,
     }
 
@@ -335,7 +341,7 @@ def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str
 
     is_high = (
         status_code == "actionable"
-        or prelabel == "ENTRY_OK"
+        or (prelabel == "ENTRY_OK" and status_code != "invalid")
         or confidence >= confidence_floor + 8.0
         or rr_estimate >= 1.3
         or score_gap >= 25.0

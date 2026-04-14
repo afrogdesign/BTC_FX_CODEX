@@ -22,6 +22,7 @@ from tools.log_feedback import (
     _ai_post_review_chart_dir,
     _build_review_chart_svg_path,
     _build_improvement_candidates,
+    _merge_review_sources,
     _normalize_ai_post_review,
     _load_csv_rows,
     _load_review_note_rows,
@@ -34,6 +35,7 @@ from tools.log_feedback import (
     evaluate_trade_row,
     export_review_queue,
     import_reviews,
+    main,
     sync_ai_post_reviews,
 )
 
@@ -855,6 +857,115 @@ class LogFeedbackTest(unittest.TestCase):
 
             mocked_cli.assert_not_called()
             self.assertEqual(stats["skipped_priority_filter"], 1)
+
+    def test_sync_ai_post_reviews_treats_missing_notification_kind_as_main_for_notified_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "signal_tier"],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_missing_kind",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_missing_kind", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            signal_path = base_dir / "logs" / "signals" / "sig_missing_kind.json"
+            signal_path.write_text('{"signal_id":"sig_missing_kind","summary_subject":"subject"}', encoding="utf-8")
+
+            ai_result = {
+                "user_verdict": "useful_entry",
+                "usefulness_1to5": "4",
+                "would_trade": "yes",
+                "actual_move_driver": "technical",
+                "misleading_entry_like_wording": "no",
+                "sl_eval": "good",
+                "tp_eval": "good",
+                "tf_4h_eval": "good",
+                "tf_1h_eval": "good",
+                "tf_15m_eval": "mixed",
+                "memo": "ok",
+            }
+            with patch("tools.log_feedback.run_cli_json", return_value=ai_result) as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {
+                        "AI_POST_REVIEW_DAILY_MAX": 2,
+                        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+                        "AI_ADVICE_CLI_COMMAND": "dummy-cli",
+                    },
+                )()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_called_once()
+            self.assertEqual(stats["created"], 1)
+
+    def test_main_sync_ai_post_reviews_accepts_missing_max_new_ai_reviews(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "sync-ai-post-reviews"]), patch(
+            "tools.log_feedback.sync_ai_post_reviews"
+        ) as mocked_sync:
+            mocked_sync.return_value = (Path("/tmp/user_reviews.csv"), {"created": 0})
+
+            main()
+
+        mocked_sync.assert_called_once()
+        self.assertIsNone(mocked_sync.call_args.kwargs["max_new_reviews"])
+
+    def test_merge_review_sources_prefers_csv_review_rows_over_stale_state(self) -> None:
+        merged = _merge_review_sources(
+            state_rows=[
+                {
+                    "signal_id": "sig_1",
+                    "review_status": "pending",
+                    "review_source": "",
+                    "memo": "",
+                }
+            ],
+            note_rows=[],
+            review_rows=[
+                {
+                    "signal_id": "sig_1",
+                    "review_status": "done",
+                    "review_source": "ai",
+                    "memo": "from csv",
+                }
+            ],
+        )
+
+        self.assertEqual(merged["sig_1"]["review_status"], "done")
+        self.assertEqual(merged["sig_1"]["review_source"], "ai")
+        self.assertEqual(merged["sig_1"]["memo"], "from csv")
 
     def test_build_shadow_log_sets_logic_validated(self) -> None:
         with TemporaryDirectory() as tmpdir:

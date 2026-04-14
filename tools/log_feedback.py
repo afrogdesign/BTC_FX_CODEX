@@ -735,8 +735,17 @@ def _reviewed_on_jst(row: dict[str, str], day_key: str) -> bool:
     return reviewed_at.astimezone(JST).strftime("%Y-%m-%d") == day_key
 
 
+def _normalized_notification_kind(trade: dict[str, str]) -> str:
+    notification_kind = str(trade.get("notification_kind", "")).strip().lower()
+    if notification_kind:
+        return notification_kind
+    if _parse_bool(trade.get("was_notified")):
+        return "main"
+    return "none"
+
+
 def _ai_post_review_priority(trade: dict[str, str]) -> tuple[int, int, str]:
-    notification_kind = str(trade.get("notification_kind", "")).strip()
+    notification_kind = _normalized_notification_kind(trade)
     signal_tier = str(trade.get("signal_tier", "")).strip()
     main_rank = 0 if notification_kind == "main" else 1
     tier_rank = {"strong_ai_confirmed": 0, "strong_machine": 1, "normal": 2}.get(signal_tier, 3)
@@ -2672,7 +2681,7 @@ def _merge_review_sources(
     review_rows: list[dict[str, str]],
 ) -> dict[str, dict[str, str]]:
     merged: dict[str, dict[str, str]] = {}
-    for source_rows in (review_rows, note_rows, state_rows):
+    for source_rows in (state_rows, note_rows, review_rows):
         for row in source_rows:
             signal_id = str(row.get("signal_id", "")).strip()
             if not signal_id:
@@ -4097,7 +4106,7 @@ def sync_ai_post_reviews(
         signal_id = str(trade.get("signal_id", "")).strip()
         if not signal_id or not _parse_bool(trade.get("was_notified")):
             continue
-        if main_only and str(trade.get("notification_kind", "")).strip() != "main":
+        if main_only and _normalized_notification_kind(trade) != "main":
             stats["skipped_priority_filter"] += 1
             continue
         outcome = outcomes.get(signal_id, {})
@@ -4313,7 +4322,7 @@ def main() -> None:
     if args.command == "sync-ai-post-reviews":
         reviews_path, stats = sync_ai_post_reviews(
             base_dir=base_dir,
-            max_new_reviews=int(args.max_new_ai_reviews),
+            max_new_reviews=args.max_new_ai_reviews,
         )
         print(f"reviews_path={reviews_path}")
         for key, value in stats.items():

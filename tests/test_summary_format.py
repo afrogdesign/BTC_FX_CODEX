@@ -197,3 +197,42 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("上側流動性が近く先に振られやすい", body)
         self.assertNotIn("bid_wall_close", body)
         self.assertNotIn("upper_liquidity_close", body)
+
+    def test_entry_ok_invalid_is_not_presented_as_strong_entry(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-04-04T20:05:00+09:00",
+            "system_label": "Ver02.4-v1",
+            "system_mode_label": "CLI",
+            "prelabel": "ENTRY_OK",
+            "bias": "short",
+            "signal_tier": "normal",
+            "primary_setup_status": "invalid",
+            "primary_setup_reason": "rr_below_min",
+            "current_price": 70200.0,
+            "confidence": 52,
+            "rr_estimate": 1.05,
+            "score_gap": 12,
+            "confidence_direction_shadow": 74.0,
+            "confidence_execution_shadow": 22.0,
+            "confidence_wait_shadow": 61.0,
+            "warning_flags": ["Critical_zone_warning"],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["RR_insufficient_short", "RR_insufficient"],
+        }
+
+        subject = build_summary_subject(payload)
+        body, _provider_used = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("📊 [通常の本通知]", subject)
+        self.assertNotIn("🟠 [高め本通知]", subject)
+        self.assertIn("位置評価: 位置は悪くないが条件未成立", body)
+        self.assertIn("執行判断: 見送り", body)
