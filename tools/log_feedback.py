@@ -3156,6 +3156,13 @@ def _format_pct(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _format_counter(counter: Counter[str], *, limit: int = 3) -> str:
+    items = [(key, count) for key, count in counter.most_common(limit) if key]
+    if not items:
+        return "なし"
+    return ", ".join(f"{key}={count}件" for key, count in items)
+
+
 def _sample_note(count: int) -> str:
     return "" if count >= 30 else f" / データ不足 {count}/30"
 
@@ -3317,11 +3324,19 @@ def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ready_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() == "ready"]
     active_rows = [row for row in rows if _parse_bool(row.get("phase1_active"))]
+    blocker_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() in {"invalid", "watch"}]
+    blockers = Counter(
+        str(row.get("primary_setup_reason", "")).strip()
+        or str(row.get("invalid_reason", "")).strip()
+        or str(row.get("primary_setup_status", "")).strip()
+        for row in blocker_rows
+    )
     tp1_pool = [row for row in active_rows if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
     expired_pool = [row for row in active_rows if str(row.get("outcome", "")).strip()]
     return {
         "ready_count": len(ready_rows),
         "active_count": len(active_rows),
+        "blocker_text": _format_counter(blockers, limit=5),
         "tp1_first_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "true"), len(tp1_pool)),
         "tp1_missed_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "false"), len(tp1_pool)),
         "expired_rate": _ratio(sum(1 for row in expired_pool if row.get("outcome") == "expired"), len(expired_pool)),
@@ -3397,6 +3412,27 @@ def _entry_ok_invalid_reason_text(rows: list[dict[str, Any]]) -> str:
     return ", ".join(f"{reason}={count}件" for reason, count in reasons.most_common(3))
 
 
+def _entry_ok_rr_blocker_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    blocked = [
+        row
+        for row in rows
+        if _entry_ok_invalid_conflict(row)
+        and (
+            str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+            or "RR不足" in str(row.get("invalid_reason", ""))
+        )
+    ]
+    flags: Counter[str] = Counter()
+    for row in blocked:
+        flags.update(_split_values(row.get("risk_flags", "")))
+    return {
+        "count": len(blocked),
+        "avg_execution": _mean_value(blocked, "confidence_execution_shadow"),
+        "avg_wait": _mean_value(blocked, "confidence_wait_shadow"),
+        "risk_flags": _format_counter(flags),
+    }
+
+
 def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
     if row.get("bias") != "long":
         return False
@@ -3467,9 +3503,18 @@ def _recent_live_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     direction_conflicts = [row for row in rows if _direction_execution_conflict(row)]
     entry_invalid_rows = [row for row in rows if _entry_ok_invalid_conflict(row)]
     countertrend_rows = [row for row in rows if _countertrend_long_cluster(row)]
+    direction_conflict_flags: Counter[str] = Counter()
+    direction_conflict_reasons: Counter[str] = Counter()
+    for row in direction_conflicts:
+        direction_conflict_flags.update(_split_values(row.get("risk_flags", "")))
+        reason = str(row.get("primary_setup_reason", "")).strip() or str(row.get("invalid_reason", "")).strip()
+        if reason:
+            direction_conflict_reasons[reason] += 1
     return {
         "count": len(rows),
         "direction_execution_conflict_count": len(direction_conflicts),
+        "direction_execution_conflict_flags": _format_counter(direction_conflict_flags),
+        "direction_execution_conflict_reasons": _format_counter(direction_conflict_reasons),
         "entry_ok_invalid_count": len(entry_invalid_rows),
         "countertrend_long_cluster_count": len(countertrend_rows),
     }
@@ -3838,6 +3883,7 @@ def build_feedback_report(
     phase1_focus = _phase1_focus_rows(completed)
     recent_rows = _recent_rows(all_rows, hours=12)
     live_summary = _recent_live_summary(recent_rows)
+    entry_ok_rr_blockers = _entry_ok_rr_blocker_summary(completed)
     improvements = _build_improvement_candidates(
         completed,
         monthly=(period == "monthly"),
@@ -3872,6 +3918,7 @@ def build_feedback_report(
     lines.append(f"- `tp1_hit_first=false` 率: {_format_pct(phase1_gate['tp1_missed_rate'])}")
     lines.append(f"- `expired` 率: {_format_pct(phase1_gate['expired_rate'])}")
     lines.append(f"- `max_size_capped` 発生率: {_format_pct(phase1_gate['cap_rate'])}")
+    lines.append(f"- ready阻害理由: {phase1_gate['blocker_text']}")
     if phase1_focus:
         lines.append("- 直近の観測対象:")
         for row in phase1_focus:
@@ -3931,6 +3978,15 @@ def build_feedback_report(
             lines.append(f"   主に触る場所: {item['touchpoints']}")
     else:
         lines.append("- まだ改善候補を絞れるだけのデータがありません")
+    if entry_ok_rr_blockers["count"]:
+        lines.append("")
+        lines.append("補助集計:")
+        lines.append(
+            f"- ENTRY_OK + rr_below_min: {entry_ok_rr_blockers['count']}件"
+            f" / 平均 execution={entry_ok_rr_blockers['avg_execution']:.1f}"
+            f" / 平均 wait={entry_ok_rr_blockers['avg_wait']:.1f}"
+        )
+        lines.append(f"- ENTRY_OK + rr_below_min の主な risk_flags: {entry_ok_rr_blockers['risk_flags']}")
     lines.append("")
 
     lines.append("## 6. 技術集計")
@@ -4021,6 +4077,9 @@ def build_feedback_report(
     lines.append("### 直近12時間速報")
     lines.append(f"- 対象件数: {live_summary['count']}件")
     lines.append(f"- direction_execution_conflict: {live_summary['direction_execution_conflict_count']}件")
+    if live_summary["direction_execution_conflict_count"]:
+        lines.append(f"- direction_execution_conflict の主な理由: {live_summary['direction_execution_conflict_reasons']}")
+        lines.append(f"- direction_execution_conflict の主な risk_flags: {live_summary['direction_execution_conflict_flags']}")
     lines.append(f"- ENTRY_OK + invalid: {live_summary['entry_ok_invalid_count']}件")
     lines.append(f"- countertrend_long_cluster: {live_summary['countertrend_long_cluster_count']}件")
     lines.append("")

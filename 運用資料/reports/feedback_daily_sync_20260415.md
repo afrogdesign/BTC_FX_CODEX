@@ -24,6 +24,7 @@
 - `tp1_hit_first=false` 率: 0.0%
 - `expired` 率: 0.0%
 - `max_size_capped` 発生率: 0.0%
+- ready阻害理由: rr_below_min=34件, entry_zone_not_reached=3件, confidence_below_min=1件, inside_entry_zone_with_trigger=1件, near_entry_zone_with_trigger=1件
 
 ## 4. 人のレビュー要約 / AI事後評価
 - 待つ判断に使えた: 16件
@@ -48,6 +49,10 @@
 3. 速報で方向/実行不整合が継続
    理由: 直近12時間で direction_execution_conflict が 5 件あります
    主に触る場所: tools/log_feedback.py
+
+補助集計:
+- ENTRY_OK + rr_below_min: 6件 / 平均 execution=10.3 / 平均 wait=64.8
+- ENTRY_OK + rr_below_min の主な risk_flags: lower_liquidity_close=5件, short_cover_risk=1件, cvd_bullish_divergence=1件
 
 ## 6. 技術集計
 
@@ -97,6 +102,8 @@
 ### 直近12時間速報
 - 対象件数: 12件
 - direction_execution_conflict: 5件
+- direction_execution_conflict の主な理由: rr_below_min=5件
+- direction_execution_conflict の主な risk_flags: lower_liquidity_close=5件, ask_wall_close=4件, sweep_incomplete=4件
 - ENTRY_OK + invalid: 1件
 - countertrend_long_cluster: 11件
 

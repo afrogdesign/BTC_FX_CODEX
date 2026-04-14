@@ -14,12 +14,13 @@
 - `daily-sync` の最新レポートは `運用資料/reports/feedback_daily_sync_20260415.md`。完了データは 41 件、近似PF は 1.15、全体勝率は 75.6%。
 - AI 事後評価の最新集計では `待つ判断に使えた=16件`、`入る判断に使えた=7件`、平均役立ち度は `3.78 / 5`。
 - `ENTRY_OK + invalid` は改善候補として独立集計するように修正済み。期間内 11 件の主理由は `rr_below_min=11件`。
+- Phase 1 へは閾値緩和で急がず、`ready=1件以上`、`phase1_active=true=5件以上`、`phase1_active=true=30件以上` の 3 段階で観測を進める。
 - 直近の通知発生は `1日8〜9件` が続いており、全件追随より `main` 通知の代表例を優先して改善観測する前提で進める。
 
 ## 次のタスク
 
 1. `daily-sync` の最新結果どおり `primary_setup_status=ready=0` と `phase1_active=true=0` が続いているため、`Phase 1` 本有効待ちを維持しつつ通知観測を継続する。
-2. 次の実装論点は `ENTRY_OK + invalid` の発生源を `rr_below_min` 中心に絞り、`position_risk` と `confidence` 側の閾値見直し候補を詰める。
+2. 次の実装論点は `ENTRY_OK + invalid` の発生源を `rr_below_min` 中心に絞り、`position_risk` と `confidence` 側の閾値見直し候補を詰める。`MIN_RR_RATIO` はまだ緩めない。
 3. 次点の改善候補は `TP が近すぎるケースが多い`。最新レポートでは `tp_eval=too_close` が 9/14 件。
 4. 直近12時間では `direction_execution_conflict=5件` が出ているため、ENTRY_OK整合性の次に速報監視側の扱いを確認する。
 
@@ -34,3 +35,4 @@
 - `daily-sync` と `sync-ai-post-reviews` の運用が継続して回る。
 - レビュー保存から `review_form_state.json`、`user_reviews.csv`、要約更新までの流れを維持する。
 - `Phase 1` の本有効確認を実データで追える状態を保つ。
+- `ready=1件以上` で準備観測、`phase1_active=true=5件以上` で本有効観測レビュー、`phase1_active=true=30件以上` で Ver03 判断材料にする。

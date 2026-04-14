@@ -129,6 +129,11 @@ def prelabel_label(value: Any) -> str:
 
 def _entry_quality_label(result: dict[str, Any], prelabel: str, status: str) -> str:
     if prelabel == "ENTRY_OK" and status == "invalid":
+        reason = _primary_setup_reason(result)
+        if reason == "rr_below_min":
+            return "位置は悪くないがRR未成立"
+        if reason == "confidence_below_min":
+            return "位置は悪くないが強度未成立"
         return "位置は悪くないが条件未成立"
     return prelabel_label(prelabel)
 

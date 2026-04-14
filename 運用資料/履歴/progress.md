@@ -33,6 +33,8 @@
   - `shadow_log.csv` に `primary_setup_reason` を出力するようにし、最新レポートでは期間内 `ENTRY_OK + invalid=11件`、主理由 `rr_below_min=11件` を確認できるようにした。
   - `tests/test_log_feedback.py` に、`ENTRY_OK + invalid` が通常の `ENTRY_OK が甘め` 集計へ混ざらない回帰テストを追加した。
   - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback tests.test_summary_format` を実施し、30 件 OK。
+  - 追加で、`ENTRY_OK + rr_below_min` の補助集計、`ready阻害理由`、`direction_execution_conflict` の主理由と risk_flags をレポートに出すようにした。通知表示は `rr_below_min` なら `位置は悪くないがRR未成立`、`confidence_below_min` なら `位置は悪くないが強度未成立` に分けた。
+  - 次フェーズ判定は、閾値緩和ではなく `ready=1件以上`、`phase1_active=true=5件以上`、`phase1_active=true=30件以上` の 3 段階で進める方針にした。
 
 - 2026-04-13 11:40 JST
   - `sync-ai-post-reviews` が LaunchAgent 経由で `int(None)` により毎日失敗していたため、`tools/log_feedback.py` の引数処理を修正し、`max_new_ai_reviews` 未指定でも既定値へ流れるようにした。

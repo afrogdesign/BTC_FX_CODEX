@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -1349,6 +1350,79 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("`max_size_capped` 発生率: 100.0%", report)
             self.assertIn("## 4. 人のレビュー要約", report)
             self.assertIn("完了レビューはまだありません", report)
+
+    def test_build_feedback_report_shows_entry_ok_rr_and_ready_blockers(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+
+            fieldnames = [
+                "signal_id",
+                "timestamp_jst",
+                "evaluation_status",
+                "data_quality_flag",
+                "signal_based_MFE_24h",
+                "signal_based_MAE_24h",
+                "outcome",
+                "direction_outcome",
+                "entry_outcome",
+                "wait_outcome",
+                "skip_outcome",
+                "tp1_hit_first",
+                "was_notified",
+                "prelabel",
+                "primary_setup_status",
+                "primary_setup_reason",
+                "invalid_reason",
+                "risk_flags",
+                "confidence_direction_shadow",
+                "confidence_execution_shadow",
+                "confidence_wait_shadow",
+                "phase1_active",
+            ]
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=fieldnames)
+                writer.writeheader()
+                timestamp_jst = (datetime.now(timezone(timedelta(hours=9))) - timedelta(hours=1)).isoformat(
+                    timespec="seconds"
+                )
+                for idx in range(3):
+                    writer.writerow(
+                        {
+                            "signal_id": f"entry_rr_{idx}",
+                            "timestamp_jst": timestamp_jst,
+                            "evaluation_status": "complete",
+                            "data_quality_flag": "ok",
+                            "signal_based_MFE_24h": "1.0",
+                            "signal_based_MAE_24h": "0.5",
+                            "outcome": "win",
+                            "direction_outcome": "correct",
+                            "entry_outcome": "poor_entry",
+                            "wait_outcome": "not_applicable",
+                            "skip_outcome": "not_applicable",
+                            "tp1_hit_first": "true",
+                            "was_notified": "true",
+                            "prelabel": "ENTRY_OK",
+                            "primary_setup_status": "invalid",
+                            "primary_setup_reason": "rr_below_min",
+                            "invalid_reason": "RR不足",
+                            "risk_flags": "lower_liquidity_close,sweep_incomplete",
+                            "confidence_direction_shadow": "80",
+                            "confidence_execution_shadow": "10",
+                            "confidence_wait_shadow": "70",
+                            "phase1_active": "false",
+                        }
+                    )
+
+            report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
+
+            self.assertIn("ready阻害理由: rr_below_min=3件", report)
+            self.assertIn("ENTRY_OK + rr_below_min: 3件 / 平均 execution=10.0 / 平均 wait=70.0", report)
+            self.assertIn("ENTRY_OK + rr_below_min の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
+            self.assertIn("direction_execution_conflict の主な理由: rr_below_min=3件", report)
+            self.assertIn("direction_execution_conflict の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
 
 
 if __name__ == "__main__":
