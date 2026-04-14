@@ -1,6 +1,6 @@
 ## BTC Monitor 共通参照
 
-更新日: 2026-04-11 JST
+更新日: 2026-04-15 JST
 
 - 共通ルール: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/共通運用ルール.md`
 - 記録ファイル構成: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/記録ファイル構成.md`
@@ -37,6 +37,9 @@
 - 実施履歴は `運用資料/履歴/progress.md`
 - 例外時だけ `運用資料/履歴/スレッド引き継ぎファイル.md`
 - 人向け入口は Obsidian 側 `👩‍⚖️秘書.md`
+  - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/👩‍⚖️秘書.md`
+- 人向け履歴は Obsidian 側 `📒打ち合わせノート.md`
+  - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md`
 
 ## 更新
 
