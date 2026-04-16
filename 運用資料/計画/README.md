@@ -6,15 +6,15 @@
 
 ## まず見るもの
 
-- [AI事後評価運用_Ver02.4-v1.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/計画/AI事後評価運用_Ver02.4-v1.md)
+- [AI事後評価運用_Ver02.4-v1.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/AI事後評価運用_Ver02.4-v1.md)
   - 現在の AI 事後評価の運用
-- [Phase1条件の見方.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/計画/Phase1条件の見方.md)
+- [Phase1条件の見方.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/Phase1条件の見方.md)
   - `ready` と `phase1_active=true` の意味
-- [フェーズ別計画_Phase0-1.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/計画/フェーズ別計画_Phase0-1.md)
+- [フェーズ別計画_Phase0-1.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/フェーズ別計画_Phase0-1.md)
   - 直近フェーズの正式計画
-- [計画全体タイムライン.html](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/計画/計画全体タイムライン.html)
+- [計画全体タイムライン.html](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/計画全体タイムライン.html)
   - 人向けの全体位置づけ
-- [マイルストーン定義.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/計画/マイルストーン定義.md)
+- [マイルストーン定義.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/マイルストーン定義.md)
   - `Ver03` 以降の節目定義
 
 ## フォルダ構成

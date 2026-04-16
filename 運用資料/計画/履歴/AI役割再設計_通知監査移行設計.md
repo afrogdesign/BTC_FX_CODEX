@@ -16,9 +16,9 @@
 
 ### 2.1 実行位置
 
-- [main.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/main.py) で `request_ai_advice(...)` を呼んでいる。
+- [main.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py) で `request_ai_advice(...)` を呼んでいる。
 - 旧実装では `should_notify(...)` より前に無条件実行していたため、実質全サイクルで AI が走っていた。
-- 通知可否そのものは [src/notification/trigger.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/notification/trigger.py) の機械条件のみで決まっていた。
+- 通知可否そのものは [src/notification/trigger.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/notification/trigger.py) の機械条件のみで決まっていた。
 
 ### 2.2 AI が返していたもの
 
@@ -32,16 +32,16 @@
 
 ### 2.3 誤解されやすかった点
 
-- `AI_SUMMARY_PROVIDER` という設定名があるが、[src/ai/summary.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/ai/summary.py) の `build_summary_body()` は外部AIを呼ばず、機械データをテンプレート整形しているだけである。
+- `AI_SUMMARY_PROVIDER` という設定名があるが、[src/ai/summary.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/ai/summary.py) の `build_summary_body()` は外部AIを呼ばず、機械データをテンプレート整形しているだけである。
 - つまり「本文は AI が自由に考察している」のではなく、「機械判定をコード側テンプレートで文章化している」実装である。
 
 ## 3. 検証結果
 
 検証対象:
 
-- [prompts/advice_prompt.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/prompts/advice_prompt.md)
-- [main.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/main.py)
-- [src/notification/trigger.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/notification/trigger.py)
+- [prompts/advice_prompt.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/prompts/advice_prompt.md)
+- [main.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py)
+- [src/notification/trigger.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/notification/trigger.py)
 - `logs/signals/*.json`
 - `logs/last_result.json`
 

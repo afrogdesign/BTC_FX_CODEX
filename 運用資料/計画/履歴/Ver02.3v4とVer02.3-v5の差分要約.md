@@ -68,15 +68,15 @@
 
 ## 主な変更ファイル
 
-- 実行フロー: [main.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/main.py)
-- AI監査ロジック: [advice.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/ai/advice.py)
-- AIプロンプト: [advice_prompt.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/prompts/advice_prompt.md)
-- 通知本文: [summary.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/ai/summary.py)
-- 詳細HTML: [detail_page.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/notification/detail_page.py)
-- シグナル階層: [signal_tier.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/analysis/signal_tier.py)
-- CSV保存: [csv_logger.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/src/storage/csv_logger.py)
-- 集計: [log_feedback.py](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/log_feedback.py)
-- 入口資料: [NEXT_TASK.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/NEXT_TASK.md), [開発ロードマップ.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/開発ロードマップ.md)
+- 実行フロー: [main.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py)
+- AI監査ロジック: [advice.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/ai/advice.py)
+- AIプロンプト: [advice_prompt.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/prompts/advice_prompt.md)
+- 通知本文: [summary.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/ai/summary.py)
+- 詳細HTML: [detail_page.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/notification/detail_page.py)
+- シグナル階層: [signal_tier.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/analysis/signal_tier.py)
+- CSV保存: [csv_logger.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/src/storage/csv_logger.py)
+- 集計: [log_feedback.py](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/tools/log_feedback.py)
+- 入口資料: [NEXT_TASK.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/NEXT_TASK.md), [開発ロードマップ.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/開発ロードマップ.md)
 
 ## 一言まとめ
 

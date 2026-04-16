@@ -6,7 +6,7 @@ BTC監視システムの実行プロジェクトです。
 
 ## セットアップ
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 python3.12 -m venv .venv312
 .venv312/bin/python -m pip install -r requirements.txt
 cp .env.example .env
@@ -14,7 +14,7 @@ cp .env.example .env
 
 ## 実行
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 .venv312/bin/python main.py
 ```
 
@@ -32,7 +32,7 @@ cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
 AI_ADVICE_PROVIDER=api
 AI_SUMMARY_PROVIDER=cli
 AI_ADVICE_CLI_COMMAND=
-AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py
+AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py
 ```
 
 - `AI_ADVICE_PROVIDER`
@@ -45,8 +45,8 @@ AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex
   - 助言CLIは JSON オブジェクトを返す必要があります
   - 要約CLIは本文テキストを返す想定です
 - 同じラッパーを両方に使えます。
-  - `AI_ADVICE_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
-  - `AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
+  - `AI_ADVICE_CLI_COMMAND=/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
+  - `AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
   - ラッパー側は、入力 JSON の `task` を見て `summary` と `ai_advice` を自動で切り替えます
 
 ## 本番運用の考え方
@@ -62,14 +62,14 @@ AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex
 ### コードを本番 Ver02.1 へ反映する
 
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 zsh tools/deploy_ver021_prod.sh
 ```
 
 ### 本番 Ver02.1 状態を軽く同期する
 
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 zsh tools/sync_ver021_prod_status.sh
 ```
 
@@ -83,7 +83,7 @@ zsh tools/sync_ver021_prod_status.sh
 ### 本番 Ver02.1 ログをフル取得する
 
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 zsh tools/pull_ver021_prod_logs_auto.sh
 ```
 
@@ -98,7 +98,7 @@ zsh tools/pull_ver021_prod_logs_auto.sh
 ### `tmp/` を整理する
 
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 zsh tools/cleanup_tmp_status.sh
 ```
 
@@ -115,7 +115,7 @@ zsh tools/cleanup_tmp_status.sh
 ### 週次 progress を圧縮する
 
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
 zsh tools/archive_progress_week.sh
 ```
 
