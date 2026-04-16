@@ -71,8 +71,34 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertEqual(row["tf_4h_eval"], "good")
         self.assertEqual(row["tf_1h_eval"], "good")
         self.assertEqual(row["tf_15m_eval"], "good")
+        self.assertEqual(row["review_action_class"], "watch")
+        self.assertEqual(row["review_priority"], "low")
+        self.assertEqual(row["next_action"], "同種通知を継続観測する")
         self.assertEqual(row["review_source"], "ai")
         self.assertEqual(row["review_model"], "gpt-test")
+
+    def test_normalize_ai_post_review_infers_action_fields(self) -> None:
+        row = _normalize_ai_post_review(
+            {
+                "user_verdict": "useful_wait",
+                "usefulness_1to5": 4,
+                "would_trade": "conditional",
+                "actual_move_driver": "technical",
+                "misleading_entry_like_wording": "no",
+                "sl_eval": "good",
+                "tp_eval": "too_close",
+                "tf_4h_eval": "good",
+                "tf_1h_eval": "mixed",
+                "tf_15m_eval": "good",
+                "memo": "監視として有効",
+            },
+            model="gpt-test",
+            image_mode="price_map_svg",
+        )
+
+        self.assertEqual(row["review_action_class"], "tune_exit")
+        self.assertEqual(row["review_priority"], "high")
+        self.assertEqual(row["next_action"], "TP1/TP2 を遠めにする候補を検証する")
 
     def test_build_review_chart_svg_path_persists_snapshot_when_enabled(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -604,6 +630,9 @@ class LogFeedbackTest(unittest.TestCase):
                     "tf_4h_eval": "good",
                     "tf_1h_eval": "mixed",
                     "tf_15m_eval": "poor",
+                    "review_action_class": "tune_exit",
+                    "review_priority": "medium",
+                    "next_action": "TPを調整する",
                     "memo": "監視として有効",
                 }
                 mocked_cfg.return_value = type(
@@ -627,6 +656,9 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["tf_4h_eval"], "good")
             self.assertEqual(rows[0]["tf_1h_eval"], "mixed")
             self.assertEqual(rows[0]["tf_15m_eval"], "poor")
+            self.assertEqual(rows[0]["review_action_class"], "tune_exit")
+            self.assertEqual(rows[0]["review_priority"], "medium")
+            self.assertEqual(rows[0]["next_action"], "TPを調整する")
             self.assertEqual(rows[0]["logic_validated"], "true")
 
     def test_sync_ai_post_reviews_reuses_snapshot_without_cli(self) -> None:
@@ -1455,6 +1487,10 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("trade_execution_gate=blocked: 3件", report)
             self.assertIn("主なブロック理由: rr_below_min=3件, execution_shadow_too_low=3件", report)
             self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 3/3件", report)
+            self.assertIn("### 改善アクション", report)
+            self.assertIn("出口設計を調整=3件", report)
+            self.assertIn("重要度: 高=3件", report)
+            self.assertIn("TP1/TP2 を遠めにする候補を検証する", report)
 
 
 if __name__ == "__main__":

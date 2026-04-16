@@ -15,6 +15,7 @@
 - 文面がエントリー寄りに誤読しやすかったか
 - SL と TP の実用性はどうだったか
 - 4時間足 / 1時間足 / 15分足 のどこが良く、どこが弱かったか
+- 次に直すべき改善アクションは何か
 
 要件:
 - JSON のみを返す
@@ -28,6 +29,9 @@
 - `tf_4h_eval` は `good` / `mixed` / `poor`
 - `tf_1h_eval` は `good` / `mixed` / `poor`
 - `tf_15m_eval` は `good` / `mixed` / `poor`
+- `review_action_class` は `none` / `watch` / `tune_exit` / `tune_entry` / `tune_text` / `tune_risk`
+- `review_priority` は `high` / `medium` / `low`
+- `next_action` は日本語1行で、次に直すことを書く
 - `memo` は日本語1-2文で簡潔に
 
 判定の考え方:
@@ -37,6 +41,19 @@
 - `too_early`: 方向感はあっても通知が早すぎた
 - `too_late`: 入るならもう遅かった
 - `low_value`: 方向も価格帯も実務価値が薄い
+
+改善アクションの考え方:
+- `none`: 対応不要
+- `watch`: まだ判断せず同種通知を観測継続
+- `tune_exit`: TP / SL / timeout など出口設計を直す
+- `tune_entry`: エントリー帯、発火タイミング、15分足条件を直す
+- `tune_text`: 件名や本文が執行可能に見えすぎるなど、通知文を直す
+- `tune_risk`: SL幅、RR、リスクフラグ、サイズ制御を直す
+
+重要度の考え方:
+- `high`: 放置すると誤エントリー、TP/SL設計、通知誤読に直結する
+- `medium`: 改善候補だが、追加観測とセットで判断してよい
+- `low`: 記録・参考・対応不要
 
 返却フォーマット:
 {
@@ -50,5 +67,8 @@
   "tf_4h_eval": "good",
   "tf_1h_eval": "mixed",
   "tf_15m_eval": "poor",
+  "review_action_class": "tune_exit",
+  "review_priority": "medium",
+  "next_action": "TPが遠すぎる局面の利確目安を近づける",
   "memo": "方向感は悪くないが、利確目安が遠く実際の執行は待ち寄り。監視通知としては有効だった。"
 }

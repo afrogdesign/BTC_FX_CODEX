@@ -59,6 +59,12 @@ POST_REVIEW_SCHEMA = {
         "tf_4h_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
         "tf_1h_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
         "tf_15m_eval": {"type": "string", "enum": ["good", "mixed", "poor"]},
+        "review_action_class": {
+            "type": "string",
+            "enum": ["none", "watch", "tune_exit", "tune_entry", "tune_text", "tune_risk"],
+        },
+        "review_priority": {"type": "string", "enum": ["high", "medium", "low"]},
+        "next_action": {"type": "string"},
         "memo": {"type": "string"},
     },
     "required": [
@@ -72,6 +78,9 @@ POST_REVIEW_SCHEMA = {
         "tf_4h_eval",
         "tf_1h_eval",
         "tf_15m_eval",
+        "review_action_class",
+        "review_priority",
+        "next_action",
         "memo",
     ],
 }

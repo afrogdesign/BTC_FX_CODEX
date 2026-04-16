@@ -38,7 +38,7 @@ REVIEW_START_CUTOFF_JST = "2026-03-30T05:05:00+09:00"
 REVIEW_SERVER_HOST = "127.0.0.1"
 REVIEW_SERVER_PORT = 8765
 REVIEW_STATE_VERSION = 1
-AI_POST_REVIEW_VARIANT = "ai_post_review_v1"
+AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
 AI_POST_REVIEW_TASK = "ai_post_review"
 
 FORM_VERDICT_OPTIONS = [
@@ -168,6 +168,9 @@ USER_REVIEW_HEADER = [
     "review_model",
     "review_image_mode",
     "review_variant",
+    "review_action_class",
+    "review_priority",
+    "next_action",
     "memo",
     "review_status",
     "reviewed_at_utc",
@@ -262,6 +265,9 @@ SHADOW_HEADER = [
     "user_verdict",
     "usefulness_1to5",
     "would_trade",
+    "review_action_class",
+    "review_priority",
+    "next_action",
     "memo",
     "evaluation_status",
     "risk_percent_applied",
@@ -306,6 +312,23 @@ VALID_SL_EVAL = {"", "good", "too_tight", "too_loose"}
 VALID_TP_EVAL = {"", "good", "too_close", "too_far"}
 VALID_TF_EVAL = {"", "good", "mixed", "poor"}
 VALID_REVIEW_SOURCE = {"", "ai", "human_override"}
+VALID_REVIEW_ACTION_CLASS = {"", "none", "watch", "tune_exit", "tune_entry", "tune_text", "tune_risk"}
+VALID_REVIEW_PRIORITY = {"", "high", "medium", "low"}
+
+REVIEW_ACTION_CLASS_LABELS = {
+    "none": "対応なし",
+    "watch": "観測継続",
+    "tune_exit": "出口設計を調整",
+    "tune_entry": "入口条件を調整",
+    "tune_text": "通知文面を調整",
+    "tune_risk": "リスク設計を調整",
+}
+
+REVIEW_PRIORITY_LABELS = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+}
 
 USER_VERDICT_LABELS = {
     "useful_entry": "入る判断に使えた",
@@ -612,6 +635,70 @@ def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path,
     return out_path
 
 
+def _infer_review_action_class(row: dict[str, Any]) -> str:
+    explicit = str(row.get("review_action_class", "")).strip()
+    if explicit in VALID_REVIEW_ACTION_CLASS and explicit:
+        return explicit
+    if str(row.get("misleading_entry_like_wording", "")).strip() == "yes":
+        return "tune_text"
+    if str(row.get("tp_eval", "")).strip() in {"too_close", "too_far"}:
+        return "tune_exit"
+    if str(row.get("sl_eval", "")).strip() in {"too_tight", "too_loose"}:
+        return "tune_risk"
+    if str(row.get("user_verdict", "")).strip() in {"too_early", "too_late"}:
+        return "tune_entry"
+    if str(row.get("tf_15m_eval", "")).strip() == "poor":
+        return "tune_entry"
+    if str(row.get("user_verdict", "")).strip() == "low_value":
+        return "watch"
+    return "none"
+
+
+def _infer_review_priority(row: dict[str, Any], action_class: str) -> str:
+    explicit = str(row.get("review_priority", "")).strip()
+    if explicit in VALID_REVIEW_PRIORITY and explicit:
+        return explicit
+    if action_class == "tune_text":
+        return "high"
+    if action_class == "tune_exit" and str(row.get("tp_eval", "")).strip() == "too_close":
+        return "high"
+    if action_class in {"tune_exit", "tune_entry", "tune_risk"}:
+        return "medium"
+    return "low"
+
+
+def _default_next_action(row: dict[str, Any], action_class: str) -> str:
+    provided = str(row.get("next_action", "")).strip()
+    if provided:
+        return provided[:120]
+    if action_class == "tune_text":
+        return "通知件名と本文の強さを抑え、執行可能と誤読されない表現にする"
+    if action_class == "tune_exit":
+        tp_eval = str(row.get("tp_eval", "")).strip()
+        if tp_eval == "too_close":
+            return "TP1/TP2 を遠めにする候補を検証する"
+        if tp_eval == "too_far":
+            return "TP が遠すぎる局面の利確目安を近づける"
+        return "出口設計を見直す"
+    if action_class == "tune_risk":
+        sl_eval = str(row.get("sl_eval", "")).strip()
+        if sl_eval == "too_tight":
+            return "SL が短期ノイズで刈られない幅か確認する"
+        if sl_eval == "too_loose":
+            return "SL 幅とRRのバランスを見直す"
+        return "SL とリスク幅を見直す"
+    if action_class == "tune_entry":
+        verdict = str(row.get("user_verdict", "")).strip()
+        if verdict == "too_early":
+            return "早すぎる通知を抑えるため発火条件を一段遅らせる"
+        if verdict == "too_late":
+            return "遅すぎる通知を減らすため発火条件を前倒しできるか見る"
+        return "15分足の執行条件を見直す"
+    if action_class == "watch":
+        return "同種通知を継続観測する"
+    return "対応なし"
+
+
 def _normalize_ai_post_review(
     payload: dict[str, Any],
     *,
@@ -648,6 +735,19 @@ def _normalize_ai_post_review(
     tf_15m_eval = str(payload.get("tf_15m_eval", "good")).strip()
     if tf_15m_eval not in VALID_TF_EVAL or not tf_15m_eval:
         tf_15m_eval = "good"
+    review_context = {
+        "user_verdict": verdict,
+        "misleading_entry_like_wording": misleading,
+        "sl_eval": sl_eval,
+        "tp_eval": tp_eval,
+        "tf_15m_eval": tf_15m_eval,
+        "review_action_class": payload.get("review_action_class", ""),
+        "review_priority": payload.get("review_priority", ""),
+        "next_action": payload.get("next_action", ""),
+    }
+    review_action_class = _infer_review_action_class(review_context)
+    review_priority = _infer_review_priority(review_context, review_action_class)
+    next_action = _default_next_action(review_context, review_action_class)
     memo = str(payload.get("memo", "")).strip()[:200]
     return {
         "user_verdict": verdict,
@@ -660,6 +760,9 @@ def _normalize_ai_post_review(
         "tf_4h_eval": tf_4h_eval,
         "tf_1h_eval": tf_1h_eval,
         "tf_15m_eval": tf_15m_eval,
+        "review_action_class": review_action_class,
+        "review_priority": review_priority,
+        "next_action": next_action,
         "memo": memo,
         "review_source": "ai",
         "review_model": str(model or "").strip(),
@@ -2688,6 +2791,9 @@ def _review_rows_to_csv_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]
                 "review_model": str(row.get("review_model", "")),
                 "review_image_mode": str(row.get("review_image_mode", "")),
                 "review_variant": str(row.get("review_variant", "")),
+                "review_action_class": str(row.get("review_action_class", "")),
+                "review_priority": str(row.get("review_priority", "")),
+                "next_action": str(row.get("next_action", "")),
                 "memo": str(row.get("memo", "")),
                 "review_status": "done",
                 "reviewed_at_utc": str(row.get("reviewed_at_utc", "")).strip() or reviewed_at,
@@ -2769,6 +2875,9 @@ def export_review_queue(
             "review_model": current.get("review_model", ""),
             "review_image_mode": current.get("review_image_mode", ""),
             "review_variant": current.get("review_variant", ""),
+            "review_action_class": current.get("review_action_class", ""),
+            "review_priority": current.get("review_priority", ""),
+            "next_action": current.get("next_action", ""),
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
             "bias": trade.get("bias", ""),
@@ -2823,6 +2932,8 @@ def import_reviews(
         tf_4h_eval = str(row.get("tf_4h_eval", "")).strip()
         tf_1h_eval = str(row.get("tf_1h_eval", "")).strip()
         tf_15m_eval = str(row.get("tf_15m_eval", "")).strip()
+        review_action_class = str(row.get("review_action_class", "")).strip()
+        review_priority = str(row.get("review_priority", "")).strip()
         review_source = _review_source_value(row)
         if user_verdict not in VALID_USER_VERDICTS:
             raise ValueError(f"invalid user_verdict: {signal_id} -> {user_verdict}")
@@ -2842,6 +2953,10 @@ def import_reviews(
             raise ValueError(f"invalid tf_1h_eval: {signal_id} -> {tf_1h_eval}")
         if tf_15m_eval not in VALID_TF_EVAL:
             raise ValueError(f"invalid tf_15m_eval: {signal_id} -> {tf_15m_eval}")
+        if review_action_class not in VALID_REVIEW_ACTION_CLASS:
+            raise ValueError(f"invalid review_action_class: {signal_id} -> {review_action_class}")
+        if review_priority not in VALID_REVIEW_PRIORITY:
+            raise ValueError(f"invalid review_priority: {signal_id} -> {review_priority}")
         if review_source not in VALID_REVIEW_SOURCE:
             raise ValueError(f"invalid review_source: {signal_id} -> {review_source}")
         if usefulness:
@@ -3119,6 +3234,9 @@ def build_shadow_log(
                 "review_model": review.get("review_model", ""),
                 "review_image_mode": review.get("review_image_mode", ""),
                 "review_variant": review.get("review_variant", ""),
+                "review_action_class": review.get("review_action_class", ""),
+                "review_priority": review.get("review_priority", ""),
+                "next_action": review.get("next_action", ""),
                 "memo": review.get("memo", ""),
                 "evaluation_status": outcome.get("evaluation_status", ""),
                 "risk_percent_applied": trade.get("risk_percent_applied", ""),
@@ -3261,6 +3379,14 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     tf_4h_marked = [row for row in rows if str(row.get("tf_4h_eval", "")).strip() in {"good", "mixed", "poor"}]
     tf_1h_marked = [row for row in rows if str(row.get("tf_1h_eval", "")).strip() in {"good", "mixed", "poor"}]
     tf_15m_marked = [row for row in rows if str(row.get("tf_15m_eval", "")).strip() in {"good", "mixed", "poor"}]
+    action_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not row.get("user_verdict") and not row.get("tp_eval") and not row.get("sl_eval"):
+            continue
+        action_class = _infer_review_action_class(row)
+        priority = _infer_review_priority(row, action_class)
+        next_action = _default_next_action(row, action_class)
+        action_rows.append({**row, "review_action_class": action_class, "review_priority": priority, "next_action": next_action})
     return {
         "verdicts": verdicts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
@@ -3274,6 +3400,14 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "tf_4h_eval_counts": Counter(str(row.get("tf_4h_eval", "")).strip() for row in tf_4h_marked),
         "tf_1h_eval_counts": Counter(str(row.get("tf_1h_eval", "")).strip() for row in tf_1h_marked),
         "tf_15m_eval_counts": Counter(str(row.get("tf_15m_eval", "")).strip() for row in tf_15m_marked),
+        "action_class_counts": Counter(str(row.get("review_action_class", "")).strip() for row in action_rows),
+        "priority_counts": Counter(str(row.get("review_priority", "")).strip() for row in action_rows),
+        "high_priority_actions": [
+            row
+            for row in action_rows
+            if str(row.get("review_priority", "")).strip() == "high"
+            and str(row.get("review_action_class", "")).strip() != "none"
+        ][:3],
     }
 
 
@@ -4057,6 +4191,34 @@ def build_feedback_report(
                 "- 15分足評価: "
                 + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_15m_counts.items())
             )
+    action_counts: Counter[str] = review_summary["action_class_counts"]
+    priority_counts: Counter[str] = review_summary["priority_counts"]
+    if any(key for key in action_counts):
+        lines.append("### 改善アクション")
+        lines.append(
+            "- 分類: "
+            + ", ".join(
+                f"{REVIEW_ACTION_CLASS_LABELS.get(key, key)}={value}件"
+                for key, value in action_counts.items()
+                if key
+            )
+        )
+        if any(key for key in priority_counts):
+            lines.append(
+                "- 重要度: "
+                + ", ".join(
+                    f"{REVIEW_PRIORITY_LABELS.get(key, key)}={value}件"
+                    for key, value in priority_counts.items()
+                    if key
+                )
+            )
+        high_priority_actions = review_summary["high_priority_actions"]
+        if high_priority_actions:
+            lines.append("- 高優先の代表例:")
+            for row in high_priority_actions:
+                lines.append(
+                    f"  - {row.get('signal_id', '')}: {REVIEW_ACTION_CLASS_LABELS.get(str(row.get('review_action_class', '')), row.get('review_action_class', ''))} / {row.get('next_action', '')}"
+                )
     lines.append("")
 
     lines.append("## 5. 改善候補")
@@ -4273,7 +4435,6 @@ def sync_ai_post_reviews(
         1
         for row in review_map.values()
         if _review_source_value(row) == "ai"
-        and str(row.get("review_variant", "")).strip() == AI_POST_REVIEW_VARIANT
         and _reviewed_on_jst(row, datetime.now(tz=JST).strftime("%Y-%m-%d"))
     )
     new_review_budget = max(0, daily_max - reviewed_today)
@@ -4297,7 +4458,7 @@ def sync_ai_post_reviews(
         if current_source == "human_override":
             stats["skipped_human_override"] += 1
             continue
-        if current_source == "ai" and str(current.get("review_variant", "")).strip() == AI_POST_REVIEW_VARIANT:
+        if current_source == "ai":
             stats["skipped_existing_ai"] += 1
             continue
         cached_review = _load_ai_post_review_snapshot(base_dir, signal_id)
@@ -4344,6 +4505,9 @@ def sync_ai_post_reviews(
             "review_model": ai_review["review_model"],
             "review_image_mode": ai_review["review_image_mode"],
             "review_variant": ai_review["review_variant"],
+            "review_action_class": ai_review["review_action_class"],
+            "review_priority": ai_review["review_priority"],
+            "next_action": ai_review["next_action"],
             "memo": ai_review["memo"],
             "review_status": "done",
             "reviewed_at_utc": reviewed_at,
