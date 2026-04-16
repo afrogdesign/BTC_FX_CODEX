@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-10 18:40 JST
+更新日: 2026-04-17 01:06 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,12 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-17 JST
+  - `ver02.5-v1` の最新コミット `7e074bc` を iMac 2019 の常設 `com.afrog.btc-monitor` へ反映した。
+  - 反映前に `.venv312/bin/python -m unittest discover tests` を実行し、96 件 OK を確認した。
+  - `zsh tools/start_monitor.sh` で LaunchAgent を再登録・再起動し、`launchctl print gui/501/com.afrog.btc-monitor` で `state = running`、PID `20830` を確認した。
+  - `logs/runtime/monitor.pid` と `logs/heartbeat.txt` の更新も確認し、最新コードの常駐反映を完了扱いにした。
 
 - 2026-04-16 JST
   - 2026-04-17 JST 追加: 勝てるトレードの実務精度と自動取引準備のため、`phase1_v1_shadow`、`trade_execution_gate`、`paper_orders.csv` の紙トレード記録を追加した。
