@@ -1,4 +1,4 @@
-更新日: 2026-04-10 05:55 JST
+更新日: 2026-04-17 01:10 JST
 
 # reports 入口
 
@@ -6,12 +6,17 @@
 
 ## まず見るもの
 
-- [feedback_daily_sync_20260410.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260410.md)
-  - 現行 `Ver02.4-v1` の最新日次レポート
-- [feedback_daily_sync_20260402.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260402.md)
+- [feedback_daily_sync_20260417.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260417.md)
+  - 現行 `ver02.5-v1` の最新日次レポート
+- [feedback_daily_sync_20260416.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260416.md)
   - 直近比較用の日次レポート
-- [feedback_weekly_20260330.md](/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_weekly_20260330.md)
-  - 週次で見たいときの参照
+
+## 最新レポート要点
+
+- 2026-04-17 レポート: 完了データ 37 件、近似PF 0.97、全体勝率 75.7%。
+- Phase 1 は `ready=0`、`phase1_active=true=0` で本有効待ち。
+- 改善候補の最上位は `TP が近すぎるケースが多い`。
+- `paper_orders planned=0件` のため、紙トレード候補はまだ発生待ち。
 
 ## フォルダ構成
 
