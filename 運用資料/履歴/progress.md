@@ -27,6 +27,25 @@
 
 ## 重要な節目ログ
 
+- 2026-04-16 JST
+  - 2026-04-17 JST 追加: 勝てるトレードの実務精度と自動取引準備のため、`phase1_v1_shadow`、`trade_execution_gate`、`paper_orders.csv` の紙トレード記録を追加した。
+  - `phase1_v1_shadow` は現行 `phase1_v0` を維持したまま、比較用出口として TP1=1.3R / TP2=2.4R を記録する。実注文は出さない。
+  - `trade_execution_gate` は `phase1_active=true` に加え、`rr_below_min`、低 execution、高 wait pressure、データ品質不良、no_trade_flags をブロック理由として記録する。
+  - `paper_orders.csv` は `trade_execution_gate=pass` のときだけ `planned` を1 signal_id 1行で保存する。
+  - `daily-sync` レポートには `紙トレード準備` 欄を追加し、gate pass/blocked、主なブロック理由、paper_orders planned、`tp_eval=too_close` に対する shadow TP の比較候補を確認できるようにした。
+  - 確認は `.venv312/bin/python -m unittest discover tests` を実施し、96 件 OK。
+  - 2026-04-17 JST 追加: ブロッカー整理として `tests/test_codex_cli_wrapper.py` と `tests/test_log_feedback.py` の既知不一致を解消した。
+  - `tools/codex_cli_wrapper.py` は `_build_command()` の `image_paths` を省略可能に戻し、既存テスト呼び出し互換を維持した。
+  - `tests/test_log_feedback.py` は weekly 期間フィルタに依存する2件の固定日付を現在時刻基準へ変更した。
+  - 確認は `.venv312/bin/python -m unittest tests.test_codex_cli_wrapper` と `.venv312/bin/python -m unittest tests.test_log_feedback` を実施し、どちらも OK。
+  - `com.afrog.btc-review-form` は `launchctl print gui/501/com.afrog.btc-review-form` で `state = running`、PID `89754` を確認し、フォーム保存の未起動ブロッカーは現時点では解消済みとして扱う。
+  - ディレクトリ移動後の旧配置参照を、現行パス `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` へ整理した。
+  - 対象は `README.md`、`.env.example`、`deploy/com.afrog.btc-*.plist`、`運用資料/運用/実務/運用コマンドメモ.md`、`運用資料/reports/README.md`、`運用資料/計画/README.md`。
+  - `~/Library/LaunchAgents` 側の `com.afrog.btc-monitor`、`com.afrog.btc-review-form`、`com.afrog.btc-feedback-daily-sync`、`com.afrog.btc-ai-post-reviews` も新パスへ更新し、launchd の読み込み済み設定が新パスになっていることを確認した。
+  - 追加確認で `/Users/marupro/CODEX` 全体の旧配置参照も同じ現行パスへ統一した。
+  - `ENTRY_OK + rr_below_min` の次判断用に、daily-sync レポートの補助集計へ `position_risk` と `confidence` の見直し候補を出すようにした。
+  - 最新実データでは `ENTRY_OK + rr_below_min=4件`、平均 `execution=10.8` / `wait=70.8` で、候補は `lower_liquidity_close` 単独加点の再確認と `execution<=20 かつ wait>=60` の本通知上位扱い抑制。
+
 - 2026-04-15 JST
   - `daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260415.md` を更新した。完了データは 41 件、近似PF は 1.15、全体勝率は 75.6%、Phase 1 は `ready=0` / `phase1_active=true=0` の本有効待ち。
   - 改善候補生成で `ENTRY_OK + primary_setup_status=invalid` を `ENTRY_OK が甘め` から分離し、独立した `ENTRY_OK と setup invalid の整合性崩れ` として出すようにした。

@@ -53,7 +53,7 @@ from src.notification.detail_page import (
 )
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
-from src.storage.csv_logger import append_trade_log
+from src.storage.csv_logger import append_paper_order, append_trade_log
 from src.storage.json_store import (
     get_last_attention_notified_path,
     get_last_notified_path,
@@ -63,7 +63,8 @@ from src.storage.json_store import (
     save_signal_snapshot,
 )
 from src.trade.activation import determine_phase1_activation
-from src.trade.exit_manager import build_exit_plan
+from src.trade.execution_gate import determine_trade_execution_gate
+from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
 from src.presentation.sanitize import (
@@ -263,6 +264,15 @@ def _phase1_defaults() -> dict[str, Any]:
         "trail_atr_multiplier": "",
         "timeout_hours": "",
         "exit_rule_version": "",
+        "shadow_tp1_price": "",
+        "shadow_tp2_price": "",
+        "shadow_breakeven_after_tp1": "",
+        "shadow_trail_atr_multiplier": "",
+        "shadow_timeout_hours": "",
+        "shadow_exit_rule_version": "",
+        "trade_execution_gate": "blocked",
+        "trade_execution_blockers": ["phase1_inactive"],
+        "paper_order_status": "",
     }
 
 
@@ -779,10 +789,31 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
             exit_rule_version="phase1_v0",
         )
+        shadow_exit_plan = build_shadow_exit_plan(
+            side=primary_setup_side,
+            entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
+            stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
+            atr=atr_15m,
+            trail_atr_multiplier=float(cfg.PHASE1_TRAIL_ATR_MULTIPLIER),
+            timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
+        )
+        execution_gate = determine_trade_execution_gate(
+            phase1_active=bool(phase1_activation["phase1_active"]),
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
         core_result["loss_streak_at_entry"] = loss_streak
         core_result.update(phase1_activation)
         core_result.update(position_size_plan)
         core_result.update(exit_plan)
+        core_result.update(shadow_exit_plan)
+        core_result.update(execution_gate)
+        if core_result["trade_execution_gate"] == "pass":
+            core_result["paper_order_status"] = "planned"
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
@@ -908,6 +939,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     save_signal_snapshot(base_dir, persisted_result)
     append_trade_log(base_dir, persisted_result)
+    if persisted_result.get("paper_order_status") == "planned":
+        append_paper_order(base_dir, persisted_result)
     save_json(get_last_result_path(base_dir), persisted_result)
 
     return persisted_result

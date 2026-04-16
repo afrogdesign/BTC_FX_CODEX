@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from src.trade.exit_manager import build_exit_plan
+from src.storage.csv_logger import append_paper_order
+from src.trade.execution_gate import determine_trade_execution_gate
+from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.position_sizing import build_position_size_plan
 
 
@@ -61,6 +65,87 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertTrue(plan["breakeven_after_tp1"])
         self.assertEqual(plan["trail_atr_multiplier"], 1.5)
         self.assertEqual(plan["timeout_hours"], 12)
+
+    def test_shadow_exit_plan_uses_wider_phase1_v1_targets(self) -> None:
+        long_plan = build_shadow_exit_plan(
+            side="long",
+            entry_price=70000,
+            stop_loss_price=69500,
+            atr=180,
+            trail_atr_multiplier=1.5,
+            timeout_hours=12,
+        )
+        short_plan = build_shadow_exit_plan(
+            side="short",
+            entry_price=70000,
+            stop_loss_price=70500,
+            atr=180,
+            trail_atr_multiplier=1.5,
+            timeout_hours=12,
+        )
+
+        self.assertEqual(long_plan["shadow_tp1_price"], 70650.0)
+        self.assertEqual(long_plan["shadow_tp2_price"], 71200.0)
+        self.assertEqual(short_plan["shadow_tp1_price"], 69350.0)
+        self.assertEqual(short_plan["shadow_tp2_price"], 68800.0)
+        self.assertEqual(long_plan["shadow_exit_rule_version"], "phase1_v1_shadow")
+
+    def test_execution_gate_blocks_rr_and_weak_execution(self) -> None:
+        result = determine_trade_execution_gate(
+            phase1_active=True,
+            primary_setup_status="ready",
+            primary_setup_reason="rr_below_min",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_execution_shadow=20,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["trade_execution_gate"], "blocked")
+        self.assertIn("rr_below_min", result["trade_execution_blockers"])
+        self.assertIn("execution_shadow_too_low", result["trade_execution_blockers"])
+        self.assertIn("wait_pressure_too_high", result["trade_execution_blockers"])
+
+    def test_execution_gate_passes_clean_ready_setup(self) -> None:
+        result = determine_trade_execution_gate(
+            phase1_active=True,
+            primary_setup_status="ready",
+            primary_setup_reason="inside_entry_zone_with_trigger",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_execution_shadow=45,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["trade_execution_gate"], "pass")
+        self.assertEqual(result["trade_execution_blockers"], [])
+
+    def test_append_paper_order_is_idempotent_by_signal_id(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "paper_1",
+                "timestamp_jst": "2026-04-17T10:00:00+09:00",
+                "primary_setup_side": "long",
+                "primary_entry_mid": 70000,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70650,
+                "shadow_tp2_price": 71200,
+                "risk_percent_applied": 0.5,
+                "planned_risk_usd": 50,
+                "position_size_usd": 3000,
+                "shadow_exit_rule_version": "phase1_v1_shadow",
+                "trade_execution_gate": "pass",
+                "trade_execution_blockers": [],
+                "paper_order_status": "planned",
+            }
+
+            path = append_paper_order(base_dir, payload)
+            append_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("paper_1", rows[1])
 
 
 if __name__ == "__main__":

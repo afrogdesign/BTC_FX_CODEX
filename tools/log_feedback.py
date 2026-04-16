@@ -206,9 +206,12 @@ SHADOW_HEADER = [
     "prelabel",
     "prelabel_primary_reason",
     "location_risk",
+    "primary_setup_side",
     "primary_setup_status",
     "primary_setup_reason",
     "invalid_reason",
+    "primary_entry_mid",
+    "primary_stop_loss",
     "signal_tier",
     "ai_decision",
     "ai_confidence",
@@ -275,6 +278,15 @@ SHADOW_HEADER = [
     "trail_atr_multiplier",
     "timeout_hours",
     "exit_rule_version",
+    "shadow_tp1_price",
+    "shadow_tp2_price",
+    "shadow_breakeven_after_tp1",
+    "shadow_trail_atr_multiplier",
+    "shadow_timeout_hours",
+    "shadow_exit_rule_version",
+    "trade_execution_gate",
+    "trade_execution_blockers",
+    "paper_order_status",
 ]
 
 VALID_USER_VERDICTS = {
@@ -460,6 +472,15 @@ def _is_stale_file(target: Path, sources: list[Path]) -> bool:
         except OSError:
             continue
     return False
+
+
+def _csv_missing_columns(path: Path, required_columns: list[str]) -> bool:
+    if not path.exists():
+        return True
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        columns = set(reader.fieldnames or [])
+    return any(column not in columns for column in required_columns)
 
 
 def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> Path:
@@ -3038,9 +3059,12 @@ def build_shadow_log(
                 "prelabel": trade.get("prelabel", ""),
                 "prelabel_primary_reason": trade.get("prelabel_primary_reason", ""),
                 "location_risk": trade.get("location_risk", ""),
+                "primary_setup_side": trade.get("primary_setup_side", ""),
                 "primary_setup_status": trade.get("primary_setup_status", ""),
                 "primary_setup_reason": trade.get("primary_setup_reason", ""),
                 "invalid_reason": trade.get("invalid_reason", ""),
+                "primary_entry_mid": trade.get("primary_entry_mid", ""),
+                "primary_stop_loss": trade.get("primary_stop_loss", ""),
                 "signal_tier": trade.get("signal_tier", "normal"),
                 "ai_decision": trade.get("ai_decision", ""),
                 "ai_confidence": trade.get("ai_confidence", ""),
@@ -3111,6 +3135,15 @@ def build_shadow_log(
                 "trail_atr_multiplier": trade.get("trail_atr_multiplier", ""),
                 "timeout_hours": trade.get("timeout_hours", ""),
                 "exit_rule_version": trade.get("exit_rule_version", ""),
+                "shadow_tp1_price": trade.get("shadow_tp1_price", ""),
+                "shadow_tp2_price": trade.get("shadow_tp2_price", ""),
+                "shadow_breakeven_after_tp1": trade.get("shadow_breakeven_after_tp1", ""),
+                "shadow_trail_atr_multiplier": trade.get("shadow_trail_atr_multiplier", ""),
+                "shadow_timeout_hours": trade.get("shadow_timeout_hours", ""),
+                "shadow_exit_rule_version": trade.get("shadow_exit_rule_version", ""),
+                "trade_execution_gate": trade.get("trade_execution_gate", ""),
+                "trade_execution_blockers": trade.get("trade_execution_blockers", ""),
+                "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
 
@@ -3321,6 +3354,40 @@ def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _shadow_tp_is_wider(row: dict[str, Any]) -> bool:
+    side = str(row.get("primary_setup_side", "")).strip()
+    tp1 = _parse_float(row.get("tp1_price"), 0.0)
+    shadow_tp1 = _parse_float(row.get("shadow_tp1_price"), 0.0)
+    if side == "long":
+        return shadow_tp1 > tp1 > 0
+    if side == "short":
+        return 0 < shadow_tp1 < tp1
+    return False
+
+
+def _paper_trade_summary(rows: list[dict[str, Any]], paper_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
+    matched_orders = [row for row in paper_rows if str(row.get("signal_id", "")).strip() in period_ids]
+    gate_pass_rows = [row for row in rows if str(row.get("trade_execution_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in rows if str(row.get("trade_execution_gate", "")).strip() == "blocked"]
+    blocker_counts: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocker_counts.update(_split_values(str(row.get("trade_execution_blockers", ""))))
+    shadow_rows = [row for row in rows if str(row.get("shadow_exit_rule_version", "")).strip() == "phase1_v1_shadow"]
+    too_close_rows = [row for row in rows if str(row.get("tp_eval", "")).strip() == "too_close"]
+    too_close_shadow_wider = [row for row in too_close_rows if _shadow_tp_is_wider(row)]
+    return {
+        "paper_count": len(matched_orders),
+        "planned_count": sum(1 for row in matched_orders if str(row.get("paper_order_status", "")).strip() == "planned"),
+        "gate_pass_count": len(gate_pass_rows),
+        "gate_blocked_count": len(blocked_rows),
+        "blockers": _format_counter(blocker_counts, limit=5),
+        "shadow_count": len(shadow_rows),
+        "too_close_count": len(too_close_rows),
+        "too_close_shadow_wider_count": len(too_close_shadow_wider),
+    }
+
+
 def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ready_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() == "ready"]
     active_rows = [row for row in rows if _parse_bool(row.get("phase1_active"))]
@@ -3425,11 +3492,27 @@ def _entry_ok_rr_blocker_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     flags: Counter[str] = Counter()
     for row in blocked:
         flags.update(_split_values(row.get("risk_flags", "")))
+    avg_execution = _mean_value(blocked, "confidence_execution_shadow")
+    avg_wait = _mean_value(blocked, "confidence_wait_shadow")
+    threshold_hints: list[str] = []
+    if blocked:
+        common_flags = {flag for flag, count in flags.items() if count >= max(2, len(blocked) // 2)}
+        if {"lower_liquidity_close", "sweep_incomplete"} <= common_flags:
+            threshold_hints.append(
+                "position_risk候補: lower_liquidity_close + sweep_incomplete 同居時は ENTRY_OK から RISKY_ENTRY 寄せを検討"
+            )
+        elif "lower_liquidity_close" in common_flags:
+            threshold_hints.append("position_risk候補: lower_liquidity_close の単独加点を強めるか close 閾値を再確認")
+        elif "upper_liquidity_close" in common_flags:
+            threshold_hints.append("position_risk候補: upper_liquidity_close の単独加点を強めるか close 閾値を再確認")
+        if avg_execution <= 20.0 and avg_wait >= 60.0:
+            threshold_hints.append("confidence候補: execution<=20 かつ wait>=60 の本通知上位扱いを抑制")
     return {
         "count": len(blocked),
-        "avg_execution": _mean_value(blocked, "confidence_execution_shadow"),
-        "avg_wait": _mean_value(blocked, "confidence_wait_shadow"),
+        "avg_execution": avg_execution,
+        "avg_wait": avg_wait,
         "risk_flags": _format_counter(flags),
+        "threshold_hints": threshold_hints,
     }
 
 
@@ -3860,12 +3943,17 @@ def build_feedback_report(
     period: str,
     output_md: Path | None = None,
     shadow_path: Path | None = None,
+    paper_orders_path: Path | None = None,
 ) -> str:
+    explicit_shadow_path = shadow_path is not None
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    paper_orders_path = paper_orders_path or base_dir / "logs" / "csv" / "paper_orders.csv"
     trades_path = base_dir / "logs" / "csv" / "trades.csv"
     outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
     reviews_path = base_dir / "logs" / "csv" / "user_reviews.csv"
-    if _is_stale_file(shadow_path, [trades_path, outcomes_path, reviews_path]):
+    if _is_stale_file(shadow_path, [trades_path, outcomes_path, reviews_path]) or (
+        not explicit_shadow_path and _csv_missing_columns(shadow_path, SHADOW_HEADER)
+    ):
         build_shadow_log(
             base_dir=base_dir,
             shadow_path=shadow_path,
@@ -3879,6 +3967,7 @@ def build_feedback_report(
     previous_completed = [row for row in previous_rows if row.get("evaluation_status") == "complete"]
     review_summary = _review_summary(completed)
     phase1_gate = _phase1_gate_summary(completed)
+    paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
     phase1_focus = _phase1_focus_rows(completed)
     recent_rows = _recent_rows(all_rows, hours=12)
@@ -3987,6 +4076,8 @@ def build_feedback_report(
             f" / 平均 wait={entry_ok_rr_blockers['avg_wait']:.1f}"
         )
         lines.append(f"- ENTRY_OK + rr_below_min の主な risk_flags: {entry_ok_rr_blockers['risk_flags']}")
+        for hint in entry_ok_rr_blockers["threshold_hints"]:
+            lines.append(f"- {hint}")
     lines.append("")
 
     lines.append("## 6. 技術集計")
@@ -4099,6 +4190,20 @@ def build_feedback_report(
         lines.append(f"- 平均 timeout_hours: {phase1_summary['avg_timeout_hours']:.2f}")
     else:
         lines.append("- まだ Phase 1 計画ログは集計対象にありません")
+    lines.append("")
+
+    lines.append("### 紙トレード準備")
+    lines.append(f"- trade_execution_gate=pass: {paper_summary['gate_pass_count']}件")
+    lines.append(f"- trade_execution_gate=blocked: {paper_summary['gate_blocked_count']}件")
+    if paper_summary["gate_blocked_count"]:
+        lines.append(f"- 主なブロック理由: {paper_summary['blockers']}")
+    lines.append(f"- paper_orders planned: {paper_summary['planned_count']}件")
+    lines.append(f"- phase1_v1_shadow 記録付き: {paper_summary['shadow_count']}件")
+    if paper_summary["too_close_count"]:
+        lines.append(
+            f"- tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: "
+            f"{paper_summary['too_close_shadow_wider_count']}/{paper_summary['too_close_count']}件"
+        )
     lines.append("")
 
     if period == "weekly":

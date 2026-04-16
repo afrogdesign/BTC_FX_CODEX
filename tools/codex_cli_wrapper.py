@@ -191,7 +191,7 @@ def _build_command(
     model: str,
     output_path: Path,
     schema_path: Path | None,
-    image_paths: list[str] | None,
+    image_paths: list[str] | None = None,
 ) -> list[str]:
     command = [
         codex_bin,

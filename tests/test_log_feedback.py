@@ -1217,10 +1217,13 @@ class LogFeedbackTest(unittest.TestCase):
                     ],
                 )
                 writer.writeheader()
+                timestamp_jst = (datetime.now(timezone(timedelta(hours=9))) - timedelta(hours=1)).isoformat(
+                    timespec="seconds"
+                )
                 writer.writerow(
                     {
                         "signal_id": "sig_report",
-                        "timestamp_jst": "2026-04-09T09:05:00+09:00",
+                        "timestamp_jst": timestamp_jst,
                         "evaluation_status": "complete",
                         "data_quality_flag": "ok",
                         "signal_based_MFE_24h": "1.2",
@@ -1305,10 +1308,13 @@ class LogFeedbackTest(unittest.TestCase):
                     ],
                 )
                 writer.writeheader()
+                timestamp_jst = (datetime.now(timezone(timedelta(hours=9))) - timedelta(hours=1)).isoformat(
+                    timespec="seconds"
+                )
                 writer.writerow(
                     {
                         "signal_id": "sig_phase1_only",
-                        "timestamp_jst": "2026-04-09T09:05:00+09:00",
+                        "timestamp_jst": timestamp_jst,
                         "evaluation_status": "complete",
                         "data_quality_flag": "ok",
                         "signal_based_MFE_24h": "1.2",
@@ -1375,12 +1381,21 @@ class LogFeedbackTest(unittest.TestCase):
                 "prelabel",
                 "primary_setup_status",
                 "primary_setup_reason",
+                "primary_setup_side",
+                "primary_entry_mid",
+                "tp1_price",
+                "shadow_tp1_price",
+                "shadow_exit_rule_version",
                 "invalid_reason",
                 "risk_flags",
                 "confidence_direction_shadow",
                 "confidence_execution_shadow",
                 "confidence_wait_shadow",
                 "phase1_active",
+                "trade_execution_gate",
+                "trade_execution_blockers",
+                "paper_order_status",
+                "tp_eval",
             ]
             with shadow_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=fieldnames)
@@ -1407,12 +1422,21 @@ class LogFeedbackTest(unittest.TestCase):
                             "prelabel": "ENTRY_OK",
                             "primary_setup_status": "invalid",
                             "primary_setup_reason": "rr_below_min",
+                            "primary_setup_side": "long",
+                            "primary_entry_mid": "70000",
+                            "tp1_price": "70500",
+                            "shadow_tp1_price": "70650",
+                            "shadow_exit_rule_version": "phase1_v1_shadow",
                             "invalid_reason": "RR不足",
                             "risk_flags": "lower_liquidity_close,sweep_incomplete",
                             "confidence_direction_shadow": "80",
                             "confidence_execution_shadow": "10",
                             "confidence_wait_shadow": "70",
                             "phase1_active": "false",
+                            "trade_execution_gate": "blocked",
+                            "trade_execution_blockers": "[\"rr_below_min\", \"execution_shadow_too_low\"]",
+                            "paper_order_status": "",
+                            "tp_eval": "too_close",
                         }
                     )
 
@@ -1421,8 +1445,16 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("ready阻害理由: rr_below_min=3件", report)
             self.assertIn("ENTRY_OK + rr_below_min: 3件 / 平均 execution=10.0 / 平均 wait=70.0", report)
             self.assertIn("ENTRY_OK + rr_below_min の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
+            self.assertIn(
+                "position_risk候補: lower_liquidity_close + sweep_incomplete 同居時は ENTRY_OK から RISKY_ENTRY 寄せを検討",
+                report,
+            )
+            self.assertIn("confidence候補: execution<=20 かつ wait>=60 の本通知上位扱いを抑制", report)
             self.assertIn("direction_execution_conflict の主な理由: rr_below_min=3件", report)
             self.assertIn("direction_execution_conflict の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
+            self.assertIn("trade_execution_gate=blocked: 3件", report)
+            self.assertIn("主なブロック理由: rr_below_min=3件, execution_shadow_too_low=3件", report)
+            self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 3/3件", report)
 
 
 if __name__ == "__main__":

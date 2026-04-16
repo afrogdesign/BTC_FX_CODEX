@@ -59,6 +59,15 @@ CSV_HEADER = [
     "trail_atr_multiplier",
     "timeout_hours",
     "exit_rule_version",
+    "shadow_tp1_price",
+    "shadow_tp2_price",
+    "shadow_breakeven_after_tp1",
+    "shadow_trail_atr_multiplier",
+    "shadow_timeout_hours",
+    "shadow_exit_rule_version",
+    "trade_execution_gate",
+    "trade_execution_blockers",
+    "paper_order_status",
     "funding_rate",
     "funding_rate_raw",
     "funding_rate_pct",
@@ -177,6 +186,15 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "trail_atr_multiplier": payload.get("trail_atr_multiplier"),
         "timeout_hours": payload.get("timeout_hours"),
         "exit_rule_version": payload.get("exit_rule_version"),
+        "shadow_tp1_price": payload.get("shadow_tp1_price"),
+        "shadow_tp2_price": payload.get("shadow_tp2_price"),
+        "shadow_breakeven_after_tp1": payload.get("shadow_breakeven_after_tp1"),
+        "shadow_trail_atr_multiplier": payload.get("shadow_trail_atr_multiplier"),
+        "shadow_timeout_hours": payload.get("shadow_timeout_hours"),
+        "shadow_exit_rule_version": payload.get("shadow_exit_rule_version"),
+        "trade_execution_gate": payload.get("trade_execution_gate"),
+        "trade_execution_blockers": json_dumps(payload.get("trade_execution_blockers")),
+        "paper_order_status": payload.get("paper_order_status"),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
         "funding_rate_pct": payload.get("funding_rate_pct"),
@@ -256,5 +274,64 @@ def append_trade_log(base_dir: Path, payload: dict[str, Any]) -> Path:
             writer.writeheader()
             for existing in existing_rows:
                 writer.writerow({field: existing.get(field, "") for field in CSV_HEADER})
+        writer.writerow(row)
+    return path
+
+
+PAPER_ORDER_HEADER = [
+    "signal_id",
+    "timestamp_jst",
+    "side",
+    "entry_price",
+    "stop_loss_price",
+    "tp1_price",
+    "tp2_price",
+    "risk_percent_applied",
+    "planned_risk_usd",
+    "position_size_usd",
+    "exit_rule_version",
+    "trade_execution_gate",
+    "trade_execution_blockers",
+    "paper_order_status",
+]
+
+
+def append_paper_order(base_dir: Path, payload: dict[str, Any]) -> Path:
+    path = base_dir / "logs" / "csv" / "paper_orders.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current_header, existing_rows = _load_existing_rows(path)
+    signal_id = str(payload.get("signal_id", "")).strip()
+    if signal_id and any(str(row.get("signal_id", "")).strip() == signal_id for row in existing_rows):
+        return path
+
+    json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
+    row = {
+        "signal_id": signal_id,
+        "timestamp_jst": payload.get("timestamp_jst", ""),
+        "side": payload.get("primary_setup_side", ""),
+        "entry_price": payload.get("primary_entry_mid", ""),
+        "stop_loss_price": payload.get("primary_stop_loss", ""),
+        "tp1_price": payload.get("shadow_tp1_price", payload.get("tp1_price", "")),
+        "tp2_price": payload.get("shadow_tp2_price", payload.get("tp2_price", "")),
+        "risk_percent_applied": payload.get("risk_percent_applied", ""),
+        "planned_risk_usd": payload.get("planned_risk_usd", ""),
+        "position_size_usd": payload.get("position_size_usd", ""),
+        "exit_rule_version": payload.get("shadow_exit_rule_version", payload.get("exit_rule_version", "")),
+        "trade_execution_gate": payload.get("trade_execution_gate", ""),
+        "trade_execution_blockers": json_dumps(payload.get("trade_execution_blockers")),
+        "paper_order_status": payload.get("paper_order_status", "planned"),
+    }
+
+    needs_rewrite = current_header and current_header != PAPER_ORDER_HEADER
+    mode = "a"
+    if not path.exists() or needs_rewrite:
+        mode = "w"
+
+    with path.open(mode, newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=PAPER_ORDER_HEADER)
+        if mode == "w":
+            writer.writeheader()
+            for existing in existing_rows:
+                writer.writerow({field: existing.get(field, "") for field in PAPER_ORDER_HEADER})
         writer.writerow(row)
     return path
