@@ -1,6 +1,6 @@
 ## BTC Monitor 共通参照
 
-更新日: 2026-04-15 JST
+更新日: 2026-04-17 JST
 
 - 共通ルール: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/共通運用ルール.md`
 - 記録ファイル構成: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/記録ファイル構成.md`
@@ -26,7 +26,7 @@
 
 ## 案件の前提
 
-- 現行主流は `iMac 2019` 上の `Ver02.4-v1`
+- 現行主流は `iMac 2019` 上の `ver02.5-v1`
 - `MBP2020` の `Ver02.1` は停止・凍結済みで、archive 参照用として扱う
 - 現行の事後評価運用は `daily-sync` と `sync-ai-post-reviews`
 - 案件固有の運用コマンドは `運用資料/運用/実務/運用コマンドメモ.md` を見る
@@ -40,6 +40,15 @@
   - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/👩‍⚖️秘書.md`
 - 人向け履歴は Obsidian 側 `📒打ち合わせノート.md`
   - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md`
+
+## 👩‍⚖️秘書.md の固定ルール
+
+- `👩‍⚖️秘書.md` は「最新状態だけの短い入口」。履歴、経緯、古い版の説明、詳細な実施内容は書かない。
+- 更新時は必ず既存本文を整理し、古い行を残して追記し続けない。
+- 見出しは必ず `## 最新状態`、`## 次に見る`、`## 入口` の 3 つだけにする。
+- `最新状態` は最大 4 行、`次に見る` は最大 3 行、`入口` は最大 2 リンクにする。
+- 書く内容は、主系統、最新コミットまたはデプロイ状態、最新レポートの主要数値、現在の判断だけに絞る。
+- 詳細説明、作業履歴、決定の背景、長いリンク集は `📒打ち合わせノート.md`、`NEXT_TASK.md`、`progress.md` へ逃がす。
 
 ## 更新
 

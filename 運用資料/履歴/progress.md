@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-17 01:06 JST
+更新日: 2026-04-17 01:20 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -28,6 +28,9 @@
 ## 重要な節目ログ
 
 - 2026-04-17 JST
+  - `👩‍⚖️秘書.md` の書き方がぶれないよう、`AGENTS.md` と `運用資料/運用/ルール/記録ファイル運用ルール.md` に固定フォーマットを明文化した。
+  - 今後の `👩‍⚖️秘書.md` は `最新状態`、`次に見る`、`入口` の 3 見出しだけにし、最新状態は最大4行、次に見るは最大3行、入口は最大2リンクに制限する。
+  - 履歴、経緯、古い版の説明、実施内容の詳細は `📒打ち合わせノート.md`、`NEXT_TASK.md`、`progress.md` へ分ける。
   - `ver02.5-v1` の最新コミット `7e074bc` を iMac 2019 の常設 `com.afrog.btc-monitor` へ反映した。
   - 反映前に `.venv312/bin/python -m unittest discover tests` を実行し、96 件 OK を確認した。
   - `zsh tools/start_monitor.sh` で LaunchAgent を再登録・再起動し、`launchctl print gui/501/com.afrog.btc-monitor` で `state = running`、PID `20830` を確認した。
