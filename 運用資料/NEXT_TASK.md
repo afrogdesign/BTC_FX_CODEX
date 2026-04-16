@@ -1,13 +1,13 @@
 # NEXT TASK TRACKER
 
-更新日: 2026-04-17 01:10 JST
+更新日: 2026-04-17 02:05 JST
 
 運用メモ: AI の日常入口として使う。履歴は `履歴/progress.md` に残し、ここには次の判断に必要な情報だけを書く。
 
 ## 現在の状況
 
 - 現行主流は `iMac 2019` 上の `ver02.5-v1`。日常の通知観測と品質判断はこの 1 本で進める。
-- 最新コードは `ver02.5-v1` / `ac4b451` まで Push 済みで、`com.afrog.btc-monitor` へデプロイ済み。`launchctl` では `state=running`、PID `20830` を確認済み。
+- 最新コードは `ver02.5-v1` / `c2651bd` まで Push 済みで、`com.afrog.btc-monitor` へデプロイ済み。`launchctl` では `state=running`、PID `20830` を確認済み。
 - `MBP2020` の `Ver02.1` は停止・凍結済み。必要なときだけ archive と過去ログを参照する。
 - 現在フェーズは `Phase 0` 本番観測中。主判断は `Phase 1` の本有効確認へ移している。
 - 事後評価運用は `daily-sync` と `sync-ai-post-reviews` の 2 段構成。レビューの主軸は AI、必要なケースだけ `human_override` を使う。
@@ -19,6 +19,8 @@
 - `phase1_v1_shadow` として TP1=1.3R / TP2=2.4R の比較用出口を追加済み。現行 `phase1_v0` は維持。
 - `trade_execution_gate` を追加済み。`rr_below_min`、低 execution、高 wait pressure、データ品質不良、no_trade_flags ありは紙トレード候補から除外する。
 - `paper_orders.csv` への紙トレード planned 記録を追加済み。対象は `phase1_active=true` かつ `trade_execution_gate=pass` のみ。2026-04-17 の最新レポート時点では `paper_orders planned=0件`。
+- AI 事後評価は `ai_post_review_v2` を追加済み。`review_action_class`、`review_priority`、`next_action` を保存し、旧レビューは互換維持のまま改善アクションへ推定補完する。
+- `daily-sync` レポートは AI 事後評価から `改善アクション` と `高優先の代表例` を出せる状態にした。`tp_eval=too_close` は `tune_exit / high` として扱える。
 - `tests/test_codex_cli_wrapper.py` と `tests/test_log_feedback.py` の既知不一致は解消済み。両方 OK。
 - `serve-review-form` は `com.afrog.btc-review-form` LaunchAgent で `state=running` を確認済み。
 - Phase 1 へは閾値緩和で急がず、`ready=1件以上`、`phase1_active=true=5件以上`、`phase1_active=true=30件以上` の 3 段階で観測を進める。
@@ -27,9 +29,10 @@
 ## 次のタスク
 
 1. `daily-sync` の最新結果どおり `primary_setup_status=ready=0` と `phase1_active=true=0` が続いているため、`Phase 1` 本有効待ちを維持しつつ通知観測を継続する。
-2. `ver02.5-v1` デプロイ後の新規ログで、`phase1_v1_shadow` が `tp_eval=too_close` の改善候補になっているか観測する。
-3. `paper_orders.csv` に planned が出たら、daily-sync の `紙トレード準備` 欄で勝敗 proxy、TP1先行、timeout を確認する。
-4. `MIN_RR_RATIO` はまだ緩めない。`trade_execution_gate=pass` が少なすぎる場合も、先に TP/entry 条件の実データを見てから判断する。
+2. 次回 `daily-sync` で `改善アクション` 欄を確認し、`tune_exit / high` がどの signal_id に集まるかを見る。
+3. `ver02.5-v1` デプロイ後の新規ログで、`phase1_v1_shadow` が `tp_eval=too_close` の改善候補になっているか観測する。
+4. `paper_orders.csv` に planned が出たら、daily-sync の `紙トレード準備` 欄で勝敗 proxy、TP1先行、timeout を確認する。
+5. `MIN_RR_RATIO` はまだ緩めない。`trade_execution_gate=pass` が少なすぎる場合も、先に TP/entry 条件の実データを見てから判断する。
 
 ## ブロッカー
 

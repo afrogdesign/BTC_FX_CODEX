@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-17 01:20 JST
+更新日: 2026-04-17 02:05 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -28,6 +28,13 @@
 ## 重要な節目ログ
 
 - 2026-04-17 JST
+  - AI 事後評価を `ai_post_review_v2` へ拡張し、`review_action_class`、`review_priority`、`next_action` を返して保存できるようにした。
+  - 既存の `user_verdict`、`tp_eval`、`sl_eval`、時間足評価はそのまま維持し、旧レビュー行は互換のまま改善アクションへ推定補完する。
+  - `daily-sync` レポートへ `改善アクション` セクションを追加し、分類件数、重要度件数、高優先の代表例を出せるようにした。
+  - `tp_eval=too_close` は `tune_exit / high / TP1/TP2 を遠めにする候補を検証する` として扱えるようにした。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback` で 28 件 OK、`.venv312/bin/python -m unittest discover tests` で 97 件 OK。
+  - GitHub へ `c2651bd Add actionable AI post review fields` を push 済み。
+  - これにより、AI 事後評価は「役に立ったか」の記録だけでなく、「次に何を直すか」まで daily-sync 上で追える状態になった。
   - `👩‍⚖️秘書.md` の書き方がぶれないよう、`AGENTS.md` と `運用資料/運用/ルール/記録ファイル運用ルール.md` に固定フォーマットを明文化した。
   - 今後の `👩‍⚖️秘書.md` は `最新状態`、`次に見る`、`入口` の 3 見出しだけにし、最新状態は最大4行、次に見るは最大3行、入口は最大2リンクに制限する。
   - 履歴、経緯、古い版の説明、実施内容の詳細は `📒打ち合わせノート.md`、`NEXT_TASK.md`、`progress.md` へ分ける。
