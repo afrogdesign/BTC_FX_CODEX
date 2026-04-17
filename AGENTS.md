@@ -26,7 +26,7 @@
 
 ## 案件の前提
 
-- 現行主流は `iMac 2019` 上の `ver02.5-v1`
+- 現行主流は `iMac 2019` 上の `ver02.5-v2`
 - `MBP2020` の `Ver02.1` は停止・凍結済みで、archive 参照用として扱う
 - 現行の事後評価運用は `daily-sync` と `sync-ai-post-reviews`
 - 案件固有の運用コマンドは `運用資料/運用/実務/運用コマンドメモ.md` を見る
@@ -40,6 +40,10 @@
   - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/👩‍⚖️秘書.md`
 - 人向け履歴は Obsidian 側 `📒打ち合わせノート.md`
   - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md`
+- ユーザーが `報告して` と書いたときは、人向けと AI 向けの報告先を一式更新する
+  - AI 向け: `運用資料/NEXT_TASK.md` と `運用資料/履歴/progress.md`
+  - 人向け: `👩‍⚖️秘書.md` と `📒打ち合わせノート.md`
+  - その時点までの最新の実施内容、判断、次に見る点を反映し、片方だけで終えない
 
 ## 👩‍⚖️秘書.md の固定ルール
 

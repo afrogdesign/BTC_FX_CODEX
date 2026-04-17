@@ -3,13 +3,20 @@ from __future__ import annotations
 from typing import Any
 
 
-def _score_from_distance(distance_atr: float | None, close_threshold: float, warning_threshold: float) -> float:
+def _score_from_distance(
+    distance_atr: float | None,
+    close_threshold: float,
+    warning_threshold: float,
+    *,
+    close_score: float = 30.0,
+    warning_score: float = 15.0,
+) -> float:
     if distance_atr is None:
         return 0.0
     if distance_atr <= close_threshold:
-        return 30.0
+        return close_score
     if distance_atr <= warning_threshold:
-        return 15.0
+        return warning_score
     return 0.0
 
 
@@ -76,7 +83,7 @@ def evaluate_position_risk(
     divergence = oi_cvd_info.get("cvd_price_divergence")
 
     if bias == "short":
-        delta = _score_from_distance(above_liq, 0.8, 1.8)
+        delta = _score_from_distance(above_liq, 0.8, 1.8, close_score=45.0)
         risk_score += delta
         if delta:
             breakdown["upper_liquidity_distance"] = round(delta, 4)
@@ -99,7 +106,7 @@ def evaluate_position_risk(
         if largest_liq_atr is not None and largest_liq_atr <= 0.9 and largest_liq_price > price:
             flags.append("liquidation_cluster_above")
     elif bias == "long":
-        delta = _score_from_distance(below_liq, 0.8, 1.8)
+        delta = _score_from_distance(below_liq, 0.8, 1.8, close_score=45.0)
         risk_score += delta
         if delta:
             breakdown["lower_liquidity_distance"] = round(delta, 4)

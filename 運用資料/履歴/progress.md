@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-17 02:05 JST
+更新日: 2026-04-18 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,15 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-18 JST
+  - `NEXT_TASK` と `feedback_daily_sync_20260417.md` の改善候補に合わせ、通知判定のバランス再調整を実施した。
+  - `src/analysis/rr.py` は近い抵抗帯/支持帯だけで `rr_below_min` に落ちすぎないよう、setup 用 TP を最低 `1.3R / 2.4R` で下支えする形へ変更した。
+  - `src/analysis/position_risk.py` は `lower_liquidity_close` と `upper_liquidity_close` の単独 close 加点を強め、`ENTRY_OK + invalid` に残りやすいケースを `RISKY_ENTRY` 側へ寄せた。
+  - `src/presentation/sanitize.py` は `confidence_execution_shadow <= 20` かつ `confidence_wait_shadow >= 60` の本通知を `high_main` / `strong_main` に上げず、`normal_main` へ抑制するようにした。
+  - 追加確認として `tests/test_eval_rebalance.py` に TP 下限と流動性近接単独ケース、`tests/test_notification_rank.py` に低 execution / 高 wait のランク抑制を追加した。
+  - 確認は `.venv312/bin/python -m unittest tests.test_eval_rebalance tests.test_notification_rank` を実施し、15 件 OK。
+  - これにより、`rr_below_min` 過多、`ENTRY_OK + invalid`、`execution<=20 & wait>=60` の上位本通知化を次回 `daily-sync` で再観測できる状態にした。
 
 - 2026-04-17 JST
   - AI 事後評価を `ai_post_review_v2` へ拡張し、`review_action_class`、`review_priority`、`next_action` を返して保存できるようにした。

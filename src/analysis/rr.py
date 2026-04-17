@@ -7,6 +7,10 @@ def _round2(value: float) -> float:
     return round(float(value), 2)
 
 
+_TP1_MIN_RR = 1.3
+_TP2_MIN_RR = 2.4
+
+
 def _empty_setup(reason: str = "") -> dict[str, Any]:
     return {
         "status": "invalid",
@@ -60,6 +64,17 @@ def _nearest_target(side: str, entry_mid: float, support_zones: list[dict[str, A
     return max(below) if below else None
 
 
+def _target_candidates(
+    side: str,
+    entry_mid: float,
+    support_zones: list[dict[str, Any]],
+    resistance_zones: list[dict[str, Any]],
+) -> list[float]:
+    if side == "long":
+        return sorted(float(z["low"]) for z in resistance_zones if float(z["low"]) > entry_mid)
+    return sorted((float(z["high"]) for z in support_zones if float(z["high"]) < entry_mid), reverse=True)
+
+
 def build_setup(
     *,
     side: str,
@@ -98,17 +113,25 @@ def build_setup(
     if side == "long":
         stop_loss = entry_low - sl_atr_multiplier * atr
         risk = max(entry_mid - stop_loss, 1e-9)
-        target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
-        tp1 = target_hint if target_hint and target_hint > entry_mid else entry_mid + risk * 1.8
-        tp2 = entry_mid + risk * 2.0
+        targets = _target_candidates(side, entry_mid, support_zones, resistance_zones)
+        tp1_floor = entry_mid + risk * _TP1_MIN_RR
+        tp2_floor = entry_mid + risk * _TP2_MIN_RR
+        tp1_hint = targets[0] if targets else None
+        tp2_hint = next((target for target in targets[1:] if target > tp1_floor), None)
+        tp1 = max(tp1_hint, tp1_floor) if tp1_hint is not None else tp1_floor
+        tp2 = max(tp2_hint, tp2_floor) if tp2_hint is not None else tp2_floor
         tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = tp1 - entry_mid
     else:
         stop_loss = entry_high + sl_atr_multiplier * atr
         risk = max(stop_loss - entry_mid, 1e-9)
-        target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
-        tp1 = target_hint if target_hint and target_hint < entry_mid else entry_mid - risk * 1.8
-        tp2 = entry_mid - risk * 2.0
+        targets = _target_candidates(side, entry_mid, support_zones, resistance_zones)
+        tp1_floor = entry_mid - risk * _TP1_MIN_RR
+        tp2_floor = entry_mid - risk * _TP2_MIN_RR
+        tp1_hint = targets[0] if targets else None
+        tp2_hint = next((target for target in targets[1:] if target < tp1_floor), None)
+        tp1 = min(tp1_hint, tp1_floor) if tp1_hint is not None else tp1_floor
+        tp2 = min(tp2_hint, tp2_floor) if tp2_hint is not None else tp2_floor
         tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = entry_mid - tp1
 

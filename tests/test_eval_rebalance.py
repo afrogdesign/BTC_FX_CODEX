@@ -220,6 +220,33 @@ class EvalRebalanceTest(unittest.TestCase):
         )
         self.assertEqual(invalid_setup["status"], "invalid")
 
+    def test_setup_uses_minimum_rr_floors_for_targets(self) -> None:
+        support_zones = [{"low": 99.0, "high": 100.0}]
+        resistance_zones = [{"low": 100.9, "high": 101.2}]
+        setup, _ = build_setup(
+            side="long",
+            price=100.0,
+            atr=1.0,
+            support_zones=support_zones,
+            resistance_zones=resistance_zones,
+            sl_atr_multiplier=1.5,
+            min_rr_ratio=1.1,
+            confidence=80,
+            confidence_min=45,
+            atr_ratio=1.0,
+            atr_ratio_min=0.25,
+            atr_ratio_max=2.4,
+            funding_rate=0.0,
+            funding_warning=999.0,
+            funding_prohibited=999.0,
+            trigger_ready=True,
+            warning_count=0,
+        )
+        self.assertEqual(setup["tp1"], 102.1)
+        self.assertEqual(setup["tp2"], 104.3)
+        self.assertEqual(setup["rr_estimate"], 1.3)
+        self.assertNotIn("rr_below_min", setup["invalid_reason_codes"])
+
     def test_position_risk_directional_liquidation(self) -> None:
         common = {
             "atr": 10.0,
@@ -242,6 +269,22 @@ class EvalRebalanceTest(unittest.TestCase):
             **common,
         )
         self.assertGreater(strong["location_risk"], weak["location_risk"])
+
+    def test_close_liquidity_alone_moves_bias_side_to_risky_entry(self) -> None:
+        result = evaluate_position_risk(
+            bias="long",
+            price=100.0,
+            atr=10.0,
+            liquidity_info={"liquidity_above": None, "liquidity_below": 0.5, "liquidity_swept_recently": True},
+            liquidation_info={"largest_liquidation_price": None},
+            oi_cvd_info={"oi_state": None, "cvd_price_divergence": None},
+            orderbook_info={"orderbook_bid_wall_price": None, "orderbook_ask_wall_price": None, "orderbook_bias": None},
+            high_threshold=80.0,
+            medium_threshold=55.0,
+        )
+        self.assertEqual(result["location_risk"], 33.0)
+        self.assertEqual(result["prelabel"], "RISKY_ENTRY")
+        self.assertIn("lower_liquidity_close", result["risk_flags"])
 
     def test_backtest_fill_and_missed_opportunity_summary(self) -> None:
         signal = {

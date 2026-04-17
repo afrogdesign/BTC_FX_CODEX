@@ -334,6 +334,11 @@ def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str
     if not is_main_context:
         return "no_send", "送信なし", "⚪", "メール送信条件は未成立"
 
+    execution_shadow = _safe_float(result.get("confidence_execution_shadow"))
+    wait_shadow = _safe_float(result.get("confidence_wait_shadow"))
+    if execution_shadow <= 20.0 and wait_shadow >= 60.0:
+        return "normal_main", "通常の本通知", "📊", "実行しにくさを優先して標準扱いに抑制"
+
     signal_tier = str(result.get("signal_tier", "normal")).strip().lower()
     if signal_tier == "strong_machine":
         return "strong_main", "強い本通知", "🔥", "条件がかなり整った本通知"

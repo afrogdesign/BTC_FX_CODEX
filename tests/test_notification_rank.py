@@ -90,6 +90,26 @@ class NotificationRankTest(unittest.TestCase):
                 expected,
             )
 
+    def test_main_rank_is_downgraded_when_execution_is_low_and_wait_is_high(self) -> None:
+        ctx = build_notification_context(
+            {
+                "bias": "long",
+                "notification_kind": "main",
+                "primary_setup_status": "ready",
+                "prelabel": "ENTRY_OK",
+                "signal_tier": "strong_machine",
+                "confidence": 82,
+                "rr_estimate": 1.9,
+                "score_gap": 30,
+                "confidence_execution_shadow": 18,
+                "confidence_wait_shadow": 72,
+            }
+        )
+        self.assertEqual(
+            (ctx["final_rank_code"], ctx["final_rank_label"], ctx["final_rank_emoji"]),
+            ("normal_main", "通常の本通知", "📊"),
+        )
+
     def test_final_rank_is_always_one_of_five_known_values(self) -> None:
         expected_codes = {"strong_main", "high_main", "normal_main", "attention", "no_send"}
         seen_codes: set[str] = set()
