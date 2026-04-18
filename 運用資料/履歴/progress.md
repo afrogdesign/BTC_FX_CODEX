@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-18 JST
+更新日: 2026-04-19 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,26 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-19 JST
+  - AI 事後評価の 24 時間後レビュー運用を見直し、`tools/log_feedback.py` に CLI パス自動補正、health 集計、`backfill-ai-post-review-v2` を追加した。
+  - `.env` の `AI_ADVICE_CLI_COMMAND` と `AI_SUMMARY_CLI_COMMAND` は、旧 repo パスから現行 repo の `tools/codex_cli_wrapper.py` へ修正した。
+  - `./.venv312/bin/python tools/log_feedback.py backfill-ai-post-review-v2` を実行し、既存 AI レビュー 111 件と snapshot 111 件を `ai_post_review_v2` 相当へ補完した。
+  - backfill 前の退避は `logs/csv/user_reviews_backfill_20260419_013047.csv` と `logs/review/ai_post_reviews_backfill_20260419_013047/` に保存した。
+  - `通知評価シート.md` は `最終レビュー保存` と `最終再生成` を分け、さらに `AI自動評価状態` を出すようにした。別 Mac で HTML を開いたときは閲覧中心であることが分かる警告表示も追加した。
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を再実行し、`feedback_daily_sync_20260419.md` に `AI事後評価 health` を追加した。状態は `停止中`、`eligible=150`、`AI済み=111`、`backlog=39`、`created=0`、`request_failed=5`。
+  - この変更で Phase 1 判定条件自体は変えていない。変わったのは、AI 事後評価が止まったときに日次レポートと通知評価シートで即座に分かるようになった点。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback` を実施し、31 件 OK。全体の `.venv312/bin/python -m unittest discover tests` は `tests/test_notification_detail_page.py` の既存不一致 1 件で失敗し、今回の変更範囲とは別系統として保留にした。
+
+- 2026-04-19 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260419.md` を更新した。
+  - 最新集計は完了データ 29 件、近似PF 1.13、全体勝率 75.9%、`待つ判断に使えた=14件`、平均役立ち度 3.60 / 5。
+  - `ready阻害理由` の `rr_below_min` は 22 件で、前回 27 件から減少した。`ENTRY_OK + invalid` も 7 件から 5 件へ減少した。
+  - `ENTRY_OK + rr_below_min` は 2 件で横ばいだが、平均 `execution=23.5` まで上がり、前回 14.5 より改善した。
+  - `tp_eval=too_close` は 10/15 件で、前回 11/16 件から微減した。代表 signal は `20260414_140500`、`20260414_090500`、`20260414_020500` 周辺に残っている。
+  - `execution<=20 かつ wait>=60` の抑制確認として、該当しやすい行は `signal_tier=normal` 側に寄っていることを確認した。直近12時間速報でも `direction_execution_conflict` の主理由は `confidence_below_min=2件` に変わり、`rr_below_min` 主因から外れた。
+  - `紙トレード準備` は `trade_execution_gate=pass:0件`、`blocked:3件`、`paper_orders planned:0件` で、`paper_orders.csv` もまだ未生成だった。
+  - これにより、今回の再調整は `rr_below_min` 過多と `ENTRY_OK + invalid` の改善傾向が見え始めた一方、`Phase 1` の本有効と紙トレード候補は引き続き未発生として継続観測に据える。
 
 - 2026-04-18 JST
   - `NEXT_TASK` と `feedback_daily_sync_20260417.md` の改善候補に合わせ、通知判定のバランス再調整を実施した。

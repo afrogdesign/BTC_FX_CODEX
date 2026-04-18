@@ -4,7 +4,9 @@ import argparse
 import csv
 import html
 import json
+import os
 import re
+import shutil
 import sys
 import tempfile
 from collections import Counter
@@ -540,6 +542,10 @@ def _archive_existing_reviews(base_dir: Path, reviews_path: Path) -> Path | None
     return archive_path
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _review_source_value(row: dict[str, Any]) -> str:
     source = str(row.get("review_source", "")).strip()
     if source in VALID_REVIEW_SOURCE:
@@ -779,12 +785,17 @@ def _request_ai_post_review(
     signal_row: dict[str, Any],
     outcome_row: dict[str, Any],
     auto_eval_summary: str,
-) -> dict[str, str] | None:
-    cli_command = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")).strip()
+) -> tuple[dict[str, str] | None, bool]:
+    cli_command, resolved_fallback = _resolve_ai_cli_command(base_dir, cfg)
     if not cli_command:
-        write_ai_error_log(base_dir, "ai_post_review_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
-        return None
-    model = str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip() or "gpt-5.3-codex"
+        configured = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")).strip()
+        write_ai_error_log(
+            base_dir,
+            "ai_post_review_error",
+            f"provider=cli\nreason=AI_ADVICE_CLI_COMMAND is unresolved\nconfigured={configured or '<empty>'}",
+        )
+        return None, resolved_fallback
+    model = _effective_codex_cli_model(str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip())
     timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
     save_chart_snapshots = bool(getattr(cfg, "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS", True))
     persist_dir = _ai_post_review_chart_dir(base_dir) if save_chart_snapshots else None
@@ -804,27 +815,27 @@ def _request_ai_post_review(
                 with_image = dict(payload)
                 with_image["image_paths"] = [str(image_path)]
                 parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=with_image)
-                return _normalize_ai_post_review(parsed, model=model, image_mode="price_map_svg")
+                return _normalize_ai_post_review(parsed, model=model, image_mode="price_map_svg"), resolved_fallback
             parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
-            return _normalize_ai_post_review(parsed, model=model, image_mode="no_chart")
+            return _normalize_ai_post_review(parsed, model=model, image_mode="no_chart"), resolved_fallback
         except Exception as exc:  # noqa: BLE001
             if image_path is not None:
                 try:
                     parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
-                    return _normalize_ai_post_review(parsed, model=model, image_mode="numeric_only_fallback")
+                    return _normalize_ai_post_review(parsed, model=model, image_mode="numeric_only_fallback"), resolved_fallback
                 except Exception as fallback_exc:  # noqa: BLE001
                     write_ai_error_log(
                         base_dir,
                         "ai_post_review_error",
                         f"signal_id={signal_id}\nimage_error={type(exc).__name__}: {exc}\nfallback_error={type(fallback_exc).__name__}: {fallback_exc}",
                     )
-                    return None
+                    return None, resolved_fallback
             write_ai_error_log(
                 base_dir,
                 "ai_post_review_error",
                 f"signal_id={signal_id}\nerror={type(exc).__name__}: {exc}",
             )
-            return None
+            return None, resolved_fallback
 
 
 def _write_ai_post_review_snapshot(base_dir: Path, signal_id: str, row: dict[str, str]) -> Path:
@@ -858,6 +869,213 @@ def _reviewed_on_jst(row: dict[str, str], day_key: str) -> bool:
     if reviewed_at is None:
         return False
     return reviewed_at.astimezone(JST).strftime("%Y-%m-%d") == day_key
+
+
+def _effective_codex_cli_model(requested_model: str) -> str:
+    requested = str(requested_model or "").strip()
+    if "codex" in requested.lower():
+        return requested
+    return os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip() or "gpt-5.3-codex"
+
+
+def _resolve_ai_cli_command(base_dir: Path, cfg: Any) -> tuple[str, bool]:
+    raw = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "") or "").strip()
+    if not raw:
+        return "", False
+    if "/" not in raw and "\\" not in raw:
+        return raw, False
+    configured_path = Path(raw).expanduser()
+    if configured_path.exists():
+        return str(configured_path), False
+    candidate = base_dir / "tools" / configured_path.name
+    if configured_path.name == "codex_cli_wrapper.py" and candidate.exists():
+        return str(candidate), True
+    return "", False
+
+
+def _normalize_ai_review_row(row: dict[str, Any]) -> dict[str, str]:
+    normalized = {str(key): str(value or "") for key, value in row.items()}
+    if _review_source_value(normalized) != "ai":
+        return normalized
+    normalized["review_source"] = "ai"
+    normalized["review_action_class"] = _infer_review_action_class(normalized)
+    normalized["review_priority"] = _infer_review_priority(normalized, normalized["review_action_class"])
+    normalized["next_action"] = _default_next_action(normalized, normalized["review_action_class"])
+    normalized["review_variant"] = AI_POST_REVIEW_VARIANT
+    return normalized
+
+
+def _latest_reviewed_at(rows: list[dict[str, str]], *, review_source: str = "ai") -> str:
+    candidates = [
+        str(row.get("reviewed_at_utc", "")).strip()
+        for row in rows
+        if _review_source_value(row) == review_source and str(row.get("reviewed_at_utc", "")).strip()
+    ]
+    return max(candidates, default="")
+
+
+def _latest_ai_error_summary(base_dir: Path, *, since_dt: datetime | None = None) -> tuple[str, int]:
+    error_dir = base_dir / "logs" / "errors"
+    if not error_dir.exists():
+        return "", 0
+    latest_ts = ""
+    count = 0
+    for path in sorted(error_dir.glob("*_ai_post_review_error.log")):
+        try:
+            modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            continue
+        modified_iso = modified.isoformat().replace("+00:00", "Z")
+        if modified_iso > latest_ts:
+            latest_ts = modified_iso
+        if since_dt is None or modified >= since_dt:
+            count += 1
+    return latest_ts, count
+
+
+def _ai_review_health_summary(
+    *,
+    base_dir: Path,
+    outcomes_path: Path,
+    reviews_path: Path,
+    trades_path: Path,
+    sync_stats: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    try:
+        cfg = load_config(base_dir)
+        main_only = bool(getattr(cfg, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY", True))
+        configured_daily_cap = int(getattr(cfg, "AI_POST_REVIEW_DAILY_MAX", 2))
+    except Exception:  # noqa: BLE001
+        cfg = None
+        main_only = True
+        configured_daily_cap = 2
+    outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
+    reviews = [row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")]
+    review_map = {row.get("signal_id", ""): row for row in reviews if row.get("signal_id", "")}
+    eligible_rows = []
+    for trade in _load_csv_rows(trades_path):
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id or not _parse_bool(trade.get("was_notified")):
+            continue
+        if main_only and _normalized_notification_kind(trade) != "main":
+            continue
+        outcome = outcomes.get(signal_id, {})
+        if str(outcome.get("evaluation_status", "")).strip() != "complete":
+            continue
+        eligible_rows.append(trade)
+    eligible = len(eligible_rows)
+    ai_count = 0
+    human_override_count = 0
+    unresolved = 0
+    for trade in eligible_rows:
+        current = review_map.get(str(trade.get("signal_id", "")).strip(), {})
+        source = _review_source_value(current)
+        if source == "ai":
+            ai_count += 1
+        elif source == "human_override":
+            human_override_count += 1
+        else:
+            unresolved += 1
+    last_ai_review_at = _latest_reviewed_at(reviews, review_source="ai")
+    last_ai_review_dt = _parse_dt(last_ai_review_at) if last_ai_review_at else None
+    last_ai_error_at, request_failed = _latest_ai_error_summary(base_dir, since_dt=last_ai_review_dt)
+    resolved_cli_fallback = 0
+    created = 0
+    reused = 0
+    daily_cap = configured_daily_cap
+    if sync_stats:
+        created = int(sync_stats.get("created", 0))
+        reused = int(sync_stats.get("reused", 0))
+        request_failed = max(request_failed, int(sync_stats.get("request_failed", 0)))
+        resolved_cli_fallback = int(sync_stats.get("resolved_cli_fallback", 0))
+        daily_cap = int(sync_stats.get("daily_cap", daily_cap))
+    status = "healthy"
+    if unresolved > 0:
+        status = "backlog"
+    last_error_dt = _parse_dt(last_ai_error_at) if last_ai_error_at else None
+    if unresolved > 0 and request_failed > 0 and (last_ai_review_dt is None or (last_error_dt and last_error_dt >= last_ai_review_dt)):
+        status = "stalled"
+    return {
+        "status": status,
+        "eligible": eligible,
+        "ai_reviewed": ai_count,
+        "human_override": human_override_count,
+        "backlog_pending": unresolved,
+        "created": created,
+        "reused": reused,
+        "request_failed": request_failed,
+        "resolved_cli_fallback": resolved_cli_fallback,
+        "daily_cap": daily_cap,
+        "last_ai_review_at": last_ai_review_at or "未作成",
+        "last_ai_error_at": last_ai_error_at or "なし",
+    }
+
+
+def _ai_review_status_label(summary: dict[str, Any]) -> str:
+    status = str(summary.get("status", "")).strip()
+    if status == "stalled":
+        return "停止中"
+    if status == "backlog":
+        return "backlogあり"
+    return "正常"
+
+
+def _backfill_snapshot_backup_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review"
+
+
+def _backup_ai_review_artifacts(base_dir: Path, reviews_path: Path) -> dict[str, str]:
+    timestamp = datetime.now(tz=JST).strftime("%Y%m%d_%H%M%S")
+    backup_paths: dict[str, str] = {}
+    if reviews_path.exists():
+        csv_backup = reviews_path.with_name(f"{reviews_path.stem}_backfill_{timestamp}{reviews_path.suffix}")
+        _ensure_parent(csv_backup)
+        shutil.copy2(reviews_path, csv_backup)
+        backup_paths["reviews_csv"] = str(csv_backup)
+    snapshot_dir = _ai_post_review_dir(base_dir)
+    if snapshot_dir.exists():
+        snapshot_backup = _backfill_snapshot_backup_dir(base_dir) / f"{snapshot_dir.name}_backfill_{timestamp}"
+        if snapshot_backup.exists():
+            shutil.rmtree(snapshot_backup)
+        shutil.copytree(snapshot_dir, snapshot_backup)
+        backup_paths["snapshot_dir"] = str(snapshot_backup)
+    return backup_paths
+
+
+def backfill_ai_post_review_v2(
+    *,
+    base_dir: Path,
+    review_note_path: Path = DEFAULT_REVIEW_NOTE,
+    reviews_path: Path | None = None,
+) -> dict[str, Any]:
+    reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    rows = _load_csv_rows(reviews_path)
+    if not rows:
+        return {"updated_reviews": 0, "updated_snapshots": 0, "backup_paths": {}}
+    updated_rows: list[dict[str, str]] = []
+    changed_signal_ids: list[str] = []
+    for row in rows:
+        normalized = _normalize_ai_review_row(row)
+        updated_rows.append(normalized)
+        if normalized != {str(key): str(value or "") for key, value in row.items()}:
+            changed_signal_ids.append(str(normalized.get("signal_id", "")).strip())
+    updated_snapshots = 0
+    backup_paths: dict[str, str] = {}
+    if changed_signal_ids:
+        backup_paths = _backup_ai_review_artifacts(base_dir, reviews_path)
+        _write_csv_rows(reviews_path, USER_REVIEW_HEADER, updated_rows)
+        for signal_id in changed_signal_ids:
+            row = next((candidate for candidate in updated_rows if str(candidate.get("signal_id", "")).strip() == signal_id), None)
+            if row is None:
+                continue
+            _write_ai_post_review_snapshot(base_dir, signal_id, row)
+            updated_snapshots += 1
+        export_review_queue(base_dir=base_dir, review_note_path=review_note_path, reviews_path=reviews_path)
+    return {
+        "updated_reviews": len(changed_signal_ids),
+        "updated_snapshots": updated_snapshots,
+        "backup_paths": backup_paths,
+    }
 
 
 def _normalized_notification_kind(trade: dict[str, str]) -> str:
@@ -1303,11 +1521,11 @@ def _load_review_note_rows(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def _render_review_note(rows: list[dict[str, str]]) -> str:
+def _render_review_note(rows: list[dict[str, str]], ai_health_summary: dict[str, Any] | None = None) -> str:
     total = len(rows)
     done_rows = [row for row in rows if str(row.get("review_status", "")).strip() == "done"]
     pending_rows = [row for row in rows if str(row.get("review_status", "")).strip() != "done"]
-    latest_updated = max(
+    latest_review_saved = max(
         (
             str(row.get("reviewed_at_utc", "")).strip()
             for row in rows
@@ -1315,6 +1533,7 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
         ),
         default="未保存",
     )
+    latest_regenerated = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
     form_link = f"[評価シート入力フォーム](file://{DEFAULT_REVIEW_FORM})"
     lines = [
         "# 通知評価シート",
@@ -1326,7 +1545,14 @@ def _render_review_note(rows: list[dict[str, str]]) -> str:
         f"- 総件数: {total}",
         f"- 完了: {len(done_rows)}",
         f"- 未完了: {len(pending_rows)}",
-        f"- 最終更新: {latest_updated}",
+        f"- 最終レビュー保存: {latest_review_saved}",
+        f"- 最終再生成: {latest_regenerated}",
+        (
+            f"- AI自動評価状態: {_ai_review_status_label(ai_health_summary)}"
+            f" (候補残 {int(ai_health_summary.get('backlog_pending', 0))}件 / 最終AI評価 {ai_health_summary.get('last_ai_review_at', '未作成')})"
+            if ai_health_summary
+            else "- AI自動評価状態: 未集計"
+        ),
         f"- 入力画面: {form_link}",
         "",
         "## 最近の完了レビュー",
@@ -1752,6 +1978,26 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       font-size: 13px;
       color: var(--muted);
     }}
+    .env-alert {{
+      margin-top: 14px;
+      border-radius: 12px;
+      padding: 14px 16px;
+      border: 1px solid #f59e0b;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: 14px;
+      font-weight: 700;
+    }}
+    .env-alert.safe {{
+      border-color: #86efac;
+      background: #ecfdf5;
+      color: #166534;
+    }}
+    .env-alert strong {{
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }}
     button {{
       border: 0;
       border-radius: 10px;
@@ -2068,11 +2314,12 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         <span id="progress-chip" class="progress-chip">レビュー進捗: 0 / 0 完了</span>
         <button type="button" id="pending-toggle-button" class="secondary" onclick="togglePendingOnly()">未完了だけ表示: OFF</button>
         <button type="button" class="secondary" onclick="focusNextPending()">次の未完了へ</button>
-        <button type="button" onclick="saveToServer()">保存</button>
-        <button type="button" class="secondary" onclick="reloadFromServer()">再読込</button>
+        <button type="button" id="save-button" onclick="saveToServer()">保存</button>
+        <button type="button" id="reload-button" class="secondary" onclick="reloadFromServer()">再読込</button>
         <button type="button" class="secondary" onclick="resetSelections()">入力を初期化</button>
         <span id="draft-status" class="draft-status">下書き未保存</span>
       </div>
+      <div id="environment-alert" class="env-alert">この端末のローカル補助への接続を確認中です。</div>
     </div>
 
     <div id="cards">{initial_cards_html}</div>
@@ -2093,6 +2340,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     var noteHeader = {json.dumps(header_text, ensure_ascii=False)};
     var draftStorageKey = 'btc-monitor-review-form:' + noteKey;
     var apiBase = window.location.protocol === 'http:' || window.location.protocol === 'https:' ? '' : 'http://{REVIEW_SERVER_HOST}:{REVIEW_SERVER_PORT}';
+    var localServerLabel = apiBase || 'この配信元';
+    var serverConnected = false;
     var verdictDefaults = {json.dumps(VERDICT_DEFAULTS, ensure_ascii=False)};
     var showPendingOnly = rows.some(function(row) {{ return String(row.review_status || 'pending') !== 'done'; }});
     var biasLabels = {json.dumps(BIAS_LABELS, ensure_ascii=False)};
@@ -2341,6 +2590,40 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     function updateServerStatus(message) {{
       var el = document.getElementById('server-status');
       if (el) el.textContent = message;
+    }}
+
+    function updateActionButtons() {{
+      var saveButton = document.getElementById('save-button');
+      var reloadButton = document.getElementById('reload-button');
+      if (saveButton) {{
+        saveButton.disabled = !serverConnected;
+        saveButton.title = serverConnected ? '' : 'この端末では保存できません。ローカル補助の起動を確認してください。';
+      }}
+      if (reloadButton) {{
+        reloadButton.disabled = !serverConnected;
+        reloadButton.title = serverConnected ? '' : 'この端末では再読込できません。ローカル補助の起動を確認してください。';
+      }}
+    }}
+
+    function updateEnvironmentAlert() {{
+      var el = document.getElementById('environment-alert');
+      if (!el) return;
+      if (serverConnected) {{
+        el.className = 'env-alert safe';
+        el.innerHTML = '<strong>この端末で保存できます</strong>' +
+          'ローカル補助 ' + localServerLabel + ' に接続済みです。保存すると、この端末の JSON / CSV / Obsidian 要約を更新します。';
+        return;
+      }}
+      el.className = 'env-alert';
+      el.innerHTML = '<strong>この画面は閲覧中心です</strong>' +
+        'この端末ではローカル補助 ' + localServerLabel + ' に接続できていません。内容は見えますが、保存と再読込は使えません。' +
+        ' 正本更新は対象Macでフォーム常駐を起動した環境だけで行ってください。';
+    }}
+
+    function setServerConnected(connected) {{
+      serverConnected = connected;
+      updateActionButtons();
+      updateEnvironmentAlert();
     }}
 
     function updatePendingToggleButton() {{
@@ -2691,6 +2974,11 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     }}
 
     async function saveToServer() {{
+      if (!serverConnected) {{
+        updateDraftStatus('この端末では保存できません');
+        updateServerStatus('閲覧用として開いています。対象Macのローカル補助を起動してください');
+        return;
+      }}
       saveDraft();
       updateDraftStatus('保存中...');
       try {{
@@ -2704,14 +2992,17 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         rows = Array.isArray(payload.rows) ? payload.rows : rows;
         updateDraftStatus('保存済み');
         updateServerStatus('保存成功: JSON / CSV / Obsidian 要約を更新しました');
+        setServerConnected(true);
         renderCards();
       }} catch (_error) {{
         updateDraftStatus('ローカル下書きのみ保存');
         updateServerStatus('ローカル補助へ保存できませんでした。localhost 起動を確認してください');
+        setServerConnected(false);
       }}
     }}
 
     async function reloadFromServer() {{
+      updateActionButtons();
       updateServerStatus('ローカル補助へ接続中...');
       try {{
         var response = await fetch(apiBase + '/api/review-form/state');
@@ -2719,9 +3010,11 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
         var payload = await response.json();
         rows = Array.isArray(payload.rows) ? payload.rows : rows;
         updateServerStatus('ローカル補助と接続済み。最新状態を読み込みました');
+        setServerConnected(true);
         renderCards();
       }} catch (_error) {{
         updateServerStatus('ローカル補助へ接続できません。下書き復元で継続できます');
+        setServerConnected(false);
       }}
     }}
 
@@ -2745,6 +3038,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     renderCards();
     restoreDraft();
     renderCards();
+    updateActionButtons();
+    updateEnvironmentAlert();
     bindSelectHandlers();
     reloadFromServer();
   </script>
@@ -2901,10 +3196,16 @@ def export_review_queue(
         key=lambda row: row.get("timestamp_jst", ""),
         reverse=True,
     )
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
     _write_review_state(state_path, ordered_rows)
     _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, _review_rows_to_csv_rows(ordered_rows), "signal_id")
     _ensure_parent(review_note_path)
-    review_note_path.write_text(_render_review_note(ordered_rows), encoding="utf-8")
+    review_note_path.write_text(_render_review_note(ordered_rows, ai_health_summary=ai_health_summary), encoding="utf-8")
     write_review_form_html(ordered_rows, review_note_path)
     return review_note_path
 
@@ -3034,7 +3335,13 @@ def _save_review_rows(
     )
     _write_review_state(state_path, ordered_rows)
     _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, _review_rows_to_csv_rows(ordered_rows), "signal_id")
-    review_note_path.write_text(_render_review_note(ordered_rows), encoding="utf-8")
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=base_dir / "logs" / "csv" / "signal_outcomes.csv",
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
+    review_note_path.write_text(_render_review_note(ordered_rows, ai_health_summary=ai_health_summary), encoding="utf-8")
     write_review_form_html(ordered_rows, review_note_path)
     return ordered_rows
 
@@ -4078,6 +4385,7 @@ def build_feedback_report(
     output_md: Path | None = None,
     shadow_path: Path | None = None,
     paper_orders_path: Path | None = None,
+    ai_health_summary: dict[str, Any] | None = None,
 ) -> str:
     explicit_shadow_path = shadow_path is not None
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
@@ -4100,6 +4408,12 @@ def build_feedback_report(
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
     previous_completed = [row for row in previous_rows if row.get("evaluation_status") == "complete"]
     review_summary = _review_summary(completed)
+    ai_health_summary = ai_health_summary or _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
     phase1_gate = _phase1_gate_summary(completed)
     paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
@@ -4117,6 +4431,10 @@ def build_feedback_report(
     lines = [f"# フィードバック分析レポート ({period})", ""]
     lines.append("## 1. まず結論")
     lines.extend(_headline_findings(completed, review_summary, improvements))
+    if ai_health_summary["status"] == "stalled":
+        lines.append(
+            f"- AI事後評価は停止中です。候補残 {ai_health_summary['backlog_pending']} 件、直近エラー {ai_health_summary['last_ai_error_at']}。"
+        )
     lines.append(
         f"- Phase 1 判定では ready={phase1_gate['ready_count']} 件、phase1_active=true={phase1_gate['active_count']} 件です。"
     )
@@ -4219,6 +4537,19 @@ def build_feedback_report(
                 lines.append(
                     f"  - {row.get('signal_id', '')}: {REVIEW_ACTION_CLASS_LABELS.get(str(row.get('review_action_class', '')), row.get('review_action_class', ''))} / {row.get('next_action', '')}"
                 )
+    lines.append("### AI事後評価 health")
+    lines.append(f"- 状態: {_ai_review_status_label(ai_health_summary)}")
+    lines.append(
+        f"- 候補件数: eligible={ai_health_summary['eligible']} / backlog={ai_health_summary['backlog_pending']} / AI済み={ai_health_summary['ai_reviewed']} / human_override={ai_health_summary['human_override']}"
+    )
+    lines.append(
+        f"- 今回の同期: created={ai_health_summary['created']} / reused={ai_health_summary['reused']} / request_failed={ai_health_summary['request_failed']} / daily_cap={ai_health_summary['daily_cap']}"
+    )
+    lines.append(
+        f"- 最終AI評価: {ai_health_summary['last_ai_review_at']} / 最終エラー: {ai_health_summary['last_ai_error_at']}"
+    )
+    if int(ai_health_summary.get("resolved_cli_fallback", 0)) > 0:
+        lines.append(f"- 補足: 旧CLIパスを現行repoへ自動補正 {ai_health_summary['resolved_cli_fallback']} 件")
     lines.append("")
 
     lines.append("## 5. 改善候補")
@@ -4424,10 +4755,12 @@ def sync_ai_post_reviews(
         "eligible": 0,
         "reused": 0,
         "created": 0,
+        "request_failed": 0,
         "skipped_existing_ai": 0,
         "skipped_human_override": 0,
         "skipped_daily_cap": 0,
         "skipped_priority_filter": 0,
+        "resolved_cli_fallback": 0,
         "daily_cap": max(0, daily_max),
     }
 
@@ -4459,12 +4792,20 @@ def sync_ai_post_reviews(
             stats["skipped_human_override"] += 1
             continue
         if current_source == "ai":
+            normalized_current = _normalize_ai_review_row(current)
+            if normalized_current != {str(key): str(value or "") for key, value in current.items()}:
+                ai_rows.append(normalized_current)
+                review_map[signal_id] = normalized_current
+                _write_ai_post_review_snapshot(base_dir, signal_id, normalized_current)
             stats["skipped_existing_ai"] += 1
             continue
         cached_review = _load_ai_post_review_snapshot(base_dir, signal_id)
         if cached_review is not None:
-            ai_rows.append(cached_review)
-            review_map[signal_id] = cached_review
+            normalized_cached = _normalize_ai_review_row(cached_review)
+            ai_rows.append(normalized_cached)
+            review_map[signal_id] = normalized_cached
+            if normalized_cached != cached_review:
+                _write_ai_post_review_snapshot(base_dir, signal_id, normalized_cached)
             stats["reused"] += 1
             continue
         if new_review_budget <= 0:
@@ -4474,7 +4815,7 @@ def sync_ai_post_reviews(
         if not isinstance(signal_payload, dict):
             signal_payload = {"signal_id": signal_id}
         auto_eval_summary = _auto_eval_summary(outcome)
-        ai_review = _request_ai_post_review(
+        ai_review, resolved_fallback = _request_ai_post_review(
             base_dir=base_dir,
             cfg=cfg,
             signal_id=signal_id,
@@ -4483,7 +4824,10 @@ def sync_ai_post_reviews(
             auto_eval_summary=auto_eval_summary,
         )
         if ai_review is None:
+            stats["request_failed"] += 1
             continue
+        if resolved_fallback:
+            stats["resolved_cli_fallback"] += 1
         reviewed_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
         row = {
             "signal_id": signal_id,
@@ -4512,6 +4856,7 @@ def sync_ai_post_reviews(
             "review_status": "done",
             "reviewed_at_utc": reviewed_at,
         }
+        row = _normalize_ai_review_row(row)
         ai_rows.append(row)
         review_map[signal_id] = row
         _write_ai_post_review_snapshot(base_dir, signal_id, row)
@@ -4520,6 +4865,10 @@ def sync_ai_post_reviews(
 
     if ai_rows:
         _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, ai_rows, "signal_id")
+    stats["backlog_pending"] = max(
+        0,
+        stats["eligible"] - stats["skipped_existing_ai"] - stats["skipped_human_override"] - stats["reused"] - stats["created"],
+    )
     return reviews_path, stats
 
 
@@ -4545,10 +4894,23 @@ def daily_sync(
         outcomes_path=outcomes_path,
         reviews_path=reviews_path,
     )
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=base_dir / "logs" / "csv" / "trades.csv",
+        sync_stats=sync_stats,
+    )
     if output_md is None:
         today = datetime.now(tz=JST).strftime("%Y%m%d")
         output_md = base_dir / "運用資料" / "reports" / f"feedback_daily_sync_{today}.md"
-    build_feedback_report(base_dir=base_dir, period="weekly", output_md=output_md, shadow_path=shadow_path)
+    build_feedback_report(
+        base_dir=base_dir,
+        period="weekly",
+        output_md=output_md,
+        shadow_path=shadow_path,
+        ai_health_summary=ai_health_summary,
+    )
     return {
         "outcomes_path": outcomes_path,
         "reviews_path": reviews_path,
@@ -4561,6 +4923,9 @@ def daily_sync(
         "ai_post_review_created": sync_stats["created"],
         "ai_post_review_skipped_existing_ai": sync_stats["skipped_existing_ai"],
         "ai_post_review_skipped_human_override": sync_stats["skipped_human_override"],
+        "ai_post_review_request_failed": sync_stats["request_failed"],
+        "ai_post_review_backlog_pending": sync_stats["backlog_pending"],
+        "ai_post_review_resolved_cli_fallback": sync_stats["resolved_cli_fallback"],
     }
 
 
@@ -4598,6 +4963,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     ai_sync_parser = subparsers.add_parser("sync-ai-post-reviews")
     ai_sync_parser.add_argument("--max-new-ai-reviews", type=int)
+
+    backfill_parser = subparsers.add_parser("backfill-ai-post-review-v2")
+    backfill_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
 
     serve_parser = subparsers.add_parser("serve-review-form")
     serve_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
@@ -4669,6 +5037,15 @@ def main() -> None:
         )
         print(f"reviews_path={reviews_path}")
         for key, value in stats.items():
+            print(f"{key}={value}")
+        return
+
+    if args.command == "backfill-ai-post-review-v2":
+        result = backfill_ai_post_review_v2(
+            base_dir=base_dir,
+            review_note_path=Path(args.review_note),
+        )
+        for key, value in result.items():
             print(f"{key}={value}")
         return
 

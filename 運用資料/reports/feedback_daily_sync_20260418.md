@@ -1,19 +1,19 @@
 # フィードバック分析レポート (weekly)
 
 ## 1. まず結論
-- 今回の完了データは 36 件です。近似PF は 0.96、全体勝率は 75.0% でした。
+- 今回の完了データは 34 件です。近似PF は 0.94、全体勝率は 76.5% でした。
 - 事後評価では「待つ判断に使えた」が最も多く、15 件でした。
 - 平均の役立ち度は 3.62 / 5 でした。
-- 根拠整合の入力率は 41.7%、整合した比率は 100.0% でした。
+- 根拠整合の入力率は 44.1%、整合した比率は 100.0% でした。
 - 今回の改善候補の最上位は「TP が近すぎるケースが多い」です。
 - Phase 1 判定では ready=0 件、phase1_active=true=0 件です。
 - 判定: Phase 1 の本有効待ち (ready / phase1_active ともに未検出のため、通知観測を継続する)
 
 ## 2. 今回の対象
-- 集計期間: 2026-04-10 08:05 〜 2026-04-15 23:05
-- 総観測件数: 36
-- データ品質の内訳: ok=36
-- 近似PF: 0.96
+- 集計期間: 2026-04-11 05:05 〜 2026-04-17 02:05
+- 総観測件数: 34
+- データ品質の内訳: ok=34
+- 近似PF: 0.94
 
 ## 3. Phase 1 判定サマリー
 - `primary_setup_status=ready` 件数: 0
@@ -24,15 +24,15 @@
 - `tp1_hit_first=false` 率: 0.0%
 - `expired` 率: 0.0%
 - `max_size_capped` 発生率: 0.0%
-- ready阻害理由: rr_below_min=30件, entry_zone_not_reached=3件, confidence_below_min=1件, inside_entry_zone_with_trigger=1件, near_entry_zone_with_trigger=1件
+- ready阻害理由: rr_below_min=27件, entry_zone_not_reached=3件, inside_entry_zone_with_trigger=2件, confidence_below_min=1件, near_entry_zone_with_trigger=1件
 
 ## 4. 人のレビュー要約 / AI事後評価
 - 待つ判断に使えた: 15件
 - 通知が早すぎた: 1件
 - 平均の役立ち度: 3.62 / 5
-- 値動きの主因の入力率: 44.4%
+- 値動きの主因の入力率: 47.1%
 - エントリー寄り誤読の入力率: 0.0% / 誤読あり率: 0.0%
-- 根拠整合の入力率: 41.7% / 整合率: 100.0%
+- 根拠整合の入力率: 44.1% / 整合率: 100.0%
 - SL評価: SL は妥当=8件, SL が広すぎた=5件, SL が狭すぎた=3件
 - TP評価: TP が近すぎた=11件, TP が遠すぎた=2件, TP は妥当=3件
 - 4時間足評価: 妥当=7件, 一部弱い=7件, 弱い=2件
@@ -51,75 +51,74 @@
    理由: tp_eval=too_close が 11/16 件 (68.8%)
    主に触る場所: src/analysis/rr.py, src/trade/exit_manager.py
 2. ENTRY_OK と setup invalid の整合性崩れ
-   理由: 期間内で ENTRY_OK + invalid が 8 件あります。主理由: rr_below_min=8件
+   理由: 期間内で ENTRY_OK + invalid が 7 件あります。主理由: rr_below_min=7件
    主に触る場所: main.py, src/analysis/confidence.py, src/analysis/position_risk.py
 3. 速報で方向/実行不整合が継続
-   理由: 直近12時間で direction_execution_conflict が 5 件あります
+   理由: 直近12時間で direction_execution_conflict が 7 件あります
    主に触る場所: tools/log_feedback.py
 
 補助集計:
-- ENTRY_OK + rr_below_min: 4件 / 平均 execution=10.8 / 平均 wait=70.8
-- ENTRY_OK + rr_below_min の主な risk_flags: lower_liquidity_close=3件, orderbook_ask_heavy=1件, short_cover_risk=1件
-- position_risk候補: lower_liquidity_close の単独加点を強めるか close 閾値を再確認
+- ENTRY_OK + rr_below_min: 2件 / 平均 execution=14.5 / 平均 wait=72.8
+- ENTRY_OK + rr_below_min の主な risk_flags: orderbook_ask_heavy=1件, lower_liquidity_close=1件, short_cover_risk=1件
 - confidence候補: execution<=20 かつ wait>=60 の本通知上位扱いを抑制
 
 ## 6. 技術集計
 
 ### regime別件数・勝率・平均MFE・平均MAE
-- range: 勝率=73.3%, 平均MFE=7.99, 平均MAE=4.22 (n=15) / データ不足 15/30
-- uptrend: 勝率=76.2%, 平均MFE=4.62, 平均MAE=7.70 (n=21) / データ不足 21/30
+- range: 勝率=77.8%, 平均MFE=8.32, 平均MAE=3.88 (n=18) / データ不足 18/30
+- uptrend: 勝率=75.0%, 平均MFE=4.38, 平均MAE=10.19 (n=16) / データ不足 16/30
 
 ### signal_tier別件数・勝率・平均MFE・平均MAE
-- normal: 勝率=75.0%, 平均MFE=6.03, 平均MAE=6.25 (n=36)
+- normal: 勝率=76.5%, 平均MFE=6.46, 平均MAE=6.85 (n=34)
 
 ### prelabel別件数・勝率・平均MFE・平均MAE
-- ENTRY_OK: 勝率=100.0%, 平均MFE=3.87, 平均MAE=6.47 (n=5) / データ不足 5/30
-- RISKY_ENTRY: 勝率=75.0%, 平均MFE=7.74, 平均MAE=3.17 (n=4) / データ不足 4/30
-- SWEEP_WAIT: 勝率=69.2%, 平均MFE=6.28, 平均MAE=6.77 (n=26) / データ不足 26/30
+- ENTRY_OK: 勝率=100.0%, 平均MFE=4.54, 平均MAE=9.51 (n=3) / データ不足 3/30
+- RISKY_ENTRY: 勝率=83.3%, 平均MFE=8.12, 平均MAE=3.07 (n=6) / データ不足 6/30
+- SWEEP_WAIT: 勝率=70.8%, 平均MFE=6.42, 平均MAE=7.58 (n=24) / データ不足 24/30
 - NO_TRADE_CANDIDATE: 勝率=100.0%, 平均MFE=3.38, 平均MAE=4.00 (n=1) / データ不足 1/30
 
 ### bias別件数・勝率
-- long: 勝率=77.1% (n=35)
+- long: 勝率=78.8% (n=33)
 - short: 勝率=0.0% (n=1) / データ不足 1/30
 
 ### bias別 direction 正誤
-- long: correct=11, wrong=15, unclear=9 / wrong_rate=42.9% (n=35)
+- long: correct=12, wrong=15, unclear=6 / wrong_rate=45.5% (n=33)
 - short: correct=0, wrong=1, unclear=0 / wrong_rate=100.0% (n=1)
 
 ### 成績指標
-- 全体勝率: 75.0%
-- 平均MFE(signal_based): 6.03
-- 平均MAE(signal_based): 6.25
+- 全体勝率: 76.5%
+- 平均MFE(signal_based): 6.46
+- 平均MAE(signal_based): 6.85
 - 平均MFE(entry_ready_based): 0.00
 - 平均MAE(entry_ready_based): 0.00
-- TP1先行率: 75.0%
+- TP1先行率: 76.5%
 
 ### 通知品質
-- A: 通知して良かった = 27件
-- B: 通知したが微妙 = 9件
+- A: 通知して良かった = 26件
+- B: 通知したが微妙 = 8件
 - C: 通知しなかったが本当は良かった = 0件
 - D: 通知しなかったので正解 = 0件
 
 ### risk flag 群別 wrong rate
-- short_cover_risk: wrong_rate=70.0% (wrong=7/10)
-- ask_wall_close: wrong_rate=42.1% (wrong=8/19)
-- orderbook_ask_heavy: wrong_rate=42.1% (wrong=8/19)
-- sweep_incomplete: wrong_rate=41.4% (wrong=12/29)
-- lower_liquidity_close: wrong_rate=40.6% (wrong=13/32)
-- long_flush_exhaustion: wrong_rate=33.3% (wrong=2/6)
+- short_cover_risk: wrong_rate=75.0% (wrong=6/8)
+- orderbook_ask_heavy: wrong_rate=45.0% (wrong=9/20)
+- long_flush_exhaustion: wrong_rate=44.4% (wrong=4/9)
+- lower_liquidity_close: wrong_rate=43.3% (wrong=13/30)
+- sweep_incomplete: wrong_rate=42.9% (wrong=12/28)
+- ask_wall_close: wrong_rate=37.5% (wrong=6/16)
 
 ### 直近12時間速報
-- 対象件数: 11件
-- direction_execution_conflict: 5件
-- direction_execution_conflict の主な理由: rr_below_min=5件
-- direction_execution_conflict の主な risk_flags: lower_liquidity_close=5件, long_flush_exhaustion=4件, sweep_incomplete=4件
-- ENTRY_OK + invalid: 1件
-- countertrend_long_cluster: 11件
+- 対象件数: 12件
+- direction_execution_conflict: 7件
+- direction_execution_conflict の主な理由: rr_below_min=5件, near_entry_zone_waiting_trigger=1件, confidence_below_min=1件
+- direction_execution_conflict の主な risk_flags: orderbook_ask_heavy=6件, lower_liquidity_close=5件, sweep_incomplete=5件
+- ENTRY_OK + invalid: 2件
+- countertrend_long_cluster: 8件
 
 ### Phase 1 計画ログ
-- Phase 1 計画付き件数: 36
+- Phase 1 計画付き件数: 34
 - 本有効件数: 0
-- 参考ログ件数: 36
+- 参考ログ件数: 34
 - 平均 risk_percent_applied: 0.00
 - 連敗時平均 risk_percent_applied: 0.00
 - 平均 planned_risk_usd: 0.00
@@ -130,14 +129,14 @@
 
 ### 紙トレード準備
 - trade_execution_gate=pass: 0件
-- trade_execution_gate=blocked: 0件
+- trade_execution_gate=blocked: 1件
+- 主なブロック理由: execution_shadow_too_low=1件, no_trade_flags_present=1件, phase1_inactive=1件, rr_below_min=1件, setup_not_ready=1件
 - paper_orders planned: 0件
-- phase1_v1_shadow 記録付き: 0件
+- phase1_v1_shadow 記録付き: 1件
 - tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 0/11件
 
 ### risk_flags 有効性比較
-- short_cover_risk: negative_rate=80.0% (n=10)
-- lower_liquidity_close: negative_rate=68.8% (n=32)
-- ask_wall_close: negative_rate=63.2% (n=19)
-- sweep_incomplete: negative_rate=62.1% (n=29)
-- orderbook_ask_heavy: negative_rate=57.9% (n=19)
+- lower_liquidity_close: negative_rate=63.3% (n=30)
+- ask_wall_close: negative_rate=62.5% (n=16)
+- sweep_incomplete: negative_rate=60.7% (n=28)
+- orderbook_ask_heavy: negative_rate=55.0% (n=20)

@@ -28,9 +28,11 @@ from tools.log_feedback import (
     _load_csv_rows,
     _load_review_note_rows,
     _load_review_state_rows,
+    _normalize_ai_review_row,
     _review_state_path,
     _review_form_path,
     _render_review_form_html,
+    backfill_ai_post_review_v2,
     build_feedback_report,
     build_shadow_log,
     evaluate_trade_row,
@@ -744,6 +746,9 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["review_source"], "ai")
             self.assertEqual(rows[0]["tf_15m_eval"], "poor")
             self.assertEqual(stats["reused"], 1)
+            self.assertEqual(rows[0]["review_action_class"], "tune_entry")
+            self.assertEqual(rows[0]["review_priority"], "medium")
+            self.assertEqual(rows[0]["review_variant"], "ai_post_review_v2")
 
     def test_sync_ai_post_reviews_skips_existing_ai_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -994,6 +999,85 @@ class LogFeedbackTest(unittest.TestCase):
 
             mocked_cli.assert_called_once()
             self.assertEqual(stats["created"], 1)
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(rows[0]["review_model"], "gpt-5.3-codex")
+
+    def test_sync_ai_post_reviews_resolves_legacy_cli_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+            (base_dir / "tools").mkdir(parents=True, exist_ok=True)
+            (base_dir / "tools" / "codex_cli_wrapper.py").write_text("# stub\n", encoding="utf-8")
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_legacy_path",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_legacy_path", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            signal_path = base_dir / "logs" / "signals" / "sig_legacy_path.json"
+            signal_path.write_text('{"signal_id":"sig_legacy_path","summary_subject":"subject"}', encoding="utf-8")
+
+            ai_result = {
+                "user_verdict": "useful_wait",
+                "usefulness_1to5": "4",
+                "would_trade": "conditional",
+                "actual_move_driver": "technical",
+                "misleading_entry_like_wording": "no",
+                "sl_eval": "good",
+                "tp_eval": "good",
+                "tf_4h_eval": "good",
+                "tf_1h_eval": "good",
+                "tf_15m_eval": "mixed",
+                "memo": "ok",
+            }
+            legacy_path = "/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py"
+            with patch("tools.log_feedback.run_cli_json", return_value=ai_result) as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {
+                        "AI_POST_REVIEW_DAILY_MAX": 2,
+                        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+                        "AI_ADVICE_CLI_COMMAND": legacy_path,
+                        "OPENAI_ADVICE_MODEL": "gpt-4o",
+                    },
+                )()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_called_once()
+            self.assertEqual(mocked_cli.call_args.kwargs["command"], str(base_dir / "tools" / "codex_cli_wrapper.py"))
+            self.assertEqual(stats["resolved_cli_fallback"], 1)
+            self.assertEqual(stats["created"], 1)
 
     def test_main_sync_ai_post_reviews_accepts_missing_max_new_ai_reviews(self) -> None:
         with patch.object(sys, "argv", ["log_feedback.py", "sync-ai-post-reviews"]), patch(
@@ -1005,6 +1089,170 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_sync.assert_called_once()
         self.assertIsNone(mocked_sync.call_args.kwargs["max_new_reviews"])
+
+    def test_backfill_ai_post_review_v2_updates_existing_rows_and_snapshots(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            snapshot_dir = base_dir / "logs" / "review" / "ai_post_reviews"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_backfill",
+                        "timestamp_jst": "2026-04-10T01:05:00+09:00",
+                        "subject": "subject",
+                        "auto_eval_summary": "summary",
+                        "user_verdict": "too_early",
+                        "usefulness_1to5": "2",
+                        "would_trade": "no",
+                        "actual_move_driver": "technical",
+                        "misleading_entry_like_wording": "no",
+                        "logic_validated": "true",
+                        "sl_eval": "good",
+                        "tp_eval": "good",
+                        "tf_4h_eval": "good",
+                        "tf_1h_eval": "good",
+                        "tf_15m_eval": "poor",
+                        "review_source": "ai",
+                        "review_model": "gpt-test",
+                        "review_image_mode": "price_map_svg",
+                        "review_variant": "ai_post_review_v1",
+                        "review_action_class": "",
+                        "review_priority": "",
+                        "next_action": "",
+                        "memo": "memo",
+                        "review_status": "done",
+                        "reviewed_at_utc": "2026-04-10T00:00:00Z",
+                    }
+                )
+
+            (snapshot_dir / "sig_backfill.json").write_text(
+                json_text := """{
+  "signal_id": "sig_backfill",
+  "review": {
+    "signal_id": "sig_backfill",
+    "timestamp_jst": "2026-04-10T01:05:00+09:00",
+    "subject": "subject",
+    "auto_eval_summary": "summary",
+    "user_verdict": "too_early",
+    "usefulness_1to5": "2",
+    "would_trade": "no",
+    "actual_move_driver": "technical",
+    "misleading_entry_like_wording": "no",
+    "logic_validated": "true",
+    "sl_eval": "good",
+    "tp_eval": "good",
+    "tf_4h_eval": "good",
+    "tf_1h_eval": "good",
+    "tf_15m_eval": "poor",
+    "review_source": "ai",
+    "review_model": "gpt-test",
+    "review_image_mode": "price_map_svg",
+    "review_variant": "ai_post_review_v1",
+    "review_action_class": "",
+    "review_priority": "",
+    "next_action": "",
+    "memo": "memo",
+    "review_status": "done",
+    "reviewed_at_utc": "2026-04-10T00:00:00Z"
+  }
+}""",
+                encoding="utf-8",
+            )
+
+            result = backfill_ai_post_review_v2(base_dir=base_dir, review_note_path=base_dir / "review.md", reviews_path=reviews_path)
+
+            self.assertEqual(result["updated_reviews"], 1)
+            self.assertEqual(result["updated_snapshots"], 1)
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(rows[0]["review_action_class"], "tune_entry")
+            self.assertEqual(rows[0]["review_priority"], "medium")
+            self.assertEqual(rows[0]["next_action"], "早すぎる通知を抑えるため発火条件を一段遅らせる")
+            self.assertEqual(rows[0]["review_variant"], "ai_post_review_v2")
+            snapshot_text = (snapshot_dir / "sig_backfill.json").read_text(encoding="utf-8")
+            self.assertIn('"review_action_class": "tune_entry"', snapshot_text)
+            self.assertIn('"review_variant": "ai_post_review_v2"', snapshot_text)
+
+    def test_build_feedback_report_includes_ai_health_warning(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            shadow_path = base_dir / "logs" / "csv" / "shadow_log.csv"
+            shadow_path.parent.mkdir(parents=True, exist_ok=True)
+            fieldnames = [
+                "signal_id",
+                "timestamp_jst",
+                "evaluation_status",
+                "data_quality_flag",
+                "signal_based_MFE_24h",
+                "signal_based_MAE_24h",
+                "outcome",
+                "direction_outcome",
+                "entry_outcome",
+                "wait_outcome",
+                "skip_outcome",
+                "tp1_hit_first",
+                "was_notified",
+                "prelabel",
+                "primary_setup_status",
+                "primary_setup_reason",
+                "signal_tier",
+            ]
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_health",
+                        "timestamp_jst": "2026-04-10T01:05:00+09:00",
+                        "evaluation_status": "complete",
+                        "data_quality_flag": "ok",
+                        "signal_based_MFE_24h": "1.0",
+                        "signal_based_MAE_24h": "0.5",
+                        "outcome": "win",
+                        "direction_outcome": "correct",
+                        "entry_outcome": "good_entry",
+                        "wait_outcome": "not_applicable",
+                        "skip_outcome": "not_applicable",
+                        "tp1_hit_first": "true",
+                        "was_notified": "true",
+                        "prelabel": "ENTRY_OK",
+                        "primary_setup_status": "ready",
+                        "primary_setup_reason": "balanced_location",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            report = build_feedback_report(
+                base_dir=base_dir,
+                period="weekly",
+                shadow_path=shadow_path,
+                ai_health_summary={
+                    "status": "stalled",
+                    "eligible": 5,
+                    "backlog_pending": 3,
+                    "ai_reviewed": 2,
+                    "human_override": 0,
+                    "created": 0,
+                    "reused": 0,
+                    "request_failed": 3,
+                    "daily_cap": 4,
+                    "last_ai_review_at": "2026-04-15T18:36:50Z",
+                    "last_ai_error_at": "2026-04-18T18:35:03Z",
+                    "resolved_cli_fallback": 1,
+                },
+            )
+
+            self.assertIn("AI事後評価は停止中です。候補残 3 件", report)
+            self.assertIn("### AI事後評価 health", report)
+            self.assertIn("状態: 停止中", report)
+            self.assertIn("created=0 / reused=0 / request_failed=3 / daily_cap=4", report)
+            self.assertIn("旧CLIパスを現行repoへ自動補正 1 件", report)
 
     def test_merge_review_sources_prefers_csv_review_rows_over_stale_state(self) -> None:
         merged = _merge_review_sources(
