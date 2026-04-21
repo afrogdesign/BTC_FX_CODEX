@@ -302,6 +302,30 @@ PAPER_ORDER_HEADER = [
 ]
 
 
+OBSERVATION_PAPER_ORDER_HEADER = [
+    "signal_id",
+    "timestamp_jst",
+    "observation_phase",
+    "observation_type",
+    "observation_status",
+    "side",
+    "reference_price",
+    "entry_price",
+    "stop_loss_price",
+    "tp1_price",
+    "tp2_price",
+    "rr_estimate",
+    "prelabel",
+    "primary_setup_status",
+    "primary_setup_reason",
+    "phase1_observation_reasons",
+    "confidence_direction_shadow",
+    "confidence_execution_shadow",
+    "confidence_wait_shadow",
+    "trade_execution_gate",
+]
+
+
 def append_paper_order(base_dir: Path, payload: dict[str, Any]) -> Path:
     path = base_dir / "logs" / "csv" / "paper_orders.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,5 +363,52 @@ def append_paper_order(base_dir: Path, payload: dict[str, Any]) -> Path:
             writer.writeheader()
             for existing in existing_rows:
                 writer.writerow({field: existing.get(field, "") for field in PAPER_ORDER_HEADER})
+        writer.writerow(row)
+    return path
+
+
+def append_observation_paper_order(base_dir: Path, payload: dict[str, Any]) -> Path:
+    path = base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current_header, existing_rows = _load_existing_rows(path)
+    signal_id = str(payload.get("signal_id", "")).strip()
+    if signal_id and any(str(row.get("signal_id", "")).strip() == signal_id for row in existing_rows):
+        return path
+
+    json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
+    row = {
+        "signal_id": signal_id,
+        "timestamp_jst": payload.get("timestamp_jst", ""),
+        "observation_phase": "phase1A",
+        "observation_type": payload.get("phase1_observation_type", ""),
+        "observation_status": "observing",
+        "side": payload.get("primary_setup_side", ""),
+        "reference_price": payload.get("current_price", ""),
+        "entry_price": payload.get("primary_entry_mid", ""),
+        "stop_loss_price": payload.get("primary_stop_loss", ""),
+        "tp1_price": payload.get("shadow_tp1_price", payload.get("tp1_price", "")),
+        "tp2_price": payload.get("shadow_tp2_price", payload.get("tp2_price", "")),
+        "rr_estimate": payload.get("rr_estimate", ""),
+        "prelabel": payload.get("prelabel", ""),
+        "primary_setup_status": payload.get("primary_setup_status", ""),
+        "primary_setup_reason": payload.get("primary_setup_reason", ""),
+        "phase1_observation_reasons": json_dumps(payload.get("phase1_observation_reasons")),
+        "confidence_direction_shadow": payload.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": payload.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": payload.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": payload.get("trade_execution_gate", ""),
+    }
+
+    needs_rewrite = current_header and current_header != OBSERVATION_PAPER_ORDER_HEADER
+    mode = "a"
+    if not path.exists() or needs_rewrite:
+        mode = "w"
+
+    with path.open(mode, newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=OBSERVATION_PAPER_ORDER_HEADER)
+        if mode == "w":
+            writer.writeheader()
+            for existing in existing_rows:
+                writer.writerow({field: existing.get(field, "") for field in OBSERVATION_PAPER_ORDER_HEADER})
         writer.writerow(row)
     return path

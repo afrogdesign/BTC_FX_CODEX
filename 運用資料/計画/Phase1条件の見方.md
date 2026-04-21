@@ -1,12 +1,27 @@
 # Phase 1 条件の見方
 
-更新日: 2026-04-10 JST
+更新日: 2026-04-22 02:40 JST
 
 ## まず結論
 
 - `primary_setup_status=ready` は「方向だけでなく、入る価格帯と引き金までそろって、やっと検討可能になった状態」です。
 - `phase1_active=true` は、その `ready` がさらに Phase 1 の観測対象として有効だと確定した状態です。
-- 今の実データでは、`ready` も `phase1_active=true` もかなり珍しく、しばらく普通に回して観測を待つのは妥当です。
+- 今後は実用化のため、`Phase 1A` と `Phase 1B` を分けます。`Phase 1A` は `phase1_observation_gate=pass` を使う観測紙トレード、`Phase 1B` は従来の `phase1_active=true` と `trade_execution_gate=pass` を使う厳格紙トレードです。
+- 直近データでは `Phase 1B` はまだ未達ですが、`Phase 1A` は開始可能です。
+
+## 0. Phase 1A / 1B の分け方
+
+`Phase 1A` は「実行する候補」ではありません。悪い相場でも、方向判断や待機条件がどれくらい使えるかを検証する観測紙トレードです。
+
+- 対象: `phase1_observation_gate=pass`
+- 保存先: `logs/csv/observation_paper_orders.csv`
+- 見る数字: 観測タイプ別の近似PF、TP1先行率、平均MFE / MAE、entry zone 未到達率
+
+`Phase 1B` は従来どおり厳格な紙トレードです。
+
+- 対象: `phase1_active=true` かつ `trade_execution_gate=pass`
+- 保存先: `logs/csv/paper_orders.csv`
+- 見る数字: planned 件数、サイズ計画、出口計画、実行 gate のブロック理由
 
 ## 1. 何が起きたら `ready` なのか
 
@@ -90,7 +105,8 @@
 - `ready`: 0 件
 - `phase1_active=true`: 0 件
 
-つまり今の相場では、まだ `Phase 1` の本番観測が立っていない状態です。
+つまり今の相場では、まだ `Phase 1B` の本番観測が立っていない状態です。
+ただし `Phase 1A` は `phase1_observation_gate=pass` を使って開始できます。
 
 ## 4. どこで止まりやすいのか
 
@@ -122,7 +138,8 @@
 ここが重要です。
 
 `SWEEP_WAIT` や `NO_TRADE_CANDIDATE` が多いあいだは、そもそも `ready` が立ちにくい設計です。  
-なので `Phase 1` に進めない主因は、レビュー不足ではなく「相場と位置判定がまだ ready 水準まで来ていないこと」です。
+なので `Phase 1B` に進めない主因は、レビュー不足ではなく「相場と位置判定がまだ ready 水準まで来ていないこと」です。
+一方で `Phase 1A` は ready を待たず、観測価値のある候補を記録して改善材料にします。
 
 ## 6. 今どう読めばよいか
 
@@ -130,14 +147,16 @@
 - 本当に見るべきなのは `primary_setup_status`
 - それが `watch` なら「監視継続」
 - それが `ready` なら、やっと「条件付きで検討」
-- そのうえで `phase1_active=true` が立ったら、Phase 1 の本番観測として扱う
+- `phase1_observation_gate=pass` なら `Phase 1A` の観測紙トレード
+- そのうえで `phase1_active=true` と `trade_execution_gate=pass` が立ったら、`Phase 1B` の厳格紙トレード
 
 今の運用では、
 
 - 通知は出る
 - AI事後評価は溜まる
 - 改善資料も溜まる
-- ただし `Phase 1` への扉が開くのは `ready` と `phase1_active=true` が実ログに出たとき
+- `Phase 1A` は `phase1_observation_gate=pass` で始める
+- `Phase 1B` への扉が開くのは `ready` と `phase1_active=true` と `trade_execution_gate=pass` が実ログに出たとき
 
 という理解でよいです。
 
@@ -146,4 +165,5 @@
 - `src/analysis/rr.py`
 - `src/analysis/position_risk.py`
 - `src/trade/activation.py`
+- `src/trade/observation_gate.py`
 - `main.py`

@@ -41,6 +41,12 @@
   - 追加確認は `.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_notification_trigger tests.test_eval_rebalance`、`.venv312/bin/python -m unittest tests.test_log_feedback tests.test_summary_format`、`git diff --check` を実施し、合計 72 件 OK。
   - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `76350`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py` を確認した。
   - `monitor.err` の直近は `urllib3` の LibreSSL 警告のみで、今回修正に伴う致命的エラーは確認されていない。
+  - 実用化のため Phase 1 を `Phase 1A` 観測紙トレードと `Phase 1B` 厳格紙トレードへ分離する計画を `運用資料/計画/実用化計画_Phase1A-1B.md` として追加した。
+  - `observation_paper_orders.csv` を追加し、`phase1_observation_gate=pass` を実行候補ではなく方向・待機条件・仮想SL/TPの検証ログとして保存するようにした。
+  - `daily-sync` に `Phase 1A 観測紙トレード` セクションを追加し、既存 `shadow_log.csv` から 322 件を backfill した。最新 weekly 範囲では `observation_paper_orders observing=16件`。
+  - `Phase 1B` 用の `paper_orders.csv` と `trade_execution_gate` は厳格条件のまま維持し、`trade_execution_gate=pass:0件` として引き続き本有効待ち。
+  - 確認は `.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_log_feedback tests.test_eval_rebalance tests.test_notification_trigger tests.test_summary_format` と `git diff --check` を実施し、74 件 OK。
+  - `zsh tools/start_monitor.sh` で常駐を再起動し、`state=running`、PID `82442` を確認した。
 
 - 2026-04-20 JST
   - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260420.md` を更新した。完了データは 27 件、近似PF は 1.11、全体勝率は 66.7%、Phase 1 は `ready=0` / `phase1_active=true=0` の本有効待ち。

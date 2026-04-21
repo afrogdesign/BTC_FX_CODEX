@@ -29,6 +29,7 @@ from src.analysis.position_risk import reconcile_prelabel_with_setup
 from src.analysis.rr import build_setup
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
 from src.trade.observation_gate import determine_phase1_observation_gate
 
@@ -3819,6 +3820,53 @@ def build_shadow_log(
     return _write_csv_rows(shadow_path, SHADOW_HEADER, shadow_rows)
 
 
+def _observation_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "observation_phase": "phase1A",
+        "observation_type": row.get("phase1_observation_type", ""),
+        "observation_status": "observing",
+        "side": row.get("primary_setup_side", ""),
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": row.get("primary_setup_status", ""),
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "phase1_observation_reasons": row.get("phase1_observation_reasons", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+    }
+
+
+def build_observation_paper_orders(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    orders: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        if str(row.get("phase1_observation_gate", "")).strip() != "pass":
+            continue
+        orders.append(_observation_order_from_trade(row))
+        seen.add(signal_id)
+    orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, OBSERVATION_PAPER_ORDER_HEADER, orders)
+
+
 def _period_filter(rows: list[dict[str, Any]], period: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     now = datetime.now(tz=JST)
     filtered: list[dict[str, Any]] = []
@@ -4107,6 +4155,43 @@ def _phase1_observation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "overall": perf(pass_rows),
         "direction_rr_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "direction_rr_learning"]),
         "setup_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "setup_watch_learning"]),
+        "representatives": representatives,
+    }
+
+
+def _phase1a_observation_order_summary(
+    rows: list[dict[str, Any]],
+    observation_orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
+    matched_orders = [
+        row for row in observation_orders if str(row.get("signal_id", "")).strip() in period_ids
+    ]
+    order_ids = {str(row.get("signal_id", "")).strip() for row in matched_orders if str(row.get("signal_id", "")).strip()}
+    pass_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    missing_order_rows = [
+        row for row in pass_rows if str(row.get("signal_id", "")).strip() not in order_ids
+    ]
+    type_counts = Counter(str(row.get("observation_type", "")).strip() for row in matched_orders)
+    status_counts = Counter(str(row.get("observation_status", "")).strip() for row in matched_orders)
+    setup_watch_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "setup_watch_learning"
+    ]
+    entry_zone_not_reached_rows = [
+        row for row in setup_watch_rows if str(row.get("primary_setup_reason", "")).strip() == "entry_zone_not_reached"
+    ]
+    representatives = [
+        str(row.get("signal_id", "")).strip()
+        for row in sorted(matched_orders, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+        if str(row.get("signal_id", "")).strip()
+    ][:5]
+    return {
+        "order_count": len(matched_orders),
+        "missing_order_count": len(missing_order_rows),
+        "type_counts": _format_counter(type_counts, limit=5),
+        "status_counts": _format_counter(status_counts, limit=5),
+        "setup_watch_count": len(setup_watch_rows),
+        "entry_zone_not_reached_rate": _ratio(len(entry_zone_not_reached_rows), len(setup_watch_rows)),
         "representatives": representatives,
     }
 
@@ -4799,11 +4884,15 @@ def build_feedback_report(
     output_md: Path | None = None,
     shadow_path: Path | None = None,
     paper_orders_path: Path | None = None,
+    observation_paper_orders_path: Path | None = None,
     ai_health_summary: dict[str, Any] | None = None,
 ) -> str:
     explicit_shadow_path = shadow_path is not None
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
     paper_orders_path = paper_orders_path or base_dir / "logs" / "csv" / "paper_orders.csv"
+    observation_paper_orders_path = (
+        observation_paper_orders_path or base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    )
     trades_path = base_dir / "logs" / "csv" / "trades.csv"
     outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
     reviews_path = base_dir / "logs" / "csv" / "user_reviews.csv"
@@ -4816,6 +4905,14 @@ def build_feedback_report(
             trades_path=trades_path,
             outcomes_path=outcomes_path,
             reviews_path=reviews_path,
+        )
+    if _is_stale_file(observation_paper_orders_path, [shadow_path]) or _csv_missing_columns(
+        observation_paper_orders_path, OBSERVATION_PAPER_ORDER_HEADER
+    ):
+        build_observation_paper_orders(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=observation_paper_orders_path,
         )
     all_rows = _load_csv_rows(shadow_path)
     rows, previous_rows = _period_filter(all_rows, period)
@@ -4831,6 +4928,10 @@ def build_feedback_report(
     phase1_gate = _phase1_gate_summary(completed)
     paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
     observation_summary = _phase1_observation_summary(completed)
+    phase1a_summary = _phase1a_observation_order_summary(
+        completed,
+        _load_csv_rows(observation_paper_orders_path),
+    )
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
     phase1_focus = _phase1_focus_rows(completed)
     phase1_blocker_examples = _phase1_blocker_examples(completed)
@@ -5153,6 +5254,21 @@ def build_feedback_report(
         lines.append(f"- 主な観測ブロック理由: {observation_summary['blocked_reasons']}")
     lines.append("")
 
+    lines.append("### Phase 1A 観測紙トレード")
+    lines.append(f"- observation_paper_orders observing: {phase1a_summary['order_count']}件")
+    lines.append(f"- 観測タイプ: {phase1a_summary['type_counts'] or 'なし'}")
+    lines.append(f"- 状態: {phase1a_summary['status_counts'] or 'なし'}")
+    lines.append(f"- gate pass だが観測紙トレード未記録: {phase1a_summary['missing_order_count']}件")
+    if phase1a_summary["setup_watch_count"]:
+        lines.append(
+            f"- setup_watch_learning の entry_zone_not_reached 率: "
+            f"{_format_pct(phase1a_summary['entry_zone_not_reached_rate'])}"
+        )
+    if phase1a_summary["representatives"]:
+        lines.append(f"- 代表例: {', '.join(phase1a_summary['representatives'])}")
+    lines.append("- 扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ")
+    lines.append("")
+
     lines.append("### 紙トレード準備")
     lines.append(f"- trade_execution_gate=pass: {paper_summary['gate_pass_count']}件")
     lines.append(f"- trade_execution_gate=blocked: {paper_summary['gate_blocked_count']}件")
@@ -5364,6 +5480,7 @@ def daily_sync(
         max_new_reviews=max_new_reviews,
     )
     shadow_path = build_shadow_log(base_dir=base_dir, outcomes_path=outcomes_path, reviews_path=reviews_path)
+    observation_paper_orders_path = build_observation_paper_orders(base_dir=base_dir, trades_path=shadow_path)
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -5391,6 +5508,7 @@ def daily_sync(
         "outcomes_path": outcomes_path,
         "reviews_path": reviews_path,
         "shadow_path": shadow_path,
+        "observation_paper_orders_path": observation_paper_orders_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,

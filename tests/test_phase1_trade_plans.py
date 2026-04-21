@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from src.storage.csv_logger import append_paper_order
+from src.storage.csv_logger import append_observation_paper_order, append_paper_order
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.observation_gate import determine_phase1_observation_gate
@@ -217,6 +217,39 @@ class Phase1TradePlanTests(unittest.TestCase):
             rows = path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(rows), 2)
             self.assertIn("paper_1", rows[1])
+
+    def test_append_observation_paper_order_is_separate_from_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "obs_1",
+                "timestamp_jst": "2026-04-22T10:00:00+09:00",
+                "current_price": 70000,
+                "primary_setup_side": "long",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70420,
+                "shadow_tp2_price": 70860,
+                "rr_estimate": 1.3,
+                "prelabel": "RISKY_ENTRY",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "phase1_observation_gate": "pass",
+                "phase1_observation_type": "setup_watch_learning",
+                "phase1_observation_reasons": ["setup_watch_learning"],
+                "confidence_direction_shadow": 60,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 70,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_observation_paper_order(base_dir, payload)
+            append_observation_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("phase1A", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
 
 
 if __name__ == "__main__":

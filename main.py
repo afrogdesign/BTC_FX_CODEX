@@ -53,7 +53,7 @@ from src.notification.detail_page import (
 )
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
-from src.storage.csv_logger import append_paper_order, append_trade_log
+from src.storage.csv_logger import append_observation_paper_order, append_paper_order, append_trade_log
 from src.storage.json_store import (
     get_last_attention_notified_path,
     get_last_notified_path,
@@ -957,6 +957,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     save_signal_snapshot(base_dir, persisted_result)
     append_trade_log(base_dir, persisted_result)
+    if persisted_result.get("phase1_observation_gate") == "pass":
+        append_observation_paper_order(base_dir, persisted_result)
     if persisted_result.get("paper_order_status") == "planned":
         append_paper_order(base_dir, persisted_result)
     save_json(get_last_result_path(base_dir), persisted_result)

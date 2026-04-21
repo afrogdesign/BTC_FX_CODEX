@@ -1,4 +1,4 @@
-更新日: 2026-04-10 05:50 JST
+更新日: 2026-04-22 02:40 JST
 
 # 計画フォルダ
 
@@ -10,6 +10,8 @@
   - 現在の AI 事後評価の運用
 - [Phase1条件の見方.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/Phase1条件の見方.md)
   - `ready` と `phase1_active=true` の意味
+- [実用化計画_Phase1A-1B.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/実用化計画_Phase1A-1B.md)
+  - 観測紙トレードと厳格紙トレードの分離
 - [フェーズ別計画_Phase0-1.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/フェーズ別計画_Phase0-1.md)
   - 直近フェーズの正式計画
 - [計画全体タイムライン.html](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/計画/計画全体タイムライン.html)

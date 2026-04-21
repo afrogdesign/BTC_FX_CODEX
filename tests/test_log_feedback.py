@@ -37,6 +37,7 @@ from tools.log_feedback import (
     _render_review_form_html,
     backfill_ai_post_review_v2,
     build_feedback_report,
+    build_observation_paper_orders,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
@@ -44,6 +45,7 @@ from tools.log_feedback import (
     main,
     sync_ai_post_reviews,
 )
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
 
 
 class LogFeedbackTest(unittest.TestCase):
@@ -1794,6 +1796,78 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["prelabel"], "RISKY_ENTRY")
             self.assertEqual(rows[0]["phase1_observation_gate"], "pass")
 
+    def test_build_observation_paper_orders_backfills_phase1a_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "current_price",
+                        "primary_setup_side",
+                        "primary_entry_mid",
+                        "primary_stop_loss",
+                        "shadow_tp1_price",
+                        "shadow_tp2_price",
+                        "rr_estimate",
+                        "prelabel",
+                        "primary_setup_status",
+                        "primary_setup_reason",
+                        "phase1_observation_gate",
+                        "phase1_observation_type",
+                        "phase1_observation_reasons",
+                        "confidence_direction_shadow",
+                        "confidence_execution_shadow",
+                        "confidence_wait_shadow",
+                        "trade_execution_gate",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "obs_backfill",
+                        "timestamp_jst": "2026-04-22T10:00:00+09:00",
+                        "current_price": "70000",
+                        "primary_setup_side": "long",
+                        "primary_entry_mid": "69900",
+                        "primary_stop_loss": "69500",
+                        "shadow_tp1_price": "70420",
+                        "shadow_tp2_price": "70860",
+                        "rr_estimate": "1.3",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "setup_watch_learning",
+                        "phase1_observation_reasons": "[\"setup_watch_learning\"]",
+                        "confidence_direction_shadow": "60",
+                        "confidence_execution_shadow": "22",
+                        "confidence_wait_shadow": "70",
+                        "trade_execution_gate": "blocked",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "blocked",
+                        "timestamp_jst": "2026-04-22T11:00:00+09:00",
+                        "phase1_observation_gate": "blocked",
+                    }
+                )
+
+            path = build_observation_paper_orders(base_dir=base_dir, trades_path=trades_path)
+            rows = _load_csv_rows(path)
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["signal_id"], "obs_backfill")
+            self.assertEqual(rows[0]["observation_phase"], "phase1A")
+            self.assertEqual(rows[0]["observation_type"], "setup_watch_learning")
+            self.assertEqual(rows[0]["observation_status"], "observing")
+
     def test_build_feedback_report_starts_with_human_summary(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -1877,7 +1951,30 @@ class LogFeedbackTest(unittest.TestCase):
                     }
                 )
 
-            report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
+            observation_orders_path = logs_csv / "observation_paper_orders.csv"
+            with observation_orders_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=OBSERVATION_PAPER_ORDER_HEADER,
+                )
+                writer.writeheader()
+                for signal_id in ["entry_rr_0", "entry_rr_1", "entry_rr_2", "risky_rr_0"]:
+                    writer.writerow(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": timestamp_jst,
+                            "observation_phase": "phase1A",
+                            "observation_type": "direction_rr_learning",
+                            "observation_status": "observing",
+                        }
+                    )
+
+            report = build_feedback_report(
+                base_dir=base_dir,
+                period="weekly",
+                shadow_path=shadow_path,
+                observation_paper_orders_path=observation_orders_path,
+            )
 
             self.assertIn("## 1. まず結論", report)
             self.assertIn("Phase 1 判定では ready=1 件、phase1_active=true=1 件です。", report)
@@ -2141,7 +2238,27 @@ class LogFeedbackTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
+            observation_orders_path = logs_csv / "observation_paper_orders.csv"
+            with observation_orders_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=OBSERVATION_PAPER_ORDER_HEADER)
+                writer.writeheader()
+                for signal_id in ["entry_rr_0", "entry_rr_1", "entry_rr_2", "risky_rr_0"]:
+                    writer.writerow(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": timestamp_jst,
+                            "observation_phase": "phase1A",
+                            "observation_type": "direction_rr_learning",
+                            "observation_status": "observing",
+                        }
+                    )
+
+            report = build_feedback_report(
+                base_dir=base_dir,
+                period="weekly",
+                shadow_path=shadow_path,
+                observation_paper_orders_path=observation_orders_path,
+            )
 
             self.assertIn("ready阻害理由: rr_below_min=4件", report)
             self.assertIn("rr_below_min 代表例: risky_rr_0(invalid/RISKY_ENTRY, dir=75, exec=26, wait=70, MFE24h=2.40, MAE24h=0.80, outcome=win)", report)
@@ -2163,6 +2280,9 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("phase1_observation_gate=pass: 4件", report)
             self.assertIn("観測タイプ: direction_rr_learning=4件", report)
             self.assertIn("direction_rr_learning: 4件 / 勝率=100.0% / TP1先行=100.0% / 近似PF=2.35", report)
+            self.assertIn("observation_paper_orders observing: 4件", report)
+            self.assertIn("gate pass だが観測紙トレード未記録: 0件", report)
+            self.assertIn("扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ", report)
             self.assertIn("RISKY_ENTRY + rr_below_min かつ execution>=20: 1件 / 平均 execution=26.0 / 平均 wait=70.4", report)
             self.assertIn("RISKY_ENTRY + rr_below_min の主な risk_flags: orderbook_ask_heavy=1件, sweep_incomplete=1件", report)
             self.assertIn("RR再調整候補: risky_rr_0(exec=26, dir=75, wait=70, MFE24h=2.40, MAE24h=0.80, outcome=win)", report)

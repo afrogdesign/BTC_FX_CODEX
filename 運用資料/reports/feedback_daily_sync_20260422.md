@@ -112,11 +112,11 @@
 - ask_wall_close: wrong_rate=50.0% (wrong=3/6)
 
 ### 直近12時間速報
-- 対象件数: 12件
+- 対象件数: 11件
 - direction_execution_conflict: 2件
 - direction_execution_conflict の主な理由: confidence_below_min=2件
 - direction_execution_conflict の主な risk_flags: ask_wall_close=2件, lower_liquidity_close=2件, sweep_incomplete=2件
-- suppress_reason の内訳: confidence_below_long_min=7件, bias_wait=2件
+- suppress_reason の内訳: confidence_below_long_min=6件, bias_wait=2件
 - ENTRY_OK + invalid: 0件
 - countertrend_long_cluster: 8件
 
@@ -141,6 +141,15 @@
 - setup_watch_learning: 6件 / 勝率=66.7% / TP1先行=66.7% / 近似PF=0.54 / 平均MFE=3.78 / 平均MAE=7.04
 - 代表例: 20260420_150501, 20260420_060500, 20260420_040500, 20260418_110745, 20260418_090500
 - 主な観測ブロック理由: confidence_below_min=10件, no_trade_candidate=5件, watch_conditions_not_met=1件
+
+### Phase 1A 観測紙トレード
+- observation_paper_orders observing: 16件
+- 観測タイプ: direction_rr_learning=10件, setup_watch_learning=6件
+- 状態: observing=16件
+- gate pass だが観測紙トレード未記録: 0件
+- setup_watch_learning の entry_zone_not_reached 率: 50.0%
+- 代表例: 20260420_150501, 20260420_060500, 20260420_040500, 20260418_110745, 20260418_090500
+- 扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ
 
 ### 紙トレード準備
 - trade_execution_gate=pass: 0件
