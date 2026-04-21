@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-22 JST
+更新日: 2026-04-22 02:09 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -36,6 +36,11 @@
   - 同 signal の snapshot を現行 `src/analysis/rr.py` の `build_setup` で再計算する helper を `tools/log_feedback.py` に追加し、レポートへ `現行RR再計算` を出すようにした。`20260417_090500` は過去ログでは `rr_below_min` だが、現行ロジックでは `watch / entry_zone_not_reached / rr=1.30` になることを確認した。
   - この結果、今の主論点は `MIN_RR_RATIO` の追加緩和ではなく、`sweep_incomplete` を伴う long の再発火条件と通知タイミングであると整理した。
   - 確認は `.venv312/bin/python -m unittest tests.test_eval_rebalance`、`.venv312/bin/python -m unittest tests.test_log_feedback tests.test_phase1_trade_plans tests.test_summary_format` を実施し、全件 OK を確認した。
+  - PR レビューで `main.py` の `phase1_observation_gate` 呼び出しに未定義変数 `prelabel_info` 参照が残っていることを確認した。
+  - `prelabel=prelabel_info["prelabel"]` を `prelabel=effective_prelabel` へ修正し、通常サイクルで `NameError` が起きるリスクを解消した。
+  - 追加確認は `.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_notification_trigger tests.test_eval_rebalance`、`.venv312/bin/python -m unittest tests.test_log_feedback tests.test_summary_format`、`git diff --check` を実施し、合計 72 件 OK。
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `76350`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py` を確認した。
+  - `monitor.err` の直近は `urllib3` の LibreSSL 警告のみで、今回修正に伴う致命的エラーは確認されていない。
 
 - 2026-04-20 JST
   - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260420.md` を更新した。完了データは 27 件、近似PF は 1.11、全体勝率は 66.7%、Phase 1 は `ready=0` / `phase1_active=true=0` の本有効待ち。

@@ -1,13 +1,13 @@
 ﻿# NEXT TASK TRACKER
 
-更新日: 2026-04-22 JST
+更新日: 2026-04-22 02:09 JST
 
 運用メモ: AI の日常入口として使う。履歴は `履歴/progress.md` に残し、ここには次の判断に必要な情報だけを書く。
 
 ## 現在の状況
 
 - 現行主流は `iMac 2019` 上の `ver02.5-v4`。日常の通知観測と品質判断はこの 1 本で進める。
-- 最新コードは `ver02.5-v4` ブランチで再調整を継続中。`com.afrog.btc-monitor` の常設反映状況は次回デプロイ時に更新する。
+- 最新コードは `ver02.5-v4` ブランチで再調整を継続中。`com.afrog.btc-monitor` は現行 repo の `main.py` を実行しており、2026-04-22 02:09 JST 時点で再起動済み。
 - `MBP2020` の `Ver02.1` は停止・凍結済み。必要なときだけ archive と過去ログを参照する。
 - 現在フェーズは `Phase 0` 本番観測中。主判断は `Phase 1` の本有効確認へ移している。
 - 事後評価運用は `daily-sync` と `sync-ai-post-reviews` の 2 段構成。レビューの主軸は AI、必要なケースだけ `human_override` を使う。
@@ -32,6 +32,7 @@
 - `feedback_daily_sync_20260420.md` では `AI事後評価 health` が `eligible=159`、`AI済み=119`、`backlog=40`、`created=0`、`request_failed=0`。手動 `sync-ai-post-reviews` では 3 件作成し、失敗 0 で動作確認済み。
 - `sync-ai-post-reviews` は CLI usage limit 時に API fallback を使えるようにした。連続失敗は `AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES=3` で停止し、定刻実行が backlog 全体を無駄に叩き続けない。
 - `ver02.5-v4` では Phase 1 の実行 gate と観測 gate を分離した。`trade_execution_gate` は実行候補として維持し、`phase1_observation_gate` は悪い相場でも学習対象を拾う紙観測用として扱う。
+- PR レビューで見つかった `main.py` の未定義変数 `prelabel_info` 参照は `effective_prelabel` へ修正済み。対象テスト 72 件と `git diff --check` は OK、常駐 PID は再起動後 `76350`。
 - 2026-04-22 レポートでは `trade_execution_gate=pass:0件` のまま。`paper_orders planned=0件` で、紙トレード開始条件はまだ未達。
 - `tests/test_codex_cli_wrapper.py` と `tests/test_log_feedback.py` の既知不一致は解消済み。両方 OK。
 - `serve-review-form` は `com.afrog.btc-review-form` LaunchAgent で `state=running` を確認済み。
@@ -45,6 +46,7 @@
 3. `20260417_090500` と同型の `sweep_incomplete` ケースに対し、RR 閾値を緩めるのではなく、再発火条件と通知タイミングを先に詰める。
 4. `confidence_below_min=9件` は引き続き観測 gate でも除外したままにし、成績が改善しないかを継続確認する。
 5. `sync-ai-post-reviews` は LaunchAgent 側で `created=4 / request_failed=0` を維持できるか、backlog `42件` が自然減するかを確認する。
+6. 次回定時サイクル後、`monitor.err` に `NameError` や `phase1_observation_gate` 周辺の例外が出ていないか確認する。
 
 ## ブロッカー
 
