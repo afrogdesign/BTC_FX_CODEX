@@ -69,7 +69,7 @@ from backtest.runner import _backtest_breakout_state, _backtest_triggers
 from config import load_config
 from src.analysis.breakout import previous_breakout_levels
 from src.analysis.confidence import compute_confidence
-from src.analysis.position_risk import evaluate_position_risk
+from src.analysis.position_risk import evaluate_position_risk, reconcile_prelabel_with_setup
 from src.analysis.rr import build_setup
 from src.analysis.scoring import compute_scores
 
@@ -102,6 +102,11 @@ class EvalRebalanceTest(unittest.TestCase):
         recent_high, recent_low = previous_breakout_levels(df, 20)
         self.assertEqual(recent_high, 100.0)
         self.assertEqual(recent_low, 90.0)
+
+    def test_reconcile_prelabel_with_setup_downgrades_entry_ok_invalid(self) -> None:
+        self.assertEqual(reconcile_prelabel_with_setup("ENTRY_OK", "invalid"), "RISKY_ENTRY")
+        self.assertEqual(reconcile_prelabel_with_setup("ENTRY_OK", "watch"), "ENTRY_OK")
+        self.assertEqual(reconcile_prelabel_with_setup("SWEEP_WAIT", "invalid"), "SWEEP_WAIT")
 
     def test_funding_warning_hits_raw_score(self) -> None:
         base_inputs = {

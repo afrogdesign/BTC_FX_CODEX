@@ -50,6 +50,7 @@ def _coerce_value(key: str, value: str) -> Any:
         "AI_TIMEOUT_SEC",
         "AI_SUMMARY_TIMEOUT_SEC",
         "AI_RETRY_COUNT",
+        "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES",
         "LOG_RETENTION_SIGNALS_DAYS",
         "LOG_RETENTION_NOTIFICATIONS_DAYS",
         "LOG_RETENTION_ERRORS_DAYS",
@@ -110,6 +111,7 @@ def _coerce_value(key: str, value: str) -> Any:
         "AI_CACHE_ENABLED",
         "DRYRUN_MODE",
         "NOTIFICATION_HTML_ENABLED",
+        "AI_POST_REVIEW_API_FALLBACK_ENABLED",
         "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS",
     }
 
@@ -319,6 +321,9 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "PHASE1_TIMEOUT_HOURS": 12,
         "PHASE1_LOSS_STREAK": 0,
         "AI_POST_REVIEW_DAILY_MAX": 2,
+        "AI_POST_REVIEW_API_FALLBACK_ENABLED": True,
+        "AI_POST_REVIEW_API_MODEL": "",
+        "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES": 3,
         "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
         "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS": True,
     }

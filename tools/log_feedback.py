@@ -25,9 +25,12 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
 
 from config import load_config
 from src.ai.cli_provider import run_cli_json, write_ai_error_log
+from src.analysis.position_risk import reconcile_prelabel_with_setup
+from src.analysis.rr import build_setup
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
 from src.storage.json_store import load_json
+from src.trade.observation_gate import determine_phase1_observation_gate
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -294,6 +297,9 @@ SHADOW_HEADER = [
     "shadow_exit_rule_version",
     "trade_execution_gate",
     "trade_execution_blockers",
+    "phase1_observation_gate",
+    "phase1_observation_type",
+    "phase1_observation_reasons",
     "paper_order_status",
 ]
 
@@ -624,6 +630,74 @@ def _signal_snapshot_path(base_dir: Path, signal_id: str) -> Path:
     return base_dir / "logs" / "signals" / f"{signal_id}.json"
 
 
+def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
+    payload = load_json(_signal_snapshot_path(base_dir, signal_id))
+    if not isinstance(payload, dict):
+        return ""
+    side = str(payload.get("primary_setup_side") or payload.get("bias") or "").strip().lower()
+    if side not in {"long", "short"}:
+        return ""
+    try:
+        price = float(payload.get("current_price", 0.0))
+        atr = float(payload.get("atr_15m_value", 0.0))
+        confidence = int(float(payload.get("confidence", 0.0)))
+        funding_rate = float(payload.get("funding_rate_pct", 0.0))
+        atr_ratio = float(payload.get("atr_ratio", 0.0))
+        volume_ratio = float(payload.get("volume_ratio", 0.0))
+        trigger_threshold = float(payload.get("trigger_volume_ratio_threshold", 0.0))
+    except (TypeError, ValueError):
+        return ""
+    try:
+        cfg = load_config(base_dir)
+    except Exception:  # noqa: BLE001
+        cfg = type(
+            "_RRReplayCfg",
+            (),
+            {
+                "SL_ATR_MULTIPLIER": 1.5,
+                "MIN_RR_RATIO": 1.1,
+                "CONFIDENCE_LONG_MIN": 45,
+                "CONFIDENCE_SHORT_MIN": 55,
+                "MIN_ACCEPTABLE_ATR_RATIO": 0.25,
+                "MAX_ACCEPTABLE_ATR_RATIO": 2.4,
+                "FUNDING_LONG_WARNING": 0.06,
+                "FUNDING_LONG_PROHIBITED": 0.10,
+                "FUNDING_SHORT_WARNING": -0.04,
+                "FUNDING_SHORT_PROHIBITED": -0.07,
+            },
+        )()
+    support_zones = payload.get("support_zones_all") or []
+    resistance_zones = payload.get("resistance_zones_all") or []
+    if not isinstance(support_zones, list) or not isinstance(resistance_zones, list):
+        return ""
+    warning_flags = payload.get("warning_flags") or []
+    warning_count = len(_split_values(warning_flags)) if isinstance(warning_flags, str) else len(warning_flags)
+    trigger_ready = bool(payload.get("breakout_up" if side == "long" else "breakout_down")) or volume_ratio >= trigger_threshold
+    setup, _ = build_setup(
+        side=side,
+        price=price,
+        atr=atr,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        sl_atr_multiplier=float(getattr(cfg, "SL_ATR_MULTIPLIER", 1.5)),
+        min_rr_ratio=float(getattr(cfg, "MIN_RR_RATIO", 1.1)),
+        confidence=confidence,
+        confidence_min=int(getattr(cfg, "CONFIDENCE_LONG_MIN" if side == "long" else "CONFIDENCE_SHORT_MIN", 45)),
+        atr_ratio=atr_ratio,
+        atr_ratio_min=float(getattr(cfg, "MIN_ACCEPTABLE_ATR_RATIO", 0.25)),
+        atr_ratio_max=float(getattr(cfg, "MAX_ACCEPTABLE_ATR_RATIO", 2.4)),
+        funding_rate=funding_rate,
+        funding_warning=float(getattr(cfg, "FUNDING_LONG_WARNING" if side == "long" else "FUNDING_SHORT_WARNING", 0.0)),
+        funding_prohibited=float(getattr(cfg, "FUNDING_LONG_PROHIBITED" if side == "long" else "FUNDING_SHORT_PROHIBITED", 0.0)),
+        trigger_ready=trigger_ready,
+        warning_count=warning_count,
+    )
+    return (
+        f"{signal_id}=>{setup.get('status', '')}/{setup.get('status_reason_code', '')}"
+        f"/rr={_parse_float(setup.get('rr_estimate', 0.0), 0.0):.2f}"
+    )
+
+
 def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
     signal_path = _signal_snapshot_path(base_dir, signal_id)
     payload = load_json(signal_path)
@@ -777,6 +851,87 @@ def _normalize_ai_post_review(
     }
 
 
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return None
+    try:
+        parsed = json.loads(stripped)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(stripped[start : end + 1])
+                return parsed if isinstance(parsed, dict) else None
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def _request_ai_post_review_via_api(
+    *,
+    base_dir: Path,
+    cfg: Any,
+    signal_id: str,
+    payload: dict[str, Any],
+) -> dict[str, str] | None:
+    if not bool(getattr(cfg, "AI_POST_REVIEW_API_FALLBACK_ENABLED", True)):
+        return None
+    api_key = str(getattr(cfg, "OPENAI_API_KEY", "")).strip()
+    if not api_key:
+        return None
+    model = str(getattr(cfg, "AI_POST_REVIEW_API_MODEL", "") or getattr(cfg, "OPENAI_ADVICE_MODEL", "gpt-4o")).strip()
+    if not model:
+        model = "gpt-4o"
+    timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
+    retry_count = int(getattr(cfg, "AI_RETRY_COUNT", 1))
+    system_prompt = str(payload.get("system_prompt", ""))
+    user_payload = {key: value for key, value in payload.items() if key != "system_prompt"}
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key, timeout=timeout_sec)
+    last_error = ""
+    for attempt in range(1, max(1, retry_count) + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+                ],
+            )
+            content = response.choices[0].message.content or ""
+            parsed = _extract_json_object(content)
+            if parsed is None:
+                last_error = f"response was not valid JSON: {content[:500]}"
+                continue
+            return _normalize_ai_post_review(parsed, model=model, image_mode="api_numeric_fallback")
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+    write_ai_error_log(
+        base_dir,
+        "ai_post_review_error",
+        "\n".join(
+            [
+                f"signal_id={signal_id}",
+                "provider=api_fallback",
+                f"model={model}",
+                f"timeout_sec={timeout_sec}",
+                f"retry_count={retry_count}",
+                f"last_attempt={attempt}",
+                f"error={last_error}",
+            ]
+        ),
+    )
+    return None
+
+
 def _request_ai_post_review(
     *,
     base_dir: Path,
@@ -787,6 +942,14 @@ def _request_ai_post_review(
     auto_eval_summary: str,
 ) -> tuple[dict[str, str] | None, bool]:
     cli_command, resolved_fallback = _resolve_ai_cli_command(base_dir, cfg)
+    payload = {
+        "task": AI_POST_REVIEW_TASK,
+        "model": _effective_codex_cli_model(str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip()),
+        "system_prompt": (BASE_DIR / "prompts" / "post_review_prompt.md").read_text(encoding="utf-8"),
+        "signal": signal_row,
+        "outcome": outcome_row,
+        "auto_eval_summary": auto_eval_summary,
+    }
     if not cli_command:
         configured = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")).strip()
         write_ai_error_log(
@@ -794,6 +957,9 @@ def _request_ai_post_review(
             "ai_post_review_error",
             f"provider=cli\nreason=AI_ADVICE_CLI_COMMAND is unresolved\nconfigured={configured or '<empty>'}",
         )
+        api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+        if api_review is not None:
+            return api_review, resolved_fallback
         return None, resolved_fallback
     model = _effective_codex_cli_model(str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip())
     timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
@@ -802,14 +968,6 @@ def _request_ai_post_review(
     with tempfile.TemporaryDirectory(prefix="btc-post-review-") as tmpdir:
         tmp_path = Path(tmpdir)
         image_path = _build_review_chart_svg_path(base_dir, signal_id, tmp_path, persist_dir=persist_dir)
-        payload = {
-            "task": AI_POST_REVIEW_TASK,
-            "model": model,
-            "system_prompt": (BASE_DIR / "prompts" / "post_review_prompt.md").read_text(encoding="utf-8"),
-            "signal": signal_row,
-            "outcome": outcome_row,
-            "auto_eval_summary": auto_eval_summary,
-        }
         try:
             if image_path is not None:
                 with_image = dict(payload)
@@ -824,12 +982,18 @@ def _request_ai_post_review(
                     parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
                     return _normalize_ai_post_review(parsed, model=model, image_mode="numeric_only_fallback"), resolved_fallback
                 except Exception as fallback_exc:  # noqa: BLE001
+                    api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+                    if api_review is not None:
+                        return api_review, resolved_fallback
                     write_ai_error_log(
                         base_dir,
                         "ai_post_review_error",
                         f"signal_id={signal_id}\nimage_error={type(exc).__name__}: {exc}\nfallback_error={type(fallback_exc).__name__}: {fallback_exc}",
                     )
                     return None, resolved_fallback
+            api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+            if api_review is not None:
+                return api_review, resolved_fallback
             write_ai_error_log(
                 base_dir,
                 "ai_post_review_error",
@@ -933,6 +1097,56 @@ def _latest_ai_error_summary(base_dir: Path, *, since_dt: datetime | None = None
     return latest_ts, count
 
 
+def _load_latest_ai_sync_stats(base_dir: Path) -> dict[str, int]:
+    runtime_path = base_dir / "logs" / "runtime" / "ai_post_reviews.out"
+    if not runtime_path.exists():
+        return {}
+    try:
+        lines = runtime_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    latest_block: dict[str, int] = {}
+    current_block: dict[str, int] = {}
+    numeric_keys = {
+        "eligible",
+        "reused",
+        "created",
+        "request_failed",
+        "skipped_existing_ai",
+        "skipped_human_override",
+        "skipped_daily_cap",
+        "skipped_priority_filter",
+        "resolved_cli_fallback",
+        "daily_cap",
+        "stopped_after_failures",
+        "already_reviewed_today",
+        "backlog_pending",
+    }
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("reviews_path="):
+            if current_block:
+                latest_block = current_block
+            current_block = {}
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key not in numeric_keys:
+            continue
+        try:
+            current_block[key] = int(value)
+        except ValueError:
+            continue
+    if current_block:
+        latest_block = current_block
+    return latest_block
+
+
 def _ai_review_health_summary(
     *,
     base_dir: Path,
@@ -983,12 +1197,21 @@ def _ai_review_health_summary(
     created = 0
     reused = 0
     daily_cap = configured_daily_cap
+    latest_runtime_stats = _load_latest_ai_sync_stats(base_dir)
     if sync_stats:
         created = int(sync_stats.get("created", 0))
         reused = int(sync_stats.get("reused", 0))
         request_failed = max(request_failed, int(sync_stats.get("request_failed", 0)))
         resolved_cli_fallback = int(sync_stats.get("resolved_cli_fallback", 0))
         daily_cap = int(sync_stats.get("daily_cap", daily_cap))
+    if latest_runtime_stats and created == 0 and reused == 0 and resolved_cli_fallback == 0 and (
+        request_failed == 0 or int(latest_runtime_stats.get("request_failed", 0)) > request_failed
+    ):
+        created = int(latest_runtime_stats.get("created", created))
+        reused = int(latest_runtime_stats.get("reused", reused))
+        request_failed = max(request_failed, int(latest_runtime_stats.get("request_failed", 0)))
+        resolved_cli_fallback = int(latest_runtime_stats.get("resolved_cli_fallback", resolved_cli_fallback))
+        daily_cap = int(latest_runtime_stats.get("daily_cap", daily_cap))
     status = "healthy"
     if unresolved > 0:
         status = "backlog"
@@ -3458,8 +3681,24 @@ def build_shadow_log(
             continue
         outcome = outcomes.get(signal_id, {})
         review = reviews.get(signal_id, {})
+        effective_prelabel = reconcile_prelabel_with_setup(
+            str(trade.get("prelabel", "")),
+            str(trade.get("primary_setup_status", "")),
+        )
         actual_move_driver = review.get("actual_move_driver", "")
         logic_validated = _logic_validated(trade.get("prelabel_primary_reason", ""), actual_move_driver)
+        observation_gate = determine_phase1_observation_gate(
+            bias=str(trade.get("bias", "")),
+            primary_setup_side=str(trade.get("primary_setup_side", "")),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+        )
         shadow_rows.append(
             {
                 "signal_id": signal_id,
@@ -3478,7 +3717,7 @@ def build_shadow_log(
                 "confidence_wait_shadow": trade.get("confidence_wait_shadow", ""),
                 "top_positive_factors": trade.get("top_positive_factors", ""),
                 "top_negative_factors": trade.get("top_negative_factors", ""),
-                "prelabel": trade.get("prelabel", ""),
+                "prelabel": effective_prelabel,
                 "prelabel_primary_reason": trade.get("prelabel_primary_reason", ""),
                 "location_risk": trade.get("location_risk", ""),
                 "primary_setup_side": trade.get("primary_setup_side", ""),
@@ -3568,6 +3807,10 @@ def build_shadow_log(
                 "shadow_exit_rule_version": trade.get("shadow_exit_rule_version", ""),
                 "trade_execution_gate": trade.get("trade_execution_gate", ""),
                 "trade_execution_blockers": trade.get("trade_execution_blockers", ""),
+                "phase1_observation_gate": trade.get("phase1_observation_gate", "") or observation_gate["phase1_observation_gate"],
+                "phase1_observation_type": trade.get("phase1_observation_type", "") or observation_gate["phase1_observation_type"],
+                "phase1_observation_reasons": trade.get("phase1_observation_reasons", "")
+                or json.dumps(observation_gate["phase1_observation_reasons"], ensure_ascii=False),
                 "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
@@ -3829,6 +4072,53 @@ def _paper_trade_summary(rows: list[dict[str, Any]], paper_rows: list[dict[str, 
     }
 
 
+def _phase1_observation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    pass_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    type_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in pass_rows)
+    blocked_reasons: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocked_reasons.update(_split_values(str(row.get("phase1_observation_reasons", ""))))
+
+    def perf(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        settled = [flag for flag in (_success_flag(row) for row in subset) if flag is not None]
+        tp_pool = [row for row in subset if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+        mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in subset)
+        mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in subset)
+        return {
+            "count": len(subset),
+            "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+            "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+            "avg_mfe": _mean_value(subset, "signal_based_MFE_24h"),
+            "avg_mae": _mean_value(subset, "signal_based_MAE_24h"),
+            "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        }
+
+    representatives = [
+        str(row.get("signal_id", "")).strip()
+        for row in sorted(pass_rows, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+        if str(row.get("signal_id", "")).strip()
+    ][:5]
+    return {
+        "pass_count": len(pass_rows),
+        "blocked_count": len(blocked_rows),
+        "type_counts": _format_counter(type_counts, limit=5),
+        "blocked_reasons": _format_counter(blocked_reasons, limit=5),
+        "overall": perf(pass_rows),
+        "direction_rr_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "direction_rr_learning"]),
+        "setup_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "setup_watch_learning"]),
+        "representatives": representatives,
+    }
+
+
+def _format_observation_perf(label: str, item: dict[str, Any]) -> str:
+    return (
+        f"- {label}: {item['count']}件 / 勝率={_format_pct(item['win_rate'])} / "
+        f"TP1先行={_format_pct(item['tp1_first_rate'])} / 近似PF={item['approx_pf']:.2f} / "
+        f"平均MFE={item['avg_mfe']:.2f} / 平均MAE={item['avg_mae']:.2f}"
+    )
+
+
 def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ready_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() == "ready"]
     active_rows = [row for row in rows if _parse_bool(row.get("phase1_active"))]
@@ -3850,6 +4140,37 @@ def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "expired_rate": _ratio(sum(1 for row in expired_pool if row.get("outcome") == "expired"), len(expired_pool)),
         "cap_rate": _ratio(sum(1 for row in active_rows if _parse_bool(row.get("max_size_capped"))), len(active_rows)),
     }
+
+
+def _phase1_blocker_examples(rows: list[dict[str, Any]], *, limit_per_reason: int = 2) -> dict[str, list[str]]:
+    reasons = ("rr_below_min", "confidence_below_min")
+    examples: dict[str, list[str]] = {}
+    for reason in reasons:
+        subset = [row for row in rows if str(row.get("primary_setup_reason", "")).strip() == reason]
+        subset.sort(
+            key=lambda row: (
+                _success_flag(row) is True,
+                _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+                -_parse_float(row.get("signal_based_MAE_24h"), 0.0),
+            ),
+            reverse=True,
+        )
+        formatted: list[str] = []
+        for row in subset[:limit_per_reason]:
+            formatted.append(
+                (
+                    f"{row.get('signal_id', '')}"
+                    f"({row.get('primary_setup_status', '')}/{row.get('prelabel', '')}"
+                    f", dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.0f}"
+                    f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+                    f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f}"
+                    f", MFE24h={_parse_float(row.get('signal_based_MFE_24h'), 0.0):.2f}"
+                    f", MAE24h={_parse_float(row.get('signal_based_MAE_24h'), 0.0):.2f}"
+                    f", outcome={row.get('outcome', '') or 'pending'})"
+                )
+            )
+        examples[reason] = formatted
+    return examples
 
 
 def _phase1_gate_decision(summary: dict[str, Any]) -> tuple[str, str]:
@@ -3957,6 +4278,93 @@ def _entry_ok_rr_blocker_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _risky_rr_near_threshold_summary(
+    base_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    execution_floor: float = 20.0,
+    limit: int = 3,
+) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("prelabel", "")).strip() == "RISKY_ENTRY"
+        and str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+        and _parse_float(row.get("confidence_execution_shadow"), 0.0) >= execution_floor
+    ]
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _success_flag(row) is True,
+            _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+        ),
+        reverse=True,
+    )
+    flags: Counter[str] = Counter()
+    for row in candidates:
+        flags.update(_split_values(row.get("risk_flags", "")))
+    formatted_examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"(exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f}"
+            f", MFE24h={_parse_float(row.get('signal_based_MFE_24h'), 0.0):.2f}"
+            f", MAE24h={_parse_float(row.get('signal_based_MAE_24h'), 0.0):.2f}"
+            f", outcome={row.get('outcome', '') or 'pending'})"
+        )
+        for row in candidates[:limit]
+    ]
+    current_logic_examples = [
+        item for item in (_recompute_current_setup_summary(base_dir, str(row.get("signal_id", ""))) for row in candidates[:limit]) if item
+    ]
+    return {
+        "count": len(candidates),
+        "avg_execution": _mean_value(candidates, "confidence_execution_shadow"),
+        "avg_wait": _mean_value(candidates, "confidence_wait_shadow"),
+        "risk_flags": _format_counter(flags),
+        "examples": formatted_examples,
+        "current_logic_examples": current_logic_examples,
+    }
+
+
+def _sweep_rr_notified_summary(rows: list[dict[str, Any]], *, limit: int = 3) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("prelabel", "")).strip() == "RISKY_ENTRY"
+        and str(row.get("primary_setup_status", "")).strip() == "invalid"
+        and str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+        and "sweep_incomplete" in _split_values(row.get("risk_flags", ""))
+        and _parse_bool(row.get("was_notified"))
+    ]
+    notify_reasons: Counter[str] = Counter()
+    for row in candidates:
+        notify_reasons.update(_parse_maybe_json_array(str(row.get("notify_reason", ""))))
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _parse_float(row.get("confidence_wait_shadow"), 0.0) * -1,
+            str(row.get("timestamp_jst", "")),
+        ),
+        reverse=True,
+    )
+    examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"({','.join(_parse_maybe_json_array(str(row.get('notify_reason', '')))[:2]) or 'no_reason'}"
+            f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f})"
+        )
+        for row in candidates[:limit]
+    ]
+    return {
+        "count": len(candidates),
+        "notify_reasons": _format_counter(notify_reasons),
+        "examples": examples,
+    }
+
+
 def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
     if row.get("bias") != "long":
         return False
@@ -4029,11 +4437,14 @@ def _recent_live_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     countertrend_rows = [row for row in rows if _countertrend_long_cluster(row)]
     direction_conflict_flags: Counter[str] = Counter()
     direction_conflict_reasons: Counter[str] = Counter()
+    suppress_reasons: Counter[str] = Counter()
     for row in direction_conflicts:
         direction_conflict_flags.update(_split_values(row.get("risk_flags", "")))
         reason = str(row.get("primary_setup_reason", "")).strip() or str(row.get("invalid_reason", "")).strip()
         if reason:
             direction_conflict_reasons[reason] += 1
+    for row in rows:
+        suppress_reasons.update(_split_values(row.get("suppress_reason", "")))
     return {
         "count": len(rows),
         "direction_execution_conflict_count": len(direction_conflicts),
@@ -4041,6 +4452,9 @@ def _recent_live_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "direction_execution_conflict_reasons": _format_counter(direction_conflict_reasons),
         "entry_ok_invalid_count": len(entry_invalid_rows),
         "countertrend_long_cluster_count": len(countertrend_rows),
+        "suppress_reasons": _format_counter(suppress_reasons),
+        "rr_sweep_recheck_wait_count": suppress_reasons.get("rr_sweep_recheck_wait", 0),
+        "attention_rr_sweep_recheck_wait_count": suppress_reasons.get("attention_rr_sweep_recheck_wait", 0),
     }
 
 
@@ -4416,11 +4830,15 @@ def build_feedback_report(
     )
     phase1_gate = _phase1_gate_summary(completed)
     paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
+    observation_summary = _phase1_observation_summary(completed)
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
     phase1_focus = _phase1_focus_rows(completed)
+    phase1_blocker_examples = _phase1_blocker_examples(completed)
     recent_rows = _recent_rows(all_rows, hours=12)
     live_summary = _recent_live_summary(recent_rows)
     entry_ok_rr_blockers = _entry_ok_rr_blocker_summary(completed)
+    risky_rr_near_threshold = _risky_rr_near_threshold_summary(base_dir, completed)
+    sweep_rr_notified = _sweep_rr_notified_summary(completed)
     improvements = _build_improvement_candidates(
         completed,
         monthly=(period == "monthly"),
@@ -4460,6 +4878,12 @@ def build_feedback_report(
     lines.append(f"- `expired` 率: {_format_pct(phase1_gate['expired_rate'])}")
     lines.append(f"- `max_size_capped` 発生率: {_format_pct(phase1_gate['cap_rate'])}")
     lines.append(f"- ready阻害理由: {phase1_gate['blocker_text']}")
+    if phase1_blocker_examples["rr_below_min"]:
+        lines.append(f"- rr_below_min 代表例: {' / '.join(phase1_blocker_examples['rr_below_min'])}")
+    if phase1_blocker_examples["confidence_below_min"]:
+        lines.append(
+            f"- confidence_below_min 代表例: {' / '.join(phase1_blocker_examples['confidence_below_min'])}"
+        )
     if phase1_focus:
         lines.append("- 直近の観測対象:")
         for row in phase1_focus:
@@ -4571,6 +4995,28 @@ def build_feedback_report(
         lines.append(f"- ENTRY_OK + rr_below_min の主な risk_flags: {entry_ok_rr_blockers['risk_flags']}")
         for hint in entry_ok_rr_blockers["threshold_hints"]:
             lines.append(f"- {hint}")
+    if risky_rr_near_threshold["count"]:
+        if not entry_ok_rr_blockers["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(
+            f"- RISKY_ENTRY + rr_below_min かつ execution>=20: {risky_rr_near_threshold['count']}件"
+            f" / 平均 execution={risky_rr_near_threshold['avg_execution']:.1f}"
+            f" / 平均 wait={risky_rr_near_threshold['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- RISKY_ENTRY + rr_below_min の主な risk_flags: {risky_rr_near_threshold['risk_flags']}"
+        )
+        lines.append(f"- RR再調整候補: {' / '.join(risky_rr_near_threshold['examples'])}")
+        if risky_rr_near_threshold["current_logic_examples"]:
+            lines.append(f"- 現行RR再計算: {' / '.join(risky_rr_near_threshold['current_logic_examples'])}")
+    if sweep_rr_notified["count"]:
+        if not entry_ok_rr_blockers["count"] and not risky_rr_near_threshold["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(f"- sweep_incomplete を含む RISKY_ENTRY + rr_below_min の通知済み履歴: {sweep_rr_notified['count']}件")
+        lines.append(f"- 主な通知理由: {sweep_rr_notified['notify_reasons']}")
+        lines.append(f"- 代表例: {' / '.join(sweep_rr_notified['examples'])}")
     lines.append("")
 
     lines.append("## 6. 技術集計")
@@ -4664,6 +5110,12 @@ def build_feedback_report(
     if live_summary["direction_execution_conflict_count"]:
         lines.append(f"- direction_execution_conflict の主な理由: {live_summary['direction_execution_conflict_reasons']}")
         lines.append(f"- direction_execution_conflict の主な risk_flags: {live_summary['direction_execution_conflict_flags']}")
+    if live_summary["rr_sweep_recheck_wait_count"]:
+        lines.append(f"- rr_sweep_recheck_wait: {live_summary['rr_sweep_recheck_wait_count']}件")
+    if live_summary["attention_rr_sweep_recheck_wait_count"]:
+        lines.append(f"- attention_rr_sweep_recheck_wait: {live_summary['attention_rr_sweep_recheck_wait_count']}件")
+    if live_summary["suppress_reasons"]:
+        lines.append(f"- suppress_reason の内訳: {live_summary['suppress_reasons']}")
     lines.append(f"- ENTRY_OK + invalid: {live_summary['entry_ok_invalid_count']}件")
     lines.append(f"- countertrend_long_cluster: {live_summary['countertrend_long_cluster_count']}件")
     lines.append("")
@@ -4683,6 +5135,22 @@ def build_feedback_report(
         lines.append(f"- 平均 timeout_hours: {phase1_summary['avg_timeout_hours']:.2f}")
     else:
         lines.append("- まだ Phase 1 計画ログは集計対象にありません")
+    lines.append("")
+
+    lines.append("### Phase 1 観測 gate")
+    lines.append(f"- phase1_observation_gate=pass: {observation_summary['pass_count']}件")
+    lines.append(f"- phase1_observation_gate=blocked: {observation_summary['blocked_count']}件")
+    if observation_summary["pass_count"]:
+        lines.append(f"- 観測タイプ: {observation_summary['type_counts']}")
+        lines.append(_format_observation_perf("観測候補全体", observation_summary["overall"]))
+        if observation_summary["direction_rr_learning"]["count"]:
+            lines.append(_format_observation_perf("direction_rr_learning", observation_summary["direction_rr_learning"]))
+        if observation_summary["setup_watch_learning"]["count"]:
+            lines.append(_format_observation_perf("setup_watch_learning", observation_summary["setup_watch_learning"]))
+        if observation_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(observation_summary['representatives'])}")
+    if observation_summary["blocked_count"]:
+        lines.append(f"- 主な観測ブロック理由: {observation_summary['blocked_reasons']}")
     lines.append("")
 
     lines.append("### 紙トレード準備")
@@ -4747,6 +5215,7 @@ def sync_ai_post_reviews(
     _archive_existing_reviews(base_dir, reviews_path)
     cfg = load_config(base_dir)
     daily_max = int(max_new_reviews if max_new_reviews is not None else getattr(cfg, "AI_POST_REVIEW_DAILY_MAX", 2))
+    max_consecutive_failures = int(getattr(cfg, "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES", 3))
     main_only = bool(getattr(cfg, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY", True))
     outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
     review_map = {row.get("signal_id", ""): row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")}
@@ -4762,6 +5231,7 @@ def sync_ai_post_reviews(
         "skipped_priority_filter": 0,
         "resolved_cli_fallback": 0,
         "daily_cap": max(0, daily_max),
+        "stopped_after_failures": 0,
     }
 
     reviewed_today = sum(
@@ -4772,6 +5242,7 @@ def sync_ai_post_reviews(
     )
     new_review_budget = max(0, daily_max - reviewed_today)
     stats["already_reviewed_today"] = reviewed_today
+    consecutive_failures = 0
 
     trades = sorted(_load_csv_rows(trades_path), key=_ai_post_review_priority)
 
@@ -4825,6 +5296,10 @@ def sync_ai_post_reviews(
         )
         if ai_review is None:
             stats["request_failed"] += 1
+            consecutive_failures += 1
+            if max_consecutive_failures > 0 and consecutive_failures >= max_consecutive_failures:
+                stats["stopped_after_failures"] = 1
+                break
             continue
         if resolved_fallback:
             stats["resolved_cli_fallback"] += 1
@@ -4861,6 +5336,7 @@ def sync_ai_post_reviews(
         review_map[signal_id] = row
         _write_ai_post_review_snapshot(base_dir, signal_id, row)
         stats["created"] += 1
+        consecutive_failures = 0
         new_review_budget -= 1
 
     if ai_rows:

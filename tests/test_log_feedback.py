@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
@@ -20,9 +21,11 @@ from tools.log_feedback import (
     DEFAULT_REVIEW_NOTE,
     REVIEW_NOTE_COLUMNS,
     USER_REVIEW_HEADER,
+    _ai_review_health_summary,
     _ai_post_review_chart_dir,
     _build_review_chart_svg_path,
     _build_improvement_candidates,
+    _load_latest_ai_sync_stats,
     _merge_review_sources,
     _normalize_ai_post_review,
     _load_csv_rows,
@@ -927,6 +930,149 @@ class LogFeedbackTest(unittest.TestCase):
             mocked_cli.assert_not_called()
             self.assertEqual(stats["skipped_priority_filter"], 1)
 
+    def test_sync_ai_post_reviews_stops_after_consecutive_failures(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                for idx in range(5):
+                    writer.writerow(
+                        {
+                            "signal_id": f"sig_fail_{idx}",
+                            "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                            "was_notified": "true",
+                            "summary_subject": "subject",
+                            "prelabel_primary_reason": "balanced_location",
+                            "notification_kind": "main",
+                            "signal_tier": "normal",
+                        }
+                    )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                for idx in range(5):
+                    writer.writerow({"signal_id": f"sig_fail_{idx}", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            with patch("tools.log_feedback.run_cli_json", side_effect=RuntimeError("usage limit")) as mocked_cli, patch(
+                "tools.log_feedback.load_config"
+            ) as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None):
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {
+                        "AI_POST_REVIEW_DAILY_MAX": 5,
+                        "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES": 2,
+                        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+                        "AI_ADVICE_CLI_COMMAND": "dummy-cli",
+                    },
+                )()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            self.assertEqual(mocked_cli.call_count, 2)
+            self.assertEqual(stats["request_failed"], 2)
+            self.assertEqual(stats["stopped_after_failures"], 1)
+
+    def test_sync_ai_post_reviews_uses_api_fallback_when_cli_fails(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_api_fallback",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_api_fallback", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            api_review = {
+                "user_verdict": "useful_wait",
+                "usefulness_1to5": "4",
+                "would_trade": "conditional",
+                "actual_move_driver": "technical",
+                "misleading_entry_like_wording": "no",
+                "sl_eval": "good",
+                "tp_eval": "good",
+                "tf_4h_eval": "good",
+                "tf_1h_eval": "mixed",
+                "tf_15m_eval": "mixed",
+                "review_source": "ai",
+                "review_model": "gpt-4o",
+                "review_image_mode": "api_numeric_fallback",
+                "review_variant": "ai_post_review_v2",
+                "review_action_class": "watch",
+                "review_priority": "medium",
+                "next_action": "継続観測する",
+                "memo": "API fallback",
+            }
+            with patch("tools.log_feedback.run_cli_json", side_effect=RuntimeError("usage limit")) as mocked_cli, patch(
+                "tools.log_feedback._request_ai_post_review_via_api", return_value=api_review
+            ) as mocked_api, patch("tools.log_feedback.load_config") as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None):
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {
+                        "AI_POST_REVIEW_DAILY_MAX": 1,
+                        "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES": 3,
+                        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+                        "AI_ADVICE_CLI_COMMAND": "dummy-cli",
+                    },
+                )()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_called_once()
+            mocked_api.assert_called_once()
+            self.assertEqual(stats["created"], 1)
+            self.assertEqual(stats["request_failed"], 0)
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(rows[0]["review_image_mode"], "api_numeric_fallback")
+
     def test_sync_ai_post_reviews_treats_missing_notification_kind_as_main_for_notified_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -1198,6 +1344,7 @@ class LogFeedbackTest(unittest.TestCase):
                 "skip_outcome",
                 "tp1_hit_first",
                 "was_notified",
+                "notify_reason",
                 "prelabel",
                 "primary_setup_status",
                 "primary_setup_reason",
@@ -1253,6 +1400,93 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("状態: 停止中", report)
             self.assertIn("created=0 / reused=0 / request_failed=3 / daily_cap=4", report)
             self.assertIn("旧CLIパスを現行repoへ自動補正 1 件", report)
+
+    def test_load_latest_ai_sync_stats_reads_last_runtime_block(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            runtime_path = base_dir / "logs" / "runtime" / "ai_post_reviews.out"
+            runtime_path.parent.mkdir(parents=True, exist_ok=True)
+            runtime_path.write_text(
+                "\n".join(
+                    [
+                        "reviews_path=/tmp/old.csv",
+                        "eligible=150",
+                        "created=1",
+                        "request_failed=41",
+                        "backlog_pending=41",
+                        "reviews_path=/tmp/latest.csv",
+                        "eligible=161",
+                        "reused=0",
+                        "created=4",
+                        "request_failed=0",
+                        "resolved_cli_fallback=0",
+                        "daily_cap=4",
+                        "backlog_pending=38",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            stats = _load_latest_ai_sync_stats(base_dir)
+
+            self.assertEqual(stats["eligible"], 161)
+            self.assertEqual(stats["created"], 4)
+            self.assertEqual(stats["request_failed"], 0)
+            self.assertEqual(stats["backlog_pending"], 38)
+
+    def test_ai_review_health_summary_uses_runtime_stats_when_daily_sync_is_noop(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            runtime_path = base_dir / "logs" / "runtime" / "ai_post_reviews.out"
+            runtime_path.parent.mkdir(parents=True, exist_ok=True)
+            runtime_path.write_text(
+                "\n".join(
+                    [
+                        "reviews_path=/tmp/latest.csv",
+                        "eligible=161",
+                        "reused=0",
+                        "created=4",
+                        "request_failed=0",
+                        "resolved_cli_fallback=0",
+                        "daily_cap=4",
+                        "backlog_pending=38",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_1", "evaluation_status": "complete"})
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "was_notified", "notification_kind"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_1", "was_notified": "true", "notification_kind": "main"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            summary = _ai_review_health_summary(
+                base_dir=base_dir,
+                outcomes_path=outcomes_path,
+                reviews_path=reviews_path,
+                trades_path=trades_path,
+                sync_stats={"created": 0, "reused": 0, "request_failed": 0, "resolved_cli_fallback": 0, "daily_cap": 0},
+            )
+
+            self.assertEqual(summary["eligible"], 1)
+            self.assertEqual(summary["backlog_pending"], 1)
+            self.assertEqual(summary["created"], 4)
+            self.assertEqual(summary["request_failed"], 0)
+            self.assertEqual(summary["daily_cap"], 4)
 
     def test_merge_review_sources_prefers_csv_review_rows_over_stale_state(self) -> None:
         merged = _merge_review_sources(
@@ -1455,12 +1689,121 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["risk_percent_applied"], "")
             self.assertEqual(rows[0]["phase1_active"], "")
 
+    def test_build_shadow_log_reconciles_entry_ok_invalid_prelabel(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=[
+                    "signal_id",
+                    "timestamp_jst",
+                    "current_price",
+                    "bias",
+                    "market_regime",
+                    "phase",
+                    "long_score",
+                    "short_score",
+                    "score_gap",
+                    "confidence",
+                    "top_positive_factors",
+                    "top_negative_factors",
+                    "prelabel",
+                    "prelabel_primary_reason",
+                    "location_risk",
+                    "primary_setup_side",
+                    "primary_setup_status",
+                    "primary_setup_reason",
+                    "invalid_reason",
+                    "signal_tier",
+                    "ai_decision",
+                    "ai_confidence",
+                    "was_notified",
+                    "notify_reason_codes",
+                    "suppress_reason_codes",
+                    "data_quality_flag",
+                    "data_missing_fields",
+                    "risk_flags",
+                    "warning_flags",
+                    "no_trade_flags",
+                    "summary_subject",
+                    "confidence_direction_shadow",
+                    "confidence_execution_shadow",
+                    "confidence_wait_shadow",
+                ])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_reconcile",
+                        "timestamp_jst": "2026-03-11T09:05:00+09:00",
+                        "current_price": "100",
+                        "bias": "long",
+                        "market_regime": "uptrend",
+                        "phase": "pullback",
+                        "long_score": "78",
+                        "short_score": "52",
+                        "score_gap": "26",
+                        "confidence": "80",
+                        "top_positive_factors": '["regime_uptrend"]',
+                        "top_negative_factors": '["rr_long_penalty"]',
+                        "prelabel": "ENTRY_OK",
+                        "prelabel_primary_reason": "balanced_location",
+                        "location_risk": "12.0",
+                        "primary_setup_side": "long",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "invalid_reason": "RR不足",
+                        "signal_tier": "normal",
+                        "ai_decision": "",
+                        "ai_confidence": "",
+                        "was_notified": "true",
+                        "notify_reason_codes": '["status_upgraded"]',
+                        "suppress_reason_codes": "[]",
+                        "data_quality_flag": "ok",
+                        "data_missing_fields": "[]",
+                        "risk_flags": "sweep_incomplete",
+                        "warning_flags": "",
+                        "no_trade_flags": "RR_insufficient",
+                        "summary_subject": "subject",
+                        "confidence_direction_shadow": "80",
+                        "confidence_execution_shadow": "18",
+                        "confidence_wait_shadow": "72",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_reconcile", "evaluation_status": "pending"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            shadow_path = build_shadow_log(
+                base_dir=base_dir,
+                trades_path=trades_path,
+                outcomes_path=outcomes_path,
+                reviews_path=reviews_path,
+            )
+            rows = _load_csv_rows(shadow_path)
+            self.assertEqual(rows[0]["prelabel"], "RISKY_ENTRY")
+            self.assertEqual(rows[0]["phase1_observation_gate"], "pass")
+
     def test_build_feedback_report_starts_with_human_summary(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             logs_csv = base_dir / "logs" / "csv"
             logs_csv.mkdir(parents=True, exist_ok=True)
             shadow_path = logs_csv / "shadow_log.csv"
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
 
             with shadow_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(
@@ -1643,6 +1986,8 @@ class LogFeedbackTest(unittest.TestCase):
             logs_csv = base_dir / "logs" / "csv"
             logs_csv.mkdir(parents=True, exist_ok=True)
             shadow_path = logs_csv / "shadow_log.csv"
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
 
             fieldnames = [
                 "signal_id",
@@ -1658,6 +2003,7 @@ class LogFeedbackTest(unittest.TestCase):
                 "skip_outcome",
                 "tp1_hit_first",
                 "was_notified",
+                "notify_reason",
                 "prelabel",
                 "primary_setup_status",
                 "primary_setup_reason",
@@ -1674,6 +2020,10 @@ class LogFeedbackTest(unittest.TestCase):
                 "phase1_active",
                 "trade_execution_gate",
                 "trade_execution_blockers",
+                "phase1_observation_gate",
+                "phase1_observation_type",
+                "phase1_observation_reasons",
+                "suppress_reason",
                 "paper_order_status",
                 "tp_eval",
             ]
@@ -1713,16 +2063,89 @@ class LogFeedbackTest(unittest.TestCase):
                             "confidence_execution_shadow": "10",
                             "confidence_wait_shadow": "70",
                             "phase1_active": "false",
-                            "trade_execution_gate": "blocked",
-                            "trade_execution_blockers": "[\"rr_below_min\", \"execution_shadow_too_low\"]",
-                            "paper_order_status": "",
-                            "tp_eval": "too_close",
-                        }
-                    )
+                        "trade_execution_gate": "blocked",
+                        "trade_execution_blockers": "[\"rr_below_min\", \"execution_shadow_too_low\"]",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "direction_rr_learning",
+                        "phase1_observation_reasons": "[\"direction_rr_learning\"]",
+                        "suppress_reason": "rr_sweep_recheck_wait,attention_rr_sweep_recheck_wait",
+                        "paper_order_status": "",
+                        "tp_eval": "too_close",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "risky_rr_0",
+                        "timestamp_jst": timestamp_jst,
+                        "evaluation_status": "complete",
+                        "data_quality_flag": "ok",
+                        "signal_based_MFE_24h": "2.4",
+                        "signal_based_MAE_24h": "0.8",
+                        "outcome": "win",
+                        "direction_outcome": "correct",
+                        "entry_outcome": "poor_entry",
+                        "wait_outcome": "not_applicable",
+                        "skip_outcome": "not_applicable",
+                        "tp1_hit_first": "true",
+                        "was_notified": "true",
+                        "notify_reason": "[\"attention_gap_crossed\", \"attention_score_crossed\"]",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "primary_setup_side": "long",
+                        "primary_entry_mid": "70100",
+                        "tp1_price": "70600",
+                        "shadow_tp1_price": "70750",
+                        "shadow_exit_rule_version": "phase1_v1_shadow",
+                        "invalid_reason": "RR不足",
+                        "risk_flags": "orderbook_ask_heavy,sweep_incomplete",
+                        "confidence_direction_shadow": "75",
+                        "confidence_execution_shadow": "26",
+                        "confidence_wait_shadow": "70.4",
+                        "phase1_active": "false",
+                        "trade_execution_gate": "blocked",
+                        "trade_execution_blockers": "[\"rr_below_min\"]",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "direction_rr_learning",
+                        "phase1_observation_reasons": "[\"direction_rr_learning\"]",
+                        "suppress_reason": "rr_sweep_recheck_wait,attention_rr_sweep_recheck_wait",
+                        "paper_order_status": "",
+                        "tp_eval": "too_close",
+                    }
+                )
+            (signals_dir / "risky_rr_0.json").write_text(
+                json.dumps(
+                    {
+                        "signal_id": "risky_rr_0",
+                        "primary_setup_side": "long",
+                        "bias": "long",
+                        "current_price": 75748.9,
+                        "atr_15m_value": 213.1,
+                        "confidence": 58,
+                        "atr_ratio": 0.94,
+                        "funding_rate_pct": 0.0043,
+                        "volume_ratio": 4.07,
+                        "trigger_volume_ratio_threshold": 1.15,
+                        "breakout_up": False,
+                        "warning_flags": [],
+                        "support_zones_all": [
+                            {"low": 74926.6, "high": 75002.6},
+                            {"low": 74720.7, "high": 74885.4},
+                        ],
+                        "resistance_zones_all": [
+                            {"low": 75962.0, "high": 76038.0},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
 
             report = build_feedback_report(base_dir=base_dir, period="weekly", shadow_path=shadow_path)
 
-            self.assertIn("ready阻害理由: rr_below_min=3件", report)
+            self.assertIn("ready阻害理由: rr_below_min=4件", report)
+            self.assertIn("rr_below_min 代表例: risky_rr_0(invalid/RISKY_ENTRY, dir=75, exec=26, wait=70, MFE24h=2.40, MAE24h=0.80, outcome=win)", report)
+            self.assertIn("entry_rr_0(invalid/ENTRY_OK, dir=80, exec=10, wait=70, MFE24h=1.00, MAE24h=0.50, outcome=win)", report)
             self.assertIn("ENTRY_OK + rr_below_min: 3件 / 平均 execution=10.0 / 平均 wait=70.0", report)
             self.assertIn("ENTRY_OK + rr_below_min の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
             self.assertIn(
@@ -1732,12 +2155,25 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("confidence候補: execution<=20 かつ wait>=60 の本通知上位扱いを抑制", report)
             self.assertIn("direction_execution_conflict の主な理由: rr_below_min=3件", report)
             self.assertIn("direction_execution_conflict の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
-            self.assertIn("trade_execution_gate=blocked: 3件", report)
-            self.assertIn("主なブロック理由: rr_below_min=3件, execution_shadow_too_low=3件", report)
-            self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 3/3件", report)
+            self.assertIn("rr_sweep_recheck_wait: 4件", report)
+            self.assertIn("attention_rr_sweep_recheck_wait: 4件", report)
+            self.assertIn("suppress_reason の内訳: rr_sweep_recheck_wait=4件, attention_rr_sweep_recheck_wait=4件", report)
+            self.assertIn("trade_execution_gate=blocked: 4件", report)
+            self.assertIn("主なブロック理由: rr_below_min=4件, execution_shadow_too_low=3件", report)
+            self.assertIn("phase1_observation_gate=pass: 4件", report)
+            self.assertIn("観測タイプ: direction_rr_learning=4件", report)
+            self.assertIn("direction_rr_learning: 4件 / 勝率=100.0% / TP1先行=100.0% / 近似PF=2.35", report)
+            self.assertIn("RISKY_ENTRY + rr_below_min かつ execution>=20: 1件 / 平均 execution=26.0 / 平均 wait=70.4", report)
+            self.assertIn("RISKY_ENTRY + rr_below_min の主な risk_flags: orderbook_ask_heavy=1件, sweep_incomplete=1件", report)
+            self.assertIn("RR再調整候補: risky_rr_0(exec=26, dir=75, wait=70, MFE24h=2.40, MAE24h=0.80, outcome=win)", report)
+            self.assertIn("現行RR再計算: risky_rr_0=>watch/entry_zone_not_reached/rr=2.40", report)
+            self.assertIn("sweep_incomplete を含む RISKY_ENTRY + rr_below_min の通知済み履歴: 1件", report)
+            self.assertIn("主な通知理由: attention_gap_crossed=1件, attention_score_crossed=1件", report)
+            self.assertIn("代表例: risky_rr_0(attention_gap_crossed,attention_score_crossed, exec=26, wait=70)", report)
+            self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 4/4件", report)
             self.assertIn("### 改善アクション", report)
-            self.assertIn("出口設計を調整=3件", report)
-            self.assertIn("重要度: 高=3件", report)
+            self.assertIn("出口設計を調整=4件", report)
+            self.assertIn("重要度: 高=4件", report)
             self.assertIn("TP1/TP2 を遠めにする候補を検証する", report)
 
 

@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from src.storage.csv_logger import append_paper_order
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
+from src.trade.observation_gate import determine_phase1_observation_gate
 from src.trade.position_sizing import build_position_size_plan
 
 
@@ -119,6 +120,76 @@ class Phase1TradePlanTests(unittest.TestCase):
 
         self.assertEqual(result["trade_execution_gate"], "pass")
         self.assertEqual(result["trade_execution_blockers"], [])
+
+    def test_observation_gate_passes_rr_learning_with_direction_value(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="invalid",
+            primary_setup_reason="rr_below_min",
+            prelabel="ENTRY_OK",
+            data_quality_flag="ok",
+            no_trade_flags=["RR_insufficient"],
+            confidence_direction_shadow=35,
+            confidence_execution_shadow=5,
+            confidence_wait_shadow=95,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "direction_rr_learning")
+        self.assertEqual(result["phase1_observation_reasons"], ["direction_rr_learning"])
+
+    def test_observation_gate_blocks_confidence_below_min(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=40,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "blocked")
+        self.assertIn("confidence_below_min", result["phase1_observation_reasons"])
+
+    def test_observation_gate_passes_watch_learning(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_direction_shadow=55,
+            confidence_execution_shadow=20,
+            confidence_wait_shadow=75,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "setup_watch_learning")
+
+    def test_observation_gate_blocks_fatal_no_trade_candidates(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="NO_TRADE_CANDIDATE",
+            data_quality_flag="ok",
+            no_trade_flags=["ATR_extreme"],
+            confidence_direction_shadow=80,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "blocked")
+        self.assertIn("no_trade_candidate", result["phase1_observation_reasons"])
+        self.assertIn("ATR_extreme", result["phase1_observation_reasons"])
 
     def test_append_paper_order_is_idempotent_by_signal_id(self) -> None:
         with TemporaryDirectory() as tmpdir:

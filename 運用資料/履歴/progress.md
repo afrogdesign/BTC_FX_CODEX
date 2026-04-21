@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-19 JST
+更新日: 2026-04-22 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,30 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-22 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を複数回再実行し、`運用資料/reports/feedback_daily_sync_20260422.md` を更新した。完了データは 27 件、近似PF は 0.84、全体勝率は 59.3%、`phase1_observation_gate=pass:16件`、`trade_execution_gate=pass:0件`。
+  - `AI事後評価 health` は `eligible=165`、`AI済み=123`、`backlog=42`、`created=4`、`request_failed=0` へ更新された。`daily-sync` 側で `sync-ai-post-reviews` の直近 runtime ログを読んで health 表示を補完するように修正した。
+  - `tools/log_feedback.py` に `rr_below_min` と `confidence_below_min` の代表例表示を追加し、日次レポートの Phase 1 判定サマリーから代表 signal と execution / wait / MFE / MAE を直接読めるようにした。
+  - `prelabel=ENTRY_OK` かつ `primary_setup_status=invalid` の不整合を解消するため、`main.py` と `tools/log_feedback.py` に整合補正を追加した。最終出力では `ENTRY_OK + invalid` を `RISKY_ENTRY` へ寄せ、4/22 レポート上の `ENTRY_OK + invalid` は 0 件になった。
+  - `RISKY_ENTRY + rr_below_min` のうち `execution>=20` の近閾値候補だけを補助集計するようにした。4/22 レポート時点の候補は `20260417_090500` の 1 件で、`exec=21`、`dir=87`、`wait=70.4`、`MFE24h=13.43`、`MAE24h=3.71`。
+  - 同 signal の snapshot を現行 `src/analysis/rr.py` の `build_setup` で再計算する helper を `tools/log_feedback.py` に追加し、レポートへ `現行RR再計算` を出すようにした。`20260417_090500` は過去ログでは `rr_below_min` だが、現行ロジックでは `watch / entry_zone_not_reached / rr=1.30` になることを確認した。
+  - この結果、今の主論点は `MIN_RR_RATIO` の追加緩和ではなく、`sweep_incomplete` を伴う long の再発火条件と通知タイミングであると整理した。
+  - 確認は `.venv312/bin/python -m unittest tests.test_eval_rebalance`、`.venv312/bin/python -m unittest tests.test_log_feedback tests.test_phase1_trade_plans tests.test_summary_format` を実施し、全件 OK を確認した。
+
+- 2026-04-20 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260420.md` を更新した。完了データは 27 件、近似PF は 1.11、全体勝率は 66.7%、Phase 1 は `ready=0` / `phase1_active=true=0` の本有効待ち。
+  - `sync-ai-post-reviews` を手動実行し、AI 事後評価を 3 件作成した。結果は `created=3`、`request_failed=0`、`daily_cap=4`、`already_reviewed_today=1`、`backlog_pending=40`。
+  - 再度 `daily-sync` を実行し、AI 事後評価 health は `eligible=159`、`AI済み=119`、`backlog=40`、最終AI評価 `2026-04-20T05:07:43.352804Z` になった。
+  - 最新レポートの改善候補は `TP が近すぎるケースが多い` が最上位で、`tp_eval=too_close=8/14件`。`ENTRY_OK + invalid=4件`、`ENTRY_OK + rr_below_min=2件` は継続観測する。
+  - `trade_execution_gate=pass` は 0 件、`paper_orders planned=0件` のまま。紙トレードはまだ開始条件未達。
+  - `sync-ai-post-reviews` の 03:35 定刻実行では CLI usage limit により `request_failed=41` が出ていたため、CLI 失敗時に API fallback へ切り替える設定を追加した。
+  - 併せて `AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES=3` を追加し、API fallback も失敗する場合は連続失敗で停止して backlog 全体を叩き続けないようにした。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback` を実施し、33 件 OK。追加確認の `sync-ai-post-reviews` は当日 cap 到達済みで `created=0`、`request_failed=0`、`already_reviewed_today=4`。
+  - Phase 1 が進まない問題に対し、実行 gate と観測 gate を分離した。`trade_execution_gate` は実行候補として維持し、新たに `phase1_observation_gate`、`phase1_observation_type`、`phase1_observation_reasons` を追加した。
+  - `rr_below_min` でも方向観測価値があるものは `direction_rr_learning`、watch 系で execution / wait が許容範囲のものは `setup_watch_learning` として記録する。`confidence_below_min`、`NO_TRADE_CANDIDATE`、データ品質不良、Funding禁止、ATR極端値は観測対象外にした。
+  - `daily-sync` を再実行し、`feedback_daily_sync_20260420.md` に `Phase 1 観測 gate` を追加した。結果は `phase1_observation_gate=pass:17件`、`direction_rr_learning=13件`、`setup_watch_learning=4件`、観測候補全体の近似PF 1.64。
+  - 確認は `.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_log_feedback` を実施し、44 件 OK。
 
 - 2026-04-19 JST
   - AI 事後評価の 24 時間後レビュー運用を見直し、`tools/log_feedback.py` に CLI パス自動補正、health 集計、`backfill-ai-post-review-v2` を追加した。

@@ -188,3 +188,11 @@ def apply_prelabel_to_setup(setup: dict[str, Any], prelabel: str, side: str, bia
         updated["status"] = "invalid"
         updated["invalid_reason"] = "位置が悪い" if not reason else f"{reason} / 位置が悪い"
     return updated
+
+
+def reconcile_prelabel_with_setup(prelabel: str, primary_setup_status: str) -> str:
+    normalized_prelabel = str(prelabel or "").upper()
+    normalized_status = str(primary_setup_status or "").lower()
+    if normalized_prelabel == "ENTRY_OK" and normalized_status == "invalid":
+        return "RISKY_ENTRY"
+    return normalized_prelabel

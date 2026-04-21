@@ -48,6 +48,25 @@ def _int_value(value: Any, default: int = 0) -> int:
         return default
 
 
+def _float_value(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:  # noqa: BLE001
+        return default
+
+
+def _rr_sweep_wait_case(current: dict[str, Any]) -> bool:
+    risk_flags = [str(flag) for flag in current.get("risk_flags", [])]
+    return (
+        str(current.get("prelabel", "")).strip() == "RISKY_ENTRY"
+        and str(current.get("primary_setup_status", "")).strip() == "invalid"
+        and str(current.get("primary_setup_reason", "")).strip() == "rr_below_min"
+        and "sweep_incomplete" in risk_flags
+        and _float_value(current.get("confidence_execution_shadow", 0.0)) <= 25.0
+        and _float_value(current.get("confidence_wait_shadow", 0.0)) >= 60.0
+    )
+
+
 def _attention_reasons(current: dict[str, Any], last_result: dict[str, Any] | None, cfg: Any) -> list[str]:
     bias = str(current.get("bias", "")).lower()
     if bias not in {"long", "short"}:
@@ -88,6 +107,9 @@ def _attention_reasons(current: dict[str, Any], last_result: dict[str, Any] | No
             reasons.append("attention_score_crossed")
         if prev_gap > -gap_min >= score_gap:
             reasons.append("attention_gap_crossed")
+
+    if _rr_sweep_wait_case(current):
+        reasons = [reason for reason in reasons if reason not in {"attention_score_crossed", "attention_gap_crossed"}]
 
     if not reasons and not last_result:
         reasons.append("attention_first_detection")
@@ -145,6 +167,7 @@ def should_notify(
         main_reasons.append("signal_tier_upgraded")
 
     no_trade_flags = current.get("no_trade_flags", [])
+    risk_flags = [str(flag) for flag in current.get("risk_flags", [])]
     main_blocked = False
     if bias == "long" and confidence < cfg.CONFIDENCE_LONG_MIN:
         suppress_reasons.append("confidence_below_long_min")
@@ -154,6 +177,11 @@ def should_notify(
         main_blocked = True
     if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
         suppress_reasons.extend(["primary_setup_invalid", "multiple_no_trade_flags"])
+        main_blocked = True
+    execution_shadow = _float_value(current.get("confidence_execution_shadow", 0.0))
+    wait_shadow = _float_value(current.get("confidence_wait_shadow", 0.0))
+    if _rr_sweep_wait_case(current):
+        suppress_reasons.append("rr_sweep_recheck_wait")
         main_blocked = True
 
     if not main_blocked and main_reasons:
@@ -199,6 +227,8 @@ def should_notify(
                 "suppress_reason_codes": [],
                 "notification_kind": "attention",
             }
+    elif _rr_sweep_wait_case(current):
+        suppress_reasons.append("attention_rr_sweep_recheck_wait")
 
     if not main_reasons and not attention_reasons:
         suppress_reasons.append("no_material_change")

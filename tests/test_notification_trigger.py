@@ -166,6 +166,75 @@ class NotificationTriggerTest(unittest.TestCase):
         self.assertFalse(decision["notify"])
         self.assertNotIn("multiple_no_trade_flags", decision["suppress_reason_codes"])
 
+    def test_risky_rr_with_sweep_incomplete_is_downgraded_from_main_to_attention(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 58,
+            "long_display_score": 94,
+            "short_display_score": 60,
+            "score_gap": 34,
+            "primary_setup_status": "invalid",
+            "primary_setup_reason": "rr_below_min",
+            "prelabel": "RISKY_ENTRY",
+            "agreement_with_machine": "disagree",
+            "no_trade_flags": ["RR_insufficient_long", "RR_insufficient"],
+            "risk_flags": ["sweep_incomplete"],
+            "confidence_execution_shadow": 21,
+            "confidence_wait_shadow": 70.4,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "wait",
+            "long_display_score": 41,
+            "short_display_score": 41,
+            "score_gap": 0,
+            "primary_setup_status": "none",
+            "prelabel": "SWEEP_WAIT",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertTrue(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "attention")
+        self.assertIn("attention_bias_changed", decision["notify_reason_codes"])
+
+    def test_risky_rr_with_sweep_incomplete_suppresses_gap_only_attention(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 56,
+            "long_display_score": 88,
+            "short_display_score": 58,
+            "score_gap": 30,
+            "primary_setup_status": "invalid",
+            "primary_setup_reason": "rr_below_min",
+            "prelabel": "RISKY_ENTRY",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": ["RR_insufficient_long", "RR_insufficient"],
+            "risk_flags": ["sweep_incomplete"],
+            "confidence_execution_shadow": 11,
+            "confidence_wait_shadow": 94.4,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "long",
+            "long_display_score": 70,
+            "short_display_score": 58,
+            "score_gap": 10,
+            "primary_setup_status": "invalid",
+            "prelabel": "RISKY_ENTRY",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertFalse(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "none")
+        self.assertIn("rr_sweep_recheck_wait", decision["suppress_reason_codes"])
+        self.assertIn("attention_rr_sweep_recheck_wait", decision["suppress_reason_codes"])
+
 
 if __name__ == "__main__":
     unittest.main()

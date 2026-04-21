@@ -18,7 +18,7 @@ from src.analysis.breakout import previous_breakout_levels
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
-from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
+from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk, reconcile_prelabel_with_setup
 from src.analysis.result_flags import assemble_result_flags
 from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
 from src.analysis.confidence import compute_confidence_details, compute_machine_agreement
@@ -65,6 +65,7 @@ from src.storage.json_store import (
 from src.trade.activation import determine_phase1_activation
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
+from src.trade.observation_gate import determine_phase1_observation_gate
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
 from src.presentation.sanitize import (
@@ -272,6 +273,9 @@ def _phase1_defaults() -> dict[str, Any]:
         "shadow_exit_rule_version": "",
         "trade_execution_gate": "blocked",
         "trade_execution_blockers": ["phase1_inactive"],
+        "phase1_observation_gate": "blocked",
+        "phase1_observation_type": "blocked",
+        "phase1_observation_reasons": ["no_directional_setup"],
         "paper_order_status": "",
     }
 
@@ -580,6 +584,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     primary_setup = (
         long_setup if primary_setup_side == "long" else short_setup if primary_setup_side == "short" else {}
     )
+    effective_prelabel = reconcile_prelabel_with_setup(position_risk["prelabel"], primary_setup_status)
     result_flags = assemble_result_flags(
         bias=bias,
         score_no_trade_flags=score_info["no_trade_flags"],
@@ -643,7 +648,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "top_negative_factors": score_info["top_negative_factors"],
         "confidence": confidence,
         "agreement_with_machine": agreement_with_machine,
-        "prelabel": position_risk["prelabel"],
+        "prelabel": effective_prelabel,
         "prelabel_primary_reason": position_risk["primary_reason"],
         "location_risk": position_risk["location_risk"],
         "critical_zone": critical_zone,
@@ -806,12 +811,25 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
             confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
         )
+        observation_gate = determine_phase1_observation_gate(
+            bias=bias,
+            primary_setup_side=primary_setup_side,
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            prelabel=prelabel_info["prelabel"],
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
         core_result["loss_streak_at_entry"] = loss_streak
         core_result.update(phase1_activation)
         core_result.update(position_size_plan)
         core_result.update(exit_plan)
         core_result.update(shadow_exit_plan)
         core_result.update(execution_gate)
+        core_result.update(observation_gate)
         if core_result["trade_execution_gate"] == "pass":
             core_result["paper_order_status"] = "planned"
 
