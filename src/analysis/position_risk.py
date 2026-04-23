@@ -2,6 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+_NO_TRADE_HARD_FLAGS = {
+    "orderbook_ask_heavy",
+    "orderbook_bid_heavy",
+    "liquidation_cluster_above",
+    "liquidation_cluster_below",
+    "long_flush_exhaustion",
+    "short_cover_risk",
+    "cvd_bearish_divergence",
+    "cvd_bullish_divergence",
+}
+
 
 def _score_from_distance(
     distance_atr: float | None,
@@ -149,10 +160,13 @@ def evaluate_position_risk(
 
     risk_score = max(0.0, min(risk_score, 100.0))
     risky_threshold = 33.0 if medium_threshold >= 55.0 else round(medium_threshold * 0.55, 2)
+    flag_set = set(flags)
     if bias not in {"long", "short"}:
         prelabel = "RISKY_ENTRY"
-    elif risk_score >= high_threshold:
+    elif risk_score >= high_threshold and flag_set & _NO_TRADE_HARD_FLAGS:
         prelabel = "NO_TRADE_CANDIDATE"
+    elif risk_score >= high_threshold:
+        prelabel = "SWEEP_WAIT"
     elif risk_score >= medium_threshold:
         prelabel = "SWEEP_WAIT"
     elif risk_score >= risky_threshold:

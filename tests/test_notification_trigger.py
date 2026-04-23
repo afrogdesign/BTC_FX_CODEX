@@ -235,6 +235,184 @@ class NotificationTriggerTest(unittest.TestCase):
         self.assertIn("rr_sweep_recheck_wait", decision["suppress_reason_codes"])
         self.assertIn("attention_rr_sweep_recheck_wait", decision["suppress_reason_codes"])
 
+    def test_watch_entry_zone_not_reached_with_sweep_incomplete_is_downgraded_from_main_to_attention(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 57,
+            "long_display_score": 90,
+            "short_display_score": 58,
+            "score_gap": 32,
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": [],
+            "risk_flags": ["sweep_incomplete"],
+            "confidence_execution_shadow": 21,
+            "confidence_wait_shadow": 72,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "wait",
+            "long_display_score": 40,
+            "short_display_score": 40,
+            "score_gap": 0,
+            "primary_setup_status": "invalid",
+            "prelabel": "NO_TRADE_CANDIDATE",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertTrue(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "attention")
+        self.assertIn("attention_bias_changed", decision["notify_reason_codes"])
+
+    def test_watch_entry_zone_not_reached_with_sweep_incomplete_suppresses_gap_only_attention(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 56,
+            "long_display_score": 89,
+            "short_display_score": 58,
+            "score_gap": 31,
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": [],
+            "risk_flags": ["sweep_incomplete"],
+            "confidence_execution_shadow": 18,
+            "confidence_wait_shadow": 80,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "long",
+            "long_display_score": 70,
+            "short_display_score": 58,
+            "score_gap": 10,
+            "primary_setup_status": "watch",
+            "prelabel": "SWEEP_WAIT",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertFalse(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "none")
+        self.assertIn("rr_sweep_recheck_wait", decision["suppress_reason_codes"])
+        self.assertIn("attention_rr_sweep_recheck_wait", decision["suppress_reason_codes"])
+
+    def test_watch_sweep_status_and_prelabel_upgrade_alone_does_not_fire_main(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 57,
+            "long_display_score": 72,
+            "short_display_score": 58,
+            "score_gap": 14,
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": [],
+            "risk_flags": ["sweep_incomplete"],
+            "confidence_execution_shadow": 37,
+            "confidence_wait_shadow": 69,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "long",
+            "long_display_score": 70,
+            "short_display_score": 60,
+            "score_gap": 10,
+            "primary_setup_status": "invalid",
+            "prelabel": "NO_TRADE_CANDIDATE",
+        }
+        last_notified = {
+            "timestamp_utc": (now - timedelta(hours=3)).isoformat().replace("+00:00", "Z"),
+            "confidence": 45,
+            "agreement_with_machine": "partial",
+            "signal_tier": "normal",
+        }
+
+        decision = should_notify(current, last_result, last_notified, None, self.cfg)
+
+        self.assertFalse(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "none")
+        self.assertIn("watch_sweep_recheck_wait", decision["suppress_reason_codes"])
+
+    def test_watch_low_execution_with_sweep_and_lower_liquidity_suppresses_attention(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 57,
+            "long_display_score": 88,
+            "short_display_score": 58,
+            "score_gap": 30,
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": [],
+            "risk_flags": ["sweep_incomplete", "lower_liquidity_close"],
+            "confidence_execution_shadow": 6,
+            "confidence_wait_shadow": 56,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "long",
+            "long_display_score": 70,
+            "short_display_score": 58,
+            "score_gap": 10,
+            "primary_setup_status": "watch",
+            "prelabel": "SWEEP_WAIT",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertFalse(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "none")
+        self.assertIn("watch_low_execution_recheck_wait", decision["suppress_reason_codes"])
+        self.assertIn("attention_watch_low_execution_recheck_wait", decision["suppress_reason_codes"])
+
+    def test_watch_low_execution_does_not_block_first_attention_bias_change(self) -> None:
+        now = datetime.now(tz=timezone.utc)
+        current = {
+            "timestamp_utc": now.isoformat().replace("+00:00", "Z"),
+            "bias": "long",
+            "confidence": 57,
+            "long_display_score": 90,
+            "short_display_score": 58,
+            "score_gap": 32,
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "prelabel": "SWEEP_WAIT",
+            "agreement_with_machine": "partial",
+            "no_trade_flags": [],
+            "risk_flags": ["sweep_incomplete", "lower_liquidity_close"],
+            "confidence_execution_shadow": 6,
+            "confidence_wait_shadow": 56,
+            "signal_tier": "normal",
+        }
+        last_result = {
+            "bias": "wait",
+            "long_display_score": 40,
+            "short_display_score": 40,
+            "score_gap": 0,
+            "primary_setup_status": "invalid",
+            "prelabel": "NO_TRADE_CANDIDATE",
+        }
+
+        decision = should_notify(current, last_result, None, None, self.cfg)
+
+        self.assertTrue(decision["notify"])
+        self.assertEqual(decision["notification_kind"], "attention")
+        self.assertIn("attention_bias_changed", decision["notify_reason_codes"])
+
 
 if __name__ == "__main__":
     unittest.main()

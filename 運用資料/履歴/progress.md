@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-22 02:09 JST
+更新日: 2026-04-24 04:50 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,46 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-24 JST
+  - `tools/log_feedback.py compare-current-setup` に `--date-from`、`--date-to`、`--status-transition` を追加し、新規ログだけを `timestamp_jst` 基準で比較できるようにした。
+  - `tests/test_log_feedback.py` に日付帯・status遷移フィルタの回帰テストを追加し、`.venv312/bin/python -m unittest tests.test_log_feedback` で 39 件 OK を確認した。
+  - 標準比較レポートを `運用資料/reports/analysis/` に生成した。`notified_rr_to_entry.md` は 33 件、`notified_rr_to_entry_orderbook_ask_heavy.md` は 14 件、`rr_to_confidence.md` は 487 件。
+  - `rr_to_confidence.md` では通知済みが 64 件あり、status は `invalid->invalid=278件`、`watch->invalid=209件`。今後の Phase 1A 仕上げでは `position_risk` 追加緩和より前に confidence 側の落ち方を観測する基準を作れた。
+  - 実データで `--date-from 2026-04-09 --date-to 2026-04-24 --status-transition 'watch->watch'` も確認し、通知済み `rr_below_min -> entry_zone_not_reached` は 14 件、平均 `execution=5.9 / wait=76.1` だった。`watch_orderbook_recheck_wait` を入れるかどうかは、この post-change 母集団が次回以降も維持されるかで判断する方針にした。
+
+- 2026-04-24 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を再実行し、`運用資料/reports/feedback_daily_sync_20260424.md` を生成した。
+  - 最新値は、完了データ 31 件、近似PF 0.87、全体勝率 71.0%、`phase1_observation_gate=pass:13件`、`direction_rr_learning=2件`、`setup_watch_learning=11件`、`trade_execution_gate=pass:0件`。
+  - 新しく追加した `watch 系通知済み履歴` は実データで 10 件出ており、主な通知理由は `prelabel_improved=9件`、`status_upgraded=6件`、`confidence_jump=4件`。代表例は `20260418_090500`、`20260422_050500`、`20260420_060500`。
+  - `AI事後評価 health` は `eligible=179`、`AI済み=131`、`backlog=48`、`created=4`、`request_failed=0` で、backlog 自然減はまだ確認できていない。
+
+- 2026-04-24 JST
+  - `src/analysis/position_risk.py` で `NO_TRADE_CANDIDATE` 判定を絞り、`近接流動性 + 近接板 + sweep_incomplete` だけでは `SWEEP_WAIT` に留め、`orderbook_*_heavy`、`liquidation_cluster_*`、OI/CVD 系などの hard flag があるときだけ `NO_TRADE_CANDIDATE` へ落とすようにした。
+  - `src/notification/trigger.py` で `watch + sweep_incomplete` 系の再通知条件を詰め、`status_upgraded`、`prelabel_improved`、`confidence_jump` だけで本通知へ上がるケースを `watch_sweep_recheck_wait` で抑制するようにした。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback tests.test_eval_rebalance tests.test_notification_trigger` を実施し、62 件 OK。
+  - その後 `./.venv312/bin/python tools/log_feedback.py daily-sync` を再実行したが、`daily-sync` は既存 `shadow_log.csv` と通知履歴の集計であるため、過去ログの `NO_TRADE_CANDIDATE 3/8` と `watch 系通知済み履歴 10件` はそのまま維持された。効果確認は次回以降の新規ログで見る前提。
+  - 既存ログでも現行 `build_setup` のズレを見られるよう、`tools/log_feedback.py compare-current-setup` を追加した。`shadow_log.csv` と signal snapshot を突き合わせ、旧 setup と現行 setup の差分件数、主な status/reason 変化、代表例を即確認できる。
+  - 実データで `./.venv312/bin/python tools/log_feedback.py compare-current-setup --limit 10` を実行し、`shadow 967行中 724件` に差分、通知済みは `149件` を確認した。主変化は `rr_below_min -> confidence_below_min=487件`、`rr_below_min -> entry_zone_not_reached=73件`、`watch->invalid=254件`、`invalid->watch=77件` で、過去判定と現行 `build_setup` の乖離が想定以上に大きいことが分かった。
+  - さらに `./.venv312/bin/python tools/log_feedback.py compare-current-setup --only-notified --previous-reason rr_below_min --current-reason entry_zone_not_reached --limit 10` を実行し、通知済みだけでも 33 件あることを確認した。内訳は `watch->watch=25件`、`invalid->watch=8件` で、`20260417_090500`、`20260415_210500`、`20260414_140500` を次の再調整母集団に使える。
+  - `compare-current-setup` へ `only-notified`、`previous-reason`、`current-reason`、`prelabel` フィルタを追加し、差分母集団の `risk_flags`、通知理由、execution/wait 平均、status別集計も出せるようにした。
+  - 同じ 33 件の主特徴は `sweep_incomplete=25件`、`lower_liquidity_close=22件`、`orderbook_ask_heavy=14件`、`ask_wall_close=13件`、通知理由は `confidence_jump=24件`、`status_upgraded=19件`、`prelabel_improved=16件`。`watch->watch` は平均 `execution=3.6 / wait=52.0`、`invalid->watch` は平均 `execution=15.6 / wait=64.0` で、次の再通知条件見直しに十分な粒度まで絞れた。
+  - 追加で `src/notification/trigger.py` に `watch_low_execution_recheck_wait` を入れ、`watch + sweep_incomplete + lower_liquidity_close + execution<=10 + wait>=45` は main/attention を抑制するようにした。初回の `attention_bias_changed` だけは残す。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback tests.test_notification_trigger` を実施し、51 件 OK。
+  - さらに `compare-current-setup` へ `risk_flag` フィルタを追加し、`orderbook_ask_heavy` 群を独立抽出できるようにした。実データでは `通知済み + rr_below_min -> entry_zone_not_reached + orderbook_ask_heavy` が 14 件あり、`watch->watch=13件`、平均 `execution=5.7 / wait=68.9`、`lower_liquidity_close=12件`、`sweep_incomplete=12件` を確認した。
+
+- 2026-04-24 JST
+  - `src/notification/trigger.py` の `sweep_incomplete` 再通知待ち条件を拡張し、従来の `invalid + rr_below_min + RISKY_ENTRY` だけでなく、現行再計算で出やすい `watch + entry_zone_not_reached + SWEEP_WAIT/RISKY_ENTRY` 系でも main 通知を抑え、score/gap だけの attention 再発火を抑制するようにした。
+  - 初回の方向転換検知は `attention_bias_changed` として残しつつ、再発火条件と通知タイミングを先に詰める方向へ寄せた。
+  - 確認は `.venv312/bin/python -m unittest tests.test_notification_trigger` を実施し、9 件 OK。
+  - `tools/log_feedback.py` に `sweep_incomplete` を含む `watch + entry_zone_not_reached` 系の通知済み履歴集計を追加し、日次レポートから `watch 系通知済み履歴` と `現行watch再計算` を直接読めるようにした。
+  - 確認は `.venv312/bin/python -m unittest tests.test_log_feedback tests.test_notification_trigger` を実施し、46 件 OK。
+
+- 2026-04-24 JST
+  - `運用資料/reports/feedback_daily_sync_20260423.md` を基準に、`NEXT_TASK.md` と `運用資料/reports/README.md` の入口情報を更新した。
+  - 現在の基準値は、完了データ 28 件、近似PF 0.79、全体勝率 67.9%、`phase1_observation_gate=pass:14件`、`direction_rr_learning=6件`、`setup_watch_learning=8件`、`trade_execution_gate=pass:0件`。
+  - AI 事後評価 health は `eligible=171`、`AI済み=127`、`backlog=44`、`created=4`、`request_failed=0` とし、backlog 自然減はまだ確認できていない前提へ揃えた。
+  - `observation_paper_orders` は `observing=14件`、`gate pass だが観測紙トレード未記録=0件` で、Phase 1A の保存導線自体は維持されていることを入口資料へ反映した。
 
 - 2026-04-22 JST
   - `./.venv312/bin/python tools/log_feedback.py daily-sync` を複数回再実行し、`運用資料/reports/feedback_daily_sync_20260422.md` を更新した。完了データは 27 件、近似PF は 0.84、全体勝率は 59.3%、`phase1_observation_gate=pass:16件`、`trade_execution_gate=pass:0件`。

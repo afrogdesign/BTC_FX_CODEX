@@ -631,13 +631,13 @@ def _signal_snapshot_path(base_dir: Path, signal_id: str) -> Path:
     return base_dir / "logs" / "signals" / f"{signal_id}.json"
 
 
-def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
+def _recompute_current_setup_details(base_dir: Path, signal_id: str) -> dict[str, Any]:
     payload = load_json(_signal_snapshot_path(base_dir, signal_id))
     if not isinstance(payload, dict):
-        return ""
+        return {}
     side = str(payload.get("primary_setup_side") or payload.get("bias") or "").strip().lower()
     if side not in {"long", "short"}:
-        return ""
+        return {}
     try:
         price = float(payload.get("current_price", 0.0))
         atr = float(payload.get("atr_15m_value", 0.0))
@@ -647,7 +647,7 @@ def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
         volume_ratio = float(payload.get("volume_ratio", 0.0))
         trigger_threshold = float(payload.get("trigger_volume_ratio_threshold", 0.0))
     except (TypeError, ValueError):
-        return ""
+        return {}
     try:
         cfg = load_config(base_dir)
     except Exception:  # noqa: BLE001
@@ -670,7 +670,7 @@ def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
     support_zones = payload.get("support_zones_all") or []
     resistance_zones = payload.get("resistance_zones_all") or []
     if not isinstance(support_zones, list) or not isinstance(resistance_zones, list):
-        return ""
+        return {}
     warning_flags = payload.get("warning_flags") or []
     warning_count = len(_split_values(warning_flags)) if isinstance(warning_flags, str) else len(warning_flags)
     trigger_ready = bool(payload.get("breakout_up" if side == "long" else "breakout_down")) or volume_ratio >= trigger_threshold
@@ -693,10 +693,188 @@ def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
         trigger_ready=trigger_ready,
         warning_count=warning_count,
     )
+    return {
+        "signal_id": signal_id,
+        "status": str(setup.get("status", "")),
+        "reason": str(setup.get("status_reason_code", "")),
+        "rr": _parse_float(setup.get("rr_estimate", 0.0), 0.0),
+    }
+
+
+def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
+    details = _recompute_current_setup_details(base_dir, signal_id)
+    if not details:
+        return ""
     return (
-        f"{signal_id}=>{setup.get('status', '')}/{setup.get('status_reason_code', '')}"
-        f"/rr={_parse_float(setup.get('rr_estimate', 0.0), 0.0):.2f}"
+        f"{signal_id}=>{details.get('status', '')}/{details.get('reason', '')}"
+        f"/rr={_parse_float(details.get('rr', 0.0), 0.0):.2f}"
     )
+
+
+def _timestamp_in_jst_date_range(timestamp_jst: str, *, date_from: str = "", date_to: str = "") -> bool:
+    dt = _parse_dt(timestamp_jst)
+    if dt is None:
+        return False
+    current_date = dt.astimezone(JST).date()
+    if date_from:
+        from_date = datetime.fromisoformat(date_from).date()
+        if current_date < from_date:
+            return False
+    if date_to:
+        to_date = datetime.fromisoformat(date_to).date()
+        if current_date > to_date:
+            return False
+    return True
+
+
+def build_current_setup_comparison_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    limit: int = 20,
+    only_notified: bool = False,
+    previous_reason: str = "",
+    current_reason: str = "",
+    prelabel: str = "",
+    risk_flag: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    status_transition: str = "",
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows = _load_csv_rows(shadow_path)
+    differences: list[dict[str, Any]] = []
+    previous_reason_filter = previous_reason.strip()
+    current_reason_filter = current_reason.strip()
+    prelabel_filter = prelabel.strip().upper()
+    risk_flag_filter = risk_flag.strip()
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    status_transition_filter = status_transition.strip()
+    for row in rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        timestamp_jst = str(row.get("timestamp_jst", "")).strip()
+        if (date_from_filter or date_to_filter) and not _timestamp_in_jst_date_range(
+            timestamp_jst,
+            date_from=date_from_filter,
+            date_to=date_to_filter,
+        ):
+            continue
+        current = _recompute_current_setup_details(base_dir, signal_id)
+        if not current:
+            continue
+        previous_status = str(row.get("primary_setup_status", "")).strip()
+        previous_reason = str(row.get("primary_setup_reason", "")).strip()
+        current_status = str(current.get("status", "")).strip()
+        current_reason = str(current.get("reason", "")).strip()
+        if previous_status == current_status and previous_reason == current_reason:
+            continue
+        current_status_transition = f"{previous_status}->{current_status}"
+        normalized_prelabel = str(row.get("prelabel", "")).strip().upper()
+        notified = _parse_bool(row.get("was_notified"))
+        row_risk_flags = _split_values(row.get("risk_flags", ""))
+        if only_notified and not notified:
+            continue
+        if previous_reason_filter and previous_reason != previous_reason_filter:
+            continue
+        if current_reason_filter and current_reason != current_reason_filter:
+            continue
+        if prelabel_filter and normalized_prelabel != prelabel_filter:
+            continue
+        if risk_flag_filter and risk_flag_filter not in row_risk_flags:
+            continue
+        if status_transition_filter and current_status_transition != status_transition_filter:
+            continue
+        differences.append(
+            {
+                "signal_id": signal_id,
+                "timestamp_jst": timestamp_jst,
+                "prelabel": normalized_prelabel,
+                "previous_status": previous_status,
+                "previous_reason": previous_reason,
+                "current_status": current_status,
+                "current_reason": current_reason,
+                "current_rr": _parse_float(current.get("rr", 0.0), 0.0),
+                "notified": notified,
+                "risk_flags": row_risk_flags,
+                "notify_reasons": _parse_maybe_json_array(str(row.get("notify_reason", ""))),
+                "execution_shadow": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait_shadow": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+            }
+        )
+
+    differences.sort(key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+    status_changes = Counter(f"{item['previous_status']}->{item['current_status']}" for item in differences)
+    reason_changes = Counter(f"{item['previous_reason']}->{item['current_reason']}" for item in differences)
+    notified_count = sum(1 for item in differences if item["notified"])
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    status_group_counts: Counter[str] = Counter()
+    for item in differences:
+        risk_flag_counts.update(item["risk_flags"])
+        notify_reason_counts.update(item["notify_reasons"])
+        status_group_counts[item["previous_status"] + "->" + item["current_status"]] += 1
+    avg_execution = _mean_value(differences, "execution_shadow")
+    avg_wait = _mean_value(differences, "wait_shadow")
+
+    lines = ["# 現行 Setup 比較", ""]
+    lines.append(f"- 比較対象 shadow 行数: {len(rows)}")
+    if only_notified:
+        lines.append("- フィルタ: 通知済みのみ")
+    if previous_reason_filter:
+        lines.append(f"- フィルタ: 旧 reason={previous_reason_filter}")
+    if current_reason_filter:
+        lines.append(f"- フィルタ: 現行 reason={current_reason_filter}")
+    if prelabel_filter:
+        lines.append(f"- フィルタ: prelabel={prelabel_filter}")
+    if risk_flag_filter:
+        lines.append(f"- フィルタ: risk_flag={risk_flag_filter}")
+    if date_from_filter:
+        lines.append(f"- フィルタ: date_from={date_from_filter}")
+    if date_to_filter:
+        lines.append(f"- フィルタ: date_to={date_to_filter}")
+    if status_transition_filter:
+        lines.append(f"- フィルタ: status_transition={status_transition_filter}")
+    lines.append(f"- 現行 setup との差分あり: {len(differences)}")
+    lines.append(f"- 差分ありのうち通知済み: {notified_count}")
+    if differences:
+        lines.append(f"- 平均 execution_shadow: {avg_execution:.1f}")
+        lines.append(f"- 平均 wait_shadow: {avg_wait:.1f}")
+    if status_changes:
+        lines.append("- 主な status 変化: " + ", ".join(f"{label}={count}件" for label, count in status_changes.most_common(5)))
+    if reason_changes:
+        lines.append("- 主な reason 変化: " + ", ".join(f"{label}={count}件" for label, count in reason_changes.most_common(5)))
+    if risk_flag_counts:
+        lines.append("- 主な risk_flags: " + ", ".join(f"{label}={count}件" for label, count in risk_flag_counts.most_common(5)))
+    if notify_reason_counts:
+        lines.append("- 主な通知理由: " + ", ".join(f"{label}={count}件" for label, count in notify_reason_counts.most_common(5)))
+    lines.append("")
+    if status_group_counts:
+        lines.append("## status別集計")
+        for label, count in status_group_counts.most_common(5):
+            subset = [item for item in differences if item["previous_status"] + "->" + item["current_status"] == label]
+            lines.append(
+                f"- {label}: {count}件 / 平均 execution={_mean_value(subset, 'execution_shadow'):.1f} / 平均 wait={_mean_value(subset, 'wait_shadow'):.1f}"
+            )
+        lines.append("")
+    lines.append("## 代表例")
+    if differences:
+        for item in differences[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {item['previous_status']}/{item['previous_reason']} -> "
+                f"{item['current_status']}/{item['current_reason']} / rr={item['current_rr']:.2f} / "
+                f"prelabel={item['prelabel']} / notified={'yes' if item['notified'] else 'no'}"
+            )
+    else:
+        lines.append("- 差分はありません")
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
 
 
 def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
@@ -4450,6 +4628,53 @@ def _sweep_rr_notified_summary(rows: list[dict[str, Any]], *, limit: int = 3) ->
     }
 
 
+def _sweep_watch_notified_summary(base_dir: Path, rows: list[dict[str, Any]], *, limit: int = 3) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("primary_setup_status", "")).strip() == "watch"
+        and str(row.get("primary_setup_reason", "")).strip() in {
+            "entry_zone_not_reached",
+            "near_entry_zone_waiting_trigger",
+            "inside_entry_zone_with_trigger",
+        }
+        and str(row.get("prelabel", "")).strip() in {"SWEEP_WAIT", "RISKY_ENTRY"}
+        and "sweep_incomplete" in _split_values(row.get("risk_flags", ""))
+        and _parse_bool(row.get("was_notified"))
+    ]
+    notify_reasons: Counter[str] = Counter()
+    for row in candidates:
+        notify_reasons.update(_parse_maybe_json_array(str(row.get("notify_reason", ""))))
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _parse_float(row.get("confidence_wait_shadow"), 0.0) * -1,
+            str(row.get("timestamp_jst", "")),
+        ),
+        reverse=True,
+    )
+    examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"({','.join(_parse_maybe_json_array(str(row.get('notify_reason', '')))[:2]) or 'no_reason'}"
+            f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f})"
+        )
+        for row in candidates[:limit]
+    ]
+    current_logic_examples = [
+        item
+        for item in (_recompute_current_setup_summary(base_dir, str(row.get("signal_id", ""))) for row in candidates[:limit])
+        if item
+    ]
+    return {
+        "count": len(candidates),
+        "notify_reasons": _format_counter(notify_reasons),
+        "examples": examples,
+        "current_logic_examples": current_logic_examples,
+    }
+
+
 def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
     if row.get("bias") != "long":
         return False
@@ -4940,6 +5165,7 @@ def build_feedback_report(
     entry_ok_rr_blockers = _entry_ok_rr_blocker_summary(completed)
     risky_rr_near_threshold = _risky_rr_near_threshold_summary(base_dir, completed)
     sweep_rr_notified = _sweep_rr_notified_summary(completed)
+    sweep_watch_notified = _sweep_watch_notified_summary(base_dir, completed)
     improvements = _build_improvement_candidates(
         completed,
         monthly=(period == "monthly"),
@@ -5118,6 +5344,17 @@ def build_feedback_report(
         lines.append(f"- sweep_incomplete を含む RISKY_ENTRY + rr_below_min の通知済み履歴: {sweep_rr_notified['count']}件")
         lines.append(f"- 主な通知理由: {sweep_rr_notified['notify_reasons']}")
         lines.append(f"- 代表例: {' / '.join(sweep_rr_notified['examples'])}")
+    if sweep_watch_notified["count"]:
+        if not entry_ok_rr_blockers["count"] and not risky_rr_near_threshold["count"] and not sweep_rr_notified["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(
+            f"- sweep_incomplete を含む watch 系通知済み履歴: {sweep_watch_notified['count']}件"
+        )
+        lines.append(f"- 主な通知理由: {sweep_watch_notified['notify_reasons']}")
+        lines.append(f"- 代表例: {' / '.join(sweep_watch_notified['examples'])}")
+        if sweep_watch_notified["current_logic_examples"]:
+            lines.append(f"- 現行watch再計算: {' / '.join(sweep_watch_notified['current_logic_examples'])}")
     lines.append("")
 
     lines.append("## 6. 技術集計")
@@ -5550,6 +5787,18 @@ def _build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--period", choices=["weekly", "monthly"], required=True)
     report_parser.add_argument("--output-md")
 
+    compare_parser = subparsers.add_parser("compare-current-setup")
+    compare_parser.add_argument("--output-md")
+    compare_parser.add_argument("--limit", type=int, default=20)
+    compare_parser.add_argument("--only-notified", action="store_true")
+    compare_parser.add_argument("--previous-reason", default="")
+    compare_parser.add_argument("--current-reason", default="")
+    compare_parser.add_argument("--prelabel", default="")
+    compare_parser.add_argument("--risk-flag", default="")
+    compare_parser.add_argument("--date-from", default="")
+    compare_parser.add_argument("--date-to", default="")
+    compare_parser.add_argument("--status-transition", default="")
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -5600,6 +5849,26 @@ def main() -> None:
         report = build_feedback_report(base_dir=base_dir, period=args.period, output_md=output_md)
         print(output_md)
         if not args.output_md:
+            print(report)
+        return
+
+    if args.command == "compare-current-setup":
+        report = build_current_setup_comparison_report(
+            base_dir=base_dir,
+            output_md=Path(args.output_md) if args.output_md else None,
+            limit=int(args.limit),
+            only_notified=bool(args.only_notified),
+            previous_reason=str(args.previous_reason),
+            current_reason=str(args.current_reason),
+            prelabel=str(args.prelabel),
+            risk_flag=str(args.risk_flag),
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            status_transition=str(args.status_transition),
+        )
+        if args.output_md:
+            print(Path(args.output_md))
+        else:
             print(report)
         return
 

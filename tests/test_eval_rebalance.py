@@ -291,6 +291,39 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertEqual(result["prelabel"], "RISKY_ENTRY")
         self.assertIn("lower_liquidity_close", result["risk_flags"])
 
+    def test_close_liquidity_and_wall_without_hard_flags_stays_sweep_wait(self) -> None:
+        result = evaluate_position_risk(
+            bias="long",
+            price=100.0,
+            atr=10.0,
+            liquidity_info={"liquidity_above": None, "liquidity_below": 0.5, "liquidity_swept_recently": False},
+            liquidation_info={"largest_liquidation_price": None},
+            oi_cvd_info={"oi_state": None, "cvd_price_divergence": None},
+            orderbook_info={"orderbook_bid_wall_price": None, "orderbook_ask_wall_price": 104.0, "orderbook_bias": None},
+            high_threshold=80.0,
+            medium_threshold=55.0,
+        )
+        self.assertEqual(result["location_risk"], 81.0)
+        self.assertEqual(result["prelabel"], "SWEEP_WAIT")
+        self.assertIn("lower_liquidity_close", result["risk_flags"])
+        self.assertIn("ask_wall_close", result["risk_flags"])
+        self.assertIn("sweep_incomplete", result["risk_flags"])
+
+    def test_hard_orderbook_flag_can_still_become_no_trade_candidate(self) -> None:
+        result = evaluate_position_risk(
+            bias="long",
+            price=100.0,
+            atr=10.0,
+            liquidity_info={"liquidity_above": None, "liquidity_below": 0.5, "liquidity_swept_recently": False},
+            liquidation_info={"largest_liquidation_price": None},
+            oi_cvd_info={"oi_state": None, "cvd_price_divergence": None},
+            orderbook_info={"orderbook_bid_wall_price": None, "orderbook_ask_wall_price": 104.0, "orderbook_bias": "ask_heavy"},
+            high_threshold=80.0,
+            medium_threshold=55.0,
+        )
+        self.assertEqual(result["prelabel"], "NO_TRADE_CANDIDATE")
+        self.assertIn("orderbook_ask_heavy", result["risk_flags"])
+
     def test_backtest_fill_and_missed_opportunity_summary(self) -> None:
         signal = {
             "timestamp": 1,

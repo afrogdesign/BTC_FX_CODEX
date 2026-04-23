@@ -20,6 +20,7 @@ from tools.log_feedback import (
     DEFAULT_REVIEW_FORM,
     DEFAULT_REVIEW_NOTE,
     REVIEW_NOTE_COLUMNS,
+    SHADOW_HEADER,
     USER_REVIEW_HEADER,
     _ai_review_health_summary,
     _ai_post_review_chart_dir,
@@ -36,6 +37,7 @@ from tools.log_feedback import (
     _review_form_path,
     _render_review_form_html,
     backfill_ai_post_review_v2,
+    build_current_setup_comparison_report,
     build_feedback_report,
     build_observation_paper_orders,
     build_shadow_log,
@@ -2210,6 +2212,46 @@ class LogFeedbackTest(unittest.TestCase):
                         "tp_eval": "too_close",
                     }
                 )
+                writer.writerow(
+                    {
+                        "signal_id": "watch_sweep_0",
+                        "timestamp_jst": timestamp_jst,
+                        "evaluation_status": "complete",
+                        "data_quality_flag": "ok",
+                        "signal_based_MFE_24h": "1.8",
+                        "signal_based_MAE_24h": "0.7",
+                        "outcome": "win",
+                        "direction_outcome": "correct",
+                        "entry_outcome": "not_applicable",
+                        "wait_outcome": "good_wait",
+                        "skip_outcome": "not_applicable",
+                        "tp1_hit_first": "true",
+                        "was_notified": "true",
+                        "notify_reason": "[\"attention_bias_changed\"]",
+                        "prelabel": "SWEEP_WAIT",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "primary_setup_side": "long",
+                        "primary_entry_mid": "70200",
+                        "tp1_price": "70700",
+                        "shadow_tp1_price": "70800",
+                        "shadow_exit_rule_version": "phase1_v1_shadow",
+                        "invalid_reason": "",
+                        "risk_flags": "sweep_incomplete",
+                        "confidence_direction_shadow": "72",
+                        "confidence_execution_shadow": "21",
+                        "confidence_wait_shadow": "72",
+                        "phase1_active": "false",
+                        "trade_execution_gate": "blocked",
+                        "trade_execution_blockers": "[\"phase1_inactive\", \"setup_not_ready\"]",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "setup_watch_learning",
+                        "phase1_observation_reasons": "[\"setup_watch_learning\"]",
+                        "suppress_reason": "rr_sweep_recheck_wait",
+                        "paper_order_status": "",
+                        "tp_eval": "too_close",
+                    }
+                )
             (signals_dir / "risky_rr_0.json").write_text(
                 json.dumps(
                     {
@@ -2237,18 +2279,44 @@ class LogFeedbackTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (signals_dir / "watch_sweep_0.json").write_text(
+                json.dumps(
+                    {
+                        "signal_id": "watch_sweep_0",
+                        "primary_setup_side": "long",
+                        "bias": "long",
+                        "current_price": 75810.0,
+                        "atr_15m_value": 210.0,
+                        "confidence": 57,
+                        "atr_ratio": 0.92,
+                        "funding_rate_pct": 0.0041,
+                        "volume_ratio": 3.2,
+                        "trigger_volume_ratio_threshold": 1.15,
+                        "breakout_up": False,
+                        "warning_flags": [],
+                        "support_zones_all": [
+                            {"low": 75010.0, "high": 75120.0},
+                        ],
+                        "resistance_zones_all": [
+                            {"low": 75980.0, "high": 76060.0},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
 
             observation_orders_path = logs_csv / "observation_paper_orders.csv"
             with observation_orders_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=OBSERVATION_PAPER_ORDER_HEADER)
                 writer.writeheader()
-                for signal_id in ["entry_rr_0", "entry_rr_1", "entry_rr_2", "risky_rr_0"]:
+                for signal_id in ["entry_rr_0", "entry_rr_1", "entry_rr_2", "risky_rr_0", "watch_sweep_0"]:
                     writer.writerow(
                         {
                             "signal_id": signal_id,
                             "timestamp_jst": timestamp_jst,
                             "observation_phase": "phase1A",
-                            "observation_type": "direction_rr_learning",
+                            "observation_type": "setup_watch_learning" if signal_id == "watch_sweep_0" else "direction_rr_learning",
                             "observation_status": "observing",
                         }
                     )
@@ -2274,13 +2342,15 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("direction_execution_conflict の主な risk_flags: lower_liquidity_close=3件, sweep_incomplete=3件", report)
             self.assertIn("rr_sweep_recheck_wait: 4件", report)
             self.assertIn("attention_rr_sweep_recheck_wait: 4件", report)
-            self.assertIn("suppress_reason の内訳: rr_sweep_recheck_wait=4件, attention_rr_sweep_recheck_wait=4件", report)
-            self.assertIn("trade_execution_gate=blocked: 4件", report)
-            self.assertIn("主なブロック理由: rr_below_min=4件, execution_shadow_too_low=3件", report)
-            self.assertIn("phase1_observation_gate=pass: 4件", report)
-            self.assertIn("観測タイプ: direction_rr_learning=4件", report)
+            self.assertIn("suppress_reason の内訳: rr_sweep_recheck_wait=5件, attention_rr_sweep_recheck_wait=4件", report)
+            self.assertIn("trade_execution_gate=blocked: 5件", report)
+            self.assertIn("主なブロック理由: rr_below_min=4件, execution_shadow_too_low=3件, phase1_inactive=1件", report)
+            self.assertIn("phase1_observation_gate=pass: 5件", report)
+            self.assertIn("観測タイプ: direction_rr_learning=4件, setup_watch_learning=1件", report)
             self.assertIn("direction_rr_learning: 4件 / 勝率=100.0% / TP1先行=100.0% / 近似PF=2.35", report)
-            self.assertIn("observation_paper_orders observing: 4件", report)
+            self.assertIn("setup_watch_learning: 1件 / 勝率=100.0% / TP1先行=100.0% / 近似PF=2.57", report)
+            self.assertIn("observation_paper_orders observing: 5件", report)
+            self.assertIn("setup_watch_learning の entry_zone_not_reached 率: 100.0%", report)
             self.assertIn("gate pass だが観測紙トレード未記録: 0件", report)
             self.assertIn("扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ", report)
             self.assertIn("RISKY_ENTRY + rr_below_min かつ execution>=20: 1件 / 平均 execution=26.0 / 平均 wait=70.4", report)
@@ -2290,11 +2360,186 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("sweep_incomplete を含む RISKY_ENTRY + rr_below_min の通知済み履歴: 1件", report)
             self.assertIn("主な通知理由: attention_gap_crossed=1件, attention_score_crossed=1件", report)
             self.assertIn("代表例: risky_rr_0(attention_gap_crossed,attention_score_crossed, exec=26, wait=70)", report)
-            self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 4/4件", report)
+            self.assertIn("sweep_incomplete を含む watch 系通知済み履歴: 1件", report)
+            self.assertIn("代表例: watch_sweep_0(attention_bias_changed, exec=21, wait=72)", report)
+            self.assertIn("現行watch再計算: watch_sweep_0=>watch/entry_zone_not_reached/rr=2.40", report)
+            self.assertIn("tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 5/5件", report)
             self.assertIn("### 改善アクション", report)
-            self.assertIn("出口設計を調整=4件", report)
-            self.assertIn("重要度: 高=4件", report)
+            self.assertIn("出口設計を調整=5件", report)
+            self.assertIn("重要度: 高=5件", report)
             self.assertIn("TP1/TP2 を遠めにする候補を検証する", report)
+
+    def test_build_current_setup_comparison_report_detects_status_changes(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_0",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "was_notified": "true",
+                    }
+                )
+            (signals_dir / "cmp_0.json").write_text(
+                json.dumps(
+                    {
+                        "signal_id": "cmp_0",
+                        "primary_setup_side": "long",
+                        "bias": "long",
+                        "current_price": 75748.9,
+                        "atr_15m_value": 213.1,
+                        "confidence": 58,
+                        "atr_ratio": 0.94,
+                        "funding_rate_pct": 0.0043,
+                        "volume_ratio": 4.07,
+                        "trigger_volume_ratio_threshold": 1.15,
+                        "breakout_up": False,
+                        "warning_flags": [],
+                        "support_zones_all": [
+                            {"low": 74926.6, "high": 75002.6},
+                            {"low": 74720.7, "high": 74885.4},
+                        ],
+                        "resistance_zones_all": [
+                            {"low": 75962.0, "high": 76038.0},
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            report = build_current_setup_comparison_report(base_dir=base_dir, shadow_path=shadow_path, limit=5)
+
+            self.assertIn("差分ありのうち通知済み: 1", report)
+            self.assertIn("平均 execution_shadow: 0.0", report)
+            self.assertIn("平均 wait_shadow: 0.0", report)
+            self.assertIn("主な status 変化: invalid->watch=1件", report)
+            self.assertIn("主な reason 変化: rr_below_min->entry_zone_not_reached=1件", report)
+            self.assertIn("## status別集計", report)
+            self.assertIn("- invalid->watch: 1件 / 平均 execution=0.0 / 平均 wait=0.0", report)
+            self.assertIn(
+                "cmp_0: invalid/rr_below_min -> watch/entry_zone_not_reached / rr=2.40 / prelabel=RISKY_ENTRY / notified=yes",
+                report,
+            )
+
+    def test_build_current_setup_comparison_report_supports_filters(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_keep",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "was_notified": "true",
+                        "risk_flags": "sweep_incomplete",
+                        "notify_reason": "[\"prelabel_improved\"]",
+                        "confidence_execution_shadow": "21",
+                        "confidence_wait_shadow": "72",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_drop",
+                        "timestamp_jst": "2026-04-24T02:05:00+09:00",
+                        "prelabel": "SWEEP_WAIT",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "confidence_below_min",
+                        "was_notified": "false",
+                        "risk_flags": "ask_wall_close",
+                        "notify_reason": "[\"status_upgraded\"]",
+                        "confidence_execution_shadow": "11",
+                        "confidence_wait_shadow": "90",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_old",
+                        "timestamp_jst": "2026-04-23T23:55:00+09:00",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "was_notified": "true",
+                        "risk_flags": "sweep_incomplete",
+                        "notify_reason": "[\"status_upgraded\"]",
+                        "confidence_execution_shadow": "19",
+                        "confidence_wait_shadow": "61",
+                    }
+                )
+            payload = {
+                "primary_setup_side": "long",
+                "bias": "long",
+                "current_price": 75748.9,
+                "atr_15m_value": 213.1,
+                "confidence": 58,
+                "atr_ratio": 0.94,
+                "funding_rate_pct": 0.0043,
+                "volume_ratio": 4.07,
+                "trigger_volume_ratio_threshold": 1.15,
+                "breakout_up": False,
+                "warning_flags": [],
+                "support_zones_all": [
+                    {"low": 74926.6, "high": 75002.6},
+                    {"low": 74720.7, "high": 74885.4},
+                ],
+                "resistance_zones_all": [
+                    {"low": 75962.0, "high": 76038.0},
+                ],
+            }
+            for signal_id in ("cmp_keep", "cmp_drop", "cmp_old"):
+                (signals_dir / f"{signal_id}.json").write_text(
+                    json.dumps({"signal_id": signal_id, **payload}, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+            report = build_current_setup_comparison_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                limit=5,
+                only_notified=True,
+                previous_reason="rr_below_min",
+                current_reason="entry_zone_not_reached",
+                prelabel="risky_entry",
+                risk_flag="sweep_incomplete",
+                date_from="2026-04-24",
+                date_to="2026-04-24",
+                status_transition="invalid->watch",
+            )
+
+            self.assertIn("- フィルタ: 通知済みのみ", report)
+            self.assertIn("- フィルタ: 旧 reason=rr_below_min", report)
+            self.assertIn("- フィルタ: 現行 reason=entry_zone_not_reached", report)
+            self.assertIn("- フィルタ: prelabel=RISKY_ENTRY", report)
+            self.assertIn("- フィルタ: risk_flag=sweep_incomplete", report)
+            self.assertIn("- フィルタ: date_from=2026-04-24", report)
+            self.assertIn("- フィルタ: date_to=2026-04-24", report)
+            self.assertIn("- フィルタ: status_transition=invalid->watch", report)
+            self.assertIn("現行 setup との差分あり: 1", report)
+            self.assertIn("- 主な risk_flags: sweep_incomplete=1件", report)
+            self.assertIn("- 主な通知理由: prelabel_improved=1件", report)
+            self.assertIn("- invalid->watch: 1件 / 平均 execution=21.0 / 平均 wait=72.0", report)
+            self.assertIn("cmp_keep: invalid/rr_below_min -> watch/entry_zone_not_reached", report)
+            self.assertNotIn("cmp_drop", report)
+            self.assertNotIn("cmp_old", report)
 
 
 if __name__ == "__main__":
