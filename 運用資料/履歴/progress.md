@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-24 04:50 JST
+更新日: 2026-04-25 04:20 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,36 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-04-25 JST
+  - `build-relaxation-candidates-report` を追加し、`confidence_below_min + sweep_incomplete + lower_liquidity_close` だが `orderbook_ask_heavy`、`ask_wall_close`、`long_flush_exhaustion` を持たない少数群だけを独立抽出できるようにした。
+  - `tests/test_log_feedback.py` に候補抽出のレポートテストと CLI 入口テストを追加し、`.venv312/bin/python -m unittest tests.test_log_feedback` で 45 件 OK を確認した。
+  - 実データでは `relaxation_candidates_20260425.md` を生成し、候補 13 件、`SWEEP_WAIT=9件`、`RISKY_ENTRY=3件`、`NO_TRADE_CANDIDATE=1件`、平均 `execution=18.2 / wait=84.1` と確認した。
+  - 候補の上位は `20260424_130500`、`20260421_140500`、`20260421_060500`、`20260421_020500`、`20260420_180500` で、次回以降はこの少数群が新規ログでも再現するかだけを見ればよい状態に整理できた。
+  - `build-operational-focus-report` をさらに拡張し、`sweep_incomplete + lower_liquidity_close` を持つ blocked 群について、`orderbook_ask_heavy`、`ask_wall_close`、`long_flush_exhaustion` の補助 flag 有無と、補助 flag なしの少数候補を直接出せるようにした。
+  - 実データでは `confidence_below_min` 67 件のうち `補助flagなし=13件`、`no_trade_candidate` 54 件のうち `補助flagなし=1件` だった。`no_trade_candidate` 側はほぼ hard flag 付きのため、緩和候補から外しやすい構図になった。
+  - 緩和候補の少数群としては `20260424_130500`、`20260421_140500`、`20260421_060500`、`20260421_020500`、`20260420_180500` などが抽出できた。いずれも `confidence_below_min` だが補助 hard flag が薄い。
+  - これで「どこを残して、どこだけ緩和候補にするか」をコード変更なしで先に切り分けられたため、次回以降の新規ログでは少数群が再現するかだけを追えばよい段階まで整理できた。
+  - `build-operational-focus-report` を拡張し、blocked 上位理由ごとの `prelabel`、`setup status`、`setup reason`、`risk_flags`、代表 signal を出せるようにした。
+  - 実データでは `confidence_below_min=84件` が `NO_TRADE_CANDIDATE=39件` と `SWEEP_WAIT=38件` に二分し、`risk_flags` は `sweep_incomplete=76件`、`lower_liquidity_close=74件`、`orderbook_ask_heavy=39件` が支配的だった。
+  - `no_trade_candidate=59件` はほぼ `NO_TRADE_CANDIDATE` 固定で、`setup reason` は `confidence_below_min=39件` が最大、`risk_flags` は `sweep_incomplete=57件`、`lower_liquidity_close=56件`、`ask_wall_close=46件` が上位だった。
+  - これにより、今すぐ `confidence floor` や `NO_TRADE_CANDIDATE` を一律に緩めるより、`sweep_incomplete + lower_liquidity_close` の扱いを新規ログでもう 2 サイクル観測してから触る方が妥当と整理した。
+  - `tools/log_feedback.py` に `build-operational-focus-report` を追加し、`shadow_log.csv` から backlog 分布と `setup_watch_learning` 偏重をローカル集計できるようにした。
+  - `tests/test_log_feedback.py` に運用フォーカス分析の集計テストと CLI 入口テストを追加し、`.venv312/bin/python -m unittest tests.test_log_feedback` で 43 件 OK を確認した。
+  - 実データでは `./.venv312/bin/python tools/log_feedback.py build-operational-focus-report --output-md 運用資料/reports/analysis/operational_focus_20260425.md --date-from 2026-04-18 --date-to 2026-04-25` を実行し、同期間の backlog 候補は 20 件、`phase1 pass=27件 / blocked=143件`、pass 内訳は `setup_watch_learning=26件`、`direction_rr_learning=1件` と確認した。
+  - `setup_watch_learning` の主 reason は `entry_zone_not_reached=16件`、`near_entry_zone_waiting_trigger=8件`、blocked 理由の上位は `confidence_below_min=83件`、`no_trade_candidate=59件`、`no_directional_setup=22件`、`watch_conditions_not_met=18件` だった。
+  - `tools/log_feedback.py` に `refresh-standard-setup-reports` を追加し、標準比較レポート 3 本を 1 コマンドで更新できるようにした。`--date-from` と `--date-to` をそのまま受け、既存の `compare-current-setup` フィルタを標準3本へまとめて適用する。
+  - `tests/test_log_feedback.py` に標準3本の生成テストと CLI 入口テストを追加し、`.venv312/bin/python -m unittest tests.test_log_feedback` で 41 件 OK を確認した。
+  - 実データでも `./.venv312/bin/python tools/log_feedback.py refresh-standard-setup-reports --date-from 2026-04-18 --date-to 2026-04-25` を実行し、`notified_rr_to_entry`、`notified_rr_to_entry_orderbook_ask_heavy`、`rr_to_confidence` をまとめて再生成できることを確認した。
+  - さらに `compare-current-setup` の日付帯を `--date-to 2026-04-25` まで伸ばして再生成したが、比較結果は維持された。`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` のままで、02:05 JST の追加1本でも差分傾向は変わらなかった。
+  - 続けて `./.venv312/bin/python tools/log_feedback.py daily-sync --output-md 運用資料/reports/feedback_daily_sync_20260425.md` を再実行し、定刻 02:05 JST の signal を取り込んだ最新日次レポートへ更新した。
+  - 最新値は、完了データ 40 件、近似PF 0.67、全体勝率 57.5%、`watch 系通知済み履歴=15件`、AI 事後評価 health は `eligible=190`、`AI済み=135`、`backlog=55`、`request_failed=0`。
+  - `launchctl print gui/$(id -u)/com.afrog.btc-monitor` と `logs/runtime/monitor.err` も確認し、LaunchAgent は `running`、runtime エラーは実害のない `urllib3` の `NotOpenSSLWarning` のみだった。
+  - 未反映だった `運用資料/reports/feedback_daily_sync_20260425.md` を確認し、最新値を `NEXT_TASK.md` へ反映した。完了データ 39 件、近似PF 0.68、全体勝率 59.0%、`phase1_observation_gate=pass:15件`、`trade_execution_gate=pass:0件`、AI 事後評価 backlog は `54件`。
+  - `./.venv312/bin/python tools/log_feedback.py compare-current-setup --output-md ... --date-from 2026-04-18 --date-to 2026-04-24` で標準比較レポート 3 本を新規ログ帯に更新した。
+  - 結果は `notified_rr_to_entry.md=0件`、`notified_rr_to_entry_orderbook_ask_heavy.md=0件`、`rr_to_confidence.md=1件` で、旧母集団で大きく見えていた `rr_below_min -> entry_zone_not_reached` / `confidence_below_min` 差分は新規ログではほぼ再現していないことを確認した。
+  - `logs/csv/shadow_log.csv` では `watch_sweep_recheck_wait` が 5 件出ていた一方、`watch_low_execution_recheck_wait` はまだ 0 件だった。抑制自体は動いているが、低 execution 側の抑制条件はまだ新規母集団待ちと整理した。
+  - このため次判断は、`watch_orderbook_recheck_wait` や confidence 緩和の追加実装へ急がず、あと 2 回分の `daily-sync` で同じ比較を継続する方針に寄せた。
 
 - 2026-04-24 JST
   - `tools/log_feedback.py compare-current-setup` に `--date-from`、`--date-to`、`--status-transition` を追加し、新規ログだけを `timestamp_jst` 基準で比較できるようにした。

@@ -877,6 +877,379 @@ def build_current_setup_comparison_report(
     return report
 
 
+def refresh_standard_setup_comparison_reports(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    analysis_dir: Path | None = None,
+    limit: int = 20,
+    date_from: str = "",
+    date_to: str = "",
+) -> dict[str, Path]:
+    analysis_dir = analysis_dir or base_dir / "運用資料" / "reports" / "analysis"
+    specs = [
+        {
+            "key": "notified_rr_to_entry",
+            "filename": "notified_rr_to_entry.md",
+            "only_notified": True,
+            "previous_reason": "rr_below_min",
+            "current_reason": "entry_zone_not_reached",
+        },
+        {
+            "key": "notified_rr_to_entry_orderbook_ask_heavy",
+            "filename": "notified_rr_to_entry_orderbook_ask_heavy.md",
+            "only_notified": True,
+            "previous_reason": "rr_below_min",
+            "current_reason": "entry_zone_not_reached",
+            "risk_flag": "orderbook_ask_heavy",
+        },
+        {
+            "key": "rr_to_confidence",
+            "filename": "rr_to_confidence.md",
+            "previous_reason": "rr_below_min",
+            "current_reason": "confidence_below_min",
+        },
+    ]
+    generated: dict[str, Path] = {}
+    for spec in specs:
+        output_md = analysis_dir / str(spec["filename"])
+        build_current_setup_comparison_report(
+            base_dir=base_dir,
+            shadow_path=shadow_path,
+            output_md=output_md,
+            limit=limit,
+            only_notified=bool(spec.get("only_notified", False)),
+            previous_reason=str(spec.get("previous_reason", "")),
+            current_reason=str(spec.get("current_reason", "")),
+            risk_flag=str(spec.get("risk_flag", "")),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        generated[str(spec["key"])] = output_md
+    return generated
+
+
+def _age_bucket_label(timestamp_jst: str, *, now: datetime | None = None) -> str:
+    dt = _parse_dt(timestamp_jst)
+    if dt is None:
+        return "不明"
+    current = (now or datetime.now(tz=JST)).astimezone(JST)
+    age_days = max(0, (current.date() - dt.astimezone(JST).date()).days)
+    if age_days <= 1:
+        return "0-1日"
+    if age_days <= 3:
+        return "2-3日"
+    if age_days <= 7:
+        return "4-7日"
+    return "8日以上"
+
+
+def _filtered_shadow_rows(
+    *,
+    shadow_path: Path,
+    date_from: str = "",
+    date_to: str = "",
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    rows = _load_csv_rows(shadow_path)
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    filtered_rows = [
+        row
+        for row in rows
+        if not (date_from_filter or date_to_filter)
+        or _timestamp_in_jst_date_range(str(row.get("timestamp_jst", "")).strip(), date_from=date_from_filter, date_to=date_to_filter)
+    ]
+    return rows, filtered_rows
+
+
+def _collect_relax_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    blocked_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    combo_flags = {"orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"}
+    candidates: list[dict[str, Any]] = []
+    for row in blocked_rows:
+        reasons = _split_values(str(row.get("phase1_observation_reasons", "")))
+        if "confidence_below_min" not in reasons:
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if "sweep_incomplete" not in risk_flags or "lower_liquidity_close" not in risk_flags:
+            continue
+        if any(flag in combo_flags for flag in risk_flags):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "phase1_reasons": _split_values(str(row.get("phase1_observation_reasons", ""))),
+                "risk_flags": risk_flags,
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def build_operational_focus_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 5,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from_filter, date_to=date_to_filter)
+
+    eligible_backlog_rows = []
+    for row in filtered_rows:
+        if not _parse_bool(row.get("was_notified")):
+            continue
+        if str(row.get("evaluation_status", "")).strip() != "complete":
+            continue
+        review_source = _review_source_value(row)
+        if review_source in {"ai", "human_override"}:
+            continue
+        eligible_backlog_rows.append(row)
+
+    age_counts: Counter[str] = Counter(_age_bucket_label(str(row.get("timestamp_jst", "")).strip()) for row in eligible_backlog_rows)
+    backlog_setup_counts = Counter(str(row.get("primary_setup_status", "")).strip() for row in eligible_backlog_rows)
+    backlog_prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in eligible_backlog_rows)
+    backlog_phase1_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in eligible_backlog_rows)
+    backlog_tier_counts = Counter(str(row.get("signal_tier", "")).strip() for row in eligible_backlog_rows)
+    backlog_action_counts = Counter(str(row.get("review_action_class", "")).strip() for row in eligible_backlog_rows)
+
+    pass_rows = [row for row in filtered_rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in filtered_rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    pass_type_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in pass_rows)
+    blocked_reason_counts: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocked_reason_counts.update(_split_values(str(row.get("phase1_observation_reasons", ""))))
+    blocked_reason_details: list[dict[str, Any]] = []
+    for reason, count in blocked_reason_counts.most_common(2):
+        subset = [
+            row
+            for row in blocked_rows
+            if reason in _split_values(str(row.get("phase1_observation_reasons", "")))
+        ]
+        prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in subset)
+        status_counts = Counter(str(row.get("primary_setup_status", "")).strip() for row in subset)
+        setup_reason_counts = Counter(str(row.get("primary_setup_reason", "")).strip() for row in subset)
+        risk_counts: Counter[str] = Counter()
+        for row in subset:
+            risk_counts.update(_split_values(str(row.get("risk_flags", ""))))
+        representatives = [
+            str(row.get("signal_id", "")).strip()
+            for row in sorted(subset, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+            if str(row.get("signal_id", "")).strip()
+        ][:3]
+        blocked_reason_details.append(
+            {
+                "reason": reason,
+                "count": count,
+                "prelabels": _format_counter(prelabel_counts, limit=4),
+                "statuses": _format_counter(status_counts, limit=4),
+                "setup_reasons": _format_counter(setup_reason_counts, limit=4),
+                "risk_flags": _format_counter(risk_counts, limit=4),
+                "representatives": representatives,
+            }
+        )
+    combo_focus_details: list[dict[str, Any]] = []
+    combo_flags = ["orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"]
+    relax_candidates = _collect_relax_candidates(filtered_rows)
+    for reason in ("confidence_below_min", "no_trade_candidate"):
+        subset = []
+        for row in blocked_rows:
+            reasons = _split_values(str(row.get("phase1_observation_reasons", "")))
+            risk_flags = _split_values(str(row.get("risk_flags", "")))
+            if reason not in reasons:
+                continue
+            if "sweep_incomplete" not in risk_flags or "lower_liquidity_close" not in risk_flags:
+                continue
+            subset.append(row)
+        if not subset:
+            continue
+        combo_counter: Counter[str] = Counter()
+        for row in subset:
+            risk_flags = _split_values(str(row.get("risk_flags", "")))
+            matched = [flag for flag in combo_flags if flag in risk_flags]
+            combo_counter.update(matched or ["補助flagなし"])
+        combo_focus_details.append(
+            {
+                "reason": reason,
+                "count": len(subset),
+                "combos": _format_counter(combo_counter, limit=5),
+                "avg_execution": _mean_value(subset, "confidence_execution_shadow"),
+                "avg_wait": _mean_value(subset, "confidence_wait_shadow"),
+            }
+        )
+
+    setup_watch_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "setup_watch_learning"
+    ]
+    setup_watch_reason_counts = Counter(str(row.get("primary_setup_reason", "")).strip() for row in setup_watch_rows)
+    setup_watch_risk_counts: Counter[str] = Counter()
+    for row in setup_watch_rows:
+        setup_watch_risk_counts.update(_split_values(str(row.get("risk_flags", ""))))
+
+    direction_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "direction_rr_learning"
+    ]
+
+    newest_backlog = sorted(
+        eligible_backlog_rows,
+        key=lambda item: str(item.get("timestamp_jst", "")),
+        reverse=True,
+    )[:limit]
+
+    lines = ["# 運用フォーカス分析", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from_filter:
+        lines.append(f"- フィルタ: date_from={date_from_filter}")
+    if date_to_filter:
+        lines.append(f"- フィルタ: date_to={date_to_filter}")
+    lines.append("")
+
+    lines.append("## AI backlog")
+    lines.append(f"- 未処理 backlog 候補: {len(eligible_backlog_rows)}件")
+    if eligible_backlog_rows:
+        lines.append(f"- 年齢分布: {_format_counter(age_counts, limit=4)}")
+        if backlog_phase1_counts:
+            lines.append(f"- phase1 観測タイプ: {_format_counter(backlog_phase1_counts, limit=5)}")
+        if backlog_setup_counts:
+            lines.append(f"- setup status: {_format_counter(backlog_setup_counts, limit=5)}")
+        if backlog_prelabel_counts:
+            lines.append(f"- prelabel: {_format_counter(backlog_prelabel_counts, limit=5)}")
+        if backlog_tier_counts:
+            lines.append(f"- signal_tier: {_format_counter(backlog_tier_counts, limit=5)}")
+        if any(backlog_action_counts):
+            lines.append(f"- review_action_class: {_format_counter(backlog_action_counts, limit=5)}")
+        lines.append("- 直近 backlog 例:")
+        for row in newest_backlog:
+            lines.append(
+                f"  - {row.get('signal_id', '')}: {str(row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / "
+                f"{row.get('primary_setup_status', '')}/{row.get('primary_setup_reason', '')} / "
+                f"prelabel={row.get('prelabel', '')} / phase1={row.get('phase1_observation_type', '') or 'none'}"
+            )
+    else:
+        lines.append("- backlog 候補はありません")
+    lines.append("")
+
+    lines.append("## Phase1 観測")
+    lines.append(f"- pass: {len(pass_rows)}件 / blocked: {len(blocked_rows)}件")
+    if pass_type_counts:
+        lines.append(f"- pass 内訳: {_format_counter(pass_type_counts, limit=5)}")
+    if blocked_reason_counts:
+        lines.append(f"- 主な blocked 理由: {_format_counter(blocked_reason_counts, limit=5)}")
+    if setup_watch_rows:
+        lines.append(
+            f"- setup_watch_learning: {len(setup_watch_rows)}件 / 平均 execution={_mean_value(setup_watch_rows, 'confidence_execution_shadow'):.1f} / "
+            f"平均 wait={_mean_value(setup_watch_rows, 'confidence_wait_shadow'):.1f}"
+        )
+        lines.append(f"- setup_watch の主な reason: {_format_counter(setup_watch_reason_counts, limit=5)}")
+        if setup_watch_risk_counts:
+            lines.append(f"- setup_watch の主な risk_flags: {_format_counter(setup_watch_risk_counts, limit=5)}")
+    if direction_rows:
+        lines.append(
+            f"- direction_rr_learning: {len(direction_rows)}件 / 平均 execution={_mean_value(direction_rows, 'confidence_execution_shadow'):.1f} / "
+            f"平均 wait={_mean_value(direction_rows, 'confidence_wait_shadow'):.1f}"
+        )
+    else:
+        lines.append("- direction_rr_learning: 0件")
+    if blocked_reason_details:
+        lines.append("")
+        lines.append("## blocked 上位理由の内訳")
+        for detail in blocked_reason_details:
+            lines.append(f"- {detail['reason']}: {detail['count']}件")
+            lines.append(f"  - prelabel: {detail['prelabels']}")
+            lines.append(f"  - setup status: {detail['statuses']}")
+            lines.append(f"  - setup reason: {detail['setup_reasons']}")
+            lines.append(f"  - risk_flags: {detail['risk_flags']}")
+            if detail["representatives"]:
+                lines.append(f"  - 代表例: {', '.join(detail['representatives'])}")
+    if combo_focus_details:
+        lines.append("")
+        lines.append("## sweep+lower_liquidity の補助flag内訳")
+        for detail in combo_focus_details:
+            lines.append(
+                f"- {detail['reason']}: {detail['count']}件 / 平均 execution={detail['avg_execution']:.1f} / 平均 wait={detail['avg_wait']:.1f}"
+            )
+            lines.append(f"  - 補助flag: {detail['combos']}")
+    if relax_candidates:
+        lines.append("")
+        lines.append("## 緩和候補の少数群")
+        for item in relax_candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: confidence_below_min / prelabel={item['prelabel']} / "
+                f"setup={item['setup_reason']} / execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_relaxation_candidates_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_relax_candidates(filtered_rows)
+
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    setup_reason_counts = Counter(str(row.get("setup_reason", "")).strip() for row in candidates)
+    phase1_reason_counts: Counter[str] = Counter()
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        phase1_reason_counts.update(row["phase1_reasons"])
+        risk_flag_counts.update(row["risk_flags"])
+
+    lines = ["# 緩和候補レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: blocked + confidence_below_min + sweep_incomplete + lower_liquidity_close + 補助 hard flag なし")
+    lines.append(f"- 候補件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- prelabel: {_format_counter(prelabel_counts, limit=5)}")
+        lines.append(f"- setup reason: {_format_counter(setup_reason_counts, limit=5)}")
+        lines.append(f"- phase1 reasons: {_format_counter(phase1_reason_counts, limit=5)}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(
+            f"- 平均 execution={_mean_value(candidates, 'execution'):.1f} / 平均 wait={_mean_value(candidates, 'wait'):.1f}"
+        )
+    lines.append("")
+    lines.append("## 候補一覧")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / setup={item['setup_reason']} / "
+                f"execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+    else:
+        lines.append("- 候補はありません")
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
     signal_path = _signal_snapshot_path(base_dir, signal_id)
     payload = load_json(signal_path)
@@ -5799,6 +6172,24 @@ def _build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("--date-to", default="")
     compare_parser.add_argument("--status-transition", default="")
 
+    standard_compare_parser = subparsers.add_parser("refresh-standard-setup-reports")
+    standard_compare_parser.add_argument("--analysis-dir")
+    standard_compare_parser.add_argument("--limit", type=int, default=20)
+    standard_compare_parser.add_argument("--date-from", default="")
+    standard_compare_parser.add_argument("--date-to", default="")
+
+    focus_parser = subparsers.add_parser("build-operational-focus-report")
+    focus_parser.add_argument("--output-md")
+    focus_parser.add_argument("--date-from", default="")
+    focus_parser.add_argument("--date-to", default="")
+    focus_parser.add_argument("--limit", type=int, default=5)
+
+    relaxation_parser = subparsers.add_parser("build-relaxation-candidates-report")
+    relaxation_parser.add_argument("--output-md")
+    relaxation_parser.add_argument("--date-from", default="")
+    relaxation_parser.add_argument("--date-to", default="")
+    relaxation_parser.add_argument("--limit", type=int, default=20)
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -5868,6 +6259,48 @@ def main() -> None:
         )
         if args.output_md:
             print(Path(args.output_md))
+        else:
+            print(report)
+        return
+
+    if args.command == "refresh-standard-setup-reports":
+        generated = refresh_standard_setup_comparison_reports(
+            base_dir=base_dir,
+            analysis_dir=Path(args.analysis_dir) if args.analysis_dir else None,
+            limit=int(args.limit),
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        for key, path in generated.items():
+            print(f"{key}={path}")
+        return
+
+    if args.command == "build-operational-focus-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_operational_focus_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-relaxation-candidates-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_relaxation_candidates_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
         else:
             print(report)
         return

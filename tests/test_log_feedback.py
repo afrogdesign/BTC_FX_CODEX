@@ -40,11 +40,14 @@ from tools.log_feedback import (
     build_current_setup_comparison_report,
     build_feedback_report,
     build_observation_paper_orders,
+    build_operational_focus_report,
+    build_relaxation_candidates_report,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
     import_reviews,
     main,
+    refresh_standard_setup_comparison_reports,
     sync_ai_post_reviews,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
@@ -2540,6 +2543,316 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("cmp_keep: invalid/rr_below_min -> watch/entry_zone_not_reached", report)
             self.assertNotIn("cmp_drop", report)
             self.assertNotIn("cmp_old", report)
+
+    def test_refresh_standard_setup_comparison_reports_generates_three_standard_reports(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            signals_dir = base_dir / "logs" / "signals"
+            signals_dir.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_entry",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "prelabel": "RISKY_ENTRY",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "rr_below_min",
+                        "was_notified": "true",
+                        "risk_flags": "sweep_incomplete,orderbook_ask_heavy",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "cmp_conf",
+                        "timestamp_jst": "2026-04-24T04:05:00+09:00",
+                        "prelabel": "SWEEP_WAIT",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "rr_below_min",
+                        "was_notified": "false",
+                        "risk_flags": "sweep_incomplete",
+                        "confidence_execution_shadow": "11",
+                        "confidence_wait_shadow": "100",
+                    }
+                )
+            entry_payload = {
+                "signal_id": "cmp_entry",
+                "primary_setup_side": "long",
+                "bias": "long",
+                "current_price": 75748.9,
+                "atr_15m_value": 213.1,
+                "confidence": 58,
+                "atr_ratio": 0.94,
+                "funding_rate_pct": 0.0043,
+                "volume_ratio": 4.07,
+                "trigger_volume_ratio_threshold": 1.15,
+                "breakout_up": False,
+                "warning_flags": [],
+                "support_zones_all": [
+                    {"low": 74926.6, "high": 75002.6},
+                    {"low": 74720.7, "high": 74885.4},
+                ],
+                "resistance_zones_all": [
+                    {"low": 75962.0, "high": 76038.0},
+                ],
+            }
+            confidence_payload = {
+                "signal_id": "cmp_conf",
+                "primary_setup_side": "long",
+                "bias": "long",
+                "current_price": 77740.8,
+                "atr_15m_value": 100.0,
+                "confidence": 17,
+                "atr_ratio": 0.94,
+                "funding_rate_pct": 0.0043,
+                "volume_ratio": 1.2,
+                "trigger_volume_ratio_threshold": 1.15,
+                "breakout_up": False,
+                "warning_flags": [],
+                "support_zones_all": [
+                    {"low": 77695.07, "high": 77793.93},
+                ],
+                "resistance_zones_all": [
+                    {"low": 77765.27, "high": 77864.13},
+                ],
+            }
+            (signals_dir / "cmp_entry.json").write_text(json.dumps(entry_payload, ensure_ascii=False), encoding="utf-8")
+            (signals_dir / "cmp_conf.json").write_text(json.dumps(confidence_payload, ensure_ascii=False), encoding="utf-8")
+
+            generated = refresh_standard_setup_comparison_reports(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                analysis_dir=base_dir / "analysis",
+                date_from="2026-04-24",
+                date_to="2026-04-24",
+            )
+
+            self.assertEqual(
+                set(generated.keys()),
+                {
+                    "notified_rr_to_entry",
+                    "notified_rr_to_entry_orderbook_ask_heavy",
+                    "rr_to_confidence",
+                },
+            )
+            self.assertIn("現行 setup との差分あり: 1", generated["notified_rr_to_entry"].read_text(encoding="utf-8"))
+            self.assertIn("risk_flag=orderbook_ask_heavy", generated["notified_rr_to_entry_orderbook_ask_heavy"].read_text(encoding="utf-8"))
+            self.assertIn("rr_below_min->confidence_below_min=1件", generated["rr_to_confidence"].read_text(encoding="utf-8"))
+
+    def test_main_refresh_standard_setup_reports_accepts_optional_analysis_dir(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "refresh-standard-setup-reports", "--analysis-dir", "/tmp/analysis"]), patch(
+            "tools.log_feedback.refresh_standard_setup_comparison_reports"
+        ) as mocked_refresh:
+            mocked_refresh.return_value = {"sample": Path("/tmp/analysis/sample.md")}
+
+            main()
+
+        mocked_refresh.assert_called_once()
+        self.assertEqual(mocked_refresh.call_args.kwargs["analysis_dir"], Path("/tmp/analysis"))
+
+    def test_build_operational_focus_report_summarizes_backlog_and_phase1_bias(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "backlog_1",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "was_notified": "true",
+                        "evaluation_status": "complete",
+                        "review_source": "",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "prelabel": "SWEEP_WAIT",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "setup_watch_learning",
+                        "confidence_execution_shadow": "8",
+                        "confidence_wait_shadow": "72",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "signal_tier": "normal",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "backlog_2",
+                        "timestamp_jst": "2026-04-22T03:05:00+09:00",
+                        "was_notified": "true",
+                        "evaluation_status": "complete",
+                        "review_source": "",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "RISKY_ENTRY",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_type": "",
+                        "phase1_observation_reasons": "confidence_below_min,no_trade_candidate",
+                        "confidence_execution_shadow": "14",
+                        "confidence_wait_shadow": "90",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close,orderbook_ask_heavy",
+                        "signal_tier": "normal",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "backlog_3",
+                        "timestamp_jst": "2026-04-22T02:05:00+09:00",
+                        "was_notified": "true",
+                        "evaluation_status": "complete",
+                        "review_source": "",
+                        "primary_setup_status": "invalid",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "SWEEP_WAIT",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_type": "",
+                        "phase1_observation_reasons": "confidence_below_min",
+                        "confidence_execution_shadow": "10",
+                        "confidence_wait_shadow": "88",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "signal_tier": "normal",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "done_ai",
+                        "timestamp_jst": "2026-04-24T04:05:00+09:00",
+                        "was_notified": "true",
+                        "evaluation_status": "complete",
+                        "review_source": "ai",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "near_entry_zone_waiting_trigger",
+                        "prelabel": "SWEEP_WAIT",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "setup_watch_learning",
+                        "confidence_execution_shadow": "9",
+                        "confidence_wait_shadow": "65",
+                        "risk_flags": "sweep_incomplete",
+                        "signal_tier": "normal",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "direction_1",
+                        "timestamp_jst": "2026-04-24T05:05:00+09:00",
+                        "was_notified": "false",
+                        "evaluation_status": "complete",
+                        "review_source": "",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "prelabel": "RISKY_ENTRY",
+                        "phase1_observation_gate": "pass",
+                        "phase1_observation_type": "direction_rr_learning",
+                        "confidence_execution_shadow": "31",
+                        "confidence_wait_shadow": "22",
+                        "risk_flags": "ask_wall_close",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            report = build_operational_focus_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-04-22",
+                date_to="2026-04-24",
+                limit=3,
+            )
+
+            self.assertIn("- 未処理 backlog 候補: 3件", report)
+            self.assertIn("- 年齢分布:", report)
+            self.assertIn("- phase1 観測タイプ: setup_watch_learning=1件", report)
+            self.assertIn("- pass: 3件 / blocked: 2件", report)
+            self.assertIn("- pass 内訳: setup_watch_learning=2件, direction_rr_learning=1件", report)
+            self.assertIn("- 主な blocked 理由: confidence_below_min=2件, no_trade_candidate=1件", report)
+            self.assertIn("- setup_watch_learning: 2件 / 平均 execution=8.5 / 平均 wait=68.5", report)
+            self.assertIn("- direction_rr_learning: 1件 / 平均 execution=31.0 / 平均 wait=22.0", report)
+            self.assertIn("## blocked 上位理由の内訳", report)
+            self.assertIn("- confidence_below_min: 2件", report)
+            self.assertIn("  - prelabel: RISKY_ENTRY=1件, SWEEP_WAIT=1件", report)
+            self.assertIn("  - risk_flags: sweep_incomplete=2件, lower_liquidity_close=2件, orderbook_ask_heavy=1件", report)
+            self.assertIn("## sweep+lower_liquidity の補助flag内訳", report)
+            self.assertIn("- confidence_below_min: 2件 / 平均 execution=12.0 / 平均 wait=89.0", report)
+            self.assertIn("  - 補助flag: orderbook_ask_heavy=1件, 補助flagなし=1件", report)
+            self.assertIn("## 緩和候補の少数群", report)
+            self.assertIn("- backlog_3: confidence_below_min / prelabel=SWEEP_WAIT / setup=confidence_below_min / execution=10.0 / wait=88.0", report)
+
+    def test_main_build_operational_focus_report_accepts_output_path(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "build-operational-focus-report", "--output-md", "/tmp/focus.md"]), patch(
+            "tools.log_feedback.build_operational_focus_report"
+        ) as mocked_focus:
+            mocked_focus.return_value = "# report\n"
+
+            main()
+
+        mocked_focus.assert_called_once()
+        self.assertEqual(mocked_focus.call_args.kwargs["output_md"], Path("/tmp/focus.md"))
+
+    def test_build_relaxation_candidates_report_lists_softer_confidence_candidates(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "soft_1",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_reasons": "confidence_below_min",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "SWEEP_WAIT",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "confidence_execution_shadow": "10",
+                        "confidence_wait_shadow": "88",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "hard_1",
+                        "timestamp_jst": "2026-04-24T02:05:00+09:00",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_reasons": "confidence_below_min",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "RISKY_ENTRY",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close,orderbook_ask_heavy",
+                        "confidence_execution_shadow": "14",
+                        "confidence_wait_shadow": "90",
+                    }
+                )
+
+            report = build_relaxation_candidates_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-04-24",
+                date_to="2026-04-24",
+            )
+
+            self.assertIn("- 候補件数: 1件", report)
+            self.assertIn("- prelabel: SWEEP_WAIT=1件", report)
+            self.assertIn("- phase1 reasons: confidence_below_min=1件", report)
+            self.assertIn("- risk_flags: sweep_incomplete=1件, lower_liquidity_close=1件", report)
+            self.assertIn("- soft_1: 2026-04-24 03:05 / prelabel=SWEEP_WAIT / setup=confidence_below_min / execution=10.0 / wait=88.0", report)
+            self.assertNotIn("hard_1", report)
+
+    def test_main_build_relaxation_candidates_report_accepts_output_path(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "build-relaxation-candidates-report", "--output-md", "/tmp/relax.md"]), patch(
+            "tools.log_feedback.build_relaxation_candidates_report"
+        ) as mocked_report:
+            mocked_report.return_value = "# relax\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/relax.md"))
 
 
 if __name__ == "__main__":
