@@ -38,6 +38,7 @@
 - `build-failed-breakout-down-reversal-report` を追加し、`breakout_up` を含むロング watch が `wrong + poor_entry + MAE24h>=5.0` で終わった失敗型を専用レポートで追えるようにした。
 - `src/analysis/market_map.py` を追加し、複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを作り、`support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log に流せるようにした。
 - `build-market-map-effectiveness-report` を追加し、`market_map_flags` 別の勝率、wrong_rate、平均MFE/MAE、代表例を `shadow_log.csv` から追えるようにした。
+- メール文言にも `market_map` 系の日本語ラベルを追加し、主要レジサポ接近、サポレジ転換、失敗ブレイク、トレンド転換初動が「内部要因」ではなく具体的な注意点として出るようにした。
 - 作業ブランチ `ver02.5-v5` を作成し、現時点のコード・資料・日次レポート群を commit `2a0ca4b` として `origin/ver02.5-v5` へ push 済み。
 - `2026-04-30` の更新では、`refresh-standard-setup-reports --date-from 2026-04-18 --date-to 2026-04-29` を再実行し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` のまま維持されることを確認した。
 - 同日の `operational_focus_20260429.md` では、同期間の backlog 候補 18 件、`phase1 pass=33件 / blocked=232件`、pass 内訳 `setup_watch_learning=32件`、`direction_rr_learning=1件` を確認した。

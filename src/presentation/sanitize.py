@@ -95,7 +95,36 @@ _CODE_LABELS = {
     "wait_pressure": "待機圧力",
     "long_reversal_risk": "上方向監視だが下落警戒",
     "failed_breakout_down_reversal": "上抜け失敗後の下落転換型",
+    "failed_breakout_up_reversal": "下抜け失敗後の上昇転換型",
+    "major_resistance_rejection": "主要レジスタンスで上値を拒否",
+    "major_support_rejection": "主要サポートで下値を拒否",
+    "long_into_major_resistance": "ロングは主要レジスタンス接近で追いかけ注意",
+    "short_into_major_support": "ショートは主要サポート接近で追いかけ注意",
+    "support_to_resistance_flip": "割れたサポートがレジスタンス化",
+    "resistance_to_support_flip": "上抜けたレジスタンスがサポート化",
+    "support_to_resistance_retest_confirmed": "サポート割れ後の戻り売り確認",
+    "resistance_to_support_retest_confirmed": "レジスタンス上抜け後の押し目確認",
+    "trend_flip_confirmed_down": "下方向への転換を確認",
+    "trend_flip_confirmed_up": "上方向への転換を確認",
+    "trend_flip_early_down": "下方向転換の初動に注意",
+    "trend_flip_early_up": "上方向転換の初動に注意",
 }
+
+_HEADLINE_PRIORITY_CODES = [
+    "long_reversal_risk",
+    "trend_flip_confirmed_down",
+    "trend_flip_confirmed_up",
+    "failed_breakout_down_reversal",
+    "failed_breakout_up_reversal",
+    "support_to_resistance_retest_confirmed",
+    "resistance_to_support_retest_confirmed",
+    "support_to_resistance_flip",
+    "resistance_to_support_flip",
+    "major_resistance_rejection",
+    "major_support_rejection",
+    "long_into_major_resistance",
+    "short_into_major_support",
+]
 
 _UNKNOWN_CODE_PATTERN = re.compile(r"\b[A-Za-z]+(?:_[A-Za-z0-9]+)+\b")
 
@@ -303,11 +332,14 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _headline_reason_labels(result: dict[str, Any], limit: int = 3) -> list[str]:
+    raw_codes = [str(code).strip() for code in _reason_sources(result) if str(code).strip()]
     labels = sanitize_reason_codes(_reason_sources(result))
-    if "long_reversal_risk" in {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}:
-        prioritized = [_CODE_LABELS["long_reversal_risk"]]
-        prioritized.extend(label for label in labels if label != _CODE_LABELS["long_reversal_risk"])
-        labels = prioritized
+    prioritized: list[str] = []
+    for code in _HEADLINE_PRIORITY_CODES:
+        if code in raw_codes and code in _CODE_LABELS:
+            prioritized.append(_CODE_LABELS[code])
+    prioritized.extend(label for label in labels if label not in prioritized)
+    labels = prioritized
     if labels:
         return labels[:limit]
     fallback_reason = sanitize_user_text(result.get("invalid_reason", "")) or "大きな待機理由は出ていません"
@@ -361,8 +393,13 @@ def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str
         return "no_send", "送信なし", "⚪", "メール送信条件は未成立"
 
     risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
-    if "long_reversal_risk" in risk_flags and status_code == "monitor":
-        return "normal_main", "通常の本通知", "📊", "下落警戒を優先して標準扱いに抑制"
+    if status_code == "monitor":
+        if "long_reversal_risk" in risk_flags:
+            return "normal_main", "通常の本通知", "📊", "下落警戒を優先して標準扱いに抑制"
+        if "failed_breakout_down_reversal" in risk_flags or "support_to_resistance_flip" in risk_flags:
+            return "normal_main", "通常の本通知", "📊", "上抜け失敗・戻り売り警戒を優先して標準扱いに抑制"
+        if "failed_breakout_up_reversal" in risk_flags or "resistance_to_support_flip" in risk_flags:
+            return "normal_main", "通常の本通知", "📊", "下抜け失敗・押し目確認を優先して標準扱いに抑制"
 
     execution_shadow = _safe_float(result.get("confidence_execution_shadow"))
     wait_shadow = _safe_float(result.get("confidence_wait_shadow"))
@@ -406,6 +443,18 @@ def _next_condition_label(result: dict[str, Any]) -> str:
     prelabel = str(result.get("prelabel", "")).upper()
     risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
     reason_code = _primary_setup_reason(result)
+    if "failed_breakout_down_reversal" in risk_flags:
+        return "上抜け失敗後、戻りが主要レジスタンスで止まるか再評価"
+    if "support_to_resistance_retest_confirmed" in risk_flags or "support_to_resistance_flip" in risk_flags:
+        return "割れたサポートが戻り売り抵抗として機能するか再評価"
+    if "trend_flip_confirmed_down" in risk_flags or "trend_flip_early_down" in risk_flags:
+        return "下方向転換が1時間足でも継続するか再評価"
+    if "failed_breakout_up_reversal" in risk_flags:
+        return "下抜け失敗後、押し目が主要サポートで止まるか再評価"
+    if "resistance_to_support_retest_confirmed" in risk_flags or "resistance_to_support_flip" in risk_flags:
+        return "上抜けたレジスタンスが押し目サポートとして機能するか再評価"
+    if "trend_flip_confirmed_up" in risk_flags or "trend_flip_early_up" in risk_flags:
+        return "上方向転換が1時間足でも継続するか再評価"
     if prelabel == "SWEEP_WAIT" or "sweep_incomplete" in risk_flags:
         if bias == "short" or "upper_liquidity_close" in risk_flags:
             return "上側流動性スイープ完了後に再評価"
@@ -421,6 +470,25 @@ def _next_condition_label(result: dict[str, Any]) -> str:
 
 def _invalidation_label(result: dict[str, Any]) -> str:
     bias = str(result.get("bias", "")).lower()
+    risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
+    nearest_support = result.get("nearest_major_support") or {}
+    nearest_resistance = result.get("nearest_major_resistance") or {}
+    if "failed_breakout_down_reversal" in risk_flags or "support_to_resistance_flip" in risk_flags:
+        try:
+            high = float(nearest_resistance.get("high", 0.0))
+            if high > 0:
+                return f"主要レジスタンス {high:,.2f} を明確に上抜けたら下落警戒は弱まる"
+        except (TypeError, ValueError):
+            pass
+        return "主要レジスタンスを明確に上抜けたら下落警戒は弱まる"
+    if "failed_breakout_up_reversal" in risk_flags or "resistance_to_support_flip" in risk_flags:
+        try:
+            low = float(nearest_support.get("low", 0.0))
+            if low > 0:
+                return f"主要サポート {low:,.2f} を明確に割れたら上昇警戒は弱まる"
+        except (TypeError, ValueError):
+            pass
+        return "主要サポートを明確に割れたら上昇警戒は弱まる"
     stop_loss = result.get("primary_stop_loss")
     try:
         stop_loss_value = float(stop_loss)

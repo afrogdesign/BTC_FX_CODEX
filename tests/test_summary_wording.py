@@ -114,3 +114,71 @@ class SummaryWordingTest(unittest.TestCase):
         self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
         self.assertIn("執行判断: 監視継続（実行不可）", body)
         self.assertIn("位置評価: 位置は悪くないが未到達", body)
+
+    def test_market_map_down_reversal_is_explained_without_internal_codes(self) -> None:
+        body = self._build(
+            {
+                "bias": "long",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "trade_execution_gate": "blocked",
+                "notification_kind": "main",
+                "confidence": 68,
+                "rr_estimate": 1.4,
+                "score_gap": 24,
+                "risk_flags": [
+                    "failed_breakout_down_reversal",
+                    "support_to_resistance_flip",
+                    "long_into_major_resistance",
+                ],
+                "no_trade_flags": [],
+                "nearest_major_resistance": {"low": 105.0, "high": 106.0},
+                "long_setup": {"status": "watch", "entry_zone": {"low": 101, "high": 102}, "stop_loss": 99, "tp1": 104, "tp2": 105},
+                "short_setup": {"status": "watch", "entry_zone": {"low": 103, "high": 104}, "stop_loss": 106, "tp1": 100, "tp2": 98},
+            }
+        )
+
+        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
+        self.assertIn("最終ランク: 📊 通常の本通知（上抜け失敗・戻り売り警戒を優先して標準扱いに抑制）", body)
+        self.assertIn("上抜け失敗後の下落転換型", body)
+        self.assertIn("割れたサポートがレジスタンス化", body)
+        self.assertIn("ロングは主要レジスタンス接近で追いかけ注意", body)
+        self.assertIn("上抜け失敗後、戻りが主要レジスタンスで止まるか再評価", body)
+        self.assertIn("主要レジスタンス 106.00 を明確に上抜けたら下落警戒は弱まる", body)
+        self.assertNotIn("failed_breakout_down_reversal", body)
+        self.assertNotIn("support_to_resistance_flip", body)
+        self.assertNotIn("long_into_major_resistance", body)
+
+    def test_market_map_up_reversal_is_explained_without_internal_codes(self) -> None:
+        body = self._build(
+            {
+                "bias": "short",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "trade_execution_gate": "blocked",
+                "notification_kind": "main",
+                "confidence": 68,
+                "rr_estimate": 1.4,
+                "score_gap": -24,
+                "risk_flags": [
+                    "failed_breakout_up_reversal",
+                    "resistance_to_support_flip",
+                    "short_into_major_support",
+                ],
+                "no_trade_flags": [],
+                "nearest_major_support": {"low": 95.0, "high": 96.0},
+                "long_setup": {"status": "watch", "entry_zone": {"low": 96, "high": 97}, "stop_loss": 94, "tp1": 100, "tp2": 102},
+                "short_setup": {"status": "watch", "entry_zone": {"low": 99, "high": 100}, "stop_loss": 102, "tp1": 96, "tp2": 94},
+            }
+        )
+
+        self.assertIn("最終ランク: 📊 通常の本通知（下抜け失敗・押し目確認を優先して標準扱いに抑制）", body)
+        self.assertIn("下抜け失敗後の上昇転換型", body)
+        self.assertIn("上抜けたレジスタンスがサポート化", body)
+        self.assertIn("ショートは主要サポート接近で追いかけ注意", body)
+        self.assertIn("下抜け失敗後、押し目が主要サポートで止まるか再評価", body)
+        self.assertIn("主要サポート 95.00 を明確に割れたら上昇警戒は弱まる", body)
+        self.assertNotIn("failed_breakout_up_reversal", body)
+        self.assertNotIn("resistance_to_support_flip", body)
