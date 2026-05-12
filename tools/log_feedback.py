@@ -31,7 +31,11 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
-from src.trade.observation_gate import determine_phase1_observation_gate, is_confidence_watch_learning_candidate
+from src.trade.observation_gate import (
+    determine_phase1_observation_gate,
+    is_confidence_watch_learning_candidate,
+    is_counter_long_short_watch_candidate,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -201,6 +205,14 @@ SHADOW_HEADER = [
     "price",
     "bias",
     "regime",
+    "market_map_primary_state",
+    "market_map_flags",
+    "nearest_major_support",
+    "nearest_major_resistance",
+    "active_level_role",
+    "level_flip_state",
+    "failed_breakout_state",
+    "trend_flip_state",
     "phase",
     "long_score",
     "short_score",
@@ -1026,6 +1038,101 @@ def _collect_confidence_watch_learning_candidates(rows: list[dict[str, str]]) ->
     return candidates
 
 
+def _collect_counter_long_short_watch_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if not is_counter_long_short_watch_candidate(
+            bias=str(row.get("bias", "")),
+            primary_setup_side=str(row.get("primary_setup_side", "")),
+            primary_setup_status=str(row.get("primary_setup_status", "")),
+            primary_setup_reason=str(row.get("primary_setup_reason", "")),
+            secondary_setup_status=str(row.get("short_status", "")) if str(row.get("bias", "")) == "long" else str(row.get("long_status", "")),
+            risk_flags=risk_flags,
+            confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+        ):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "bias": str(row.get("bias", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def _top_factor_codes(row: dict[str, str]) -> list[str]:
+    value = str(row.get("top_positive_factors", "")).strip()
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    codes: list[str] = []
+    for item in parsed:
+        if isinstance(item, dict):
+            code = str(item.get("code", "")).strip()
+            if code:
+                codes.append(code)
+    return codes
+
+
+def _collect_failed_breakout_down_reversal_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("bias", "")).strip() != "long":
+            continue
+        if str(row.get("phase", "")).strip() != "breakout":
+            continue
+        top_factor_codes = _top_factor_codes(row)
+        if "breakout_up" not in top_factor_codes:
+            continue
+        if str(row.get("primary_setup_status", "")).strip() != "watch":
+            continue
+        if str(row.get("direction_outcome", "")).strip() != "wrong":
+            continue
+        if str(row.get("entry_outcome", "")).strip() != "poor_entry":
+            continue
+        if _parse_float(row.get("signal_based_MAE_24h"), 0.0) < 5.0:
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        notify_reasons = _split_values(str(row.get("notify_reason", "")))
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "long_score": _parse_float(row.get("long_score"), 0.0),
+                "short_score": _parse_float(row.get("short_score"), 0.0),
+                "score_gap": _parse_float(row.get("score_gap"), 0.0),
+                "mfe24h": _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+                "mae24h": _parse_float(row.get("signal_based_MAE_24h"), 0.0),
+                "risk_flags": risk_flags,
+                "notify_reasons": notify_reasons,
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
 def build_operational_focus_report(
     *,
     base_dir: Path,
@@ -1360,6 +1467,169 @@ def build_phase1b_promotion_report(
             )
     else:
         lines.append("- 候補はありません")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_failed_breakout_down_reversal_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_failed_breakout_down_reversal_candidates(filtered_rows)
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+        notify_reason_counts.update(row["notify_reasons"])
+
+    lines = ["# failed_breakout_down_reversal レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: bias=long + phase=breakout + top_positive_factors に breakout_up + watch + direction_outcome=wrong + entry_outcome=poor_entry + MAE24h>=5.0")
+    lines.append(f"- 件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- 平均MFE24h={_mean_value(candidates, 'mfe24h'):.2f} / 平均MAE24h={_mean_value(candidates, 'mae24h'):.2f}")
+        lines.append(f"- 平均 long_score={_mean_value(candidates, 'long_score'):.1f} / 平均 short_score={_mean_value(candidates, 'short_score'):.1f} / 平均 gap={_mean_value(candidates, 'score_gap'):.1f}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(f"- notify_reason: {_format_counter(notify_reason_counts, limit=5)}")
+    lines.append("")
+    lines.append("## 代表例")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / setup={item['setup_reason']} / "
+                f"long={item['long_score']:.1f} / short={item['short_score']:.1f} / gap={item['score_gap']:.1f} / "
+                f"MFE24h={item['mfe24h']:.2f} / MAE24h={item['mae24h']:.2f}"
+            )
+    else:
+        lines.append("- 該当候補はありません")
+    lines.append("")
+    lines.append("## 次に触る候補")
+    lines.append("- src/analysis/scoring.py")
+    lines.append("- src/presentation/sanitize.py")
+    lines.append("- src/trade/observation_gate.py")
+    lines.append("- tools/log_feedback.py")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _market_map_group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    settled = [flag for flag in (_success_flag(row) for row in rows) if flag is not None]
+    wrong_count = sum(1 for row in rows if str(row.get("direction_outcome", "")).strip() == "wrong")
+    return {
+        "count": len(rows),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "wrong_rate": _ratio(wrong_count, len(rows)),
+        "avg_mfe": _mean_value(rows, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(rows, "signal_based_MAE_24h"),
+        "representatives": [str(row.get("signal_id", "")).strip() for row in rows[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def build_market_map_effectiveness_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    market_rows = [
+        row
+        for row in filtered_rows
+        if str(row.get("market_map_primary_state", "")).strip()
+        or _split_values(str(row.get("market_map_flags", "")))
+        or str(row.get("level_flip_state", "")).strip()
+        or str(row.get("failed_breakout_state", "")).strip()
+    ]
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    flip_counts: Counter[str] = Counter()
+    failed_counts: Counter[str] = Counter()
+    trend_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+        flip = str(row.get("level_flip_state", "")).strip()
+        if flip:
+            flip_counts[flip] += 1
+        failed = str(row.get("failed_breakout_state", "")).strip()
+        if failed:
+            failed_counts[failed] += 1
+        trend = str(row.get("trend_flip_state", "")).strip()
+        if trend:
+            trend_counts[trend] += 1
+
+    tracked_flags = [
+        "long_into_major_resistance",
+        "short_into_major_support",
+        "failed_breakout_down_reversal",
+        "failed_breakout_up_reversal",
+        "support_to_resistance_flip",
+        "resistance_to_support_flip",
+        "trend_flip_confirmed_down",
+        "trend_flip_confirmed_up",
+    ]
+    grouped: list[tuple[str, dict[str, Any]]] = []
+    for flag in tracked_flags:
+        group_rows = [row for row in market_rows if flag in _split_values(str(row.get("market_map_flags", "")))]
+        if group_rows:
+            grouped.append((flag, _market_map_group_stats(group_rows)))
+    grouped.sort(key=lambda item: item[1]["count"], reverse=True)
+
+    lines = ["# market_map 有効性レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- market_map 記録あり: {len(market_rows)}件")
+    lines.append(f"- primary_state: {_format_counter(primary_counts, limit=8)}")
+    lines.append(f"- market_map_flags: {_format_counter(flag_counts, limit=10)}")
+    lines.append(f"- level_flip_state: {_format_counter(flip_counts, limit=8)}")
+    lines.append(f"- failed_breakout_state: {_format_counter(failed_counts, limit=8)}")
+    lines.append(f"- trend_flip_state: {_format_counter(trend_counts, limit=8)}")
+    lines.append("")
+    lines.append("## flag別成績")
+    if grouped:
+        for flag, stats in grouped[:limit]:
+            lines.append(
+                f"- {flag}: 勝率={_format_pct(stats['win_rate'])}, wrong_rate={_format_pct(stats['wrong_rate'])}, "
+                f"平均MFE24h={stats['avg_mfe']:.2f}, 平均MAE24h={stats['avg_mae']:.2f} (n={stats['count']})"
+            )
+            if stats["representatives"]:
+                lines.append(f"  代表例: {', '.join(stats['representatives'])}")
+    else:
+        lines.append("- 集計対象の market_map flag はまだありません")
+    lines.append("")
+    lines.append("## 次に見る場所")
+    lines.append("- src/analysis/market_map.py")
+    lines.append("- src/analysis/scoring.py")
+    lines.append("- logs/csv/shadow_log.csv")
 
     report = "\n".join(lines) + "\n"
     if output_md is not None:
@@ -4369,6 +4639,7 @@ def build_shadow_log(
             confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
             confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
             confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+            secondary_setup_status=str(trade.get("short_status", "")) if str(trade.get("bias", "")) == "long" else str(trade.get("long_status", "")),
         )
         shadow_rows.append(
             {
@@ -4377,6 +4648,14 @@ def build_shadow_log(
                 "price": trade.get("current_price", ""),
                 "bias": trade.get("bias", ""),
                 "regime": trade.get("market_regime", ""),
+                "market_map_primary_state": trade.get("market_map_primary_state", ""),
+                "market_map_flags": trade.get("market_map_flags", ""),
+                "nearest_major_support": trade.get("nearest_major_support", ""),
+                "nearest_major_resistance": trade.get("nearest_major_resistance", ""),
+                "active_level_role": trade.get("active_level_role", ""),
+                "level_flip_state": trade.get("level_flip_state", ""),
+                "failed_breakout_state": trade.get("failed_breakout_state", ""),
+                "trend_flip_state": trade.get("trend_flip_state", ""),
                 "phase": trade.get("phase", ""),
                 "long_score": trade.get("long_score", trade.get("long_display_score", "")),
                 "short_score": trade.get("short_score", trade.get("short_display_score", "")),
@@ -4491,13 +4770,21 @@ def build_shadow_log(
 
 
 def _observation_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    observation_type = str(row.get("phase1_observation_type", "")).strip()
+    observation_side = row.get("primary_setup_side", "")
+    if observation_type == "counter_long_short_watch":
+        bias = str(row.get("bias", "")).strip()
+        if bias == "long":
+            observation_side = "short"
+        elif bias == "short":
+            observation_side = "long"
     return {
         "signal_id": row.get("signal_id", ""),
         "timestamp_jst": row.get("timestamp_jst", ""),
         "observation_phase": "phase1A",
-        "observation_type": row.get("phase1_observation_type", ""),
+        "observation_type": observation_type,
         "observation_status": "observing",
-        "side": row.get("primary_setup_side", ""),
+        "side": observation_side,
         "reference_price": row.get("current_price", row.get("price", "")),
         "entry_price": row.get("primary_entry_mid", ""),
         "stop_loss_price": row.get("primary_stop_loss", ""),
@@ -4826,6 +5113,7 @@ def _phase1_observation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "direction_rr_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "direction_rr_learning"]),
         "setup_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "setup_watch_learning"]),
         "confidence_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "confidence_watch_learning"]),
+        "counter_long_short_watch": perf([row for row in pass_rows if row.get("phase1_observation_type") == "counter_long_short_watch"]),
         "representatives": representatives,
     }
 
@@ -4849,6 +5137,90 @@ def _phase1b_promotion_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
         "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
         "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _counter_long_short_watch_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_counter_long_short_watch_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+    return {
+        "count": len(candidates),
+        "risk_flags": _format_counter(risk_flag_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _failed_breakout_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_failed_breakout_down_reversal_candidates(rows)
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+        notify_reason_counts.update(row["notify_reasons"])
+    return {
+        "count": len(candidates),
+        "risk_flags": _format_counter(risk_flag_counts, limit=5),
+        "notify_reasons": _format_counter(notify_reason_counts, limit=5),
+        "avg_long_score": _mean_value(candidates, "long_score"),
+        "avg_short_score": _mean_value(candidates, "short_score"),
+        "avg_gap": _mean_value(candidates, "score_gap"),
+        "avg_mfe": _mean_value(candidates, "mfe24h"),
+        "avg_mae": _mean_value(candidates, "mae24h"),
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _market_map_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    market_rows = [
+        row
+        for row in rows
+        if str(row.get("market_map_primary_state", "")).strip()
+        or _split_values(str(row.get("market_map_flags", "")))
+    ]
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    trend_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+        trend = str(row.get("trend_flip_state", "")).strip()
+        if trend:
+            trend_counts[trend] += 1
+
+    down_reversal_rows = [
+        row
+        for row in market_rows
+        if "failed_breakout_down_reversal" in _split_values(str(row.get("market_map_flags", "")))
+        or "support_to_resistance_flip" in _split_values(str(row.get("market_map_flags", "")))
+    ]
+    stats = _market_map_group_stats(down_reversal_rows)
+    return {
+        "count": len(market_rows),
+        "primary_states": _format_counter(primary_counts, limit=5),
+        "flags": _format_counter(flag_counts, limit=8),
+        "trend_states": _format_counter(trend_counts, limit=5),
+        "down_reversal_count": stats["count"],
+        "down_reversal_win_rate": stats["win_rate"],
+        "down_reversal_wrong_rate": stats["wrong_rate"],
+        "down_reversal_avg_mfe": stats["avg_mfe"],
+        "down_reversal_avg_mae": stats["avg_mae"],
+        "representatives": stats["representatives"],
     }
 
 
@@ -5673,6 +6045,9 @@ def build_feedback_report(
         _load_csv_rows(observation_paper_orders_path),
     )
     promotion_summary = _phase1b_promotion_summary(completed)
+    counter_watch_summary = _counter_long_short_watch_summary(completed)
+    failed_breakout_summary = _failed_breakout_summary(completed)
+    market_map_summary = _market_map_summary(completed)
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
     phase1_focus = _phase1_focus_rows(completed)
     phase1_blocker_examples = _phase1_blocker_examples(completed)
@@ -6003,6 +6378,8 @@ def build_feedback_report(
             lines.append(_format_observation_perf("setup_watch_learning", observation_summary["setup_watch_learning"]))
         if observation_summary["confidence_watch_learning"]["count"]:
             lines.append(_format_observation_perf("confidence_watch_learning", observation_summary["confidence_watch_learning"]))
+        if observation_summary["counter_long_short_watch"]["count"]:
+            lines.append(_format_observation_perf("counter_long_short_watch", observation_summary["counter_long_short_watch"]))
         if observation_summary["representatives"]:
             lines.append(f"- 代表例: {', '.join(observation_summary['representatives'])}")
     if observation_summary["blocked_count"]:
@@ -6044,6 +6421,67 @@ def build_feedback_report(
         if promotion_summary["representatives"]:
             lines.append(f"- 代表例: {', '.join(promotion_summary['representatives'])}")
     lines.append("- 扱い: `trade_execution_gate=pass` ではないが、限定条件付きで Phase 1B 候補へ昇格を検討する母集団")
+    lines.append("")
+
+    lines.append("### counter_long_short_watch")
+    lines.append(f"- 候補件数: {counter_watch_summary['count']}件")
+    if counter_watch_summary["count"]:
+        lines.append(f"- risk_flags: {counter_watch_summary['risk_flags']}")
+        lines.append(
+            f"- 勝率={_format_pct(counter_watch_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(counter_watch_summary['tp1_first_rate'])} / "
+            f"近似PF={counter_watch_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={counter_watch_summary['avg_direction']:.1f} / "
+            f"平均 execution={counter_watch_summary['avg_execution']:.1f} / "
+            f"平均 wait={counter_watch_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={counter_watch_summary['avg_mfe']:.2f} / 平均MAE={counter_watch_summary['avg_mae']:.2f}"
+        )
+        if counter_watch_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(counter_watch_summary['representatives'])}")
+    lines.append("- 扱い: ロング監視の失敗初動をショート観測候補として切り出す Phase 1A 母集団")
+    lines.append("")
+
+    lines.append("### failed_breakout_down_reversal")
+    lines.append(f"- 件数: {failed_breakout_summary['count']}件")
+    if failed_breakout_summary["count"]:
+        lines.append(
+            f"- 平均 long_score={failed_breakout_summary['avg_long_score']:.1f} / "
+            f"平均 short_score={failed_breakout_summary['avg_short_score']:.1f} / "
+            f"平均 gap={failed_breakout_summary['avg_gap']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE24h={failed_breakout_summary['avg_mfe']:.2f} / "
+            f"平均MAE24h={failed_breakout_summary['avg_mae']:.2f}"
+        )
+        lines.append(f"- risk_flags: {failed_breakout_summary['risk_flags']}")
+        lines.append(f"- notify_reason: {failed_breakout_summary['notify_reasons']}")
+        if failed_breakout_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(failed_breakout_summary['representatives'])}")
+    lines.append("- 扱い: breakout_up が効かず大きく下落した watch 群の失敗型を継続追跡する")
+    lines.append("")
+
+    lines.append("### market_map")
+    lines.append(f"- 記録あり: {market_map_summary['count']}件")
+    if market_map_summary["count"]:
+        lines.append(f"- primary_state: {market_map_summary['primary_states']}")
+        lines.append(f"- flags: {market_map_summary['flags']}")
+        lines.append(f"- trend_state: {market_map_summary['trend_states']}")
+        lines.append(
+            f"- 下方向反転系: {market_map_summary['down_reversal_count']}件 / "
+            f"勝率={_format_pct(market_map_summary['down_reversal_win_rate'])} / "
+            f"wrong_rate={_format_pct(market_map_summary['down_reversal_wrong_rate'])}"
+        )
+        lines.append(
+            f"- 下方向反転系 平均MFE24h={market_map_summary['down_reversal_avg_mfe']:.2f} / "
+            f"平均MAE24h={market_map_summary['down_reversal_avg_mae']:.2f}"
+        )
+        if market_map_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(market_map_summary['representatives'])}")
+    lines.append("- 扱い: レジサポ実体、役割転換、失敗ブレイクの新判定を後追い検証する")
     lines.append("")
 
     lines.append("### 紙トレード準備")
@@ -6363,6 +6801,18 @@ def _build_parser() -> argparse.ArgumentParser:
     promotion_parser.add_argument("--date-to", default="")
     promotion_parser.add_argument("--limit", type=int, default=20)
 
+    failed_breakout_parser = subparsers.add_parser("build-failed-breakout-down-reversal-report")
+    failed_breakout_parser.add_argument("--output-md")
+    failed_breakout_parser.add_argument("--date-from", default="")
+    failed_breakout_parser.add_argument("--date-to", default="")
+    failed_breakout_parser.add_argument("--limit", type=int, default=20)
+
+    market_map_parser = subparsers.add_parser("build-market-map-effectiveness-report")
+    market_map_parser.add_argument("--output-md")
+    market_map_parser.add_argument("--date-from", default="")
+    market_map_parser.add_argument("--date-to", default="")
+    market_map_parser.add_argument("--limit", type=int, default=20)
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -6481,6 +6931,36 @@ def main() -> None:
     if args.command == "build-phase1b-promotion-report":
         output_md = Path(args.output_md) if args.output_md else None
         report = build_phase1b_promotion_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-failed-breakout-down-reversal-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_failed_breakout_down_reversal_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-market-map-effectiveness-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_market_map_effectiveness_report(
             base_dir=base_dir,
             output_md=output_md,
             date_from=str(args.date_from),

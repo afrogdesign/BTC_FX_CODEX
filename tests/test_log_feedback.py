@@ -38,7 +38,9 @@ from tools.log_feedback import (
     _render_review_form_html,
     backfill_ai_post_review_v2,
     build_current_setup_comparison_report,
+    build_failed_breakout_down_reversal_report,
     build_feedback_report,
+    build_market_map_effectiveness_report,
     build_observation_paper_orders,
     build_operational_focus_report,
     build_phase1b_promotion_report,
@@ -2905,6 +2907,110 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("- promo_1: 2026-04-24 03:05 / prelabel=SWEEP_WAIT / direction=58.0 / execution=22.0 / wait=80.0", report)
             self.assertNotIn("blocked_1", report)
 
+    def test_build_failed_breakout_down_reversal_report_lists_reversal_failures(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "20260429_100500",
+                        "timestamp_jst": "2026-04-29T19:05:00+09:00",
+                        "bias": "long",
+                        "phase": "breakout",
+                        "prelabel": "ENTRY_OK",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "top_positive_factors": '[{"code":"ema_alignment_bullish","score":12},{"code":"breakout_up","score":10}]',
+                        "direction_outcome": "wrong",
+                        "entry_outcome": "poor_entry",
+                        "signal_based_MFE_24h": "1.68",
+                        "signal_based_MAE_24h": "12.27",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close,long_reversal_risk",
+                        "notify_reason": '["confidence_jump","prelabel_improved"]',
+                        "long_score": "92",
+                        "short_score": "50",
+                        "score_gap": "42",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "other_case",
+                        "timestamp_jst": "2026-04-29T18:05:00+09:00",
+                        "bias": "long",
+                        "phase": "breakout",
+                        "prelabel": "ENTRY_OK",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "top_positive_factors": '[{"code":"ema_alignment_bullish","score":12}]',
+                        "direction_outcome": "wrong",
+                        "entry_outcome": "poor_entry",
+                        "signal_based_MFE_24h": "1.00",
+                        "signal_based_MAE_24h": "9.00",
+                    }
+                )
+
+            report = build_failed_breakout_down_reversal_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-04-29",
+                date_to="2026-04-29",
+            )
+
+            self.assertIn("- 件数: 1件", report)
+            self.assertIn("- risk_flags: sweep_incomplete=1件, lower_liquidity_close=1件, long_reversal_risk=1件", report)
+            self.assertIn("20260429_100500", report)
+            self.assertNotIn("other_case", report)
+
+    def test_build_market_map_effectiveness_report_groups_flags(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "map_down_1",
+                        "timestamp_jst": "2026-04-29T19:05:00+09:00",
+                        "market_map_primary_state": "confirmed_down",
+                        "market_map_flags": "failed_breakout_down_reversal,long_into_major_resistance",
+                        "level_flip_state": "support_to_resistance_confirmed",
+                        "failed_breakout_state": "down_reversal",
+                        "trend_flip_state": "confirmed_down",
+                        "direction_outcome": "wrong",
+                        "outcome": "loss",
+                        "signal_based_MFE_24h": "1.5",
+                        "signal_based_MAE_24h": "12.0",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "plain_1",
+                        "timestamp_jst": "2026-04-29T18:05:00+09:00",
+                        "direction_outcome": "correct",
+                        "outcome": "win",
+                    }
+                )
+
+            report = build_market_map_effectiveness_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-04-29",
+                date_to="2026-04-29",
+            )
+
+            self.assertIn("- market_map 記録あり: 1件", report)
+            self.assertIn("failed_breakout_down_reversal=1件", report)
+            self.assertIn("failed_breakout_down_reversal: 勝率=0.0%", report)
+            self.assertIn("map_down_1", report)
+
     def test_main_build_relaxation_candidates_report_accepts_output_path(self) -> None:
         with patch.object(sys, "argv", ["log_feedback.py", "build-relaxation-candidates-report", "--output-md", "/tmp/relax.md"]), patch(
             "tools.log_feedback.build_relaxation_candidates_report"
@@ -2926,6 +3032,32 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/promotion.md"))
+
+    def test_main_build_failed_breakout_down_reversal_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-failed-breakout-down-reversal-report", "--output-md", "/tmp/failed_breakout.md"],
+        ), patch("tools.log_feedback.build_failed_breakout_down_reversal_report") as mocked_report:
+            mocked_report.return_value = "# failed_breakout\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/failed_breakout.md"))
+
+    def test_main_build_market_map_effectiveness_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-market-map-effectiveness-report", "--output-md", "/tmp/market_map.md"],
+        ), patch("tools.log_feedback.build_market_map_effectiveness_report") as mocked_report:
+            mocked_report.return_value = "# market_map\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/market_map.md"))
 
 
 if __name__ == "__main__":

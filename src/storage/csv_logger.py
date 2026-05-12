@@ -17,6 +17,14 @@ CSV_HEADER = [
     "phase",
     "market_regime",
     "transition_direction",
+    "market_map_primary_state",
+    "market_map_flags",
+    "nearest_major_support",
+    "nearest_major_resistance",
+    "active_level_role",
+    "level_flip_state",
+    "failed_breakout_state",
+    "trend_flip_state",
     "long_score",
     "short_score",
     "long_display_score",
@@ -147,6 +155,14 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "phase": payload.get("phase"),
         "market_regime": payload.get("market_regime"),
         "transition_direction": payload.get("transition_direction"),
+        "market_map_primary_state": payload.get("market_map_primary_state"),
+        "market_map_flags": ",".join(payload.get("market_map_flags", [])),
+        "nearest_major_support": json_dumps(payload.get("nearest_major_support")),
+        "nearest_major_resistance": json_dumps(payload.get("nearest_major_resistance")),
+        "active_level_role": payload.get("active_level_role"),
+        "level_flip_state": payload.get("level_flip_state"),
+        "failed_breakout_state": payload.get("failed_breakout_state"),
+        "trend_flip_state": payload.get("trend_flip_state"),
         "long_score": payload.get("long_score"),
         "short_score": payload.get("short_score"),
         "long_display_score": payload.get("long_display_score"),
@@ -375,14 +391,23 @@ def append_observation_paper_order(base_dir: Path, payload: dict[str, Any]) -> P
     if signal_id and any(str(row.get("signal_id", "")).strip() == signal_id for row in existing_rows):
         return path
 
+    observation_type = str(payload.get("phase1_observation_type", "")).strip()
+    observation_side = payload.get("primary_setup_side", "")
+    if observation_type == "counter_long_short_watch":
+        bias = str(payload.get("bias", "")).strip()
+        if bias == "long":
+            observation_side = "short"
+        elif bias == "short":
+            observation_side = "long"
+
     json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
     row = {
         "signal_id": signal_id,
         "timestamp_jst": payload.get("timestamp_jst", ""),
         "observation_phase": "phase1A",
-        "observation_type": payload.get("phase1_observation_type", ""),
+        "observation_type": observation_type,
         "observation_status": "observing",
-        "side": payload.get("primary_setup_side", ""),
+        "side": observation_side,
         "reference_price": payload.get("current_price", ""),
         "entry_price": payload.get("primary_entry_mid", ""),
         "stop_loss_price": payload.get("primary_stop_loss", ""),

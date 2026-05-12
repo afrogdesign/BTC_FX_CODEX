@@ -6,7 +6,7 @@
 
 ## 現在の状況
 
-- 主系統は `iMac 2019` の `ver02.5-v4`。`Phase 0` 本番観測中で、`Phase 1A` 観測紙トレードを継続中。`Phase 1B` の実行候補はまだ 0 件。
+- 主系統は `iMac 2019` の `ver02.5-v5`。`Phase 0` 本番観測中で、`Phase 1A` 観測紙トレードを継続中。`Phase 1B` の実行候補はまだ 0 件。
 - 最新レポートは `運用資料/reports/feedback_daily_sync_20260430.md`。完了 29 件、近似PF 1.10、全体勝率 44.8%。
 - `phase1_observation_gate=pass` は 8 件。内訳は `setup_watch_learning=8件`。
 - `trade_execution_gate=pass` は 0 件、`paper_orders planned=0件`。`Phase 1B` の開始条件は未達。
@@ -34,6 +34,11 @@
 - `watch + trade_execution_gate=blocked` の本通知は、件名を `上方向バイアス` ではなく `上方向監視` と読める形に変え、本文冒頭にも「これは実行候補ではありません」を追加した。
 - `long_reversal_risk` を追加し、`transition/down + watch + sweep_incomplete` かつ抵抗要因ありのロング監視は `通常の本通知` へ抑制しつつ、通知理由に `下落警戒` を出せるようにした。
 - `src/analysis/scoring.py` では `transition/down + breakout_up` に反転ペナルティを足し、上抜け失敗の下落初動をスコア上でも少し重く見るようにした。
+- `counter_long_short_watch` を Phase 1A 観測候補に追加し、`long_reversal_risk` が出たロング監視で反対側 short setup が `watch/ready` のものを、ショート観測候補として `observation_paper_orders` へ落とせるようにした。
+- `build-failed-breakout-down-reversal-report` を追加し、`breakout_up` を含むロング watch が `wrong + poor_entry + MAE24h>=5.0` で終わった失敗型を専用レポートで追えるようにした。
+- `src/analysis/market_map.py` を追加し、複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを作り、`support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log に流せるようにした。
+- `build-market-map-effectiveness-report` を追加し、`market_map_flags` 別の勝率、wrong_rate、平均MFE/MAE、代表例を `shadow_log.csv` から追えるようにした。
+- 作業ブランチ `ver02.5-v5` を作成し、現時点のコード・資料・日次レポート群を commit `2a0ca4b` として `origin/ver02.5-v5` へ push 済み。
 - `2026-04-30` の更新では、`refresh-standard-setup-reports --date-from 2026-04-18 --date-to 2026-04-29` を再実行し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` のまま維持されることを確認した。
 - 同日の `operational_focus_20260429.md` では、同期間の backlog 候補 18 件、`phase1 pass=33件 / blocked=232件`、pass 内訳 `setup_watch_learning=32件`、`direction_rr_learning=1件` を確認した。
 - 同レポートの blocked 上位内訳では、`confidence_below_min=147件` は `SWEEP_WAIT=71件`、`NO_TRADE_CANDIDATE=60件`、`RISKY_ENTRY=16件` に分かれ、`no_trade_candidate=81件` は `NO_TRADE_CANDIDATE` 固定が続いた。
@@ -75,9 +80,10 @@
 7. `no_trade_candidate=81件` がほぼ `NO_TRADE_CANDIDATE` 固定で、`sweep_incomplete + lower_liquidity_close` に寄っているため、この組み合わせの hard flag 扱いは維持寄りで見る。
 8. 緩和を検討するなら、まず `confidence_below_min` かつ `sweep_incomplete + lower_liquidity_close` でも `補助flagなし` の少数群 23 件だけを次回比較で追う。
 9. `build-phase1b-promotion-report` で出た 2 件の型、特に `20260424_130500` が次回以降も再現するかを見る。2 件の成績が弱いため、件数が増えるまでは gate 緩和へ進まない。
-10. `ロング誤判定と下落取り逃し改善計画_20260430.md` のうち、文面誤読防止と `long_reversal_risk` は実装済み。次は `failed_breakout_down_reversal` 集計と `counter_long_short_watch` の観測候補化を追加する。
-11. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ、backlog `53件` と新規帯 backlog 候補 `18件` が自然減するかを確認する。
-12. 次回定時サイクル後も `monitor.err` に `NameError` や `phase1_observation_gate` 周辺の例外が出ていないか確認する。現状は `urllib3` の `NotOpenSSLWarning` のみ。
+10. `ロング誤判定と下落取り逃し改善計画_20260430.md` のうち、文面誤読防止、`long_reversal_risk`、`counter_long_short_watch`、`failed_breakout_down_reversal` 専用集計 CLI、`market_map` までは実装済み。次は実データで件数と代表例を更新し、`daily-sync` の観測数値が自然に増えるかを確認する。
+11. 次回 `shadow_log.csv` 更新後に `build-market-map-effectiveness-report --date-from 2026-04-18 --date-to YYYY-MM-DD` を実行し、`long_into_major_resistance`、`support_to_resistance_flip`、`failed_breakout_down_reversal` が実際に負けパターンを分離できているかを見る。
+12. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ、backlog `53件` と新規帯 backlog 候補 `18件` が自然減するかを確認する。
+13. 次回定時サイクル後も `monitor.err` に `NameError` や `phase1_observation_gate` 周辺の例外が出ていないか確認する。現状は `urllib3` の `NotOpenSSLWarning` のみ。
 
 ## ブロッカー
 

@@ -213,6 +213,25 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["phase1_observation_gate"], "pass")
         self.assertEqual(result["phase1_observation_type"], "confidence_watch_learning")
 
+    def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="ENTRY_OK",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
+            confidence_direction_shadow=92,
+            confidence_execution_shadow=24,
+            confidence_wait_shadow=78,
+            secondary_setup_status="watch",
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "counter_long_short_watch")
+
     def test_append_paper_order_is_idempotent_by_signal_id(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -272,6 +291,38 @@ class Phase1TradePlanTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertIn("phase1A", rows[1])
             self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_append_observation_paper_order_uses_short_side_for_counter_long_short_watch(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "obs_counter_1",
+                "timestamp_jst": "2026-04-29T19:05:00+09:00",
+                "current_price": 77605.5,
+                "bias": "long",
+                "primary_setup_side": "long",
+                "primary_entry_mid": 77300,
+                "primary_stop_loss": 76800,
+                "shadow_tp1_price": 77100,
+                "shadow_tp2_price": 76700,
+                "rr_estimate": 1.1,
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "phase1_observation_gate": "pass",
+                "phase1_observation_type": "counter_long_short_watch",
+                "phase1_observation_reasons": ["counter_long_short_watch"],
+                "confidence_direction_shadow": 92,
+                "confidence_execution_shadow": 24,
+                "confidence_wait_shadow": 78,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_observation_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn(",short,", rows[1])
 
 
 if __name__ == "__main__":

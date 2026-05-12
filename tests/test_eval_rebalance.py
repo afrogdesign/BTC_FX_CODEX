@@ -62,7 +62,10 @@ class _MiniDataFrame:
             yield SimpleNamespace(**row)
 
 
-sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=_MiniDataFrame))
+try:
+    import pandas  # noqa: F401
+except ImportError:
+    sys.modules.setdefault("pandas", types.SimpleNamespace(DataFrame=_MiniDataFrame))
 
 from backtest.evaluator import evaluate_signals, summarize_evaluated_signals
 from backtest.runner import _backtest_breakout_state, _backtest_triggers
@@ -176,6 +179,43 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertGreater(result["short_raw_score"], control["short_raw_score"])
         self.assertIn("breakout_up_reversal_risk", result["long_factor_breakdown"])
         self.assertIn("failed_breakout_down_hint", result["short_factor_breakdown"])
+
+    def test_market_map_failed_breakout_penalizes_breakout_long(self) -> None:
+        base_inputs = {
+            "market_regime": "uptrend",
+            "ema_alignment_4h": "bullish",
+            "ema20_slope_4h": "up",
+            "structure_4h": "hh_hl",
+            "structure_1h": "hh_hl",
+            "price": 100.0,
+            "ema50_4h": 95.0,
+            "rsi_15m": 52.0,
+            "volume_ratio": 1.20,
+            "atr_ratio": 1.0,
+            "funding_rate": 0.0,
+            "rr_long": 1.5,
+            "rr_short": 1.5,
+            "near_support": False,
+            "near_resistance": True,
+            "breakout_up": True,
+            "breakout_down": False,
+            "in_range_center": False,
+            "transition_direction": "up",
+            "signals_15m": "long",
+        }
+        control = compute_scores({**base_inputs, "market_map": {"flags": []}}, self.cfg)
+        result = compute_scores(
+            {
+                **base_inputs,
+                "market_map": {"flags": ["failed_breakout_down_reversal", "long_into_major_resistance"]},
+            },
+            self.cfg,
+        )
+
+        self.assertLess(result["long_raw_score"], control["long_raw_score"])
+        self.assertGreater(result["short_raw_score"], control["short_raw_score"])
+        self.assertIn("market_map_failed_breakout_down", result["long_factor_breakdown"])
+        self.assertIn("market_map_failed_breakout_down", result["short_factor_breakdown"])
 
     def test_confidence_uses_major_minor_warning_budget(self) -> None:
         base_inputs = {

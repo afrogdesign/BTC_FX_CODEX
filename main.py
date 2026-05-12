@@ -16,6 +16,7 @@ from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
 from src.analysis.breakout import previous_breakout_levels
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
+from src.analysis.market_map import build_market_map
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk, reconcile_prelabel_with_setup
@@ -38,6 +39,7 @@ from src.analysis.support_resistance import (
     sort_zones_by_distance,
     zone_gap_to_opposite,
 )
+from src.analysis.volume_structure import analyze_volume_structure
 from src.data.fetcher import DataFetchError, FetchConfig, fetch_funding_rate, fetch_klines, get_server_time_ms
 from src.data.exchange_fetcher import fetch_market_structure
 from src.data.validator import validate_klines
@@ -335,9 +337,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
     per_tf_inputs = {
-        "4h": {"df": df_4h, "swings": tf_4h["swings"]},
-        "1h": {"df": df_1h, "swings": tf_1h["swings"]},
-        "15m": {"df": df_15m, "swings": tf_15m["swings"]},
+        "4h": {"df": df_4h, "swings": tf_4h["swings"], "structure": tf_4h["structure"]},
+        "1h": {"df": df_1h, "swings": tf_1h["swings"], "structure": tf_1h["structure"]},
+        "15m": {"df": df_15m, "swings": tf_15m["swings"], "structure": tf_15m["structure"]},
     }
     all_support_zones, all_resistance_zones = build_all_support_resistance(per_tf_inputs, atr_15m)
     support_zones, resistance_zones = build_support_resistance(per_tf_inputs, atr_15m)
@@ -369,6 +371,16 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     range_low = recent_low if recent_low is not None else price
     range_mid = (range_high + range_low) / 2
     in_range_center = abs(price - range_mid) <= atr_15m * 0.5
+    volume_structure = analyze_volume_structure(df_15m, cfg)
+    market_map = build_market_map(
+        price=price,
+        atr=atr_15m,
+        per_tf_inputs=per_tf_inputs,
+        volume_info=volume_structure,
+        breakout_up=breakout_up,
+        breakout_down=breakout_down,
+        cfg=cfg,
+    )
 
     pre_long_setup, _ = build_setup(
         side="long",
@@ -431,6 +443,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "in_range_center": in_range_center,
             "transition_direction": transition_direction,
             "signals_15m": tf_15m["signal"],
+            "market_map": market_map,
         },
         cfg,
     )
@@ -602,6 +615,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
         risk_flags=result_flags["risk_flags"],
         long_factor_breakdown=score_info["long_factor_breakdown"],
+        market_map_flags=market_map["flags"],
     )
 
     qualitative_context = build_qualitative_context(
@@ -667,6 +681,15 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "resistance_zones_by_strength": resistance_zones,
         "support_zones_all": all_support_zones,
         "resistance_zones_all": all_resistance_zones,
+        "market_map": market_map,
+        "market_map_primary_state": market_map["market_map_primary_state"],
+        "market_map_flags": market_map["flags"],
+        "nearest_major_support": market_map["nearest_major_support"],
+        "nearest_major_resistance": market_map["nearest_major_resistance"],
+        "active_level_role": market_map["active_level_role"],
+        "level_flip_state": market_map["level_flip_state"],
+        "failed_breakout_state": market_map["failed_breakout_state"],
+        "trend_flip_state": market_map["trend_flip_state"],
         "chart_snapshot": _build_chart_snapshot(df_4h, df_1h, df_15m),
         "long_setup": long_setup,
         "short_setup": short_setup,
@@ -832,6 +855,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
             confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
             confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+            secondary_setup_status=str(short_setup.get("status", "")) if bias == "long" else str(long_setup.get("status", "")),
         )
         core_result["loss_streak_at_entry"] = loss_streak
         core_result.update(phase1_activation)

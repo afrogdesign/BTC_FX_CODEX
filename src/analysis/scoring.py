@@ -67,6 +67,12 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     in_range_center = bool(inputs["in_range_center"])
     transition_direction = str(inputs.get("transition_direction", ""))
     signal_15m = str(inputs.get("signals_15m", ""))
+    market_map = inputs.get("market_map") or {}
+    market_map_flags = {
+        str(flag or "").strip()
+        for flag in market_map.get("flags", [])
+        if str(flag or "").strip()
+    }
 
     if regime == "uptrend":
         long_raw += 15
@@ -129,6 +135,68 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     if breakout_down:
         short_raw += 10
         _add_factor(short_factors, "breakout_down", 10.0)
+
+    if "support_to_resistance_flip" in market_map_flags:
+        long_raw -= 12
+        short_raw += 7
+        _add_factor(long_factors, "market_map_support_to_resistance_flip", -12.0)
+        _add_factor(short_factors, "market_map_support_to_resistance_flip", 7.0)
+    if "resistance_to_support_flip" in market_map_flags:
+        short_raw -= 12
+        long_raw += 7
+        _add_factor(short_factors, "market_map_resistance_to_support_flip", -12.0)
+        _add_factor(long_factors, "market_map_resistance_to_support_flip", 7.0)
+
+    if "support_to_resistance_retest_confirmed" in market_map_flags:
+        long_raw -= 4
+        short_raw += 6
+        _add_factor(long_factors, "market_map_support_retest_failed", -4.0)
+        _add_factor(short_factors, "market_map_support_retest_failed", 6.0)
+    if "resistance_to_support_retest_confirmed" in market_map_flags:
+        short_raw -= 4
+        long_raw += 6
+        _add_factor(short_factors, "market_map_resistance_retest_failed", -4.0)
+        _add_factor(long_factors, "market_map_resistance_retest_held", 6.0)
+
+    if "failed_breakout_down_reversal" in market_map_flags:
+        long_raw -= 14
+        short_raw += 8
+        _add_factor(long_factors, "market_map_failed_breakout_down", -14.0)
+        _add_factor(short_factors, "market_map_failed_breakout_down", 8.0)
+    elif "major_resistance_rejection" in market_map_flags:
+        long_raw -= 8
+        short_raw += 3
+        _add_factor(long_factors, "market_map_major_resistance_rejection", -8.0)
+        _add_factor(short_factors, "market_map_major_resistance_rejection", 3.0)
+
+    if "failed_breakout_up_reversal" in market_map_flags:
+        short_raw -= 14
+        long_raw += 8
+        _add_factor(short_factors, "market_map_failed_breakout_up", -14.0)
+        _add_factor(long_factors, "market_map_failed_breakout_up", 8.0)
+    elif "major_support_rejection" in market_map_flags:
+        short_raw -= 8
+        long_raw += 3
+        _add_factor(short_factors, "market_map_major_support_rejection", -8.0)
+        _add_factor(long_factors, "market_map_major_support_rejection", 3.0)
+
+    if "long_into_major_resistance" in market_map_flags:
+        long_raw -= 6
+        _add_factor(long_factors, "market_map_long_into_major_resistance", -6.0)
+    if "short_into_major_support" in market_map_flags:
+        short_raw -= 6
+        _add_factor(short_factors, "market_map_short_into_major_support", -6.0)
+
+    if "trend_flip_confirmed_down" in market_map_flags:
+        long_raw -= 8
+        short_raw += 8
+        _add_factor(long_factors, "market_map_trend_flip_confirmed_down", -8.0)
+        _add_factor(short_factors, "market_map_trend_flip_confirmed_down", 8.0)
+    if "trend_flip_confirmed_up" in market_map_flags:
+        short_raw -= 8
+        long_raw += 8
+        _add_factor(short_factors, "market_map_trend_flip_confirmed_up", -8.0)
+        _add_factor(long_factors, "market_map_trend_flip_confirmed_up", 8.0)
 
     if regime == "transition" and transition_direction == "down" and breakout_up:
         long_raw -= 8
@@ -232,28 +300,60 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     direction_shadow_long = 0.0
     direction_shadow_short = 0.0
     for code, value in long_factors.items():
-        if code.startswith(("regime_", "ema_", "price_above", "structure_", "transition_")):
+        if code.startswith(("regime_", "ema_", "price_above", "structure_", "transition_", "market_map_trend_")):
             direction_shadow_long += value
     for code, value in short_factors.items():
-        if code.startswith(("regime_", "ema_", "price_below", "structure_", "transition_")):
+        if code.startswith(("regime_", "ema_", "price_below", "structure_", "transition_", "market_map_trend_")):
             direction_shadow_short += value
 
     activity_shadow_long = 0.0
     activity_shadow_short = 0.0
     for code, value in long_factors.items():
-        if code.startswith(("breakout_", "volume_", "signal_15m_")):
+        if code.startswith(("breakout_", "volume_", "signal_15m_", "market_map_failed_breakout")):
             activity_shadow_long += value
     for code, value in short_factors.items():
-        if code.startswith(("breakout_", "volume_", "signal_15m_")):
+        if code.startswith(("breakout_", "volume_", "signal_15m_", "market_map_failed_breakout")):
             activity_shadow_short += value
 
     entry_shadow_long = 0.0
     entry_shadow_short = 0.0
     for code, value in long_factors.items():
-        if code.startswith(("near_support", "near_resistance", "rr_", "range_center", "atr_", "funding_")):
+        if code.startswith(
+            (
+                "near_support",
+                "near_resistance",
+                "rr_",
+                "range_center",
+                "atr_",
+                "funding_",
+                "market_map_long_into",
+                "market_map_short_into",
+                "market_map_support_to_resistance",
+                "market_map_resistance_to_support",
+                "market_map_support_retest",
+                "market_map_resistance_retest",
+                "market_map_major_",
+            )
+        ):
             entry_shadow_long += value
     for code, value in short_factors.items():
-        if code.startswith(("near_support", "near_resistance", "rr_", "range_center", "atr_", "funding_")):
+        if code.startswith(
+            (
+                "near_support",
+                "near_resistance",
+                "rr_",
+                "range_center",
+                "atr_",
+                "funding_",
+                "market_map_long_into",
+                "market_map_short_into",
+                "market_map_support_to_resistance",
+                "market_map_resistance_to_support",
+                "market_map_support_retest",
+                "market_map_resistance_retest",
+                "market_map_major_",
+            )
+        ):
             entry_shadow_short += value
 
     selected_direction_shadow = direction_shadow_long if bias != "short" else direction_shadow_short

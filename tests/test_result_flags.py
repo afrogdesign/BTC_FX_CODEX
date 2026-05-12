@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.analysis.result_flags import assemble_result_flags
+from src.analysis.result_flags import assemble_result_flags, derive_additional_risk_flags
 
 
 class ResultFlagsTest(unittest.TestCase):
@@ -41,6 +41,21 @@ class ResultFlagsTest(unittest.TestCase):
 
         self.assertEqual(result["no_trade_flags"], ["volatile_regime"])
         self.assertEqual(result["risk_flags"], ["upper_liquidity_close"])
+
+    def test_market_map_flags_are_promoted_to_risk_flags(self) -> None:
+        result = derive_additional_risk_flags(
+            bias="long",
+            market_regime="uptrend",
+            transition_direction="up",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            risk_flags=[],
+            long_factor_breakdown={},
+            market_map_flags=["failed_breakout_down_reversal"],
+        )
+
+        self.assertIn("failed_breakout_down_reversal", result)
+        self.assertIn("long_reversal_risk", result)
 
 
 if __name__ == "__main__":

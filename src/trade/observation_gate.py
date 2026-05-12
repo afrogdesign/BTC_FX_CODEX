@@ -18,6 +18,7 @@ _WATCH_LEARNING_REASONS = {
 _CONFIDENCE_WATCH_LEARNING_PRELABELS = {"SWEEP_WAIT", "RISKY_ENTRY"}
 _CONFIDENCE_WATCH_REQUIRED_FLAGS = {"sweep_incomplete", "lower_liquidity_close"}
 _CONFIDENCE_WATCH_BLOCKING_FLAGS = {"orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"}
+_COUNTER_LONG_SHORT_WATCH_REASONS = {"entry_zone_not_reached", "confidence_below_min"}
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -55,6 +56,37 @@ def is_confidence_watch_learning_candidate(
     return direction >= 55.0 and execution >= 18.0 and wait <= 85.0
 
 
+def is_counter_long_short_watch_candidate(
+    *,
+    bias: str,
+    primary_setup_side: str,
+    primary_setup_status: str,
+    primary_setup_reason: str,
+    secondary_setup_status: str,
+    risk_flags: list[str],
+    confidence_direction_shadow: Any,
+    confidence_execution_shadow: Any,
+    confidence_wait_shadow: Any,
+) -> bool:
+    normalized_flags = {str(flag).strip() for flag in risk_flags if str(flag).strip()}
+    if str(bias or "").strip() != "long":
+        return False
+    if str(primary_setup_side or "").strip() != "long":
+        return False
+    if str(primary_setup_status or "").strip() != "watch":
+        return False
+    if str(primary_setup_reason or "").strip() not in _COUNTER_LONG_SHORT_WATCH_REASONS:
+        return False
+    if str(secondary_setup_status or "").strip() not in {"watch", "ready"}:
+        return False
+    if "long_reversal_risk" not in normalized_flags:
+        return False
+    direction = _as_float(confidence_direction_shadow)
+    execution = _as_float(confidence_execution_shadow)
+    wait = _as_float(confidence_wait_shadow)
+    return direction >= 55.0 and execution >= 15.0 and wait <= 90.0
+
+
 def determine_phase1_observation_gate(
     *,
     bias: str,
@@ -68,6 +100,7 @@ def determine_phase1_observation_gate(
     confidence_direction_shadow: Any,
     confidence_execution_shadow: Any,
     confidence_wait_shadow: Any,
+    secondary_setup_status: str = "",
 ) -> dict[str, Any]:
     blockers: list[str] = []
     observation_type = "blocked"
@@ -89,7 +122,19 @@ def determine_phase1_observation_gate(
     execution = _as_float(confidence_execution_shadow)
     wait = _as_float(confidence_wait_shadow)
 
-    if reason == "confidence_below_min":
+    if not blockers and is_counter_long_short_watch_candidate(
+        bias=bias,
+        primary_setup_side=primary_setup_side,
+        primary_setup_status=primary_setup_status,
+        primary_setup_reason=reason,
+        secondary_setup_status=secondary_setup_status,
+        risk_flags=risk_flags,
+        confidence_direction_shadow=direction,
+        confidence_execution_shadow=execution,
+        confidence_wait_shadow=wait,
+    ):
+        observation_type = "counter_long_short_watch"
+    elif reason == "confidence_below_min":
         if not blockers and is_confidence_watch_learning_candidate(
             primary_setup_status=primary_setup_status,
             primary_setup_reason=reason,

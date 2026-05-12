@@ -28,11 +28,21 @@
 ## 重要な節目ログ
 
 - 2026-05-13 JST
+  - 現時点の差分一式を `ver02.5-v5` ブランチとして切り出し、commit `2a0ca4b Prepare ver02.5-v5 updates and reports` を作成して `origin/ver02.5-v5` へ push した。
   - `watch + trade_execution_gate=blocked` の本通知がロング実行推奨に見えないよう、`src/presentation/sanitize.py` と `src/ai/summary.py` を更新した。件名は `上方向監視 / 下方向監視` を使い、本文冒頭にも「これは実行候補ではありません。監視と再評価のための通知です。」を追加した。
   - `ENTRY_OK + watch + entry_zone_not_reached` の表示を `位置は悪くないが未到達` に変更し、`trade_execution_gate=blocked` 時の執行判断も `監視継続（実行不可）` と出すようにした。
   - `src/analysis/result_flags.py` に `long_reversal_risk` 派生判定を追加し、`transition/down + watch + sweep_incomplete` かつ抵抗要因ありのロング監視で risk flag を付けるようにした。`src/analysis/scoring.py` でも `transition/down + breakout_up` に反転ペナルティを追加した。
   - `long_reversal_risk` がある本通知は `高め本通知` へ上げず、`通常の本通知` に抑えたうえで `下落警戒` を主理由に出すようにした。これで `20260429_100500` 型の誤読防止を先に実装した。
   - 確認は `./.venv312/bin/python -m unittest tests.test_summary_format tests.test_summary_wording tests.test_notification_rank tests.test_eval_rebalance tests.test_notification_detail_page tests.test_notification_trigger tests.test_phase1_trade_plans tests.test_log_feedback` を実施し、109 件 OK を確認した。
+  - 続けて `src/trade/observation_gate.py` に `counter_long_short_watch` を追加し、`long_reversal_risk` が付いたロング watch で反対側 short setup が `watch/ready` のときは、ショート観測候補として Phase 1A 母集団へ通せるようにした。
+  - `src/storage/csv_logger.py` と `tools/log_feedback.py` も合わせ、`counter_long_short_watch` は `observation_paper_orders` 上で `side=short` として保存されるように揃えた。既存 trades からの backfill でも同じ向きが出るようにしてある。
+  - `tools/log_feedback.py` に `build-failed-breakout-down-reversal-report` を追加し、`breakout_up` を含むロング watch が `direction_outcome=wrong`、`entry_outcome=poor_entry`、`MAE24h>=5.0` で終わった失敗型を専用レポートとして再生成できるようにした。
+  - `build_feedback_report` には `counter_long_short_watch` と `failed_breakout_down_reversal` の要約を足し、日次の確認でも件数と代表例を追いやすくした。
+  - 確認は `./.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_log_feedback` を実施し、64 件 OK を確認した。
+  - 勝率低下とトレンド転換取り逃しへの対策として `src/analysis/market_map.py` を追加し、複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを構築するようにした。
+  - `market_map` では `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_down_reversal`、`failed_breakout_up_reversal`、`trend_flip_*` を出し、`main.py`、`src/analysis/scoring.py`、`src/analysis/result_flags.py`、`src/storage/csv_logger.py` へ接続した。
+  - `tools/log_feedback.py` に `build-market-map-effectiveness-report` を追加し、`market_map_flags` 別の勝率、wrong_rate、平均MFE/MAE、代表例を `shadow_log.csv` から検証できるようにした。`build_feedback_report` にも `market_map` セクションを追加した。
+  - テストは `./.venv312/bin/python -m unittest discover -s tests` を実施し、151 件 OK を確認した。併せて `git diff --check` も OK。
 
 - 2026-04-30 JST
   - `20260429_100500` のように、内部は `watch + trade_execution_gate=blocked` なのにロング推奨に見える通知が大きな下落になった失敗を受け、`運用資料/計画/ロング誤判定と下落取り逃し改善計画_20260430.md` を追加した。
