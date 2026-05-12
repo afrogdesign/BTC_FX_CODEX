@@ -46,6 +46,17 @@
 7. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ backlog を自然減できているか確認する。
 8. 定時サイクル後、`monitor.err` に `NameError` や `market_map` / `phase1_observation_gate` 周辺の例外が出ていないか確認する。
 
+## 残作業一覧
+
+- `shadow_log.csv` 再生成後に `market_map_readiness_YYYYMMDD.md` と `market_map_effectiveness_YYYYMMDD.md` を更新し、`trades.csv` で出始めた `confirmed_down`、`support_to_resistance_flip`、`failed_breakout_down_reversal`、`trend_flip_confirmed_down` が shadow 側にも入るか確認する。
+- 次回メールで件名が `[Ver02.5-v5] [CLI]` になっていることを確認し、古い `[Ver02.5-v4]` 表記が残る場合は `last_result.json`、`trades.csv`、通知送信ログのどこで古い値を保持しているか切り分ける。
+- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は約 50 件残っている。
+- AI事後評価の `AI_POST_REVIEW_DAILY_MAX=4` は安定運用優先なら維持する。backlog 解消を優先する場合のみ `6` または `8` への増加を検討する。
+- 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。
+- `market_map` の初期サンプルが 30 件未満の間はスコア重みや gate を大きく変更しない。まず flag 別の wrong_rate、平均MFE/MAE、代表例を集める。
+- `trade_execution_gate=pass` と `paper_orders planned` が出るまでは `Phase 1B` へ進めない。候補が増えても成績が弱い間は gate 緩和しない。
+- 定時サイクル後の `monitor.err`、`ai_post_reviews.err`、`feedback_daily_sync.err` が空であることを継続確認する。
+
 ## ブロッカー
 
 - 通知増加は AI 事後評価の処理量を上回りやすく、backlog 解消には時間がかかる。
