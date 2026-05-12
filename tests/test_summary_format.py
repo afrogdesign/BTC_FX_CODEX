@@ -275,7 +275,7 @@ class SummaryFormatTest(unittest.TestCase):
     def test_watch_blocked_long_reversal_is_presented_as_monitoring_not_long_entry(self) -> None:
         payload = {
             "timestamp_jst": "2026-04-29T19:05:00+09:00",
-            "system_label": "Ver02.5-v4",
+            "system_label": "Ver02.5-v5",
             "system_mode_label": "CLI",
             "notification_kind": "main",
             "prelabel": "ENTRY_OK",

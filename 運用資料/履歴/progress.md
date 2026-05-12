@@ -48,6 +48,7 @@
   - 確認は `./.venv312/bin/python -m unittest discover -s tests` を実施し、153 件 OK を確認した。併せて `git diff --check` も OK。
   - `tools/log_feedback.py` に `build-market-map-readiness-report` を追加し、`market_map` が実ログへ入り始めたかを短く判定できるようにした。`2026-05-13` 時点では `readiness=wait`、最新 shadow は `20260512_180500 / 03:05 / Ver02.5-v4` で、`ver02.5-v5` の値入りは次サイクル待ち。
   - readiness 結果は `運用資料/reports/analysis/market_map_readiness_20260513.md` に保存した。確認は `./.venv312/bin/python -m unittest tests.test_log_feedback -k market_map` を実施し、5 件 OK。
+  - メール件名ラベルを `.env` / `.env.example` とも `SYSTEM_LABEL=Ver02.5-v5` に更新し、`com.afrog.btc-monitor` を再起動した。件名生成の確認では `[Ver02.5-v5] [CLI]` が出ることを確認済み。
 
 - 2026-04-30 JST
   - `20260429_100500` のように、内部は `watch + trade_execution_gate=blocked` なのにロング推奨に見える通知が大きな下落になった失敗を受け、`運用資料/計画/ロング誤判定と下落取り逃し改善計画_20260430.md` を追加した。
