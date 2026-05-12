@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-04-25 04:20 JST
+更新日: 2026-05-13 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,40 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-13 JST
+  - `watch + trade_execution_gate=blocked` の本通知がロング実行推奨に見えないよう、`src/presentation/sanitize.py` と `src/ai/summary.py` を更新した。件名は `上方向監視 / 下方向監視` を使い、本文冒頭にも「これは実行候補ではありません。監視と再評価のための通知です。」を追加した。
+  - `ENTRY_OK + watch + entry_zone_not_reached` の表示を `位置は悪くないが未到達` に変更し、`trade_execution_gate=blocked` 時の執行判断も `監視継続（実行不可）` と出すようにした。
+  - `src/analysis/result_flags.py` に `long_reversal_risk` 派生判定を追加し、`transition/down + watch + sweep_incomplete` かつ抵抗要因ありのロング監視で risk flag を付けるようにした。`src/analysis/scoring.py` でも `transition/down + breakout_up` に反転ペナルティを追加した。
+  - `long_reversal_risk` がある本通知は `高め本通知` へ上げず、`通常の本通知` に抑えたうえで `下落警戒` を主理由に出すようにした。これで `20260429_100500` 型の誤読防止を先に実装した。
+  - 確認は `./.venv312/bin/python -m unittest tests.test_summary_format tests.test_summary_wording tests.test_notification_rank tests.test_eval_rebalance tests.test_notification_detail_page tests.test_notification_trigger tests.test_phase1_trade_plans tests.test_log_feedback` を実施し、109 件 OK を確認した。
+
+- 2026-04-30 JST
+  - `20260429_100500` のように、内部は `watch + trade_execution_gate=blocked` なのにロング推奨に見える通知が大きな下落になった失敗を受け、`運用資料/計画/ロング誤判定と下落取り逃し改善計画_20260430.md` を追加した。
+  - 同計画では、失敗原因を `文面の誤読`、`上位足ロング要因の残りすぎ`、`失敗ブレイク型の未検出`、`ショート候補化の遅れ` に分けた。
+  - 改善手順は、まず `watch + trade_execution_gate=blocked` の件名と本文を `監視 / 実行不可` と読めるようにし、次に `long_reversal_risk`、`counter_long_short_watch`、`failed_breakout_down_reversal` レポートを順に追加する方針にした。
+  - `NEXT_TASK.md` に計画への参照と次タスクを追加し、次回実装ではこの計画を入口にして着手できる状態にした。
+
+- 2026-04-30 JST
+  - `src/trade/observation_gate.py` に `confidence_watch_learning` を追加し、`watch + confidence_below_min + SWEEP_WAIT/RISKY_ENTRY + sweep_incomplete + lower_liquidity_close + 補助 hard flag なし + direction>=55 + execution>=18 + wait<=85` の少数群だけは Phase 1A 観測候補として拾えるようにした。
+  - `main.py` と `tools/log_feedback.py` を更新し、live 判定と分析レポートの両方で同じ限定条件を使うように揃えた。
+  - `tools/log_feedback.py` に `build-phase1b-promotion-report` を追加し、限定昇格候補を独立レポート化できるようにした。`daily-sync` にも `Phase 1B 昇格候補` セクションを追加した。
+  - `tests/test_phase1_trade_plans.py` と `tests/test_log_feedback.py` を更新し、限定候補判定、専用レポート、CLI 入口を含めて `.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_log_feedback` 60 件 OK を確認した。
+  - 実データでは `./.venv312/bin/python tools/log_feedback.py build-phase1b-promotion-report --output-md 運用資料/reports/analysis/phase1b_promotion_candidates_20260429.md --date-from 2026-04-18 --date-to 2026-04-29` を実行し、候補は 2 件、どちらも `SWEEP_WAIT`、平均 `direction=59.0 / execution=22.0 / wait=76.8` だった。
+  - ただし成績は `勝率 0.0% / TP1先行 0.0% / 近似PF 0.12` で弱く、この型だけではまだ `Phase 1B` 昇格材料として不足と確認した。現時点では「昇格条件の即緩和」ではなく「この型の再現監視」を優先する。
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync --output-md 運用資料/reports/feedback_daily_sync_20260430.md` を実行し、完了 29 件、近似PF 1.10、全体勝率 44.8%、`phase1_observation_gate=pass:8件`、`confidence_watch_learning 候補:1件`、`trade_execution_gate=pass:0件` を確認した。
+  - 入口資料 `NEXT_TASK.md`、計画 `実用化計画_Phase1A-1B.md`、運用メモ `運用コマンドメモ.md` を更新し、新しい昇格候補導線と現状判断を反映した。
+
+- 2026-04-30 JST
+  - 未反映だった `運用資料/reports/feedback_daily_sync_20260426.md` 〜 `feedback_daily_sync_20260429.md` を確認し、入口判断を `2026-04-29` 時点へ更新した。
+  - `./.venv312/bin/python tools/log_feedback.py refresh-standard-setup-reports --date-from 2026-04-18 --date-to 2026-04-29` を実行し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` が維持されることを確認した。
+  - これにより、`rr_below_min -> entry_zone_not_reached` と `orderbook_ask_heavy` 付き差分は、新規ログ帯でも追加実装を急ぐ段階ではないと再確認できた。
+  - `./.venv312/bin/python tools/log_feedback.py build-operational-focus-report --output-md 運用資料/reports/analysis/operational_focus_20260429.md --date-from 2026-04-18 --date-to 2026-04-29` を実行し、backlog 候補 18 件、`phase1 pass=33件 / blocked=232件`、blocked 上位は `confidence_below_min=147件`、`no_trade_candidate=81件` と確認した。
+  - `setup_watch_learning` pass は 32 件で継続している一方、blocked 群は `sweep_incomplete + lower_liquidity_close` 同居が依然支配的で、`confidence floor` や `NO_TRADE_CANDIDATE` の一律緩和はまだ早いと整理した。
+  - `./.venv312/bin/python tools/log_feedback.py build-relaxation-candidates-report --output-md 運用資料/reports/analysis/relaxation_candidates_20260429.md --date-from 2026-04-18 --date-to 2026-04-29` を実行し、緩和候補は 23 件、`SWEEP_WAIT=16件`、`RISKY_ENTRY=6件`、`NO_TRADE_CANDIDATE=1件`、平均 `execution=18.5 / wait=84.8` と確認した。
+  - 少数群の先頭は `20260427_170500`、`20260427_110500`、`20260427_100500`、`20260426_210500`、`20260426_180501` で、次回以降はこの新顔群が再現するかを優先監視する方針にした。
+  - `logs/runtime/monitor.err` と `logs/heartbeat.txt`、`logs/last_result.json` も確認し、定時更新は `2026-04-30 01:05 JST` まで進んでおり、runtime エラーは従来どおり `urllib3` の `NotOpenSSLWarning` のみだった。
+  - 入口資料 `NEXT_TASK.md` を `2026-04-29` 基準へ更新し、比較帯、backlog、緩和候補、次判断を最新観測に合わせて整理した。
 
 - 2026-04-25 JST
   - `build-relaxation-candidates-report` を追加し、`confidence_below_min + sweep_incomplete + lower_liquidity_close` だが `orderbook_ask_heavy`、`ask_wall_close`、`long_flush_exhaustion` を持たない少数群だけを独立抽出できるようにした。

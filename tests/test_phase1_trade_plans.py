@@ -130,6 +130,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             prelabel="ENTRY_OK",
             data_quality_flag="ok",
             no_trade_flags=["RR_insufficient"],
+            risk_flags=[],
             confidence_direction_shadow=35,
             confidence_execution_shadow=5,
             confidence_wait_shadow=95,
@@ -148,6 +149,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             prelabel="SWEEP_WAIT",
             data_quality_flag="ok",
             no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "orderbook_ask_heavy"],
             confidence_direction_shadow=70,
             confidence_execution_shadow=40,
             confidence_wait_shadow=40,
@@ -165,6 +167,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             prelabel="SWEEP_WAIT",
             data_quality_flag="ok",
             no_trade_flags=[],
+            risk_flags=[],
             confidence_direction_shadow=55,
             confidence_execution_shadow=20,
             confidence_wait_shadow=75,
@@ -182,6 +185,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             prelabel="NO_TRADE_CANDIDATE",
             data_quality_flag="ok",
             no_trade_flags=["ATR_extreme"],
+            risk_flags=[],
             confidence_direction_shadow=80,
             confidence_execution_shadow=40,
             confidence_wait_shadow=20,
@@ -190,6 +194,24 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["phase1_observation_gate"], "blocked")
         self.assertIn("no_trade_candidate", result["phase1_observation_reasons"])
         self.assertIn("ATR_extreme", result["phase1_observation_reasons"])
+
+    def test_observation_gate_passes_confidence_watch_learning_candidate(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=80,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "confidence_watch_learning")
 
     def test_append_paper_order_is_idempotent_by_signal_id(self) -> None:
         with TemporaryDirectory() as tmpdir:

@@ -19,7 +19,7 @@ from src.analysis.funding import format_funding_pct, funding_rate_label, funding
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk, reconcile_prelabel_with_setup
-from src.analysis.result_flags import assemble_result_flags
+from src.analysis.result_flags import assemble_result_flags, derive_additional_risk_flags
 from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
 from src.analysis.confidence import compute_confidence_details, compute_machine_agreement
 from src.analysis.evaluation_trace import build_evaluation_trace
@@ -594,6 +594,15 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         position_risk_flags=position_risk["risk_flags"],
         critical_zone=critical_zone,
     )
+    result_flags["risk_flags"] = derive_additional_risk_flags(
+        bias=bias,
+        market_regime=market_regime,
+        transition_direction=transition_direction,
+        primary_setup_status=primary_setup_status,
+        primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+        risk_flags=result_flags["risk_flags"],
+        long_factor_breakdown=score_info["long_factor_breakdown"],
+    )
 
     qualitative_context = build_qualitative_context(
         now_ms=now_ms,
@@ -819,6 +828,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             prelabel=effective_prelabel,
             data_quality_flag=core_result["data_quality_flag"],
             no_trade_flags=result_flags["no_trade_flags"],
+            risk_flags=result_flags["risk_flags"],
             confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
             confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
             confidence_wait_shadow=confidence_details["confidence_wait_shadow"],

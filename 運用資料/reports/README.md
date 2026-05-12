@@ -6,9 +6,9 @@
 
 ## まず見るもの
 
-- [feedback_daily_sync_20260424.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260424.md)
+- [feedback_daily_sync_20260424.md](feedback_daily_sync_20260424.md)
   - 現行 `ver02.5-v4` の最新日次レポート
-- [feedback_daily_sync_20260423.md](/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/運用資料/reports/feedback_daily_sync_20260423.md)
+- [feedback_daily_sync_20260423.md](feedback_daily_sync_20260423.md)
   - 直近比較用の日次レポート
 
 ## 最新レポート要点

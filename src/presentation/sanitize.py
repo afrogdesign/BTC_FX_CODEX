@@ -93,6 +93,8 @@ _CODE_LABELS = {
     "direction_strength": "方向の強さ",
     "execution_readiness": "実行しやすさ",
     "wait_pressure": "待機圧力",
+    "long_reversal_risk": "上方向監視だが下落警戒",
+    "failed_breakout_down_reversal": "上抜け失敗後の下落転換型",
 }
 
 _UNKNOWN_CODE_PATTERN = re.compile(r"\b[A-Za-z]+(?:_[A-Za-z0-9]+)+\b")
@@ -128,6 +130,10 @@ def prelabel_label(value: Any) -> str:
 
 
 def _entry_quality_label(result: dict[str, Any], prelabel: str, status: str) -> str:
+    if prelabel == "ENTRY_OK" and status == "watch":
+        reason = _primary_setup_reason(result)
+        if reason == "entry_zone_not_reached":
+            return "位置は悪くないが未到達"
     if prelabel == "ENTRY_OK" and status == "invalid":
         reason = _primary_setup_reason(result)
         if reason == "rr_below_min":
@@ -241,6 +247,20 @@ def _subject_action_label(action_label: str) -> str:
     return action_label.replace("は", "").replace("だが", "/").replace("現状", "").strip(" /")
 
 
+def _is_watch_blocked_context(result: dict[str, Any], status: str | None = None) -> bool:
+    resolved_status = status or _primary_setup_status(result)
+    return resolved_status == "watch" and str(result.get("trade_execution_gate", "")).strip() == "blocked"
+
+
+def _subject_direction_label(result: dict[str, Any], bias: str, status: str) -> str:
+    if _is_watch_blocked_context(result, status):
+        if bias == "long":
+            return "上方向監視"
+        if bias == "short":
+            return "下方向監視"
+    return direction_compact_label(bias)
+
+
 def _reason_sources(result: dict[str, Any]) -> list[str]:
     setup = (result.get("long_setup") or {}) if str(result.get("bias", "")).lower() == "long" else (result.get("short_setup") or {})
     reasons: list[str] = []
@@ -270,7 +290,7 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
         reason_labels = [fallback_reason]
     return {
         "direction_label": direction_label(bias),
-        "direction_compact_label": direction_compact_label(bias),
+        "direction_compact_label": _subject_direction_label(result, bias, status),
         "action_label": action,
         "action_compact_label": _subject_action_label(action),
         "entry_quality_label": _entry_quality_label(result, prelabel, status),
@@ -284,6 +304,10 @@ def build_display_context(result: dict[str, Any]) -> dict[str, Any]:
 
 def _headline_reason_labels(result: dict[str, Any], limit: int = 3) -> list[str]:
     labels = sanitize_reason_codes(_reason_sources(result))
+    if "long_reversal_risk" in {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}:
+        prioritized = [_CODE_LABELS["long_reversal_risk"]]
+        prioritized.extend(label for label in labels if label != _CODE_LABELS["long_reversal_risk"])
+        labels = prioritized
     if labels:
         return labels[:limit]
     fallback_reason = sanitize_user_text(result.get("invalid_reason", "")) or "大きな待機理由は出ていません"
@@ -306,10 +330,12 @@ def _notification_status(result: dict[str, Any]) -> tuple[str, str, str]:
     return "neutral", "中立", "方向優位なし"
 
 
-def _execution_label(status_code: str) -> str:
+def _execution_label(result: dict[str, Any], status_code: str) -> str:
     if status_code == "actionable":
         return "条件付きで検討"
     if status_code == "monitor":
+        if _is_watch_blocked_context(result):
+            return "監視継続（実行不可）"
         return "監視継続"
     return "見送り"
 
@@ -333,6 +359,10 @@ def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str
 
     if not is_main_context:
         return "no_send", "送信なし", "⚪", "メール送信条件は未成立"
+
+    risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
+    if "long_reversal_risk" in risk_flags and status_code == "monitor":
+        return "normal_main", "通常の本通知", "📊", "下落警戒を優先して標準扱いに抑制"
 
     execution_shadow = _safe_float(result.get("confidence_execution_shadow"))
     wait_shadow = _safe_float(result.get("confidence_wait_shadow"))
@@ -461,7 +491,7 @@ def build_notification_context(result: dict[str, Any]) -> dict[str, Any]:
         "final_rank_label": final_rank_label,
         "final_rank_emoji": final_rank_emoji,
         "final_rank_explanation": final_rank_explanation,
-        "execution_label": _execution_label(status_code),
+        "execution_label": _execution_label(result, status_code),
         "entry_window_label": _entry_window_label(primary_reason),
         "reason_labels": headline_reasons,
         "reason_labels_full": display_context["wait_reason_labels"],

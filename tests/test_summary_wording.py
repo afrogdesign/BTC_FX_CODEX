@@ -95,3 +95,22 @@ class SummaryWordingTest(unittest.TestCase):
         )
         self.assertIn("方向判断: 相場は上方向バイアスです", body)
         self.assertIn("位置評価: 位置はやや注意", body)
+
+    def test_watch_blocked_entry_ok_is_marked_as_not_reached_and_not_actionable(self) -> None:
+        body = self._build(
+            {
+                "bias": "long",
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "trade_execution_gate": "blocked",
+                "confidence": 68,
+                "risk_flags": ["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
+                "no_trade_flags": [],
+                "long_setup": {"status": "watch", "entry_zone": {"low": 101, "high": 102}, "stop_loss": 99, "tp1": 104, "tp2": 105},
+                "short_setup": {},
+            }
+        )
+        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
+        self.assertIn("執行判断: 監視継続（実行不可）", body)
+        self.assertIn("位置評価: 位置は悪くないが未到達", body)

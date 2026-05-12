@@ -41,6 +41,7 @@ from tools.log_feedback import (
     build_feedback_report,
     build_observation_paper_orders,
     build_operational_focus_report,
+    build_phase1b_promotion_report,
     build_relaxation_candidates_report,
     build_shadow_log,
     evaluate_trade_row,
@@ -2843,6 +2844,67 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("- soft_1: 2026-04-24 03:05 / prelabel=SWEEP_WAIT / setup=confidence_below_min / execution=10.0 / wait=88.0", report)
             self.assertNotIn("hard_1", report)
 
+    def test_build_phase1b_promotion_report_lists_limited_watch_candidates(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "promo_1",
+                        "timestamp_jst": "2026-04-24T03:05:00+09:00",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_reasons": "confidence_below_min",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "SWEEP_WAIT",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "confidence_direction_shadow": "58",
+                        "confidence_execution_shadow": "22",
+                        "confidence_wait_shadow": "80",
+                        "outcome": "win",
+                        "tp1_hit_first": "true",
+                        "signal_based_MFE_24h": "12",
+                        "signal_based_MAE_24h": "4",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "blocked_1",
+                        "timestamp_jst": "2026-04-24T02:05:00+09:00",
+                        "phase1_observation_gate": "blocked",
+                        "phase1_observation_reasons": "confidence_below_min",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "SWEEP_WAIT",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close,ask_wall_close",
+                        "confidence_direction_shadow": "60",
+                        "confidence_execution_shadow": "25",
+                        "confidence_wait_shadow": "75",
+                        "outcome": "win",
+                        "tp1_hit_first": "true",
+                        "signal_based_MFE_24h": "15",
+                        "signal_based_MAE_24h": "5",
+                    }
+                )
+
+            report = build_phase1b_promotion_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-04-24",
+                date_to="2026-04-24",
+            )
+
+            self.assertIn("- 候補件数: 1件", report)
+            self.assertIn("- prelabel: SWEEP_WAIT=1件", report)
+            self.assertIn("- 勝率=100.0% / TP1先行=100.0% / 近似PF=3.00", report)
+            self.assertIn("- promo_1: 2026-04-24 03:05 / prelabel=SWEEP_WAIT / direction=58.0 / execution=22.0 / wait=80.0", report)
+            self.assertNotIn("blocked_1", report)
+
     def test_main_build_relaxation_candidates_report_accepts_output_path(self) -> None:
         with patch.object(sys, "argv", ["log_feedback.py", "build-relaxation-candidates-report", "--output-md", "/tmp/relax.md"]), patch(
             "tools.log_feedback.build_relaxation_candidates_report"
@@ -2853,6 +2915,17 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/relax.md"))
+
+    def test_main_build_phase1b_promotion_report_accepts_output_path(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "build-phase1b-promotion-report", "--output-md", "/tmp/promotion.md"]), patch(
+            "tools.log_feedback.build_phase1b_promotion_report"
+        ) as mocked_report:
+            mocked_report.return_value = "# promotion\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/promotion.md"))
 
 
 if __name__ == "__main__":

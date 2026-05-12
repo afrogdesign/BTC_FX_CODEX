@@ -13,6 +13,47 @@ def _dedupe(values: list[str]) -> list[str]:
     return unique
 
 
+_LONG_REVERSAL_RISK_REQUIRED_FLAGS = {"sweep_incomplete"}
+_LONG_REVERSAL_RISK_TRIGGER_FLAGS = {
+    "orderbook_ask_heavy",
+    "ask_wall_close",
+    "lower_liquidity_close",
+    "long_flush_exhaustion",
+}
+
+
+def derive_additional_risk_flags(
+    *,
+    bias: str,
+    market_regime: str,
+    transition_direction: str,
+    primary_setup_status: str,
+    primary_setup_reason: str,
+    risk_flags: list[str],
+    long_factor_breakdown: dict[str, float] | None = None,
+) -> list[str]:
+    derived_flags = list(risk_flags)
+    normalized_flags = {str(flag or "").strip() for flag in risk_flags if str(flag or "").strip()}
+    normalized_breakdown = long_factor_breakdown or {}
+
+    long_reversal_risk = (
+        str(bias or "").strip() == "long"
+        and str(market_regime or "").strip() == "transition"
+        and str(transition_direction or "").strip() == "down"
+        and str(primary_setup_status or "").strip() == "watch"
+        and str(primary_setup_reason or "").strip() in {"entry_zone_not_reached", "confidence_below_min"}
+        and _LONG_REVERSAL_RISK_REQUIRED_FLAGS.issubset(normalized_flags)
+        and (
+            bool(_LONG_REVERSAL_RISK_TRIGGER_FLAGS & normalized_flags)
+            or "near_resistance_penalty" in normalized_breakdown
+        )
+    )
+    if long_reversal_risk:
+        derived_flags.append("long_reversal_risk")
+
+    return _dedupe(derived_flags)
+
+
 def assemble_result_flags(
     *,
     bias: str,

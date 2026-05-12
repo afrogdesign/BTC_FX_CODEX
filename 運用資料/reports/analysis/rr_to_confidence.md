@@ -1,10 +1,10 @@
 # 現行 Setup 比較
 
-- 比較対象 shadow 行数: 990
+- 比較対象 shadow 行数: 1085
 - フィルタ: 旧 reason=rr_below_min
 - フィルタ: 現行 reason=confidence_below_min
 - フィルタ: date_from=2026-04-18
-- フィルタ: date_to=2026-04-25
+- フィルタ: date_to=2026-04-29
 - 現行 setup との差分あり: 1
 - 差分ありのうち通知済み: 0
 - 平均 execution_shadow: 11.0

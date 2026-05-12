@@ -110,6 +110,27 @@ class NotificationRankTest(unittest.TestCase):
             ("normal_main", "通常の本通知", "📊"),
         )
 
+    def test_main_rank_is_downgraded_when_long_reversal_risk_is_present(self) -> None:
+        ctx = build_notification_context(
+            {
+                "bias": "long",
+                "notification_kind": "main",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "prelabel": "ENTRY_OK",
+                "trade_execution_gate": "blocked",
+                "signal_tier": "normal",
+                "confidence": 68,
+                "rr_estimate": 1.35,
+                "score_gap": 42,
+                "risk_flags": ["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
+            }
+        )
+        self.assertEqual(
+            (ctx["final_rank_code"], ctx["final_rank_label"], ctx["final_rank_emoji"]),
+            ("normal_main", "通常の本通知", "📊"),
+        )
+
     def test_final_rank_is_always_one_of_five_known_values(self) -> None:
         expected_codes = {"strong_main", "high_main", "normal_main", "attention", "no_send"}
         seen_codes: set[str] = set()

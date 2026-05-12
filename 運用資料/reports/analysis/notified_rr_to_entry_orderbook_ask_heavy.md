@@ -1,12 +1,12 @@
 # 現行 Setup 比較
 
-- 比較対象 shadow 行数: 990
+- 比較対象 shadow 行数: 1085
 - フィルタ: 通知済みのみ
 - フィルタ: 旧 reason=rr_below_min
 - フィルタ: 現行 reason=entry_zone_not_reached
 - フィルタ: risk_flag=orderbook_ask_heavy
 - フィルタ: date_from=2026-04-18
-- フィルタ: date_to=2026-04-25
+- フィルタ: date_to=2026-04-29
 - 現行 setup との差分あり: 0
 - 差分ありのうち通知済み: 0
 

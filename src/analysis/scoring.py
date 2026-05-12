@@ -130,6 +130,17 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         short_raw += 10
         _add_factor(short_factors, "breakout_down", 10.0)
 
+    if regime == "transition" and transition_direction == "down" and breakout_up:
+        long_raw -= 8
+        short_raw += 4
+        _add_factor(long_factors, "breakout_up_reversal_risk", -8.0)
+        _add_factor(short_factors, "failed_breakout_down_hint", 4.0)
+    elif regime == "transition" and transition_direction == "up" and breakout_down:
+        short_raw -= 8
+        long_raw += 4
+        _add_factor(short_factors, "breakout_down_reversal_risk", -8.0)
+        _add_factor(long_factors, "failed_breakout_up_hint", 4.0)
+
     if regime == "transition" and transition_direction == "up":
         long_raw += 6
         _add_factor(long_factors, "transition_up_hint", 6.0)

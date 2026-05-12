@@ -140,7 +140,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("待機圧力", html)
         self.assertIn("スコア差", html)
         self.assertIn("最終ランク", html)
-        self.assertIn("🟠 高め本通知", html)
+        self.assertIn("📊 通常の本通知", html)
         self.assertIn("補足状態", html)
         self.assertIn("ロング / ショートの再検討ライン", html)
         self.assertIn("4時間足: 大局方向", html)

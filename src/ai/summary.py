@@ -105,8 +105,11 @@ def _root_summary_lines(
     notification_context: dict[str, Any],
 ) -> list[str]:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
-    lines = [
-        "【結論】",
+    lines = ["【結論】"]
+    if display_context.get("primary_setup_status") == "watch" and str(result.get("trade_execution_gate", "")).strip() == "blocked":
+        lines.append("これは実行候補ではありません。監視と再評価のための通知です。")
+    lines.extend(
+        [
         f"最終ランク: {notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}（{notification_context.get('final_rank_explanation', 'メール送信条件は未成立')}）",
         f"補足状態: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
         f"方向判断: {display_context['direction_label']}",
@@ -115,7 +118,8 @@ def _root_summary_lines(
         f"有効目安: {notification_context.get('validity_label', '次回更新までを目安')}",
         "",
         "【いま重視する理由】",
-    ]
+        ]
+    )
     for reason in notification_context.get("reason_labels", []):
         lines.append(f"- {reason}")
     lines.extend(

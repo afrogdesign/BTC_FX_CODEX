@@ -31,7 +31,7 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
-from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.observation_gate import determine_phase1_observation_gate, is_confidence_watch_learning_candidate
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -991,6 +991,41 @@ def _collect_relax_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]
     return candidates
 
 
+def _collect_confidence_watch_learning_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if not is_confidence_watch_learning_candidate(
+            primary_setup_status=str(row.get("primary_setup_status", "")),
+            primary_setup_reason=str(row.get("primary_setup_reason", "")),
+            prelabel=str(row.get("prelabel", "")),
+            risk_flags=risk_flags,
+            confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+        ):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_status": str(row.get("primary_setup_status", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
 def build_operational_focus_report(
     *,
     base_dir: Path,
@@ -1061,6 +1096,7 @@ def build_operational_focus_report(
     combo_focus_details: list[dict[str, Any]] = []
     combo_flags = ["orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"]
     relax_candidates = _collect_relax_candidates(filtered_rows)
+    promotion_candidates = _collect_confidence_watch_learning_candidates(filtered_rows)
     for reason in ("confidence_below_min", "no_trade_candidate"):
         subset = []
         for row in blocked_rows:
@@ -1187,6 +1223,21 @@ def build_operational_focus_report(
                 f"- {item['signal_id']}: confidence_below_min / prelabel={item['prelabel']} / "
                 f"setup={item['setup_reason']} / execution={item['execution']:.1f} / wait={item['wait']:.1f}"
             )
+    if promotion_candidates:
+        lines.append("")
+        lines.append("## Phase 1B 昇格候補")
+        lines.append(
+            f"- 候補件数: {len(promotion_candidates)}件 / 平均 direction={_mean_value(promotion_candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(promotion_candidates, 'execution'):.1f} / 平均 wait={_mean_value(promotion_candidates, 'wait'):.1f}"
+        )
+        lines.append(
+            f"- prelabel: {_format_counter(Counter(str(item.get('prelabel', '')).strip() for item in promotion_candidates), limit=5)}"
+        )
+        for item in promotion_candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {item['setup_reason']} / prelabel={item['prelabel']} / "
+                f"direction={item['direction']:.1f} / execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
 
     report = "\n".join(lines) + "\n"
     if output_md is not None:
@@ -1243,6 +1294,73 @@ def build_relaxation_candidates_report(
             )
     else:
         lines.append("- 候補はありません")
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_phase1b_promotion_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_confidence_watch_learning_candidates(filtered_rows)
+
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+
+    lines = ["# Phase 1B 昇格候補レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: watch + confidence_below_min + SWEEP_WAIT/RISKY_ENTRY + sweep_incomplete + lower_liquidity_close + 補助 hard flag なし")
+    lines.append("- 昇格観測条件: direction>=55 / execution>=18 / wait<=85")
+    lines.append(f"- 候補件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- prelabel: {_format_counter(prelabel_counts, limit=5)}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(
+            f"- 勝率={_format_pct(_ratio(sum(1 for flag in settled if flag), len(settled)))} / "
+            f"TP1先行={_format_pct(_ratio(sum(1 for row in tp_pool if row.get('tp1_hit_first') == 'true'), len(tp_pool)))} / "
+            f"近似PF={(mfe_sum / mae_sum) if mae_sum > 0 else 0.0:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={_mean_value(candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(candidates, 'execution'):.1f} / 平均 wait={_mean_value(candidates, 'wait'):.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={_mean_value(candidates, 'signal_based_MFE_24h'):.2f} / "
+            f"平均MAE={_mean_value(candidates, 'signal_based_MAE_24h'):.2f}"
+        )
+    lines.append("")
+    lines.append("## 候補一覧")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / direction={item['direction']:.1f} / "
+                f"execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+    else:
+        lines.append("- 候補はありません")
+
     report = "\n".join(lines) + "\n"
     if output_md is not None:
         _ensure_parent(output_md)
@@ -4247,6 +4365,7 @@ def build_shadow_log(
             prelabel=effective_prelabel,
             data_quality_flag=str(trade.get("data_quality_flag", "")),
             no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
             confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
             confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
             confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
@@ -4706,7 +4825,30 @@ def _phase1_observation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "overall": perf(pass_rows),
         "direction_rr_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "direction_rr_learning"]),
         "setup_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "setup_watch_learning"]),
+        "confidence_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "confidence_watch_learning"]),
         "representatives": representatives,
+    }
+
+
+def _phase1b_promotion_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_confidence_watch_learning_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    return {
+        "count": len(candidates),
+        "prelabels": _format_counter(prelabel_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
     }
 
 
@@ -5530,6 +5672,7 @@ def build_feedback_report(
         completed,
         _load_csv_rows(observation_paper_orders_path),
     )
+    promotion_summary = _phase1b_promotion_summary(completed)
     phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
     phase1_focus = _phase1_focus_rows(completed)
     phase1_blocker_examples = _phase1_blocker_examples(completed)
@@ -5858,6 +6001,8 @@ def build_feedback_report(
             lines.append(_format_observation_perf("direction_rr_learning", observation_summary["direction_rr_learning"]))
         if observation_summary["setup_watch_learning"]["count"]:
             lines.append(_format_observation_perf("setup_watch_learning", observation_summary["setup_watch_learning"]))
+        if observation_summary["confidence_watch_learning"]["count"]:
+            lines.append(_format_observation_perf("confidence_watch_learning", observation_summary["confidence_watch_learning"]))
         if observation_summary["representatives"]:
             lines.append(f"- 代表例: {', '.join(observation_summary['representatives'])}")
     if observation_summary["blocked_count"]:
@@ -5877,6 +6022,28 @@ def build_feedback_report(
     if phase1a_summary["representatives"]:
         lines.append(f"- 代表例: {', '.join(phase1a_summary['representatives'])}")
     lines.append("- 扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ")
+    lines.append("")
+
+    lines.append("### Phase 1B 昇格候補")
+    lines.append(f"- confidence_watch_learning 候補: {promotion_summary['count']}件")
+    if promotion_summary["count"]:
+        lines.append(f"- prelabel: {promotion_summary['prelabels']}")
+        lines.append(
+            f"- 勝率={_format_pct(promotion_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(promotion_summary['tp1_first_rate'])} / "
+            f"近似PF={promotion_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={promotion_summary['avg_direction']:.1f} / "
+            f"平均 execution={promotion_summary['avg_execution']:.1f} / "
+            f"平均 wait={promotion_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={promotion_summary['avg_mfe']:.2f} / 平均MAE={promotion_summary['avg_mae']:.2f}"
+        )
+        if promotion_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(promotion_summary['representatives'])}")
+    lines.append("- 扱い: `trade_execution_gate=pass` ではないが、限定条件付きで Phase 1B 候補へ昇格を検討する母集団")
     lines.append("")
 
     lines.append("### 紙トレード準備")
@@ -6190,6 +6357,12 @@ def _build_parser() -> argparse.ArgumentParser:
     relaxation_parser.add_argument("--date-to", default="")
     relaxation_parser.add_argument("--limit", type=int, default=20)
 
+    promotion_parser = subparsers.add_parser("build-phase1b-promotion-report")
+    promotion_parser.add_argument("--output-md")
+    promotion_parser.add_argument("--date-from", default="")
+    promotion_parser.add_argument("--date-to", default="")
+    promotion_parser.add_argument("--limit", type=int, default=20)
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -6293,6 +6466,21 @@ def main() -> None:
     if args.command == "build-relaxation-candidates-report":
         output_md = Path(args.output_md) if args.output_md else None
         report = build_relaxation_candidates_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-phase1b-promotion-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_phase1b_promotion_report(
             base_dir=base_dir,
             output_md=output_md,
             date_from=str(args.date_from),

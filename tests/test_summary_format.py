@@ -271,3 +271,58 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertIn("位置評価: 位置は悪くないが強度未成立", body)
+
+    def test_watch_blocked_long_reversal_is_presented_as_monitoring_not_long_entry(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-04-29T19:05:00+09:00",
+            "system_label": "Ver02.5-v4",
+            "system_mode_label": "CLI",
+            "notification_kind": "main",
+            "prelabel": "ENTRY_OK",
+            "bias": "long",
+            "signal_tier": "normal",
+            "trade_execution_gate": "blocked",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "entry_zone_not_reached",
+            "current_price": 77605.5,
+            "confidence": 68,
+            "rr_estimate": 1.35,
+            "score_gap": 42,
+            "confidence_direction_shadow": 92.0,
+            "confidence_execution_shadow": 24.0,
+            "confidence_wait_shadow": 78.0,
+            "warning_flags": [],
+            "risk_flags": ["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
+            "no_trade_flags": [],
+            "market_regime": "transition",
+            "phase": "breakout",
+            "signals_4h": "long",
+            "signals_1h": "long",
+            "signals_15m": "short",
+            "long_display_score": 92,
+            "short_display_score": 50,
+            "long_setup": {"status": "watch", "entry_zone": {"low": 77100.0, "high": 77300.0}, "stop_loss": 76800.0, "tp1": 78100.0, "tp2": 78600.0},
+            "short_setup": {"status": "watch", "entry_zone": {"low": 77680.0, "high": 77850.0}, "stop_loss": 78150.0, "tp1": 77100.0, "tp2": 76700.0},
+            "ai_advice": None,
+        }
+
+        subject = build_summary_subject(payload)
+        body, _provider_used = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("📊 [通常の本通知]", subject)
+        self.assertNotIn("🟠 [高め本通知]", subject)
+        self.assertIn("上方向監視", subject)
+        self.assertIn("下落警戒", subject)
+        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
+        self.assertIn("執行判断: 監視継続（実行不可）", body)
+        self.assertIn("位置評価: 位置は悪くないが未到達", body)
+        self.assertIn("最終ランク: 📊 通常の本通知（下落警戒を優先して標準扱いに抑制）", body)

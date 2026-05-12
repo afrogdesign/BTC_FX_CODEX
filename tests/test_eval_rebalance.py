@@ -147,6 +147,36 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertIn("Funding_warning_long", result["warning_flags"])
         self.assertEqual(control["long_raw_score"] - result["long_raw_score"], 4.0)
 
+    def test_transition_down_breakout_up_adds_reversal_penalty(self) -> None:
+        base_inputs = {
+            "market_regime": "transition",
+            "ema_alignment_4h": "bullish",
+            "ema20_slope_4h": "up",
+            "structure_4h": "hh_hl",
+            "structure_1h": "hh_hl",
+            "price": 100.0,
+            "ema50_4h": 95.0,
+            "rsi_15m": 52.0,
+            "volume_ratio": 1.20,
+            "atr_ratio": 1.0,
+            "funding_rate": 0.0,
+            "rr_long": 1.5,
+            "rr_short": 1.5,
+            "near_support": False,
+            "near_resistance": True,
+            "breakout_up": True,
+            "breakout_down": False,
+            "in_range_center": False,
+            "signals_15m": "short",
+        }
+        control = compute_scores({**base_inputs, "transition_direction": "up"}, self.cfg)
+        result = compute_scores({**base_inputs, "transition_direction": "down"}, self.cfg)
+
+        self.assertLess(result["long_raw_score"], control["long_raw_score"])
+        self.assertGreater(result["short_raw_score"], control["short_raw_score"])
+        self.assertIn("breakout_up_reversal_risk", result["long_factor_breakdown"])
+        self.assertIn("failed_breakout_down_hint", result["short_factor_breakdown"])
+
     def test_confidence_uses_major_minor_warning_budget(self) -> None:
         base_inputs = {
             "bias": "short",
