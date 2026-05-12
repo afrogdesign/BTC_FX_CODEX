@@ -1638,6 +1638,112 @@ def build_market_map_effectiveness_report(
     return report
 
 
+MARKET_MAP_READINESS_FIELDS = (
+    "market_map_primary_state",
+    "market_map_flags",
+    "nearest_major_support",
+    "nearest_major_resistance",
+    "active_level_role",
+    "level_flip_state",
+    "failed_breakout_state",
+    "trend_flip_state",
+)
+
+
+def _has_market_map_value(row: dict[str, Any]) -> bool:
+    return any(str(row.get(field, "")).strip() for field in MARKET_MAP_READINESS_FIELDS)
+
+
+def _latest_timestamp_row(rows: list[dict[str, str]]) -> dict[str, str] | None:
+    dated_rows = [(dt, row) for row in rows if (dt := _parse_dt(str(row.get("timestamp_jst", "")).strip())) is not None]
+    if not dated_rows:
+        return rows[0] if rows else None
+    return max(dated_rows, key=lambda item: item[0])[1]
+
+
+def _extract_summary_version(row: dict[str, str] | None) -> str:
+    if not row:
+        return "なし"
+    subject = str(row.get("summary_subject", "")).strip()
+    match = re.search(r"\[(Ver[^\]]+)\]", subject)
+    if not match:
+        return "不明"
+    return match.group(1)
+
+
+def build_market_map_readiness_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    min_market_rows: int = 1,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    market_rows = [row for row in filtered_rows if _has_market_map_value(row)]
+    latest_row = _latest_timestamp_row(filtered_rows)
+    latest_market_row = _latest_timestamp_row(market_rows)
+    empty_latest_fields = [
+        field
+        for field in MARKET_MAP_READINESS_FIELDS
+        if latest_row is not None and not str(latest_row.get(field, "")).strip()
+    ]
+    ready = len(market_rows) >= max(1, int(min_market_rows))
+
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+
+    lines = ["# market_map readiness レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- readiness: {'pass' if ready else 'wait'}")
+    lines.append(f"- market_map 記録あり: {len(market_rows)}件 / 必要件数 {max(1, int(min_market_rows))}件")
+    if latest_row:
+        lines.append(
+            f"- 最新 shadow: {latest_row.get('signal_id', '')} / "
+            f"{str(latest_row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / "
+            f"subject_version={_extract_summary_version(latest_row)}"
+        )
+        lines.append(f"- 最新 shadow の空 market_map 欄: {', '.join(empty_latest_fields) if empty_latest_fields else 'なし'}")
+    else:
+        lines.append("- 最新 shadow: なし")
+    if latest_market_row:
+        lines.append(
+            f"- 最新 market_map: {latest_market_row.get('signal_id', '')} / "
+            f"{str(latest_market_row.get('timestamp_jst', ''))[:16].replace('T', ' ')}"
+        )
+    else:
+        lines.append("- 最新 market_map: なし")
+    lines.append(f"- primary_state: {_format_counter(primary_counts, limit=8)}")
+    lines.append(f"- market_map_flags: {_format_counter(flag_counts, limit=10)}")
+    lines.append("")
+    lines.append("## 判定")
+    if ready:
+        lines.append("- market_map の実データが入り始めています。次は有効性レポートで flag 別成績を確認します。")
+    else:
+        lines.append("- market_map の実データはまだ入っていません。次回監視サイクル後に再確認します。")
+    lines.append("")
+    lines.append("## 次のコマンド")
+    lines.append("- ./.venv312/bin/python tools/log_feedback.py build-market-map-readiness-report --date-from 2026-05-13")
+    lines.append("- ./.venv312/bin/python tools/log_feedback.py build-market-map-effectiveness-report --date-from 2026-05-13")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
     signal_path = _signal_snapshot_path(base_dir, signal_id)
     payload = load_json(signal_path)
@@ -6813,6 +6919,12 @@ def _build_parser() -> argparse.ArgumentParser:
     market_map_parser.add_argument("--date-to", default="")
     market_map_parser.add_argument("--limit", type=int, default=20)
 
+    market_map_readiness_parser = subparsers.add_parser("build-market-map-readiness-report")
+    market_map_readiness_parser.add_argument("--output-md")
+    market_map_readiness_parser.add_argument("--date-from", default="")
+    market_map_readiness_parser.add_argument("--date-to", default="")
+    market_map_readiness_parser.add_argument("--min-market-rows", type=int, default=1)
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -6966,6 +7078,21 @@ def main() -> None:
             date_from=str(args.date_from),
             date_to=str(args.date_to),
             limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-market-map-readiness-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_market_map_readiness_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            min_market_rows=int(args.min_market_rows),
         )
         if output_md:
             print(output_md)

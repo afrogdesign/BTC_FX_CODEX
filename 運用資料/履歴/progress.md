@@ -46,6 +46,8 @@
   - `market_map` 系のメール文言を明示化し、`long_into_major_resistance`、`support_to_resistance_flip`、`failed_breakout_down_reversal`、`trend_flip_*` などが「内部要因」ではなく、追いかけ注意、戻り売り確認、押し目確認、転換初動として読めるようにした。
   - 件名の主理由、本文の「いま重視する理由」、次に見る条件、無効化目安でも market_map 系の意味が出るようにし、`watch + blocked` の誤読をさらに減らした。
   - 確認は `./.venv312/bin/python -m unittest discover -s tests` を実施し、153 件 OK を確認した。併せて `git diff --check` も OK。
+  - `tools/log_feedback.py` に `build-market-map-readiness-report` を追加し、`market_map` が実ログへ入り始めたかを短く判定できるようにした。`2026-05-13` 時点では `readiness=wait`、最新 shadow は `20260512_180500 / 03:05 / Ver02.5-v4` で、`ver02.5-v5` の値入りは次サイクル待ち。
+  - readiness 結果は `運用資料/reports/analysis/market_map_readiness_20260513.md` に保存した。確認は `./.venv312/bin/python -m unittest tests.test_log_feedback -k market_map` を実施し、5 件 OK。
 
 - 2026-04-30 JST
   - `20260429_100500` のように、内部は `watch + trade_execution_gate=blocked` なのにロング推奨に見える通知が大きな下落になった失敗を受け、`運用資料/計画/ロング誤判定と下落取り逃し改善計画_20260430.md` を追加した。

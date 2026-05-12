@@ -41,6 +41,7 @@ from tools.log_feedback import (
     build_failed_breakout_down_reversal_report,
     build_feedback_report,
     build_market_map_effectiveness_report,
+    build_market_map_readiness_report,
     build_observation_paper_orders,
     build_operational_focus_report,
     build_phase1b_promotion_report,
@@ -3011,6 +3012,63 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("failed_breakout_down_reversal: 勝率=0.0%", report)
             self.assertIn("map_down_1", report)
 
+    def test_build_market_map_readiness_report_waits_without_values(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "latest_without_map",
+                        "timestamp_jst": "2026-05-13T04:05:00+09:00",
+                        "summary_subject": "👀 [注意報] 上方向監視 【BTC:80,493】 [Ver02.5-v5] [CLI]",
+                    }
+                )
+
+            report = build_market_map_readiness_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-05-13",
+            )
+
+            self.assertIn("- readiness: wait", report)
+            self.assertIn("- market_map 記録あり: 0件", report)
+            self.assertIn("subject_version=Ver02.5-v5", report)
+            self.assertIn("market_map_primary_state", report)
+
+    def test_build_market_map_readiness_report_passes_with_values(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "map_ready",
+                        "timestamp_jst": "2026-05-13T05:05:00+09:00",
+                        "market_map_primary_state": "confirmed_down",
+                        "market_map_flags": "support_to_resistance_flip,failed_breakout_down_reversal",
+                    }
+                )
+
+            report = build_market_map_readiness_report(
+                base_dir=base_dir,
+                shadow_path=shadow_path,
+                date_from="2026-05-13",
+            )
+
+            self.assertIn("- readiness: pass", report)
+            self.assertIn("- market_map 記録あり: 1件", report)
+            self.assertIn("confirmed_down=1件", report)
+            self.assertIn("failed_breakout_down_reversal=1件", report)
+
     def test_main_build_relaxation_candidates_report_accepts_output_path(self) -> None:
         with patch.object(sys, "argv", ["log_feedback.py", "build-relaxation-candidates-report", "--output-md", "/tmp/relax.md"]), patch(
             "tools.log_feedback.build_relaxation_candidates_report"
@@ -3058,6 +3116,20 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/market_map.md"))
+
+    def test_main_build_market_map_readiness_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-market-map-readiness-report", "--output-md", "/tmp/market_map_ready.md", "--min-market-rows", "3"],
+        ), patch("tools.log_feedback.build_market_map_readiness_report") as mocked_report:
+            mocked_report.return_value = "# market_map readiness\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/market_map_ready.md"))
+        self.assertEqual(mocked_report.call_args.kwargs["min_market_rows"], 3)
 
 
 if __name__ == "__main__":
