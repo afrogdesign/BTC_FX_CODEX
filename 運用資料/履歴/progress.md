@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-13 JST
+更新日: 2026-05-15 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,13 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-15 JST
+  - `./.venv312/bin/python tools/log_feedback.py build-market-map-readiness-report --output-md 運用資料/reports/analysis/market_map_readiness_20260514.md --date-from 2026-05-13` を実行し、`readiness=pass`、対象 shadow 37 行中 `market_map 記録あり=33件` を確認した。
+  - `./.venv312/bin/python tools/log_feedback.py build-market-map-effectiveness-report --output-md 運用資料/reports/analysis/market_map_effectiveness_20260514.md --date-from 2026-05-13 --date-to 2026-05-14` を実行し、`support_to_resistance_flip=21件`、`trend_flip_confirmed_down=17件`、`failed_breakout_up_reversal=8件` を確認した。
+  - 初期サンプルでは `trend_flip_confirmed_up=4件` が勝率 0.0% / wrong_rate 50.0% と弱く、次回以降の有効性レポートで継続確認する対象にした。`trade_execution_gate=pass` と `paper_orders planned` は引き続き 0 件で、Phase 1B 本有効は未達。
+  - `com.afrog.btc-monitor` は iMac 2019 上で running、`logs/heartbeat.txt` と `logs/last_result.json` は 2026-05-15 00:05 JST 更新、`monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空であることを確認した。
+  - `NEXT_TASK.md` を `feedback_daily_sync_20260514.md` と新規 market_map レポート基準へ更新し、古い `readiness=wait` 前提を解消した。
 
 - 2026-05-13 JST
   - 現時点の差分一式を `ver02.5-v5` ブランチとして切り出し、commit `2a0ca4b Prepare ver02.5-v5 updates and reports` を作成して `origin/ver02.5-v5` へ push した。
