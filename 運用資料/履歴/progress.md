@@ -28,6 +28,11 @@
 ## 重要な節目ログ
 
 - 2026-05-15 JST
+  - `ver02.5-v5` から新ブランチ `ver02.5-v6` を作成した。
+  - `.env` / `.env.example` の `SYSTEM_LABEL` を `Ver02.5-v6` へ更新し、入口資料の現行版表記も `Ver02.5-v6` に合わせた。
+  - 常駐 `com.afrog.btc-monitor` の再起動と次回件名 `[Ver02.5-v6] [CLI]` の確認は次作業に残した。
+
+- 2026-05-15 JST
   - `./.venv312/bin/python tools/log_feedback.py build-market-map-readiness-report --output-md 運用資料/reports/analysis/market_map_readiness_20260514.md --date-from 2026-05-13` を実行し、`readiness=pass`、対象 shadow 37 行中 `market_map 記録あり=33件` を確認した。
   - `./.venv312/bin/python tools/log_feedback.py build-market-map-effectiveness-report --output-md 運用資料/reports/analysis/market_map_effectiveness_20260514.md --date-from 2026-05-13 --date-to 2026-05-14` を実行し、`support_to_resistance_flip=21件`、`trend_flip_confirmed_down=17件`、`failed_breakout_up_reversal=8件` を確認した。
   - 初期サンプルでは `trend_flip_confirmed_up=4件` が勝率 0.0% / wrong_rate 50.0% と弱く、次回以降の有効性レポートで継続確認する対象にした。`trade_execution_gate=pass` と `paper_orders planned` は引き続き 0 件で、Phase 1B 本有効は未達。
