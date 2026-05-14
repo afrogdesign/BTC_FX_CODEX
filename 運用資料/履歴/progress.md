@@ -28,6 +28,12 @@
 ## 重要な節目ログ
 
 - 2026-05-15 JST
+  - 改善案 `2026-05-15_042121_btc_notification_design_codex.md` を実装方針へ落とし込み、`運用資料/計画/通知ランク再設計_実装設計_20260515.md` を追加した。
+  - 通知ランクを `執行候補・強` / `執行候補` / `高優先監視・実行不可` / `通常監視・実行不可` / `注意報・売買非推奨` に再設計した。`trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ執行候補を出し、それ以外の本通知は監視系として表示する。
+  - 件名・本文冒頭・詳細ページの期待値を新ランクへ合わせ、注意報は「売買推奨ではない」こと、監視通知は「実行候補ではない」ことを先に出すようにした。
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `21314`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py` を確認した。05:05 サイクルで `logs/last_result.json` と `logs/heartbeat.txt` が更新され、`monitor.err` は空。05:05 は `final_rank_code=no_send` のため、`[Ver02.5-v6] [CLI]` 件名確認は次回送信時に持ち越し。
+
+- 2026-05-15 JST
   - `ver02.5-v5` から新ブランチ `ver02.5-v6` を作成した。
   - `.env` / `.env.example` の `SYSTEM_LABEL` を `Ver02.5-v6` へ更新し、入口資料の現行版表記も `Ver02.5-v6` に合わせた。
   - 常駐 `com.afrog.btc-monitor` の再起動と次回件名 `[Ver02.5-v6] [CLI]` の確認は次作業に残した。

@@ -372,60 +372,29 @@ def _execution_label(result: dict[str, Any], status_code: str) -> str:
     return "見送り"
 
 
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
 def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str, str]:
-    notification_kind = str(result.get("notification_kind", "")).lower().strip()
-    bias = str(result.get("bias", "")).lower()
-    is_main_context = notification_kind == "main" or (
-        notification_kind not in {"main", "attention", "none"} and status_code in {"actionable", "monitor", "invalid"} and bias in {"long", "short"}
-    )
+    del status_code
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
 
     if notification_kind == "attention":
-        return "attention", "注意報", "👀", "方向変化の早期共有"
+        return "attention", "注意報・売買非推奨", "👀", "方向変化の早期共有。売買推奨ではありません"
 
-    if not is_main_context:
+    if notification_kind != "main":
         return "no_send", "送信なし", "⚪", "メール送信条件は未成立"
 
-    risk_flags = {str(flag).strip() for flag in result.get("risk_flags", []) if str(flag).strip()}
-    if status_code == "monitor":
-        if "long_reversal_risk" in risk_flags:
-            return "normal_main", "通常の本通知", "📊", "下落警戒を優先して標準扱いに抑制"
-        if "failed_breakout_down_reversal" in risk_flags or "support_to_resistance_flip" in risk_flags:
-            return "normal_main", "通常の本通知", "📊", "上抜け失敗・戻り売り警戒を優先して標準扱いに抑制"
-        if "failed_breakout_up_reversal" in risk_flags or "resistance_to_support_flip" in risk_flags:
-            return "normal_main", "通常の本通知", "📊", "下抜け失敗・押し目確認を優先して標準扱いに抑制"
-
-    execution_shadow = _safe_float(result.get("confidence_execution_shadow"))
-    wait_shadow = _safe_float(result.get("confidence_wait_shadow"))
-    if execution_shadow <= 20.0 and wait_shadow >= 60.0:
-        return "normal_main", "通常の本通知", "📊", "実行しにくさを優先して標準扱いに抑制"
-
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
     signal_tier = str(result.get("signal_tier", "normal")).strip().lower()
-    if signal_tier == "strong_machine":
-        return "strong_main", "強い本通知", "🔥", "条件がかなり整った本通知"
+    if trade_gate == "pass" and paper_order_status == "planned":
+        if signal_tier == "strong_machine":
+            return "strong_main", "執行候補・強", "🔥", "実行候補として条件がかなり整っています"
+        return "high_main", "執行候補", "✅", "実行ゲートを通過した執行候補です"
 
-    confidence = _safe_float(result.get("confidence"))
-    confidence_floor = 45.0 if bias == "long" else 55.0 if bias == "short" else 50.0
-    prelabel = str(result.get("prelabel", "")).upper()
-    rr_estimate = _safe_float(result.get("rr_estimate"))
-    score_gap = abs(_safe_float(result.get("score_gap")))
+    observation_gate = str(result.get("phase1_observation_gate", "blocked")).lower().strip() or "blocked"
+    if observation_gate == "pass":
+        return "high_watch", "高優先監視・実行不可", "🟠", "方向・構造は強いが、実行候補ではありません"
 
-    is_high = (
-        status_code == "actionable"
-        or (prelabel == "ENTRY_OK" and status_code != "invalid")
-        or confidence >= confidence_floor + 8.0
-        or rr_estimate >= 1.3
-        or score_gap >= 25.0
-    )
-    if is_high:
-        return "high_main", "高め本通知", "🟠", "条件が一段強い本通知"
-    return "normal_main", "通常の本通知", "📊", "標準的な本通知"
+    return "normal_main", "通常監視・実行不可", "📊", "監視と再評価のための通知です"
 
 
 def _entry_window_label(reason_code: str) -> str:

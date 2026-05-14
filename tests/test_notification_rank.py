@@ -22,12 +22,29 @@ class NotificationRankTest(unittest.TestCase):
                     "notification_kind": "main",
                     "primary_setup_status": "ready",
                     "prelabel": "ENTRY_OK",
+                    "trade_execution_gate": "pass",
+                    "paper_order_status": "planned",
                     "signal_tier": "strong_machine",
                     "confidence": 80,
                     "rr_estimate": 1.9,
                     "score_gap": 28,
                 },
-                ("strong_main", "強い本通知", "🔥"),
+                ("strong_main", "執行候補・強", "🔥"),
+            ),
+            (
+                {
+                    "bias": "short",
+                    "notification_kind": "main",
+                    "primary_setup_status": "ready",
+                    "prelabel": "ENTRY_OK",
+                    "trade_execution_gate": "pass",
+                    "paper_order_status": "planned",
+                    "signal_tier": "normal",
+                    "confidence": 66,
+                    "rr_estimate": 1.2,
+                    "score_gap": -18,
+                },
+                ("high_main", "執行候補", "✅"),
             ),
             (
                 {
@@ -35,12 +52,14 @@ class NotificationRankTest(unittest.TestCase):
                     "notification_kind": "main",
                     "primary_setup_status": "watch",
                     "prelabel": "SWEEP_WAIT",
+                    "trade_execution_gate": "blocked",
+                    "phase1_observation_gate": "pass",
                     "signal_tier": "normal",
                     "confidence": 66,
                     "rr_estimate": 1.2,
                     "score_gap": -18,
                 },
-                ("high_main", "高め本通知", "🟠"),
+                ("high_watch", "高優先監視・実行不可", "🟠"),
             ),
             (
                 {
@@ -48,12 +67,14 @@ class NotificationRankTest(unittest.TestCase):
                     "notification_kind": "main",
                     "primary_setup_status": "invalid",
                     "prelabel": "SWEEP_WAIT",
+                    "trade_execution_gate": "blocked",
+                    "phase1_observation_gate": "blocked",
                     "signal_tier": "normal",
                     "confidence": 60,
                     "rr_estimate": 0.9,
                     "score_gap": -12,
                 },
-                ("normal_main", "通常の本通知", "📊"),
+                ("normal_main", "通常監視・実行不可", "📊"),
             ),
             (
                 {
@@ -66,7 +87,7 @@ class NotificationRankTest(unittest.TestCase):
                     "rr_estimate": 0.9,
                     "score_gap": -21,
                 },
-                ("attention", "注意報", "👀"),
+                ("attention", "注意報・売買非推奨", "👀"),
             ),
             (
                 {
@@ -90,13 +111,14 @@ class NotificationRankTest(unittest.TestCase):
                 expected,
             )
 
-    def test_main_rank_is_downgraded_when_execution_is_low_and_wait_is_high(self) -> None:
+    def test_main_rank_requires_planned_paper_order_even_when_machine_is_strong(self) -> None:
         ctx = build_notification_context(
             {
                 "bias": "long",
                 "notification_kind": "main",
                 "primary_setup_status": "ready",
                 "prelabel": "ENTRY_OK",
+                "trade_execution_gate": "pass",
                 "signal_tier": "strong_machine",
                 "confidence": 82,
                 "rr_estimate": 1.9,
@@ -107,10 +129,10 @@ class NotificationRankTest(unittest.TestCase):
         )
         self.assertEqual(
             (ctx["final_rank_code"], ctx["final_rank_label"], ctx["final_rank_emoji"]),
-            ("normal_main", "通常の本通知", "📊"),
+            ("normal_main", "通常監視・実行不可", "📊"),
         )
 
-    def test_main_rank_is_downgraded_when_long_reversal_risk_is_present(self) -> None:
+    def test_blocked_observation_pass_becomes_high_watch_not_execution_candidate(self) -> None:
         ctx = build_notification_context(
             {
                 "bias": "long",
@@ -119,32 +141,46 @@ class NotificationRankTest(unittest.TestCase):
                 "primary_setup_reason": "entry_zone_not_reached",
                 "prelabel": "ENTRY_OK",
                 "trade_execution_gate": "blocked",
-                "signal_tier": "normal",
-                "confidence": 68,
-                "rr_estimate": 1.35,
+                "phase1_observation_gate": "pass",
+                "signal_tier": "strong_machine",
+                "confidence": 90,
+                "rr_estimate": 2.5,
                 "score_gap": 42,
                 "risk_flags": ["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
             }
         )
         self.assertEqual(
             (ctx["final_rank_code"], ctx["final_rank_label"], ctx["final_rank_emoji"]),
-            ("normal_main", "通常の本通知", "📊"),
+            ("high_watch", "高優先監視・実行不可", "🟠"),
         )
 
-    def test_final_rank_is_always_one_of_five_known_values(self) -> None:
-        expected_codes = {"strong_main", "high_main", "normal_main", "attention", "no_send"}
+    def test_final_rank_is_always_one_of_six_known_values(self) -> None:
+        expected_codes = {"strong_main", "high_main", "high_watch", "normal_main", "attention", "no_send"}
         seen_codes: set[str] = set()
         biases = ["wait", "long", "short"]
         notification_kinds = ["none", "main", "attention"]
         statuses = ["none", "invalid", "watch", "ready"]
         prelabels = ["NO_TRADE_CANDIDATE", "SWEEP_WAIT", "RISKY_ENTRY", "ENTRY_OK"]
         signal_tiers = ["normal", "strong_machine"]
+        trade_gates = ["blocked", "pass"]
+        paper_order_statuses = ["", "planned"]
+        observation_gates = ["blocked", "pass"]
         confidences = [30, 45, 55, 63, 75]
         rrs = [0.9, 1.2, 1.35, 1.85]
         gaps = [0, 12, 18, 30]
 
-        for bias, kind, status, prelabel, tier, confidence, rr_estimate, gap in product(
-            biases, notification_kinds, statuses, prelabels, signal_tiers, confidences, rrs, gaps
+        for bias, kind, status, prelabel, tier, trade_gate, paper_status, observation_gate, confidence, rr_estimate, gap in product(
+            biases,
+            notification_kinds,
+            statuses,
+            prelabels,
+            signal_tiers,
+            trade_gates,
+            paper_order_statuses,
+            observation_gates,
+            confidences,
+            rrs,
+            gaps,
         ):
             payload = {
                 "bias": bias,
@@ -152,6 +188,9 @@ class NotificationRankTest(unittest.TestCase):
                 "primary_setup_status": status,
                 "prelabel": prelabel,
                 "signal_tier": tier,
+                "trade_execution_gate": trade_gate,
+                "paper_order_status": paper_status,
+                "phase1_observation_gate": observation_gate,
                 "confidence": confidence,
                 "rr_estimate": rr_estimate,
                 "score_gap": gap if bias != "short" else -gap,

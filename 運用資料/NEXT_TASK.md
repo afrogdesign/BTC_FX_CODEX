@@ -10,7 +10,8 @@
 - `Phase 1B` の実行候補はまだ 0 件。`trade_execution_gate=pass` と `paper_orders planned` が出るまでは本有効へ進めない。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
-- メール件名ラベルは `.env` / `.env.example` とも `Ver02.5-v6` へ更新済み。`com.afrog.btc-monitor` の再起動確認は次タスク。
+- 通知ランクは `執行候補・強` / `執行候補` / `高優先監視・実行不可` / `通常監視・実行不可` / `注意報・売買非推奨` へ再設計済み。執行候補は `trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ出る。
+- メール件名ラベルは `.env` / `.env.example` とも `Ver02.5-v6` へ更新済み。`com.afrog.btc-monitor` は再起動済みで、05:05 サイクルの `last_result.json` 更新まで確認済み。
 - `market_map` は shadow 側でも値入り確認済み。`market_map_readiness_20260514.md` は `readiness=pass`。
 - AI 事後評価は `request_failed=0` を維持。backlog は残っているため、自然減を継続観測する。
 
@@ -24,6 +25,7 @@
 - `market_map` は `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log/メール文言へ流す。
 - 標準比較、運用焦点、Phase 1B 候補、失敗ブレイク、market_map readiness、有効性の各レポート CLI は実装済み。
 - 作業ブランチは `ver02.5-v6` へ切り替え済み。
+- 通知ランク再設計の実装設計は `運用資料/計画/通知ランク再設計_実装設計_20260515.md` に保存済み。
 
 ## 直近の基準値
 
@@ -45,12 +47,13 @@
 5. `confidence_below_min` の緩和は、`sweep_incomplete + lower_liquidity_close` でも補助 flag が薄い少数群だけを対象に検討する。
 6. `phase1b_promotion_candidates` は候補数と成績が増えるまで gate 緩和へ進めない。`feedback_daily_sync_20260515.md` では `confidence_watch_learning` 候補 1 件のみ。
 7. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ backlog を自然減できているか確認する。
-8. `Ver02.5-v6` 反映後、`com.afrog.btc-monitor` を再起動し、次回メール件名が `[Ver02.5-v6] [CLI]` になることを確認する。
+8. 次回メール送信が発生したら、件名が `[Ver02.5-v6] [CLI]` になっていることを確認する。05:05 サイクルは `no_send` のため件名確認は未発生。
+9. 新ランク反映後の実メールで、`高優先監視・実行不可` が実行候補に見えず、`執行候補` 系が実行ゲート通過時だけ出ることを確認する。
 
 ## 残作業一覧
 
 - 次回 `market_map_effectiveness_YYYYMMDD.md` を更新し、`trend_flip_confirmed_up`、`resistance_to_support_flip`、`failed_breakout_down_reversal` の成績がサンプル増でどう変わるか見る。
-- 最新 `last_result.json` の件名は `[Ver02.5-v5] [CLI]` まで確認済み。`Ver02.5-v6` 再起動後に `[Ver02.5-v6] [CLI]` へ変わるか確認する。
+- `com.afrog.btc-monitor` は `Ver02.5-v6` 反映後に再起動済み。最新 `last_result.json` は `2026-05-15T05:05:00+09:00` 更新で `final_rank_code=no_send` のため、件名確認は次回送信発生時に行う。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 65 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=4` は安定運用優先なら維持する。backlog 解消を優先する場合のみ `6` または `8` への増加を検討する。
 - 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。

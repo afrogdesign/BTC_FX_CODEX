@@ -111,7 +111,8 @@ class SummaryWordingTest(unittest.TestCase):
                 "short_setup": {},
             }
         )
-        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
+        self.assertIn("これは実行候補ではありません。", body)
+        self.assertIn("通常監視と再評価のための通知です。", body)
         self.assertIn("執行判断: 監視継続（実行不可）", body)
         self.assertIn("位置評価: 位置は悪くないが未到達", body)
 
@@ -139,8 +140,9 @@ class SummaryWordingTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
-        self.assertIn("最終ランク: 📊 通常の本通知（上抜け失敗・戻り売り警戒を優先して標準扱いに抑制）", body)
+        self.assertIn("これは実行候補ではありません。", body)
+        self.assertIn("通常監視と再評価のための通知です。", body)
+        self.assertIn("最終ランク: 📊 通常監視・実行不可（監視と再評価のための通知です）", body)
         self.assertIn("上抜け失敗後の下落転換型", body)
         self.assertIn("割れたサポートがレジスタンス化", body)
         self.assertIn("ロングは主要レジスタンス接近で追いかけ注意", body)
@@ -174,7 +176,7 @@ class SummaryWordingTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("最終ランク: 📊 通常の本通知（下抜け失敗・押し目確認を優先して標準扱いに抑制）", body)
+        self.assertIn("最終ランク: 📊 通常監視・実行不可（監視と再評価のための通知です）", body)
         self.assertIn("下抜け失敗後の上昇転換型", body)
         self.assertIn("上抜けたレジスタンスがサポート化", body)
         self.assertIn("ショートは主要サポート接近で追いかけ注意", body)

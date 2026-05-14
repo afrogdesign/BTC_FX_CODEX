@@ -87,6 +87,38 @@ def _format_zone_summary(name: str, zones: list[dict[str, Any]]) -> str:
     return f"{name}: " + " / ".join(parts)
 
 
+def _normalize_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).strip()
+    observation_gate = str(result.get("phase1_observation_gate", "blocked")).strip() or "blocked"
+    observation_type = str(result.get("phase1_observation_type", "")).strip()
+    trade_blockers = _normalize_text_list(result.get("trade_execution_blockers", []))
+    observation_reasons = _normalize_text_list(result.get("phase1_observation_reasons", []))
+
+    lines.extend(["", "【実行ゲート】", f"判定: {trade_gate}"])
+    if paper_order_status:
+        lines.append(f"paper_order_status: {paper_order_status}")
+    if trade_blockers:
+        lines.append("理由:")
+        lines.extend(f"- {blocker}" for blocker in trade_blockers)
+
+    lines.extend(["", "【観測ゲート】", f"判定: {observation_gate}"])
+    if observation_type:
+        lines.append(f"観測タイプ: {observation_type}")
+    if observation_reasons:
+        lines.append("理由:")
+        lines.extend(f"- {reason}" for reason in observation_reasons)
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -106,18 +138,41 @@ def _root_summary_lines(
 ) -> list[str]:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = ["【結論】"]
-    if display_context.get("primary_setup_status") == "watch" and str(result.get("trade_execution_gate", "")).strip() == "blocked":
-        lines.append("これは実行候補ではありません。監視と再評価のための通知です。")
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    observation_gate = str(result.get("phase1_observation_gate", "blocked")).lower().strip() or "blocked"
+    if trade_gate == "pass":
+        lines.extend(
+            [
+                "これは執行候補です。",
+                "ただし自動売買ではなく、Phase 1 の紙トレード記録対象です。",
+            ]
+        )
+    elif observation_gate == "pass":
+        lines.extend(
+            [
+                "これは実行候補ではありません。",
+                "方向・構造は強いため、高優先で監視する通知です。",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "これは実行候補ではありません。",
+                "通常監視と再評価のための通知です。",
+            ]
+        )
+    _extend_gate_lines(lines, result)
     lines.extend(
         [
-        f"最終ランク: {notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}（{notification_context.get('final_rank_explanation', 'メール送信条件は未成立')}）",
-        f"補足状態: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
-        f"方向判断: {display_context['direction_label']}",
-        f"執行判断: {notification_context.get('execution_label', '見送り')}",
-        f"現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
-        f"有効目安: {notification_context.get('validity_label', '次回更新までを目安')}",
-        "",
-        "【いま重視する理由】",
+            "",
+            f"最終ランク: {notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}（{notification_context.get('final_rank_explanation', 'メール送信条件は未成立')}）",
+            f"補足状態: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
+            f"方向判断: {display_context['direction_label']}",
+            f"執行判断: {notification_context.get('execution_label', '見送り')}",
+            f"現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
+            f"有効目安: {notification_context.get('validity_label', '次回更新までを目安')}",
+            "",
+            "【いま重視する理由】",
         ]
     )
     for reason in notification_context.get("reason_labels", []):
@@ -193,7 +248,12 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
         "【注意報】",
-        "これは売買推奨メールではなく、方向の変化を早めに共有する注意通知です。",
+        "これは売買推奨メールではありません。",
+        "方向変化や初動を早めに共有する注意通知です。",
+    ]
+    _extend_gate_lines(lines, result)
+    lines.extend(
+        [
         "",
         "【今の見立て】",
         f"- 最終ランク: {notification_context.get('final_rank_emoji', '👀')} {notification_context.get('final_rank_label', '注意報')}（{notification_context.get('final_rank_explanation', '方向変化の早期共有')}）",
@@ -208,7 +268,8 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
         f"- 現在価格: {_format_price(result.get('current_price'))}",
         "",
         "【まだ本命通知でない理由】",
-    ]
+        ]
+    )
     for reason in notification_context.get("reason_labels", []):
         lines.append(f"- {reason}")
     lines.extend(

@@ -56,6 +56,8 @@ class SummaryFormatTest(unittest.TestCase):
             },
             "primary_setup_status": "ready",
             "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "trade_execution_gate": "pass",
+            "paper_order_status": "planned",
             "warning_flags": [],
             "risk_flags": [],
             "no_trade_flags": [],
@@ -82,11 +84,13 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertEqual(provider_used, "api")
-        self.assertIn("🔥 [強い本通知]", subject)
+        self.assertIn("🔥 [執行候補・強]", subject)
         self.assertIn("上方向バイアス", subject)
         self.assertNotIn("条件付きで検討 |", subject)
         self.assertNotIn("総合強度", subject)
-        self.assertIn("最終ランク: 🔥 強い本通知（条件がかなり整った本通知）", body)
+        self.assertIn("これは執行候補です。", body)
+        self.assertIn("paper_order_status: planned", body)
+        self.assertIn("最終ランク: 🔥 執行候補・強（実行候補として条件がかなり整っています）", body)
         self.assertIn("補足状態: 執行可（条件成立）", body)
         self.assertIn("方向判断: 相場は上方向バイアスです", body)
         self.assertIn("執行判断: 条件付きで検討", body)
@@ -135,13 +139,14 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報] "))
+        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報・売買非推奨] "))
         self.assertIn("下方向バイアス", subject)
         self.assertNotIn("🔥", subject)
         self.assertNotIn("🟠", subject)
         self.assertNotIn("📊", subject)
         self.assertNotIn("総合強度", subject)
-        self.assertIn("最終ランク: 👀 注意報（方向変化の早期共有）", body)
+        self.assertIn("これは売買推奨メールではありません。", body)
+        self.assertIn("最終ランク: 👀 注意報・売買非推奨（方向変化の早期共有。売買推奨ではありません）", body)
         self.assertIn("補足状態: 注意報（方向変化の早期共有）", body)
         self.assertIn("上側流動性スイープ完了後に再評価", body)
         self.assertIn("方向の強さ: 62.0", body)
@@ -160,6 +165,9 @@ class SummaryFormatTest(unittest.TestCase):
             "signal_tier": "normal",
             "primary_setup_status": "watch",
             "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "trade_execution_gate": "blocked",
+            "phase1_observation_gate": "pass",
+            "phase1_observation_type": "setup_watch_learning",
             "current_price": 73911.8,
             "confidence": 66,
             "rr_estimate": 1.18,
@@ -187,9 +195,11 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertTrue(subject.startswith("[機械判定のみ] "))
-        self.assertIn("🟠 [高め本通知]", subject)
+        self.assertIn("🟠 [高優先監視・実行不可]", subject)
         self.assertIn("下方向バイアス", body)
-        self.assertIn("最終ランク: 🟠 高め本通知（条件が一段強い本通知）", body)
+        self.assertIn("方向・構造は強いため、高優先で監視する通知です。", body)
+        self.assertIn("観測タイプ: setup_watch_learning", body)
+        self.assertIn("最終ランク: 🟠 高優先監視・実行不可（方向・構造は強いが、実行候補ではありません）", body)
         self.assertIn("補足状態: 監視（条件接近）", body)
         self.assertNotIn("総合強度", subject)
         self.assertIn("上側流動性スイープ完了後に再評価", body)
@@ -232,7 +242,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertIn("📊 [通常の本通知]", subject)
+        self.assertIn("📊 [通常監視・実行不可]", subject)
         self.assertNotIn("🟠 [高め本通知]", subject)
         self.assertIn("位置評価: 位置は悪くないがRR未成立", body)
         self.assertIn("執行判断: 見送り", body)
@@ -318,11 +328,12 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertIn("📊 [通常の本通知]", subject)
+        self.assertIn("📊 [通常監視・実行不可]", subject)
         self.assertNotIn("🟠 [高め本通知]", subject)
         self.assertIn("上方向監視", subject)
         self.assertIn("下落警戒", subject)
-        self.assertIn("これは実行候補ではありません。監視と再評価のための通知です。", body)
+        self.assertIn("これは実行候補ではありません。", body)
+        self.assertIn("通常監視と再評価のための通知です。", body)
         self.assertIn("執行判断: 監視継続（実行不可）", body)
         self.assertIn("位置評価: 位置は悪くないが未到達", body)
-        self.assertIn("最終ランク: 📊 通常の本通知（下落警戒を優先して標準扱いに抑制）", body)
+        self.assertIn("最終ランク: 📊 通常監視・実行不可（監視と再評価のための通知です）", body)
