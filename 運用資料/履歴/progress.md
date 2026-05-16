@@ -34,6 +34,8 @@
   - `tools/log_feedback.py` に `build_phase1b_lite_paper_orders`、日次 `Phase 1B-lite` 要約、Phase 1B 昇格候補レポート内の lite セクションを追加した。メール件名ランクは執行候補へ上げない。
   - 実データ検証では `daily-sync` に `Phase 1B-lite` セクションが出ること、`build-phase1b-promotion-report --date-to 2026-05-17` で lite 候補 5 件が出ることを確認した。
   - 確認は `./.venv312/bin/python -m unittest discover -s tests` で 160 件 OK、`git diff --check` OK。
+  - commit `1401a69 Add Phase 1B-lite tracking lane` を作成し、`origin/ver02.5-v6` へ push した。
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `64909`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`、`monitor.err` 空を確認した。
 
 - 2026-05-16 JST
   - `feedback_daily_sync_20260516.md` を確認し、完了 38 件、近似PF 0.76、全体勝率 57.9%、`trade_execution_gate=pass=0件`、AI backlog 69 件、`request_failed=0` と整理した。

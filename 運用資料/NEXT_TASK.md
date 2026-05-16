@@ -7,7 +7,8 @@
 ## 現在の状況
 
 - 主系統は `iMac 2019` の `ver02.5-v6`。`Phase 0` 本番観測中、`Phase 1A` 観測紙トレード継続中。
-- フェーズ加速用に `Phase 1B-lite` を追加済み。これは正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
+- フェーズ加速用に `Phase 1B-lite` を追加済み。commit `1401a69` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
+- `Phase 1B-lite` は正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
 - `Phase 1B` の実行候補はまだ 0 件。`trade_execution_gate=pass` と `paper_orders planned` が出るまでは本有効へ進めない。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
@@ -36,7 +37,7 @@
 - `operational_focus_20260516.md`: blocked 上位は `confidence_below_min=350件`、`no_trade_candidate=192件`。どちらも `sweep_incomplete` と `lower_liquidity_close` への偏りが強い。
 - `relaxation_candidates_20260516.md`: 緩和候補 48 件。`SWEEP_WAIT=31件`、`RISKY_ENTRY=16件`、`NO_TRADE_CANDIDATE=1件`。
 - `phase1b_promotion_candidates_20260516.md`: 候補 6 件、勝率 50.0%、TP1先行 100.0%、近似PF 1.26。ただし全件 `trade_execution_gate=blocked` のため gate 緩和材料にはまだしない。
-- `Phase 1B-lite` 実装検証では `build-phase1b-promotion-report --date-to 2026-05-17` で lite 候補 5 件、`daily-sync` 検証では期間内 lite 候補 1 件、専用紙トレード observing 5 件を確認。
+- `Phase 1B-lite` 実装検証では `build-phase1b-promotion-report --date-to 2026-05-17` で lite 候補 5 件、`daily-sync` 検証では期間内 lite 候補 1 件、専用紙トレード observing 5 件を確認。全体テスト 160 件 OK。
 - `market_map_effectiveness_20260516.md`: `2026-05-13` 以降の shadow 72 行中 68 件で `market_map` 記録あり。`support_to_resistance_flip=39件`、`trend_flip_confirmed_down=33件`、`failed_breakout_up_reversal=15件`。
 - `trend_flip_confirmed_up=11件` は勝率 33.3%、wrong_rate 27.3%、平均MAE24h 14.51 で引き続き弱く、上方向転換の gate 強化候補として観測継続。
 - AI 事後評価 health は `feedback_daily_sync_20260516.md` 基準で `eligible=288 / AI済み=219 / backlog=69 / created=4 / request_failed=0`。
@@ -55,7 +56,7 @@
 ## 残作業一覧
 
 - 次回 `market_map_effectiveness_YYYYMMDD.md` を更新し、`trend_flip_confirmed_up`、`resistance_to_support_flip`、`failed_breakout_down_reversal` の成績がサンプル増でどう変わるか見る。
-- `com.afrog.btc-monitor` は `Ver02.5-v6` 反映後に再起動済み。`[Ver02.5-v6] [CLI]` 件名は本通知・注意報とも確認済み。
+- `com.afrog.btc-monitor` は `Phase 1B-lite` 実装 commit `1401a69` 反映後に再起動済み。PID `64909`、`state=running`、`monitor.err` は空。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 69 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=4` は安定運用優先なら維持する。backlog 解消を優先する場合のみ `6` または `8` への増加を検討する。
 - 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。
