@@ -7,7 +7,7 @@
 ## 現在の状況
 
 - 主系統は `iMac 2019` の `ver02.5-v6`。`Phase 0` 本番観測中、`Phase 1A` 観測紙トレード継続中。
-- フェーズ加速用に `Phase 1B-lite` を追加済み。commit `1401a69` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
+- フェーズ加速用に `Phase 1B-lite` を追加済み。実装 commit `1401a69`、記録更新 commit `2b22b03` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
 - `Phase 1B-lite` は正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
 - `Phase 1B` の実行候補はまだ 0 件。`trade_execution_gate=pass` と `paper_orders planned` が出るまでは本有効へ進めない。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。

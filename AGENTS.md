@@ -1,6 +1,6 @@
 ## BTC Monitor 共通参照
 
-更新日: 2026-04-17 JST
+更新日: 2026-05-17 JST
 
 - 共通ルール: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/共通運用ルール.md`
 - 記録ファイル構成: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/記録ファイル構成.md`
@@ -26,7 +26,8 @@
 
 ## 案件の前提
 
-- 現行主流は `iMac 2019` 上の `ver02.5-v4`
+- 現行主流は `iMac 2019` 上の `ver02.5-v6`
+- `Phase 1B-lite` 実装 commit は `1401a69` で、常駐 `com.afrog.btc-monitor` へ反映済み。
 - `MBP2020` の `Ver02.1` は停止・凍結済みで、archive 参照用として扱う
 - 現行の事後評価運用は `daily-sync` と `sync-ai-post-reviews`
 - 案件固有の運用コマンドは `運用資料/運用/実務/運用コマンドメモ.md` を見る
