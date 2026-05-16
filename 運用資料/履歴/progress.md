@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-15 JST
+更新日: 2026-05-16 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,13 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-16 JST
+  - `feedback_daily_sync_20260516.md` を確認し、完了 38 件、近似PF 0.76、全体勝率 57.9%、`trade_execution_gate=pass=0件`、AI backlog 69 件、`request_failed=0` と整理した。
+  - `market_map_effectiveness_20260516.md`、標準比較 3 本、`operational_focus_20260516.md`、`relaxation_candidates_20260516.md`、`phase1b_promotion_candidates_20260516.md` を生成した。
+  - 標準比較は `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。
+  - `market_map` は 2026-05-13 以降 68 件記録あり。`trend_flip_confirmed_up=11件` は勝率 33.3%、wrong_rate 27.3%、平均MAE24h 14.51 と弱く、上方向転換は gate 緩和せず観測継続にした。
+  - `Ver02.5-v6` の実メール件名は、本通知 `20260515_230500` と注意報 `20260516_060500` で `[Ver02.5-v6] [CLI]` を確認した。`通常監視・実行不可` と `注意報・売買非推奨` は実ログ確認済み。
 
 - 2026-05-15 JST
   - 改善案 `2026-05-15_042121_btc_notification_design_codex.md` を実装方針へ落とし込み、`運用資料/計画/通知ランク再設計_実装設計_20260515.md` を追加した。
