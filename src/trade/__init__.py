@@ -5,6 +5,7 @@ from .observation_gate import (
     is_confidence_watch_learning_candidate,
     is_counter_long_short_watch_candidate,
 )
+from .phase1b_lite import determine_phase1b_lite_gate
 from .exit_manager import build_exit_plan, build_shadow_exit_plan
 from .performance_state import load_loss_streak
 from .position_sizing import build_position_size_plan
@@ -17,6 +18,7 @@ __all__ = [
     "determine_phase1_activation",
     "determine_trade_execution_gate",
     "determine_phase1_observation_gate",
+    "determine_phase1b_lite_gate",
     "is_confidence_watch_learning_candidate",
     "is_counter_long_short_watch_candidate",
 ]

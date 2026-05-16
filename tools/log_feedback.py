@@ -29,13 +29,14 @@ from src.analysis.position_risk import reconcile_prelabel_with_setup
 from src.analysis.rr import build_setup
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
-from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
 from src.trade.observation_gate import (
     determine_phase1_observation_gate,
     is_confidence_watch_learning_candidate,
     is_counter_long_short_watch_candidate,
 )
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -313,6 +314,9 @@ SHADOW_HEADER = [
     "phase1_observation_gate",
     "phase1_observation_type",
     "phase1_observation_reasons",
+    "phase1b_lite_gate",
+    "phase1b_lite_type",
+    "phase1b_lite_reasons",
     "paper_order_status",
 ]
 
@@ -1038,6 +1042,55 @@ def _collect_confidence_watch_learning_candidates(rows: list[dict[str, str]]) ->
     return candidates
 
 
+def _phase1b_lite_gate_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    return determine_phase1b_lite_gate(
+        phase1_observation_type=str(row.get("phase1_observation_type", "")),
+        primary_setup_status=str(row.get("primary_setup_status", "")),
+        primary_setup_reason=str(row.get("primary_setup_reason", "")),
+        prelabel=str(row.get("prelabel", "")),
+        data_quality_flag=str(row.get("data_quality_flag", "")),
+        no_trade_flags=_split_values(str(row.get("no_trade_flags", ""))),
+        risk_flags=_split_values(str(row.get("risk_flags", ""))),
+        confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+        confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+        confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+    )
+
+
+def _collect_phase1b_lite_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        lite_gate = {
+            "phase1b_lite_gate": row.get("phase1b_lite_gate", ""),
+            "phase1b_lite_type": row.get("phase1b_lite_type", ""),
+            "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        }
+        if str(lite_gate["phase1b_lite_gate"]).strip() not in {"pass", "blocked"}:
+            lite_gate = _phase1b_lite_gate_from_row(row)
+        if str(lite_gate["phase1b_lite_gate"]).strip() != "pass":
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_status": str(row.get("primary_setup_status", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
 def _collect_counter_long_short_watch_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for row in rows:
@@ -1420,6 +1473,7 @@ def build_phase1b_promotion_report(
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
     rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
     candidates = _collect_confidence_watch_learning_candidates(filtered_rows)
+    lite_candidates = _collect_phase1b_lite_candidates(filtered_rows)
 
     prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
     risk_flag_counts: Counter[str] = Counter()
@@ -1456,6 +1510,28 @@ def build_phase1b_promotion_report(
             f"- 平均MFE={_mean_value(candidates, 'signal_based_MFE_24h'):.2f} / "
             f"平均MAE={_mean_value(candidates, 'signal_based_MAE_24h'):.2f}"
         )
+    lines.append("")
+    lines.append("## Phase 1B-lite")
+    lines.append("- 条件: confidence_watch_learning + SWEEP_WAIT 限定。正式 trade_execution_gate は緩めない")
+    lines.append(f"- lite 候補件数: {len(lite_candidates)}件")
+    if lite_candidates:
+        lite_settled = [flag for flag in (_success_flag(row) for row in lite_candidates) if flag is not None]
+        lite_tp_pool = [
+            row for row in lite_candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}
+        ]
+        lite_mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in lite_candidates)
+        lite_mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in lite_candidates)
+        lines.append(
+            f"- 勝率={_format_pct(_ratio(sum(1 for flag in lite_settled if flag), len(lite_settled)))} / "
+            f"TP1先行={_format_pct(_ratio(sum(1 for row in lite_tp_pool if row.get('tp1_hit_first') == 'true'), len(lite_tp_pool)))} / "
+            f"近似PF={(lite_mfe_sum / lite_mae_sum) if lite_mae_sum > 0 else 0.0:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={_mean_value(lite_candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(lite_candidates, 'execution'):.1f} / "
+            f"平均 wait={_mean_value(lite_candidates, 'wait'):.1f}"
+        )
+        lines.append("- 扱い: 実弾ではなく、正式 Phase 1B でもない。専用CSVでのみ追跡する")
     lines.append("")
     lines.append("## 候補一覧")
     if candidates:
@@ -4747,6 +4823,19 @@ def build_shadow_log(
             confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
             secondary_setup_status=str(trade.get("short_status", "")) if str(trade.get("bias", "")) == "long" else str(trade.get("long_status", "")),
         )
+        effective_observation_type = trade.get("phase1_observation_type", "") or observation_gate["phase1_observation_type"]
+        lite_gate = determine_phase1b_lite_gate(
+            phase1_observation_type=str(effective_observation_type),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+        )
         shadow_rows.append(
             {
                 "signal_id": signal_id,
@@ -4864,9 +4953,13 @@ def build_shadow_log(
                 "trade_execution_gate": trade.get("trade_execution_gate", ""),
                 "trade_execution_blockers": trade.get("trade_execution_blockers", ""),
                 "phase1_observation_gate": trade.get("phase1_observation_gate", "") or observation_gate["phase1_observation_gate"],
-                "phase1_observation_type": trade.get("phase1_observation_type", "") or observation_gate["phase1_observation_type"],
+                "phase1_observation_type": effective_observation_type,
                 "phase1_observation_reasons": trade.get("phase1_observation_reasons", "")
                 or json.dumps(observation_gate["phase1_observation_reasons"], ensure_ascii=False),
+                "phase1b_lite_gate": trade.get("phase1b_lite_gate", "") or lite_gate["phase1b_lite_gate"],
+                "phase1b_lite_type": trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"],
+                "phase1b_lite_reasons": trade.get("phase1b_lite_reasons", "")
+                or json.dumps(lite_gate["phase1b_lite_reasons"], ensure_ascii=False),
                 "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
@@ -4908,6 +5001,31 @@ def _observation_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _phase1b_lite_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "lite_phase": "phase1B-lite",
+        "lite_type": row.get("phase1b_lite_type", ""),
+        "lite_status": "observing",
+        "side": row.get("primary_setup_side", ""),
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": row.get("primary_setup_status", ""),
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+    }
+
+
 def build_observation_paper_orders(
     *,
     base_dir: Path,
@@ -4928,6 +5046,37 @@ def build_observation_paper_orders(
         seen.add(signal_id)
     orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
     return _write_csv_rows(output_path, OBSERVATION_PAPER_ORDER_HEADER, orders)
+
+
+def build_phase1b_lite_paper_orders(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "phase1b_lite_paper_orders.csv"
+    orders: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        lite_gate = {
+            "phase1b_lite_gate": row.get("phase1b_lite_gate", ""),
+            "phase1b_lite_type": row.get("phase1b_lite_type", ""),
+            "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        }
+        if str(lite_gate["phase1b_lite_gate"]).strip() not in {"pass", "blocked"}:
+            lite_gate = _phase1b_lite_gate_from_row(row)
+        if str(lite_gate["phase1b_lite_gate"]).strip() != "pass":
+            continue
+        enriched = dict(row)
+        enriched.update(lite_gate)
+        orders.append(_phase1b_lite_order_from_trade(enriched))
+        seen.add(signal_id)
+    orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, PHASE1B_LITE_PAPER_ORDER_HEADER, orders)
 
 
 def _period_filter(rows: list[dict[str, Any]], period: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -5234,6 +5383,32 @@ def _phase1b_promotion_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "count": len(candidates),
         "prelabels": _format_counter(prelabel_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _phase1b_lite_summary(rows: list[dict[str, Any]], lite_orders: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_phase1b_lite_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    order_ids = {str(row.get("signal_id", "")).strip() for row in lite_orders if str(row.get("signal_id", "")).strip()}
+    candidate_ids = {str(row.get("signal_id", "")).strip() for row in candidates if str(row.get("signal_id", "")).strip()}
+    status_counts = Counter(str(row.get("lite_status", "")).strip() for row in lite_orders if str(row.get("lite_status", "")).strip())
+    return {
+        "count": len(candidates),
+        "order_count": len(order_ids),
+        "missing_order_count": len(candidate_ids - order_ids),
+        "status_counts": _format_counter(status_counts, limit=5),
         "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
         "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
         "avg_direction": _mean_value(candidates, "direction"),
@@ -6103,6 +6278,7 @@ def build_feedback_report(
     shadow_path: Path | None = None,
     paper_orders_path: Path | None = None,
     observation_paper_orders_path: Path | None = None,
+    phase1b_lite_paper_orders_path: Path | None = None,
     ai_health_summary: dict[str, Any] | None = None,
 ) -> str:
     explicit_shadow_path = shadow_path is not None
@@ -6110,6 +6286,9 @@ def build_feedback_report(
     paper_orders_path = paper_orders_path or base_dir / "logs" / "csv" / "paper_orders.csv"
     observation_paper_orders_path = (
         observation_paper_orders_path or base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    )
+    phase1b_lite_paper_orders_path = (
+        phase1b_lite_paper_orders_path or base_dir / "logs" / "csv" / "phase1b_lite_paper_orders.csv"
     )
     trades_path = base_dir / "logs" / "csv" / "trades.csv"
     outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
@@ -6132,6 +6311,14 @@ def build_feedback_report(
             trades_path=shadow_path,
             output_path=observation_paper_orders_path,
         )
+    if _is_stale_file(phase1b_lite_paper_orders_path, [shadow_path]) or _csv_missing_columns(
+        phase1b_lite_paper_orders_path, PHASE1B_LITE_PAPER_ORDER_HEADER
+    ):
+        build_phase1b_lite_paper_orders(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=phase1b_lite_paper_orders_path,
+        )
     all_rows = _load_csv_rows(shadow_path)
     rows, previous_rows = _period_filter(all_rows, period)
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
@@ -6151,6 +6338,7 @@ def build_feedback_report(
         _load_csv_rows(observation_paper_orders_path),
     )
     promotion_summary = _phase1b_promotion_summary(completed)
+    phase1b_lite_summary = _phase1b_lite_summary(completed, _load_csv_rows(phase1b_lite_paper_orders_path))
     counter_watch_summary = _counter_long_short_watch_summary(completed)
     failed_breakout_summary = _failed_breakout_summary(completed)
     market_map_summary = _market_map_summary(completed)
@@ -6527,6 +6715,32 @@ def build_feedback_report(
         if promotion_summary["representatives"]:
             lines.append(f"- 代表例: {', '.join(promotion_summary['representatives'])}")
     lines.append("- 扱い: `trade_execution_gate=pass` ではないが、限定条件付きで Phase 1B 候補へ昇格を検討する母集団")
+    lines.append("")
+
+    lines.append("### Phase 1B-lite")
+    lines.append(f"- lite 候補: {phase1b_lite_summary['count']}件")
+    lines.append(f"- phase1b_lite_paper_orders observing: {phase1b_lite_summary['order_count']}件")
+    lines.append(f"- lite pass だが専用紙トレード未記録: {phase1b_lite_summary['missing_order_count']}件")
+    if phase1b_lite_summary["status_counts"]:
+        lines.append(f"- 状態: {phase1b_lite_summary['status_counts']}")
+    if phase1b_lite_summary["count"]:
+        lines.append(
+            f"- 勝率={_format_pct(phase1b_lite_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(phase1b_lite_summary['tp1_first_rate'])} / "
+            f"近似PF={phase1b_lite_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={phase1b_lite_summary['avg_direction']:.1f} / "
+            f"平均 execution={phase1b_lite_summary['avg_execution']:.1f} / "
+            f"平均 wait={phase1b_lite_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={phase1b_lite_summary['avg_mfe']:.2f} / "
+            f"平均MAE={phase1b_lite_summary['avg_mae']:.2f}"
+        )
+        if phase1b_lite_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(phase1b_lite_summary['representatives'])}")
+    lines.append("- 扱い: 実弾ではなく、正式 Phase 1B でもない。件名ランクは執行候補へ上げない")
     lines.append("")
 
     lines.append("### counter_long_short_watch")

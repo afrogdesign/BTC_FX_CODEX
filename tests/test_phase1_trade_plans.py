@@ -4,10 +4,15 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from src.storage.csv_logger import append_observation_paper_order, append_paper_order
+from src.storage.csv_logger import (
+    append_observation_paper_order,
+    append_paper_order,
+    append_phase1b_lite_paper_order,
+)
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.position_sizing import build_position_size_plan
 
 
@@ -213,6 +218,55 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["phase1_observation_gate"], "pass")
         self.assertEqual(result["phase1_observation_type"], "confidence_watch_learning")
 
+    def test_phase1b_lite_gate_passes_limited_confidence_watch_sweep_candidate(self) -> None:
+        result = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+
+        self.assertEqual(result["phase1b_lite_gate"], "pass")
+        self.assertEqual(result["phase1b_lite_type"], "confidence_watch_sweep_lite")
+        self.assertEqual(result["phase1b_lite_reasons"], ["confidence_watch_sweep_lite"])
+
+    def test_phase1b_lite_gate_blocks_risky_entry_and_standalone_trend_flip_up(self) -> None:
+        risky_entry = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="RISKY_ENTRY",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+        standalone_trend_up = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "trend_flip_confirmed_up"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+
+        self.assertEqual(risky_entry["phase1b_lite_gate"], "blocked")
+        self.assertIn("prelabel_not_sweep_wait", risky_entry["phase1b_lite_reasons"])
+        self.assertEqual(standalone_trend_up["phase1b_lite_gate"], "blocked")
+        self.assertIn("standalone_trend_flip_confirmed_up", standalone_trend_up["phase1b_lite_reasons"])
+
     def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
         result = determine_phase1_observation_gate(
             bias="long",
@@ -290,6 +344,40 @@ class Phase1TradePlanTests(unittest.TestCase):
             rows = path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(rows), 2)
             self.assertIn("phase1A", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_append_phase1b_lite_paper_order_is_separate_from_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "lite_1",
+                "timestamp_jst": "2026-05-17T10:00:00+09:00",
+                "current_price": 70000,
+                "primary_setup_side": "long",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70420,
+                "shadow_tp2_price": 70860,
+                "rr_estimate": 1.3,
+                "prelabel": "SWEEP_WAIT",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "confidence_below_min",
+                "phase1b_lite_gate": "pass",
+                "phase1b_lite_type": "confidence_watch_sweep_lite",
+                "phase1b_lite_reasons": ["confidence_watch_sweep_lite"],
+                "confidence_direction_shadow": 60,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 76.8,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_phase1b_lite_paper_order(base_dir, payload)
+            append_phase1b_lite_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("phase1B-lite", rows[1])
+            self.assertIn("confidence_watch_sweep_lite", rows[1])
             self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
 
     def test_append_observation_paper_order_uses_short_side_for_counter_long_short_watch(self) -> None:

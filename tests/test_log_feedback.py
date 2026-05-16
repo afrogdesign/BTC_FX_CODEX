@@ -43,6 +43,7 @@ from tools.log_feedback import (
     build_market_map_effectiveness_report,
     build_market_map_readiness_report,
     build_observation_paper_orders,
+    build_phase1b_lite_paper_orders,
     build_operational_focus_report,
     build_phase1b_promotion_report,
     build_relaxation_candidates_report,
@@ -54,7 +55,7 @@ from tools.log_feedback import (
     refresh_standard_setup_comparison_reports,
     sync_ai_post_reviews,
 )
-from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 
 
 class LogFeedbackTest(unittest.TestCase):
@@ -2861,10 +2862,12 @@ class LogFeedbackTest(unittest.TestCase):
                         "signal_id": "promo_1",
                         "timestamp_jst": "2026-04-24T03:05:00+09:00",
                         "phase1_observation_gate": "blocked",
+                        "phase1_observation_type": "confidence_watch_learning",
                         "phase1_observation_reasons": "confidence_below_min",
                         "primary_setup_status": "watch",
                         "primary_setup_reason": "confidence_below_min",
                         "prelabel": "SWEEP_WAIT",
+                        "data_quality_flag": "ok",
                         "risk_flags": "sweep_incomplete,lower_liquidity_close",
                         "confidence_direction_shadow": "58",
                         "confidence_execution_shadow": "22",
@@ -2880,10 +2883,12 @@ class LogFeedbackTest(unittest.TestCase):
                         "signal_id": "blocked_1",
                         "timestamp_jst": "2026-04-24T02:05:00+09:00",
                         "phase1_observation_gate": "blocked",
+                        "phase1_observation_type": "confidence_watch_learning",
                         "phase1_observation_reasons": "confidence_below_min",
                         "primary_setup_status": "watch",
                         "primary_setup_reason": "confidence_below_min",
                         "prelabel": "SWEEP_WAIT",
+                        "data_quality_flag": "ok",
                         "risk_flags": "sweep_incomplete,lower_liquidity_close,ask_wall_close",
                         "confidence_direction_shadow": "60",
                         "confidence_execution_shadow": "25",
@@ -2905,8 +2910,76 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("- 候補件数: 1件", report)
             self.assertIn("- prelabel: SWEEP_WAIT=1件", report)
             self.assertIn("- 勝率=100.0% / TP1先行=100.0% / 近似PF=3.00", report)
+            self.assertIn("## Phase 1B-lite", report)
+            self.assertIn("- lite 候補件数: 1件", report)
+            self.assertIn("- 扱い: 実弾ではなく、正式 Phase 1B でもない。専用CSVでのみ追跡する", report)
             self.assertIn("- promo_1: 2026-04-24 03:05 / prelabel=SWEEP_WAIT / direction=58.0 / execution=22.0 / wait=80.0", report)
             self.assertNotIn("blocked_1", report)
+
+    def test_build_phase1b_lite_paper_orders_backfills_lite_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            output_path = logs_csv / "phase1b_lite_paper_orders.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "lite_1",
+                        "timestamp_jst": "2026-05-17T10:00:00+09:00",
+                        "primary_setup_side": "long",
+                        "primary_entry_mid": "69900",
+                        "primary_stop_loss": "69500",
+                        "shadow_tp1_price": "70420",
+                        "shadow_tp2_price": "70860",
+                        "phase1_observation_type": "confidence_watch_learning",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "confidence_below_min",
+                        "prelabel": "SWEEP_WAIT",
+                        "data_quality_flag": "ok",
+                        "no_trade_flags": "",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "confidence_direction_shadow": "60",
+                        "confidence_execution_shadow": "22",
+                        "confidence_wait_shadow": "76.8",
+                        "trade_execution_gate": "blocked",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "normal_obs_1",
+                        "timestamp_jst": "2026-05-17T09:00:00+09:00",
+                        "phase1_observation_type": "setup_watch_learning",
+                        "primary_setup_status": "watch",
+                        "primary_setup_reason": "entry_zone_not_reached",
+                        "prelabel": "SWEEP_WAIT",
+                        "data_quality_flag": "ok",
+                        "risk_flags": "sweep_incomplete,lower_liquidity_close",
+                        "confidence_direction_shadow": "60",
+                        "confidence_execution_shadow": "22",
+                        "confidence_wait_shadow": "76.8",
+                    }
+                )
+
+            result_path = build_phase1b_lite_paper_orders(
+                base_dir=base_dir,
+                trades_path=shadow_path,
+                output_path=output_path,
+            )
+
+            with result_path.open(newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(result_path, output_path)
+            self.assertEqual(rows[0].keys(), set(PHASE1B_LITE_PAPER_ORDER_HEADER))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["signal_id"], "lite_1")
+            self.assertEqual(rows[0]["lite_phase"], "phase1B-lite")
+            self.assertEqual(rows[0]["lite_status"], "observing")
+            self.assertEqual(rows[0]["lite_type"], "confidence_watch_sweep_lite")
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
 
     def test_build_failed_breakout_down_reversal_report_lists_reversal_failures(self) -> None:
         with TemporaryDirectory() as tmpdir:

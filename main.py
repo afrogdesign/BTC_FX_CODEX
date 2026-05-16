@@ -55,7 +55,12 @@ from src.notification.detail_page import (
 )
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
-from src.storage.csv_logger import append_observation_paper_order, append_paper_order, append_trade_log
+from src.storage.csv_logger import (
+    append_observation_paper_order,
+    append_paper_order,
+    append_phase1b_lite_paper_order,
+    append_trade_log,
+)
 from src.storage.json_store import (
     get_last_attention_notified_path,
     get_last_notified_path,
@@ -68,6 +73,7 @@ from src.trade.activation import determine_phase1_activation
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
 from src.presentation.sanitize import (
@@ -857,6 +863,18 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
             secondary_setup_status=str(short_setup.get("status", "")) if bias == "long" else str(long_setup.get("status", "")),
         )
+        phase1b_lite_gate = determine_phase1b_lite_gate(
+            phase1_observation_type=observation_gate["phase1_observation_type"],
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            risk_flags=result_flags["risk_flags"],
+            confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
         core_result["loss_streak_at_entry"] = loss_streak
         core_result.update(phase1_activation)
         core_result.update(position_size_plan)
@@ -864,6 +882,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         core_result.update(shadow_exit_plan)
         core_result.update(execution_gate)
         core_result.update(observation_gate)
+        core_result.update(phase1b_lite_gate)
         if core_result["trade_execution_gate"] == "pass":
             core_result["paper_order_status"] = "planned"
 
@@ -993,6 +1012,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     append_trade_log(base_dir, persisted_result)
     if persisted_result.get("phase1_observation_gate") == "pass":
         append_observation_paper_order(base_dir, persisted_result)
+    if persisted_result.get("phase1b_lite_gate") == "pass":
+        append_phase1b_lite_paper_order(base_dir, persisted_result)
     if persisted_result.get("paper_order_status") == "planned":
         append_paper_order(base_dir, persisted_result)
     save_json(get_last_result_path(base_dir), persisted_result)

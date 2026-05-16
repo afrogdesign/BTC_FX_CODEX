@@ -1,12 +1,13 @@
 ﻿# NEXT TASK TRACKER
 
-更新日: 2026-05-16 JST
+更新日: 2026-05-17 JST
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
 ## 現在の状況
 
 - 主系統は `iMac 2019` の `ver02.5-v6`。`Phase 0` 本番観測中、`Phase 1A` 観測紙トレード継続中。
+- フェーズ加速用に `Phase 1B-lite` を追加済み。これは正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
 - `Phase 1B` の実行候補はまだ 0 件。`trade_execution_gate=pass` と `paper_orders planned` が出るまでは本有効へ進めない。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
@@ -20,6 +21,7 @@
 - `NO_TRADE_CANDIDATE` は hard flag があるときだけ強い見送りへ落とす。
 - `watch + sweep_incomplete` は `watch_sweep_recheck_wait` / `watch_low_execution_recheck_wait` で main/attention を抑制する。
 - `confidence_watch_learning` を追加し、`confidence_below_min` でも限定条件を満たす watch 群は `Phase 1A` 観測対象として追える。
+- `Phase 1B-lite` は `confidence_watch_learning + SWEEP_WAIT + sweep_incomplete + lower_liquidity_close` かつ危険補助 flag なし、`direction>=55 / execution>=18 / wait<=85` の行だけを `phase1b_lite_paper_orders.csv` に分離保存する。
 - `long_reversal_risk`、`counter_long_short_watch`、`failed_breakout_down_reversal` を追加し、上抜け失敗から下落へ切り替わる型を観測できる。
 - `market_map` は複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを作る。
 - `market_map` は `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log/メール文言へ流す。
@@ -34,6 +36,7 @@
 - `operational_focus_20260516.md`: blocked 上位は `confidence_below_min=350件`、`no_trade_candidate=192件`。どちらも `sweep_incomplete` と `lower_liquidity_close` への偏りが強い。
 - `relaxation_candidates_20260516.md`: 緩和候補 48 件。`SWEEP_WAIT=31件`、`RISKY_ENTRY=16件`、`NO_TRADE_CANDIDATE=1件`。
 - `phase1b_promotion_candidates_20260516.md`: 候補 6 件、勝率 50.0%、TP1先行 100.0%、近似PF 1.26。ただし全件 `trade_execution_gate=blocked` のため gate 緩和材料にはまだしない。
+- `Phase 1B-lite` 実装検証では `build-phase1b-promotion-report --date-to 2026-05-17` で lite 候補 5 件、`daily-sync` 検証では期間内 lite 候補 1 件、専用紙トレード observing 5 件を確認。
 - `market_map_effectiveness_20260516.md`: `2026-05-13` 以降の shadow 72 行中 68 件で `market_map` 記録あり。`support_to_resistance_flip=39件`、`trend_flip_confirmed_down=33件`、`failed_breakout_up_reversal=15件`。
 - `trend_flip_confirmed_up=11件` は勝率 33.3%、wrong_rate 27.3%、平均MAE24h 14.51 で引き続き弱く、上方向転換の gate 強化候補として観測継続。
 - AI 事後評価 health は `feedback_daily_sync_20260516.md` 基準で `eligible=288 / AI済み=219 / backlog=69 / created=4 / request_failed=0`。
@@ -45,9 +48,9 @@
 3. 次回 `daily-sync` 後、標準 3 本の比較レポートを更新し、新規ログ基準 `0 / 0 / 1` から崩れた部分だけを掘る。
 4. `watch_sweep_recheck_wait` と `watch_low_execution_recheck_wait` の件数推移を見る。低 execution 側が未出現の間は追加抑制を急がない。
 5. `confidence_below_min` の緩和は、`sweep_incomplete + lower_liquidity_close` でも補助 flag が薄い少数群だけを対象に検討する。
-6. `phase1b_promotion_candidates` は候補数と成績がさらに増えるまで gate 緩和へ進めない。`20260516` 時点では候補 6 件、勝率 50.0%、近似PF 1.26。
-7. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ backlog を自然減できているか確認する。
-8. 新ランク反映後の実メールで、`高優先監視・実行不可` が実行候補に見えず、`執行候補` 系が実行ゲート通過時だけ出ることを確認する。通常監視と注意報は確認済み。
+6. `Phase 1B-lite` は 10〜15 件まで専用CSVで追う。TP1先行率、近似PF、平均MFE/MAE、誤読レビューを見るまで正式 gate は緩めない。
+7. `phase1b_promotion_candidates` は候補数と成績がさらに増えるまで gate 緩和へ進めない。`20260516` 時点では候補 6 件、勝率 50.0%、近似PF 1.26。
+8. `sync-ai-post-reviews` が `request_failed=0` を維持しつつ backlog を自然減できているか確認する。
 
 ## 残作業一覧
 
@@ -58,6 +61,7 @@
 - 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。
 - `market_map` は 68 件まで増えたが、上方向転換系が弱いためスコア重みや gate はまだ大きく変更しない。まず flag 別の wrong_rate、平均MFE/MAE、代表例を増やす。
 - `trade_execution_gate=pass` と `paper_orders planned` が出るまでは `Phase 1B` へ進めない。候補が増えても成績が弱い間は gate 緩和しない。
+- `Phase 1B-lite` は件名ランクを執行候補へ上げない。正式 `paper_orders.csv` とは混ぜず、専用CSVでだけ観測する。
 - 定時サイクル後の `monitor.err`、`ai_post_reviews.err`、`feedback_daily_sync.err` が空であることを継続確認する。
 
 ## ブロッカー

@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-16 JST
+更新日: 2026-05-17 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,14 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-17 JST
+  - フェーズ加速計画として `運用資料/計画/フェーズ加速計画_Phase1B-lite_20260517.md` を作成し、正式 `Phase 1B` を緩めずに限定検証レーン `Phase 1B-lite` を追加する方針にした。
+  - `src/trade/phase1b_lite.py` を追加し、`confidence_watch_learning + SWEEP_WAIT + sweep_incomplete + lower_liquidity_close` かつ `direction>=55 / execution>=18 / wait<=85`、危険補助 flag なしの行だけを `phase1b_lite_gate=pass` にするようにした。
+  - `main.py` と `src/storage/csv_logger.py` を更新し、lite pass 行を正式 `paper_orders.csv` ではなく `logs/csv/phase1b_lite_paper_orders.csv` へ分離保存するようにした。
+  - `tools/log_feedback.py` に `build_phase1b_lite_paper_orders`、日次 `Phase 1B-lite` 要約、Phase 1B 昇格候補レポート内の lite セクションを追加した。メール件名ランクは執行候補へ上げない。
+  - 実データ検証では `daily-sync` に `Phase 1B-lite` セクションが出ること、`build-phase1b-promotion-report --date-to 2026-05-17` で lite 候補 5 件が出ることを確認した。
+  - 確認は `./.venv312/bin/python -m unittest discover -s tests` で 160 件 OK、`git diff --check` OK。
 
 - 2026-05-16 JST
   - `feedback_daily_sync_20260516.md` を確認し、完了 38 件、近似PF 0.76、全体勝率 57.9%、`trade_execution_gate=pass=0件`、AI backlog 69 件、`request_failed=0` と整理した。
