@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-17 JST
+更新日: 2026-05-18 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,15 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-18 JST
+  - 自動生成済みの `feedback_daily_sync_20260517.md` と `feedback_daily_sync_20260518.md` を確認し、20260518 基準では完了 47 件、近似PF 0.73、全体勝率 46.8%、`trade_execution_gate=pass=0件`、`paper_orders planned=0件` と整理した。
+  - `market_map_effectiveness_20260518.md`、標準比較 3 本、`operational_focus_20260518.md`、`relaxation_candidates_20260518.md`、`phase1b_promotion_candidates_20260518.md` を生成した。
+  - 標準比較は `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。
+  - `market_map` は 2026-05-13 以降 116 件記録あり。`support_to_resistance_flip=75件` は勝率 69.6%、平均MFE24h 7.56 / 平均MAE24h 5.52 と相対的に良い一方、`trend_flip_confirmed_up=16件` は勝率 37.5%、wrong_rate 31.2%、平均MFE24h 1.59 / 平均MAE24h 13.09 と弱い。
+  - `Phase 1B-lite` は lite 候補 5 件、専用紙トレード observing 5 件のまま。正式 `Phase 1B` へ上げる 10〜15 件条件には未達。
+  - AI 事後評価は `eligible=302 / AI済み=227 / backlog=75 / created=4 / request_failed=0`。backlog は増えたがエラーは再発していない。
+  - 常駐 `com.afrog.btc-monitor` は `state=running`、PID `64909`、`monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空。
 
 - 2026-05-17 JST
   - フェーズ加速計画として `運用資料/計画/フェーズ加速計画_Phase1B-lite_20260517.md` を作成し、正式 `Phase 1B` を緩めずに限定検証レーン `Phase 1B-lite` を追加する方針にした。
