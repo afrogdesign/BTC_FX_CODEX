@@ -16,7 +16,7 @@
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
 - 通知ランクは `執行候補・強` / `執行候補` / `高優先監視・実行不可` / `通常監視・実行不可` / `注意報・売買非推奨` へ再設計済み。執行候補は `trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ出る。
 - メール件名ラベルは `Ver02.5-v6` で実送信確認済み。通常監視は `20260515_230500`、注意報は `20260516_060500` で新ランク表示を確認済み。`Ver02.5-v7` は再起動後の次回送信で確認する。
-- `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260516.md` では 68 件記録あり。
+- `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260518.md` では 116 件記録あり。
 - AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260518.md` では backlog 75 件。
 
 ## 実装済みの前提

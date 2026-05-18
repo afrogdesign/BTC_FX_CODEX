@@ -28,6 +28,12 @@
 ## 重要な節目ログ
 
 - 2026-05-18 JST
+  - repo 整理として、古い `feedback_daily_sync_YYYYMMDD.md` を `運用資料/reports/archive/daily/YYYY-MM/` へ移動し、直下には最新 `20260518` と直近比較用 `20260517` だけを残した。
+  - 古い dated analysis レポートを `運用資料/reports/archive/analysis/` へ移動し、`analysis/` 直下には現行判断で見る最新分析と標準比較だけを残した。
+  - `運用資料/reports/README.md` を 2026-05-18 基準へ書き換え、まず見るレポートと整理ルールを明記した。
+  - Git 管理外の `.DS_Store`、`__pycache__`、`tmp/` 一時ファイルを削除した。
+
+- 2026-05-18 JST
   - `Ver02.5-v7 先行実装パック` を実装した。作業ブランチは `ver02.5-v7`、`SYSTEM_LABEL` は `Ver02.5-v7`。
   - `src/analysis/rr.py` に `refine_execution_precision` を追加し、主要サポート直近の short と主要レジスタンス直近の long は `wait_only` として、`ready` なら `watch` へ落とすようにした。
   - `breakout_follow_candidate` は記録だけ行い、正式 gate 通過には使わない設計にした。
