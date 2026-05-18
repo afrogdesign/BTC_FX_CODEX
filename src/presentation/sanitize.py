@@ -397,6 +397,9 @@ def _final_rank(result: dict[str, Any], status_code: str) -> tuple[str, str, str
         return "high_main", "執行候補", "✅", "実行ゲートを通過した執行候補です"
 
     observation_gate = str(result.get("phase1_observation_gate", "blocked")).lower().strip() or "blocked"
+    opportunity_gate = str(result.get("opportunity_gate", "blocked")).lower().strip() or "blocked"
+    if opportunity_gate == "pass":
+        return "paper_opportunity", "紙実行候補・実弾不可", "🧪", "紙トレードで追う候補。実弾執行候補ではありません"
     if observation_gate == "pass":
         return "high_watch", "高優先監視・実行不可", "🟠", "方向・構造は強いが、実行候補ではありません"
 

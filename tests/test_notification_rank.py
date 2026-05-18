@@ -53,6 +53,23 @@ class NotificationRankTest(unittest.TestCase):
                     "primary_setup_status": "watch",
                     "prelabel": "SWEEP_WAIT",
                     "trade_execution_gate": "blocked",
+                    "opportunity_gate": "pass",
+                    "opportunity_type": "confidence_watch_sweep_lite",
+                    "phase1_observation_gate": "pass",
+                    "signal_tier": "normal",
+                    "confidence": 66,
+                    "rr_estimate": 1.2,
+                    "score_gap": -18,
+                },
+                ("paper_opportunity", "紙実行候補・実弾不可", "🧪"),
+            ),
+            (
+                {
+                    "bias": "short",
+                    "notification_kind": "main",
+                    "primary_setup_status": "watch",
+                    "prelabel": "SWEEP_WAIT",
+                    "trade_execution_gate": "blocked",
                     "phase1_observation_gate": "pass",
                     "signal_tier": "normal",
                     "confidence": 66,
@@ -155,7 +172,7 @@ class NotificationRankTest(unittest.TestCase):
         )
 
     def test_final_rank_is_always_one_of_six_known_values(self) -> None:
-        expected_codes = {"strong_main", "high_main", "high_watch", "normal_main", "attention", "no_send"}
+        expected_codes = {"strong_main", "high_main", "paper_opportunity", "high_watch", "normal_main", "attention", "no_send"}
         seen_codes: set[str] = set()
         biases = ["wait", "long", "short"]
         notification_kinds = ["none", "main", "attention"]
@@ -165,11 +182,12 @@ class NotificationRankTest(unittest.TestCase):
         trade_gates = ["blocked", "pass"]
         paper_order_statuses = ["", "planned"]
         observation_gates = ["blocked", "pass"]
+        opportunity_gates = ["blocked", "pass"]
         confidences = [30, 45, 55, 63, 75]
         rrs = [0.9, 1.2, 1.35, 1.85]
         gaps = [0, 12, 18, 30]
 
-        for bias, kind, status, prelabel, tier, trade_gate, paper_status, observation_gate, confidence, rr_estimate, gap in product(
+        for bias, kind, status, prelabel, tier, trade_gate, paper_status, observation_gate, opportunity_gate, confidence, rr_estimate, gap in product(
             biases,
             notification_kinds,
             statuses,
@@ -178,6 +196,7 @@ class NotificationRankTest(unittest.TestCase):
             trade_gates,
             paper_order_statuses,
             observation_gates,
+            opportunity_gates,
             confidences,
             rrs,
             gaps,
@@ -191,6 +210,7 @@ class NotificationRankTest(unittest.TestCase):
                 "trade_execution_gate": trade_gate,
                 "paper_order_status": paper_status,
                 "phase1_observation_gate": observation_gate,
+                "opportunity_gate": opportunity_gate,
                 "confidence": confidence,
                 "rr_estimate": rr_estimate,
                 "score_gap": gap if bias != "short" else -gap,

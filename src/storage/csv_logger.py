@@ -84,6 +84,9 @@ CSV_HEADER = [
     "phase1b_lite_gate",
     "phase1b_lite_type",
     "phase1b_lite_reasons",
+    "opportunity_gate",
+    "opportunity_type",
+    "opportunity_reasons",
     "paper_order_status",
     "funding_rate",
     "funding_rate_raw",
@@ -228,6 +231,9 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "phase1b_lite_gate": payload.get("phase1b_lite_gate"),
         "phase1b_lite_type": payload.get("phase1b_lite_type"),
         "phase1b_lite_reasons": json_dumps(payload.get("phase1b_lite_reasons")),
+        "opportunity_gate": payload.get("opportunity_gate"),
+        "opportunity_type": payload.get("opportunity_type"),
+        "opportunity_reasons": json_dumps(payload.get("opportunity_reasons")),
         "paper_order_status": payload.get("paper_order_status"),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
@@ -378,6 +384,33 @@ PHASE1B_LITE_PAPER_ORDER_HEADER = [
 ]
 
 
+PAPER_POSITION_HEADER = [
+    "signal_id",
+    "timestamp_jst",
+    "position_phase",
+    "position_status",
+    "opportunity_type",
+    "opportunity_reasons",
+    "side",
+    "reference_price",
+    "entry_price",
+    "stop_loss_price",
+    "tp1_price",
+    "tp2_price",
+    "timeout_hours",
+    "exit_rule_version",
+    "rr_estimate",
+    "prelabel",
+    "primary_setup_status",
+    "primary_setup_reason",
+    "market_map_flags",
+    "confidence_direction_shadow",
+    "confidence_execution_shadow",
+    "confidence_wait_shadow",
+    "trade_execution_gate",
+]
+
+
 def append_paper_order(base_dir: Path, payload: dict[str, Any]) -> Path:
     path = base_dir / "logs" / "csv" / "paper_orders.csv"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -518,5 +551,57 @@ def append_phase1b_lite_paper_order(base_dir: Path, payload: dict[str, Any]) -> 
             writer.writeheader()
             for existing in existing_rows:
                 writer.writerow({field: existing.get(field, "") for field in PHASE1B_LITE_PAPER_ORDER_HEADER})
+        writer.writerow(row)
+    return path
+
+
+def append_paper_position(base_dir: Path, payload: dict[str, Any]) -> Path:
+    path = base_dir / "logs" / "csv" / "paper_positions.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current_header, existing_rows = _load_existing_rows(path)
+    signal_id = str(payload.get("signal_id", "")).strip()
+    if signal_id and any(str(row.get("signal_id", "")).strip() == signal_id for row in existing_rows):
+        return path
+
+    json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
+    setup_status = str(payload.get("primary_setup_status", "")).strip()
+    position_status = "opened" if setup_status == "ready" else "pending"
+    row = {
+        "signal_id": signal_id,
+        "timestamp_jst": payload.get("timestamp_jst", ""),
+        "position_phase": "pre_auto_paper",
+        "position_status": position_status,
+        "opportunity_type": payload.get("opportunity_type", ""),
+        "opportunity_reasons": json_dumps(payload.get("opportunity_reasons")),
+        "side": payload.get("primary_setup_side", ""),
+        "reference_price": payload.get("current_price", ""),
+        "entry_price": payload.get("primary_entry_mid", ""),
+        "stop_loss_price": payload.get("primary_stop_loss", ""),
+        "tp1_price": payload.get("shadow_tp1_price", payload.get("tp1_price", "")),
+        "tp2_price": payload.get("shadow_tp2_price", payload.get("tp2_price", "")),
+        "timeout_hours": payload.get("shadow_timeout_hours", payload.get("timeout_hours", "")),
+        "exit_rule_version": payload.get("shadow_exit_rule_version", payload.get("exit_rule_version", "")),
+        "rr_estimate": payload.get("rr_estimate", ""),
+        "prelabel": payload.get("prelabel", ""),
+        "primary_setup_status": setup_status,
+        "primary_setup_reason": payload.get("primary_setup_reason", ""),
+        "market_map_flags": ",".join(payload.get("market_map_flags", [])),
+        "confidence_direction_shadow": payload.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": payload.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": payload.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": payload.get("trade_execution_gate", ""),
+    }
+
+    needs_rewrite = current_header and current_header != PAPER_POSITION_HEADER
+    mode = "a"
+    if not path.exists() or needs_rewrite:
+        mode = "w"
+
+    with path.open(mode, newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+        if mode == "w":
+            writer.writeheader()
+            for existing in existing_rows:
+                writer.writerow({field: existing.get(field, "") for field in PAPER_POSITION_HEADER})
         writer.writerow(row)
     return path

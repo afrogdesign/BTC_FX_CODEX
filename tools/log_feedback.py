@@ -29,13 +29,14 @@ from src.analysis.position_risk import reconcile_prelabel_with_setup
 from src.analysis.rr import build_setup
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
-from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
 from src.trade.observation_gate import (
     determine_phase1_observation_gate,
     is_confidence_watch_learning_candidate,
     is_counter_long_short_watch_candidate,
 )
+from src.trade.opportunity_gate import determine_opportunity_gate
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 
 
@@ -317,6 +318,9 @@ SHADOW_HEADER = [
     "phase1b_lite_gate",
     "phase1b_lite_type",
     "phase1b_lite_reasons",
+    "opportunity_gate",
+    "opportunity_type",
+    "opportunity_reasons",
     "paper_order_status",
 ]
 
@@ -4836,6 +4840,22 @@ def build_shadow_log(
             confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
             confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
         )
+        opportunity_gate = determine_opportunity_gate(
+            bias=str(trade.get("bias", "")),
+            primary_setup_side=str(trade.get("primary_setup_side", "")),
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
+            market_map_flags=_split_values(str(trade.get("market_map_flags", ""))),
+            phase1_observation_gate=str(trade.get("phase1_observation_gate", "") or observation_gate["phase1_observation_gate"]),
+            phase1_observation_type=str(effective_observation_type),
+            phase1b_lite_gate=str(trade.get("phase1b_lite_gate", "") or lite_gate["phase1b_lite_gate"]),
+            phase1b_lite_type=str(trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"]),
+            trade_execution_gate=str(trade.get("trade_execution_gate", "")),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+        )
         shadow_rows.append(
             {
                 "signal_id": signal_id,
@@ -4960,6 +4980,10 @@ def build_shadow_log(
                 "phase1b_lite_type": trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"],
                 "phase1b_lite_reasons": trade.get("phase1b_lite_reasons", "")
                 or json.dumps(lite_gate["phase1b_lite_reasons"], ensure_ascii=False),
+                "opportunity_gate": trade.get("opportunity_gate", "") or opportunity_gate["opportunity_gate"],
+                "opportunity_type": trade.get("opportunity_type", "") or opportunity_gate["opportunity_type"],
+                "opportunity_reasons": trade.get("opportunity_reasons", "")
+                or json.dumps(opportunity_gate["opportunity_reasons"], ensure_ascii=False),
                 "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
@@ -5026,6 +5050,35 @@ def _phase1b_lite_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    setup_status = str(row.get("primary_setup_status", "")).strip()
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "position_phase": "pre_auto_paper",
+        "position_status": "opened" if setup_status == "ready" else "pending",
+        "opportunity_type": row.get("opportunity_type", ""),
+        "opportunity_reasons": row.get("opportunity_reasons", ""),
+        "side": row.get("primary_setup_side", ""),
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "timeout_hours": row.get("shadow_timeout_hours", row.get("timeout_hours", "")),
+        "exit_rule_version": row.get("shadow_exit_rule_version", row.get("exit_rule_version", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": setup_status,
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "market_map_flags": row.get("market_map_flags", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+    }
+
+
 def build_observation_paper_orders(
     *,
     base_dir: Path,
@@ -5077,6 +5130,28 @@ def build_phase1b_lite_paper_orders(
         seen.add(signal_id)
     orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
     return _write_csv_rows(output_path, PHASE1B_LITE_PAPER_ORDER_HEADER, orders)
+
+
+def build_paper_positions(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    positions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        if str(row.get("opportunity_gate", "")).strip() != "pass":
+            continue
+        positions.append(_paper_position_from_trade(row))
+        seen.add(signal_id)
+    positions.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, PAPER_POSITION_HEADER, positions)
 
 
 def _period_filter(rows: list[dict[str, Any]], period: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -5329,6 +5404,28 @@ def _paper_trade_summary(rows: list[dict[str, Any]], paper_rows: list[dict[str, 
         "shadow_count": len(shadow_rows),
         "too_close_count": len(too_close_rows),
         "too_close_shadow_wider_count": len(too_close_shadow_wider),
+    }
+
+
+def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
+    matched = [row for row in position_rows if str(row.get("signal_id", "")).strip() in period_ids]
+    pass_rows = [row for row in rows if str(row.get("opportunity_gate", "")).strip() == "pass"]
+    type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in pass_rows)
+    status_counts = Counter(str(row.get("position_status", "")).strip() for row in matched)
+    recorded_ids = {str(row.get("signal_id", "")).strip() for row in matched}
+    missing_ids = [
+        str(row.get("signal_id", "")).strip()
+        for row in pass_rows
+        if str(row.get("signal_id", "")).strip() and str(row.get("signal_id", "")).strip() not in recorded_ids
+    ]
+    return {
+        "opportunity_pass_count": len(pass_rows),
+        "position_count": len(matched),
+        "missing_position_count": len(missing_ids),
+        "type_counts": _format_counter(type_counts, limit=6),
+        "status_counts": _format_counter(status_counts, limit=4),
+        "representatives": missing_ids[:3],
     }
 
 
@@ -6279,6 +6376,7 @@ def build_feedback_report(
     paper_orders_path: Path | None = None,
     observation_paper_orders_path: Path | None = None,
     phase1b_lite_paper_orders_path: Path | None = None,
+    paper_positions_path: Path | None = None,
     ai_health_summary: dict[str, Any] | None = None,
 ) -> str:
     explicit_shadow_path = shadow_path is not None
@@ -6290,6 +6388,7 @@ def build_feedback_report(
     phase1b_lite_paper_orders_path = (
         phase1b_lite_paper_orders_path or base_dir / "logs" / "csv" / "phase1b_lite_paper_orders.csv"
     )
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
     trades_path = base_dir / "logs" / "csv" / "trades.csv"
     outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
     reviews_path = base_dir / "logs" / "csv" / "user_reviews.csv"
@@ -6319,6 +6418,14 @@ def build_feedback_report(
             trades_path=shadow_path,
             output_path=phase1b_lite_paper_orders_path,
         )
+    if _is_stale_file(paper_positions_path, [shadow_path]) or _csv_missing_columns(
+        paper_positions_path, PAPER_POSITION_HEADER
+    ):
+        build_paper_positions(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=paper_positions_path,
+        )
     all_rows = _load_csv_rows(shadow_path)
     rows, previous_rows = _period_filter(all_rows, period)
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
@@ -6332,6 +6439,7 @@ def build_feedback_report(
     )
     phase1_gate = _phase1_gate_summary(completed)
     paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
+    paper_position_summary = _paper_position_summary(completed, _load_csv_rows(paper_positions_path))
     observation_summary = _phase1_observation_summary(completed)
     phase1a_summary = _phase1a_observation_order_summary(
         completed,
@@ -6811,6 +6919,11 @@ def build_feedback_report(
         lines.append(f"- 主なブロック理由: {paper_summary['blockers']}")
     lines.append(f"- paper_orders planned: {paper_summary['planned_count']}件")
     lines.append(f"- phase1_v1_shadow 記録付き: {paper_summary['shadow_count']}件")
+    lines.append(f"- opportunity_gate=pass: {paper_position_summary['opportunity_pass_count']}件")
+    lines.append(f"- paper_positions 記録: {paper_position_summary['position_count']}件")
+    lines.append(f"- 紙ポジション状態: {paper_position_summary['status_counts'] or 'なし'}")
+    lines.append(f"- 紙実行候補タイプ: {paper_position_summary['type_counts'] or 'なし'}")
+    lines.append(f"- opportunity pass だが paper_positions 未記録: {paper_position_summary['missing_position_count']}件")
     if paper_summary["too_close_count"]:
         lines.append(
             f"- tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: "
@@ -7016,6 +7129,8 @@ def daily_sync(
     )
     shadow_path = build_shadow_log(base_dir=base_dir, outcomes_path=outcomes_path, reviews_path=reviews_path)
     observation_paper_orders_path = build_observation_paper_orders(base_dir=base_dir, trades_path=shadow_path)
+    phase1b_lite_paper_orders_path = build_phase1b_lite_paper_orders(base_dir=base_dir, trades_path=shadow_path)
+    paper_positions_path = build_paper_positions(base_dir=base_dir, trades_path=shadow_path)
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -7044,6 +7159,8 @@ def daily_sync(
         "reviews_path": reviews_path,
         "shadow_path": shadow_path,
         "observation_paper_orders_path": observation_paper_orders_path,
+        "phase1b_lite_paper_orders_path": phase1b_lite_paper_orders_path,
+        "paper_positions_path": paper_positions_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
@@ -7138,6 +7255,10 @@ def _build_parser() -> argparse.ArgumentParser:
     market_map_readiness_parser.add_argument("--date-from", default="")
     market_map_readiness_parser.add_argument("--date-to", default="")
     market_map_readiness_parser.add_argument("--min-market-rows", type=int, default=1)
+
+    paper_positions_parser = subparsers.add_parser("build-paper-positions")
+    paper_positions_parser.add_argument("--trades-path")
+    paper_positions_parser.add_argument("--output-csv")
 
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
@@ -7312,6 +7433,15 @@ def main() -> None:
             print(output_md)
         else:
             print(report)
+        return
+
+    if args.command == "build-paper-positions":
+        path = build_paper_positions(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_path=Path(args.output_csv) if args.output_csv else None,
+        )
+        print(path)
         return
 
     if args.command == "serve-review-form":

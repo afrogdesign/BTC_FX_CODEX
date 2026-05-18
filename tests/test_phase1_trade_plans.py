@@ -7,11 +7,13 @@ from tempfile import TemporaryDirectory
 from src.storage.csv_logger import (
     append_observation_paper_order,
     append_paper_order,
+    append_paper_position,
     append_phase1b_lite_paper_order,
 )
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.opportunity_gate import determine_opportunity_gate
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.position_sizing import build_position_size_plan
 
@@ -267,6 +269,50 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(standalone_trend_up["phase1b_lite_gate"], "blocked")
         self.assertIn("standalone_trend_flip_confirmed_up", standalone_trend_up["phase1b_lite_reasons"])
 
+    def test_opportunity_gate_passes_observation_and_market_map_without_formal_gate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="counter_long_short_watch",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=18,
+            confidence_wait_shadow=55,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "counter_long_short_watch")
+        self.assertIn("phase1_observation_gate_pass", result["opportunity_reasons"])
+        self.assertIn("market_map:support_to_resistance_flip", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_fatal_no_trade_flags(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            data_quality_flag="ok",
+            no_trade_flags=["Funding_prohibited_long"],
+            risk_flags=[],
+            market_map_flags=["resistance_to_support_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=80,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("fatal_no_trade_flag:Funding_prohibited_long", result["opportunity_reasons"])
+
     def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
         result = determine_phase1_observation_gate(
             bias="long",
@@ -378,6 +424,43 @@ class Phase1TradePlanTests(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertIn("phase1B-lite", rows[1])
             self.assertIn("confidence_watch_sweep_lite", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_append_paper_position_is_separate_from_formal_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "opp_1",
+                "timestamp_jst": "2026-05-18T10:00:00+09:00",
+                "current_price": 70000,
+                "opportunity_gate": "pass",
+                "opportunity_type": "counter_long_short_watch",
+                "opportunity_reasons": ["phase1_observation_gate_pass"],
+                "primary_setup_side": "short",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 70400,
+                "shadow_tp1_price": 69250,
+                "shadow_tp2_price": 68700,
+                "shadow_timeout_hours": 12,
+                "shadow_exit_rule_version": "phase1_v1_shadow",
+                "rr_estimate": 1.3,
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "market_map_flags": ["support_to_resistance_flip"],
+                "confidence_direction_shadow": 70,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 65,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_paper_position(base_dir, payload)
+            append_paper_position(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("pre_auto_paper", rows[1])
+            self.assertIn("pending", rows[1])
             self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
 
     def test_append_observation_paper_order_uses_short_side_for_counter_long_short_watch(self) -> None:
