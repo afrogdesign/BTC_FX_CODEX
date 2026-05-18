@@ -32,6 +32,7 @@
   - 旧計画ファイルを `運用資料/計画/archive/superseded/2026-05-18_pre_auto_redesign/` へ退避し、`自動取引直前_高速到達計画_20260518.md` と新 `マイルストーン定義.md` を正本化した。
   - `src/trade/opportunity_gate.py`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を追加した。
   - 実弾発注、取引所API送信、秘密鍵連携は引き続き禁止として明記した。
+  - 全体テストは `./.venv312/bin/python -m unittest discover -s tests` で 166 件 OK。commit `27c2db8 Add pre-auto paper opportunity flow` を `origin/ver02.5-v7` へ push 済み。
 
 - 2026-05-18 JST
   - `運用資料/計画/` を整理し、実装済み計画書を `計画/archive/implemented/2026-05-18/` へ移動した。

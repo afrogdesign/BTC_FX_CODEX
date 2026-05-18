@@ -8,7 +8,7 @@
 
 - 主系統は `iMac 2019` の `ver02.5-v7`。自動取引直前へ向けた `Phase A` 開始。正式 gate 待ちだけでなく、`opportunity_gate` と `paper_positions.csv` で紙実行候補を拾う方針へ変更。
 - 新しい正本は `運用資料/計画/自動取引直前_高速到達計画_20260518.md` と `運用資料/計画/マイルストーン定義.md`。旧計画は `運用資料/計画/archive/superseded/2026-05-18_pre_auto_redesign/` へ退避済み。
-- `opportunity_gate`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を実装中。実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
+- `opportunity_gate`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を実装済み。commit `27c2db8` を `origin/ver02.5-v7` へ push 済み。実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
 - `Ver02.5-v7 先行実装パック` を実装済み。15分足の執行精度チェック、`trend_flip_confirmed_up` の弱評価化、詳細HTML/CSV保存、ロードマップ/タイムライン更新まで完了。全体テスト 163 件 OK。
 - 常駐 `com.afrog.btc-monitor` は `Ver02.5-v7` 反映後に再起動済み。PID `98649`、`state=running`、`monitor.err` は空。
 - フェーズ加速用に `Phase 1B-lite` を追加済み。実装 commit `1401a69`、記録更新 commit `2b22b03` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
@@ -49,10 +49,10 @@
 ## 次のタスク
 
 1. 次回サイクルで `SYSTEM_LABEL=Ver02.5-v7`、`execution_precision_*`、`15分足 執行チェック` が result / CSV / 詳細HTMLへ入るか確認する。
-2. `trend_flip_confirmed_up` は 16 件でも弱い。上方向転換の強評価や gate 緩和には使わず、30 件までは観測継続する。
-3. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-4. `feedback_daily_sync_20260518.md` の改善候補 1 位「15分足の執行価格精度が弱い」は v7 で一次対応済み。次は live で `ready -> watch` 降格が過剰でないか見る。
-5. 標準 3 本は `0 / 0 / 1` を維持。`rr_below_min -> entry_zone_not_reached` 系の追加修正は急がない。
+2. 次回 `daily-sync` で `opportunity_gate=pass`、`paper_positions`、`紙実行候補・実弾不可` の集計が出るか確認する。
+3. `paper_positions.csv` の pending / opened が live で増えるか確認し、次段階で closed / TP / SL / timeout 判定を実装する。
+4. `trend_flip_confirmed_up` は 16 件でも弱い。上方向転換の強評価や gate 緩和には使わず、30 件までは観測継続する。
+5. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
 6. AI backlog は 75 件へ増加したが `request_failed=0`。安定優先なら daily cap 4 維持、backlog 解消優先なら 6 または 8 を検討する。
 
 ## 残作業一覧
