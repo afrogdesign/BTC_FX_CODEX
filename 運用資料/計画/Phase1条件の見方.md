@@ -162,7 +162,7 @@
 
 ## 7. 通知ランクと実行可否の分離
 
-`Ver02.5-v6` では、通知ランクを実行可否で分けます。
+`Ver02.5-v7` では、通知ランクを実行可否で分けます。
 
 - `執行候補・強` / `執行候補`
   - `trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ出る
@@ -175,10 +175,21 @@
 
 これにより、方向や構造が強い通知でも、実行ゲートを通っていないものは `執行候補` と表示しません。
 
+## 8. Phase 1B-lite の扱い
+
+`Phase 1B-lite` は正式 `Phase 1B` ではありません。
+`SWEEP_WAIT` 限定の専用紙トレード観測レーンで、正式 `paper_orders.csv` とは分けます。
+
+- 対象: `phase1b_lite_gate=pass`
+- 保存先: `logs/csv/phase1b_lite_paper_orders.csv`
+- 件名ランク: `執行候補` へは上げない
+- 昇格目安: まず 10〜15 件まで観測し、TP1先行率、近似PF、平均MFE/MAEを見る
+
 ## 参照コード
 
 - `src/analysis/rr.py`
 - `src/analysis/position_risk.py`
 - `src/trade/activation.py`
 - `src/trade/observation_gate.py`
+- `src/trade/phase1b_lite.py`
 - `main.py`

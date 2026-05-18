@@ -30,7 +30,7 @@
 - `market_map` は `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log/メール文言へ流す。
 - 標準比較、運用焦点、Phase 1B 候補、失敗ブレイク、market_map readiness、有効性の各レポート CLI は実装済み。
 - 作業ブランチは `ver02.5-v7` へ切り替え済み。
-- 通知ランク再設計の実装設計は `運用資料/計画/通知ランク再設計_実装設計_20260515.md` に保存済み。
+- 実装済みの計画書は `運用資料/計画/archive/implemented/2026-05-18/` へ整理済み。
 
 ## 直近の基準値
 
