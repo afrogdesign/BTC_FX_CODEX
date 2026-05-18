@@ -576,6 +576,30 @@ def _setup_line(result: dict[str, Any], side: str) -> str:
     )
 
 
+def _execution_precision_line(result: dict[str, Any], side: str) -> str:
+    setup = result.get("long_setup", {}) if side == "long" else result.get("short_setup", {})
+    action = str(setup.get("execution_precision_action") or "keep")
+    reason = str(setup.get("execution_precision_reason") or "").strip()
+    flags = [str(flag) for flag in setup.get("execution_precision_flags", []) if str(flag)]
+    action_labels = {
+        "keep": "そのまま監視",
+        "wait_only": "待機のみ",
+        "invalidate_watch": "無効化寄り",
+        "allow_breakout_follow": "ブレイク追随候補",
+    }
+    flag_labels = {
+        "short_at_major_support_wait_only": "主要サポート接近",
+        "long_at_major_resistance_wait_only": "主要レジスタンス接近",
+        "short_invalidated_by_up_break": "上抜け後の支持化",
+        "long_invalidated_by_down_break": "下抜け後の抵抗化",
+        "breakout_follow_candidate": "ブレイク追随候補",
+    }
+    flag_text = " / ".join(flag_labels.get(flag, flag) for flag in flags) or "追加注意なし"
+    if reason:
+        return f"{action_labels.get(action, action)}。{reason}（{flag_text}）"
+    return f"{action_labels.get(action, action)}（{flag_text}）"
+
+
 def _build_wait_reasons(display_context: dict[str, Any], result: dict[str, Any]) -> list[str]:
     reasons = [str(item) for item in display_context.get("wait_reason_labels", []) if str(item).strip()]
     if reasons:
@@ -1242,10 +1266,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         <div class="panel">
           <h3>ロング</h3>
           <p>{esc(_setup_line(result, 'long'))}</p>
+          <p><strong>15分足 執行チェック:</strong> {esc(_execution_precision_line(result, 'long'))}</p>
         </div>
         <div class="panel">
           <h3>ショート</h3>
           <p>{esc(_setup_line(result, 'short'))}</p>
+          <p><strong>15分足 執行チェック:</strong> {esc(_execution_precision_line(result, 'short'))}</p>
         </div>
       </div>
     </section>

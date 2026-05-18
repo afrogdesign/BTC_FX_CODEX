@@ -97,6 +97,9 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "stop_loss": 66991.9,
                 "tp1": 66341.98,
                 "tp2": 65525.65,
+                "execution_precision_action": "wait_only",
+                "execution_precision_flags": ["short_at_major_support_wait_only"],
+                "execution_precision_reason": "主要サポートが近く、15分足ショートは追いかけず待機",
             },
             "primary_setup_status": "watch",
             "primary_setup_reason": "near_entry_zone_waiting_trigger",
@@ -143,6 +146,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("📊 通常監視・実行不可", html)
         self.assertIn("補足状態", html)
         self.assertIn("ロング / ショートの再検討ライン", html)
+        self.assertIn("15分足 執行チェック", html)
+        self.assertIn("主要サポートが近く、15分足ショートは追いかけず待機", html)
         self.assertIn("4時間足: 大局方向", html)
         self.assertIn("1時間足: 帯の妥当性", html)
         self.assertIn("15分足: 入る価格 / SL / TP", html)

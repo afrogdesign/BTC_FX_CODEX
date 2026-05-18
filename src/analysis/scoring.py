@@ -193,10 +193,10 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         _add_factor(long_factors, "market_map_trend_flip_confirmed_down", -8.0)
         _add_factor(short_factors, "market_map_trend_flip_confirmed_down", 8.0)
     if "trend_flip_confirmed_up" in market_map_flags:
-        short_raw -= 8
-        long_raw += 8
-        _add_factor(short_factors, "market_map_trend_flip_confirmed_up", -8.0)
-        _add_factor(long_factors, "market_map_trend_flip_confirmed_up", 8.0)
+        short_raw -= 3
+        long_raw += 2
+        _add_factor(short_factors, "market_map_trend_flip_confirmed_up_weak", -3.0)
+        _add_factor(long_factors, "market_map_trend_flip_confirmed_up_weak", 2.0)
 
     if regime == "transition" and transition_direction == "down" and breakout_up:
         long_raw -= 8

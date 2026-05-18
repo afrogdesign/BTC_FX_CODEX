@@ -73,7 +73,7 @@ from config import load_config
 from src.analysis.breakout import previous_breakout_levels
 from src.analysis.confidence import compute_confidence
 from src.analysis.position_risk import evaluate_position_risk, reconcile_prelabel_with_setup
-from src.analysis.rr import build_setup
+from src.analysis.rr import build_setup, refine_execution_precision
 from src.analysis.scoring import compute_scores
 
 
@@ -216,6 +216,72 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertGreater(result["short_raw_score"], control["short_raw_score"])
         self.assertIn("market_map_failed_breakout_down", result["long_factor_breakdown"])
         self.assertIn("market_map_failed_breakout_down", result["short_factor_breakdown"])
+
+    def test_market_map_trend_flip_up_is_weak_confirmation(self) -> None:
+        base_inputs = {
+            "market_regime": "uptrend",
+            "ema_alignment_4h": "bullish",
+            "ema20_slope_4h": "up",
+            "structure_4h": "hh_hl",
+            "structure_1h": "hh_hl",
+            "price": 100.0,
+            "ema50_4h": 95.0,
+            "rsi_15m": 52.0,
+            "volume_ratio": 1.20,
+            "atr_ratio": 1.0,
+            "funding_rate": 0.0,
+            "rr_long": 1.5,
+            "rr_short": 1.5,
+            "near_support": False,
+            "near_resistance": False,
+            "breakout_up": False,
+            "breakout_down": False,
+            "in_range_center": False,
+            "transition_direction": "up",
+            "signals_15m": "long",
+        }
+        control = compute_scores({**base_inputs, "market_map": {"flags": []}}, self.cfg)
+        result = compute_scores({**base_inputs, "market_map": {"flags": ["trend_flip_confirmed_up"]}}, self.cfg)
+
+        self.assertEqual(result["long_raw_score"] - control["long_raw_score"], 2.0)
+        self.assertEqual(control["short_raw_score"] - result["short_raw_score"], 3.0)
+        self.assertIn("market_map_trend_flip_confirmed_up_weak", result["long_factor_breakdown"])
+        self.assertIn("market_map_trend_flip_confirmed_up_weak", result["short_factor_breakdown"])
+
+    def test_execution_precision_downgrades_ready_short_at_major_support(self) -> None:
+        setup = {"status": "ready", "status_reason_code": "inside_entry_zone_with_trigger", "blocking_flags": []}
+        refined, flags = refine_execution_precision(
+            setup,
+            side="short",
+            market_map={
+                "flags": ["short_into_major_support"],
+                "nearest_major_support": {"distance_atr": 0.2},
+            },
+            signal_15m="short",
+            breakout_up=False,
+            breakout_down=False,
+        )
+
+        self.assertEqual(refined["status"], "watch")
+        self.assertEqual(refined["status_reason_code"], "execution_precision_wait_only")
+        self.assertEqual(refined["execution_precision_action"], "wait_only")
+        self.assertIn("short_at_major_support_wait_only", flags)
+        self.assertIn("execution_precision_wait_only", refined["blocking_flags"])
+
+    def test_execution_precision_marks_breakout_follow_without_ready_upgrade(self) -> None:
+        setup = {"status": "watch", "status_reason_code": "entry_zone_not_reached", "blocking_flags": []}
+        refined, flags = refine_execution_precision(
+            setup,
+            side="long",
+            market_map={"flags": ["trend_flip_confirmed_up"]},
+            signal_15m="long",
+            breakout_up=True,
+            breakout_down=False,
+        )
+
+        self.assertEqual(refined["status"], "watch")
+        self.assertEqual(refined["execution_precision_action"], "keep")
+        self.assertIn("breakout_follow_candidate", flags)
 
     def test_confidence_uses_major_minor_warning_budget(self) -> None:
         base_inputs = {

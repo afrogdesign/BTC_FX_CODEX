@@ -340,7 +340,7 @@
       <ul class="meta">
         <li class="chip">BTC Monitor</li>
         <li class="chip">運用資料 / 計画</li>
-        <li class="chip">更新日: 2026-04-10 04:20 JST</li>
+        <li class="chip">更新日: 2026-05-18 JST</li>
         <li class="chip">目的: 過去・現在・未来を 1 枚で把握する</li>
       </ul>
       <h1>BTC Monitor 計画全体タイムライン</h1>
@@ -370,13 +370,13 @@
       <div class="overview">
         <div class="overview-box">
           <strong>現在版</strong>
-          <p><code>Ver02.4-v1</code></p>
-          <p>いま実際に動かして観察している中心の版です。通知の方向だけでなく、入る価格・SL・TP の精度まで後から評価する版になりました。</p>
+          <p><code>Ver02.5-v7</code></p>
+          <p>いま実際に動かして観察している中心の版です。15分足の執行価格精度と market_map の非対称評価を先に整え、自動取引前の通知品質を上げます。</p>
         </div>
         <div class="overview-box">
           <strong>いまの主戦場</strong>
-          <p><code>Phase 0</code> 本番観測中</p>
-          <p>人のレビューを大量にためる段階ではなく、「この仕組みが本番で次の段階に進める状態か」を先に確かめている段階です。</p>
+          <p><code>Phase 0</code> 本番観測 + <code>Phase 1A</code> + <code>Phase 1B-lite</code></p>
+          <p>formal pass は 0 件のため、正式昇格ではなく、lite 観測と通知品質改善を先に進める段階です。</p>
         </div>
         <div class="overview-box">
           <strong>次の大型節目</strong>
@@ -524,29 +524,31 @@
             <div class="entry-sub">いまいちばん実務に近い流れ</div>
           </div>
           <p>
-            いまの中心は、<code>Ver02.4-v1</code> を本番観測しながら、
-            通知後 24 時間評価の一周確認と、
-            <code>Phase 1</code> の本有効条件が実データで立つかを先に見ることです。
+            いまの中心は、<code>Ver02.5-v7</code> を本番観測しながら、
+            通知後 24 時間評価、<code>Phase 1A</code>、<code>Phase 1B-lite</code>、
+            そして 15 分足の執行価格精度を同時に見ることです。
           </p>
           <div class="bands">
             <div class="band current">
               <strong>現在できていること</strong>
               <ul>
-                <li><code>Ver02.4-v1</code> を主系統として運用中: いま見るべき中心版はこれ</li>
+                <li><code>Ver02.5-v7</code> を主系統として運用中: いま見るべき中心版はこれ</li>
                 <li>通知時だけ <code>ai_audit</code> を保存する形へ切替済み: 必要な場面だけ AI 監査メモを残す運用に整理済み</li>
                 <li>通知時の詳細 HTML は 3 段チャート化済み: 上段 4 時間足、中段 1 時間足、下段 15 分足で価格帯・SL・TP を確認できる</li>
                 <li>通知後は AI 事後評価が自動で走る: 通知で示した価格帯・SL・TP が実務上妥当だったかを後から採点できる</li>
                 <li><code>daily-sync</code> に <code>Phase 1 判定サマリー</code> と判定文を追加済み: 今日進めてよいかを日次レポートで即確認できる</li>
+                <li><code>15分足 執行チェック</code> を追加: 主要ライン直近の追いかけ ready を watch に落とせる</li>
                 <li>レビューは JSON 正本 + HTML フォームで維持できる: 人の感想も残せるが、主役は AI 事後評価に切り替わった</li>
               </ul>
             </div>
             <div class="band current">
               <strong>いま詰めていること</strong>
               <ul>
-                <li><code>primary_setup_status=ready</code> が live で何件出るか: 次段階に進めそうな候補が、本番で出始めたかを見る</li>
-                <li><code>phase1_active=true</code> の初回ケース確認: 候補ではなく、本当に次段階の判断が有効になった回が出たかを見る</li>
+                <li><code>primary_setup_status=ready</code> が live で何件出るか: 危ない ready が減り、実務に近い ready が残るかを見る</li>
+                <li><code>Phase1B-lite</code> が 10-15 件に届くか: 現在 5 件のため、正式昇格ではなく観測継続</li>
                 <li>実メールで最終ランクと 3 段チャートが直感に合うかの確認: 人が読んで「どこで入るべきか」が分かる通知になっているか確認する</li>
                 <li><code>SL評価</code> / <code>TP評価</code> / <code>15分足評価</code> の偏り確認: 価格精度のどこを優先改善するかを絞る</li>
+                <li>2026-05-18 時点: daily 47 件、概算 PF 0.73、勝率 46.8%、formal pass 0 件</li>
               </ul>
             </div>
             <div class="band next">
@@ -565,7 +567,8 @@
               <code>マイルストーン定義.md</code>、
               <code>NEXT_TASK.md</code>、
               <code>開発ロードマップ.md</code>、
-              <code>feedback_daily_sync_20260410.md</code>
+              <code>feedback_daily_sync_20260518.md</code>、
+              <code>Ver02.5-v7_先行実装パック設計_20260518.md</code>
               が、この実務線の主な正本です。
             </p>
           </div>
@@ -897,7 +900,7 @@
           </tr>
           <tr>
             <td>今すぐ進めてよい段階か知りたい</td>
-            <td><code>feedback_daily_sync_20260410.md</code></td>
+            <td><code>feedback_daily_sync_20260518.md</code></td>
             <td><code>NEXT_TASK.md</code></td>
           </tr>
           <tr>

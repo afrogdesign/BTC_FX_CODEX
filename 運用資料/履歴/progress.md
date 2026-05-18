@@ -28,6 +28,16 @@
 ## 重要な節目ログ
 
 - 2026-05-18 JST
+  - `Ver02.5-v7 先行実装パック` を実装した。作業ブランチは `ver02.5-v7`、`SYSTEM_LABEL` は `Ver02.5-v7`。
+  - `src/analysis/rr.py` に `refine_execution_precision` を追加し、主要サポート直近の short と主要レジスタンス直近の long は `wait_only` として、`ready` なら `watch` へ落とすようにした。
+  - `breakout_follow_candidate` は記録だけ行い、正式 gate 通過には使わない設計にした。
+  - `src/analysis/scoring.py` では `trend_flip_confirmed_up` の影響を long `+2`、short `-3` へ弱め、`src/presentation/sanitize.py` の文言も慎重評価へ変更した。
+  - 詳細HTMLに `15分足 執行チェック` を追加し、CSV/result に `execution_precision_action`、`execution_precision_flags`、`execution_precision_reason` を保存するようにした。
+  - `運用資料/計画/Ver02.5-v7_先行実装パック設計_20260518.md` を作成し、`開発ロードマップ.md` と `計画全体タイムライン.html` を 2026-05-18 / Ver02.5-v7 基準へ更新した。
+  - 確認は `./.venv312/bin/python -m unittest discover -s tests` で 163 件 OK、`git diff --check` OK。
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `98649`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`、`monitor.err` 空を確認した。
+
+- 2026-05-18 JST
   - 自動生成済みの `feedback_daily_sync_20260517.md` と `feedback_daily_sync_20260518.md` を確認し、20260518 基準では完了 47 件、近似PF 0.73、全体勝率 46.8%、`trade_execution_gate=pass=0件`、`paper_orders planned=0件` と整理した。
   - `market_map_effectiveness_20260518.md`、標準比較 3 本、`operational_focus_20260518.md`、`relaxation_candidates_20260518.md`、`phase1b_promotion_candidates_20260518.md` を生成した。
   - 標準比較は `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。

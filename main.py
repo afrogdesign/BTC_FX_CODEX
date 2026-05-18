@@ -27,7 +27,7 @@ from src.analysis.evaluation_trace import build_evaluation_trace
 from src.analysis.phase import determine_phase
 from src.analysis.qualitative import build_qualitative_context
 from src.analysis.regime import classify_market_regime
-from src.analysis.rr import build_setup, choose_primary_setup
+from src.analysis.rr import build_setup, choose_primary_setup, refine_execution_precision
 from src.analysis.scoring import compute_scores
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
 from src.analysis.support_resistance import (
@@ -585,11 +585,29 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             trigger_ready=trigger_down,
             warning_count=len(score_info["warning_flags"]),
         )
+        long_setup_local = apply_prelabel_to_setup(long_setup_local, position_risk["prelabel"], "long", bias)
+        short_setup_local = apply_prelabel_to_setup(short_setup_local, position_risk["prelabel"], "short", bias)
+        long_setup_local, long_precision_flags = refine_execution_precision(
+            long_setup_local,
+            side="long",
+            market_map=market_map,
+            signal_15m=tf_15m["signal"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+        )
+        short_setup_local, short_precision_flags = refine_execution_precision(
+            short_setup_local,
+            side="short",
+            market_map=market_map,
+            signal_15m=tf_15m["signal"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+        )
         return (
-            apply_prelabel_to_setup(long_setup_local, position_risk["prelabel"], "long", bias),
-            long_flags_local,
-            apply_prelabel_to_setup(short_setup_local, position_risk["prelabel"], "short", bias),
-            short_flags_local,
+            long_setup_local,
+            sorted(set(long_flags_local + long_precision_flags)),
+            short_setup_local,
+            sorted(set(short_flags_local + short_precision_flags)),
         )
 
     long_setup, long_flags, short_setup, short_flags = _build_directional_setups(preliminary_confidence)
@@ -702,6 +720,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "primary_setup_side": primary_setup_side,
         "primary_setup_status": primary_setup_status,
         "primary_setup_reason": primary_setup.get("status_reason_code", ""),
+        "execution_precision_action": primary_setup.get("execution_precision_action", ""),
+        "execution_precision_flags": primary_setup.get("execution_precision_flags", []),
+        "execution_precision_reason": primary_setup.get("execution_precision_reason", ""),
         "invalid_reason": primary_setup.get("invalid_reason", ""),
         "primary_entry_mid": primary_setup.get("entry_mid", ""),
         "primary_stop_loss": primary_setup.get("stop_loss", ""),

@@ -100,12 +100,18 @@ _CODE_LABELS = {
     "major_support_rejection": "主要サポートで下値を拒否",
     "long_into_major_resistance": "ロングは主要レジスタンス接近で追いかけ注意",
     "short_into_major_support": "ショートは主要サポート接近で追いかけ注意",
+    "execution_precision_wait_only": "15分足の入る価格は待機優先",
+    "short_at_major_support_wait_only": "ショートは主要サポート直近で待機優先",
+    "long_at_major_resistance_wait_only": "ロングは主要レジスタンス直近で待機優先",
+    "short_invalidated_by_up_break": "上抜け後の支持化でショートは無効寄り",
+    "long_invalidated_by_down_break": "下抜け後の抵抗化でロングは無効寄り",
+    "breakout_follow_candidate": "ブレイク追随候補として記録",
     "support_to_resistance_flip": "割れたサポートがレジスタンス化",
     "resistance_to_support_flip": "上抜けたレジスタンスがサポート化",
     "support_to_resistance_retest_confirmed": "サポート割れ後の戻り売り確認",
     "resistance_to_support_retest_confirmed": "レジスタンス上抜け後の押し目確認",
     "trend_flip_confirmed_down": "下方向への転換を確認",
-    "trend_flip_confirmed_up": "上方向への転換を確認",
+    "trend_flip_confirmed_up": "上方向転換は慎重評価",
     "trend_flip_early_down": "下方向転換の初動に注意",
     "trend_flip_early_up": "上方向転換の初動に注意",
 }
@@ -423,7 +429,7 @@ def _next_condition_label(result: dict[str, Any]) -> str:
     if "resistance_to_support_retest_confirmed" in risk_flags or "resistance_to_support_flip" in risk_flags:
         return "上抜けたレジスタンスが押し目サポートとして機能するか再評価"
     if "trend_flip_confirmed_up" in risk_flags or "trend_flip_early_up" in risk_flags:
-        return "上方向転換が1時間足でも継続するか再評価"
+        return "上方向転換は慎重評価。押し目保持と1時間足継続まで待つ"
     if prelabel == "SWEEP_WAIT" or "sweep_incomplete" in risk_flags:
         if bias == "short" or "upper_liquidity_close" in risk_flags:
             return "上側流動性スイープ完了後に再評価"

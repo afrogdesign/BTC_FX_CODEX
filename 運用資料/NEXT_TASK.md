@@ -6,14 +6,16 @@
 
 ## 現在の状況
 
-- 主系統は `iMac 2019` の `ver02.5-v6`。`Phase 0` 本番観測中、`Phase 1A` 観測紙トレード継続中。
+- 主系統は `iMac 2019` の `ver02.5-v7`。`Phase 0` 本番観測中、`Phase 1A` 観測紙トレード継続中、`Phase 1B-lite` 限定検証中。
+- `Ver02.5-v7 先行実装パック` を実装済み。15分足の執行精度チェック、`trend_flip_confirmed_up` の弱評価化、詳細HTML/CSV保存、ロードマップ/タイムライン更新まで完了。全体テスト 163 件 OK。
+- 常駐 `com.afrog.btc-monitor` は `Ver02.5-v7` 反映後に再起動済み。PID `98649`、`state=running`、`monitor.err` は空。
 - フェーズ加速用に `Phase 1B-lite` を追加済み。実装 commit `1401a69`、記録更新 commit `2b22b03` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
 - `Phase 1B-lite` は正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
 - `Phase 1B` の実行候補はまだ 0 件。`feedback_daily_sync_20260518.md` でも `trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
 - 通知ランクは `執行候補・強` / `執行候補` / `高優先監視・実行不可` / `通常監視・実行不可` / `注意報・売買非推奨` へ再設計済み。執行候補は `trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ出る。
-- メール件名ラベルは `Ver02.5-v6` で実送信確認済み。通常監視は `20260515_230500`、注意報は `20260516_060500` で新ランク表示を確認済み。
+- メール件名ラベルは `Ver02.5-v6` で実送信確認済み。通常監視は `20260515_230500`、注意報は `20260516_060500` で新ランク表示を確認済み。`Ver02.5-v7` は再起動後の次回送信で確認する。
 - `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260516.md` では 68 件記録あり。
 - AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260518.md` では backlog 75 件。
 
@@ -27,7 +29,7 @@
 - `market_map` は複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを作る。
 - `market_map` は `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log/メール文言へ流す。
 - 標準比較、運用焦点、Phase 1B 候補、失敗ブレイク、market_map readiness、有効性の各レポート CLI は実装済み。
-- 作業ブランチは `ver02.5-v6` へ切り替え済み。
+- 作業ブランチは `ver02.5-v7` へ切り替え済み。
 - 通知ランク再設計の実装設計は `運用資料/計画/通知ランク再設計_実装設計_20260515.md` に保存済み。
 
 ## 直近の基準値
@@ -39,22 +41,22 @@
 - `phase1b_promotion_candidates_20260518.md`: 候補 6 件、勝率 100.0%、TP1先行 100.0%、近似PF 1.26。ただし新規候補は増えておらず、正式 gate 緩和材料にはまだしない。
 - `Phase 1B-lite`: lite 候補 5 件、専用紙トレード observing 5 件。10〜15 件の成功条件にはまだ未達。
 - `market_map_effectiveness_20260518.md`: `2026-05-13` 以降の shadow 120 行中 116 件で `market_map` 記録あり。`support_to_resistance_flip=75件` は勝率 69.6%、平均MFE24h 7.56 / 平均MAE24h 5.52 と相対的に有効。
-- `trend_flip_confirmed_up=16件` は勝率 37.5%、wrong_rate 31.2%、平均MFE24h 1.59 / 平均MAE24h 13.09 で引き続き弱く、上方向転換の gate 強化候補としては不採用。
+- `trend_flip_confirmed_up=16件` は勝率 37.5%、wrong_rate 31.2%、平均MFE24h 1.59 / 平均MAE24h 13.09 で弱いため、`Ver02.5-v7` では score 加点を弱め、表示も慎重評価へ変更済み。
 - AI 事後評価 health は `feedback_daily_sync_20260518.md` 基準で `eligible=302 / AI済み=227 / backlog=75 / created=4 / request_failed=0`。
 
 ## 次のタスク
 
-1. `trend_flip_confirmed_up` は 16 件でも弱い。上方向転換の強評価や gate 緩和には使わず、30 件までは観測継続する。
-2. `support_to_resistance_flip` は 75 件で成績が相対的に良い。次は「下方向は有効、上方向は弱い」という非対称性を score / 表示 / gate に反映する設計を検討する。
+1. 次回サイクルで `SYSTEM_LABEL=Ver02.5-v7`、`execution_precision_*`、`15分足 執行チェック` が result / CSV / 詳細HTMLへ入るか確認する。
+2. `trend_flip_confirmed_up` は 16 件でも弱い。上方向転換の強評価や gate 緩和には使わず、30 件までは観測継続する。
 3. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-4. `feedback_daily_sync_20260518.md` の改善候補 1 位は「15分足の執行価格精度が弱い」。`src/analysis/rr.py` と `src/notification/detail_page.py` を次の実装候補にする。
+4. `feedback_daily_sync_20260518.md` の改善候補 1 位「15分足の執行価格精度が弱い」は v7 で一次対応済み。次は live で `ready -> watch` 降格が過剰でないか見る。
 5. 標準 3 本は `0 / 0 / 1` を維持。`rr_below_min -> entry_zone_not_reached` 系の追加修正は急がない。
 6. AI backlog は 75 件へ増加したが `request_failed=0`。安定優先なら daily cap 4 維持、backlog 解消優先なら 6 または 8 を検討する。
 
 ## 残作業一覧
 
 - 次回 `market_map_effectiveness_YYYYMMDD.md` を更新し、`trend_flip_confirmed_up`、`resistance_to_support_flip`、`failed_breakout_down_reversal` の成績がサンプル増でどう変わるか見る。
-- `com.afrog.btc-monitor` は `Phase 1B-lite` 実装 commit `1401a69` 反映後に再起動済み。PID `64909`、`state=running`、`monitor.err` は空。
+- `com.afrog.btc-monitor` は `Ver02.5-v7` 反映後に再起動済み。PID `98649`、`state=running`、`monitor.err` は空。`logs/heartbeat.txt` と `logs/last_result.json` は次回定刻サイクルで更新確認する。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 75 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=4` は安定運用優先なら維持する。backlog 解消を優先する場合のみ `6` または `8` への増加を検討する。
 - 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。

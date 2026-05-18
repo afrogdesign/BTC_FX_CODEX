@@ -212,6 +212,77 @@ def build_setup(
     return setup, sorted(set(no_trade_flags))
 
 
+def _market_map_distance_atr(market_map: dict[str, Any], key: str) -> float | None:
+    level = market_map.get(key)
+    if not isinstance(level, dict):
+        return None
+    value = level.get("distance_atr")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def refine_execution_precision(
+    setup: dict[str, Any],
+    *,
+    side: str,
+    market_map: dict[str, Any] | None,
+    signal_15m: str,
+    breakout_up: bool,
+    breakout_down: bool,
+) -> tuple[dict[str, Any], list[str]]:
+    refined = dict(setup)
+    flags = {str(flag) for flag in refined.get("execution_precision_flags", []) if str(flag)}
+    market_map = market_map or {}
+    market_flags = {str(flag) for flag in market_map.get("flags", []) if str(flag)}
+    action = str(refined.get("execution_precision_action") or "keep")
+    reason = str(refined.get("execution_precision_reason") or "")
+
+    support_distance_atr = _market_map_distance_atr(market_map, "nearest_major_support")
+    resistance_distance_atr = _market_map_distance_atr(market_map, "nearest_major_resistance")
+
+    if side == "short":
+        if "short_into_major_support" in market_flags or (
+            support_distance_atr is not None and support_distance_atr <= 0.30
+        ):
+            flags.add("short_at_major_support_wait_only")
+            action = "wait_only"
+            reason = "主要サポートが近く、15分足ショートは追いかけず待機"
+        if {"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_flags and signal_15m != "short":
+            flags.add("short_invalidated_by_up_break")
+            action = "wait_only"
+            reason = "上抜け後の支持化が残り、15分足ショート発火は無効寄り"
+        if breakout_down and {"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_flags:
+            flags.add("breakout_follow_candidate")
+    elif side == "long":
+        if "long_into_major_resistance" in market_flags or (
+            resistance_distance_atr is not None and resistance_distance_atr <= 0.30
+        ):
+            flags.add("long_at_major_resistance_wait_only")
+            action = "wait_only"
+            reason = "主要レジスタンスが近く、15分足ロングは追いかけず待機"
+        if {"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_flags and signal_15m != "long":
+            flags.add("long_invalidated_by_down_break")
+            action = "wait_only"
+            reason = "下抜け後の抵抗化が残り、15分足ロング発火は無効寄り"
+        if breakout_up and {"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_flags:
+            flags.add("breakout_follow_candidate")
+
+    if action == "wait_only" and refined.get("status") == "ready":
+        refined["status"] = "watch"
+        refined["status_reason_code"] = "execution_precision_wait_only"
+        existing = [str(flag) for flag in refined.get("blocking_flags", []) if str(flag)]
+        refined["blocking_flags"] = sorted(set(existing + ["execution_precision_wait_only"]))
+
+    refined["execution_precision_action"] = action
+    refined["execution_precision_flags"] = sorted(flags)
+    refined["execution_precision_reason"] = reason
+    return refined, sorted(flags)
+
+
 def choose_primary_setup(bias: str, long_setup: dict[str, Any], short_setup: dict[str, Any]) -> tuple[str, str]:
     if bias == "long":
         return "long", long_setup["status"]
