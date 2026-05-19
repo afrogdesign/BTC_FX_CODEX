@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-18 JST
+更新日: 2026-05-19 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -33,6 +33,7 @@
   - 全体テストは `./.venv312/bin/python -m unittest discover -s tests` で 177 件 OK。`git diff --check` も OK。
   - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `9798`、`monitor.err` 空を確認した。
   - `feedback_daily_sync_20260519.md` で live 集計を確認した。`primary_setup_status=invalid` を紙候補から除外するよう `opportunity_gate` と shadow 再計算を補正し、週次 `paper_positions` は 20 件すべて closed、内訳は `missed_opportunity=10`、`sl_hit=9`、`tp2_hit=1`、24h超 pending 0 件。
+  - 補正 commit `85914b4 Tighten paper opportunity eligibility` を `origin/ver02.5-v8` へ push 済み。常駐は再起動済みで、PID `28498`、`monitor.err` 空を確認した。
 
 - 2026-05-18 JST
   - 自動取引直前へ最短で進めるため、旧マイルストーンの厳格 `Phase 1B` 待ちを主軸から外し、`opportunity_gate` と紙ポジションで前進する方針へ再設計した。
