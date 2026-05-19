@@ -43,6 +43,7 @@ from tools.log_feedback import (
     build_market_map_effectiveness_report,
     build_market_map_readiness_report,
     build_observation_paper_orders,
+    build_paper_positions,
     build_phase1b_lite_paper_orders,
     build_operational_focus_report,
     build_phase1b_promotion_report,
@@ -55,10 +56,175 @@ from tools.log_feedback import (
     refresh_standard_setup_comparison_reports,
     sync_ai_post_reviews,
 )
-from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 
 
 class LogFeedbackTest(unittest.TestCase):
+    def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            trades_path = logs_csv / "shadow_log.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "opportunity_gate",
+                        "opportunity_type",
+                        "primary_setup_status",
+                        "primary_setup_side",
+                        "current_price",
+                        "primary_entry_mid",
+                        "primary_stop_loss",
+                        "shadow_tp1_price",
+                        "shadow_tp2_price",
+                        "shadow_timeout_hours",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_existing",
+                        "timestamp_jst": "2026-05-18T10:00:00+09:00",
+                        "opportunity_gate": "pass",
+                        "opportunity_type": "test_type",
+                        "primary_setup_status": "watch",
+                        "primary_setup_side": "long",
+                        "current_price": "100",
+                        "primary_entry_mid": "99",
+                        "primary_stop_loss": "97",
+                        "shadow_tp1_price": "103",
+                        "shadow_tp2_price": "105",
+                        "shadow_timeout_hours": "12",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "sig_new",
+                        "timestamp_jst": "2026-05-18T11:00:00+09:00",
+                        "opportunity_gate": "pass",
+                        "opportunity_type": "new_type",
+                        "primary_setup_status": "ready",
+                        "primary_setup_side": "short",
+                        "current_price": "100",
+                        "primary_entry_mid": "100",
+                        "primary_stop_loss": "102",
+                        "shadow_tp1_price": "98",
+                        "shadow_tp2_price": "96",
+                        "shadow_timeout_hours": "12",
+                    }
+                )
+
+            output_path = logs_csv / "paper_positions.csv"
+            with output_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_existing",
+                        "timestamp_jst": "2026-05-18T10:00:00+09:00",
+                        "position_status": "closed",
+                        "exit_status": "sl_hit",
+                        "realized_r": "-1",
+                    }
+                )
+                writer.writerow(row)
+
+            with patch("tools.log_feedback.load_config", return_value=object()), patch(
+                "tools.log_feedback._fetch_future_15m_df",
+                return_value=pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"]),
+            ):
+                build_paper_positions(base_dir=base_dir, trades_path=trades_path, output_path=output_path)
+
+            rows = {row["signal_id"]: row for row in _load_csv_rows(output_path)}
+            self.assertEqual(rows["sig_existing"]["position_status"], "closed")
+            self.assertEqual(rows["sig_existing"]["exit_status"], "sl_hit")
+            self.assertEqual(rows["sig_new"]["position_status"], "opened")
+
+    def test_build_paper_positions_extends_legacy_header(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            trades_path = logs_csv / "shadow_log.csv"
+            trades_path.write_text("signal_id,timestamp_jst,opportunity_gate\n", encoding="utf-8")
+            output_path = logs_csv / "paper_positions.csv"
+            output_path.write_text("signal_id,timestamp_jst,position_status\nlegacy,2026-05-18T10:00:00+09:00,pending\n", encoding="utf-8")
+
+            with patch("tools.log_feedback.load_config", return_value=object()), patch(
+                "tools.log_feedback._fetch_future_15m_df",
+                return_value=pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"]),
+            ):
+                build_paper_positions(base_dir=base_dir, trades_path=trades_path, output_path=output_path)
+
+            header = output_path.read_text(encoding="utf-8").splitlines()[0].split(",")
+            self.assertIn("opened_at_jst", header)
+            self.assertIn("realized_r", header)
+            rows = _load_csv_rows(output_path)
+            self.assertEqual(rows[0]["signal_id"], "legacy")
+
+    def test_feedback_report_includes_paper_position_execution_summary(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in SHADOW_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_closed",
+                        "timestamp_jst": datetime.now(timezone.utc).astimezone().isoformat(),
+                        "evaluation_status": "complete",
+                        "opportunity_gate": "pass",
+                        "opportunity_type": "confidence_watch_learning",
+                    }
+                )
+                writer.writerow(row)
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_closed",
+                        "timestamp_jst": datetime.now(timezone.utc).astimezone().isoformat(),
+                        "position_status": "closed",
+                        "opportunity_type": "confidence_watch_learning",
+                        "exit_status": "tp2_hit",
+                        "realized_r": "2.0",
+                    }
+                )
+                writer.writerow(row)
+            paper_orders_path = logs_csv / "paper_orders.csv"
+            paper_orders_path.write_text("signal_id\n", encoding="utf-8")
+            observation_path = logs_csv / "observation_paper_orders.csv"
+            observation_path.write_text(",".join(OBSERVATION_PAPER_ORDER_HEADER) + "\n", encoding="utf-8")
+            lite_path = logs_csv / "phase1b_lite_paper_orders.csv"
+            lite_path.write_text(",".join(PHASE1B_LITE_PAPER_ORDER_HEADER) + "\n", encoding="utf-8")
+
+            report = build_feedback_report(
+                base_dir=base_dir,
+                period="weekly",
+                shadow_path=shadow_path,
+                paper_orders_path=paper_orders_path,
+                observation_paper_orders_path=observation_path,
+                phase1b_lite_paper_orders_path=lite_path,
+                paper_positions_path=paper_positions_path,
+                ai_health_summary={},
+            )
+
+            self.assertIn("紙ポジション終了状態: tp2_hit=1件", report)
+            self.assertIn("opportunity_type 別 closed", report)
+            self.assertIn("平均R=2.00", report)
+
     def test_normalize_ai_post_review_applies_defaults(self) -> None:
         row = _normalize_ai_post_review(
             {

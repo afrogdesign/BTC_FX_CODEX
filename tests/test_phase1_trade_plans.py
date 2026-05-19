@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pandas as pd
+
 from src.storage.csv_logger import (
     append_observation_paper_order,
     append_paper_order,
@@ -14,11 +16,128 @@ from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
 from src.trade.observation_gate import determine_phase1_observation_gate
 from src.trade.opportunity_gate import determine_opportunity_gate
+from src.trade.paper_position import evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.position_sizing import build_position_size_plan
 
 
 class Phase1TradePlanTests(unittest.TestCase):
+    def _paper_row(self, **overrides: object) -> dict[str, object]:
+        row: dict[str, object] = {
+            "signal_id": "paper_1",
+            "timestamp_jst": "2026-05-18T10:00:00+09:00",
+            "position_status": "pending",
+            "side": "long",
+            "reference_price": 100,
+            "entry_price": 99,
+            "stop_loss_price": 97,
+            "tp1_price": 103,
+            "tp2_price": 105,
+            "breakeven_after_tp1": "false",
+            "timeout_hours": 12,
+            "atr_15m_value": 2,
+        }
+        row.update(overrides)
+        return row
+
+    def _candles(self, items: list[tuple[str, float, float, float]]) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "timestamp": int(pd.Timestamp(ts).timestamp() * 1000),
+                    "open": close,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": 1,
+                }
+                for ts, high, low, close in items
+            ]
+        )
+
+    def test_ready_paper_position_opens_immediately(self) -> None:
+        row = self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00")
+        updated = evaluate_paper_position(row, self._candles([]))
+
+        self.assertEqual(updated["position_status"], "opened")
+        self.assertEqual(updated["opened_at_jst"], "2026-05-18T10:00:00+09:00")
+
+    def test_pending_paper_position_opens_on_entry_touch(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-18T01:15:00Z", 101, 98.5, 100)]),
+        )
+
+        self.assertEqual(updated["position_status"], "opened")
+        self.assertEqual(updated["opened_at_jst"], "2026-05-18T10:15:00+09:00")
+
+    def test_opened_paper_position_closes_on_tp2(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 106, 100, 105)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "tp2_hit")
+        self.assertEqual(updated["close_price"], 105)
+        self.assertEqual(updated["realized_r"], 3.0)
+
+    def test_opened_paper_position_closes_on_sl(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 100, 96.5, 97)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "sl_hit")
+        self.assertEqual(updated["realized_r"], -1.0)
+
+    def test_tp_and_sl_same_candle_prefers_sl(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 106, 96.5, 100)]),
+        )
+
+        self.assertEqual(updated["exit_status"], "sl_hit")
+
+    def test_breakeven_stop_after_tp1(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(
+                position_status="opened",
+                opened_at_jst="2026-05-18T10:00:00+09:00",
+                breakeven_after_tp1="true",
+            ),
+            self._candles(
+                [
+                    ("2026-05-18T01:15:00Z", 103.5, 100, 102),
+                    ("2026-05-18T01:30:00Z", 102, 98.5, 99),
+                ]
+            ),
+        )
+
+        self.assertEqual(updated["exit_status"], "sl_hit")
+        self.assertEqual(updated["close_price"], 99)
+        self.assertEqual(updated["realized_r"], 0.0)
+
+    def test_pending_position_marks_missed_when_tp_direction_runs_before_entry(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-18T01:15:00Z", 103.5, 100, 102)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "missed_opportunity")
+        self.assertEqual(updated["missed_opportunity"], "true")
+
+    def test_pending_position_closes_when_entry_not_reached_for_24h(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-19T01:15:00Z", 101, 100, 100.5)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "entry_not_reached")
+
     def test_position_sizing_applies_loss_streak_reduction_and_cap_for_strong_machine(self) -> None:
         plan = build_position_size_plan(
             account_balance=10000,

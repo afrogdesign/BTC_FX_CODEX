@@ -28,6 +28,13 @@
 ## 重要な節目ログ
 
 - 2026-05-18 JST
+  - 仕様変更幅が大きいため、作業ブランチと `SYSTEM_LABEL` を `Ver02.5-v8` へ更新した。
+  - `paper_positions.csv` を単なる候補台帳から `pending -> opened -> closed` の紙ポジション管理へ拡張した。TP2 / SL / timeout / missed_opportunity / entry_not_reached、TP1後建値SL、realized_r、MFE/MAE、日次レポートの closed 成績集計を追加した。
+  - 全体テストは `./.venv312/bin/python -m unittest discover -s tests` で 177 件 OK。`git diff --check` も OK。
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `9798`、`monitor.err` 空を確認した。
+  - `feedback_daily_sync_20260519.md` で live 集計を確認した。`paper_positions` は 33 件すべて closed、内訳は `sl_hit=17`、`missed_opportunity=13`、`tp2_hit=3`、24h超 pending 0 件。
+
+- 2026-05-18 JST
   - 自動取引直前へ最短で進めるため、旧マイルストーンの厳格 `Phase 1B` 待ちを主軸から外し、`opportunity_gate` と紙ポジションで前進する方針へ再設計した。
   - 旧計画ファイルを `運用資料/計画/archive/superseded/2026-05-18_pre_auto_redesign/` へ退避し、`自動取引直前_高速到達計画_20260518.md` と新 `マイルストーン定義.md` を正本化した。
   - `src/trade/opportunity_gate.py`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を追加した。

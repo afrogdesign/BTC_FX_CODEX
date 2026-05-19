@@ -37,6 +37,7 @@ from src.trade.observation_gate import (
     is_counter_long_short_watch_candidate,
 )
 from src.trade.opportunity_gate import determine_opportunity_gate
+from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 
 
@@ -5052,11 +5053,12 @@ def _phase1b_lite_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
 
 def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
     setup_status = str(row.get("primary_setup_status", "")).strip()
+    position_status = "opened" if setup_status == "ready" else "pending"
     return {
         "signal_id": row.get("signal_id", ""),
         "timestamp_jst": row.get("timestamp_jst", ""),
         "position_phase": "pre_auto_paper",
-        "position_status": "opened" if setup_status == "ready" else "pending",
+        "position_status": position_status,
         "opportunity_type": row.get("opportunity_type", ""),
         "opportunity_reasons": row.get("opportunity_reasons", ""),
         "side": row.get("primary_setup_side", ""),
@@ -5065,9 +5067,11 @@ def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
         "stop_loss_price": row.get("primary_stop_loss", ""),
         "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
         "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "breakeven_after_tp1": row.get("shadow_breakeven_after_tp1", row.get("breakeven_after_tp1", "")),
         "timeout_hours": row.get("shadow_timeout_hours", row.get("timeout_hours", "")),
         "exit_rule_version": row.get("shadow_exit_rule_version", row.get("exit_rule_version", "")),
         "rr_estimate": row.get("rr_estimate", ""),
+        "atr_15m_value": row.get("atr_15m_value", ""),
         "prelabel": row.get("prelabel", ""),
         "primary_setup_status": setup_status,
         "primary_setup_reason": row.get("primary_setup_reason", ""),
@@ -5076,6 +5080,21 @@ def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
         "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
         "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
         "trade_execution_gate": row.get("trade_execution_gate", ""),
+        "opened_at_jst": row.get("timestamp_jst", "") if position_status == "opened" else "",
+        "closed_at_jst": "",
+        "exit_status": "",
+        "exit_reason": "",
+        "close_price": "",
+        "tp1_hit_at_jst": "",
+        "tp2_hit_at_jst": "",
+        "sl_hit_at_jst": "",
+        "timeout_at_jst": "",
+        "mfe_atr": "",
+        "mae_atr": "",
+        "realized_r": "",
+        "missed_opportunity": "",
+        "missed_reason": "",
+        "last_evaluated_at_utc": "",
     }
 
 
@@ -5140,7 +5159,13 @@ def build_paper_positions(
 ) -> Path:
     trades_path = trades_path or base_dir / "logs" / "csv" / "shadow_log.csv"
     output_path = output_path or base_dir / "logs" / "csv" / "paper_positions.csv"
-    positions: list[dict[str, Any]] = []
+    existing_rows = _load_csv_rows(output_path)
+    existing_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in existing_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+    candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in _load_csv_rows(trades_path):
         signal_id = str(row.get("signal_id", "")).strip()
@@ -5148,9 +5173,36 @@ def build_paper_positions(
             continue
         if str(row.get("opportunity_gate", "")).strip() != "pass":
             continue
-        positions.append(_paper_position_from_trade(row))
+        new_row = _paper_position_from_trade(row)
+        current = existing_by_id.get(signal_id, {})
+        if current:
+            merged = dict(new_row)
+            for field in STATE_FIELDS | {"position_status"}:
+                if str(current.get(field, "")).strip():
+                    merged[field] = current.get(field, "")
+            if str(current.get("position_status", "")).strip() == "closed":
+                merged["position_status"] = "closed"
+        else:
+            merged = new_row
+        candidates.append(merged)
         seen.add(signal_id)
-    positions.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+
+    future_df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+    if candidates:
+        try:
+            cfg = load_config(base_dir)
+            future_df = _fetch_future_15m_df(cfg, candidates)
+        except OSError:
+            future_df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+    evaluated_by_id = {
+        str(row.get("signal_id", "")).strip(): evaluate_paper_position(row, future_df)
+        for row in candidates
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions_by_id = dict(existing_by_id)
+    positions_by_id.update(evaluated_by_id)
+    positions = sorted(positions_by_id.values(), key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
     return _write_csv_rows(output_path, PAPER_POSITION_HEADER, positions)
 
 
@@ -5413,6 +5465,35 @@ def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict
     pass_rows = [row for row in rows if str(row.get("opportunity_gate", "")).strip() == "pass"]
     type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in pass_rows)
     status_counts = Counter(str(row.get("position_status", "")).strip() for row in matched)
+    exit_status_counts = Counter(str(row.get("exit_status", "")).strip() for row in matched if str(row.get("exit_status", "")).strip())
+    closed_rows = [row for row in matched if str(row.get("position_status", "")).strip() == "closed"]
+    missed_rows = [
+        row
+        for row in matched
+        if str(row.get("missed_opportunity", "")).strip().lower() == "true"
+        or str(row.get("exit_status", "")).strip() == "missed_opportunity"
+    ]
+    old_pending_rows = [
+        row
+        for row in matched
+        if str(row.get("position_status", "")).strip() == "pending"
+        and (datetime.now(tz=JST) - (_parse_dt(row.get("timestamp_jst", "")) or datetime.now(tz=JST))).total_seconds()
+        > 24 * 60 * 60
+    ]
+
+    by_type: dict[str, dict[str, Any]] = {}
+    for opportunity_type in sorted({str(row.get("opportunity_type", "")).strip() or "unknown" for row in closed_rows}):
+        subset = [row for row in closed_rows if (str(row.get("opportunity_type", "")).strip() or "unknown") == opportunity_type]
+        r_values = [_parse_float(row.get("realized_r"), 0.0) for row in subset if str(row.get("realized_r", "")).strip()]
+        positive = sum(value for value in r_values if value > 0)
+        negative = abs(sum(value for value in r_values if value < 0))
+        wins = sum(1 for row in subset if str(row.get("exit_status", "")).strip() == "tp2_hit")
+        by_type[opportunity_type] = {
+            "count": len(subset),
+            "win_rate": _ratio(wins, len(subset)),
+            "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+            "approx_pf": (positive / negative) if negative > 0 else 0.0,
+        }
     recorded_ids = {str(row.get("signal_id", "")).strip() for row in matched}
     missing_ids = [
         str(row.get("signal_id", "")).strip()
@@ -5425,6 +5506,11 @@ def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict
         "missing_position_count": len(missing_ids),
         "type_counts": _format_counter(type_counts, limit=6),
         "status_counts": _format_counter(status_counts, limit=4),
+        "exit_status_counts": _format_counter(exit_status_counts, limit=6),
+        "closed_by_type": by_type,
+        "missed_count": len(missed_rows),
+        "missed_examples": [str(row.get("signal_id", "")).strip() for row in missed_rows if str(row.get("signal_id", "")).strip()][:3],
+        "old_pending_count": len(old_pending_rows),
         "representatives": missing_ids[:3],
     }
 
@@ -6922,7 +7008,19 @@ def build_feedback_report(
     lines.append(f"- opportunity_gate=pass: {paper_position_summary['opportunity_pass_count']}件")
     lines.append(f"- paper_positions 記録: {paper_position_summary['position_count']}件")
     lines.append(f"- 紙ポジション状態: {paper_position_summary['status_counts'] or 'なし'}")
+    lines.append(f"- 紙ポジション終了状態: {paper_position_summary['exit_status_counts'] or 'なし'}")
     lines.append(f"- 紙実行候補タイプ: {paper_position_summary['type_counts'] or 'なし'}")
+    if paper_position_summary["closed_by_type"]:
+        lines.append("- opportunity_type 別 closed:")
+        for opportunity_type, item in paper_position_summary["closed_by_type"].items():
+            lines.append(
+                f"  - {opportunity_type}: {item['count']}件 / 勝率={_format_pct(item['win_rate'])} / "
+                f"平均R={item['avg_realized_r']:.2f} / 簡易PF={item['approx_pf']:.2f}"
+            )
+    lines.append(f"- missed_opportunity: {paper_position_summary['missed_count']}件")
+    if paper_position_summary["missed_examples"]:
+        lines.append(f"- missed代表例: {', '.join(paper_position_summary['missed_examples'])}")
+    lines.append(f"- 24h超の pending: {paper_position_summary['old_pending_count']}件")
     lines.append(f"- opportunity pass だが paper_positions 未記録: {paper_position_summary['missing_position_count']}件")
     if paper_summary["too_close_count"]:
         lines.append(
