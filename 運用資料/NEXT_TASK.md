@@ -37,8 +37,8 @@
 
 ## 直近の基準値
 
-- 最新 daily-sync 基準: `feedback_daily_sync_20260519.md`。完了 47 件、近似PF 0.80、全体勝率 48.9%。
-- `paper_positions.csv` は live 集計で `closed=33件`、`sl_hit=17件`、`missed_opportunity=13件`、`tp2_hit=3件`、24h超 pending 0件。`market_map_opportunity` は 24件 / 勝率 12.5% / 平均R 0.47 / 簡易PF 2.24。
+- 最新 daily-sync 基準: `feedback_daily_sync_20260519.md`。完了 46 件、近似PF 0.88、全体勝率 56.5%。
+- `paper_positions.csv` は live 集計で `closed=20件`、`missed_opportunity=10件`、`sl_hit=9件`、`tp2_hit=1件`、24h超 pending 0件。`market_map_opportunity` は 13件 / 勝率 7.7% / 平均R 0.50 / 簡易PF 2.30。
 - 新規ログ基準: `2026-04-18` 〜 `2026-05-18` では `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持。
 - `operational_focus_20260518.md`: Phase1 pass 142 件 / blocked 575 件。blocked 上位は `confidence_below_min=385件`、`no_trade_candidate=207件`。
 - `relaxation_candidates_20260518.md`: 緩和候補 48 件。`SWEEP_WAIT=31件`、`RISKY_ENTRY=16件`、`NO_TRADE_CANDIDATE=1件`。件数は 20260516 から横ばい。
@@ -46,7 +46,7 @@
 - `Phase 1B-lite`: lite 候補 5 件、専用紙トレード observing 5 件。10〜15 件の成功条件にはまだ未達。
 - `market_map_effectiveness_20260518.md`: `2026-05-13` 以降の shadow 120 行中 116 件で `market_map` 記録あり。`support_to_resistance_flip=75件` は勝率 69.6%、平均MFE24h 7.56 / 平均MAE24h 5.52 と相対的に有効。
 - `trend_flip_confirmed_up=16件` は勝率 37.5%、wrong_rate 31.2%、平均MFE24h 1.59 / 平均MAE24h 13.09 で弱いため、`Ver02.5-v7` では score 加点を弱め、表示も慎重評価へ変更済み。
-- AI 事後評価 health は `feedback_daily_sync_20260519.md` 基準で `eligible=308 / AI済み=231 / backlog=77 / created=4 / request_failed=0`。
+- AI 事後評価 health は `feedback_daily_sync_20260519.md` 基準で `eligible=311 / AI済み=235 / backlog=76 / created=4 / request_failed=0`。
 
 ## 次のタスク
 
@@ -55,13 +55,13 @@
 3. `sl_hit` と `missed_opportunity` が多いため、まず entry 条件と待機条件のズレを見て、すぐに実弾 gate 緩和へ進めない。
 4. `trend_flip_confirmed_up` は 16 件でも弱い。上方向転換の強評価や gate 緩和には使わず、30 件までは観測継続する。
 5. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-6. AI backlog は 75 件へ増加したが `request_failed=0`。安定優先なら daily cap 4 維持、backlog 解消優先なら 6 または 8 を検討する。
+6. AI backlog は 76 件だが `request_failed=0`。安定優先なら daily cap 4 維持、backlog 解消優先なら 6 または 8 を検討する。
 
 ## 残作業一覧
 
 - 次回 `market_map_effectiveness_YYYYMMDD.md` を更新し、`trend_flip_confirmed_up`、`resistance_to_support_flip`、`failed_breakout_down_reversal` の成績がサンプル増でどう変わるか見る。
 - `com.afrog.btc-monitor` は `Ver02.5-v8` 反映後に再起動済み。PID `9798`、`state=running`、`monitor.err` は空。`logs/heartbeat.txt` と `logs/last_result.json` は次回定刻サイクルで更新確認する。
-- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 75 件残っている。
+- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 76 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=4` は安定運用優先なら維持する。backlog 解消を優先する場合のみ `6` または `8` への増加を検討する。
 - 標準比較 3 本、`operational_focus`、`relaxation_candidates`、`phase1b_promotion_candidates` を次回 daily-sync 後に更新し、`0 / 0 / 1` 基準から崩れた箇所だけを見る。
 - `market_map` は 116 件まで増えた。下方向側は相対的に有効だが上方向転換系が弱いため、上方向のスコア重みや gate はまだ大きく変更しない。

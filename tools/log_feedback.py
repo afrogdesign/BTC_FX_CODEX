@@ -4844,6 +4844,7 @@ def build_shadow_log(
         opportunity_gate = determine_opportunity_gate(
             bias=str(trade.get("bias", "")),
             primary_setup_side=str(trade.get("primary_setup_side", "")),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
             data_quality_flag=str(trade.get("data_quality_flag", "")),
             no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
             risk_flags=_split_values(str(trade.get("risk_flags", ""))),
@@ -4981,10 +4982,9 @@ def build_shadow_log(
                 "phase1b_lite_type": trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"],
                 "phase1b_lite_reasons": trade.get("phase1b_lite_reasons", "")
                 or json.dumps(lite_gate["phase1b_lite_reasons"], ensure_ascii=False),
-                "opportunity_gate": trade.get("opportunity_gate", "") or opportunity_gate["opportunity_gate"],
-                "opportunity_type": trade.get("opportunity_type", "") or opportunity_gate["opportunity_type"],
-                "opportunity_reasons": trade.get("opportunity_reasons", "")
-                or json.dumps(opportunity_gate["opportunity_reasons"], ensure_ascii=False),
+                "opportunity_gate": opportunity_gate["opportunity_gate"],
+                "opportunity_type": opportunity_gate["opportunity_type"],
+                "opportunity_reasons": json.dumps(opportunity_gate["opportunity_reasons"], ensure_ascii=False),
                 "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
@@ -5460,9 +5460,9 @@ def _paper_trade_summary(rows: list[dict[str, Any]], paper_rows: list[dict[str, 
 
 
 def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
-    matched = [row for row in position_rows if str(row.get("signal_id", "")).strip() in period_ids]
     pass_rows = [row for row in rows if str(row.get("opportunity_gate", "")).strip() == "pass"]
+    pass_ids = {str(row.get("signal_id", "")).strip() for row in pass_rows if str(row.get("signal_id", "")).strip()}
+    matched = [row for row in position_rows if str(row.get("signal_id", "")).strip() in pass_ids]
     type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in pass_rows)
     status_counts = Counter(str(row.get("position_status", "")).strip() for row in matched)
     exit_status_counts = Counter(str(row.get("exit_status", "")).strip() for row in matched if str(row.get("exit_status", "")).strip())

@@ -37,6 +37,7 @@ def determine_opportunity_gate(
     *,
     bias: str,
     primary_setup_side: str,
+    primary_setup_status: str,
     data_quality_flag: str,
     no_trade_flags: list[str] | tuple[str, ...] | set[str] | str | None,
     risk_flags: list[str] | tuple[str, ...] | set[str] | str | None,
@@ -62,6 +63,8 @@ def determine_opportunity_gate(
         blockers.append("data_quality_not_ok")
     if str(bias or "").strip() not in {"long", "short"} or str(primary_setup_side or "").strip() not in {"long", "short"}:
         blockers.append("no_directional_setup")
+    if str(primary_setup_status or "").strip() not in {"ready", "watch"}:
+        blockers.append("setup_status_not_watch_or_ready")
     fatal_flags = sorted(normalized_no_trade & _FATAL_NO_TRADE_FLAGS)
     blockers.extend(f"fatal_no_trade_flag:{flag}" for flag in fatal_flags)
 

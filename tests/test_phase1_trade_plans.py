@@ -392,6 +392,7 @@ class Phase1TradePlanTests(unittest.TestCase):
         result = determine_opportunity_gate(
             bias="short",
             primary_setup_side="short",
+            primary_setup_status="watch",
             data_quality_flag="ok",
             no_trade_flags=[],
             risk_flags=["failed_breakout_down_reversal"],
@@ -415,6 +416,7 @@ class Phase1TradePlanTests(unittest.TestCase):
         result = determine_opportunity_gate(
             bias="long",
             primary_setup_side="long",
+            primary_setup_status="watch",
             data_quality_flag="ok",
             no_trade_flags=["Funding_prohibited_long"],
             risk_flags=[],
@@ -431,6 +433,28 @@ class Phase1TradePlanTests(unittest.TestCase):
 
         self.assertEqual(result["opportunity_gate"], "blocked")
         self.assertIn("fatal_no_trade_flag:Funding_prohibited_long", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_invalid_setup_status(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="invalid",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=18,
+            confidence_wait_shadow=55,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("setup_status_not_watch_or_ready", result["opportunity_reasons"])
 
     def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
         result = determine_phase1_observation_gate(

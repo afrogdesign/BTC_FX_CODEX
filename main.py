@@ -907,6 +907,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         opportunity_gate = determine_opportunity_gate(
             bias=bias,
             primary_setup_side=primary_setup_side,
+            primary_setup_status=primary_setup_status,
             data_quality_flag=core_result["data_quality_flag"],
             no_trade_flags=result_flags["no_trade_flags"],
             risk_flags=result_flags["risk_flags"],

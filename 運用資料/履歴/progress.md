@@ -32,7 +32,7 @@
   - `paper_positions.csv` を単なる候補台帳から `pending -> opened -> closed` の紙ポジション管理へ拡張した。TP2 / SL / timeout / missed_opportunity / entry_not_reached、TP1後建値SL、realized_r、MFE/MAE、日次レポートの closed 成績集計を追加した。
   - 全体テストは `./.venv312/bin/python -m unittest discover -s tests` で 177 件 OK。`git diff --check` も OK。
   - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`state=running`、PID `9798`、`monitor.err` 空を確認した。
-  - `feedback_daily_sync_20260519.md` で live 集計を確認した。`paper_positions` は 33 件すべて closed、内訳は `sl_hit=17`、`missed_opportunity=13`、`tp2_hit=3`、24h超 pending 0 件。
+  - `feedback_daily_sync_20260519.md` で live 集計を確認した。`primary_setup_status=invalid` を紙候補から除外するよう `opportunity_gate` と shadow 再計算を補正し、週次 `paper_positions` は 20 件すべて closed、内訳は `missed_opportunity=10`、`sl_hit=9`、`tp2_hit=1`、24h超 pending 0 件。
 
 - 2026-05-18 JST
   - 自動取引直前へ最短で進めるため、旧マイルストーンの厳格 `Phase 1B` 待ちを主軸から外し、`opportunity_gate` と紙ポジションで前進する方針へ再設計した。
