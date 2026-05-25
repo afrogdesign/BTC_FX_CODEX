@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-25 JST
+更新日: 2026-05-26 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,15 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-26 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、[feedback_daily_sync_20260526.md](../reports/feedback_daily_sync_20260526.md) を生成した。完了データは 44 件、近似PF は 0.83、全体勝率は 43.2%、`phase1_active=true=2件`。一方 `trade_execution_gate=pass=0件`、`paper_orders planned=0件` は継続した。
+  - AI 事後評価 health は `eligible=356 / AI済み=283 / backlog=73 / created=8 / request_failed=0 / daily_cap=8`。`operational_focus_20260526.md` の未処理 backlog 候補は 38 件で、`request_failed=0` を維持したまま backlog は前日比で微増した。
+  - `market_map_effectiveness_20260526.md`、`operational_focus_20260526.md`、`relaxation_candidates_20260526.md`、`phase1b_promotion_candidates_20260526.md`、`paper_opportunity_diagnostics_20260526.md` を生成した。標準比較 3 本も `2026-04-18` 〜 `2026-05-26` 基準へ更新し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。
+  - `paper_positions.csv` の daily 集計は `closed=19件`、`sl_hit=12件`、`missed_opportunity=5件`、`tp2_hit=1件`、`timeout=1件`、24h超 pending 0 件。`market_map_opportunity` は 9 件 / 勝率 11.1% / 平均R 0.26 / 簡易PF 1.57 で、entry を広げるより SL/TP と発火条件の見直し優先が明確になった。
+  - `paper_opportunity_diagnostics_20260526.md` では 4/18〜5/26 の closed 264 件、平均R 0.33、簡易PF 1.82。`market_map_opportunity` は 97 件 / 平均R 0.36 / 簡易PF 1.97 だが、`long` は 18 件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 39 件 / 平均R -0.16 / 簡易PF 0.74、`trend_flip_confirmed_up` は 7 件すべて `sl_hit` で弱さが継続した。
+  - `market_map_effectiveness_20260526.md` では `market_map` 記録 305 件、`support_to_resistance_flip=194件` は勝率 56.4% / 平均MFE24h 6.91 / 平均MAE24h 5.44。一方 `trend_flip_confirmed_up=32件` は勝率 41.2%、wrong_rate 28.1%、平均MFE24h 2.50 / 平均MAE24h 10.85 で、上方向転換系の再評価は ChatGPT プロジェクト側へ戻す判断にした。
+  - `com.afrog.btc-monitor` は `state=running`、PID `1591`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`。`logs/heartbeat.txt` は 2026-05-26 01:05 JST、`logs/last_result.json` は 2026-05-26 01:05:08 JST 更新、`logs/runtime/monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は 0 bytes。
 
 - 2026-05-25 JST
   - `ver02.5-v8` の 2026-05-25 診断・レポート更新を commit `607a48d Update Ver02.5-v8 diagnostics and reports` として `origin/ver02.5-v8` へ push した。
