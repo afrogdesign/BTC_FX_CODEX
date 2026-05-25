@@ -28,6 +28,12 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - `chatgpt/specs/active/20260526_paper_entry_sl_wait_redesign.md` に従い、`tools/log_feedback.py` の `build-paper-opportunity-diagnostics-report` を拡張した。`exit_status` 別、wait 帯別、execution 帯別、`sl_hit` 原因分類、proposal、不足データを Markdown 出力へ追加し、CSV schema や gate 判定、通知ランク、実弾系ロジックは変更していない。
+  - `./.venv312/bin/python -m unittest tests.test_log_feedback` は 60 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 180 件 OK、`git diff --check` は空を確認した。`tests/test_log_feedback.py` には `sl_hit` 原因分類と proposal 出力を確認する回帰テストを追加した。
+  - `./.venv312/bin/python tools/log_feedback.py build-paper-opportunity-diagnostics-report --date-from 2026-04-18 --date-to 2026-05-26 --output-md 運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md` を実行し、[paper_entry_sl_wait_redesign_20260526.md](../reports/analysis/paper_entry_sl_wait_redesign_20260526.md) を生成した。
+  - `paper_entry_sl_wait_redesign_20260526.md` では `closed=264件`、`market_map_opportunity=97件`。`wait>=80` は 7 件 / 平均R -0.84 / `sl_hit=6件`、`execution<20` は 44 件 / 平均R -0.02 / `sl_hit=29件`、`long` は 18 件 / 平均R -0.51 / 簡易PF 0.29 / `sl_hit=15件`、`trend_flip_confirmed_up` は 7 件すべて `sl_hit` だった。
+  - `sl_hit` 原因分類は `late_wait_sl=20件`、`trend_flip_long_sl=10件`、`other_sl=18件`。proposal は `suppress_long_high_wait`、`suppress_trend_flip_up_strong`、`require_execution_for_high_wait`、`delay_entry_on_sweep_wait` を出した。`mfe_atr` / `mae_atr` / `rr_estimate` は 97 件欠損しており、thin RR 判定はまだ補助扱いに留める。
+  - 今回は診断追加だけを行い、gate 緩和、score 調整、通知文言変更、実弾系変更は行っていない。次判断は `運用資料/NEXT_TASK.md` を正本として ChatGPT 側へ戻す。
   - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、[feedback_daily_sync_20260526.md](../reports/feedback_daily_sync_20260526.md) を生成した。完了データは 44 件、近似PF は 0.83、全体勝率は 43.2%、`phase1_active=true=2件`。一方 `trade_execution_gate=pass=0件`、`paper_orders planned=0件` は継続した。
   - AI 事後評価 health は `eligible=356 / AI済み=283 / backlog=73 / created=8 / request_failed=0 / daily_cap=8`。`operational_focus_20260526.md` の未処理 backlog 候補は 38 件で、`request_failed=0` を維持したまま backlog は前日比で微増した。
   - `market_map_effectiveness_20260526.md`、`operational_focus_20260526.md`、`relaxation_candidates_20260526.md`、`phase1b_promotion_candidates_20260526.md`、`paper_opportunity_diagnostics_20260526.md` を生成した。標準比較 3 本も `2026-04-18` 〜 `2026-05-26` 基準へ更新し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。

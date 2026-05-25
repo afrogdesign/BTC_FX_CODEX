@@ -46,8 +46,9 @@ Codex は、ユーザーから「ChatGPT から引き継いで」「仕様書を
 3. `chatgpt/initial_settings.md` を読む。
 4. `chatgpt/specs/active/` の最新仕様書 1 件を確認する。
 5. その仕様書の `目的`、`変更範囲`、`実装内容`、`検証方法`、`完了条件`、`注意事項` を確認する。
-6. 仕様書がなければ `運用資料/ChatGPTプロジェクト設定.md` → `運用資料/NEXT_TASK.md` を読む。
-7. それでも判断が必要なら、実装せず確認事項として返す。
+6. 実装完了後は、検証、`commit / push`、実施済み仕様書の `chatgpt/specs/archive/` への移動までを一連の作業として行う。
+7. `active/` が空なら `運用資料/ChatGPTプロジェクト設定.md` → `運用資料/NEXT_TASK.md` を読む。
+8. それでも判断が必要なら、実装せず確認事項として返す。
 
 確認コマンド例:
 
@@ -75,6 +76,7 @@ ChatGPT が Codex に実装を渡す場合は、必ず `chatgpt/specs/active/YYY
 Codex は、`chatgpt/specs/active/` に置かれた最新仕様書を実務実行の正本として扱う。
 チャット本文だけを正本にしない。
 チャットで追加指示があった場合も、必要なら `chatgpt/specs/active/` の仕様書へ反映してから作業する。
+実装が完了した仕様は、検証と `commit / push` の後に `chatgpt/specs/archive/` へ移し、`active/` には未着手の現役仕様だけを残す。
 
 ### ChatGPT 分析文書の置き場所
 

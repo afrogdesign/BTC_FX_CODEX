@@ -282,6 +282,96 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("support_to_resistance_flip: 1件", report)
             self.assertIn("sig_sl: sl_hit", report)
 
+    def test_paper_opportunity_diagnostics_report_classifies_sl_failures(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                for signal_id, flags in [
+                    ("sig_long_wait", "trend_flip_confirmed_up,resistance_to_support_flip"),
+                    ("sig_sweep", "support_to_resistance_flip"),
+                ]:
+                    row = {field: "" for field in SHADOW_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                            "market_map_flags": flags,
+                        }
+                    )
+                    writer.writerow(row)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_long_wait",
+                        "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:trend_flip_confirmed_up"]',
+                        "side": "long",
+                        "exit_status": "sl_hit",
+                        "realized_r": "-1.0",
+                        "rr_estimate": "1.2",
+                        "mfe_atr": "0.10",
+                        "mae_atr": "1.40",
+                        "primary_setup_reason": "confidence_below_min",
+                        "market_map_flags": "trend_flip_confirmed_up,resistance_to_support_flip",
+                        "confidence_direction_shadow": "55",
+                        "confidence_execution_shadow": "18",
+                        "confidence_wait_shadow": "72",
+                        "prelabel": "ENTRY_OK",
+                    }
+                )
+                writer.writerow(row)
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_sweep",
+                        "timestamp_jst": "2026-05-21T11:00:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                        "side": "short",
+                        "exit_status": "missed_opportunity",
+                        "realized_r": "1.3",
+                        "rr_estimate": "1.5",
+                        "mfe_atr": "1.60",
+                        "mae_atr": "0.40",
+                        "primary_setup_reason": "near_entry_zone_waiting_trigger",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "70",
+                        "confidence_execution_shadow": "22",
+                        "confidence_wait_shadow": "76.8",
+                        "prelabel": "SWEEP_WAIT",
+                    }
+                )
+                writer.writerow(row)
+
+            report = build_paper_opportunity_diagnostics_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-05-21",
+                date_to="2026-05-21",
+            )
+
+            self.assertIn("紙実行候補 entry/wait 診断", report)
+            self.assertIn("## SL失敗分類", report)
+            self.assertIn("trend_flip_long_sl: 1件", report)
+            self.assertIn("suppress_long_high_wait", report)
+            self.assertIn("suppress_trend_flip_up_strong", report)
+            self.assertIn("require_execution_for_high_wait", report)
+            self.assertIn("delay_entry_on_sweep_wait", report)
+
     def test_normalize_ai_post_review_applies_defaults(self) -> None:
         row = _normalize_ai_post_review(
             {

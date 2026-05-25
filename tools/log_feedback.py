@@ -5137,6 +5137,154 @@ def _paper_position_group_lines(
     return lines
 
 
+def _paper_position_bucket(value: float, thresholds: list[tuple[float, str]], fallback: str) -> str:
+    for upper, label in thresholds:
+        if value < upper:
+            return label
+    return fallback
+
+
+def _paper_position_has_flag(row: dict[str, Any], flag: str) -> bool:
+    return flag in _split_values(str(row.get("market_map_flags", "")))
+
+
+def _classify_sl_failure(row: dict[str, Any]) -> str:
+    side = str(row.get("side", "")).strip()
+    wait = _parse_float(row.get("confidence_wait_shadow"), 0.0)
+    mfe_atr = _parse_float(row.get("mfe_atr"), 0.0)
+    mae_atr = _parse_float(row.get("mae_atr"), 0.0)
+    rr_estimate = _parse_float(row.get("rr_estimate"), 0.0)
+
+    if side == "long" and any(
+        _paper_position_has_flag(row, flag)
+        for flag in ("trend_flip_confirmed_up", "trend_flip_early_up")
+    ):
+        return "trend_flip_long_sl"
+    if wait >= 60.0:
+        return "late_wait_sl"
+    if rr_estimate > 0.0 and rr_estimate <= 1.3:
+        return "thin_rr_sl"
+    if mfe_atr >= 0.5 and mae_atr >= 0.8:
+        return "early_entry_sl"
+    if mfe_atr < 0.3 and mae_atr >= 0.8:
+        return "direction_mismatch_sl"
+    return "other_sl"
+
+
+def _paper_position_sl_failure_summary(rows: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    labels = [
+        "early_entry_sl",
+        "direction_mismatch_sl",
+        "thin_rr_sl",
+        "late_wait_sl",
+        "trend_flip_long_sl",
+        "other_sl",
+    ]
+    return [(label, [row for row in rows if _classify_sl_failure(row) == label]) for label in labels]
+
+
+def _paper_position_sl_group_lines(rows: list[dict[str, Any]]) -> list[str]:
+    lines = ["", "## SL失敗分類"]
+    summaries = _paper_position_sl_failure_summary(rows)
+    emitted = 0
+    for label, subset in summaries:
+        if not subset:
+            continue
+        stats = _paper_position_realized_stats(subset)
+        sample_ids = ", ".join(str(row.get("signal_id", "")).strip() for row in subset[:3] if str(row.get("signal_id", "")).strip())
+        lines.append(
+            f"- {label}: {len(subset)}件 / 平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} / "
+            f"平均MFE={_mean_value(subset, 'mfe_atr'):.2f} / 平均MAE={_mean_value(subset, 'mae_atr'):.2f} / "
+            f"代表={sample_ids or 'なし'}"
+        )
+        emitted += 1
+    if emitted == 0:
+        lines.append("- 該当なし")
+    return lines
+
+
+def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    proposals: list[tuple[str, str]] = []
+    long_high_wait_rows = [
+        row for row in market_rows
+        if str(row.get("side", "")).strip() == "long"
+        and _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0
+    ]
+    if long_high_wait_rows:
+        stats = _paper_position_realized_stats(long_high_wait_rows)
+        proposals.append(
+            (
+                "suppress_long_high_wait",
+                f"long かつ wait>=60 は {len(long_high_wait_rows)}件 / 平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} のため、紙候補でも一段抑制候補。",
+            )
+        )
+
+    trend_flip_up_rows = [
+        row for row in market_rows
+        if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
+    ]
+    if trend_flip_up_rows:
+        stats = _paper_position_realized_stats(trend_flip_up_rows)
+        proposals.append(
+            (
+                "suppress_trend_flip_up_strong",
+                f"上方向転換系は {len(trend_flip_up_rows)}件 / 平均R={stats['avg_realized_r']:.2f} / 勝率={_format_pct(stats['win_rate'])} のため、強評価へ戻さない候補。",
+            )
+        )
+
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    if high_wait_rows:
+        weak_exec_rows = [row for row in high_wait_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 35.0]
+        target_rows = weak_exec_rows or high_wait_rows
+        stats = _paper_position_realized_stats(target_rows)
+        proposals.append(
+            (
+                "require_execution_for_high_wait",
+                f"wait>=60 群は execution 下限強化候補。対象 {len(target_rows)}件 / 平均 execution={_mean_value(target_rows, 'confidence_execution_shadow'):.1f} / 平均R={stats['avg_realized_r']:.2f}。",
+            )
+        )
+
+    sweep_wait_rows = [row for row in market_rows if str(row.get("prelabel", "")).strip() == "SWEEP_WAIT"]
+    if sweep_wait_rows:
+        weak_sweep_rows = [
+            row for row in sweep_wait_rows
+            if str(row.get("exit_status", "")).strip() in {"sl_hit", "missed_opportunity"}
+        ]
+        if weak_sweep_rows:
+            proposals.append(
+                (
+                    "delay_entry_on_sweep_wait",
+                    f"SWEEP_WAIT の弱い終了が {len(weak_sweep_rows)}件あるため、即 entry ではなく再確認待ちへ寄せる候補。",
+                )
+            )
+
+    thin_rr_rows = [row for row in market_rows if _classify_sl_failure(row) == "thin_rr_sl"]
+    if thin_rr_rows:
+        proposals.append(
+            (
+                "skip_thin_sl",
+                f"thin_rr_sl が {len(thin_rr_rows)}件あるため、SL拡張ではなく skip 優先で検討する候補。",
+            )
+        )
+    return proposals
+
+
+def _paper_position_missing_data_notes(rows: list[dict[str, Any]]) -> list[str]:
+    checks = [
+        ("mfe_atr", "MFE/MAE 判定"),
+        ("mae_atr", "MFE/MAE 判定"),
+        ("rr_estimate", "RR 判定"),
+        ("confidence_wait_shadow", "wait 判定"),
+        ("confidence_execution_shadow", "execution 判定"),
+    ]
+    notes: list[str] = []
+    for key, label in checks:
+        present = sum(1 for row in rows if str(row.get(key, "")).strip())
+        if rows and present < len(rows):
+            notes.append(f"- {label}: `{key}` が {len(rows) - present}件で欠落")
+    return notes
+
+
 def build_paper_opportunity_diagnostics_report(
     *,
     base_dir: Path,
@@ -5207,6 +5355,10 @@ def build_paper_opportunity_diagnostics_report(
     ]
     by_reason.sort(key=lambda item: (len(item[1]), _paper_position_realized_stats(item[1])["avg_realized_r"]), reverse=True)
 
+    exit_groups = [
+        (label, [row for row in market_rows if str(row.get("exit_status", "")).strip() == label])
+        for label in ["tp2_hit", "sl_hit", "timeout", "missed_opportunity", "entry_not_reached"]
+    ]
     confidence_groups = [
         ("direction<60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) < 60]),
         ("direction>=60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) >= 60]),
@@ -5215,11 +5367,26 @@ def build_paper_opportunity_diagnostics_report(
         ("wait>=60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60]),
         ("wait<60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) < 60]),
     ]
+    wait_groups = [
+        ("wait<40", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) < 40.0]),
+        ("40<=wait<60", [row for row in market_rows if 40.0 <= _parse_float(row.get("confidence_wait_shadow"), 0.0) < 60.0]),
+        ("60<=wait<80", [row for row in market_rows if 60.0 <= _parse_float(row.get("confidence_wait_shadow"), 0.0) < 80.0]),
+        ("wait>=80", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 80.0]),
+    ]
+    execution_groups = [
+        ("execution<20", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 20.0]),
+        ("20<=execution<35", [row for row in market_rows if 20.0 <= _parse_float(row.get("confidence_execution_shadow"), 0.0) < 35.0]),
+        ("35<=execution<50", [row for row in market_rows if 35.0 <= _parse_float(row.get("confidence_execution_shadow"), 0.0) < 50.0]),
+        ("execution>=50", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) >= 50.0]),
+    ]
     setup_groups = [
         (label, [row for row in market_rows if str(row.get("primary_setup_reason", "")).strip() == label])
         for label in sorted({str(row.get("primary_setup_reason", "")).strip() for row in market_rows if str(row.get("primary_setup_reason", "")).strip()})
     ]
     side_groups = [(label, [row for row in market_rows if str(row.get("side", "")).strip() == label]) for label in ["long", "short"]]
+    sl_rows = [row for row in market_rows if str(row.get("exit_status", "")).strip() == "sl_hit"]
+    proposals = _paper_position_proposals(market_rows)
+    missing_data_notes = _paper_position_missing_data_notes(market_rows)
     weak_examples = [
         row
         for row in market_rows
@@ -5258,11 +5425,30 @@ def build_paper_opportunity_diagnostics_report(
         lines.append("- 主な失敗は missed 側に寄っており、entry 到達前の TP 方向進行と待機条件の精査を優先する。")
     lines.append("- `support_to_resistance_flip` などの flag 自体は有効でも、紙ポジション化する entry / wait 条件がまだ粗い。")
 
+    lines.extend(_paper_position_group_lines(title="exit_status 別", labels=exit_groups))
     lines.extend(_paper_position_group_lines(title="confidence 帯別", labels=confidence_groups))
+    lines.extend(_paper_position_group_lines(title="wait 帯別", labels=wait_groups))
+    lines.extend(_paper_position_group_lines(title="execution 帯別", labels=execution_groups))
     lines.extend(_paper_position_group_lines(title="setup reason 別", labels=setup_groups))
     lines.extend(_paper_position_group_lines(title="side 別", labels=side_groups))
     lines.extend(_paper_position_group_lines(title="market_map flag 別", labels=by_flag, limit=limit))
     lines.extend(_paper_position_group_lines(title="opportunity reason 別", labels=by_reason, limit=limit))
+    lines.extend(_paper_position_sl_group_lines(sl_rows))
+
+    lines.append("")
+    lines.append("## proposal")
+    if proposals:
+        for label, note in proposals:
+            lines.append(f"- {label}: {note}")
+    else:
+        lines.append("- 該当なし")
+
+    lines.append("")
+    lines.append("## 不足データ")
+    if missing_data_notes:
+        lines.extend(missing_data_notes)
+    else:
+        lines.append("- 主要な診断項目で目立つ欠落なし")
 
     lines.append("")
     lines.append("## 弱い代表例")
