@@ -33,6 +33,13 @@ YYYYMMDD_topic.md
 20260526_trend_flip_review.md
 ```
 
+## 現在の継続メモ
+
+- `20260526_entry_sl_tp_wait_redesign.md`
+- `20260526_trend_flip_confirmed_up_reassessment.md`
+
+`chatgpt/specs/active/` が空のとき、ChatGPT は `NEXT_TASK.md` と `report_hub_latest.md` を見たあと、まずこの2本を起点に次の設計を進める。
+
 ## specs との違い
 
 `analysis/` は考察用です。

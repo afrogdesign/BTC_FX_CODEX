@@ -7,6 +7,16 @@ ChatGPT は診断、考察、設計、仕様化を担当し、Codex は確定済
 レポート導線の案内板は `運用資料/reports/report_hub_latest.md` に置きます。
 このディレクトリは入口と受け渡しに絞って使います。
 
+## ChatGPT が最初に読む順
+
+1. `運用資料/ChatGPTプロジェクト設定.md`
+2. `運用資料/NEXT_TASK.md`
+3. `運用資料/reports/report_hub_latest.md`
+4. Hub から必要な raw report
+5. `chatgpt/README.md`
+6. 関連する `chatgpt/analysis/*.md`
+7. 必要時だけ `運用資料/開発ロードマップ.md` と `運用資料/履歴/progress.md`
+
 ## ディレクトリ構造
 
 ```txt
@@ -29,8 +39,8 @@ ChatGPT が行う診断、考察、改善案比較のレポートを保存しま
 例:
 
 ```txt
-chatgpt/analysis/20260526_sl_hit_redesign.md
-chatgpt/analysis/20260526_trend_flip_review.md
+chatgpt/analysis/20260526_entry_sl_tp_wait_redesign.md
+chatgpt/analysis/20260526_trend_flip_confirmed_up_reassessment.md
 ```
 
 ### `specs/active/`
@@ -68,5 +78,6 @@ ChatGPT プロジェクトの「情報源」に登録する要約版です。
 - ChatGPT 設定の正本は `運用資料/ChatGPTプロジェクト設定.md` に置く。
 - 最新状態と次指示の正本は `運用資料/NEXT_TASK.md` に置く。
 - ChatGPT は `NEXT_TASK.md` の次に `運用資料/reports/report_hub_latest.md` を開き、必要な raw report を選ぶ。
+- 未確定の継続設計は `chatgpt/analysis/` に残し、次回の ChatGPT がそこから再開できるようにする。
 - 実装仕様の正本は `chatgpt/specs/active/` に置く。
 - 実施済み仕様は `chatgpt/specs/archive/` に移す。

@@ -13,6 +13,13 @@
 5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md`
 6. 設計テーマが `sl_hit` 偏重なら `運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md`
 
+## ChatGPT が次に引き継ぐ分析メモ
+
+- `chatgpt/analysis/20260526_entry_sl_tp_wait_redesign.md`
+- `chatgpt/analysis/20260526_trend_flip_confirmed_up_reassessment.md`
+
+`chatgpt/specs/active/` が空のとき、ChatGPT はこの2本を継続メモとして使い、設計が固まったら `chatgpt/specs/active/` に確定仕様を書く。
+
 ## 現在の状況
 
 - 実行系の主状態は `iMac 2019` の `ver02.5-v8`、作業ブランチは `ver02.6-v1`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。

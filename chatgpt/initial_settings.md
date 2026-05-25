@@ -17,9 +17,10 @@ Codex handles implementation only after a confirmed spec exists in `chatgpt/spec
 1. `運用資料/ChatGPTプロジェクト設定.md`
 2. `運用資料/NEXT_TASK.md`
 3. `運用資料/reports/report_hub_latest.md`
-4. `運用資料/開発ロードマップ.md`
-5. Hub から必要な raw report
-6. `運用資料/履歴/progress.md`
+4. Hub から必要な raw report
+5. `chatgpt/README.md`
+6. 関連する `chatgpt/analysis/*.md`
+7. 必要時だけ `運用資料/開発ロードマップ.md` と `運用資料/履歴/progress.md`
 
 ## Current branch
 
@@ -37,7 +38,7 @@ Codex handles implementation only after a confirmed spec exists in `chatgpt/spec
 - Treat `運用資料/ChatGPTプロジェクト設定.md` as the source of truth for roles, reading order, and design rules.
 - Treat `運用資料/NEXT_TASK.md` as the source of truth for current state, next tasks, and latest report references.
 - Treat `運用資料/reports/report_hub_latest.md` as the routing index for raw reports.
-- Put unfinished thinking in `chatgpt/analysis/`.
+- Put unfinished thinking and current design continuity notes in `chatgpt/analysis/`.
 - Put confirmed implementation specs in `chatgpt/specs/active/`.
 - Move completed or historical specs to `chatgpt/specs/archive/`.
 - Keep actual trading outside scope unless explicitly approved later.
