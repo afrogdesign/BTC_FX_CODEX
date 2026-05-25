@@ -4,6 +4,12 @@
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
+## 現在のブランチ
+
+- 現在の作業ブランチ: `ver02.6-v2`
+- 運用本体の参照ブランチ: `ver02.5-v8`
+- 新しいブランチを切ったら、この節を同じ作業単位で必ず更新する。
+
 ## ChatGPT が最初に開くレポート
 
 1. `運用資料/reports/report_hub_latest.md`
@@ -22,8 +28,8 @@
 
 ## 現在の状況
 
-- 実行系の主状態は `iMac 2019` の `ver02.5-v8`、作業ブランチは `ver02.6-v1`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。
-- `ver02.6-v1` では役割分担を変更する。診断、設計、再考、フェーズ管理は ChatGPT プロジェクトで行い、Codex は確定済み仕様の実装、検証、Git 操作、常駐確認に徹する。
+- 実行系の主状態は `iMac 2019` の `ver02.5-v8`、作業ブランチは `ver02.6-v2`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。
+- `ver02.6-v2` では役割分担を変更する。診断、設計、再考、フェーズ管理は ChatGPT プロジェクトで行い、Codex は確定済み仕様の実装、検証、Git 操作、常駐確認に徹する。
 - 新しい正本は `運用資料/計画/自動取引直前_高速到達計画_20260518.md` と `運用資料/計画/マイルストーン定義.md`。旧計画は `運用資料/計画/archive/superseded/2026-05-18_pre_auto_redesign/` へ退避済み。
 - `opportunity_gate`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を実装済み。紙ポジションは `pending -> opened -> closed`、TP2 / SL / timeout / missed_opportunity / entry_not_reached の後追い評価へ拡張中。実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
 - `Ver02.5-v7 先行実装パック` を実装済み。15分足の執行精度チェック、`trend_flip_confirmed_up` の弱評価化、詳細HTML/CSV保存、ロードマップ/タイムライン更新まで完了。
@@ -50,7 +56,7 @@
 - `market_map` は複数時間足のレジサポ合流、反応回数、直近性、ヒゲ拒否、出来高タッチから主要ラインを作る。
 - `market_map` は `support_to_resistance_flip`、`resistance_to_support_flip`、`failed_breakout_*_reversal`、`trend_flip_*` を score/risk/log/メール文言へ流す。
 - 標準比較、運用焦点、Phase 1B 候補、失敗ブレイク、market_map readiness、有効性の各レポート CLI は実装済み。
-- 現行の作業ブランチは `ver02.6-v1`、運用本体は `ver02.5-v8`。
+- 現行の作業ブランチは `ver02.6-v2`、運用本体は `ver02.5-v8`。
 - 実装済みの計画書は `運用資料/計画/archive/implemented/2026-05-18/` へ整理済み。
 
 ## 直近の基準値

@@ -22,11 +22,11 @@ Codex handles implementation only after a confirmed spec exists in `chatgpt/spec
 6. 関連する `chatgpt/analysis/*.md`
 7. 必要時だけ `運用資料/開発ロードマップ.md` と `運用資料/履歴/progress.md`
 
-## Current branch
+## Branch handling
 
-- Working branch: `ver02.6-v1`
-- Main runtime reference: `ver02.5-v8`
-- This branch is used to separate ChatGPT design work from Codex implementation work.
+- The latest working branch must always be read from `運用資料/NEXT_TASK.md`.
+- When a new branch is created, `運用資料/NEXT_TASK.md` must be updated in the same work unit.
+- Main runtime reference may differ from the current working branch.
 
 ## Main design themes
 
