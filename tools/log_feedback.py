@@ -3145,8 +3145,8 @@ def _load_review_note_rows(path: Path) -> list[dict[str, str]]:
 
 def _render_review_note(rows: list[dict[str, str]], ai_health_summary: dict[str, Any] | None = None) -> str:
     total = len(rows)
-    done_rows = [row for row in rows if str(row.get("review_status", "")).strip() == "done"]
-    pending_rows = [row for row in rows if str(row.get("review_status", "")).strip() != "done"]
+    human_rows = [row for row in rows if _review_source_value(row) == "human_override"]
+    ai_rows = [row for row in rows if _review_source_value(row) == "ai"]
     latest_review_saved = max(
         (
             str(row.get("reviewed_at_utc", "")).strip()
@@ -3160,27 +3160,27 @@ def _render_review_note(rows: list[dict[str, str]], ai_health_summary: dict[str,
     lines = [
         "# 通知評価シート",
         "",
-        "このノートは、新体制の通知レビューの進捗を見るための要約ノートです。",
+        "このノートは、AI事後評価の進捗を確認し、必要時だけ人が上書きするための進捗メモです。",
         "",
         "## 進捗",
         f"- 評価対象は `{REVIEW_START_CUTOFF_JST}` 以降の通知だけです。",
         f"- 総件数: {total}",
-        f"- 完了: {len(done_rows)}",
-        f"- 未完了: {len(pending_rows)}",
+        f"- AI評価済み: {len(ai_rows)}",
+        f"- 人が上書き済み: {len(human_rows)}",
         f"- 最終レビュー保存: {latest_review_saved}",
         f"- 最終再生成: {latest_regenerated}",
         (
             f"- AI自動評価状態: {_ai_review_status_label(ai_health_summary)}"
-            f" (候補残 {int(ai_health_summary.get('backlog_pending', 0))}件 / 最終AI評価 {ai_health_summary.get('last_ai_review_at', '未作成')})"
+            f" (候補残 {int(ai_health_summary.get('backlog_pending', 0))}件 / 最終AI評価 {ai_health_summary.get('last_ai_review_at', '未作成')} / human_override {int(ai_health_summary.get('human_override', 0))}件)"
             if ai_health_summary
             else "- AI自動評価状態: 未集計"
         ),
         f"- 入力画面: {form_link}",
         "",
-        "## 最近の完了レビュー",
+        "## 人が上書きした通知",
     ]
-    if done_rows:
-        for row in done_rows[:5]:
+    if human_rows:
+        for row in human_rows[:5]:
             lines.append(
                 "- "
                 + " / ".join(
@@ -3195,23 +3195,7 @@ def _render_review_note(rows: list[dict[str, str]], ai_health_summary: dict[str,
                 )
             )
     else:
-        lines.append("- まだ完了レビューはありません")
-    lines.extend(["", "## 未完了通知"])
-    if pending_rows:
-        for row in pending_rows[:10]:
-            lines.append(
-                "- "
-                + " / ".join(
-                    part
-                    for part in (
-                        _format_time_badge(str(row.get("timestamp_jst", ""))),
-                        str(row.get("subject", "")).strip(),
-                    )
-                    if part
-                )
-            )
-    else:
-        lines.append("- 未完了はありません")
+        lines.append("- まだ human_override はありません。通常は AI 事後評価をそのまま使います。")
     lines.append("")
     return "\n".join(lines)
 
@@ -3499,8 +3483,8 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     header_text = _render_review_note([])
     initial_cards_html = _render_static_review_cards(rows_payload, options_payload)
     intro = (
-        "この画面は、AI が付けた事後評価を人が確認し、必要なときだけ修正するための入力フォームです。"
-        " 保存すると JSON 正本と CSV、Obsidian 要約が自動で更新され、人が保存した行は以後 AI で上書きしません。"
+        "この画面は、AI が付けた事後評価を確認し、必要な通知だけ人が上書きするための入力フォームです。"
+        " 日常運用では AI 評価を主系として使い、保存した行だけ `human_override` として以後 AI で上書きしません。"
     )
 
     return f"""<!doctype html>
@@ -5475,6 +5459,72 @@ def _paper_position_sl_group_lines(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _paper_review_summary_lines(
+    *,
+    title: str,
+    rows: list[dict[str, Any]],
+) -> list[str]:
+    lines = ["", f"## {title}"]
+    if not rows:
+        lines.append("- 該当なし")
+        return lines
+    summary = _review_summary(rows)
+    reviewed_count = int(summary.get("reviewed_count", 0))
+    lines.append(f"- review coverage: {reviewed_count}/{len(rows)}件")
+    source_counts: Counter[str] = summary.get("review_source_counts", Counter())
+    if source_counts:
+        lines.append("- review source: " + ", ".join(f"{key}={value}件" for key, value in source_counts.items() if key))
+    verdicts: Counter[str] = summary.get("verdicts", Counter())
+    if verdicts:
+        lines.append("- verdict: " + ", ".join(f"{key}={value}件" for key, value in verdicts.items() if key))
+    sl_counts: Counter[str] = summary.get("sl_eval_counts", Counter())
+    if sl_counts:
+        lines.append("- sl_eval: " + ", ".join(f"{key}={value}件" for key, value in sl_counts.items() if key))
+    tp_counts: Counter[str] = summary.get("tp_eval_counts", Counter())
+    if tp_counts:
+        lines.append("- tp_eval: " + ", ".join(f"{key}={value}件" for key, value in tp_counts.items() if key))
+    tf_15m_counts: Counter[str] = summary.get("tf_15m_eval_counts", Counter())
+    if tf_15m_counts:
+        lines.append("- tf_15m_eval: " + ", ".join(f"{key}={value}件" for key, value in tf_15m_counts.items() if key))
+    action_counts: Counter[str] = summary.get("action_class_counts", Counter())
+    if action_counts:
+        lines.append("- action_class: " + ", ".join(f"{key}={value}件" for key, value in action_counts.items() if key))
+    priority_counts: Counter[str] = summary.get("priority_counts", Counter())
+    if priority_counts:
+        lines.append("- priority: " + ", ".join(f"{key}={value}件" for key, value in priority_counts.items() if key))
+    high_priority_actions = summary.get("high_priority_actions", [])
+    if high_priority_actions:
+        lines.append("- high priority examples:")
+        for row in high_priority_actions[:3]:
+            lines.append(f"  - {row.get('signal_id', '')}: {row.get('review_action_class', '')} / {row.get('next_action', '')}")
+    return lines
+
+
+def _paper_review_backing_notes(rows: list[dict[str, Any]]) -> list[str]:
+    notes: list[str] = []
+    if not rows:
+        return notes
+    summary = _review_summary(rows)
+    sl_counts: Counter[str] = summary.get("sl_eval_counts", Counter())
+    too_tight = int(sl_counts.get("too_tight", 0))
+    if too_tight > 0:
+        notes.append(f"- AI裏付け: `sl_eval=too_tight` が {too_tight}件あり、SL幅再設計の裏付けがある。")
+    verdicts: Counter[str] = summary.get("verdicts", Counter())
+    too_early = int(verdicts.get("too_early", 0))
+    tf_15m_counts: Counter[str] = summary.get("tf_15m_eval_counts", Counter())
+    poor_15m = int(tf_15m_counts.get("poor", 0))
+    if too_early > 0 or poor_15m > 0:
+        notes.append(f"- AI裏付け: `too_early={too_early}件` / `tf_15m_eval=poor={poor_15m}件` で、発火遅延または15分足条件見直し候補。")
+    misleading_yes = sum(1 for row in rows if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
+    if misleading_yes > 0:
+        notes.append(f"- AI裏付け: `misleading_entry_like_wording=yes` が {misleading_yes}件あり、通知文面の中立化候補。")
+    logic_false = sum(1 for row in rows if str(row.get("logic_validated", "")).strip() == "false")
+    technical_driver = sum(1 for row in rows if str(row.get("actual_move_driver", "")).strip() == "technical")
+    if logic_false > 0 and technical_driver > 0:
+        notes.append(f"- AI裏付け: `actual_move_driver=technical` が {technical_driver}件ある一方で `logic_validated=false` が {logic_false}件あり、根拠整合の再設計候補。")
+    return notes
+
+
 def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
     proposals: list[tuple[str, str]] = []
     long_high_wait_rows = [
@@ -5536,6 +5586,47 @@ def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[s
             (
                 "skip_thin_sl",
                 f"thin_rr_sl が {len(thin_rr_rows)}件あるため、SL拡張ではなく skip 優先で検討する候補。",
+            )
+        )
+    too_tight_rows = [row for row in market_rows if str(row.get("sl_eval", "")).strip() == "too_tight"]
+    if too_tight_rows:
+        proposals.append(
+            (
+                "widen_sl_for_noise",
+                f"`sl_eval=too_tight` が {len(too_tight_rows)}件あるため、短期ノイズで刈られにくい SL 幅へ再設計候補。",
+            )
+        )
+    early_or_poor_rows = [
+        row for row in market_rows
+        if str(row.get("user_verdict", "")).strip() == "too_early"
+        or str(row.get("tf_15m_eval", "")).strip() == "poor"
+    ]
+    if early_or_poor_rows:
+        proposals.append(
+            (
+                "delay_entry_from_ai_review",
+                f"`too_early` または `tf_15m_eval=poor` が {len(early_or_poor_rows)}件あり、entry 発火遅延または15分足条件見直し候補。",
+            )
+        )
+    misleading_rows = [row for row in market_rows if str(row.get("misleading_entry_like_wording", "")).strip() == "yes"]
+    if misleading_rows:
+        proposals.append(
+            (
+                "neutralize_wording",
+                f"`misleading_entry_like_wording=yes` が {len(misleading_rows)}件あり、通知文面をより中立にする候補。",
+            )
+        )
+    realign_rows = [
+        row
+        for row in market_rows
+        if str(row.get("actual_move_driver", "")).strip() == "technical"
+        and str(row.get("logic_validated", "")).strip() == "false"
+    ]
+    if realign_rows:
+        proposals.append(
+            (
+                "realign_reasoning",
+                f"`actual_move_driver=technical` かつ `logic_validated=false` が {len(realign_rows)}件あり、根拠整合の再設計候補。",
             )
         )
     return proposals
@@ -5659,6 +5750,14 @@ def build_paper_opportunity_diagnostics_report(
     sl_rows = [row for row in market_rows if str(row.get("exit_status", "")).strip() == "sl_hit"]
     proposals = _paper_position_proposals(market_rows)
     missing_data_notes = _paper_position_missing_data_notes(market_rows)
+    long_rows = [row for row in market_rows if str(row.get("side", "")).strip() == "long"]
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    low_exec_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
+    trend_flip_up_rows = [
+        row
+        for row in market_rows
+        if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
+    ]
     weak_examples = [
         row
         for row in market_rows
@@ -5706,6 +5805,11 @@ def build_paper_opportunity_diagnostics_report(
     lines.extend(_paper_position_group_lines(title="market_map flag 別", labels=by_flag, limit=limit))
     lines.extend(_paper_position_group_lines(title="opportunity reason 別", labels=by_reason, limit=limit))
     lines.extend(_paper_position_sl_group_lines(sl_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価サマリー", rows=market_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: long", rows=long_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: wait>=60", rows=high_wait_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: execution<24", rows=low_exec_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: trend_flip_confirmed_up", rows=trend_flip_up_rows))
 
     lines.append("")
     lines.append("## proposal")
@@ -5714,6 +5818,11 @@ def build_paper_opportunity_diagnostics_report(
             lines.append(f"- {label}: {note}")
     else:
         lines.append("- 該当なし")
+    backing_notes = _paper_review_backing_notes(market_rows)
+    if backing_notes:
+        lines.append("")
+        lines.append("## AI事後評価の裏付け")
+        lines.extend(backing_notes)
 
     lines.append("")
     lines.append("## 不足データ")
@@ -5958,6 +6067,16 @@ def _signal_tier_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     verdicts = Counter(row.get("user_verdict", "") for row in rows if row.get("user_verdict"))
     usefulness = [int(row.get("usefulness_1to5", "0")) for row in rows if str(row.get("usefulness_1to5", "")).isdigit()]
+    review_source_counts = Counter(_review_source_value(row) for row in rows if _review_source_value(row))
+    reviewed_count = sum(
+        1
+        for row in rows
+        if _review_source_value(row) in {"ai", "human_override"}
+        or str(row.get("user_verdict", "")).strip()
+        or str(row.get("sl_eval", "")).strip()
+        or str(row.get("tp_eval", "")).strip()
+        or str(row.get("tf_15m_eval", "")).strip()
+    )
     actual_move_driver_count = sum(1 for row in rows if row.get("actual_move_driver"))
     misleading_marked = [row for row in rows if str(row.get("misleading_entry_like_wording", "")).strip() in {"yes", "no"}]
     misleading_yes_count = sum(1 for row in misleading_marked if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
@@ -5978,6 +6097,8 @@ def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         action_rows.append({**row, "review_action_class": action_class, "review_priority": priority, "next_action": next_action})
     return {
         "verdicts": verdicts,
+        "reviewed_count": reviewed_count,
+        "review_source_counts": review_source_counts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
         "actual_move_driver_rate": _ratio(actual_move_driver_count, len(rows)),
         "misleading_entry_rate": _ratio(misleading_yes_count, len(misleading_marked)),
@@ -7250,10 +7371,16 @@ def build_feedback_report(
             )
     lines.append("")
 
-    lines.append("## 4. 人のレビュー要約 / AI事後評価")
+    lines.append("## 4. AI事後評価サマリー")
     lines.extend(_verdict_summary_lines(review_summary))
     if review_summary["verdicts"]:
         lines.append(f"- 平均の役立ち度: {review_summary['avg_usefulness']:.2f} / 5")
+        source_counts: Counter[str] = review_summary["review_source_counts"]
+        if source_counts:
+            lines.append(
+                "- レビュー source: "
+                + ", ".join(f"{key}={value}件" for key, value in source_counts.items() if key)
+            )
         lines.append(f"- 値動きの主因の入力率: {_format_pct(review_summary['actual_move_driver_rate'])}")
         lines.append(
             f"- エントリー寄り誤読の入力率: {_format_pct(review_summary['misleading_entry_coverage'])} / 誤読あり率: {_format_pct(review_summary['misleading_entry_rate'])}"

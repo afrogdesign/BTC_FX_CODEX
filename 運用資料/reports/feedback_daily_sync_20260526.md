@@ -2,9 +2,9 @@
 
 ## 1. まず結論
 - 今回の完了データは 44 件です。近似PF は 0.83、全体勝率は 43.2% でした。
-- 事後評価では「待つ判断に使えた」が最も多く、28 件でした。
-- 平均の役立ち度は 3.77 / 5 でした。
-- 根拠整合の入力率は 70.5%、整合した比率は 100.0% でした。
+- 事後評価では「待つ判断に使えた」が最も多く、33 件でした。
+- 平均の役立ち度は 3.72 / 5 でした。
+- 根拠整合の入力率は 86.4%、整合した比率は 100.0% でした。
 - 今回の改善候補の最上位は「SL が狭すぎるケースが多い」です。
 - Phase 1 判定では ready=2 件、phase1_active=true=2 件です。
 - 判定: Phase 1 の本有効確認を進めてよい (phase1_active=true の実データが出ているため、正式指標の観測を優先する)
@@ -30,43 +30,45 @@
   - 2026-05-24 06:05 / 20260523_210500 / setup=ready / phase1_active=True / outcome=loss
   - 2026-05-23 23:05 / 20260523_140500 / setup=ready / phase1_active=True / outcome=win
 
-## 4. 人のレビュー要約 / AI事後評価
-- 待つ判断に使えた: 28件
-- 見送り判断に使えた: 5件
+## 4. AI事後評価サマリー
+- 待つ判断に使えた: 33件
+- 見送り判断に使えた: 7件
+- 価値が低かった: 1件
 - 入る判断に使えた: 1件
 - 通知が早すぎた: 1件
-- 平均の役立ち度: 3.77 / 5
-- 値動きの主因の入力率: 79.5%
+- 平均の役立ち度: 3.72 / 5
+- レビュー source: ai=43件
+- 値動きの主因の入力率: 97.7%
 - エントリー寄り誤読の入力率: 0.0% / 誤読あり率: 0.0%
-- 根拠整合の入力率: 70.5% / 整合率: 100.0%
-- SL評価: SL は妥当=18件, SL が広すぎた=2件, SL が狭すぎた=15件
-- TP評価: TP が遠すぎた=11件, TP が近すぎた=4件, TP は妥当=20件
-- 4時間足評価: 一部弱い=26件, 妥当=9件
-- 1時間足評価: 一部弱い=26件, 妥当=5件, 弱い=4件
-- 15分足評価: 弱い=9件, 妥当=16件, 一部弱い=10件
+- 根拠整合の入力率: 86.4% / 整合率: 100.0%
+- SL評価: SL が狭すぎた=19件, SL は妥当=22件, SL が広すぎた=2件
+- TP評価: TP が遠すぎた=16件, TP は妥当=22件, TP が近すぎた=5件
+- 4時間足評価: 弱い=1件, 一部弱い=33件, 妥当=9件
+- 1時間足評価: 一部弱い=32件, 妥当=7件, 弱い=4件
+- 15分足評価: 一部弱い=13件, 妥当=17件, 弱い=13件
 ### 改善アクション
-- 分類: 入口条件を調整=28件, 対応なし=1件, 観測継続=5件, リスク設計を調整=1件
-- 重要度: 中=24件, 低=4件, 高=7件
+- 分類: 入口条件を調整=33件, 観測継続=6件, 通知文面を調整=2件, 対応なし=1件, リスク設計を調整=1件
+- 重要度: 中=28件, 高=11件, 低=4件
 - 高優先の代表例:
-  - 20260522_070500: 入口条件を調整 / 15分足の発火条件を「主要レジスタンス直下の上方向バイアス」では抑制し、方向表示も中立寄りに補正する。
-  - 20260522_060500: 入口条件を調整 / 15分足の発火条件を見直し、短期ロング示唆と下方向バイアスが衝突した場合は通知を遅延して再判定する。
-  - 20260522_010500: 入口条件を調整 / 15分足で再失速確定（高値切り下げ＋出来高/CVD追随）を満たすまで通知を遅らせ、即時逆行を避ける。
+  - 20260524_130500: 入口条件を調整 / 15分足でレジスタンス再否定の成立時に限定して、wait固定を解除する発火条件を追加する。
+  - 20260524_000500: 入口条件を調整 / 15分足は主要S/R同居の臨界帯では発火禁止を強め、流動性掃除後の再テスト確認を必須化する。
+  - 20260523_210500: 通知文面を調整 / 「ENTRY_OK/執行可」と「実弾不可・待機」を同時表示しない文面に統一し、待機専用通知として明確化する。
 ### AI事後評価 health
 - 状態: backlogあり
-- 候補件数: eligible=356 / backlog=73 / AI済み=283 / human_override=0
+- 候補件数: eligible=356 / backlog=65 / AI済み=291 / human_override=0
 - 今回の同期: created=8 / reused=0 / request_failed=0 / daily_cap=8
-- 最終AI評価: 2026-05-24T18:37:12.436767Z / 最終エラー: 2026-04-19T18:40:01.705120Z
+- 最終AI評価: 2026-05-25T18:37:03.344761Z / 最終エラー: 2026-04-19T18:40:01.705120Z
 
 ## 5. 改善候補
 1. SL が狭すぎるケースが多い
-   理由: sl_eval=too_tight が 15/35 件 (42.9%)
+   理由: sl_eval=too_tight が 19/43 件 (44.2%)
    主に触る場所: src/analysis/rr.py
-2. 速報で方向/実行不整合が継続
-   理由: 直近12時間で direction_execution_conflict が 5 件あります
+2. TP が遠すぎるケースが多い
+   理由: tp_eval=too_far が 16/43 件 (37.2%)
+   主に触る場所: src/analysis/rr.py, src/trade/exit_manager.py
+3. 速報で方向/実行不整合が継続
+   理由: 直近12時間で direction_execution_conflict が 4 件あります
    主に触る場所: tools/log_feedback.py
-3. ENTRY_OK が甘め
-   理由: ENTRY_OK の poor_entry が 3/4 件 (75.0%)
-   主に触る場所: config.py, src/analysis/position_risk.py
 
 補助集計:
 - sweep_incomplete を含む watch 系通知済み履歴: 4件
@@ -137,12 +139,12 @@
 
 ### 直近12時間速報
 - 対象件数: 11件
-- direction_execution_conflict: 5件
-- direction_execution_conflict の主な理由: confidence_below_min=4件, inside_entry_zone_with_trigger=1件
-- direction_execution_conflict の主な risk_flags: short_into_major_support=5件, long_into_major_resistance=5件, sweep_incomplete=4件
+- direction_execution_conflict: 4件
+- direction_execution_conflict の主な理由: confidence_below_min=3件, inside_entry_zone_with_trigger=1件
+- direction_execution_conflict の主な risk_flags: short_into_major_support=4件, long_into_major_resistance=4件, sweep_incomplete=3件
 - rr_sweep_recheck_wait: 1件
 - attention_rr_sweep_recheck_wait: 1件
-- suppress_reason の内訳: confidence_below_short_min=3件, bias_wait=2件, attention_rr_sweep_recheck_wait=1件
+- suppress_reason の内訳: bias_wait=2件, confidence_below_short_min=2件, attention_rr_sweep_recheck_wait=1件
 - ENTRY_OK + invalid: 0件
 - countertrend_long_cluster: 4件
 
@@ -223,7 +225,7 @@
 - missed代表例: 20260524_150500, 20260522_180500, 20260521_140500
 - 24h超の pending: 0件
 - opportunity pass だが paper_positions 未記録: 0件
-- tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 4/4件
+- tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 5/5件
 
 ### risk_flags 有効性比較
 - bid_wall_close: negative_rate=87.5% (n=16)

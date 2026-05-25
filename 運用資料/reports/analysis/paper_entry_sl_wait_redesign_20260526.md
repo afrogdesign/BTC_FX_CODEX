@@ -1,6 +1,6 @@
 # 紙実行候補 entry/wait 診断
 
-- 対象 paper_positions: 264件
+- 対象 paper_positions: 265件
 - フィルタ: date_from=2026-04-18
 - フィルタ: date_to=2026-05-26
 - closed: 264件 / opportunity_type: setup_watch_learning=161件, market_map_opportunity=97件, confidence_watch_sweep_lite=5件, formal_execution_candidate=1件
@@ -73,11 +73,80 @@
 - trend_flip_long_sl: 10件 / 平均R=-0.70 / 簡易PF=0.00 / 平均MFE=0.00 / 平均MAE=0.00 / 代表=20260523_210500, 20260522_030500, 20260517_180500
 - other_sl: 18件 / 平均R=-0.56 / 簡易PF=0.00 / 平均MFE=0.00 / 平均MAE=0.00 / 代表=20260523_230500, 20260523_160500, 20260521_120500
 
+## AI事後評価サマリー
+- review coverage: 27/97件
+- review source: ai=27件
+- verdict: useful_wait=18件, useful_entry=1件, too_early=1件, too_late=1件, low_value=3件, useful_skip=3件
+- sl_eval: too_tight=10件, good=16件, too_loose=1件
+- tp_eval: too_far=8件, too_close=6件, good=13件
+- tf_15m_eval: mixed=9件, poor=9件, good=9件
+- action_class: tune_entry=21件, tune_text=2件, none=1件, tune_risk=1件, watch=2件
+- priority: medium=18件, high=6件, low=3件
+- high priority examples:
+  - 20260523_210500: tune_text / 「ENTRY_OK/執行可」と「実弾不可・待機」を同時表示しない文面に統一し、待機専用通知として明確化する。
+  - 20260518_000500: tune_entry / 15分足で戻り待ち未達のまま加速した場合に追随エントリーを許可する代替条件を追加する。
+  - 20260517_140501: tune_entry / 15分足で上側流動性回収と再失速確認が出るまでエントリー無効を明示し、発火条件を厳格化する。
+
+## AI事後評価: long
+- review coverage: 9/18件
+- review source: ai=9件
+- verdict: useful_wait=7件, useful_entry=1件, useful_skip=1件
+- sl_eval: good=7件, too_loose=1件, too_tight=1件
+- tp_eval: too_far=5件, too_close=2件, good=2件
+- tf_15m_eval: poor=2件, good=5件, mixed=2件
+- action_class: tune_text=2件, tune_entry=7件
+- priority: high=1件, medium=8件
+- high priority examples:
+  - 20260523_210500: tune_text / 「ENTRY_OK/執行可」と「実弾不可・待機」を同時表示しない文面に統一し、待機専用通知として明確化する。
+
+## AI事後評価: wait>=60
+- review coverage: 9/39件
+- review source: ai=9件
+- verdict: useful_entry=1件, useful_wait=6件, useful_skip=1件, low_value=1件
+- sl_eval: too_loose=1件, too_tight=2件, good=6件
+- tp_eval: too_close=2件, good=3件, too_far=4件
+- tf_15m_eval: good=5件, poor=2件, mixed=2件
+- action_class: tune_entry=7件, tune_risk=1件, tune_text=1件
+- priority: medium=8件, high=1件
+- high priority examples:
+  - 20260513_110500: tune_entry / SWEEP待ち条件を緩和し、15分足で下方向ブレイク継続時はwatchから段階的に実行許可へ切り替える。
+
+## AI事後評価: execution<24
+- review coverage: 15/66件
+- review source: ai=15件
+- verdict: useful_wait=11件, low_value=2件, useful_skip=2件
+- sl_eval: good=10件, too_tight=5件
+- tp_eval: good=8件, too_far=5件, too_close=2件
+- tf_15m_eval: good=7件, poor=2件, mixed=6件
+- action_class: none=1件, tune_entry=10件, tune_risk=1件, watch=2件, tune_text=1件
+- priority: low=3件, medium=10件, high=2件
+- high priority examples:
+  - 20260516_060500: tune_entry / 15分足で下抜け再加速が出た時はSWEEP待ちを緩和し、段階的にエントリー許可する条件へ修正する。
+  - 20260513_110500: tune_entry / SWEEP待ち条件を緩和し、15分足で下方向ブレイク継続時はwatchから段階的に実行許可へ切り替える。
+
+## AI事後評価: trend_flip_confirmed_up
+- review coverage: 7/15件
+- review source: ai=7件
+- verdict: useful_wait=5件, useful_entry=1件, useful_skip=1件
+- sl_eval: good=5件, too_loose=1件, too_tight=1件
+- tp_eval: too_far=3件, too_close=2件, good=2件
+- tf_15m_eval: poor=2件, good=3件, mixed=2件
+- action_class: tune_text=1件, tune_entry=6件
+- priority: high=1件, medium=6件
+- high priority examples:
+  - 20260523_210500: tune_text / 「ENTRY_OK/執行可」と「実弾不可・待機」を同時表示しない文面に統一し、待機専用通知として明確化する。
+
 ## proposal
 - suppress_long_high_wait: long かつ wait>=60 は 16件 / 平均R=-0.51 / 簡易PF=0.31 のため、紙候補でも一段抑制候補。
 - suppress_trend_flip_up_strong: 上方向転換系は 15件 / 平均R=-0.19 / 勝率=6.7% のため、強評価へ戻さない候補。
 - require_execution_for_high_wait: wait>=60 群は execution 下限強化候補。対象 39件 / 平均 execution=18.3 / 平均R=-0.16。
 - delay_entry_on_sweep_wait: SWEEP_WAIT の弱い終了が 59件あるため、即 entry ではなく再確認待ちへ寄せる候補。
+- widen_sl_for_noise: `sl_eval=too_tight` が 10件あるため、短期ノイズで刈られにくい SL 幅へ再設計候補。
+- delay_entry_from_ai_review: `too_early` または `tf_15m_eval=poor` が 10件あり、entry 発火遅延または15分足条件見直し候補。
+
+## AI事後評価の裏付け
+- AI裏付け: `sl_eval=too_tight` が 10件あり、SL幅再設計の裏付けがある。
+- AI裏付け: `too_early=1件` / `tf_15m_eval=poor=9件` で、発火遅延または15分足条件見直し候補。
 
 ## 不足データ
 - MFE/MAE 判定: `mfe_atr` が 97件で欠落

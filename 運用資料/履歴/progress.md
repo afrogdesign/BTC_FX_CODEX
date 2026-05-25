@@ -28,6 +28,10 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - AI事後評価を `feedback_daily_sync` だけでなく設計系レポートでも使うように拡張した。`tools/log_feedback.py` の `build_paper_opportunity_diagnostics_report()` に `AI事後評価サマリー` と `AI事後評価の裏付け` を追加し、`sl_eval=too_tight`、`too_early`、`tf_15m_eval=poor`、`misleading_entry_like_wording=yes`、`logic_validated=false` を proposal 側へ直接反映するようにした。
+  - `通知評価シート.md` は人のレビュー一覧から AI 事後評価の進捗メモへ縮小した。日常運用では AI 評価を主系とし、`human_override` は必要時だけの例外として扱う文言へ変更した。iCloud 側の `評価シート入力フォーム.html` も同じ前提で再生成した。
+  - `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md` と `paper_entry_sl_wait_redesign_20260526.md` を再生成した。前者では `review coverage: 25/97件`、後者では `review coverage: 27/97件` を確認し、両方で `widen_sl_for_noise` と `delay_entry_from_ai_review` が proposal に出ることを確認した。
+  - `./.venv312/bin/python -m unittest tests.test_log_feedback` は 63 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 183 件 OK、`git diff --check` は空を確認した。
   - ChatGPT のレポート導線を `NEXT_TASK.md` → `運用資料/reports/report_hub_latest.md` → raw report に整理した。`tools/log_feedback.py` に `build-report-hub` を追加し、レポート族ごとの latest / previous / storage / freshness / missing / stale を自動で一覧化できるようにした。
   - `運用資料/reports/README.md` と `運用資料/reports/analysis/README.md` を evergreen 化し、dated report の active/archive ルールを明記した。`運用資料/ChatGPTプロジェクト設定.md`、`chatgpt/README.md`、`chatgpt/initial_settings.md`、`運用資料/README.md`、`AGENTS.md` も Hub 前提の読む順へ更新した。
   - active 側のレポート棚も整理し、直下の `feedback_daily_sync` は `20260526` と `20260525` だけを残した。`analysis/` も各族の最新 1 本だけを残し、古い dated report は `archive/` へ移した。Hub 生成後の active 側は `market_map_effectiveness_20260526.md`、`operational_focus_20260526.md`、`paper_opportunity_diagnostics_20260526.md`、`paper_entry_sl_wait_redesign_20260526.md` などの現役棚に揃えた。

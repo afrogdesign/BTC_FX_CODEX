@@ -60,6 +60,7 @@
 - `paper_opportunity_diagnostics_20260526.md`: 4/18〜5/26 の紙ポジションは closed 264件 / 平均R 0.33 / 簡易PF 1.82。`market_map_opportunity` は 97件 / 平均R 0.36 / 簡易PF 1.97 だが、`long` は 18件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 39件 / 平均R -0.16 / 簡易PF 0.74 と弱い。
 - `paper_entry_sl_wait_redesign_20260526.md`: `sl_hit` 原因を切り分ける追加診断を実施。`wait>=80` は 7件 / 平均R -0.84 / `sl_hit=6件`、`execution<20` は 44件 / 平均R -0.02 / `sl_hit=29件`、`long` は 18件 / 平均R -0.51 / `sl_hit=15件`、`trend_flip_confirmed_up` は 7件すべて `sl_hit`。SL 失敗分類は `late_wait_sl=20件`、`trend_flip_long_sl=10件`、`other_sl=18件`。proposal は `suppress_long_high_wait`、`suppress_trend_flip_up_strong`、`require_execution_for_high_wait`、`delay_entry_on_sweep_wait` を出力した。
 - AI 事後評価 health は `feedback_daily_sync_20260526.md` 基準で `eligible=356 / AI済み=283 / backlog=73 / created=8 / request_failed=0`。daily cap 8 は継続可能。
+- AI事後評価は今後 `feedback_daily_sync` だけでなく `paper_opportunity_diagnostics` と `paper_entry_sl_wait_redesign` の設計根拠にも使う。`human_override` は例外で、日常判断は AI 評価を主系にする。
 
 ## 次のタスク
 

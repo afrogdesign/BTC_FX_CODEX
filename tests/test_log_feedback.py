@@ -335,8 +335,20 @@ class LogFeedbackTest(unittest.TestCase):
                             "signal_id": signal_id,
                             "timestamp_jst": "2026-05-21T10:00:00+09:00",
                             "market_map_flags": flags,
+                            "review_source": "ai",
+                            "actual_move_driver": "technical",
                         }
                     )
+                    if signal_id == "sig_long_wait":
+                        row["user_verdict"] = "too_early"
+                        row["sl_eval"] = "too_tight"
+                        row["tf_15m_eval"] = "poor"
+                        row["logic_validated"] = "false"
+                    else:
+                        row["user_verdict"] = "useful_wait"
+                        row["sl_eval"] = "good"
+                        row["tf_15m_eval"] = "good"
+                        row["logic_validated"] = "true"
                     writer.writerow(row)
 
             paper_positions_path = logs_csv / "paper_positions.csv"
@@ -401,6 +413,8 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("紙実行候補 entry/wait 診断", report)
             self.assertIn("## SL失敗分類", report)
             self.assertIn("trend_flip_long_sl: 1件", report)
+            self.assertIn("## AI事後評価サマリー", report)
+            self.assertIn("review coverage: 2/2件", report)
             self.assertIn("suppress_long_high_wait", report)
             self.assertIn("suppress_trend_flip_up_strong", report)
             self.assertIn("require_execution_for_high_wait", report)
@@ -673,6 +687,7 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("syncRowsFromDom()", html)
         self.assertIn("bindSelectHandlers()", html)
         self.assertIn("保存先", html)
+        self.assertIn("AI 評価を主系として使い", html)
         self.assertNotIn("Markdownをコピー", html)
 
     def test_import_reviews_ignores_rows_before_review_cutoff(self) -> None:
@@ -807,9 +822,124 @@ class LogFeedbackTest(unittest.TestCase):
             form_text = _review_form_path(review_note).read_text(encoding="utf-8")
 
             self.assertNotIn("old_sig", note_text)
-            self.assertIn("new subject", note_text)
+            self.assertIn("AI事後評価の進捗を確認", note_text)
             self.assertNotIn("old_sig", form_text)
             self.assertIn("new_sig", form_text)
+
+    def test_export_review_queue_note_is_ai_first_and_lists_human_overrides_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            outcomes_path = base_dir / "outcomes.csv"
+            trades_path = base_dir / "trades.csv"
+            reviews_path = base_dir / "user_reviews.csv"
+            review_note = base_dir / "review.md"
+            logs_review = base_dir / "logs" / "review"
+            logs_review.mkdir(parents=True, exist_ok=True)
+
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "evaluation_status"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_human", "timestamp_jst": "2026-03-30T09:05:00+09:00", "evaluation_status": "complete"})
+                writer.writerow({"signal_id": "sig_ai", "timestamp_jst": "2026-03-30T10:05:00+09:00", "evaluation_status": "complete"})
+
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "signal_id",
+                        "timestamp_jst",
+                        "was_notified",
+                        "summary_subject",
+                        "bias",
+                        "prelabel",
+                        "primary_setup_status",
+                        "signal_tier",
+                        "notify_reason_codes",
+                        "confidence_direction_shadow",
+                        "confidence_execution_shadow",
+                        "confidence_wait_shadow",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_human", "timestamp_jst": "2026-03-30T09:05:00+09:00", "was_notified": "true", "summary_subject": "human subject", "bias": "long", "prelabel": "ENTRY_OK", "primary_setup_status": "ready", "signal_tier": "normal", "notify_reason_codes": '["status_upgraded"]', "confidence_direction_shadow": "70", "confidence_execution_shadow": "45", "confidence_wait_shadow": "20"})
+                writer.writerow({"signal_id": "sig_ai", "timestamp_jst": "2026-03-30T10:05:00+09:00", "was_notified": "true", "summary_subject": "ai subject", "bias": "short", "prelabel": "SWEEP_WAIT", "primary_setup_status": "watch", "signal_tier": "normal", "notify_reason_codes": '["attention_bias_changed"]', "confidence_direction_shadow": "60", "confidence_execution_shadow": "25", "confidence_wait_shadow": "70"})
+
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_human",
+                        "timestamp_jst": "2026-03-30T09:05:00+09:00",
+                        "subject": "human subject",
+                        "auto_eval_summary": "auto",
+                        "user_verdict": "useful_wait",
+                        "usefulness_1to5": "4",
+                        "would_trade": "no",
+                        "actual_move_driver": "technical",
+                        "misleading_entry_like_wording": "no",
+                        "logic_validated": "true",
+                        "sl_eval": "good",
+                        "tp_eval": "good",
+                        "tf_4h_eval": "good",
+                        "tf_1h_eval": "good",
+                        "tf_15m_eval": "good",
+                        "review_source": "human_override",
+                        "review_model": "",
+                        "review_image_mode": "",
+                        "review_variant": "",
+                        "review_action_class": "watch",
+                        "review_priority": "medium",
+                        "next_action": "watch",
+                        "memo": "manual",
+                        "review_status": "done",
+                        "reviewed_at_utc": "2026-03-30T00:30:00Z",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "signal_id": "sig_ai",
+                        "timestamp_jst": "2026-03-30T10:05:00+09:00",
+                        "subject": "ai subject",
+                        "auto_eval_summary": "auto",
+                        "user_verdict": "too_early",
+                        "usefulness_1to5": "2",
+                        "would_trade": "conditional",
+                        "actual_move_driver": "technical",
+                        "misleading_entry_like_wording": "yes",
+                        "logic_validated": "false",
+                        "sl_eval": "too_tight",
+                        "tp_eval": "good",
+                        "tf_4h_eval": "good",
+                        "tf_1h_eval": "mixed",
+                        "tf_15m_eval": "poor",
+                        "review_source": "ai",
+                        "review_model": "gpt-test",
+                        "review_image_mode": "price_map_svg",
+                        "review_variant": "ai_post_review_v2",
+                        "review_action_class": "tune_entry",
+                        "review_priority": "high",
+                        "next_action": "delay",
+                        "memo": "",
+                        "review_status": "done",
+                        "reviewed_at_utc": "2026-03-30T00:35:00Z",
+                    }
+                )
+
+            export_review_queue(
+                base_dir=base_dir,
+                review_note_path=review_note,
+                outcomes_path=outcomes_path,
+                reviews_path=reviews_path,
+                trades_path=trades_path,
+            )
+
+            note_text = review_note.read_text(encoding="utf-8")
+            self.assertIn("AI事後評価の進捗を確認", note_text)
+            self.assertIn("AI評価済み: 1", note_text)
+            self.assertIn("人が上書き済み: 1", note_text)
+            self.assertIn("human subject", note_text)
+            self.assertNotIn("ai subject /", note_text)
 
     def test_load_review_note_rows_ignores_single_header_and_keeps_real_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2337,7 +2467,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("Phase 1 判定では ready=1 件、phase1_active=true=1 件です。", report)
             self.assertIn("判定: Phase 1 の本有効確認を進めてよい", report)
             self.assertIn("## 3. Phase 1 判定サマリー", report)
-            self.assertIn("## 4. 人のレビュー要約", report)
+            self.assertIn("## 4. AI事後評価サマリー", report)
             self.assertIn("待つ判断に使えた", report)
             self.assertIn("平均の役立ち度", report)
             self.assertIn("`primary_setup_status=ready` 件数: 1", report)
@@ -2431,7 +2561,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("`tp1_hit_first=false` 率: 100.0%", report)
             self.assertIn("`expired` 率: 100.0%", report)
             self.assertIn("`max_size_capped` 発生率: 100.0%", report)
-            self.assertIn("## 4. 人のレビュー要約", report)
+            self.assertIn("## 4. AI事後評価サマリー", report)
             self.assertIn("完了レビューはまだありません", report)
 
     def test_build_feedback_report_shows_entry_ok_rr_and_ready_blockers(self) -> None:
