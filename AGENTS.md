@@ -30,22 +30,23 @@
 この repo では、ChatGPT と Codex の受け渡しを GitHub 上の `chatgpt/` ディレクトリで行う。
 
 - `chatgpt/README.md`: ChatGPT 作業ディレクトリ全体の入口。
-- `chatgpt/initial_settings.md`: ChatGPT プロジェクトの「情報源」に入れる初期設定。
+- `chatgpt/initial_settings.md`: ChatGPT プロジェクトの「情報源」に入れる要約版。正本は `運用資料/ChatGPTプロジェクト設定.md`。
 - `chatgpt/analysis/`: ChatGPT が作る診断、考察、比較検討の正本。
-- `chatgpt/specs/`: Codex が実行する確定仕様書の正本。
+- `chatgpt/specs/active/`: Codex が次に実行する現役の確定仕様書。
+- `chatgpt/specs/archive/`: 実施済み、または履歴参照用の仕様書。
 - `chatgpt/templates/`: ChatGPT と Codex が使う文書テンプレート。
 
-Codex は、ユーザーから「ChatGPT から引き継いで」「仕様書を読んで」「続きの作業」と言われた場合、まず `chatgpt/specs/` を確認する。
-設計が未確定な話は `chatgpt/analysis/` を確認し、勝手に実装へ進めない。
+Codex は、ユーザーから「ChatGPT から引き継いで」「仕様書を読んで」「続きの作業」と言われた場合、まず `chatgpt/specs/active/` の最新仕様書だけを確認する。
+設計が未確定な話は `chatgpt/analysis/` を確認し、勝手に実装へ進めない。ChatGPT の次判断や最新指示は常に `運用資料/NEXT_TASK.md` を正本とする。
 
 ### Codex 作業開始時の固定順
 
 1. `AGENTS.md` を読む。
 2. `chatgpt/README.md` を読む。
 3. `chatgpt/initial_settings.md` を読む。
-4. `chatgpt/specs/` に新しい仕様書があるか確認する。
-5. 最新仕様書の `目的`、`変更範囲`、`実装内容`、`検証方法`、`完了条件`、`注意事項` を確認する。
-6. 仕様書がなければ `運用資料/NEXT_TASK.md` を読む。
+4. `chatgpt/specs/active/` の最新仕様書 1 件を確認する。
+5. その仕様書の `目的`、`変更範囲`、`実装内容`、`検証方法`、`完了条件`、`注意事項` を確認する。
+6. 仕様書がなければ `運用資料/ChatGPTプロジェクト設定.md` → `運用資料/NEXT_TASK.md` を読む。
 7. それでも判断が必要なら、実装せず確認事項として返す。
 
 確認コマンド例:
@@ -54,12 +55,12 @@ Codex は、ユーザーから「ChatGPT から引き継いで」「仕様書を
 git checkout ver02.6-v1
 git pull origin ver02.6-v1
 find chatgpt -maxdepth 3 -type f | sort
-ls -lt chatgpt/specs/*.md 2>/dev/null | head
+ls -lt chatgpt/specs/active/*.md 2>/dev/null | head
 ```
 
 ### ChatGPT から Codex への受け渡しルール
 
-ChatGPT が Codex に実装を渡す場合は、必ず `chatgpt/specs/YYYYMMDD_topic.md` に仕様書を置く。
+ChatGPT が Codex に実装を渡す場合は、必ず `chatgpt/specs/active/YYYYMMDD_topic.md` に仕様書を置く。
 
 仕様書には最低限、次を含める。
 
@@ -71,33 +72,28 @@ ChatGPT が Codex に実装を渡す場合は、必ず `chatgpt/specs/YYYYMMDD_t
 - 完了条件
 - 注意事項
 
-Codex は、`chatgpt/specs/` に置かれた仕様書を実務実行の正本として扱う。
+Codex は、`chatgpt/specs/active/` に置かれた最新仕様書を実務実行の正本として扱う。
 チャット本文だけを正本にしない。
-チャットで追加指示があった場合も、必要なら `chatgpt/specs/` の仕様書へ反映してから作業する。
+チャットで追加指示があった場合も、必要なら `chatgpt/specs/active/` の仕様書へ反映してから作業する。
 
 ### ChatGPT 分析文書の置き場所
 
 ChatGPT 側の未確定な考察、原因仮説、改善案比較、追加診断依頼は `chatgpt/analysis/` に置く。
 
 `analysis/` の文書は、そのまま実装してよい仕様ではない。
-Codex は `analysis/` だけを根拠に gate 緩和、score 変更、trade ロジック変更を行わない。
+Codex は `analysis/` だけを根拠に gate 緩和、score 変更、trade ロジック変更を行わない。分析が固まったものだけを `chatgpt/specs/active/` へ移す。
 
 ### 今回の直近仕様書
 
-現在の直近引き継ぎ仕様書は以下。
-
-```txt
-chatgpt/specs/20260526_codex_handoff_chatgpt_scaffold_normalization.md
-```
-
-Codex は、ChatGPT 作業ディレクトリの正規化を行う場合、まずこの仕様書を読む。
+- `chatgpt/specs/active/` が現役の実行対象
+- `chatgpt/specs/archive/20260526_codex_handoff_chatgpt_scaffold_normalization.md` は実施済みの履歴参照用
 
 ## 作業開始
 
 - まず `Global_BOX` の `マシン構成.md` を確認する
 - ネットワーク判断が必要なら `ネットワーク全体図.md` を確認する
 - デプロイ先や常駐構成を扱うなら `Global_BOX` の `デプロイ先/一覧.md` を確認する
-- この案件では `AGENTS.md` → `chatgpt/README.md` → `chatgpt/initial_settings.md` → `chatgpt/specs/` → `運用資料/NEXT_TASK.md` → `運用資料/開発ロードマップ.md` の順で読む
+- この案件では `AGENTS.md` → `chatgpt/README.md` → `chatgpt/initial_settings.md` → `chatgpt/specs/active/` → `運用資料/ChatGPTプロジェクト設定.md` → `運用資料/NEXT_TASK.md` → `運用資料/開発ロードマップ.md` の順で読む
 
 ## 案件の前提
 
@@ -109,7 +105,8 @@ Codex は、ChatGPT 作業ディレクトリの正規化を行う場合、まず
 
 ## 記録
 
-- AI の入口は `AGENTS.md` → `chatgpt/README.md` → `chatgpt/specs/` → `運用資料/NEXT_TASK.md` → `運用資料/開発ロードマップ.md`
+- AI の入口は `AGENTS.md` → `chatgpt/README.md` → `chatgpt/specs/active/` → `運用資料/ChatGPTプロジェクト設定.md` → `運用資料/NEXT_TASK.md` → `運用資料/開発ロードマップ.md`
+- ChatGPT の最新判断、直近レポート名、次に扱う論点は `運用資料/NEXT_TASK.md` に一元管理する
 - 実施履歴は `運用資料/履歴/progress.md`
 - 例外時だけ `運用資料/履歴/スレッド引き継ぎファイル.md`
 - 人向け入口は Obsidian 側 `👩‍⚖️秘書.md`
@@ -118,7 +115,7 @@ Codex は、ChatGPT 作業ディレクトリの正規化を行う場合、まず
   - `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md`
 - ユーザーが `報告して` と書いたときは、人向けと AI 向けの報告先を一式更新する
   - AI 向け: `運用資料/NEXT_TASK.md` と `運用資料/履歴/progress.md`
-  - ChatGPT / Codex 受け渡しに関わる場合: `chatgpt/analysis/` または `chatgpt/specs/`
+  - ChatGPT / Codex 受け渡しに関わる場合: `chatgpt/analysis/` または `chatgpt/specs/active/`
   - 人向け: `👩‍⚖️秘書.md` と `📒打ち合わせノート.md`
   - その時点までの最新の実施内容、判断、次に見る点を反映し、片方だけで終えない
 

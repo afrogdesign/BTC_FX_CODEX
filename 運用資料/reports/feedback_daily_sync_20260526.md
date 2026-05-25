@@ -62,7 +62,7 @@
    理由: sl_eval=too_tight が 15/35 件 (42.9%)
    主に触る場所: src/analysis/rr.py
 2. 速報で方向/実行不整合が継続
-   理由: 直近12時間で direction_execution_conflict が 7 件あります
+   理由: 直近12時間で direction_execution_conflict が 5 件あります
    主に触る場所: tools/log_feedback.py
 3. ENTRY_OK が甘め
    理由: ENTRY_OK の poor_entry が 3/4 件 (75.0%)
@@ -137,14 +137,14 @@
 
 ### 直近12時間速報
 - 対象件数: 11件
-- direction_execution_conflict: 7件
-- direction_execution_conflict の主な理由: confidence_below_min=6件, inside_entry_zone_with_trigger=1件
-- direction_execution_conflict の主な risk_flags: short_into_major_support=7件, long_into_major_resistance=7件, sweep_incomplete=6件
+- direction_execution_conflict: 5件
+- direction_execution_conflict の主な理由: confidence_below_min=4件, inside_entry_zone_with_trigger=1件
+- direction_execution_conflict の主な risk_flags: short_into_major_support=5件, long_into_major_resistance=5件, sweep_incomplete=4件
 - rr_sweep_recheck_wait: 1件
 - attention_rr_sweep_recheck_wait: 1件
-- suppress_reason の内訳: confidence_below_short_min=5件, bias_wait=1件, attention_rr_sweep_recheck_wait=1件
+- suppress_reason の内訳: confidence_below_short_min=3件, bias_wait=2件, attention_rr_sweep_recheck_wait=1件
 - ENTRY_OK + invalid: 0件
-- countertrend_long_cluster: 3件
+- countertrend_long_cluster: 4件
 
 ### Phase 1 計画ログ
 - Phase 1 計画付き件数: 44

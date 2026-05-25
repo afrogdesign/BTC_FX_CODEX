@@ -1,6 +1,6 @@
 # 運用資料 入口
 
-更新日: 2026-05-25 JST
+更新日: 2026-05-26 JST
 
 ## 概要
 
@@ -13,11 +13,13 @@
 ## ChatGPT / Codex の読む順
 
 1. ChatGPT: `ChatGPTプロジェクト設定.md`
-2. ChatGPT: `NEXT_TASK.md`
-3. ChatGPT: `開発ロードマップ.md`
-4. ChatGPT: 必要なレポート、診断資料、計画資料
-5. Codex: ChatGPT またはユーザーが確定した実装指示
-6. Codex: 実施履歴が必要なときだけ `履歴/progress.md`
+2. ChatGPT: `../chatgpt/README.md`
+3. ChatGPT: `../chatgpt/initial_settings.md`
+4. ChatGPT: `NEXT_TASK.md`
+5. ChatGPT: `開発ロードマップ.md`
+6. ChatGPT: 必要なレポート、診断資料、計画資料
+7. Codex: `../chatgpt/specs/active/` の確定仕様、またはユーザーが確定した実装指示
+8. Codex: 実施履歴が必要なときだけ `履歴/progress.md`
 
 ## 人が見る入口
 
@@ -32,7 +34,11 @@
 ## 主役ファイル
 
 - `ChatGPTプロジェクト設定.md`
-  - ChatGPT プロジェクトに読み込ませる役割・参照順・出力ルール
+  - ChatGPT プロジェクトに読み込ませる役割・参照順・出力ルールの正本
+- `../chatgpt/README.md`
+  - ChatGPT/Codex の受け渡しディレクトリ入口
+- `../chatgpt/initial_settings.md`
+  - ChatGPT プロジェクトへ入れる要約版設定
 - `NEXT_TASK.md`
   - ChatGPT へ渡す直近の状態と次判断
 - `開発ロードマップ.md`

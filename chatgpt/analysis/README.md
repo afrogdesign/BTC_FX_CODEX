@@ -36,6 +36,6 @@ YYYYMMDD_topic.md
 ## specs との違い
 
 `analysis/` は考察用です。
-`specs/` は確定仕様用です。
+`chatgpt/specs/active/` は確定仕様用です。
 
-分析が終わり、実装方針が固まったものだけを `specs/` に移してください。
+分析が終わり、実装方針が固まったものだけを `chatgpt/specs/active/` に移してください。

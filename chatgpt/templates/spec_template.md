@@ -10,6 +10,12 @@ tags:
 > [!abstract]
 > この文書は、Codex に実装を依頼するための確定仕様書です。目的、変更範囲、実装内容、検証方法、完了条件を明確にします。
 
+保存先:
+
+```txt
+chatgpt/specs/active/YYYYMMDD_topic.md
+```
+
 ## 📋 目次
 
 - [[#🎯 目的]]
