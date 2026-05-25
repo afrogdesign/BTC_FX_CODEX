@@ -68,16 +68,19 @@ class LogFeedbackTest(unittest.TestCase):
             reports_dir = base_dir / "運用資料" / "reports"
             analysis_dir = reports_dir / "analysis"
             archive_daily = reports_dir / "archive" / "daily" / "2026-05"
+            archive_weekly = reports_dir / "archive" / "weekly"
             archive_analysis = reports_dir / "archive" / "analysis"
             legacy_v23 = reports_dir / "Ver02.3のレポート"
             legacy_old = reports_dir / "Ver02までのレポート"
-            for path in [analysis_dir, archive_daily, archive_analysis, legacy_v23, legacy_old]:
+            for path in [analysis_dir, archive_daily, archive_weekly, archive_analysis, legacy_v23, legacy_old]:
                 path.mkdir(parents=True, exist_ok=True)
 
             (reports_dir / "feedback_daily_sync_20260526.md").write_text("# daily 26\n", encoding="utf-8")
             (archive_daily / "feedback_daily_sync_20260525.md").write_text("# daily 25\n", encoding="utf-8")
+            (archive_weekly / "feedback_weekly_20260330.md").write_text("# weekly 30\n", encoding="utf-8")
             (analysis_dir / "market_map_effectiveness_20260526.md").write_text("# map 26\n", encoding="utf-8")
             (archive_analysis / "market_map_effectiveness_20260520.md").write_text("# map 20\n", encoding="utf-8")
+            (analysis_dir / "market_map_readiness_20260514.md").write_text("# readiness 14\n", encoding="utf-8")
             (analysis_dir / "operational_focus_20260526.md").write_text("# focus 26\n", encoding="utf-8")
             (analysis_dir / "paper_opportunity_diagnostics_20260526.md").write_text("# paper 26\n", encoding="utf-8")
             (analysis_dir / "rr_to_confidence.md").write_text("# rr confidence\n", encoding="utf-8")
@@ -90,9 +93,15 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("feedback_daily_sync_20260525.md", report)
             self.assertIn("storage: `active`", report)
             self.assertIn("archive/daily/2026-05/feedback_daily_sync_20260525.md", report)
+            self.assertIn("archive/weekly/feedback_weekly_20260330.md", report)
+            self.assertIn("## Dormant / 補助診断", report)
+            self.assertIn("market_map_readiness_20260514.md", report)
+            self.assertIn("## Archived / 現行運用外", report)
             self.assertIn("rr_to_confidence.md", report)
             self.assertIn("missing: `paper_entry_sl_wait_redesign`", report)
             self.assertIn("legacy", report)
+            self.assertNotIn("stale: `feedback_weekly`", report)
+            self.assertNotIn("stale: `market_map_readiness`", report)
             self.assertTrue((reports_dir / "report_hub_latest.md").exists())
 
     def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:

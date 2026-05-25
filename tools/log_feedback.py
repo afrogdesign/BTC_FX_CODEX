@@ -73,9 +73,13 @@ REPORT_FAMILY_SPECS = [
         "label": "weekly 集計",
         "pattern": "feedback_weekly_*.md",
         "date_pattern": r"feedback_weekly_(\d{8})\.md$",
-        "search_roots": [("active", Path("運用資料") / "reports")],
-        "purpose": "週次の長め集計。日常では必要時だけ参照。",
-        "section": "current",
+        "search_roots": [
+            ("archive", Path("運用資料") / "reports" / "archive" / "weekly"),
+            ("active", Path("運用資料") / "reports"),
+        ],
+        "purpose": "週次の長め集計。現行運用では常用せず、必要時だけ履歴参照する。",
+        "section": "archived",
+        "warn_if_stale": False,
     },
     {
         "name": "market_map_effectiveness",
@@ -98,8 +102,9 @@ REPORT_FAMILY_SPECS = [
             ("active", Path("運用資料") / "reports" / "analysis"),
             ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
         ],
-        "purpose": "market_map 記録の値入り確認。常用ではなく補助診断。",
-        "section": "ondemand",
+        "purpose": "market_map 記録の値入り確認。market_map ロジック刷新時だけ再生成する補助診断。",
+        "section": "dormant",
+        "warn_if_stale": False,
     },
     {
         "name": "operational_focus",
@@ -733,6 +738,10 @@ def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
     lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "current", now_jst))
     lines.extend(["## 設計テーマ用 / on-demand", ""])
     lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "ondemand", now_jst))
+    lines.extend(["## Dormant / 補助診断", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "dormant", now_jst))
+    lines.extend(["## Archived / 現行運用外", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "archived", now_jst))
     lines.extend(["## Evergreen 比較", ""])
     lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "evergreen", now_jst))
     lines.extend(
@@ -752,6 +761,8 @@ def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
         entries = _gather_report_family_entries(base_dir, spec)
         if not entries:
             warnings.append(f"- missing: `{spec['name']}`")
+            continue
+        if spec.get("warn_if_stale", True) is False:
             continue
         latest = entries[0]
         freshness = _report_freshness_label(latest["date"], now_jst)

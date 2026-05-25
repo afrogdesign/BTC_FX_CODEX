@@ -23,4 +23,5 @@
 - dated report は各族の最新 1 本だけをここに残す。
 - 古い dated report は `../archive/analysis/` へ移す。
 - evergreen 比較レポートはここに残してよい。
+- `market_map_readiness` は常用棚ではなく dormant 診断。market_map ロジック刷新時だけ更新し、普段は stale 警告対象にしない。
 - ここは ChatGPT の分析メモ置き場ではない。設計メモは `../../chatgpt/analysis/` を使う。

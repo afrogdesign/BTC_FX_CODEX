@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-05-26 04:13 JST
+- generated_at: 2026-05-26 04:37 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順
@@ -20,13 +20,6 @@
 - storage: `active`
 - purpose: 日次の全体成績、AI事後評価、Phase1 状況の入口。
 - last_date: `2026-05-26` / freshness: `fresh(0d)`
-
-### weekly 集計
-- latest: [運用資料/reports/feedback_weekly_20260330.md](運用資料/reports/feedback_weekly_20260330.md)
-- previous: `missing`
-- storage: `active`
-- purpose: 週次の長め集計。日常では必要時だけ参照。
-- last_date: `2026-03-30` / freshness: `stale(57d)`
 
 ### market_map 有効性
 - latest: [運用資料/reports/analysis/market_map_effectiveness_20260526.md](運用資料/reports/analysis/market_map_effectiveness_20260526.md)
@@ -51,13 +44,6 @@
 
 ## 設計テーマ用 / on-demand
 
-### market_map readiness
-- latest: [運用資料/reports/analysis/market_map_readiness_20260514.md](運用資料/reports/analysis/market_map_readiness_20260514.md)
-- previous: [運用資料/reports/archive/analysis/market_map_readiness_20260513.md](運用資料/reports/archive/analysis/market_map_readiness_20260513.md)
-- storage: `active`
-- purpose: market_map 記録の値入り確認。常用ではなく補助診断。
-- last_date: `2026-05-14` / freshness: `stale(12d)`
-
 ### 緩和候補
 - latest: [運用資料/reports/analysis/relaxation_candidates_20260526.md](運用資料/reports/analysis/relaxation_candidates_20260526.md)
 - previous: [運用資料/reports/archive/analysis/relaxation_candidates_20260525.md](運用資料/reports/archive/analysis/relaxation_candidates_20260525.md)
@@ -78,6 +64,24 @@
 - storage: `active`
 - purpose: sl_hit 偏重、高 wait、低 execution の切り分け。
 - last_date: `2026-05-26` / freshness: `fresh(0d)`
+
+## Dormant / 補助診断
+
+### market_map readiness
+- latest: [運用資料/reports/analysis/market_map_readiness_20260514.md](運用資料/reports/analysis/market_map_readiness_20260514.md)
+- previous: [運用資料/reports/archive/analysis/market_map_readiness_20260513.md](運用資料/reports/archive/analysis/market_map_readiness_20260513.md)
+- storage: `active`
+- purpose: market_map 記録の値入り確認。market_map ロジック刷新時だけ再生成する補助診断。
+- last_date: `2026-05-14` / freshness: `stale(12d)`
+
+## Archived / 現行運用外
+
+### weekly 集計
+- latest: [運用資料/reports/archive/weekly/feedback_weekly_20260330.md](運用資料/reports/archive/weekly/feedback_weekly_20260330.md)
+- previous: `missing`
+- storage: `archive`
+- purpose: 週次の長め集計。現行運用では常用せず、必要時だけ履歴参照する。
+- last_date: `2026-03-30` / freshness: `stale(57d)`
 
 ## Evergreen 比較
 
@@ -110,5 +114,4 @@
 
 ## missing / stale 警告
 
-- stale: `feedback_weekly` latest=運用資料/reports/feedback_weekly_20260330.md freshness=stale(57d)
-- stale: `market_map_readiness` latest=運用資料/reports/analysis/market_map_readiness_20260514.md freshness=stale(12d)
+- なし
