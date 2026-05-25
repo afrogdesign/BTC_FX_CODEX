@@ -28,6 +28,11 @@
 ## 重要な節目ログ
 
 - 2026-05-25 JST
+  - `ver02.5-v8` の 2026-05-25 診断・レポート更新を commit `607a48d Update Ver02.5-v8 diagnostics and reports` として `origin/ver02.5-v8` へ push した。
+  - `607a48d` から `ver02.6-v1` ブランチを作成した。`ver02.6-v1` の主目的は、ChatGPT と Codex の役割分担を明確に分離すること。
+  - 今後の診断、設計、再考、フェーズ判断、改善案比較は ChatGPT プロジェクト側で行う。Codex は確定済み仕様の実装、テスト、レポート生成、Git 操作、常駐確認、運用資料への実施結果反映に徹する運用へ変更した。
+
+- 2026-05-25 JST
   - 前回途中の `build-paper-opportunity-diagnostics-report` 追加作業を再開し、`closed` 行の `opportunity_type` 件数が全ポジション基準になる不整合を修正した。回帰テストも追加し、`./.venv312/bin/python -m unittest tests.test_log_feedback` は 59 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 179 件 OK。
   - `feedback_daily_sync_20260525.md` を確認した。5/25 基準では完了 39 件、近似PF 0.98、全体勝率 51.3%、`phase1_active=true=1件`。一方 `trade_execution_gate=pass=0件`、`paper_orders planned=0件` は継続しており、実弾 gate 緩和はまだしない。
   - AI 事後評価は `eligible=347 / AI済み=275 / backlog=72 / created=8 / request_failed=0 / daily_cap=8`。`operational_focus_20260525.md` の未処理 backlog 候補は 37 件で、daily cap 8 は継続可能。

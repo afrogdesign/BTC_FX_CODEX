@@ -1,6 +1,6 @@
 ## BTC Monitor 共通参照
 
-更新日: 2026-05-17 JST
+更新日: 2026-05-25 JST
 
 - 共通ルール: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/共通運用ルール.md`
 - 記録ファイル構成: `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/00_Global_BOX/10_共通ルール/記録ファイル構成.md`
@@ -17,6 +17,14 @@
 - Python 実行は原則 `.venv312/bin/python` を使い、システムの `python3` は直接使わない
 - 本番影響、破壊的変更、追加料金リスクがあるときだけ事前共有する
 
+## ChatGPT / Codex 役割分担
+
+- 今後の診断、設計、再考、フェーズ判断、改善案比較、実装前の仕様決定は ChatGPT プロジェクト側で行う。
+- Codex は実務実行に徹する。主な担当は、確定済み仕様の実装、テスト、レポート生成、Git 操作、常駐確認、運用資料への実施結果反映。
+- Codex は、明示された仕様なしに大きな設計変更、フェーズ昇格判断、gate 緩和判断、売買ロジックの方向性決定を行わない。
+- ユーザーから設計判断を求められた場合、Codex は必要な現状確認や材料整理まで行い、最終判断は ChatGPT プロジェクトへ渡す前提で扱う。
+- ChatGPT 側で決まった設計を repo に反映するときだけ、Codex が実装計画、コード変更、検証、commit / push を担当する。
+
 ## 作業開始
 
 - まず `Global_BOX` の `マシン構成.md` を確認する
@@ -26,7 +34,7 @@
 
 ## 案件の前提
 
-- 現行主流は `iMac 2019` 上の `ver02.5-v6`
+- 現行主流は `iMac 2019` 上の `ver02.6-v1`
 - `Phase 1B-lite` 実装 commit は `1401a69` で、常駐 `com.afrog.btc-monitor` へ反映済み。
 - `MBP2020` の `Ver02.1` は停止・凍結済みで、archive 参照用として扱う
 - 現行の事後評価運用は `daily-sync` と `sync-ai-post-reviews`

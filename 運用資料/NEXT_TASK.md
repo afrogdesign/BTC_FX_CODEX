@@ -6,7 +6,8 @@
 
 ## 現在の状況
 
-- 主系統は `iMac 2019` の `ver02.5-v8`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。
+- 実行系の主状態は `iMac 2019` の `ver02.5-v8`、作業ブランチは `ver02.6-v1`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。
+- `ver02.6-v1` では役割分担を変更する。診断、設計、再考、フェーズ管理は ChatGPT プロジェクトで行い、Codex は確定済み仕様の実装、検証、Git 操作、常駐確認に徹する。
 - 新しい正本は `運用資料/計画/自動取引直前_高速到達計画_20260518.md` と `運用資料/計画/マイルストーン定義.md`。旧計画は `運用資料/計画/archive/superseded/2026-05-18_pre_auto_redesign/` へ退避済み。
 - `opportunity_gate`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を実装済み。紙ポジションは `pending -> opened -> closed`、TP2 / SL / timeout / missed_opportunity / entry_not_reached の後追い評価へ拡張中。実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
 - `Ver02.5-v7 先行実装パック` を実装済み。15分足の執行精度チェック、`trend_flip_confirmed_up` の弱評価化、詳細HTML/CSV保存、ロードマップ/タイムライン更新まで完了。
@@ -53,11 +54,12 @@
 ## 次のタスク
 
 1. `phase1_active=true` が 1 件出たが、`trade_execution_gate=pass=0件` と `paper_orders planned=0件` は継続。実弾 gate 緩和ではなく、まず本有効候補の増加と再現性を見る。
-2. `sl_hit` と `missed_opportunity` が多いため、entry 条件と待機条件のズレを見て、すぐに実弾 gate 緩和へ進めない。
-3. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。紙候補からの抑制候補として検討する。
-4. `trend_flip_confirmed_up` は 29 件でも弱い。次回 30 件到達時点で上方向転換系の扱いを再判定する。
-5. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-6. AI backlog は 72 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
+2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は ChatGPT 側で確定した仕様を受けて実装する。
+3. `sl_hit` と `missed_opportunity` が多いため、entry 条件と待機条件のズレを ChatGPT 側で再設計対象にする。
+4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。紙候補からの抑制案は ChatGPT 側で検討する。
+5. `trend_flip_confirmed_up` は 29 件でも弱い。次回 30 件到達時点の扱いは ChatGPT 側で再判定する。
+6. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
+7. AI backlog は 72 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
 
 ## 残作業一覧
 
