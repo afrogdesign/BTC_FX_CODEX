@@ -4,6 +4,15 @@
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
+## ChatGPT が最初に開くレポート
+
+1. `運用資料/reports/report_hub_latest.md`
+2. `運用資料/reports/feedback_daily_sync_20260526.md`
+3. `運用資料/reports/analysis/market_map_effectiveness_20260526.md`
+4. `運用資料/reports/analysis/operational_focus_20260526.md`
+5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md`
+6. 設計テーマが `sl_hit` 偏重なら `運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md`
+
 ## 現在の状況
 
 - 実行系の主状態は `iMac 2019` の `ver02.5-v8`、作業ブランチは `ver02.6-v1`。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。

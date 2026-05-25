@@ -53,6 +53,142 @@ REVIEW_SERVER_PORT = 8765
 REVIEW_STATE_VERSION = 1
 AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
 AI_POST_REVIEW_TASK = "ai_post_review"
+REPORT_STALE_DAYS = 7
+
+REPORT_FAMILY_SPECS = [
+    {
+        "name": "feedback_daily_sync",
+        "label": "daily-sync 日次",
+        "pattern": "feedback_daily_sync_*.md",
+        "date_pattern": r"feedback_daily_sync_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "daily"),
+        ],
+        "purpose": "日次の全体成績、AI事後評価、Phase1 状況の入口。",
+        "section": "current",
+    },
+    {
+        "name": "feedback_weekly",
+        "label": "weekly 集計",
+        "pattern": "feedback_weekly_*.md",
+        "date_pattern": r"feedback_weekly_(\d{8})\.md$",
+        "search_roots": [("active", Path("運用資料") / "reports")],
+        "purpose": "週次の長め集計。日常では必要時だけ参照。",
+        "section": "current",
+    },
+    {
+        "name": "market_map_effectiveness",
+        "label": "market_map 有効性",
+        "pattern": "market_map_effectiveness_*.md",
+        "date_pattern": r"market_map_effectiveness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "market_map flag 別の有効性確認。",
+        "section": "current",
+    },
+    {
+        "name": "market_map_readiness",
+        "label": "market_map readiness",
+        "pattern": "market_map_readiness_*.md",
+        "date_pattern": r"market_map_readiness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "market_map 記録の値入り確認。常用ではなく補助診断。",
+        "section": "ondemand",
+    },
+    {
+        "name": "operational_focus",
+        "label": "運用フォーカス",
+        "pattern": "operational_focus_*.md",
+        "date_pattern": r"operational_focus_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "blocked 理由、AI backlog、Phase1 観測の詰まりどころを見る。",
+        "section": "current",
+    },
+    {
+        "name": "relaxation_candidates",
+        "label": "緩和候補",
+        "pattern": "relaxation_candidates_*.md",
+        "date_pattern": r"relaxation_candidates_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "gate 緩和候補の抽出。設計判断用。",
+        "section": "ondemand",
+    },
+    {
+        "name": "phase1b_promotion_candidates",
+        "label": "Phase 1B 昇格候補",
+        "pattern": "phase1b_promotion_candidates_*.md",
+        "date_pattern": r"phase1b_promotion_candidates_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Phase 1B-lite からの昇格候補確認。",
+        "section": "ondemand",
+    },
+    {
+        "name": "paper_opportunity_diagnostics",
+        "label": "紙候補診断",
+        "pattern": "paper_opportunity_diagnostics_*.md",
+        "date_pattern": r"paper_opportunity_diagnostics_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "紙候補の entry / wait / flag 別診断。",
+        "section": "current",
+    },
+    {
+        "name": "paper_entry_sl_wait_redesign",
+        "label": "SL/entry 再設計診断",
+        "pattern": "paper_entry_sl_wait_redesign_*.md",
+        "date_pattern": r"paper_entry_sl_wait_redesign_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "sl_hit 偏重、高 wait、低 execution の切り分け。",
+        "section": "ondemand",
+    },
+    {
+        "name": "notified_rr_to_entry",
+        "label": "標準比較 notified_rr_to_entry",
+        "pattern": "notified_rr_to_entry.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+    {
+        "name": "notified_rr_to_entry_orderbook_ask_heavy",
+        "label": "標準比較 ask-heavy",
+        "pattern": "notified_rr_to_entry_orderbook_ask_heavy.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+    {
+        "name": "rr_to_confidence",
+        "label": "標準比較 rr_to_confidence",
+        "pattern": "rr_to_confidence.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+]
 
 FORM_VERDICT_OPTIONS = [
     {"value": "", "label": "未選択"},
@@ -496,6 +632,142 @@ def _split_values(value: str) -> list[str]:
 
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _parse_report_date_from_name(name: str, date_pattern: str | None) -> datetime | None:
+    if not date_pattern:
+        return None
+    match = re.search(date_pattern, name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d")
+    except ValueError:
+        return None
+
+
+def _report_freshness_label(report_date: datetime | None, now_jst: datetime) -> str:
+    if report_date is None:
+        return "evergreen"
+    age_days = (now_jst.date() - report_date.date()).days
+    if age_days > REPORT_STALE_DAYS:
+        return f"stale({age_days}d)"
+    return f"fresh({age_days}d)"
+
+
+def _gather_report_family_entries(base_dir: Path, spec: dict[str, Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for bucket, relative_root in spec["search_roots"]:
+        root = base_dir / relative_root
+        if not root.exists():
+            continue
+        paths = sorted(root.rglob(spec["pattern"]))
+        for path in paths:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            report_date = _parse_report_date_from_name(path.name, spec.get("date_pattern"))
+            entries.append(
+                {
+                    "path": path,
+                    "bucket": bucket,
+                    "date": report_date,
+                    "name": path.name,
+                }
+            )
+    entries.sort(key=lambda item: ((item["date"] or datetime.min), item["name"]), reverse=True)
+    return entries
+
+
+def _format_report_link(base_dir: Path, path: Path | None) -> str:
+    if path is None:
+        return "`missing`"
+    relative = path.relative_to(base_dir)
+    return f"[{relative.as_posix()}]({relative.as_posix()})"
+
+
+def _report_hub_section_lines(base_dir: Path, specs: list[dict[str, Any]], section: str, now_jst: datetime) -> list[str]:
+    lines: list[str] = []
+    for spec in specs:
+        if spec["section"] != section:
+            continue
+        entries = _gather_report_family_entries(base_dir, spec)
+        latest = entries[0] if entries else None
+        previous = entries[1] if len(entries) > 1 else None
+        freshness = _report_freshness_label(latest["date"], now_jst) if latest else "missing"
+        storage = latest["bucket"] if latest else "missing"
+        last_date = latest["date"].strftime("%Y-%m-%d") if latest and latest["date"] else "n/a"
+        lines.append(f"### {spec['label']}")
+        lines.append(f"- latest: {_format_report_link(base_dir, latest['path'] if latest else None)}")
+        lines.append(f"- previous: {_format_report_link(base_dir, previous['path'] if previous else None)}")
+        lines.append(f"- storage: `{storage}`")
+        lines.append(f"- purpose: {spec['purpose']}")
+        lines.append(f"- last_date: `{last_date}` / freshness: `{freshness}`")
+        lines.append("")
+    return lines
+
+
+def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
+    now_jst = datetime.now(tz=JST)
+    output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
+    lines = [
+        "# Report Hub",
+        "",
+        f"- generated_at: {now_jst.strftime('%Y-%m-%d %H:%M JST')}",
+        "- purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。",
+        "",
+        "## ChatGPT が最初に開く順",
+        "1. `運用資料/NEXT_TASK.md`",
+        f"2. {_format_report_link(base_dir, output_md)}",
+        "3. 最新 `feedback_daily_sync`",
+        "4. 最新 `market_map_effectiveness`",
+        "5. 最新 `operational_focus`",
+        "6. 最新 `paper_opportunity_diagnostics`",
+        "7. テーマがあるときだけ追加の design report",
+        "",
+        "## 現役レポート",
+        "",
+    ]
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "current", now_jst))
+    lines.extend(["## 設計テーマ用 / on-demand", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "ondemand", now_jst))
+    lines.extend(["## Evergreen 比較", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "evergreen", now_jst))
+    lines.extend(
+        [
+            "## Legacy / 旧版説明",
+            "",
+            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02.3のレポート' / 'README.md')}",
+            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02までのレポート' / 'README.md')}",
+            "- purpose: 現行判断の正本ではなく、旧版の背景説明用。",
+            "",
+            "## missing / stale 警告",
+            "",
+        ]
+    )
+    warnings: list[str] = []
+    for spec in REPORT_FAMILY_SPECS:
+        entries = _gather_report_family_entries(base_dir, spec)
+        if not entries:
+            warnings.append(f"- missing: `{spec['name']}`")
+            continue
+        latest = entries[0]
+        freshness = _report_freshness_label(latest["date"], now_jst)
+        if freshness.startswith("stale("):
+            warnings.append(
+                f"- stale: `{spec['name']}` latest={latest['path'].relative_to(base_dir).as_posix()} freshness={freshness}"
+            )
+    if warnings:
+        lines.extend(warnings)
+    else:
+        lines.append("- なし")
+    lines.append("")
+    report = "\n".join(lines)
+    _ensure_parent(output_md)
+    output_md.write_text(report, encoding="utf-8")
+    return report
 
 
 def _review_state_path(base_dir: Path) -> Path:
@@ -7740,6 +8012,9 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_diagnostics_parser.add_argument("--date-to", default="")
     paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
 
+    report_hub_parser = subparsers.add_parser("build-report-hub")
+    report_hub_parser.add_argument("--output-md")
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -7931,6 +8206,19 @@ def main() -> None:
         if output_md:
             print(output_md)
         else:
+            print(report)
+        return
+
+    if args.command == "build-report-hub":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_report_hub(
+            base_dir=base_dir,
+            output_md=output_md,
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(base_dir / "運用資料" / "reports" / "report_hub_latest.md")
             print(report)
         return
 

@@ -1,33 +1,35 @@
 # reports 入口
 
-更新日: 2026-05-18 JST
+更新日: 2026-05-26 JST
 
-このフォルダは、自動生成レポートと旧版説明レポートを置く場所です。
-日常判断では最新だけを見て、古い日次レポートは `archive/` から必要時だけ探します。
+このフォルダは、自動生成レポートの保存場所です。
+ChatGPT は生レポートを読むが、入口は常に `NEXT_TASK.md` と `report_hub_latest.md` から始める。
 
-## まず見るもの
+## 最初に開く順
 
-- [feedback_daily_sync_20260518.md](feedback_daily_sync_20260518.md)
-  - 最新の日次レポート。完了 47 件、近似PF 0.73、全体勝率 46.8%。
-- [analysis/market_map_effectiveness_20260518.md](analysis/market_map_effectiveness_20260518.md)
-  - `market_map` の直近有効性。上方向転換の弱さと下方向 flag の相対的な強さを見る。
-- [analysis/operational_focus_20260518.md](analysis/operational_focus_20260518.md)
-  - Phase 1 の pass / blocked と、次に詰める阻害要因を見る。
+1. [../NEXT_TASK.md](../NEXT_TASK.md)
+2. [report_hub_latest.md](report_hub_latest.md)
+3. Hub から最新の raw report
 
 ## フォルダ構成
 
-- 直下の `feedback_daily_sync_YYYYMMDD.md`
-  - 最新と直近比較用だけを残す。古い日次は `archive/daily/YYYY-MM/`。
+- 直下
+  - `README.md`
+  - `report_hub_latest.md`
+  - 最新と直前の `feedback_daily_sync_YYYYMMDD.md`
+  - 最新の `feedback_weekly_YYYYMMDD.md` がある場合は 1 本
 - `analysis/`
-  - 現行判断で見る最新分析と標準比較レポート。
+  - 各分析レポート族の最新 1 本だけを置く現役棚
+- `archive/daily/YYYY-MM/`
+  - 古い日次レポート
 - `archive/analysis/`
-  - 過去日の分析レポート。
+  - 古い分析レポート
 - `Ver02.3のレポート/`、`Ver02までのレポート/`
-  - 旧版の説明・比較用。現行判断の正本にはしない。
+  - 旧版の説明資料。現行判断の正本にはしない
 
-## 整理ルール
+## 運用ルール
 
-- `daily-sync` は直下に新しい日次レポートを出す。
-- 直下に残す日次は最新と直近比較用を基本にする。
-- 古いレポートは削除せず `archive/` へ移す。
-- 現在地の要約は `../NEXT_TASK.md` を正本にする。
+- ChatGPT は Hub を案内板として使い、必要な raw report を直接読む。
+- `analysis/` に dated report を増やし続けない。最新 1 本だけを残し、古いものは `archive/analysis/` へ移す。
+- `daily-sync` の直下レポートも最新と直前だけを残し、それ以前は `archive/daily/YYYY-MM/` へ移す。
+- 現在の判断、最新レポート名、次指示の正本は `../NEXT_TASK.md`。

@@ -28,6 +28,10 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - ChatGPT のレポート導線を `NEXT_TASK.md` → `運用資料/reports/report_hub_latest.md` → raw report に整理した。`tools/log_feedback.py` に `build-report-hub` を追加し、レポート族ごとの latest / previous / storage / freshness / missing / stale を自動で一覧化できるようにした。
+  - `運用資料/reports/README.md` と `運用資料/reports/analysis/README.md` を evergreen 化し、dated report の active/archive ルールを明記した。`運用資料/ChatGPTプロジェクト設定.md`、`chatgpt/README.md`、`chatgpt/initial_settings.md`、`運用資料/README.md`、`AGENTS.md` も Hub 前提の読む順へ更新した。
+  - active 側のレポート棚も整理し、直下の `feedback_daily_sync` は `20260526` と `20260525` だけを残した。`analysis/` も各族の最新 1 本だけを残し、古い dated report は `archive/` へ移した。Hub 生成後の active 側は `market_map_effectiveness_20260526.md`、`operational_focus_20260526.md`、`paper_opportunity_diagnostics_20260526.md`、`paper_entry_sl_wait_redesign_20260526.md` などの現役棚に揃えた。
+  - `./.venv312/bin/python -m unittest tests.test_log_feedback` は 62 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 182 件 OK。`./.venv312/bin/python tools/log_feedback.py build-report-hub` で [report_hub_latest.md](../reports/report_hub_latest.md) を生成し、`feedback_weekly_20260330.md` と `market_map_readiness_20260514.md` が stale 警告として出ることを確認した。
   - `chatgpt/specs/active/20260526_paper_entry_sl_wait_redesign.md` に従い、`tools/log_feedback.py` の `build-paper-opportunity-diagnostics-report` を拡張した。`exit_status` 別、wait 帯別、execution 帯別、`sl_hit` 原因分類、proposal、不足データを Markdown 出力へ追加し、CSV schema や gate 判定、通知ランク、実弾系ロジックは変更していない。
   - `./.venv312/bin/python -m unittest tests.test_log_feedback` は 60 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 180 件 OK、`git diff --check` は空を確認した。`tests/test_log_feedback.py` には `sl_hit` 原因分類と proposal 出力を確認する回帰テストを追加した。
   - `./.venv312/bin/python tools/log_feedback.py build-paper-opportunity-diagnostics-report --date-from 2026-04-18 --date-to 2026-05-26 --output-md 運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md` を実行し、[paper_entry_sl_wait_redesign_20260526.md](../reports/analysis/paper_entry_sl_wait_redesign_20260526.md) を生成した。

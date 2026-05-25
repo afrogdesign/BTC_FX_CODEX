@@ -16,10 +16,11 @@
 2. ChatGPT: `../chatgpt/README.md`
 3. ChatGPT: `../chatgpt/initial_settings.md`
 4. ChatGPT: `NEXT_TASK.md`
-5. ChatGPT: `開発ロードマップ.md`
-6. ChatGPT: 必要なレポート、診断資料、計画資料
-7. Codex: `../chatgpt/specs/active/` の確定仕様、またはユーザーが確定した実装指示
-8. Codex: 実施履歴が必要なときだけ `履歴/progress.md`
+5. ChatGPT: `reports/report_hub_latest.md`
+6. ChatGPT: `開発ロードマップ.md`
+7. ChatGPT: Hub から必要な生レポート、診断資料、計画資料
+8. Codex: `../chatgpt/specs/active/` の確定仕様、またはユーザーが確定した実装指示
+9. Codex: 実施履歴が必要なときだけ `履歴/progress.md`
 
 ## 人が見る入口
 

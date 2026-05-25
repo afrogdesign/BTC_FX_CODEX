@@ -48,6 +48,7 @@ from tools.log_feedback import (
     build_phase1b_lite_paper_orders,
     build_operational_focus_report,
     build_phase1b_promotion_report,
+    build_report_hub,
     build_relaxation_candidates_report,
     build_shadow_log,
     evaluate_trade_row,
@@ -61,6 +62,39 @@ from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITIO
 
 
 class LogFeedbackTest(unittest.TestCase):
+    def test_build_report_hub_lists_latest_previous_and_warnings(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            reports_dir = base_dir / "運用資料" / "reports"
+            analysis_dir = reports_dir / "analysis"
+            archive_daily = reports_dir / "archive" / "daily" / "2026-05"
+            archive_analysis = reports_dir / "archive" / "analysis"
+            legacy_v23 = reports_dir / "Ver02.3のレポート"
+            legacy_old = reports_dir / "Ver02までのレポート"
+            for path in [analysis_dir, archive_daily, archive_analysis, legacy_v23, legacy_old]:
+                path.mkdir(parents=True, exist_ok=True)
+
+            (reports_dir / "feedback_daily_sync_20260526.md").write_text("# daily 26\n", encoding="utf-8")
+            (archive_daily / "feedback_daily_sync_20260525.md").write_text("# daily 25\n", encoding="utf-8")
+            (analysis_dir / "market_map_effectiveness_20260526.md").write_text("# map 26\n", encoding="utf-8")
+            (archive_analysis / "market_map_effectiveness_20260520.md").write_text("# map 20\n", encoding="utf-8")
+            (analysis_dir / "operational_focus_20260526.md").write_text("# focus 26\n", encoding="utf-8")
+            (analysis_dir / "paper_opportunity_diagnostics_20260526.md").write_text("# paper 26\n", encoding="utf-8")
+            (analysis_dir / "rr_to_confidence.md").write_text("# rr confidence\n", encoding="utf-8")
+            (legacy_v23 / "README.md").write_text("# legacy v23\n", encoding="utf-8")
+            (legacy_old / "README.md").write_text("# legacy old\n", encoding="utf-8")
+
+            report = build_report_hub(base_dir=base_dir)
+
+            self.assertIn("feedback_daily_sync_20260526.md", report)
+            self.assertIn("feedback_daily_sync_20260525.md", report)
+            self.assertIn("storage: `active`", report)
+            self.assertIn("archive/daily/2026-05/feedback_daily_sync_20260525.md", report)
+            self.assertIn("rr_to_confidence.md", report)
+            self.assertIn("missing: `paper_entry_sl_wait_redesign`", report)
+            self.assertIn("legacy", report)
+            self.assertTrue((reports_dir / "report_hub_latest.md").exists())
+
     def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -3516,6 +3550,17 @@ class LogFeedbackTest(unittest.TestCase):
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/market_map_ready.md"))
         self.assertEqual(mocked_report.call_args.kwargs["min_market_rows"], 3)
+
+    def test_main_build_report_hub_accepts_output_path(self) -> None:
+        with patch.object(sys, "argv", ["log_feedback.py", "build-report-hub", "--output-md", "/tmp/report_hub.md"]), patch(
+            "tools.log_feedback.build_report_hub"
+        ) as mocked_report:
+            mocked_report.return_value = "# hub\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/report_hub.md"))
 
 
 if __name__ == "__main__":

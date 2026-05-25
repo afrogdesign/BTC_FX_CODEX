@@ -4,6 +4,7 @@
 
 ChatGPT は診断、考察、設計、仕様化を担当し、Codex は確定済み仕様に基づいて実装、テスト、Git 操作を担当します。
 設定の正本は `運用資料/ChatGPTプロジェクト設定.md` に置き、最新の状態と次指示の正本は `運用資料/NEXT_TASK.md` に置きます。
+レポート導線の案内板は `運用資料/reports/report_hub_latest.md` に置きます。
 このディレクトリは入口と受け渡しに絞って使います。
 
 ## ディレクトリ構造
@@ -66,5 +67,6 @@ ChatGPT プロジェクトの「情報源」に登録する要約版です。
 - 実弾発注、取引所API送信、秘密鍵連携は明示許可があるまで対象外にする。
 - ChatGPT 設定の正本は `運用資料/ChatGPTプロジェクト設定.md` に置く。
 - 最新状態と次指示の正本は `運用資料/NEXT_TASK.md` に置く。
+- ChatGPT は `NEXT_TASK.md` の次に `運用資料/reports/report_hub_latest.md` を開き、必要な raw report を選ぶ。
 - 実装仕様の正本は `chatgpt/specs/active/` に置く。
 - 実施済み仕様は `chatgpt/specs/archive/` に移す。

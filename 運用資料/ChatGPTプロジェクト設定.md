@@ -25,8 +25,9 @@ BTC Monitor では、今後の診断、設計、再考、フェーズ管理を C
 2. `運用資料/開発ロードマップ.md`
 3. `運用資料/計画/README.md`
 4. `chatgpt/README.md`
-5. 必要に応じて `運用資料/reports/`
-6. 経緯が必要なときだけ `運用資料/履歴/progress.md`
+5. `運用資料/reports/report_hub_latest.md`
+6. 必要に応じて Hub から最新 raw report
+7. 経緯が必要なときだけ `運用資料/履歴/progress.md`
 
 まず全体を広く読むのではなく、`NEXT_TASK.md` を入口にして、必要なレポートだけ追加で読む。
 
@@ -34,12 +35,14 @@ BTC Monitor では、今後の診断、設計、再考、フェーズ管理を C
 
 - 普遍ルールの正本: `運用資料/ChatGPTプロジェクト設定.md`
 - 最新状態と次指示の正本: `運用資料/NEXT_TASK.md`
+- レポート導線の入口: `運用資料/reports/report_hub_latest.md`
 - ChatGPT の分析メモ: `chatgpt/analysis/`
 - Codex へ渡す確定仕様書: `chatgpt/specs/active/`
 - 実施済み仕様書の履歴: `chatgpt/specs/archive/`
 
 `NEXT_TASK.md` は、最新の数値、次に扱う論点、直近レポート名、追加確認事項を一元管理する場所として扱う。
 ChatGPT は次に何をするかを決めるとき、まず `NEXT_TASK.md` を見る。新しい判断や次指示も、まず `NEXT_TASK.md` へ反映する。
+その次に `report_hub_latest.md` を開き、必要な raw report を選ぶ。
 
 ## 設計するときのルール
 
