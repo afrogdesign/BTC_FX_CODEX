@@ -1,189 +1,273 @@
-# Codex 実行依頼: entry / wait / trend_flip 品質ガード
+# 20260526 entry / wait / trend_flip quality guard
 
-作成日: 2026-05-26 JST
-作成者: ChatGPT プロジェクト
+## Codex 実行依頼
 
-## 目的
+### 目的
 
-`paper_positions.csv` の `sl_hit` 偏重を減らすため、実弾 gate 緩和ではなく、紙候補の品質ガードを追加する。
+自動トレードへ進む前段として、紙候補の品質ガードを追加する。
 
-今回の目的は次の 3 点に限定する。
+現時点では `trade_execution_gate` を直接緩めない。
+`sl_hit` に偏っている候補を分離し、次回 daily-sync / paper diagnostics で実弾化できる候補だけを評価できる状態にする。
 
-1. `long` + 高 `wait` + 低 `execution` の弱い紙候補を抑制する。
-2. `trend_flip_confirmed_up` を上方向の強評価・紙候補昇格根拠として使わない。
-3. 変更後に、日次レポートと追加診断で抑制理由が追えるようにする。
+今回の目的は「自動トレード実装」ではなく、「自動トレード直前へ進むための候補品質改善」である。
 
-## 対象ブランチ
+### 対象ブランチ
 
-- 作業ブランチ: `ver02.6-v2`
-- 運用本体の参照ブランチ: `ver02.5-v8`
+`ver02.6-v2`
 
-`運用資料/NEXT_TASK.md` の現在値を正本とし、作業開始時に必ず確認する。
+このブランチ名は `運用資料/NEXT_TASK.md` の `現在の作業ブランチ` を正本として採用する。
+`main` や remote branch 一覧から推測しない。
 
-## 根拠
+### 参照した根拠
 
-### 参照レポート
-
+- `運用資料/NEXT_TASK.md`
 - `運用資料/reports/feedback_daily_sync_20260526.md`
+- `運用資料/reports/analysis/market_map_effectiveness_20260526.md`
+- `運用資料/reports/analysis/operational_focus_20260526.md`
 - `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md`
 - `運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md`
-- `運用資料/reports/analysis/market_map_effectiveness_20260526.md`
 - `chatgpt/analysis/20260526_entry_sl_tp_wait_redesign.md`
 - `chatgpt/analysis/20260526_trend_flip_confirmed_up_reassessment.md`
+- `chatgpt/analysis/20260526_auto_trade_fast_path_design.md`
 
-### 判断に使う主要数値
+### 現状判断
 
-- `paper_positions closed=19 / sl_hit=12 / missed_opportunity=5`
-- `market_map_opportunity=97件 / 平均R 0.36 / 簡易PF 1.97`
-- `long=18件 / 平均R -0.51 / 簡易PF 0.29 / sl_hit=15`
-- `wait>=60=39件 / 平均R -0.16 / 簡易PF 0.74`
-- `wait>=80=7件 / 平均R -0.84 / sl_hit=6`
-- `execution<20=44件 / 平均R -0.02 / sl_hit=29`
-- `trend_flip_confirmed_up=32件 / 勝率41.2% / wrong_rate28.1% / MFE24h2.50 / MAE24h10.85`
-- 紙ポジション診断では `trend_flip_confirmed_up=7件` がすべて `sl_hit`
+- `trade_execution_gate=pass` は 0 件。
+- `paper_orders planned` は 0 件。
+- `paper_positions` は `sl_hit` 偏重が残っている。
+- `long`、高 wait、低 execution、`trend_flip_confirmed_up` が弱い。
+- したがって、今回の目的は gate 緩和ではなく、紙候補の品質ガードである。
 
-## 変更範囲
+### 変更範囲
 
-Codex は実装前に関連ファイルを検索し、実際のファイル名に合わせて最小変更する。
+主対象:
 
-触ってよい範囲:
+- `src/trade/opportunity_gate.py`
 
-- scoring / signal / opportunity gate / paper order 判定まわり
-- `paper_positions.csv` や `paper_orders` 生成に関わる理由フラグ出力
-- 日次・分析レポート生成 CLI
-- 通知文言のうち `trend_flip_confirmed_up` を強く見せている表現
-- `運用資料/NEXT_TASK.md`
-- `運用資料/履歴/progress.md`
-- `運用資料/reports/report_hub_latest.md`
+必要に応じて触ってよい:
 
-触らない範囲:
+- `tests/` 配下の関連テスト
+- `tools/` 配下の report / diagnostics 生成ロジック
+- `運用資料/NEXT_TASK.md` の作業記録
+- `運用資料/履歴/progress.md` の履歴記録
+
+触らない:
 
 - 実弾発注処理
-- 取引所 API 送信
+- 取引所API送信処理
 - 秘密鍵・認証情報
-- launchd / 常駐設定そのもの
-- `trade_execution_gate` を緩める変更
-- SL / TP の倍率・距離・RR 計算
+- 本番発注を有効化する設定
+- SL/TP 倍率そのもの
+- `trade_execution_gate` の pass 条件緩和
+- `Phase 1B-lite` の正式 `Phase 1B` 昇格
 
-## 実装内容
+### 実装内容
 
-### 1. 高 wait / 低 execution / long の紙候補ガード
+#### 1. paper quality blocker を追加する
 
-以下の抑制理由を追加する。
+`src/trade/opportunity_gate.py` の `determine_opportunity_gate()` に、紙候補品質用の blocker を追加する。
 
-#### `paper_quality_high_wait_block`
+既存の fatal blocker と混ぜすぎず、理由名で区別できるようにする。
 
-条件:
+追加する blocker 名:
 
-- `wait >= 80`
+```txt
+paper_quality_high_wait_block
+paper_quality_low_execution_block
+paper_quality_long_wait_block
+paper_quality_trend_flip_up_block
+```
 
-効果:
+品質 blocker は、`opportunity_gate=pass` へ進む前に評価する。
+該当する場合は、`opportunity_gate=blocked` / `opportunity_type=blocked` / `opportunity_reasons` に blocker 名を残す。
 
-- `paper_order_status=planned` にしない。
-- 既存の watch / 通知は残してよい。
-- 理由フラグとして CSV / JSON / レポートに残す。
-
-#### `paper_quality_low_execution_block`
-
-条件:
-
-- `execution < 20`
-
-効果:
-
-- 原則として `paper_order_status=planned` にしない。
-- ただし既存コードに明確な例外条件がある場合は、Codex は勝手に拡張せず、その例外を保ったうえで理由ログだけ追加する。
-
-#### `paper_quality_long_wait_block`
+#### 2. `paper_quality_high_wait_block`
 
 条件:
 
-- `direction` が long 系である。
-- かつ `wait >= 60`
-- かつ `execution < 25`
+```txt
+confidence_wait_shadow >= 80
+```
 
-効果:
+扱い:
 
-- `paper_order_status=planned` にしない。
-- long 側の高 wait / 低 execution を別理由で追えるようにする。
-
-### 2. `trend_flip_confirmed_up` の扱い固定
-
-`trend_flip_confirmed_up` は、現時点では強い上方向根拠として扱わない。
-
-実装すること:
-
-- `trend_flip_confirmed_up` 単独で score を大きく押し上げない。
-- `trend_flip_confirmed_up` 単独で `trade_execution_gate=pass` に近づけない。
-- `trend_flip_confirmed_up` 単独で `paper_order_status=planned` にしない。
-- long 候補かつ `trend_flip_confirmed_up` を含む場合、追加理由 `paper_quality_trend_flip_up_block` を出せるようにする。
-
-通知文言:
-
-- 強い表現は禁止。
-- 例: `上方向転換を確認`、`ロング優勢`、`買い候補` のような誤読しやすい表現は避ける。
-- 許容例: `上方向転換の可能性はあるが、現行評価では紙候補昇格には使わない`。
-
-### 3. SL / TP は今回変更しない
-
-今回の第一弾では SL / TP の倍率・距離・RR 計算を触らない。
+- `opportunity_gate=blocked`
+- `opportunity_type=blocked`
+- `opportunity_reasons` に `paper_quality_high_wait_block` を出す
 
 理由:
 
-- `sl_eval=too_tight` は補助根拠として重要だが、現時点では「SL が狭い」のか「entry が早い」のか「待ちすぎ entry」なのかが混ざっている。
-- SL を広げるだけだと、損失幅だけが増える可能性がある。
-- まず弱い entry を抑制し、その後に `too_tight` 優勢群だけを別診断する方が安全。
+- `wait>=80` は `sl_hit` 偏重が強く、平均Rが弱い。
+- 自動トレード前に候補化から外すべき。
 
-### 4. レポート出力
+#### 3. `paper_quality_low_execution_block`
 
-日次または分析レポートに、最低限次の集計を追加する。
+条件:
 
-- `paper_quality_high_wait_block` 件数
-- `paper_quality_low_execution_block` 件数
-- `paper_quality_long_wait_block` 件数
-- `paper_quality_trend_flip_up_block` 件数
-- 抑制後の `paper_order_status=planned` 件数
-- 抑制後の `sl_hit` / `tp2_hit` / `missed_opportunity` の変化が後日追える導線
-
-既存レポートに自然に入るなら追加でよい。
-独立レポートが必要なら、`運用資料/reports/analysis/paper_quality_guard_YYYYMMDD.md` を生成する CLI を追加する。
-
-## 検証
-
-Codex は最低限、以下を実行する。
-
-```bash
-git branch --show-current
-git pull
-find chatgpt -maxdepth 3 -type f | sort
+```txt
+confidence_execution_shadow < 20
 ```
 
-その後、repo の既存ルールに従ってテストを実行する。
+扱い:
 
-必須確認:
+- `opportunity_gate=blocked`
+- `opportunity_type=blocked`
+- `opportunity_reasons` に `paper_quality_low_execution_block` を出す
 
-- 既存テストが通る。
-- `trade_execution_gate` を緩めていない。
-- 実弾発注、取引所API、秘密鍵連携に触れていない。
-- SL / TP の倍率・距離・RR 計算に触れていない。
-- `trend_flip_confirmed_up` が強評価へ戻っていない。
-- 新しい抑制理由が CSV / JSON / レポートのいずれかで追える。
-- 生成した raw report を `運用資料/reports/report_hub_latest.md` から辿れる。
+理由:
 
-## 完了条件
+- `execution<20` は低品質 entry になりやすく、`sl_hit` が多い。
 
-- `ver02.6-v2` に実装 commit が入っている。
-- 全体テストまたは既存の主要テストが通っている。
-- 必要な日次・分析レポートが生成されている。
-- `運用資料/NEXT_TASK.md` に、今回追加した品質ガードと次に見る数値が反映されている。
-- `運用資料/履歴/progress.md` に作業履歴が追記されている。
-- この仕様書を `chatgpt/specs/archive/` へ移動し、`chatgpt/specs/active/` には未着手仕様だけを残す。
-- commit / push 済み。
+#### 4. `paper_quality_long_wait_block`
 
-## 注意事項
+条件:
 
-- これは `Phase 1B` 昇格ではない。
-- これは実弾 gate 緩和ではない。
-- `paper_order_status=planned` を増やす作業ではなく、弱い紙候補を減らす作業である。
-- 数値条件を追加で変えたくなった場合は、Codex 側で勝手に判断せず、確認事項として返す。
-- `mfe_atr` / `mae_atr` / `rr_estimate` は欠損が残っているため、thin RR 系の判定は今回の主条件にしない。
+```txt
+long_side == true
+AND confidence_wait_shadow >= 60
+AND confidence_execution_shadow < 25
+```
+
+`long_side` は以下で判定する。
+
+```txt
+bias == "long" OR primary_setup_side == "long"
+```
+
+扱い:
+
+- `opportunity_gate=blocked`
+- `opportunity_type=blocked`
+- `opportunity_reasons` に `paper_quality_long_wait_block` を出す
+
+理由:
+
+- long と高 wait の組み合わせは現状弱い。
+- long 側を自動トレードに近づけるのは時期尚早。
+
+#### 5. `paper_quality_trend_flip_up_block`
+
+条件:
+
+```txt
+long_side == true
+AND (
+  "trend_flip_confirmed_up" in risk_flags
+  OR "trend_flip_confirmed_up" in market_map_flags
+)
+```
+
+扱い:
+
+- `opportunity_gate=blocked`
+- `opportunity_type=blocked`
+- `opportunity_reasons` に `paper_quality_trend_flip_up_block` を出す
+
+理由:
+
+- `trend_flip_confirmed_up` は件数こそ増えたが、強評価へ戻す根拠がない。
+- 紙ポジション側でも `sl_hit` 偏重が確認されている。
+
+#### 6. market_map の有効 flag は潰さない
+
+以下の既存 market_map opportunity flags は維持する。
+
+```txt
+support_to_resistance_flip
+failed_breakout_down_reversal
+resistance_to_support_flip
+```
+
+ただし、上記 quality blocker に該当する場合は候補化しない。
+
+特に `support_to_resistance_flip` / `trend_flip_confirmed_down` の下方向優位を壊さないこと。
+
+#### 7. SL/TP 数値は変更しない
+
+今回、以下は変更しない。
+
+- SL 幅
+- TP 距離
+- RR 計算式
+- breakeven 条件
+- timeout 時間
+
+理由:
+
+`sl_eval=too_tight` の裏付けはあるが、entry 早すぎ / wait 劣化 / long 弱さが混ざっているため、第一弾では品質ガードを先に入れる。
+
+### 検証
+
+Codex は次を実行する。
+
+#### 1. 既存テスト
+
+```bash
+pytest
+```
+
+または repo の既存ルールに従い、現在使われている全体テストコマンドを実行する。
+
+#### 2. opportunity_gate 単体テスト
+
+既存テストがある場合は追加・更新する。
+ない場合は `tests/` 配下に `determine_opportunity_gate()` のテストを追加する。
+
+最低限確認するケース:
+
+1. `wait=80` 以上で `paper_quality_high_wait_block`
+2. `execution=19.9` 以下で `paper_quality_low_execution_block`
+3. `long_side=true / wait>=60 / execution<25` で `paper_quality_long_wait_block`
+4. `long_side=true / trend_flip_confirmed_up` で `paper_quality_trend_flip_up_block`
+5. `support_to_resistance_flip` かつ quality blocker なしなら `market_map_opportunity` を維持
+6. `trade_execution_gate=pass` でも quality blocker がある場合に blocked へ寄せる
+
+#### 3. レポート生成確認
+
+可能なら次を生成する。
+
+```bash
+python -m tools.feedback_daily_sync
+```
+
+または repo で使っている daily-sync / paper diagnostics の正式コマンドを実行する。
+
+確認項目:
+
+- `paper_quality_high_wait_block` 件数が追跡できる
+- `paper_quality_low_execution_block` 件数が追跡できる
+- `paper_quality_long_wait_block` 件数が追跡できる
+- `paper_quality_trend_flip_up_block` 件数が追跡できる
+- `opportunity_gate=pass` が不自然に増えていない
+- `paper_orders planned` を勝手に増やしていない
+
+### 完了条件
+
+- `pytest` が通る
+- `determine_opportunity_gate()` の quality blocker がテストで確認できる
+- quality blocker が `opportunity_reasons` に残る
+- market_map の既存 opportunity flag が blocker なしでは維持される
+- SL/TP 倍率や実弾発注関連には触っていない
+- 変更内容を `運用資料/NEXT_TASK.md` または `運用資料/履歴/progress.md` に短く記録する
+
+### 注意
+
+- 実弾発注はしない。
+- 取引所API送信はしない。
+- 秘密鍵連携はしない。
+- `trade_execution_gate` の緩和はしない。
+- `Phase 1B-lite` を正式 `Phase 1B` に昇格しない。
+- 件名ランクを `執行候補` に上げない。
+- 今回は自動トレード実装ではなく、自動トレード直前へ進むための品質ガード実装である。
+
+### 実装後に ChatGPT が見るべき数値
+
+次回 ChatGPT は以下を見る。
+
+- quality blocker 別件数
+- blocker 後の `opportunity_gate=pass` 件数
+- blocker 後の `paper_positions` の `sl_hit` 比率
+- `missed_opportunity` が増えすぎていないか
+- `support_to_resistance_flip` の有効性が維持されているか
+- `long` / `trend_flip_confirmed_up` がまだ弱いか
+- `trade_execution_gate=pass` と `paper_orders planned` が自然発生するか
