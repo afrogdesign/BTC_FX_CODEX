@@ -31,6 +31,7 @@
   - `ver02.5-v8` の 2026-05-25 診断・レポート更新を commit `607a48d Update Ver02.5-v8 diagnostics and reports` として `origin/ver02.5-v8` へ push した。
   - `607a48d` から `ver02.6-v1` ブランチを作成した。`ver02.6-v1` の主目的は、ChatGPT と Codex の役割分担を明確に分離すること。
   - 今後の診断、設計、再考、フェーズ判断、改善案比較は ChatGPT プロジェクト側で行う。Codex は確定済み仕様の実装、テスト、レポート生成、Git 操作、常駐確認、運用資料への実施結果反映に徹する運用へ変更した。
+  - ChatGPT プロジェクトへ読み込ませる設定ファイルとして `運用資料/ChatGPTプロジェクト設定.md` を追加した。役割、参照順、設計ルール、Codex への実行依頼テンプレート、現在の重要資料を固定した。
 
 - 2026-05-25 JST
   - 前回途中の `build-paper-opportunity-diagnostics-report` 追加作業を再開し、`closed` 行の `opportunity_type` 件数が全ポジション基準になる不整合を修正した。回帰テストも追加し、`./.venv312/bin/python -m unittest tests.test_log_feedback` は 59 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 179 件 OK。
