@@ -1,6 +1,6 @@
 # Progress Log
 
-更新日: 2026-05-19 JST
+更新日: 2026-05-25 JST
 
 このファイルは、現在の軽い進行ログ入口です。
 重い履歴は `progress_weekly/` へ週ごとに退避します。
@@ -26,6 +26,37 @@
   - `Global_BOX` と案件内運用資料の入口を見直し、`iMac 2019` を主観測先、`MBA M4` を軽作業機として整理した。
 
 ## 重要な節目ログ
+
+- 2026-05-25 JST
+  - 前回途中の `build-paper-opportunity-diagnostics-report` 追加作業を再開し、`closed` 行の `opportunity_type` 件数が全ポジション基準になる不整合を修正した。回帰テストも追加し、`./.venv312/bin/python -m unittest tests.test_log_feedback` は 59 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 179 件 OK。
+  - `feedback_daily_sync_20260525.md` を確認した。5/25 基準では完了 39 件、近似PF 0.98、全体勝率 51.3%、`phase1_active=true=1件`。一方 `trade_execution_gate=pass=0件`、`paper_orders planned=0件` は継続しており、実弾 gate 緩和はまだしない。
+  - AI 事後評価は `eligible=347 / AI済み=275 / backlog=72 / created=8 / request_failed=0 / daily_cap=8`。`operational_focus_20260525.md` の未処理 backlog 候補は 37 件で、daily cap 8 は継続可能。
+  - `market_map_effectiveness_20260525.md`、`operational_focus_20260525.md`、`relaxation_candidates_20260525.md`、`phase1b_promotion_candidates_20260525.md`、`paper_opportunity_diagnostics_20260525.md` を生成した。標準比較 3 本も `2026-04-18` 〜 `2026-05-25` 基準へ更新し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。
+  - 紙ポジションの daily 集計は `closed=17件`、`sl_hit=9件`、`missed_opportunity=6件`、`tp2_hit=1件`、`timeout=1件`、24h超 pending 0 件。`market_map_opportunity` は 9 件 / 勝率 11.1% / 平均R 0.51 / 簡易PF 2.53。
+  - `paper_opportunity_diagnostics_20260525.md` では 5/13〜5/25 の closed 135 件、平均R 0.36、簡易PF 1.96。`market_map_opportunity` は 94 件 / 平均R 0.40 / 簡易PF 2.16 だが、`long` は 18 件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 36 件 / 平均R -0.09 / 簡易PF 0.85 と弱い。
+  - `market_map` は 2026-05-13 以降 284 件記録あり。`support_to_resistance_flip=180件` は勝率 59.6%、平均MFE24h 7.23 / 平均MAE24h 5.28。一方 `trend_flip_confirmed_up=29件` は勝率 37.5%、wrong_rate 31.0%、平均MFE24h 2.34 / 平均MAE24h 11.43 で、次回 30 件到達時点でも上方向の強評価や gate 緩和は慎重に扱う。
+  - `operational_focus_20260525.md` では Phase1 pass 163 件 / blocked 722 件、blocked 上位は `confidence_below_min=507件`、`no_trade_candidate=254件`。`relaxation_candidates_20260525.md` は 51 件、`phase1b_promotion_candidates_20260525.md` は候補 6 件、`Phase 1B-lite` は lite 候補 5 件のまま。
+  - `com.afrog.btc-monitor` は `state=running`、PID `28498`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`。`logs/heartbeat.txt` は 2026-05-25 15:05 JST、`logs/last_result.json` は 2026-05-25 15:05:07 JST 更新、`logs/runtime/monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は 0 bytes。
+
+- 2026-05-22 JST
+  - `feedback_daily_sync_20260521.md` と `feedback_daily_sync_20260522.md` を確認した。5/22 基準では完了 36 件、近似PF 1.13、全体勝率 55.6%、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
+  - AI 事後評価は `eligible=324 / AI済み=251 / backlog=73 / created=8 / request_failed=0 / daily_cap=8`。5/20 に増やした `AI_POST_REVIEW_DAILY_MAX=8` はエラーなしで稼働し、backlog は 77 件から 73 件へ減った。
+  - 紙ポジション集計は `closed=17件`、`sl_hit=10件`、`missed_opportunity=6件`、`timeout=1件`、24h超 pending 0 件。`market_map_opportunity` は 11 件 / 勝率 0.0% / 平均R -0.07 / 簡易PF 0.87 で、実弾 gate 緩和より entry / wait 条件の検証を優先する判断にした。
+  - `market_map_effectiveness_20260522.md`、`operational_focus_20260522.md`、`relaxation_candidates_20260522.md`、`phase1b_promotion_candidates_20260522.md` を生成した。標準比較 3 本も `2026-04-18` 〜 `2026-05-22` 基準へ更新し、`notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持した。
+  - `tools/log_feedback.py` に `build-paper-opportunity-diagnostics-report` を追加し、`paper_positions.csv` と `shadow_log.csv` を突き合わせて、紙実行候補の entry / wait 条件を診断できるようにした。`paper_opportunity_diagnostics_20260522.md` では 5/13〜5/22 の closed 109 件、平均R 0.31、簡易PF 1.85。`market_map_opportunity` は 78 件 / 平均R 0.35 / 簡易PF 2.03 だが、`long` は 15 件 / 平均R -0.64 / 簡易PF 0.12、`wait>=60` は 30 件 / 平均R -0.25 / 簡易PF 0.60 と弱い。
+  - `market_map` は 2026-05-13 以降 212 件記録あり。`support_to_resistance_flip=129件` は勝率 63.2%、平均MFE24h 7.11 / 平均MAE24h 4.92。一方 `trend_flip_confirmed_up=25件` は勝率 38.5%、wrong_rate 24.0%、平均MFE24h 2.18 / 平均MAE24h 11.04 で、上方向の強評価や gate 緩和にはまだ使わない。
+  - `operational_focus_20260522.md` では Phase1 pass 153 件 / blocked 660 件、blocked 上位は `confidence_below_min=458件`、`no_trade_candidate=235件`。`relaxation_candidates_20260522.md` は 50 件、`phase1b_promotion_candidates_20260522.md` は候補 6 件、`Phase 1B-lite` は lite 候補 5 件のまま。
+  - `com.afrog.btc-monitor` は `state=running`、PID `28498`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`。`logs/heartbeat.txt` は 2026-05-22 12:05 JST、`logs/last_result.json` は 2026-05-22 12:05:27 JST 更新、`monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は 0 bytes。
+
+- 2026-05-20 JST
+  - `Ver02.5-v8` 反映後の定時サイクルを確認した。`com.afrog.btc-monitor` は `state=running`、PID `28498`、実行元 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/main.py`。`logs/heartbeat.txt` と `logs/last_result.json` は 2026-05-20 03:05 JST 更新、`monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空。
+  - `logs/csv/trades.csv` で `execution_precision_action`、`execution_precision_flags`、`execution_precision_reason` の保存を確認した。`20260519_170500` は `execution_precision_action=wait_only`、詳細HTML `logs/notifications_html/ver02-5-v8/main/20260519_170500.html` も生成済み。
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync --output-md 運用資料/reports/feedback_daily_sync_20260520.md` を実行した。完了 43 件、近似PF 0.92、全体勝率 60.5%、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
+  - 紙ポジション集計は `closed=20件`、`missed_opportunity=11件`、`sl_hit=8件`、`tp2_hit=1件`、24h超 pending 0 件。`market_map_opportunity` は 14 件 / 勝率 7.1% / 平均R 0.56 / 簡易PF 2.56。
+  - `market_map_effectiveness_20260520.md`、標準比較 3 本、`operational_focus_20260520.md`、`relaxation_candidates_20260520.md`、`phase1b_promotion_candidates_20260520.md` を生成した。標準比較は `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持。
+  - `market_map` は 2026-05-13 以降 164 件記録あり。`support_to_resistance_flip=94件` は勝率 71.4%、平均MFE24h 8.15 / 平均MAE24h 4.89 と相対的に有効。一方 `trend_flip_confirmed_up=18件` は勝率 44.4%、wrong_rate 33.3%、平均MFE24h 1.57 / 平均MAE24h 13.60 で、上方向の強評価や gate 緩和にはまだ使わない。
+  - `Phase 1B-lite` は lite 候補 5 件、専用紙トレード observing 5 件のまま。AI 事後評価 health は `eligible=312 / AI済み=235 / backlog=77 / created=4 / request_failed=0`。
+  - backlog 解消優先として `.env` の `AI_POST_REVIEW_DAILY_MAX` を `4 -> 8` へ変更した。次回同期で `created=8`、`request_failed=0` を確認する。
 
 - 2026-05-18 JST
   - 仕様変更幅が大きいため、作業ブランチと `SYSTEM_LABEL` を `Ver02.5-v8` へ更新した。

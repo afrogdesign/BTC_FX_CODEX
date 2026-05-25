@@ -5098,6 +5098,200 @@ def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _paper_position_realized_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    r_values = [_parse_float(row.get("realized_r"), 0.0) for row in rows if str(row.get("realized_r", "")).strip()]
+    positive = sum(value for value in r_values if value > 0)
+    negative = abs(sum(value for value in r_values if value < 0))
+    wins = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    return {
+        "count": len(rows),
+        "win_rate": _ratio(wins, len(rows)),
+        "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+        "approx_pf": (positive / negative) if negative > 0 else 0.0,
+    }
+
+
+def _paper_position_group_lines(
+    *,
+    title: str,
+    labels: list[tuple[str, list[dict[str, Any]]]],
+    limit: int = 12,
+) -> list[str]:
+    lines = ["", f"## {title}"]
+    emitted = 0
+    for label, subset in labels:
+        if not subset:
+            continue
+        stats = _paper_position_realized_stats(subset)
+        exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in subset)
+        lines.append(
+            f"- {label}: {stats['count']}件 / 勝率={_format_pct(stats['win_rate'])} / "
+            f"平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} / "
+            f"終了={_format_counter(exit_counts, limit=4)}"
+        )
+        emitted += 1
+        if emitted >= limit:
+            break
+    if emitted == 0:
+        lines.append("- 該当なし")
+    return lines
+
+
+def build_paper_opportunity_diagnostics_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if date_from and (dt is None or dt.strftime("%Y-%m-%d") < date_from):
+            continue
+        if date_to and (dt is None or dt.strftime("%Y-%m-%d") > date_to):
+            continue
+        merged = dict(shadow_by_id.get(signal_id, {}))
+        merged.update(row)
+        positions.append(merged)
+
+    positions.sort(key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+    closed_rows = [row for row in positions if str(row.get("position_status", "")).strip() == "closed"]
+    market_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"]
+    observation_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() != "market_map_opportunity"]
+    all_stats = _paper_position_realized_stats(closed_rows)
+    market_stats = _paper_position_realized_stats(market_rows)
+
+    exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in closed_rows if str(row.get("exit_status", "")).strip())
+    market_exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in market_rows if str(row.get("exit_status", "")).strip())
+    closed_type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in closed_rows)
+
+    flag_names = sorted(
+        {
+            flag
+            for row in market_rows
+            for flag in _split_values(str(row.get("market_map_flags", "")))
+        }
+    )
+    by_flag = [
+        (flag, [row for row in market_rows if flag in _split_values(str(row.get("market_map_flags", "")))])
+        for flag in flag_names
+    ]
+    by_flag.sort(key=lambda item: (len(item[1]), _paper_position_realized_stats(item[1])["avg_realized_r"]), reverse=True)
+
+    reason_names = sorted(
+        {
+            reason
+            for row in market_rows
+            for reason in _split_values(str(row.get("opportunity_reasons", "")))
+        }
+    )
+    by_reason = [
+        (reason, [row for row in market_rows if reason in _split_values(str(row.get("opportunity_reasons", "")))])
+        for reason in reason_names
+    ]
+    by_reason.sort(key=lambda item: (len(item[1]), _paper_position_realized_stats(item[1])["avg_realized_r"]), reverse=True)
+
+    confidence_groups = [
+        ("direction<60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) < 60]),
+        ("direction>=60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) >= 60]),
+        ("execution<24", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24]),
+        ("execution>=24", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) >= 24]),
+        ("wait>=60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60]),
+        ("wait<60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) < 60]),
+    ]
+    setup_groups = [
+        (label, [row for row in market_rows if str(row.get("primary_setup_reason", "")).strip() == label])
+        for label in sorted({str(row.get("primary_setup_reason", "")).strip() for row in market_rows if str(row.get("primary_setup_reason", "")).strip()})
+    ]
+    side_groups = [(label, [row for row in market_rows if str(row.get("side", "")).strip() == label]) for label in ["long", "short"]]
+    weak_examples = [
+        row
+        for row in market_rows
+        if str(row.get("exit_status", "")).strip() in {"sl_hit", "missed_opportunity", "timeout", "entry_not_reached"}
+    ][:limit]
+
+    lines = ["# 紙実行候補 entry/wait 診断", ""]
+    lines.append(f"- 対象 paper_positions: {len(positions)}件")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed: {len(closed_rows)}件 / opportunity_type: {_format_counter(closed_type_counts, limit=6)}")
+    lines.append(
+        f"- closed 全体: 勝率={_format_pct(all_stats['win_rate'])} / 平均R={all_stats['avg_realized_r']:.2f} / "
+        f"簡易PF={all_stats['approx_pf']:.2f} / 終了={_format_counter(exit_counts, limit=6)}"
+    )
+    lines.append(
+        f"- market_map_opportunity: {market_stats['count']}件 / 勝率={_format_pct(market_stats['win_rate'])} / "
+        f"平均R={market_stats['avg_realized_r']:.2f} / 簡易PF={market_stats['approx_pf']:.2f} / "
+        f"終了={_format_counter(market_exit_counts, limit=6)}"
+    )
+    if observation_rows:
+        obs_stats = _paper_position_realized_stats(observation_rows)
+        lines.append(
+            f"- その他 opportunity: {obs_stats['count']}件 / 勝率={_format_pct(obs_stats['win_rate'])} / "
+            f"平均R={obs_stats['avg_realized_r']:.2f} / 簡易PF={obs_stats['approx_pf']:.2f}"
+        )
+    lines.append("")
+    lines.append("## 判断")
+    if market_rows and market_stats["win_rate"] <= 0.0:
+        lines.append("- market_map_opportunity は closed 範囲で TP2 勝ちがなく、現状のまま実弾 gate へ近づけない。")
+    if market_exit_counts.get("sl_hit", 0) >= market_exit_counts.get("missed_opportunity", 0):
+        lines.append("- 主な失敗は missed より SL 側に寄っており、入口を広げるより entry 発火または SL/TP 条件の精査を優先する。")
+    else:
+        lines.append("- 主な失敗は missed 側に寄っており、entry 到達前の TP 方向進行と待機条件の精査を優先する。")
+    lines.append("- `support_to_resistance_flip` などの flag 自体は有効でも、紙ポジション化する entry / wait 条件がまだ粗い。")
+
+    lines.extend(_paper_position_group_lines(title="confidence 帯別", labels=confidence_groups))
+    lines.extend(_paper_position_group_lines(title="setup reason 別", labels=setup_groups))
+    lines.extend(_paper_position_group_lines(title="side 別", labels=side_groups))
+    lines.extend(_paper_position_group_lines(title="market_map flag 別", labels=by_flag, limit=limit))
+    lines.extend(_paper_position_group_lines(title="opportunity reason 別", labels=by_reason, limit=limit))
+
+    lines.append("")
+    lines.append("## 弱い代表例")
+    if weak_examples:
+        for row in weak_examples:
+            lines.append(
+                f"- {row.get('signal_id', '')}: {row.get('exit_status', '')} / side={row.get('side', '')} / "
+                f"setup={row.get('primary_setup_reason', '')} / flags={row.get('market_map_flags', '')} / "
+                f"dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.1f} / "
+                f"exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.1f} / "
+                f"wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.1f} / "
+                f"R={_parse_float(row.get('realized_r'), 0.0):.2f}"
+            )
+    else:
+        lines.append("- 該当なし")
+    lines.append("")
+    lines.append("## 次に触る候補")
+    lines.append("- src/trade/opportunity_gate.py")
+    lines.append("- src/trade/paper_position.py")
+    lines.append("- src/analysis/market_map.py")
+    lines.append("- tools/log_feedback.py")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def build_observation_paper_orders(
     *,
     base_dir: Path,
@@ -7354,6 +7548,12 @@ def _build_parser() -> argparse.ArgumentParser:
     market_map_readiness_parser.add_argument("--date-to", default="")
     market_map_readiness_parser.add_argument("--min-market-rows", type=int, default=1)
 
+    paper_diagnostics_parser = subparsers.add_parser("build-paper-opportunity-diagnostics-report")
+    paper_diagnostics_parser.add_argument("--output-md")
+    paper_diagnostics_parser.add_argument("--date-from", default="")
+    paper_diagnostics_parser.add_argument("--date-to", default="")
+    paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -7526,6 +7726,21 @@ def main() -> None:
             date_from=str(args.date_from),
             date_to=str(args.date_to),
             min_market_rows=int(args.min_market_rows),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-paper-opportunity-diagnostics-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_paper_opportunity_diagnostics_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
         )
         if output_md:
             print(output_md)
