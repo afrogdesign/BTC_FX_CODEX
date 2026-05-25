@@ -3,7 +3,8 @@
 更新日: 2026-05-26 JST
 
 このフォルダは、自動取引直前まで最短で進めるための計画正本を置く場所です。
-旧マイルストーンと旧フェーズ計画は `archive/superseded/2026-05-18_pre_auto_redesign/` へ退避済みです。
+
+`latest_integrated_plan_20260526.md` を最新統合計画として最上位に置き、過去の個別計画は履歴・archive に整理します。
 
 ## 現在の正本
 
@@ -11,6 +12,7 @@
 - 運用本体の参照ブランチ: `ver02.5-v8`
 - 現在版: `Ver02.5-v8` 稼働中 / `ver02.6-v2` で設計・仕様化中
 - 現在フェーズ: `Phase C` 実装済み・観測中、`Phase D` 初期段階
+- 最新統合計画: `運用資料/計画/latest_integrated_plan_20260526.md`
 - 実務正本: `運用資料/NEXT_TASK.md`
 - レポート導線: `運用資料/reports/report_hub_latest.md`
 - Codex 実装正本: `chatgpt/specs/active/`
@@ -26,12 +28,12 @@
 
 ## まず見るもの
 
-1. [../NEXT_TASK.md](../NEXT_TASK.md)
-   - 最新の作業ブランチ、現在状態、次タスクの正本。
-2. [../reports/report_hub_latest.md](../reports/report_hub_latest.md)
+1. [latest_integrated_plan_20260526.md](latest_integrated_plan_20260526.md)
+   - 現在の最新統合計画。Phase C 観測中・Phase D 初期の計画正本。
+2. [../NEXT_TASK.md](../NEXT_TASK.md)
+   - 最新の作業ブランチ、現在状態、次タスクの実務正本。
+3. [../reports/report_hub_latest.md](../reports/report_hub_latest.md)
    - 最新レポートへの案内板。
-3. [自動取引直前_高速到達計画_20260518.md](自動取引直前_高速到達計画_20260518.md)
-   - 自動取引直前まで進めるための基本計画。現在は Phase C 実装済み、Phase D 初期として読む。
 4. [マイルストーン定義.md](マイルストーン定義.md)
    - Phase A-E と Ver 昇格条件の定義。
 5. [../開発ロードマップ.md](../開発ロードマップ.md)
@@ -55,8 +57,9 @@
 - `support_to_resistance_flip` など有効な market_map 型は維持し、候補化条件だけを整える。
 - SL/TP 倍率や RR 計算はまだ変更しない。
 
-## archive の扱い
+## archive / 履歴の扱い
 
 - `archive/implemented/`: 実装済み計画。履歴参照用。
 - `archive/superseded/`: 現行計画に置き換えた古い計画。現行判断の正本にはしない。
 - `履歴/`: 経緯確認用。現行判断の正本にはしない。
+- `履歴/2026-05-26_plan_consolidation/`: 最新統合計画へ吸収した旧計画の退避先。
