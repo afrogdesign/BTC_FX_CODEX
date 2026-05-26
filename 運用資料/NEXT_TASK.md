@@ -47,6 +47,7 @@
 - AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260526.md` では `created=8 / request_failed=0 / backlog=73`、`operational_focus_20260526.md` では未処理候補 38 件。
 - `src/trade/opportunity_gate.py` に `paper_quality_high_wait_block`、`paper_quality_low_execution_block`、`paper_quality_long_wait_block`、`paper_quality_trend_flip_up_block` を追加した。`trade_execution_gate=pass` の formal candidate は維持しつつ、`formal_candidate_quality_conflict:*` を reasons に残す形へ変更した。
 - `tools/run_daily_reports.py` を追加し、`daily-sync`、主要分析レポート、`report_hub` を日次セットとして順実行できるようにした。`--dry-run`、`--skip-heavy`、`--skip-ai`、`logs/runtime/daily_reports_last_result.json` を実装済みで、自動 commit / push と本番 launchd 配置はまだ行わない。
+- `chatgpt/specs/active/` は現在 `.gitkeep` のみ。直近 2 本の仕様は `archive/` へ移動済みで、次の実装は ChatGPT 側の新しい確定仕様待ち。
 
 ## 実装済みの前提
 
@@ -88,11 +89,12 @@
 7. AI backlog は 73 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
 8. quality blocker 導入後の `opportunity_gate=pass` 件数、`paper_positions` の `sl_hit` 比率、`missed_opportunity` の増減を ChatGPT 側で再評価する。
 9. `tools/run_daily_reports.py` の運用を人手で試し、launchd へ載せるかは `daily_reports_last_result.json` の安定を見てから判断する。
+10. `chatgpt/specs/active/` は空なので、次の実作業に進む前に ChatGPT 側で新しい確定仕様を 1 本作る。
 
 ## 残作業一覧
 
 - `trend_flip_confirmed_up` は 32 件に到達したため、`market_map_effectiveness_20260526.md` を基準に ChatGPT 側で上方向転換系の扱いを再判定する。
-- `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。PID `1591`、`state=running`、`logs/runtime/monitor.err` は空。定時サイクルは 2026-05-26 01:05 JST まで更新確認済み。
+- `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。PID `30676`、`state=running`、`logs/runtime/monitor.err` は空。2026-05-26 JST に再起動済みで、次サイクル確認待ち。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 73 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。

@@ -28,6 +28,7 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - 最新の申次状態として、`chatgpt/specs/active/` は `.gitkeep` のみになった。直近 2 本の仕様は `archive/` へ移し、次の実装は ChatGPT 側の新しい確定仕様待ちであることを `NEXT_TASK.md` に反映した。
   - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state=running`、PID `30676`、実行元 `.venv312/bin/python main.py` を確認した。再起動後も `logs/runtime/monitor.err` は空で、次サイクル待ちの状態。
   - Global_BOX 側の `デプロイ先/ラボ iMac.md` を更新し、BTC Monitor の実行系参照版を `Ver02.5-v8`、作業ブランチは `運用資料/NEXT_TASK.md` 正本、`tools/run_daily_reports.py` は手動運用中と明記した。repo 側の `運用コマンドメモ.md` にも `run_daily_reports.py --skip-ai` を追加した。
   - `chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md` と `20260526_auto_report_generation_schedule.md` を実装した。`src/trade/opportunity_gate.py` に paper quality blocker を追加し、`trade_execution_gate=pass` の formal candidate は維持しつつ `formal_candidate_quality_conflict:*` を残す方式へ変更した。
