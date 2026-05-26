@@ -45,6 +45,8 @@
 - `execution_precision_*` は `logs/csv/trades.csv` と `last_result.json` へ保存済み。詳細HTMLにも `15分足 執行チェック` が出ており、`20260519_170500` では `wait_only` を確認済み。
 - `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260526.md` では 305 件記録あり。
 - AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260526.md` では `created=8 / request_failed=0 / backlog=73`、`operational_focus_20260526.md` では未処理候補 38 件。
+- `src/trade/opportunity_gate.py` に `paper_quality_high_wait_block`、`paper_quality_low_execution_block`、`paper_quality_long_wait_block`、`paper_quality_trend_flip_up_block` を追加した。`trade_execution_gate=pass` の formal candidate は維持しつつ、`formal_candidate_quality_conflict:*` を reasons に残す形へ変更した。
+- `tools/run_daily_reports.py` を追加し、`daily-sync`、主要分析レポート、`report_hub` を日次セットとして順実行できるようにした。`--dry-run`、`--skip-heavy`、`--skip-ai`、`logs/runtime/daily_reports_last_result.json` を実装済みで、自動 commit / push と本番 launchd 配置はまだ行わない。
 
 ## 実装済みの前提
 
@@ -84,6 +86,8 @@
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
 6. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
 7. AI backlog は 73 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
+8. quality blocker 導入後の `opportunity_gate=pass` 件数、`paper_positions` の `sl_hit` 比率、`missed_opportunity` の増減を ChatGPT 側で再評価する。
+9. `tools/run_daily_reports.py` の運用を人手で試し、launchd へ載せるかは `daily_reports_last_result.json` の安定を見てから判断する。
 
 ## 残作業一覧
 

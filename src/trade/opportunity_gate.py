@@ -15,6 +15,7 @@ _MARKET_MAP_OPPORTUNITY_FLAGS = {
     "resistance_to_support_flip",
 }
 _BLOCKED_TREND_FLAGS = {"standalone_trend_flip_confirmed_up"}
+_QUALITY_TREND_FLAGS = {"trend_flip_confirmed_up", *_BLOCKED_TREND_FLAGS}
 
 
 def _normalize_flags(values: list[str] | tuple[str, ...] | set[str] | str | None) -> set[str]:
@@ -52,6 +53,7 @@ def determine_opportunity_gate(
     confidence_wait_shadow: Any,
 ) -> dict[str, Any]:
     blockers: list[str] = []
+    quality_blockers: list[str] = []
     reasons: list[str] = []
     opportunity_type = "blocked"
 
@@ -71,34 +73,59 @@ def determine_opportunity_gate(
     direction = _as_float(confidence_direction_shadow)
     execution = _as_float(confidence_execution_shadow)
     wait = _as_float(confidence_wait_shadow)
+    long_side = str(bias or "").strip() == "long" or str(primary_setup_side or "").strip() == "long"
     if direction < 45.0:
         blockers.append("direction_shadow_too_low")
     if wait > 92.0:
         blockers.append("wait_shadow_extreme")
 
-    if normalized_risk & _BLOCKED_TREND_FLAGS:
-        blockers.extend(sorted(normalized_risk & _BLOCKED_TREND_FLAGS))
+    if wait >= 80.0:
+        quality_blockers.append("paper_quality_high_wait_block")
+    if execution < 20.0:
+        quality_blockers.append("paper_quality_low_execution_block")
+    if long_side and wait >= 60.0 and execution < 25.0:
+        quality_blockers.append("paper_quality_long_wait_block")
+    if long_side and ((normalized_risk | normalized_market) & _QUALITY_TREND_FLAGS):
+        quality_blockers.append("paper_quality_trend_flip_up_block")
 
-    if not blockers and str(trade_execution_gate or "").strip() == "pass":
+    hard_blockers = sorted(set(blockers))
+    unique_quality_blockers = sorted(set(quality_blockers))
+    is_formal_candidate = str(trade_execution_gate or "").strip() == "pass"
+
+    if hard_blockers:
+        return {
+            "opportunity_gate": "blocked",
+            "opportunity_type": "blocked",
+            "opportunity_reasons": hard_blockers,
+        }
+
+    if is_formal_candidate:
         opportunity_type = "formal_execution_candidate"
         reasons.append("trade_execution_gate_pass")
-    elif not blockers and str(phase1b_lite_gate or "").strip() == "pass":
+        reasons.extend(f"formal_candidate_quality_conflict:{blocker}" for blocker in unique_quality_blockers)
+    elif str(phase1b_lite_gate or "").strip() == "pass":
         opportunity_type = str(phase1b_lite_type or "").strip() or "phase1b_lite"
         reasons.append("phase1b_lite_gate_pass")
-    elif not blockers and str(phase1_observation_gate or "").strip() == "pass":
+    elif str(phase1_observation_gate or "").strip() == "pass":
         opportunity_type = str(phase1_observation_type or "").strip() or "phase1_observation"
         reasons.append("phase1_observation_gate_pass")
 
     market_hits = sorted(normalized_market & _MARKET_MAP_OPPORTUNITY_FLAGS)
-    if not blockers and market_hits and direction >= 50.0 and execution >= 12.0:
+    if market_hits and direction >= 50.0 and execution >= 12.0:
         if opportunity_type == "blocked":
             opportunity_type = "market_map_opportunity"
         reasons.extend(f"market_map:{flag}" for flag in market_hits)
 
-    unique_blockers = sorted(set(blockers))
     unique_reasons = sorted(set(reasons))
+    if unique_quality_blockers and not is_formal_candidate:
+        return {
+            "opportunity_gate": "blocked",
+            "opportunity_type": "blocked",
+            "opportunity_reasons": unique_quality_blockers,
+        }
+
     return {
-        "opportunity_gate": "pass" if opportunity_type != "blocked" and not unique_blockers else "blocked",
-        "opportunity_type": opportunity_type if not unique_blockers else "blocked",
-        "opportunity_reasons": unique_reasons if opportunity_type != "blocked" and not unique_blockers else unique_blockers,
+        "opportunity_gate": "pass" if opportunity_type != "blocked" else "blocked",
+        "opportunity_type": opportunity_type if opportunity_type != "blocked" else "blocked",
+        "opportunity_reasons": unique_reasons if opportunity_type != "blocked" else [],
     }

@@ -28,6 +28,10 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - `chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md` と `20260526_auto_report_generation_schedule.md` を実装した。`src/trade/opportunity_gate.py` に paper quality blocker を追加し、`trade_execution_gate=pass` の formal candidate は維持しつつ `formal_candidate_quality_conflict:*` を残す方式へ変更した。
+  - quality blocker と新規ラッパー用に `tests/test_phase1_trade_plans.py` と `tests/test_run_daily_reports.py` を更新・追加した。`./.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_run_daily_reports` は 40 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 193 件 OK。
+  - `tools/run_daily_reports.py` を追加し、`daily-sync`、`paper_opportunity_diagnostics`、`market_map_effectiveness`、`operational_focus`、`paper_entry_sl_wait_redesign`、`report_hub` を順実行できるようにした。`--dry-run`、`--skip-heavy`、`--skip-ai` を実装し、結果は `logs/runtime/daily_reports_last_result.json` に保存する。
+  - `./.venv312/bin/python tools/run_daily_reports.py --date 20260526 --skip-ai` を実行し、`daily_reports_last_result.json` で全 6 ステップ success を確認した。本番 launchd 配置と自動 commit / push は今回まだ行っていない。
   - AI事後評価を `feedback_daily_sync` だけでなく設計系レポートでも使うように拡張した。`tools/log_feedback.py` の `build_paper_opportunity_diagnostics_report()` に `AI事後評価サマリー` と `AI事後評価の裏付け` を追加し、`sl_eval=too_tight`、`too_early`、`tf_15m_eval=poor`、`misleading_entry_like_wording=yes`、`logic_validated=false` を proposal 側へ直接反映するようにした。
   - `通知評価シート.md` は人のレビュー一覧から AI 事後評価の進捗メモへ縮小した。日常運用では AI 評価を主系とし、`human_override` は必要時だけの例外として扱う文言へ変更した。iCloud 側の `評価シート入力フォーム.html` も同じ前提で再生成した。
   - `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md` と `paper_entry_sl_wait_redesign_20260526.md` を再生成した。前者では `review coverage: 25/97件`、後者では `review coverage: 27/97件` を確認し、両方で `widen_sl_for_noise` と `delay_entry_from_ai_review` が proposal に出ることを確認した。

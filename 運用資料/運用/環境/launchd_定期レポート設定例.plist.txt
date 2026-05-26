@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.afrog.btc-monitor.daily-reports</string>
+  <key>WorkingDirectory</key>
+  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/.venv312/bin/python</string>
+    <string>tools/run_daily_reports.py</string>
+    <string>--max-new-ai-reviews</string>
+    <string>8</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>10</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/logs/runtime/daily_reports.launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/logs/runtime/daily_reports.launchd.err</string>
+</dict>
+</plist>
