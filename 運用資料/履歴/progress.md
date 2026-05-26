@@ -28,6 +28,7 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - 実行実体の表記を修正した。`com.afrog.btc-monitor` は `Ver02.5-v8` ではなく、現在の worktree である `ver02.6-v2` のコードを実行している。`Ver02.5-v8` は節目版や件名ラベル文脈でだけ使い、実行 branch 表記とは分ける。
   - 最新の申次状態として、`chatgpt/specs/active/` は `.gitkeep` のみになった。直近 2 本の仕様は `archive/` へ移し、次の実装は ChatGPT 側の新しい確定仕様待ちであることを `NEXT_TASK.md` に反映した。
   - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state=running`、PID `30676`、実行元 `.venv312/bin/python main.py` を確認した。再起動後も `logs/runtime/monitor.err` は空で、次サイクル待ちの状態。
   - Global_BOX 側の `デプロイ先/ラボ iMac.md` を更新し、BTC Monitor の実行系参照版を `Ver02.5-v8`、作業ブランチは `運用資料/NEXT_TASK.md` 正本、`tools/run_daily_reports.py` は手動運用中と明記した。repo 側の `運用コマンドメモ.md` にも `run_daily_reports.py --skip-ai` を追加した。
