@@ -28,6 +28,8 @@
 ## 重要な節目ログ
 
 - 2026-05-26 JST
+  - `zsh tools/start_monitor.sh` で `com.afrog.btc-monitor` を再起動し、`launchctl print gui/$(id -u)/com.afrog.btc-monitor` で `state=running`、PID `30676`、実行元 `.venv312/bin/python main.py` を確認した。再起動後も `logs/runtime/monitor.err` は空で、次サイクル待ちの状態。
+  - Global_BOX 側の `デプロイ先/ラボ iMac.md` を更新し、BTC Monitor の実行系参照版を `Ver02.5-v8`、作業ブランチは `運用資料/NEXT_TASK.md` 正本、`tools/run_daily_reports.py` は手動運用中と明記した。repo 側の `運用コマンドメモ.md` にも `run_daily_reports.py --skip-ai` を追加した。
   - `chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md` と `20260526_auto_report_generation_schedule.md` を実装した。`src/trade/opportunity_gate.py` に paper quality blocker を追加し、`trade_execution_gate=pass` の formal candidate は維持しつつ `formal_candidate_quality_conflict:*` を残す方式へ変更した。
   - quality blocker と新規ラッパー用に `tests/test_phase1_trade_plans.py` と `tests/test_run_daily_reports.py` を更新・追加した。`./.venv312/bin/python -m unittest tests.test_phase1_trade_plans tests.test_run_daily_reports` は 40 件 OK、`./.venv312/bin/python -m unittest discover -s tests -p 'test*.py'` は 193 件 OK。
   - `tools/run_daily_reports.py` を追加し、`daily-sync`、`paper_opportunity_diagnostics`、`market_map_effectiveness`、`operational_focus`、`paper_entry_sl_wait_redesign`、`report_hub` を順実行できるようにした。`--dry-run`、`--skip-heavy`、`--skip-ai` を実装し、結果は `logs/runtime/daily_reports_last_result.json` に保存する。

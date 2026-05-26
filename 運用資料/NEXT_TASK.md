@@ -34,7 +34,7 @@
 - `opportunity_gate`、`paper_positions.csv`、通知ランク `紙実行候補・実弾不可`、日次レポートの紙ポジション集計を実装済み。紙ポジションは `pending -> opened -> closed`、TP2 / SL / timeout / missed_opportunity / entry_not_reached の後追い評価へ拡張中。実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
 - `Ver02.5-v7 先行実装パック` を実装済み。15分足の執行精度チェック、`trend_flip_confirmed_up` の弱評価化、詳細HTML/CSV保存、ロードマップ/タイムライン更新まで完了。
 - `Ver02.5-v8` は紙ポジション状態遷移、TP2 / SL / timeout / missed_opportunity / entry_not_reached、日次レポートの closed 成績集計を追加する版。最新 commit `9441cf7` を `origin/ver02.5-v8` へ push 済み。全体テスト 179 件 OK。
-- 常駐 `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。PID `1591`、`state=running`、`logs/heartbeat.txt` は 2026-05-26 01:05 JST、`logs/last_result.json` は 2026-05-26 01:05:08 JST 更新、`logs/runtime/monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空。
+- 常駐 `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。2026-05-26 JST に再起動し、PID `30676`、`state=running` を確認した。`logs/heartbeat.txt` は 2026-05-26 12:05 JST、`logs/last_result.json` は 2026-05-26 12:05:07 JST 更新、`logs/runtime/monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空。
 - フェーズ加速用に `Phase 1B-lite` を追加済み。実装 commit `1401a69`、記録更新 commit `2b22b03` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
 - `Phase 1B-lite` は正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
 - `Phase 1B` の実行候補はまだ 0 件。`feedback_daily_sync_20260526.md` でも `trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
