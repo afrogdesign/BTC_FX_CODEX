@@ -1,6 +1,6 @@
 ﻿# NEXT TASK TRACKER
 
-更新日: 2026-05-26 JST
+更新日: 2026-05-28 JST
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
@@ -13,7 +13,7 @@
 ## ChatGPT が最初に開くレポート
 
 1. `運用資料/reports/report_hub_latest.md`
-2. `運用資料/reports/feedback_daily_sync_20260526.md`
+2. `運用資料/reports/feedback_daily_sync_20260528.md`
 3. `運用資料/reports/analysis/market_map_effectiveness_20260526.md`
 4. `運用資料/reports/analysis/operational_focus_20260526.md`
 5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md`
@@ -37,14 +37,14 @@
 - 常駐 `com.afrog.btc-monitor` は `ver02.6-v2` で稼働中。2026-05-26 JST に再起動し、PID `30676`、`state=running` を確認した。`logs/heartbeat.txt` は 2026-05-26 12:05 JST、`logs/last_result.json` は 2026-05-26 12:05:07 JST 更新、`logs/runtime/monitor.err` / `ai_post_reviews.err` / `feedback_daily_sync.err` は空。
 - フェーズ加速用に `Phase 1B-lite` を追加済み。実装 commit `1401a69`、記録更新 commit `2b22b03` を `origin/ver02.5-v6` へ push 済みで、常駐 `com.afrog.btc-monitor` も最新コードで再起動済み。
 - `Phase 1B-lite` は正式 `Phase 1B` でも実弾でもなく、`SWEEP_WAIT` 限定の専用紙トレード観測レーン。
-- `Phase 1B` の実行候補はまだ 0 件。`feedback_daily_sync_20260526.md` でも `trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
+- `Phase 1B` の実行候補はまだ 0 件。`feedback_daily_sync_20260528.md` でも `trade_execution_gate=pass=0件`、`paper_orders planned=0件`。
 - 直近の勝率低下とトレンド転換取り逃し対策として、`market_map` 判定を実装・本番反映済み。
 - メール文言は、実行候補ではない watch 通知をロング推奨と誤読しにくい表現へ調整済み。
 - 通知ランクは `執行候補・強` / `執行候補` / `高優先監視・実行不可` / `通常監視・実行不可` / `注意報・売買非推奨` へ再設計済み。執行候補は `trade_execution_gate=pass` かつ `paper_order_status=planned` のときだけ出る。
 - メール件名ラベルは `Ver02.5-v8` で実送信確認済み。`20260519_170500` は `紙実行候補・実弾不可`、`SYSTEM_LABEL=Ver02.5-v8`、`CLI` として保存済み。
 - `execution_precision_*` は `logs/csv/trades.csv` と `last_result.json` へ保存済み。詳細HTMLにも `15分足 執行チェック` が出ており、`20260519_170500` では `wait_only` を確認済み。
 - `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260526.md` では 305 件記録あり。
-- AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260526.md` では `created=8 / request_failed=0 / backlog=73`、`operational_focus_20260526.md` では未処理候補 38 件。
+- AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260528.md` では `created=8 / request_failed=0 / backlog=69`、`operational_focus_20260526.md` では未処理候補 38 件。
 - `src/trade/opportunity_gate.py` に `paper_quality_high_wait_block`、`paper_quality_low_execution_block`、`paper_quality_long_wait_block`、`paper_quality_trend_flip_up_block` を追加した。`trade_execution_gate=pass` の formal candidate は維持しつつ、`formal_candidate_quality_conflict:*` を reasons に残す形へ変更した。
 - `tools/run_daily_reports.py` を追加し、`daily-sync`、主要分析レポート、`report_hub` を日次セットとして順実行できるようにした。`--dry-run`、`--skip-heavy`、`--skip-ai`、`logs/runtime/daily_reports_last_result.json` を実装済みで、自動 commit / push と本番 launchd 配置はまだ行わない。
 - `chatgpt/specs/active/` は現在 `.gitkeep` のみ。直近 2 本の仕様は `archive/` へ移動済みで、次の実装は ChatGPT 側の新しい確定仕様待ち。
@@ -64,7 +64,7 @@
 
 ## 直近の基準値
 
-- 最新 daily-sync 基準: `feedback_daily_sync_20260526.md`。完了 44 件、近似PF 0.83、全体勝率 43.2%。`phase1_active=true` は 2 件に増えたが、`trade_execution_gate=pass` は 0 件。
+- 最新 daily-sync 基準: `feedback_daily_sync_20260528.md`。完了 43 件、近似PF 0.89、全体勝率 46.5%。`phase1_active=true` は 2 件で維持、`trade_execution_gate=pass` は 0 件。
 - `paper_positions.csv` は daily-sync 集計で `closed=19件`、`sl_hit=12件`、`missed_opportunity=5件`、`tp2_hit=1件`、`timeout=1件`、24h超 pending 0件。`market_map_opportunity` は 9件 / 勝率 11.1% / 平均R 0.26 / 簡易PF 1.57。
 - 新規ログ基準: `2026-04-18` 〜 `2026-05-26` では `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持。
 - `operational_focus_20260526.md`: Phase1 pass 167 件 / blocked 739 件。blocked 上位は `confidence_below_min=519件`、`no_trade_candidate=263件`。
@@ -75,7 +75,7 @@
 - `trend_flip_confirmed_up=32件` は勝率 41.2%、wrong_rate 28.1%、平均MFE24h 2.50 / 平均MAE24h 10.85 でまだ弱いため、上方向の強評価や gate 緩和には使わない。
 - `paper_opportunity_diagnostics_20260526.md`: 4/18〜5/26 の紙ポジションは closed 264件 / 平均R 0.33 / 簡易PF 1.82。`market_map_opportunity` は 97件 / 平均R 0.36 / 簡易PF 1.97 だが、`long` は 18件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 39件 / 平均R -0.16 / 簡易PF 0.74 と弱い。
 - `paper_entry_sl_wait_redesign_20260526.md`: `sl_hit` 原因を切り分ける追加診断を実施。`wait>=80` は 7件 / 平均R -0.84 / `sl_hit=6件`、`execution<20` は 44件 / 平均R -0.02 / `sl_hit=29件`、`long` は 18件 / 平均R -0.51 / `sl_hit=15件`、`trend_flip_confirmed_up` は 7件すべて `sl_hit`。SL 失敗分類は `late_wait_sl=20件`、`trend_flip_long_sl=10件`、`other_sl=18件`。proposal は `suppress_long_high_wait`、`suppress_trend_flip_up_strong`、`require_execution_for_high_wait`、`delay_entry_on_sweep_wait` を出力した。
-- AI 事後評価 health は `feedback_daily_sync_20260526.md` 基準で `eligible=356 / AI済み=283 / backlog=73 / created=8 / request_failed=0`。daily cap 8 は継続可能。
+- AI 事後評価 health は `feedback_daily_sync_20260528.md` 基準で `eligible=368 / AI済み=299 / backlog=69 / created=8 / request_failed=0`。daily cap 8 は継続可能。
 - AI事後評価は今後 `feedback_daily_sync` だけでなく `paper_opportunity_diagnostics` と `paper_entry_sl_wait_redesign` の設計根拠にも使う。`human_override` は例外で、日常判断は AI 評価を主系にする。
 
 ## 次のタスク
@@ -86,7 +86,7 @@
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
 6. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-7. AI backlog は 73 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
+7. AI backlog は 69 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
 8. quality blocker 導入後の `opportunity_gate=pass` 件数、`paper_positions` の `sl_hit` 比率、`missed_opportunity` の増減を ChatGPT 側で再評価する。
 9. `tools/run_daily_reports.py` の運用を人手で試し、launchd へ載せるかは `daily_reports_last_result.json` の安定を見てから判断する。
 10. `chatgpt/specs/active/` は空なので、次の実作業に進む前に ChatGPT 側で新しい確定仕様を 1 本作る。
@@ -95,7 +95,7 @@
 
 - `trend_flip_confirmed_up` は 32 件に到達したため、`market_map_effectiveness_20260526.md` を基準に ChatGPT 側で上方向転換系の扱いを再判定する。
 - `com.afrog.btc-monitor` は `ver02.6-v2` で稼働中。PID `30676`、`state=running`、`logs/runtime/monitor.err` は空。2026-05-26 JST に再起動済みで、次サイクル確認待ち。
-- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 73 件残っている。
+- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 69 件残っている。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。
 - `market_map` は 305 件まで増えた。下方向側は相対的に有効だが、紙実行候補では `long` / 高 wait / 上方向転換系が弱いため、実弾 gate 緩和ではなく entry / wait 条件の検証を優先する。

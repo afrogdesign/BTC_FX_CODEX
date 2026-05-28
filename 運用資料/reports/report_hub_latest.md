@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-05-26 12:47 JST
+- generated_at: 2026-05-28 03:20 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順
@@ -15,11 +15,11 @@
 ## 現役レポート
 
 ### daily-sync 日次
-- latest: [運用資料/reports/feedback_daily_sync_20260526.md](運用資料/reports/feedback_daily_sync_20260526.md)
-- previous: [運用資料/reports/feedback_daily_sync_20260525.md](運用資料/reports/feedback_daily_sync_20260525.md)
+- latest: [運用資料/reports/feedback_daily_sync_20260528.md](運用資料/reports/feedback_daily_sync_20260528.md)
+- previous: [運用資料/reports/feedback_daily_sync_20260527.md](運用資料/reports/feedback_daily_sync_20260527.md)
 - storage: `active`
 - purpose: 日次の全体成績、AI事後評価、Phase1 状況の入口。
-- last_date: `2026-05-26` / freshness: `fresh(0d)`
+- last_date: `2026-05-28` / freshness: `fresh(0d)`
 
 ### market_map 有効性
 - latest: [運用資料/reports/analysis/market_map_effectiveness_20260526.md](運用資料/reports/analysis/market_map_effectiveness_20260526.md)
@@ -72,7 +72,7 @@
 - previous: [運用資料/reports/archive/analysis/market_map_readiness_20260513.md](運用資料/reports/archive/analysis/market_map_readiness_20260513.md)
 - storage: `active`
 - purpose: market_map 記録の値入り確認。market_map ロジック刷新時だけ再生成する補助診断。
-- last_date: `2026-05-14` / freshness: `stale(12d)`
+- last_date: `2026-05-14` / freshness: `stale(14d)`
 
 ## Archived / 現行運用外
 
@@ -81,7 +81,7 @@
 - previous: `missing`
 - storage: `archive`
 - purpose: 週次の長め集計。現行運用では常用せず、必要時だけ履歴参照する。
-- last_date: `2026-03-30` / freshness: `stale(57d)`
+- last_date: `2026-03-30` / freshness: `stale(59d)`
 
 ## Evergreen 比較
 
