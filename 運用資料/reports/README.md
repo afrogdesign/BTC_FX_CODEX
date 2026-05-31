@@ -1,6 +1,6 @@
 # reports 入口
 
-更新日: 2026-05-30 JST
+更新日: 2026-06-01 JST
 
 このフォルダは、自動生成レポートの保存場所です。
 ChatGPT は生レポートを読むが、入口は常に `NEXT_TASK.md` と `report_hub_latest.md` から始める。
