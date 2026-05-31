@@ -268,6 +268,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("紙ポジション終了状態: tp2_hit=1件", report)
             self.assertIn("opportunity_type 別 closed", report)
             self.assertIn("平均R=2.00", report)
+            self.assertIn("quality guard blocked: 0件", report)
 
     def test_paper_opportunity_diagnostics_report_groups_market_map_failures(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -324,6 +325,77 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("market_map_opportunity: 1件", report)
             self.assertIn("support_to_resistance_flip: 1件", report)
             self.assertIn("sig_sl: sl_hit", report)
+
+    def test_paper_opportunity_diagnostics_report_includes_quality_guard_counts(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                blocked = {field: "" for field in SHADOW_HEADER}
+                blocked.update(
+                    {
+                        "signal_id": "sig_blocked",
+                        "timestamp_jst": "2026-05-21T09:00:00+09:00",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "60",
+                        "confidence_execution_shadow": "22",
+                        "opportunity_gate": "blocked",
+                        "opportunity_reasons": '["require_execution_for_high_wait"]',
+                    }
+                )
+                writer.writerow(blocked)
+                passed = {field: "" for field in SHADOW_HEADER}
+                passed.update(
+                    {
+                        "signal_id": "sig_pass",
+                        "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "64",
+                        "confidence_execution_shadow": "24",
+                        "opportunity_gate": "pass",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                    }
+                )
+                writer.writerow(passed)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_pass",
+                        "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                        "side": "short",
+                        "exit_status": "sl_hit",
+                        "realized_r": "-1.0",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "64",
+                        "confidence_execution_shadow": "24",
+                        "confidence_wait_shadow": "59.2",
+                    }
+                )
+                writer.writerow(row)
+
+            report = build_paper_opportunity_diagnostics_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-05-21",
+                date_to="2026-05-21",
+            )
+
+            self.assertIn("quality guard blocked: 1件", report)
+            self.assertIn("require_execution_for_high_wait=1件", report)
+            self.assertIn("market_map candidate before/after guard: 2件 -> 1件", report)
 
     def test_paper_opportunity_diagnostics_report_classifies_sl_failures(self) -> None:
         with TemporaryDirectory() as tmpdir:

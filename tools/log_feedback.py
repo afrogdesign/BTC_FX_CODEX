@@ -54,6 +54,11 @@ REVIEW_STATE_VERSION = 1
 AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
 AI_POST_REVIEW_TASK = "ai_post_review"
 REPORT_STALE_DAYS = 7
+_QUALITY_GUARD_REASONS = (
+    "require_execution_for_high_wait",
+    "suppress_long_high_wait",
+    "suppress_trend_flip_up_strong",
+)
 
 REPORT_FAMILY_SPECS = [
     {
@@ -633,6 +638,30 @@ def _split_values(value: str) -> list[str]:
         except json.JSONDecodeError:
             pass
     return [part.strip() for part in stripped.split(",") if part.strip()]
+
+
+def _quality_guard_counts(rows: list[dict[str, Any]]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        reasons = set(_split_values(str(row.get("opportunity_reasons", ""))))
+        for reason in _QUALITY_GUARD_REASONS:
+            if reason in reasons:
+                counts[reason] += 1
+    return counts
+
+
+def _pre_guard_market_map_count(rows: list[dict[str, Any]]) -> int:
+    count = 0
+    for row in rows:
+        market_flags = set(_split_values(str(row.get("market_map_flags", ""))))
+        if not (market_flags & {"support_to_resistance_flip", "failed_breakout_down_reversal", "resistance_to_support_flip"}):
+            continue
+        if _parse_float(row.get("confidence_direction_shadow"), 0.0) < 50.0:
+            continue
+        if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 12.0:
+            continue
+        count += 1
+    return count
 
 
 def _ensure_parent(path: Path) -> None:
@@ -5769,6 +5798,24 @@ def build_paper_opportunity_diagnostics_report(
         for row in market_rows
         if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
     ]
+    quality_guard_counts = _quality_guard_counts(shadow_rows)
+    quality_guard_blocked_rows = [
+        row
+        for row in shadow_rows
+        if str(row.get("opportunity_gate", "")).strip() == "blocked"
+        and any(reason in set(_split_values(str(row.get("opportunity_reasons", "")))) for reason in _QUALITY_GUARD_REASONS)
+    ]
+    pre_guard_market_map_count = _pre_guard_market_map_count(shadow_rows)
+    guarded_sl_hit_count = sum(
+        1
+        for row in sl_rows
+        if any(
+            reason in set(
+                _split_values(str(shadow_by_id.get(str(row.get("signal_id", "")).strip(), {}).get("opportunity_reasons", "")))
+            )
+            for reason in _QUALITY_GUARD_REASONS
+        )
+    )
     weak_examples = [
         row
         for row in market_rows
@@ -5806,6 +5853,12 @@ def build_paper_opportunity_diagnostics_report(
     else:
         lines.append("- 主な失敗は missed 側に寄っており、entry 到達前の TP 方向進行と待機条件の精査を優先する。")
     lines.append("- `support_to_resistance_flip` などの flag 自体は有効でも、紙ポジション化する entry / wait 条件がまだ粗い。")
+    lines.append(
+        f"- quality guard blocked: {len(quality_guard_blocked_rows)}件 / "
+        f"理由={_format_counter(quality_guard_counts, limit=6) or 'なし'}"
+    )
+    lines.append(f"- market_map candidate before/after guard: {pre_guard_market_map_count}件 -> {market_stats['count']}件")
+    lines.append(f"- closed sl_hit: {exit_counts.get('sl_hit', 0)}件 / quality guard 該当 closed sl_hit: {guarded_sl_hit_count}件")
 
     lines.extend(_paper_position_group_lines(title="exit_status 別", labels=exit_groups))
     lines.extend(_paper_position_group_lines(title="confidence 帯別", labels=confidence_groups))
@@ -6247,6 +6300,11 @@ def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict
     pass_rows = [row for row in rows if str(row.get("opportunity_gate", "")).strip() == "pass"]
     pass_ids = {str(row.get("signal_id", "")).strip() for row in pass_rows if str(row.get("signal_id", "")).strip()}
     matched = [row for row in position_rows if str(row.get("signal_id", "")).strip() in pass_ids]
+    matched_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in matched
+        if str(row.get("signal_id", "")).strip()
+    }
     type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in pass_rows)
     status_counts = Counter(str(row.get("position_status", "")).strip() for row in matched)
     exit_status_counts = Counter(str(row.get("exit_status", "")).strip() for row in matched if str(row.get("exit_status", "")).strip())
@@ -6284,10 +6342,35 @@ def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict
         for row in pass_rows
         if str(row.get("signal_id", "")).strip() and str(row.get("signal_id", "")).strip() not in recorded_ids
     ]
+    quality_guard_counts = _quality_guard_counts(rows)
+    quality_guard_blocked_count = sum(
+        1
+        for row in rows
+        if str(row.get("opportunity_gate", "")).strip() == "blocked"
+        and any(reason in set(_split_values(str(row.get("opportunity_reasons", "")))) for reason in _QUALITY_GUARD_REASONS)
+    )
+    pre_guard_market_map_count = _pre_guard_market_map_count(rows)
+    post_guard_market_map_count = sum(
+        1
+        for row in pass_rows
+        if str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"
+    )
+    guarded_sl_hit_count = sum(
+        1
+        for row in rows
+        if str(row.get("signal_id", "")).strip() in matched_by_id
+        and str(matched_by_id[str(row.get("signal_id", "")).strip()].get("exit_status", "")).strip() == "sl_hit"
+        and any(reason in set(_split_values(str(row.get("opportunity_reasons", "")))) for reason in _QUALITY_GUARD_REASONS)
+    )
     return {
         "opportunity_pass_count": len(pass_rows),
         "position_count": len(matched),
         "missing_position_count": len(missing_ids),
+        "quality_guard_counts": _format_counter(quality_guard_counts, limit=6),
+        "quality_guard_blocked_count": quality_guard_blocked_count,
+        "pre_guard_market_map_count": pre_guard_market_map_count,
+        "post_guard_market_map_count": post_guard_market_map_count,
+        "guarded_sl_hit_count": guarded_sl_hit_count,
         "type_counts": _format_counter(type_counts, limit=6),
         "status_counts": _format_counter(status_counts, limit=4),
         "exit_status_counts": _format_counter(exit_status_counts, limit=6),
@@ -7796,9 +7879,18 @@ def build_feedback_report(
     lines.append(f"- paper_orders planned: {paper_summary['planned_count']}件")
     lines.append(f"- phase1_v1_shadow 記録付き: {paper_summary['shadow_count']}件")
     lines.append(f"- opportunity_gate=pass: {paper_position_summary['opportunity_pass_count']}件")
+    lines.append(
+        f"- quality guard blocked: {paper_position_summary['quality_guard_blocked_count']}件 / "
+        f"理由={paper_position_summary['quality_guard_counts'] or 'なし'}"
+    )
+    lines.append(
+        f"- market_map opportunity before/after guard: "
+        f"{paper_position_summary['pre_guard_market_map_count']}件 -> {paper_position_summary['post_guard_market_map_count']}件"
+    )
     lines.append(f"- paper_positions 記録: {paper_position_summary['position_count']}件")
     lines.append(f"- 紙ポジション状態: {paper_position_summary['status_counts'] or 'なし'}")
     lines.append(f"- 紙ポジション終了状態: {paper_position_summary['exit_status_counts'] or 'なし'}")
+    lines.append(f"- quality guard 該当 closed sl_hit: {paper_position_summary['guarded_sl_hit_count']}件")
     lines.append(f"- 紙実行候補タイプ: {paper_position_summary['type_counts'] or 'なし'}")
     if paper_position_summary["closed_by_type"]:
         lines.append("- opportunity_type 別 closed:")

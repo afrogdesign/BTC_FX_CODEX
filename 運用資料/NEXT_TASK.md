@@ -1,16 +1,16 @@
 ﻿# NEXT TASK TRACKER
 
-更新日: 2026-05-26 JST
+更新日: 2026-06-01 JST
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
 ## ChatGPT が最初に開くレポート
 
 1. `運用資料/reports/report_hub_latest.md`
-2. `運用資料/reports/feedback_daily_sync_20260526.md`
+2. `運用資料/reports/feedback_daily_sync_20260601.md`
 3. `運用資料/reports/analysis/market_map_effectiveness_20260526.md`
 4. `運用資料/reports/analysis/operational_focus_20260526.md`
-5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md`
+5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260601.md`
 6. 設計テーマが `sl_hit` 偏重なら `運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md`
 
 ## ChatGPT が次に引き継ぐ分析メモ
@@ -39,6 +39,8 @@
 - `execution_precision_*` は `logs/csv/trades.csv` と `last_result.json` へ保存済み。詳細HTMLにも `15分足 執行チェック` が出ており、`20260519_170500` では `wait_only` を確認済み。
 - `market_map` は shadow 側でも値入り確認済み。`market_map_effectiveness_20260526.md` では 305 件記録あり。
 - AI 事後評価は `request_failed=0` を維持。`feedback_daily_sync_20260526.md` では `created=8 / request_failed=0 / backlog=73`、`operational_focus_20260526.md` では未処理候補 38 件。
+- `ver02.6-v1` で `src/trade/opportunity_gate.py` に paper opportunity quality guard を最小実装した。追加 guard は `require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong`。`trade_execution_gate` と `phase1b_lite_gate` は変更していない。
+- 既存 CLI でレポートを再生成し、`feedback_daily_sync_20260601.md` と `paper_opportunity_diagnostics_20260601.md` に quality guard 集計を追加した。`paper_entry_sl_wait_redesign` は専用 builder が見当たらないため、今回は既存ファイル据え置きとした。
 
 ## 実装済みの前提
 
@@ -55,8 +57,8 @@
 
 ## 直近の基準値
 
-- 最新 daily-sync 基準: `feedback_daily_sync_20260526.md`。完了 44 件、近似PF 0.83、全体勝率 43.2%。`phase1_active=true` は 2 件に増えたが、`trade_execution_gate=pass` は 0 件。
-- `paper_positions.csv` は daily-sync 集計で `closed=19件`、`sl_hit=12件`、`missed_opportunity=5件`、`tp2_hit=1件`、`timeout=1件`、24h超 pending 0件。`market_map_opportunity` は 9件 / 勝率 11.1% / 平均R 0.26 / 簡易PF 1.57。
+- 最新 daily-sync 基準: `feedback_daily_sync_20260601.md`。完了 36 件、近似PF 1.39、全体勝率 63.9%。`phase1_active=true` は 0 件、`trade_execution_gate=pass` は 0 件。
+- `paper_positions.csv` は daily-sync 集計で `closed=13件`、`sl_hit=5件`、`missed_opportunity=6件`、`tp2_hit=1件`、`timeout=1件`、24h超 pending 0件。`market_map_opportunity` は 3件 / 勝率 0.0% / 平均R 1.30 / 簡易PF 0.00。
 - 新規ログ基準: `2026-04-18` 〜 `2026-05-26` では `notified_rr_to_entry=0件`、`notified_rr_to_entry_orderbook_ask_heavy=0件`、`rr_to_confidence=1件` を維持。
 - `operational_focus_20260526.md`: Phase1 pass 167 件 / blocked 739 件。blocked 上位は `confidence_below_min=519件`、`no_trade_candidate=263件`。
 - `relaxation_candidates_20260526.md`: 緩和候補 51 件。`SWEEP_WAIT=33件`、`RISKY_ENTRY=16件`、`NO_TRADE_CANDIDATE=2件`。平均 `execution=18.2 / wait=84.2` で一律緩和にはまだ弱い。
@@ -66,24 +68,27 @@
 - `trend_flip_confirmed_up=32件` は勝率 41.2%、wrong_rate 28.1%、平均MFE24h 2.50 / 平均MAE24h 10.85 でまだ弱いため、上方向の強評価や gate 緩和には使わない。
 - `paper_opportunity_diagnostics_20260526.md`: 4/18〜5/26 の紙ポジションは closed 264件 / 平均R 0.33 / 簡易PF 1.82。`market_map_opportunity` は 97件 / 平均R 0.36 / 簡易PF 1.97 だが、`long` は 18件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 39件 / 平均R -0.16 / 簡易PF 0.74 と弱い。
 - `paper_entry_sl_wait_redesign_20260526.md`: `sl_hit` 原因を切り分ける追加診断を実施。`wait>=80` は 7件 / 平均R -0.84 / `sl_hit=6件`、`execution<20` は 44件 / 平均R -0.02 / `sl_hit=29件`、`long` は 18件 / 平均R -0.51 / `sl_hit=15件`、`trend_flip_confirmed_up` は 7件すべて `sl_hit`。SL 失敗分類は `late_wait_sl=20件`、`trend_flip_long_sl=10件`、`other_sl=18件`。proposal は `suppress_long_high_wait`、`suppress_trend_flip_up_strong`、`require_execution_for_high_wait`、`delay_entry_on_sweep_wait` を出力した。
-- AI 事後評価 health は `feedback_daily_sync_20260526.md` 基準で `eligible=356 / AI済み=283 / backlog=73 / created=8 / request_failed=0`。daily cap 8 は継続可能。
+- AI 事後評価 health は `feedback_daily_sync_20260601.md` 基準で `eligible=393 / AI済み=339 / backlog=54 / created=8 / request_failed=0`。daily cap 8 は継続可能。
+- quality guard 集計の初回反映では、`feedback_daily_sync_20260601.md` 基準で `quality guard blocked=15件`、内訳は `require_execution_for_high_wait=13件`、`suppress_long_high_wait=5件`、`suppress_trend_flip_up_strong=4件`。`market_map opportunity before/after guard` は `26件 -> 4件`。
 - AI事後評価は今後 `feedback_daily_sync` だけでなく `paper_opportunity_diagnostics` と `paper_entry_sl_wait_redesign` の設計根拠にも使う。`human_override` は例外で、日常判断は AI 評価を主系にする。
 
 ## 次のタスク
 
-1. `phase1_active=true` は 2 件まで増えたが、`trade_execution_gate=pass=0件` と `paper_orders planned=0件` は継続。実弾 gate 緩和ではなく、本有効候補の増加と再現性を優先して見る。
+1. quality guard 実装後も `trade_execution_gate=pass=0件` と `paper_orders planned=0件` は継続。実弾 gate 緩和ではなく、`quality guard blocked` 件数と `sl_hit` / `missed_opportunity` の変化を優先して見る。
 2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は ChatGPT 側で確定した仕様を受けて実装する。
 3. `paper_entry_sl_wait_redesign_20260526.md` で `sl_hit` の主因が高 wait、低 execution、long、上方向転換系に偏ることを追加確認した。ChatGPT 側は entry 発火条件、SL/TP 条件、wait/execution 抑制条件を分けて再設計する。
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
 6. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
-7. AI backlog は 73 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
+7. AI backlog は 54 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
+8. `paper_entry_sl_wait_redesign` は専用 CLI が見当たらず、今回の再生成対象から外した。既存 report builder 構造の中でどこに置くかを ChatGPT 側で判断する。
 
 ## 残作業一覧
 
 - `trend_flip_confirmed_up` は 32 件に到達したため、`market_map_effectiveness_20260526.md` を基準に ChatGPT 側で上方向転換系の扱いを再判定する。
 - `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。PID `1591`、`state=running`、`logs/runtime/monitor.err` は空。定時サイクルは 2026-05-26 01:05 JST まで更新確認済み。
-- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 73 件残っている。
+- `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 54 件残っている。
+- `paper_opportunity_diagnostics_20260601.md` の quality guard 集計を基準に、`require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong` が `sl_hit` 偏重の抑制に効くかを次回も追う。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。
 - `market_map` は 305 件まで増えた。下方向側は相対的に有効だが、紙実行候補では `long` / 高 wait / 上方向転換系が弱いため、実弾 gate 緩和ではなく entry / wait 条件の検証を優先する。
