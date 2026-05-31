@@ -84,6 +84,8 @@
 8. `paper_entry_sl_wait_redesign` は専用 CLI が見当たらず、今回の再生成対象から外した。既存 report builder 構造の中でどこに置くかを ChatGPT 側で判断する。
 9. `quality_guard_effectiveness_20260601.md` を追加し、daily-sync と paper diagnostics の `quality guard` 件数差は母集団差として整理した。`guard該当 closed sl_hit=0件` は成功証拠ではなく、保存仕様と集計母集団差を含めて解釈する。
 10. 次に見る論点は `counterfactual_quality_guard` の正式 builder 化要否と、`paper_entry_sl_wait_redesign` builder の扱いである。guard 条件そのものは今回は変更しない。
+11. `quality_guard_effectiveness_20260601.md` に reason別・複合条件別 counterfactual を追加した。次に ChatGPT が見るべき論点は、reason組み合わせ別の `sl_hit_rate` と `tp2_hit / missed_opportunity` 巻き込み率であり、guard 条件変更はまだ行っていない。
+12. builder 正式化は次回以降の論点とし、今回は `paper_positions.csv` と `shadow_log.csv` の後付け再計算で材料整理だけを行った。
 
 ## 残作業一覧
 
@@ -92,6 +94,7 @@
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 54 件残っている。
 - `paper_opportunity_diagnostics_20260601.md` の quality guard 集計を基準に、`require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong` が `sl_hit` 偏重の抑制に効くかを次回も追う。
 - `quality_guard_effectiveness_20260601.md` を基準に、daily-sync の新規観測と diagnostics の累積 closed 母集団を混同せずに評価する。必要なら `counterfactual_quality_guard` を report builder 化する。
+- `quality_guard_effectiveness_20260601.md` の reason組み合わせ別表を基準に、`A only`、`B only`、`C only`、`A+B` のどこを維持し、どこを閾値再調整候補にするかを ChatGPT 側で判断する。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。
 - `market_map` は 305 件まで増えた。下方向側は相対的に有効だが、紙実行候補では `long` / 高 wait / 上方向転換系が弱いため、実弾 gate 緩和ではなく entry / wait 条件の検証を優先する。
