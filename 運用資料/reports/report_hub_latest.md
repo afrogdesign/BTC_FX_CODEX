@@ -65,6 +65,13 @@
 - purpose: sl_hit 偏重、高 wait、低 execution の切り分け。
 - last_date: `2026-05-26` / freshness: `fresh(6d)`
 
+### quality guard 有効性
+- latest: [運用資料/reports/analysis/quality_guard_effectiveness_20260601.md](運用資料/reports/analysis/quality_guard_effectiveness_20260601.md)
+- previous: `missing`
+- storage: `active`
+- purpose: paper opportunity quality guard の初回反映評価と counterfactual 論点整理。
+- last_date: `2026-06-01` / freshness: `fresh(0d)`
+
 ## Dormant / 補助診断
 
 ### market_map readiness

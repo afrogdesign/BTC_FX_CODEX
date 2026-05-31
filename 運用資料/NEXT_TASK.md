@@ -82,6 +82,8 @@
 6. `Phase 1B-lite` は 5 件で止まっている。10〜15 件まで専用CSVで追い、正式 `Phase 1B` へはまだ上げない。
 7. AI backlog は 54 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
 8. `paper_entry_sl_wait_redesign` は専用 CLI が見当たらず、今回の再生成対象から外した。既存 report builder 構造の中でどこに置くかを ChatGPT 側で判断する。
+9. `quality_guard_effectiveness_20260601.md` を追加し、daily-sync と paper diagnostics の `quality guard` 件数差は母集団差として整理した。`guard該当 closed sl_hit=0件` は成功証拠ではなく、保存仕様と集計母集団差を含めて解釈する。
+10. 次に見る論点は `counterfactual_quality_guard` の正式 builder 化要否と、`paper_entry_sl_wait_redesign` builder の扱いである。guard 条件そのものは今回は変更しない。
 
 ## 残作業一覧
 
@@ -89,6 +91,7 @@
 - `com.afrog.btc-monitor` は `Ver02.5-v8` で稼働中。PID `1591`、`state=running`、`logs/runtime/monitor.err` は空。定時サイクルは 2026-05-26 01:05 JST まで更新確認済み。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 54 件残っている。
 - `paper_opportunity_diagnostics_20260601.md` の quality guard 集計を基準に、`require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong` が `sl_hit` 偏重の抑制に効くかを次回も追う。
+- `quality_guard_effectiveness_20260601.md` を基準に、daily-sync の新規観測と diagnostics の累積 closed 母集団を混同せずに評価する。必要なら `counterfactual_quality_guard` を report builder 化する。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。
 - `market_map` は 305 件まで増えた。下方向側は相対的に有効だが、紙実行候補では `long` / 高 wait / 上方向転換系が弱いため、実弾 gate 緩和ではなく entry / wait 条件の検証を優先する。
