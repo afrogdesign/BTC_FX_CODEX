@@ -1,19 +1,19 @@
 # フィードバック分析レポート (weekly)
 
 ## 1. まず結論
-- 今回の完了データは 36 件です。近似PF は 1.39、全体勝率は 63.9% でした。
-- 事後評価では「待つ判断に使えた」が最も多く、26 件でした。
-- 平均の役立ち度は 3.61 / 5 でした。
-- 根拠整合の入力率は 97.2%、整合した比率は 100.0% でした。
+- 今回の完了データは 35 件です。近似PF は 1.43、全体勝率は 62.9% でした。
+- 事後評価では「待つ判断に使えた」が最も多く、25 件でした。
+- 平均の役立ち度は 3.60 / 5 でした。
+- 根拠整合の入力率は 97.1%、整合した比率は 100.0% でした。
 - 今回の改善候補の最上位は「15分足の執行価格精度が弱い」です。
 - Phase 1 判定では ready=0 件、phase1_active=true=0 件です。
 - 判定: Phase 1 の本有効待ち (ready / phase1_active ともに未検出のため、通知観測を継続する)
 
 ## 2. 今回の対象
-- 集計期間: 2026-05-25 05:05 〜 2026-05-30 23:05
-- 総観測件数: 36
-- データ品質の内訳: ok=36
-- 近似PF: 1.39
+- 集計期間: 2026-05-25 11:05 〜 2026-05-30 23:05
+- 総観測件数: 35
+- データ品質の内訳: ok=35
+- 近似PF: 1.43
 
 ## 3. Phase 1 判定サマリー
 - `primary_setup_status=ready` 件数: 0
@@ -24,28 +24,28 @@
 - `tp1_hit_first=false` 率: 0.0%
 - `expired` 率: 0.0%
 - `max_size_capped` 発生率: 0.0%
-- ready阻害理由: confidence_below_min=17件, entry_zone_not_reached=11件, near_entry_zone_waiting_trigger=6件, inside_entry_zone_with_trigger=2件
+- ready阻害理由: confidence_below_min=16件, entry_zone_not_reached=11件, near_entry_zone_waiting_trigger=6件, inside_entry_zone_with_trigger=2件
 - confidence_below_min 代表例: 20260527_130500(invalid/NO_TRADE_CANDIDATE, dir=68, exec=11, wait=78, MFE24h=18.16, MAE24h=0.00, outcome=win) / 20260525_190500(watch/SWEEP_WAIT, dir=66, exec=28, wait=59, MFE24h=15.65, MAE24h=4.85, outcome=win)
 
 ## 4. AI事後評価サマリー
-- 待つ判断に使えた: 26件
+- 待つ判断に使えた: 25件
 - 見送り判断に使えた: 7件
 - 通知が遅すぎた: 1件
 - 価値が低かった: 1件
 - 通知が早すぎた: 1件
-- 平均の役立ち度: 3.61 / 5
-- レビュー source: ai=36件
+- 平均の役立ち度: 3.60 / 5
+- レビュー source: ai=35件
 - 値動きの主因の入力率: 100.0%
 - エントリー寄り誤読の入力率: 0.0% / 誤読あり率: 0.0%
-- 根拠整合の入力率: 97.2% / 整合率: 100.0%
-- SL評価: SL が狭すぎた=11件, SL は妥当=24件, SL が広すぎた=1件
-- TP評価: TP が遠すぎた=7件, TP は妥当=25件, TP が近すぎた=4件
-- 4時間足評価: 一部弱い=27件, 妥当=9件
-- 1時間足評価: 一部弱い=31件, 妥当=5件
-- 15分足評価: 弱い=14件, 妥当=15件, 一部弱い=7件
+- 根拠整合の入力率: 97.1% / 整合率: 100.0%
+- SL評価: SL が狭すぎた=11件, SL は妥当=23件, SL が広すぎた=1件
+- TP評価: TP が遠すぎた=7件, TP は妥当=24件, TP が近すぎた=4件
+- 4時間足評価: 一部弱い=26件, 妥当=9件
+- 1時間足評価: 一部弱い=30件, 妥当=5件
+- 15分足評価: 弱い=14件, 妥当=15件, 一部弱い=6件
 ### 改善アクション
-- 分類: 通知文面を調整=2件, 観測継続=9件, 入口条件を調整=24件, 出口設計を調整=1件
-- 重要度: 高=10件, 中=23件, 低=3件
+- 分類: 通知文面を調整=2件, 観測継続=9件, 入口条件を調整=23件, 出口設計を調整=1件
+- 重要度: 高=10件, 中=22件, 低=3件
 - 高優先の代表例:
   - 20260530_140500: 通知文面を調整 / 「下方向バイアス」の主表示を弱め、実行不可・見送りを件名と冒頭に固定して誤読を防ぐ。
   - 20260529_050500: 入口条件を調整 / 15分足で上側流動性回収後の再失速確認（73,655付近の再拒否と出来高条件）を満たすまで通知を発火しない。
@@ -58,7 +58,7 @@
 
 ## 5. 改善候補
 1. 15分足の執行価格精度が弱い
-   理由: tf_15m_eval=poor が 14/36 件 (38.9%)
+   理由: tf_15m_eval=poor が 14/35 件 (40.0%)
    主に触る場所: src/analysis/rr.py, src/notification/detail_page.py
 2. ENTRY_OK が甘め
    理由: ENTRY_OK の poor_entry が 3/3 件 (100.0%)
@@ -74,37 +74,37 @@
 
 ### regime別件数・勝率・平均MFE・平均MAE
 - downtrend: 勝率=50.0%, 平均MFE=4.10, 平均MAE=4.72 (n=6) / データ不足 6/30
-- range: 勝率=62.5%, 平均MFE=6.86, 平均MAE=4.92 (n=24) / データ不足 24/30
+- range: 勝率=60.9%, 平均MFE=6.95, 平均MAE=4.79 (n=23) / データ不足 23/30
 - transition: 勝率=80.0%, 平均MFE=9.08, 平均MAE=5.33 (n=5) / データ不足 5/30
 - volatile: 勝率=100.0%, 平均MFE=6.31, 平均MAE=0.23 (n=1) / データ不足 1/30
 
 ### signal_tier別件数・勝率・平均MFE・平均MAE
-- normal: 勝率=63.9%, 平均MFE=6.69, 平均MAE=4.81 (n=36)
+- normal: 勝率=62.9%, 平均MFE=6.74, 平均MAE=4.72 (n=35)
 
 ### prelabel別件数・勝率・平均MFE・平均MAE
 - ENTRY_OK: 勝率=100.0%, 平均MFE=10.27, 平均MAE=2.51 (n=3) / データ不足 3/30
-- RISKY_ENTRY: 勝率=40.0%, 平均MFE=5.77, 平均MAE=5.43 (n=10) / データ不足 10/30
+- RISKY_ENTRY: 勝率=33.3%, 平均MFE=5.87, 平均MAE=5.14 (n=9) / データ不足 9/30
 - SWEEP_WAIT: 勝率=77.8%, 平均MFE=7.87, 平均MAE=3.82 (n=9) / データ不足 9/30
 - NO_TRADE_CANDIDATE: 勝率=64.3%, 平均MFE=5.83, 平均MAE=5.50 (n=14) / データ不足 14/30
 
 ### bias別件数・勝率
 - long: 勝率=40.0% (n=5) / データ不足 5/30
-- short: 勝率=67.7% (n=31)
+- short: 勝率=66.7% (n=30)
 
 ### bias別 direction 正誤
 - long: correct=1, wrong=3, unclear=1 / wrong_rate=60.0% (n=5)
-- short: correct=11, wrong=14, unclear=6 / wrong_rate=45.2% (n=31)
+- short: correct=11, wrong=13, unclear=6 / wrong_rate=43.3% (n=30)
 
 ### 成績指標
-- 全体勝率: 63.9%
-- 平均MFE(signal_based): 6.69
-- 平均MAE(signal_based): 4.81
+- 全体勝率: 62.9%
+- 平均MFE(signal_based): 6.74
+- 平均MAE(signal_based): 4.72
 - 平均MFE(entry_ready_based): 0.00
 - 平均MAE(entry_ready_based): 0.00
-- TP1先行率: 65.7%
+- TP1先行率: 64.7%
 
 ### 通知品質
-- A: 通知して良かった = 23件
+- A: 通知して良かった = 22件
 - B: 通知したが微妙 = 13件
 - C: 通知しなかったが本当は良かった = 0件
 - D: 通知しなかったので正解 = 0件
@@ -117,13 +117,13 @@
 - failed_breakout_up_reversal: wrong_rate=60.0% (wrong=3/5)
 - lower_liquidity_close: wrong_rate=60.0% (wrong=3/5)
 - bid_wall_close: wrong_rate=53.3% (wrong=8/15)
-- long_into_major_resistance: wrong_rate=47.8% (wrong=11/23)
-- short_into_major_support: wrong_rate=46.4% (wrong=13/28)
+- long_into_major_resistance: wrong_rate=45.5% (wrong=10/22)
+- short_into_major_support: wrong_rate=44.4% (wrong=12/27)
 - long_flush_exhaustion: wrong_rate=44.4% (wrong=4/9)
 - major_support_rejection: wrong_rate=44.4% (wrong=4/9)
 - support_to_resistance_retest_confirmed: wrong_rate=43.5% (wrong=10/23)
-- upper_liquidity_close: wrong_rate=42.3% (wrong=11/26)
 - support_to_resistance_flip: wrong_rate=41.7% (wrong=10/24)
+- upper_liquidity_close: wrong_rate=40.0% (wrong=10/25)
 - cvd_bearish_divergence: wrong_rate=40.0% (wrong=2/5)
 - orderbook_bid_heavy: wrong_rate=37.5% (wrong=6/16)
 - short_cover_risk: wrong_rate=37.5% (wrong=3/8)
@@ -134,17 +134,15 @@
 
 ### 直近12時間速報
 - 対象件数: 12件
-- direction_execution_conflict: 1件
-- direction_execution_conflict の主な理由: confidence_below_min=1件
-- direction_execution_conflict の主な risk_flags: orderbook_bid_heavy=1件, sweep_incomplete=1件, upper_liquidity_close=1件
-- suppress_reason の内訳: confidence_below_short_min=3件, no_material_change=1件, cooldown_active=1件
+- direction_execution_conflict: 0件
+- suppress_reason の内訳: no_material_change=2件, watch_sweep_recheck_wait=2件, confidence_below_short_min=2件
 - ENTRY_OK + invalid: 0件
 - countertrend_long_cluster: 0件
 
 ### Phase 1 計画ログ
-- Phase 1 計画付き件数: 36
+- Phase 1 計画付き件数: 35
 - 本有効件数: 0
-- 参考ログ件数: 36
+- 参考ログ件数: 35
 - 平均 risk_percent_applied: 0.00
 - 連敗時平均 risk_percent_applied: 0.00
 - 平均 planned_risk_usd: 0.00
@@ -155,12 +153,12 @@
 
 ### Phase 1 観測 gate
 - phase1_observation_gate=pass: 11件
-- phase1_observation_gate=blocked: 25件
+- phase1_observation_gate=blocked: 24件
 - 観測タイプ: setup_watch_learning=11件
 - 観測候補全体: 11件 / 勝率=54.5% / TP1先行=60.0% / 近似PF=2.61 / 平均MFE=8.28 / 平均MAE=3.17
 - setup_watch_learning: 11件 / 勝率=54.5% / TP1先行=60.0% / 近似PF=2.61 / 平均MFE=8.28 / 平均MAE=3.17
 - 代表例: 20260529_220500, 20260529_050500, 20260528_070500, 20260528_040500, 20260528_010500
-- 主な観測ブロック理由: confidence_below_min=17件, no_trade_candidate=14件, watch_conditions_not_met=2件
+- 主な観測ブロック理由: confidence_below_min=16件, no_trade_candidate=14件, watch_conditions_not_met=2件
 
 ### Phase 1A 観測紙トレード
 - observation_paper_orders observing: 11件
@@ -191,9 +189,9 @@
 - 扱い: breakout_up が効かず大きく下落した watch 群の失敗型を継続追跡する
 
 ### market_map
-- 記録あり: 36件
-- primary_state: early_down=16件, confirmed_down=12件, confirmed_up=5件, near_major_resistance=2件, active_support=1件
-- flags: short_into_major_support=28件, support_to_resistance_flip=24件, long_into_major_resistance=23件, support_to_resistance_retest_confirmed=23件, trend_flip_early_down=16件, major_resistance_rejection=13件, trend_flip_confirmed_down=12件, major_support_rejection=9件
+- 記録あり: 35件
+- primary_state: early_down=16件, confirmed_down=12件, confirmed_up=5件, near_major_resistance=1件, active_support=1件
+- flags: short_into_major_support=27件, support_to_resistance_flip=24件, support_to_resistance_retest_confirmed=23件, long_into_major_resistance=22件, trend_flip_early_down=16件, major_resistance_rejection=13件, trend_flip_confirmed_down=12件, major_support_rejection=9件
 - trend_state: early_down=16件, confirmed_down=12件, confirmed_up=5件
 - 下方向反転系: 28件 / 勝率=64.3% / wrong_rate=39.3%
 - 下方向反転系 平均MFE24h=7.51 / 平均MAE24h=3.83
@@ -202,36 +200,39 @@
 
 ### 紙トレード準備
 - trade_execution_gate=pass: 0件
-- trade_execution_gate=blocked: 36件
-- 主なブロック理由: phase1_inactive=36件, setup_not_ready=36件, no_trade_flags_present=29件, wait_pressure_too_high=17件, execution_shadow_too_low=12件
+- trade_execution_gate=blocked: 35件
+- 主なブロック理由: phase1_inactive=35件, setup_not_ready=35件, no_trade_flags_present=28件, wait_pressure_too_high=17件, execution_shadow_too_low=12件
 - paper_orders planned: 0件
-- phase1_v1_shadow 記録付き: 36件
-- opportunity_gate=pass: 14件
-- quality guard blocked: 15件 / 理由=require_execution_for_high_wait=13件, suppress_long_high_wait=5件, suppress_trend_flip_up_strong=4件
-- market_map opportunity before/after guard: 26件 -> 4件
-- paper_positions 記録: 13件
-- 紙ポジション状態: closed=13件
-- 紙ポジション終了状態: missed_opportunity=6件, sl_hit=5件, timeout=1件, tp2_hit=1件
+- phase1_v1_shadow 記録付き: 35件
+- opportunity_gate=pass: 15件
+- quality guard blocked: 2件 / 理由=require_execution_for_high_wait=2件
+- hard_quality_blocked: 2件 / 理由=require_execution_for_high_wait=2件
+- soft_quality_risk: 1件 / 理由=soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong=1件
+- market_map opportunity before/after guard: 26件 -> 5件
+- market_map opportunity before/after hard guard: 26件 -> 5件
+- paper_positions 記録: 15件
+- 紙ポジション状態: closed=15件
+- 紙ポジション終了状態: sl_hit=6件, missed_opportunity=6件, tp2_hit=2件, timeout=1件
 - quality guard 該当 closed sl_hit: 0件
-- 紙実行候補タイプ: setup_watch_learning=10件, market_map_opportunity=4件
+- 紙実行候補タイプ: setup_watch_learning=10件, market_map_opportunity=5件
 - opportunity_type 別 closed:
-  - market_map_opportunity: 3件 / 勝率=0.0% / 平均R=1.30 / 簡易PF=0.00
+  - market_map_opportunity: 5件 / 勝率=20.0% / 平均R=1.26 / 簡易PF=0.00
   - setup_watch_learning: 10件 / 勝率=10.0% / 平均R=0.28 / 簡易PF=1.78
 - missed_opportunity: 6件
 - missed代表例: 20260528_070500, 20260528_040500, 20260528_010500
 - 24h超の pending: 0件
-- opportunity pass だが paper_positions 未記録: 1件
+- opportunity pass だが paper_positions 未記録: 0件
 - tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: 4/4件
 
 ### risk_flags 有効性比較
 - trend_flip_confirmed_down: negative_rate=91.7% (n=12)
 - bid_wall_close: negative_rate=80.0% (n=15)
-- long_into_major_resistance: negative_rate=78.3% (n=23)
-- short_into_major_support: negative_rate=75.0% (n=28)
+- long_into_major_resistance: negative_rate=77.3% (n=22)
 - support_to_resistance_flip: negative_rate=75.0% (n=24)
 - orderbook_bid_heavy: negative_rate=75.0% (n=16)
+- short_into_major_support: negative_rate=74.1% (n=27)
 - support_to_resistance_retest_confirmed: negative_rate=73.9% (n=23)
-- upper_liquidity_close: negative_rate=69.2% (n=26)
+- upper_liquidity_close: negative_rate=68.0% (n=25)
 - sweep_incomplete: negative_rate=63.6% (n=22)
 - trend_flip_early_down: negative_rate=62.5% (n=16)
 - major_resistance_rejection: negative_rate=61.5% (n=13)

@@ -86,8 +86,8 @@
 10. 次に見る論点は `counterfactual_quality_guard` の正式 builder 化要否と、`paper_entry_sl_wait_redesign` builder の扱いである。guard 条件そのものは今回は変更しない。
 11. `quality_guard_effectiveness_20260601.md` に reason別・複合条件別 counterfactual を追加した。次に ChatGPT が見るべき論点は、reason組み合わせ別の `sl_hit_rate` と `tp2_hit / missed_opportunity` 巻き込み率であり、guard 条件変更はまだ行っていない。
 12. builder 正式化は次回以降の論点とし、今回は `paper_positions.csv` と `shadow_log.csv` の後付け再計算で材料整理だけを行った。
-13. `chatgpt/specs/active/20260601_quality_guard_hard_soft_split.md` を追加し、次に実装するなら `A=require_execution_for_high_wait` を hard blocker 維持、`B/C` 単独を soft risk 化する案を固定した。今回はコード変更していない。
-14. 次回 ChatGPT が見るべき論点は、この hard / soft 分離 spec をそのまま実装へ進めるか、さらに観測を続けるかである。
+13. `paper opportunity quality guard` の hard / soft 分離を実装し、仕様書は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md` へ移した。`A=require_execution_for_high_wait` を含む group は hard blocker、`B/C` 単独と `B+C` は soft risk として扱う。
+14. `trade_execution_gate` と `phase1b_lite_gate` は変更していない。次回 ChatGPT が見るべき論点は、この hard / soft 分離の観測を続けるか、soft risk 側の閾値再調整へ進むかである。
 
 ## 残作業一覧
 
@@ -97,7 +97,8 @@
 - `paper_opportunity_diagnostics_20260601.md` の quality guard 集計を基準に、`require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong` が `sl_hit` 偏重の抑制に効くかを次回も追う。
 - `quality_guard_effectiveness_20260601.md` を基準に、daily-sync の新規観測と diagnostics の累積 closed 母集団を混同せずに評価する。必要なら `counterfactual_quality_guard` を report builder 化する。
 - `quality_guard_effectiveness_20260601.md` の reason組み合わせ別表を基準に、`A only`、`B only`、`C only`、`A+B` のどこを維持し、どこを閾値再調整候補にするかを ChatGPT 側で判断する。
-- `chatgpt/specs/active/20260601_quality_guard_hard_soft_split.md` を基準に、`A` を hard blocker 維持、`B/C` 単独を soft risk 化する実装へ進むか、観測継続を優先するかを ChatGPT 側で決める。
+- hard / soft 分離後は、`hard_quality_blocked` と `soft_quality_risk` の推移を基準に、`A` を維持したまま `B/C` 単独の扱いをさらに調整するかを ChatGPT 側で決める。
+- 次回は `daily-sync` と `paper_opportunity_diagnostics` で `hard_quality_blocked` と `soft_quality_risk` の推移を見る。
 - AI事後評価の `AI_POST_REVIEW_DAILY_MAX=8` は安定確認済み。`request_failed` が増える場合だけ 4 または 6 へ戻す。
 - 標準比較 3 本は 2026-05-26 基準でも `0 / 0 / 1` を維持。次回 daily-sync 後も崩れた箇所だけを見る。
 - `market_map` は 305 件まで増えた。下方向側は相対的に有効だが、紙実行候補では `long` / 高 wait / 上方向転換系が弱いため、実弾 gate 緩和ではなく entry / wait 条件の検証を優先する。

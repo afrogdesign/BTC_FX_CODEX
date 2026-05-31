@@ -476,9 +476,84 @@ class Phase1TradePlanTests(unittest.TestCase):
         )
 
         self.assertEqual(result["opportunity_gate"], "blocked")
-        self.assertIn("require_execution_for_high_wait", result["opportunity_reasons"])
+        self.assertEqual(result["opportunity_reasons"], ["require_execution_for_high_wait"])
 
-    def test_opportunity_gate_blocks_long_high_wait_quality_candidate(self) -> None:
+    def test_opportunity_gate_blocks_a_plus_b_quality_candidate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(
+            result["opportunity_reasons"],
+            ["require_execution_for_high_wait+suppress_long_high_wait"],
+        )
+
+    def test_opportunity_gate_a_plus_c_conditions_collapse_into_a_plus_b_plus_c(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(
+            result["opportunity_reasons"],
+            ["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"],
+        )
+
+    def test_opportunity_gate_blocks_a_plus_b_plus_c_quality_candidate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(
+            result["opportunity_reasons"],
+            ["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"],
+        )
+
+    def test_opportunity_gate_keeps_b_only_as_soft_risk(self) -> None:
         result = determine_opportunity_gate(
             bias="long",
             primary_setup_side="long",
@@ -497,10 +572,10 @@ class Phase1TradePlanTests(unittest.TestCase):
             confidence_wait_shadow=60,
         )
 
-        self.assertEqual(result["opportunity_gate"], "blocked")
-        self.assertIn("suppress_long_high_wait", result["opportunity_reasons"])
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("soft_risk:suppress_long_high_wait", result["opportunity_reasons"])
 
-    def test_opportunity_gate_blocks_long_trend_flip_up_quality_candidate(self) -> None:
+    def test_opportunity_gate_keeps_c_only_as_soft_risk(self) -> None:
         result = determine_opportunity_gate(
             bias="long",
             primary_setup_side="long",
@@ -519,8 +594,33 @@ class Phase1TradePlanTests(unittest.TestCase):
             confidence_wait_shadow=45,
         )
 
-        self.assertEqual(result["opportunity_gate"], "blocked")
-        self.assertIn("suppress_trend_flip_up_strong", result["opportunity_reasons"])
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("soft_risk:suppress_trend_flip_up_strong", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_b_plus_c_as_soft_risk(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=28,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn(
+            "soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
 
     def test_opportunity_gate_keeps_market_map_candidate_without_quality_blockers(self) -> None:
         result = determine_opportunity_gate(
@@ -567,9 +667,36 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["opportunity_gate"], "pass")
         self.assertEqual(result["opportunity_type"], "formal_execution_candidate")
         self.assertIn("trade_execution_gate_pass", result["opportunity_reasons"])
-        self.assertIn("formal_candidate_quality_conflict:require_execution_for_high_wait", result["opportunity_reasons"])
-        self.assertIn("formal_candidate_quality_conflict:suppress_long_high_wait", result["opportunity_reasons"])
-        self.assertIn("formal_candidate_quality_conflict:suppress_trend_flip_up_strong", result["opportunity_reasons"])
+        self.assertIn(
+            "formal_candidate_quality_conflict:require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
+
+    def test_opportunity_gate_keeps_formal_candidate_and_adds_soft_risk_conflicts(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="pass",
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=28,
+            confidence_wait_shadow=45,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "formal_execution_candidate")
+        self.assertIn(
+            "formal_candidate_quality_conflict:soft_risk:suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
 
     def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
         result = determine_phase1_observation_gate(

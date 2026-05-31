@@ -83,6 +83,7 @@ class LogFeedbackTest(unittest.TestCase):
             (analysis_dir / "market_map_readiness_20260514.md").write_text("# readiness 14\n", encoding="utf-8")
             (analysis_dir / "operational_focus_20260526.md").write_text("# focus 26\n", encoding="utf-8")
             (analysis_dir / "paper_opportunity_diagnostics_20260526.md").write_text("# paper 26\n", encoding="utf-8")
+            (analysis_dir / "quality_guard_effectiveness_20260601.md").write_text("# qg 0601\n", encoding="utf-8")
             (analysis_dir / "rr_to_confidence.md").write_text("# rr confidence\n", encoding="utf-8")
             (legacy_v23 / "README.md").write_text("# legacy v23\n", encoding="utf-8")
             (legacy_old / "README.md").write_text("# legacy old\n", encoding="utf-8")
@@ -98,6 +99,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("market_map_readiness_20260514.md", report)
             self.assertIn("## Archived / 現行運用外", report)
             self.assertIn("rr_to_confidence.md", report)
+            self.assertIn("quality_guard_effectiveness_20260601.md", report)
             self.assertIn("missing: `paper_entry_sl_wait_redesign`", report)
             self.assertIn("legacy", report)
             self.assertNotIn("stale: `feedback_weekly`", report)
@@ -395,7 +397,71 @@ class LogFeedbackTest(unittest.TestCase):
 
             self.assertIn("quality guard blocked: 1件", report)
             self.assertIn("require_execution_for_high_wait=1件", report)
+            self.assertIn("hard_quality_blocked: 1件", report)
+            self.assertIn("soft_quality_risk: 0件", report)
             self.assertIn("market_map candidate before/after guard: 2件 -> 1件", report)
+            self.assertIn("market_map candidate before/after hard guard: 2件 -> 1件", report)
+
+    def test_paper_opportunity_diagnostics_report_includes_soft_quality_risk_counts(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                passed = {field: "" for field in SHADOW_HEADER}
+                passed.update(
+                    {
+                        "signal_id": "sig_soft",
+                        "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "64",
+                        "confidence_execution_shadow": "28",
+                        "confidence_wait_shadow": "60",
+                        "opportunity_gate": "pass",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip","soft_risk:suppress_long_high_wait"]',
+                    }
+                )
+                writer.writerow(passed)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_soft",
+                        "timestamp_jst": "2026-05-21T10:00:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip","soft_risk:suppress_long_high_wait"]',
+                        "side": "long",
+                        "exit_status": "missed_opportunity",
+                        "realized_r": "1.3",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "confidence_direction_shadow": "64",
+                        "confidence_execution_shadow": "28",
+                        "confidence_wait_shadow": "60.0",
+                    }
+                )
+                writer.writerow(row)
+
+            report = build_paper_opportunity_diagnostics_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-05-21",
+                date_to="2026-05-21",
+            )
+
+            self.assertIn("quality guard blocked: 0件", report)
+            self.assertIn("hard_quality_blocked: 0件", report)
+            self.assertIn("soft_quality_risk: 1件", report)
+            self.assertIn("soft_risk:suppress_long_high_wait=1件", report)
 
     def test_paper_opportunity_diagnostics_report_classifies_sl_failures(self) -> None:
         with TemporaryDirectory() as tmpdir:

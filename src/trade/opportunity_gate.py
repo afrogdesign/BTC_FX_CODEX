@@ -16,6 +16,7 @@ _MARKET_MAP_OPPORTUNITY_FLAGS = {
 }
 _BLOCKED_TREND_FLAGS = {"standalone_trend_flip_confirmed_up"}
 _QUALITY_TREND_FLAGS = {"trend_flip_confirmed_up", *_BLOCKED_TREND_FLAGS}
+_SOFT_RISK_PREFIX = "soft_risk:"
 
 
 def _normalize_flags(values: list[str] | tuple[str, ...] | set[str] | str | None) -> set[str]:
@@ -32,6 +33,22 @@ def _as_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _quality_guard_reasons(*, execution: float, wait: float, long_side: bool, trend_flags: set[str]) -> tuple[str | None, str | None]:
+    hard_reasons: list[str] = []
+    soft_reasons: list[str] = []
+    if wait >= 60.0 and execution < 24.0:
+        hard_reasons.append("require_execution_for_high_wait")
+    if long_side and wait >= 60.0:
+        target = hard_reasons if hard_reasons else soft_reasons
+        target.append("suppress_long_high_wait")
+    if long_side and trend_flags:
+        target = hard_reasons if hard_reasons else soft_reasons
+        target.append("suppress_trend_flip_up_strong")
+    hard_reason = "+".join(hard_reasons) if hard_reasons else None
+    soft_reason = f"{_SOFT_RISK_PREFIX}{'+'.join(soft_reasons)}" if soft_reasons else None
+    return hard_reason, soft_reason
 
 
 def determine_opportunity_gate(
@@ -53,7 +70,6 @@ def determine_opportunity_gate(
     confidence_wait_shadow: Any,
 ) -> dict[str, Any]:
     blockers: list[str] = []
-    quality_blockers: list[str] = []
     reasons: list[str] = []
     opportunity_type = "blocked"
 
@@ -82,21 +98,23 @@ def determine_opportunity_gate(
     if normalized_risk & _BLOCKED_TREND_FLAGS:
         blockers.extend(sorted(normalized_risk & _BLOCKED_TREND_FLAGS))
 
-    if wait >= 60.0 and execution < 24.0:
-        quality_blockers.append("require_execution_for_high_wait")
-    if long_side and wait >= 60.0:
-        quality_blockers.append("suppress_long_high_wait")
-    if long_side and ((normalized_risk | normalized_market) & _QUALITY_TREND_FLAGS):
-        quality_blockers.append("suppress_trend_flip_up_strong")
+    hard_quality_reason, soft_quality_reason = _quality_guard_reasons(
+        execution=execution,
+        wait=wait,
+        long_side=long_side,
+        trend_flags=(normalized_risk | normalized_market) & _QUALITY_TREND_FLAGS,
+    )
 
     unique_blockers = sorted(set(blockers))
-    unique_quality_blockers = sorted(set(quality_blockers))
     is_formal_candidate = str(trade_execution_gate or "").strip() == "pass"
 
     if not unique_blockers and is_formal_candidate:
         opportunity_type = "formal_execution_candidate"
         reasons.append("trade_execution_gate_pass")
-        reasons.extend(f"formal_candidate_quality_conflict:{blocker}" for blocker in unique_quality_blockers)
+        if hard_quality_reason:
+            reasons.append(f"formal_candidate_quality_conflict:{hard_quality_reason}")
+        if soft_quality_reason:
+            reasons.append(f"formal_candidate_quality_conflict:{soft_quality_reason}")
     elif not unique_blockers and str(phase1b_lite_gate or "").strip() == "pass":
         opportunity_type = str(phase1b_lite_type or "").strip() or "phase1b_lite"
         reasons.append("phase1b_lite_gate_pass")
@@ -110,12 +128,15 @@ def determine_opportunity_gate(
             opportunity_type = "market_map_opportunity"
         reasons.extend(f"market_map:{flag}" for flag in market_hits)
 
+    if not unique_blockers and soft_quality_reason and not is_formal_candidate and opportunity_type != "blocked":
+        reasons.append(soft_quality_reason)
+
     unique_reasons = sorted(set(reasons))
-    if unique_quality_blockers and not is_formal_candidate:
+    if hard_quality_reason and not unique_blockers and not is_formal_candidate:
         return {
             "opportunity_gate": "blocked",
             "opportunity_type": "blocked",
-            "opportunity_reasons": unique_quality_blockers,
+            "opportunity_reasons": [hard_quality_reason],
         }
     return {
         "opportunity_gate": "pass" if opportunity_type != "blocked" and not unique_blockers else "blocked",
