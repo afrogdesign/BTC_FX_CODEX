@@ -46,6 +46,7 @@ from tools.log_feedback import (
     build_paper_entry_sl_wait_redesign_report,
     build_paper_opportunity_diagnostics_report,
     build_quality_guard_effectiveness_report,
+    build_soft_risk_collateral_damage_report,
     build_paper_positions,
     build_phase1b_lite_paper_orders,
     build_operational_focus_report,
@@ -772,6 +773,116 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("quality guard の blocker 判断では `entered_avg_R` を主判断に使う。", report)
             self.assertIn("`non_entered_avg_R` は参考値であり、約定後損益として扱わない。", report)
             self.assertIn("counterfactual は後付け再計算であり、実運用結果ではない。", report)
+
+    def test_soft_risk_collateral_damage_report_includes_required_groups_and_judgement(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+
+                def _write_shadow(signal_id: str, reasons: str) -> None:
+                    row = {field: "" for field in SHADOW_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                            "opportunity_reasons": reasons,
+                        }
+                    )
+                    writer.writerow(row)
+
+                for i in range(12):
+                    _write_shadow(f"sig_b_{i}", '["soft_risk:suppress_long_high_wait"]')
+                for i in range(10):
+                    _write_shadow(f"sig_c_{i}", '["soft_risk:suppress_trend_flip_up_strong"]')
+                for i in range(6):
+                    _write_shadow(f"sig_bc_{i}", '["soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong"]')
+                for i in range(10):
+                    _write_shadow(f"sig_ab_{i}", '["require_execution_for_high_wait+suppress_long_high_wait"]')
+                _write_shadow("sig_none", '["market_map:support_to_resistance_flip"]')
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+
+                def _write_position(signal_id: str, exit_status: str, realized_r: str) -> None:
+                    row = {field: "" for field in PAPER_POSITION_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                            "position_status": "closed",
+                            "side": "short",
+                            "primary_setup_reason": "confidence_below_min",
+                            "market_map_flags": "support_to_resistance_flip",
+                            "confidence_direction_shadow": "66",
+                            "confidence_execution_shadow": "24",
+                            "confidence_wait_shadow": "58",
+                            "exit_status": exit_status,
+                            "realized_r": realized_r,
+                        }
+                    )
+                    writer.writerow(row)
+
+                # B only -> keep_soft
+                for i in range(2):
+                    _write_position(f"sig_b_{i}", "sl_hit", "-1.0")
+                _write_position("sig_b_2", "tp2_hit", "2.4")
+                for i in range(3, 10):
+                    _write_position(f"sig_b_{i}", "timeout", "0.2")
+                _write_position("sig_b_10", "entry_not_reached", "1.3")
+                _write_position("sig_b_11", "entry_not_reached", "1.3")
+
+                # C only -> avoid_hardening
+                for i in range(3):
+                    _write_position(f"sig_c_{i}", "tp2_hit", "2.0")
+                for i in range(3, 6):
+                    _write_position(f"sig_c_{i}", "sl_hit", "-1.0")
+                for i in range(6, 10):
+                    _write_position(f"sig_c_{i}", "timeout", "0.1")
+
+                # B+C -> monitor_only (count < 10)
+                _write_position("sig_bc_0", "sl_hit", "-1.0")
+                _write_position("sig_bc_1", "sl_hit", "-1.0")
+                _write_position("sig_bc_2", "tp2_hit", "2.4")
+                _write_position("sig_bc_3", "timeout", "0.3")
+                _write_position("sig_bc_4", "missed_opportunity", "1.3")
+                _write_position("sig_bc_5", "entry_not_reached", "1.3")
+
+                for i in range(10):
+                    _write_position(f"sig_ab_{i}", "sl_hit", "-0.7")
+                _write_position("sig_none", "tp2_hit", "2.1")
+                _write_position("sig_missing", "sl_hit", "-1.0")
+
+            report = build_soft_risk_collateral_damage_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+                limit=5,
+            )
+
+            self.assertIn("# soft risk collateral damage", report)
+            self.assertIn("## group table", report)
+            self.assertIn("## representative examples", report)
+            self.assertIn("missing_shadow_join: `1件`", report)
+            self.assertIn("| B only |", report)
+            self.assertIn("| C only |", report)
+            self.assertIn("| B+C |", report)
+            self.assertIn("| B/C soft risk 全体 |", report)
+            self.assertIn("collateral_damage_score", report)
+            self.assertIn("judgement", report)
+            self.assertIn("| B only | 12 | 10 | 2 | 20.0% | 1 | 10.0% | 7 | 0.18 | 2 | 0 | 2 | 1.30 | 1.50 | keep_soft |", report)
+            self.assertIn("| C only | 10 | 10 | 3 | 30.0% | 3 | 30.0% | 4 | 0.34 | 0 | 0 | 0 | 0.00 | 4.50 | avoid_hardening |", report)
+            self.assertIn("| B+C | 6 | 4 | 2 | 50.0% | 1 | 25.0% | 1 | 0.17 | 2 | 1 | 1 | 1.30 | 2.25 | monitor_only |", report)
+            self.assertIn("### B only", report)
+            self.assertIn("sig_b_0", report)
 
     def test_normalize_ai_post_review_applies_defaults(self) -> None:
         row = _normalize_ai_post_review(
@@ -4058,6 +4169,19 @@ class LogFeedbackTest(unittest.TestCase):
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/qg.md"))
 
+    def test_main_build_soft_risk_collateral_damage_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-soft-risk-collateral-damage-report", "--output-md", "/tmp/soft_risk.md"],
+        ), patch("tools.log_feedback.build_soft_risk_collateral_damage_report") as mocked_report:
+            mocked_report.return_value = "# soft risk\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/soft_risk.md"))
+
     def test_main_build_paper_entry_sl_wait_redesign_report_accepts_output_path(self) -> None:
         with patch.object(
             sys,
@@ -4096,6 +4220,19 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/paper_entry_alias.md"))
+
+    def test_main_soft_risk_collateral_damage_alias_maps_to_subcommand(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "--soft-risk-collateral-damage", "--output-md", "/tmp/soft_risk_alias.md"],
+        ), patch("tools.log_feedback.build_soft_risk_collateral_damage_report") as mocked_report:
+            mocked_report.return_value = "# soft risk\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/soft_risk_alias.md"))
 
 
 if __name__ == "__main__":

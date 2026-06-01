@@ -199,6 +199,18 @@ REPORT_FAMILY_SPECS = [
         "section": "ondemand",
     },
     {
+        "name": "soft_risk_collateral_damage",
+        "label": "soft risk collateral damage",
+        "pattern": "soft_risk_collateral_damage_*.md",
+        "date_pattern": r"soft_risk_collateral_damage_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "B/C 単独 soft risk の hard blocker 化による巻き込み被害を評価する。",
+        "section": "ondemand",
+    },
+    {
         "name": "notified_rr_to_entry",
         "label": "標準比較 notified_rr_to_entry",
         "pattern": "notified_rr_to_entry.md",
@@ -5819,6 +5831,197 @@ def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
     return "monitor"
 
 
+def _soft_risk_collateral_damage_score(split_stats: dict[str, Any]) -> float:
+    score = (
+        float(split_stats.get("entered_tp2_hit", 0)) * 2.0
+        + float(split_stats.get("missed_opportunity", 0))
+        + float(split_stats.get("entry_not_reached", 0)) * 0.25
+        - float(split_stats.get("entered_sl_hit", 0)) * 0.5
+    )
+    return round(score, 2)
+
+
+def _soft_risk_collateral_damage_judgement(split_stats: dict[str, Any], collateral_damage_score: float) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    entered_sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    entered_tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed_opportunity = int(split_stats.get("missed_opportunity", 0))
+
+    if count < 10 or entered_count < 10:
+        return "monitor_only"
+    if entered_tp2_hit_rate >= 0.2 or _ratio(missed_opportunity, count) >= 0.4:
+        return "avoid_hardening"
+    if count >= 10 and collateral_damage_score > 0:
+        return "keep_soft"
+    if count >= 10 and entered_count >= 10 and entered_sl_hit_rate >= 0.7 and collateral_damage_score <= 0:
+        return "harden_candidate"
+    return "monitor_only"
+
+
+def build_soft_risk_collateral_damage_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 5,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    closed_rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        if str(row.get("position_status", "")).strip() != "closed":
+            continue
+        if date_from or date_to:
+            if not _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")).strip(),
+                date_from=date_from.strip(),
+                date_to=date_to.strip(),
+            ):
+                continue
+        closed_rows.append(row)
+
+    joined_rows: list[dict[str, Any]] = []
+    missing_shadow_join_ids: list[str] = []
+    for row in closed_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        shadow = shadow_by_id.get(signal_id)
+        if shadow is None:
+            missing_shadow_join_ids.append(signal_id)
+            continue
+        leaf_hits = _counterfactual_leaf_hits_from_shadow_row(shadow)
+        merged = dict(shadow)
+        merged.update(row)
+        merged["_leaf_hits"] = leaf_hits
+        merged["_group_label"] = _counterfactual_group_label(leaf_hits)
+        joined_rows.append(merged)
+
+    grouped_rows = {
+        "B only": [row for row in joined_rows if row.get("_group_label") == "B only"],
+        "C only": [row for row in joined_rows if row.get("_group_label") == "C only"],
+        "B+C": [row for row in joined_rows if row.get("_group_label") == "B+C"],
+        "A+B": [row for row in joined_rows if row.get("_group_label") == "A+B"],
+        "A+C": [row for row in joined_rows if row.get("_group_label") == "A+C"],
+        "A+B+C": [row for row in joined_rows if row.get("_group_label") == "A+B+C"],
+        "B/C soft risk 全体": [
+            row
+            for row in joined_rows
+            if "require_execution_for_high_wait" not in row.get("_leaf_hits", set())
+            and bool({"suppress_long_high_wait", "suppress_trend_flip_up_strong"} & set(row.get("_leaf_hits", set())))
+        ],
+        "A hard 含み全体": [row for row in joined_rows if "require_execution_for_high_wait" in row.get("_leaf_hits", set())],
+        "guard非該当全体": [row for row in joined_rows if not row.get("_leaf_hits")],
+        "closed全体": joined_rows,
+    }
+    ordered_groups = [
+        "B only",
+        "C only",
+        "B+C",
+        "A+B",
+        "A+C",
+        "A+B+C",
+        "B/C soft risk 全体",
+        "A hard 含み全体",
+        "guard非該当全体",
+        "closed全体",
+    ]
+
+    lines = ["# soft risk collateral damage", "", "## 概要", ""]
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed 全体件数: `{len(closed_rows)}件`")
+    lines.append(f"- joined closed 件数: `{len(joined_rows)}件`")
+    lines.append(f"- missing_shadow_join: `{len(missing_shadow_join_ids)}件`")
+    if missing_shadow_join_ids:
+        lines.append(f"- missing_shadow_join 代表: `{', '.join(missing_shadow_join_ids[:5])}`")
+    lines.append(f"- B/C soft risk 対象件数: `{len(grouped_rows['B/C soft risk 全体'])}件`")
+    lines.append(f"- A hard 含み件数: `{len(grouped_rows['A hard 含み全体'])}件`")
+    lines.append("")
+    lines.append("## group table")
+    lines.append("")
+    lines.append(
+        "| group | count | entered_count | entered_sl_hit | entered_sl_hit_rate | entered_tp2_hit | entered_tp2_hit_rate | entered_timeout | entered_avg_R | non_entered_count | missed_opportunity | entry_not_reached | non_entered_avg_R | collateral_damage_score | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in ordered_groups:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        collateral_damage_score = _soft_risk_collateral_damage_score(split_stats)
+        judgement = _soft_risk_collateral_damage_judgement(split_stats, collateral_damage_score)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    f"{split_stats['entered_avg_r']:.2f}",
+                    str(split_stats["non_entered_count"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{split_stats['non_entered_avg_r']:.2f}",
+                    f"{collateral_damage_score:.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    max_examples = max(1, min(int(limit), 5))
+    lines.append("")
+    lines.append("## representative examples")
+    for label in ordered_groups:
+        lines.append("")
+        lines.append(f"### {label}")
+        group_rows = grouped_rows[label][:max_examples]
+        if not group_rows:
+            lines.append("- 該当なし")
+            continue
+        for row in group_rows:
+            flags = str(row.get("market_map_flags", "")).strip() or str(row.get("opportunity_reasons", "")).strip()
+            lines.append(
+                f"- {row.get('signal_id', '')}: {row.get('exit_status', '')} / "
+                f"side={row.get('side', '')} / setup={row.get('primary_setup_reason', '')} / "
+                f"flags={flags} / direction={_parse_float(row.get('confidence_direction_shadow'), 0.0):.1f} / "
+                f"execution={_parse_float(row.get('confidence_execution_shadow'), 0.0):.1f} / "
+                f"wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.1f} / "
+                f"realized_r={_parse_float(row.get('realized_r'), 0.0):.2f}"
+            )
+
+    lines.append("")
+    lines.append("## interpretation")
+    lines.append("- B/C 単独 soft risk は現時点では hard blocker 化しない。")
+    lines.append("- この report は guard 条件変更のための材料であり、即時変更ではない。")
+    lines.append("- missed_opportunity / entry_not_reached は約定後損益ではない。")
+    lines.append("- trend_flip_confirmed_up は強評価へ戻さない。")
+    lines.append("- trade_execution_gate / phase1b_lite_gate / opportunity_gate は変更しない。")
+    lines.append("")
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def build_quality_guard_effectiveness_report(
     *,
     base_dir: Path,
@@ -8715,6 +8918,12 @@ def _build_parser() -> argparse.ArgumentParser:
     quality_guard_effectiveness_parser.add_argument("--date-from", default="")
     quality_guard_effectiveness_parser.add_argument("--date-to", default="")
 
+    soft_risk_collateral_damage_parser = subparsers.add_parser("build-soft-risk-collateral-damage-report")
+    soft_risk_collateral_damage_parser.add_argument("--output-md")
+    soft_risk_collateral_damage_parser.add_argument("--date-from", default="")
+    soft_risk_collateral_damage_parser.add_argument("--date-to", default="")
+    soft_risk_collateral_damage_parser.add_argument("--limit", type=int, default=5)
+
     report_hub_parser = subparsers.add_parser("build-report-hub")
     report_hub_parser.add_argument("--output-md")
 
@@ -8748,6 +8957,8 @@ def main() -> None:
         argv = ["build-paper-entry-sl-wait-redesign-report", *argv[1:]]
     if argv and argv[0] == "--quality-guard-effectiveness":
         argv = ["build-quality-guard-effectiveness-report", *argv[1:]]
+    if argv and argv[0] == "--soft-risk-collateral-damage":
+        argv = ["build-soft-risk-collateral-damage-report", *argv[1:]]
     if argv and argv[0] == "--report-hub":
         argv = ["build-report-hub", *argv[1:]]
     args = parser.parse_args(argv)
@@ -8952,6 +9163,28 @@ def main() -> None:
             output_md=output_md,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-soft-risk-collateral-damage-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"soft_risk_collateral_damage_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_soft_risk_collateral_damage_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
         )
         if output_md:
             print(output_md)

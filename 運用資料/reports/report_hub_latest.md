@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-06-01 17:33 JST
+- generated_at: 2026-06-01 17:58 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順
@@ -70,6 +70,13 @@
 - previous: `missing`
 - storage: `active`
 - purpose: paper opportunity quality guard の初回反映評価と counterfactual 論点整理。
+- last_date: `2026-06-01` / freshness: `fresh(0d)`
+
+### soft risk collateral damage
+- latest: [運用資料/reports/analysis/soft_risk_collateral_damage_20260601.md](運用資料/reports/analysis/soft_risk_collateral_damage_20260601.md)
+- previous: `missing`
+- storage: `active`
+- purpose: B/C 単独 soft risk の hard blocker 化による巻き込み被害を評価する。
 - last_date: `2026-06-01` / freshness: `fresh(0d)`
 
 ## Dormant / 補助診断

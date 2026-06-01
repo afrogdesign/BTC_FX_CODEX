@@ -52,6 +52,7 @@
 - 実施済み仕様 `chatgpt/specs/archive/20260601_counterfactual_quality_guard_builder.md` と `chatgpt/specs/archive/20260601_quality_guard_effectiveness_metric_split.md` へ移動済み。BTCFX-20260601-02 で `quality_guard_effectiveness` の entered / non-entered split、`entered_avg_R` / `non_entered_avg_R` / `judgement` を実装し、`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更していない。
 - BTCFX-20260601-04 で `paper_entry_sl_wait_redesign` report の正式 builder / CLI 化を実装済み。`build_paper_entry_sl_wait_redesign_report(...)`、`build-paper-entry-sl-wait-redesign-report`、`--paper-entry-sl-wait-redesign` を追加し、report hub は最新 `paper_entry_sl_wait_redesign_20260601.md` を参照するよう更新済み。`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更せず、active spec は `chatgpt/specs/archive/20260601_paper_entry_sl_wait_redesign_builder.md` へ移動済み。
 - BTCFX-20260601-05 で次回実装用 active spec `chatgpt/specs/active/20260601_soft_risk_collateral_damage_report.md` を作成。目的は B/C 単独 soft risk の collateral damage を評価する report builder / CLI 化で、今回は仕様作成のみ（実装は次回）。
+- BTCFX-20260601-06 で `soft_risk_collateral_damage` report の builder / CLI 化を実装済み。`build_soft_risk_collateral_damage_report(...)`、`build-soft-risk-collateral-damage-report`、`--soft-risk-collateral-damage` を追加し、report hub は最新 `soft_risk_collateral_damage_20260601.md` を参照するよう更新済み。B/C 単独 soft risk は現時点で hard blocker 化せず、`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更していない。active spec は `chatgpt/specs/archive/20260601_soft_risk_collateral_damage_report.md` へ移動済み。
 
 ## 実装済みの前提
 
