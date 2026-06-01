@@ -685,6 +685,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("## proposal", report)
             self.assertIn("## 設計判断ラベル", report)
             self.assertIn("## entry recheck reason impact", report)
+            self.assertIn("## entry recheck collateral damage breakdown", report)
             self.assertIn("| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |", report)
             self.assertIn("| entry_recheck_required_high_wait |", report)
             self.assertIn("| entry_recheck_required_low_execution |", report)
@@ -777,8 +778,10 @@ class LogFeedbackTest(unittest.TestCase):
 
             self.assertIn("## entry recheck reason impact", report)
             self.assertIn("## entry recheck counterfactual impact", report)
+            self.assertIn("## entry recheck collateral damage breakdown", report)
             reason_section = report.split("## entry recheck reason impact", 1)[1].split("## entry recheck counterfactual impact", 1)[0]
-            counterfactual_section = report.split("## entry recheck counterfactual impact", 1)[1]
+            counterfactual_section = report.split("## entry recheck counterfactual impact", 1)[1].split("## entry recheck collateral damage breakdown", 1)[0]
+            breakdown_section = report.split("## entry recheck collateral damage breakdown", 1)[1]
             self.assertIn("| entry_recheck_any | 0 | 0 |", reason_section)
             self.assertIn("| entry_recheck_required_high_wait |", counterfactual_section)
             self.assertIn("| entry_recheck_required_low_execution |", counterfactual_section)
@@ -788,6 +791,16 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("| entry_recheck_any | 5 | 5 |", counterfactual_section)
             self.assertIn("| entry_recheck_none | 1 | 1 |", counterfactual_section)
             self.assertIn("counterfactual であり、過去実行時に実際に出た reason ではない", counterfactual_section)
+            self.assertIn("### side", breakdown_section)
+            self.assertIn("### wait band", breakdown_section)
+            self.assertIn("### execution band", breakdown_section)
+            self.assertIn("### primary_setup_reason", breakdown_section)
+            self.assertIn("### market_map_flags", breakdown_section)
+            self.assertIn("### side + wait band", breakdown_section)
+            self.assertIn("### side + execution band", breakdown_section)
+            self.assertIn("### setup reason + execution band", breakdown_section)
+            self.assertIn("| short | 1 | 1 | 0 | 0.0% | 0 | 0.0% | 0 | 0.0% | 1 | 0.20 | insufficient_n |", breakdown_section)
+            self.assertIn("| support_to_resistance_flip | 1 | 1 | 0 | 0.0% | 0 | 0.0% | 0 | 0.0% | 1 | 0.20 | insufficient_n |", breakdown_section)
 
     def test_quality_guard_effectiveness_report_includes_split_and_judgement(self) -> None:
         with TemporaryDirectory() as tmpdir:

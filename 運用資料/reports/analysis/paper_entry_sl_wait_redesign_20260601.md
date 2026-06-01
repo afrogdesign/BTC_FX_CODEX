@@ -204,6 +204,89 @@
 - trend_flip_confirmed_up は強評価へ戻さない。
 - この集計は Phase 1B 昇格材料ではなく、次の再設計判断材料。
 
+
+## entry recheck collateral damage breakdown
+
+- 対象: counterfactual `entry_recheck_none` group
+- rows: `50件`
+
+### side
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| short | 47 | 23 | 16 | 69.6% | 4 | 17.4% | 24 | 51.1% | 3 | 0.64 | collateral_damage_risk |
+| long | 3 | 3 | 2 | 66.7% | 1 | 33.3% | 0 | 0.0% | 0 | 0.47 | insufficient_n |
+
+### wait band
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 40<=wait<60 | 48 | 25 | 18 | 72.0% | 4 | 16.0% | 23 | 47.9% | 3 | 0.58 | collateral_damage_risk |
+| wait<40 | 1 | 0 | 0 | 0.0% | 0 | 0.0% | 1 | 100.0% | 0 | 1.30 | insufficient_n |
+| 60<=wait<80 | 1 | 1 | 0 | 0.0% | 1 | 100.0% | 0 | 0.0% | 0 | 2.40 | insufficient_n |
+
+### execution band
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 20<=execution<35 | 38 | 18 | 11 | 61.1% | 5 | 27.8% | 20 | 52.6% | 2 | 0.79 | collateral_damage_risk |
+| execution<20 | 9 | 8 | 7 | 87.5% | 0 | 0.0% | 1 | 11.1% | 1 | -0.25 | suppress_candidate |
+| 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
+
+### primary_setup_reason
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| confidence_below_min | 44 | 20 | 14 | 70.0% | 4 | 20.0% | 24 | 54.5% | 2 | 0.72 | collateral_damage_risk |
+| inside_entry_zone_with_trigger | 6 | 6 | 4 | 66.7% | 1 | 16.7% | 0 | 0.0% | 1 | -0.02 | collateral_damage_risk |
+
+### market_map_flags
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| short_into_major_support | 41 | 23 | 16 | 69.6% | 4 | 17.4% | 18 | 43.9% | 3 | 0.55 | collateral_damage_risk |
+| support_to_resistance_retest_confirmed | 40 | 18 | 13 | 72.2% | 3 | 16.7% | 22 | 55.0% | 2 | 0.71 | collateral_damage_risk |
+| support_to_resistance_flip | 40 | 18 | 13 | 72.2% | 3 | 16.7% | 22 | 55.0% | 2 | 0.71 | collateral_damage_risk |
+| long_into_major_resistance | 28 | 21 | 15 | 71.4% | 3 | 14.3% | 7 | 25.0% | 3 | 0.28 | monitor_only |
+| trend_flip_early_down | 24 | 12 | 9 | 75.0% | 2 | 16.7% | 12 | 50.0% | 1 | 0.65 | collateral_damage_risk |
+| trend_flip_confirmed_down | 22 | 11 | 7 | 63.6% | 2 | 18.2% | 11 | 50.0% | 2 | 0.61 | collateral_damage_risk |
+| major_resistance_rejection | 17 | 12 | 7 | 58.3% | 2 | 16.7% | 5 | 29.4% | 3 | 0.46 | collateral_damage_risk |
+| failed_breakout_down_reversal | 14 | 11 | 6 | 54.5% | 2 | 18.2% | 3 | 21.4% | 3 | 0.37 | collateral_damage_risk |
+| major_support_rejection | 13 | 5 | 5 | 100.0% | 0 | 0.0% | 8 | 61.5% | 0 | 0.57 | collateral_damage_risk |
+| resistance_to_support_retest_confirmed | 9 | 7 | 4 | 57.1% | 2 | 28.6% | 2 | 22.2% | 1 | 0.46 | collateral_damage_risk |
+| resistance_to_support_flip | 9 | 7 | 4 | 57.1% | 2 | 28.6% | 2 | 22.2% | 1 | 0.46 | collateral_damage_risk |
+| failed_breakout_up_reversal | 7 | 1 | 1 | 100.0% | 0 | 0.0% | 6 | 85.7% | 0 | 0.97 | collateral_damage_risk |
+| trend_flip_early_up | 3 | 2 | 1 | 50.0% | 1 | 50.0% | 1 | 33.3% | 0 | 1.23 | insufficient_n |
+| trend_flip_confirmed_up | 1 | 1 | 1 | 100.0% | 0 | 0.0% | 0 | 0.0% | 0 | -1.00 | insufficient_n |
+
+### side + wait band
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| short | 40<=wait<60 | 46 | 23 | 16 | 69.6% | 4 | 17.4% | 23 | 50.0% | 3 | 0.63 | collateral_damage_risk |
+| long | 40<=wait<60 | 2 | 2 | 2 | 100.0% | 0 | 0.0% | 0 | 0.0% | 0 | -0.50 | insufficient_n |
+| short | wait<40 | 1 | 0 | 0 | 0.0% | 0 | 0.0% | 1 | 100.0% | 0 | 1.30 | insufficient_n |
+| long | 60<=wait<80 | 1 | 1 | 0 | 0.0% | 1 | 100.0% | 0 | 0.0% | 0 | 2.40 | insufficient_n |
+
+### side + execution band
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| short | 20<=execution<35 | 35 | 15 | 9 | 60.0% | 4 | 26.7% | 20 | 57.1% | 2 | 0.82 | collateral_damage_risk |
+| short | execution<20 | 9 | 8 | 7 | 87.5% | 0 | 0.0% | 1 | 11.1% | 1 | -0.25 | suppress_candidate |
+| short | 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
+| long | 20<=execution<35 | 3 | 3 | 2 | 66.7% | 1 | 33.3% | 0 | 0.0% | 0 | 0.47 | insufficient_n |
+
+### setup reason + execution band
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| confidence_below_min | 20<=execution<35 | 36 | 16 | 10 | 62.5% | 4 | 25.0% | 20 | 55.6% | 2 | 0.79 | collateral_damage_risk |
+| confidence_below_min | execution<20 | 5 | 4 | 4 | 100.0% | 0 | 0.0% | 1 | 20.0% | 0 | -0.14 | monitor_only |
+| inside_entry_zone_with_trigger | execution<20 | 4 | 4 | 3 | 75.0% | 0 | 0.0% | 0 | 0.0% | 1 | -0.38 | insufficient_n |
+| confidence_below_min | 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
+| inside_entry_zone_with_trigger | 20<=execution<35 | 2 | 2 | 1 | 50.0% | 1 | 50.0% | 0 | 0.0% | 0 | 0.70 | insufficient_n |
+
 ## proposal
 - suppress_long_high_wait: long かつ wait>=60 は 17件 / 平均R=-0.34 / 簡易PF=0.51 のため、紙候補でも一段抑制候補。
 - suppress_trend_flip_up_strong: 上方向転換系は 19件 / 平均R=0.06 / 勝率=10.5% のため、強評価へ戻さない候補。

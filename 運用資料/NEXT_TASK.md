@@ -79,6 +79,10 @@
 - 次回 ChatGPT は上記 analysis を先に読み、次に active spec 化する対象（entry recheck 条件微調整 / collateral damage 追加診断）を判断する。
 - BTCFX-20260601-14 で active spec `chatgpt/specs/active/20260601_entry_recheck_collateral_damage_breakdown.md` を作成。
 - 次回はこの active spec を正本に、paper_entry_sl_wait_redesign report へ collateral damage breakdown を実装する。
+- BTCFX-20260601-15 で entry recheck collateral damage breakdown を実装。
+- paper_entry_sl_wait_redesign_20260601.md に新セクションを追加。
+- active spec は archive 済み。
+- 次回は breakdown 結果を読んで、high_wait / low_execution の条件微調整に進むか判断。
 
 ## 実装済みの前提
 

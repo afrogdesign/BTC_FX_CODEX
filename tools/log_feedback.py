@@ -6028,6 +6028,126 @@ def _paper_entry_recheck_counterfactual_impact_section_lines(market_rows: list[d
     return lines
 
 
+def _entry_recheck_wait_band(wait_value: float) -> str:
+    if wait_value < 40.0:
+        return "wait<40"
+    if wait_value < 60.0:
+        return "40<=wait<60"
+    if wait_value < 80.0:
+        return "60<=wait<80"
+    return "wait>=80"
+
+
+def _entry_recheck_execution_band(execution_value: float) -> str:
+    if execution_value < 20.0:
+        return "execution<20"
+    if execution_value < 35.0:
+        return "20<=execution<35"
+    if execution_value < 50.0:
+        return "35<=execution<50"
+    return "execution>=50"
+
+
+def _entry_recheck_collateral_damage_breakdown_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed = int(split_stats.get("missed_opportunity", 0))
+    missed_rate = _ratio(missed, count)
+    if count < 5:
+        return "insufficient_n"
+    if tp2_hit_rate >= 0.15 or missed_rate >= 0.3:
+        return "collateral_damage_risk"
+    if sl_hit_rate >= 0.7 and tp2_hit_rate < 0.1 and missed_rate < 0.2:
+        return "suppress_candidate"
+    return "monitor_only"
+
+
+def _entry_recheck_grouped_rows(rows: list[dict[str, Any]], axis: str) -> list[tuple[str, list[dict[str, Any]]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        side = str(row.get("side", "")).strip() or "unknown"
+        wait_band = _entry_recheck_wait_band(_parse_float(row.get("confidence_wait_shadow"), 0.0))
+        execution_band = _entry_recheck_execution_band(_parse_float(row.get("confidence_execution_shadow"), 0.0))
+        setup_reason = str(row.get("primary_setup_reason", "")).strip() or "unknown"
+        if axis == "side":
+            labels = [side]
+        elif axis == "wait band":
+            labels = [wait_band]
+        elif axis == "execution band":
+            labels = [execution_band]
+        elif axis == "primary_setup_reason":
+            labels = [setup_reason]
+        elif axis == "market_map_flags":
+            labels = _split_values(str(row.get("market_map_flags", ""))) or ["none"]
+        elif axis == "side + wait band":
+            labels = [f"{side} | {wait_band}"]
+        elif axis == "side + execution band":
+            labels = [f"{side} | {execution_band}"]
+        elif axis == "setup reason + execution band":
+            labels = [f"{setup_reason} | {execution_band}"]
+        else:
+            labels = ["unknown"]
+        for label in labels:
+            grouped.setdefault(label, []).append(row)
+    ordered = sorted(grouped.items(), key=lambda item: (len(item[1]), item[0]), reverse=True)
+    return ordered
+
+
+def _paper_entry_recheck_collateral_damage_breakdown_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_counterfactual_hits(row))
+        for row in market_rows
+    ]
+    none_rows = [row for row, hits in rows_with_hits if not hits]
+    axes = [
+        "side",
+        "wait band",
+        "execution band",
+        "primary_setup_reason",
+        "market_map_flags",
+        "side + wait band",
+        "side + execution band",
+        "setup reason + execution band",
+    ]
+
+    lines = ["", "## entry recheck collateral damage breakdown", ""]
+    lines.append("- 対象: counterfactual `entry_recheck_none` group")
+    lines.append(f"- rows: `{len(none_rows)}件`")
+    for axis in axes:
+        grouped = _entry_recheck_grouped_rows(none_rows, axis)
+        lines.extend(["", f"### {axis}", ""])
+        lines.append(
+            "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |"
+        )
+        lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+        for label, grouped_rows in grouped:
+            split_stats = _counterfactual_entered_non_entered_stats(grouped_rows)
+            judgement = _entry_recheck_collateral_damage_breakdown_judgement(split_stats)
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        label,
+                        str(split_stats["count"]),
+                        str(split_stats["entered_count"]),
+                        str(split_stats["entered_sl_hit"]),
+                        _format_pct(split_stats["entered_sl_hit_rate"]),
+                        str(split_stats["entered_tp2_hit"]),
+                        _format_pct(split_stats["entered_tp2_hit_rate"]),
+                        str(split_stats["missed_opportunity"]),
+                        _format_pct(_ratio(int(split_stats["missed_opportunity"]), int(split_stats["count"]))),
+                        str(split_stats["entered_timeout"]),
+                        f"{_mean_value(grouped_rows, 'realized_r'):.2f}",
+                        judgement,
+                    ]
+                )
+                + " |"
+            )
+    lines.append("")
+    return lines
+
+
 def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
     count = int(split_stats.get("count", 0))
     entered_count = int(split_stats.get("entered_count", 0))
@@ -6768,13 +6888,22 @@ def build_paper_entry_sl_wait_redesign_report(
     label_section = ["", "## 設計判断ラベル", *_paper_entry_sl_wait_redesign_label_lines(market_rows)]
     impact_section = _paper_entry_recheck_impact_section_lines(market_rows)
     counterfactual_impact_section = _paper_entry_recheck_counterfactual_impact_section_lines(market_rows)
+    collateral_damage_breakdown_section = _paper_entry_recheck_collateral_damage_breakdown_section_lines(market_rows)
     try:
         proposal_idx = lines.index("## proposal")
-        lines = [*lines[:proposal_idx], *label_section, *impact_section, *counterfactual_impact_section, *lines[proposal_idx:]]
+        lines = [
+            *lines[:proposal_idx],
+            *label_section,
+            *impact_section,
+            *counterfactual_impact_section,
+            *collateral_damage_breakdown_section,
+            *lines[proposal_idx:],
+        ]
     except ValueError:
         lines.extend(label_section)
         lines.extend(impact_section)
         lines.extend(counterfactual_impact_section)
+        lines.extend(collateral_damage_breakdown_section)
 
     report = "\n".join(lines) + "\n"
     if output_md is not None:
