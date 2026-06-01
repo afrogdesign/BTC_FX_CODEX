@@ -50,6 +50,7 @@
 - `counterfactual_quality_guard` builder を `tools/log_feedback.py` に実装し、`./.venv312/bin/python tools/log_feedback.py --quality-guard-effectiveness` で `運用資料/reports/analysis/quality_guard_effectiveness_20260601.md` を再生成した。
 - report hub は `./.venv312/bin/python tools/log_feedback.py --report-hub` で更新済み。`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は今回も変更していない。
 - 実施済み仕様 `chatgpt/specs/archive/20260601_counterfactual_quality_guard_builder.md` と `chatgpt/specs/archive/20260601_quality_guard_effectiveness_metric_split.md` へ移動済み。BTCFX-20260601-02 で `quality_guard_effectiveness` の entered / non-entered split、`entered_avg_R` / `non_entered_avg_R` / `judgement` を実装し、`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更していない。
+- BTCFX-20260601-03 で次回実装用 active spec `chatgpt/specs/active/20260601_paper_entry_sl_wait_redesign_builder.md` を作成。目的は `paper_entry_sl_wait_redesign` report の正式 builder / CLI 化で、今回は仕様作成のみ。
 
 ## 実装済みの前提
 
