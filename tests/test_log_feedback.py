@@ -637,6 +637,12 @@ class LogFeedbackTest(unittest.TestCase):
                         '["entry_recheck_required_high_wait","entry_recheck_required_low_execution","market_map:support_to_resistance_flip"]',
                     ),
                     (
+                        "sig_i",
+                        "sl_hit",
+                        "-0.6",
+                        '["entry_recheck_required_short_low_execution","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
                         "sig_g",
                         "tp2_hit",
                         "2.0",
@@ -689,6 +695,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |", report)
             self.assertIn("| entry_recheck_required_high_wait |", report)
             self.assertIn("| entry_recheck_required_low_execution |", report)
+            self.assertIn("| entry_recheck_required_short_low_execution |", report)
             self.assertIn("| entry_recheck_required_long_weakness |", report)
             self.assertIn("| entry_recheck_required_trend_flip_up |", report)
             self.assertIn("| price_distance_missing |", report)
@@ -785,6 +792,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("| entry_recheck_any | 0 | 0 |", reason_section)
             self.assertIn("| entry_recheck_required_high_wait |", counterfactual_section)
             self.assertIn("| entry_recheck_required_low_execution |", counterfactual_section)
+            self.assertIn("| entry_recheck_required_short_low_execution |", counterfactual_section)
             self.assertIn("| entry_recheck_required_long_weakness |", counterfactual_section)
             self.assertIn("| entry_recheck_required_trend_flip_up |", counterfactual_section)
             self.assertIn("| price_distance_missing |", counterfactual_section)

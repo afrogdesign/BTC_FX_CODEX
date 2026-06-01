@@ -164,3 +164,8 @@
 - `phase1_active=true=30件以上` を Ver03 判断材料にできるだけの観測が貯まる。
 - BTCFX-20260601-16 で active spec `chatgpt/specs/active/20260601_short_low_execution_recheck.md` を作成。
 - 次回はこの active spec を正本に、short + execution<20 の entry recheck 追加を実装する。
+- BTCFX-20260601-17 で short + execution<20 の entry recheck reason を実装。
+- entry_recheck_required_short_low_execution を追加し、paper_entry_sl_wait_redesign report の counterfactual impact に反映。
+- active spec は archive 済み。
+- trade_execution_gate / phase1b_lite_gate / paper_orders planned は変更していない。
+- 次回は再生成された report の結果を見て、条件を維持するか追加調整するか判断。

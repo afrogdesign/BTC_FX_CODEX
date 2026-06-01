@@ -1,6 +1,6 @@
 # 紙実行候補 entry/wait 診断
 
-- 対象 paper_positions: 514件
+- 対象 paper_positions: 515件
 - closed: 505件 / opportunity_type: setup_watch_learning=213件, direction_rr_learning=169件, market_map_opportunity=117件, confidence_watch_sweep_lite=5件, formal_execution_candidate=1件
 - closed 全体: 勝率=5.3% / 平均R=4.01 / 簡易PF=11.56 / 終了=sl_hit=216件, missed_opportunity=125件, entry_not_reached=116件, tp2_hit=27件, timeout=21件
 - market_map_opportunity: 117件 / 勝率=9.4% / 平均R=0.37 / 簡易PF=2.05 / 終了=sl_hit=56件, missed_opportunity=42件, tp2_hit=11件, timeout=8件
@@ -165,6 +165,7 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | entry_recheck_required_high_wait | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
 | entry_recheck_required_low_execution | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
+| entry_recheck_required_short_low_execution | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
 | entry_recheck_required_long_weakness | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
 | entry_recheck_required_trend_flip_up | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
 | price_distance_missing | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
@@ -187,11 +188,12 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | entry_recheck_required_high_wait | 13 | 12 | 11 | 91.7% | 0 | 0.0% | 1 | 1 | 0 | -0.73 | risk_confirmed |
 | entry_recheck_required_low_execution | 55 | 41 | 34 | 82.9% | 4 | 9.8% | 3 | 14 | 0 | 0.04 | risk_confirmed |
+| entry_recheck_required_short_low_execution | 44 | 35 | 28 | 80.0% | 3 | 8.6% | 4 | 9 | 0 | 0.08 | risk_confirmed |
 | entry_recheck_required_long_weakness | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
 | entry_recheck_required_trend_flip_up | 7 | 7 | 6 | 85.7% | 1 | 14.3% | 0 | 0 | 0 | -0.23 | insufficient_n |
 | price_distance_missing | 17 | 13 | 9 | 69.2% | 2 | 15.4% | 2 | 4 | 0 | 0.37 | monitor_only |
-| entry_recheck_any | 67 | 49 | 38 | 77.6% | 6 | 12.2% | 5 | 18 | 0 | 0.17 | risk_confirmed |
-| entry_recheck_none | 50 | 26 | 18 | 69.2% | 5 | 19.2% | 3 | 24 | 0 | 0.63 | collateral_damage_risk |
+| entry_recheck_any | 76 | 57 | 45 | 78.9% | 6 | 10.5% | 6 | 19 | 0 | 0.12 | risk_confirmed |
+| entry_recheck_none | 41 | 18 | 11 | 61.1% | 5 | 27.8% | 2 | 23 | 0 | 0.83 | collateral_damage_risk |
 | market_map_opportunity 全体 | 117 | 75 | 56 | 74.7% | 11 | 14.7% | 8 | 42 | 0 | 0.37 | risk_confirmed |
 
 ### interpretation
@@ -208,20 +210,20 @@
 ## entry recheck collateral damage breakdown
 
 - 対象: counterfactual `entry_recheck_none` group
-- rows: `50件`
+- rows: `41件`
 
 ### side
 
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| short | 47 | 23 | 16 | 69.6% | 4 | 17.4% | 24 | 51.1% | 3 | 0.64 | collateral_damage_risk |
+| short | 38 | 15 | 9 | 60.0% | 4 | 26.7% | 23 | 60.5% | 2 | 0.86 | collateral_damage_risk |
 | long | 3 | 3 | 2 | 66.7% | 1 | 33.3% | 0 | 0.0% | 0 | 0.47 | insufficient_n |
 
 ### wait band
 
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 40<=wait<60 | 48 | 25 | 18 | 72.0% | 4 | 16.0% | 23 | 47.9% | 3 | 0.58 | collateral_damage_risk |
+| 40<=wait<60 | 39 | 17 | 11 | 64.7% | 4 | 23.5% | 22 | 56.4% | 2 | 0.77 | collateral_damage_risk |
 | wait<40 | 1 | 0 | 0 | 0.0% | 0 | 0.0% | 1 | 100.0% | 0 | 1.30 | insufficient_n |
 | 60<=wait<80 | 1 | 1 | 0 | 0.0% | 1 | 100.0% | 0 | 0.0% | 0 | 2.40 | insufficient_n |
 
@@ -230,32 +232,31 @@
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 20<=execution<35 | 38 | 18 | 11 | 61.1% | 5 | 27.8% | 20 | 52.6% | 2 | 0.79 | collateral_damage_risk |
-| execution<20 | 9 | 8 | 7 | 87.5% | 0 | 0.0% | 1 | 11.1% | 1 | -0.25 | suppress_candidate |
 | 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
 
 ### primary_setup_reason
 
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| confidence_below_min | 44 | 20 | 14 | 70.0% | 4 | 20.0% | 24 | 54.5% | 2 | 0.72 | collateral_damage_risk |
-| inside_entry_zone_with_trigger | 6 | 6 | 4 | 66.7% | 1 | 16.7% | 0 | 0.0% | 1 | -0.02 | collateral_damage_risk |
+| confidence_below_min | 39 | 16 | 10 | 62.5% | 4 | 25.0% | 23 | 59.0% | 2 | 0.83 | collateral_damage_risk |
+| inside_entry_zone_with_trigger | 2 | 2 | 1 | 50.0% | 1 | 50.0% | 0 | 0.0% | 0 | 0.70 | insufficient_n |
 
 ### market_map_flags
 
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| short_into_major_support | 41 | 23 | 16 | 69.6% | 4 | 17.4% | 18 | 43.9% | 3 | 0.55 | collateral_damage_risk |
-| support_to_resistance_retest_confirmed | 40 | 18 | 13 | 72.2% | 3 | 16.7% | 22 | 55.0% | 2 | 0.71 | collateral_damage_risk |
-| support_to_resistance_flip | 40 | 18 | 13 | 72.2% | 3 | 16.7% | 22 | 55.0% | 2 | 0.71 | collateral_damage_risk |
-| long_into_major_resistance | 28 | 21 | 15 | 71.4% | 3 | 14.3% | 7 | 25.0% | 3 | 0.28 | monitor_only |
-| trend_flip_early_down | 24 | 12 | 9 | 75.0% | 2 | 16.7% | 12 | 50.0% | 1 | 0.65 | collateral_damage_risk |
-| trend_flip_confirmed_down | 22 | 11 | 7 | 63.6% | 2 | 18.2% | 11 | 50.0% | 2 | 0.61 | collateral_damage_risk |
-| major_resistance_rejection | 17 | 12 | 7 | 58.3% | 2 | 16.7% | 5 | 29.4% | 3 | 0.46 | collateral_damage_risk |
-| failed_breakout_down_reversal | 14 | 11 | 6 | 54.5% | 2 | 18.2% | 3 | 21.4% | 3 | 0.37 | collateral_damage_risk |
-| major_support_rejection | 13 | 5 | 5 | 100.0% | 0 | 0.0% | 8 | 61.5% | 0 | 0.57 | collateral_damage_risk |
+| short_into_major_support | 32 | 15 | 9 | 60.0% | 4 | 26.7% | 17 | 53.1% | 2 | 0.77 | collateral_damage_risk |
+| support_to_resistance_retest_confirmed | 31 | 10 | 6 | 60.0% | 3 | 30.0% | 21 | 67.7% | 1 | 0.99 | collateral_damage_risk |
+| support_to_resistance_flip | 31 | 10 | 6 | 60.0% | 3 | 30.0% | 21 | 67.7% | 1 | 0.99 | collateral_damage_risk |
+| trend_flip_confirmed_down | 19 | 8 | 5 | 62.5% | 2 | 25.0% | 11 | 57.9% | 1 | 0.73 | collateral_damage_risk |
+| long_into_major_resistance | 19 | 13 | 8 | 61.5% | 3 | 23.1% | 6 | 31.6% | 2 | 0.53 | collateral_damage_risk |
+| trend_flip_early_down | 18 | 7 | 4 | 57.1% | 2 | 28.6% | 11 | 61.1% | 1 | 0.96 | collateral_damage_risk |
+| major_resistance_rejection | 14 | 9 | 5 | 55.6% | 2 | 22.2% | 5 | 35.7% | 2 | 0.59 | collateral_damage_risk |
+| failed_breakout_down_reversal | 11 | 8 | 4 | 50.0% | 2 | 25.0% | 3 | 27.3% | 2 | 0.52 | collateral_damage_risk |
+| major_support_rejection | 10 | 3 | 3 | 100.0% | 0 | 0.0% | 7 | 70.0% | 0 | 0.71 | collateral_damage_risk |
 | resistance_to_support_retest_confirmed | 9 | 7 | 4 | 57.1% | 2 | 28.6% | 2 | 22.2% | 1 | 0.46 | collateral_damage_risk |
 | resistance_to_support_flip | 9 | 7 | 4 | 57.1% | 2 | 28.6% | 2 | 22.2% | 1 | 0.46 | collateral_damage_risk |
-| failed_breakout_up_reversal | 7 | 1 | 1 | 100.0% | 0 | 0.0% | 6 | 85.7% | 0 | 0.97 | collateral_damage_risk |
+| failed_breakout_up_reversal | 5 | 0 | 0 | 0.0% | 0 | 0.0% | 5 | 100.0% | 0 | 1.30 | collateral_damage_risk |
 | trend_flip_early_up | 3 | 2 | 1 | 50.0% | 1 | 50.0% | 1 | 33.3% | 0 | 1.23 | insufficient_n |
 | trend_flip_confirmed_up | 1 | 1 | 1 | 100.0% | 0 | 0.0% | 0 | 0.0% | 0 | -1.00 | insufficient_n |
 
@@ -263,7 +264,7 @@
 
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| short | 40<=wait<60 | 46 | 23 | 16 | 69.6% | 4 | 17.4% | 23 | 50.0% | 3 | 0.63 | collateral_damage_risk |
+| short | 40<=wait<60 | 37 | 15 | 9 | 60.0% | 4 | 26.7% | 22 | 59.5% | 2 | 0.84 | collateral_damage_risk |
 | long | 40<=wait<60 | 2 | 2 | 2 | 100.0% | 0 | 0.0% | 0 | 0.0% | 0 | -0.50 | insufficient_n |
 | short | wait<40 | 1 | 0 | 0 | 0.0% | 0 | 0.0% | 1 | 100.0% | 0 | 1.30 | insufficient_n |
 | long | 60<=wait<80 | 1 | 1 | 0 | 0.0% | 1 | 100.0% | 0 | 0.0% | 0 | 2.40 | insufficient_n |
@@ -273,7 +274,6 @@
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | short | 20<=execution<35 | 35 | 15 | 9 | 60.0% | 4 | 26.7% | 20 | 57.1% | 2 | 0.82 | collateral_damage_risk |
-| short | execution<20 | 9 | 8 | 7 | 87.5% | 0 | 0.0% | 1 | 11.1% | 1 | -0.25 | suppress_candidate |
 | short | 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
 | long | 20<=execution<35 | 3 | 3 | 2 | 66.7% | 1 | 33.3% | 0 | 0.0% | 0 | 0.47 | insufficient_n |
 
@@ -282,8 +282,6 @@
 | group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | confidence_below_min | 20<=execution<35 | 36 | 16 | 10 | 62.5% | 4 | 25.0% | 20 | 55.6% | 2 | 0.79 | collateral_damage_risk |
-| confidence_below_min | execution<20 | 5 | 4 | 4 | 100.0% | 0 | 0.0% | 1 | 20.0% | 0 | -0.14 | monitor_only |
-| inside_entry_zone_with_trigger | execution<20 | 4 | 4 | 3 | 75.0% | 0 | 0.0% | 0 | 0.0% | 1 | -0.38 | insufficient_n |
 | confidence_below_min | 35<=execution<50 | 3 | 0 | 0 | 0.0% | 0 | 0.0% | 3 | 100.0% | 0 | 1.30 | insufficient_n |
 | inside_entry_zone_with_trigger | 20<=execution<35 | 2 | 2 | 1 | 50.0% | 1 | 50.0% | 0 | 0.0% | 0 | 0.70 | insufficient_n |
 

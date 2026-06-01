@@ -537,6 +537,31 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["opportunity_gate"], "blocked")
         self.assertIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
 
+    def test_opportunity_gate_blocks_short_low_execution_recheck_for_market_map_opportunity(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=72,
+            confidence_execution_shadow=19,
+            confidence_wait_shadow=50,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_short_low_execution", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+
     def test_opportunity_gate_blocks_long_weakness_when_long_confirmation_is_insufficient(self) -> None:
         result = determine_opportunity_gate(
             bias="long",

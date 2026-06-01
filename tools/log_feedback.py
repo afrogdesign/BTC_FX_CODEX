@@ -80,6 +80,7 @@ _QUALITY_GUARD_LEAF_REASONS = (
 _ENTRY_RECHECK_REASONS = (
     "entry_recheck_required_high_wait",
     "entry_recheck_required_low_execution",
+    "entry_recheck_required_short_low_execution",
     "entry_recheck_required_long_weakness",
     "entry_recheck_required_trend_flip_up",
     "price_distance_missing",
@@ -5863,6 +5864,7 @@ def _paper_entry_recheck_impact_section_lines(market_rows: list[dict[str, Any]])
     group_order = [
         "entry_recheck_required_high_wait",
         "entry_recheck_required_low_execution",
+        "entry_recheck_required_short_low_execution",
         "entry_recheck_required_long_weakness",
         "entry_recheck_required_trend_flip_up",
         "price_distance_missing",
@@ -5873,6 +5875,7 @@ def _paper_entry_recheck_impact_section_lines(market_rows: list[dict[str, Any]])
     grouped_rows: dict[str, list[dict[str, Any]]] = {
         "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
         "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_short_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_short_low_execution" in hits],
         "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
         "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
         "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],
@@ -5963,6 +5966,7 @@ def _paper_entry_recheck_counterfactual_impact_section_lines(market_rows: list[d
     group_order = [
         "entry_recheck_required_high_wait",
         "entry_recheck_required_low_execution",
+        "entry_recheck_required_short_low_execution",
         "entry_recheck_required_long_weakness",
         "entry_recheck_required_trend_flip_up",
         "price_distance_missing",
@@ -5973,6 +5977,7 @@ def _paper_entry_recheck_counterfactual_impact_section_lines(market_rows: list[d
     grouped_rows: dict[str, list[dict[str, Any]]] = {
         "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
         "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_short_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_short_low_execution" in hits],
         "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
         "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
         "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],

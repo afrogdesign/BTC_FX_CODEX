@@ -103,6 +103,9 @@ def _entry_wait_price_recheck_reasons(
     if wait >= 60.0 and not high_wait_keep:
         blocking_reasons.append("entry_recheck_required_high_wait")
 
+    if short_side and execution < 20.0:
+        blocking_reasons.append("entry_recheck_required_short_low_execution")
+
     low_exec_keep = (
         direction >= 70.0
         and wait < 60.0
