@@ -169,3 +169,5 @@
 - active spec は archive 済み。
 - trade_execution_gate / phase1b_lite_gate / paper_orders planned は変更していない。
 - 次回は再生成された report の結果を見て、条件を維持するか追加調整するか判断。
+- BTCFX-20260601-18 で影響範囲を確認し、entry_recheck_required_short_low_execution の count=44 は market_map_opportunity 全体の short+execution<20 再計算（重複込み）であることを確認。
+- entry_recheck_none 内の9件は short_low_execution 単独ヒット分で、通知数44件減を直接意味しない点を確認メモとして残した。
