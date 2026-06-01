@@ -1,20 +1,20 @@
 # 紙実行候補 entry/wait 診断
 
-- 対象 paper_positions: 504件
-- closed: 499件 / opportunity_type: setup_watch_learning=209件, direction_rr_learning=169件, market_map_opportunity=115件, confidence_watch_sweep_lite=5件, formal_execution_candidate=1件
-- closed 全体: 勝率=5.4% / 平均R=4.07 / 簡易PF=11.89 / 終了=sl_hit=211件, missed_opportunity=125件, entry_not_reached=116件, tp2_hit=27件, timeout=20件
+- 対象 paper_positions: 506件
+- closed: 503件 / opportunity_type: setup_watch_learning=213件, direction_rr_learning=169件, market_map_opportunity=115件, confidence_watch_sweep_lite=5件, formal_execution_candidate=1件
+- closed 全体: 勝率=5.4% / 平均R=4.03 / 簡易PF=11.68 / 終了=sl_hit=214件, missed_opportunity=125件, entry_not_reached=116件, tp2_hit=27件, timeout=21件
 - market_map_opportunity: 115件 / 勝率=9.6% / 平均R=0.39 / 簡易PF=2.15 / 終了=sl_hit=54件, missed_opportunity=42件, tp2_hit=11件, timeout=8件
-- その他 opportunity: 384件 / 勝率=4.2% / 平均R=5.18 / 簡易PF=14.47
+- その他 opportunity: 388件 / 勝率=4.1% / 平均R=5.11 / 簡易PF=14.15
 
 ## 判断
 - 主な失敗は missed より SL 側に寄っており、入口を広げるより entry 発火または SL/TP 条件の精査を優先する。
 - `support_to_resistance_flip` などの flag 自体は有効でも、紙ポジション化する entry / wait 条件がまだ粗い。
-- quality guard blocked: 198件 / 理由=require_execution_for_high_wait+suppress_long_high_wait=124件, require_execution_for_high_wait=69件, require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong=5件
-- hard_quality_blocked: 198件 / 理由=require_execution_for_high_wait+suppress_long_high_wait=124件, require_execution_for_high_wait=69件, require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong=5件
+- quality guard blocked: 199件 / 理由=require_execution_for_high_wait+suppress_long_high_wait=124件, require_execution_for_high_wait=70件, require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong=5件
+- hard_quality_blocked: 199件 / 理由=require_execution_for_high_wait+suppress_long_high_wait=124件, require_execution_for_high_wait=70件, require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong=5件
 - soft_quality_risk: 22件 / 理由=soft_risk:suppress_long_high_wait=15件, soft_risk:suppress_trend_flip_up_strong=6件, soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong=1件
-- market_map candidate before/after guard: 266件 -> 115件
-- market_map candidate before/after hard guard: 266件 -> 115件
-- closed sl_hit: 211件 / quality guard 該当 closed sl_hit: 12件
+- market_map candidate before/after guard: 272件 -> 115件
+- market_map candidate before/after hard guard: 272件 -> 115件
+- closed sl_hit: 214件 / quality guard 該当 closed sl_hit: 12件
 
 ## exit_status 別
 - tp2_hit: 11件 / 勝率=100.0% / 平均R=2.40 / 簡易PF=0.00 / 終了=tp2_hit=11件

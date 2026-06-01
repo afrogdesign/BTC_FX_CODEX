@@ -69,12 +69,12 @@
 - `paper_opportunity_diagnostics_20260526.md`: 4/18〜5/26 の紙ポジションは closed 264件 / 平均R 0.33 / 簡易PF 1.82。`market_map_opportunity` は 97件 / 平均R 0.36 / 簡易PF 1.97 だが、`long` は 18件 / 平均R -0.51 / 簡易PF 0.29、`wait>=60` は 39件 / 平均R -0.16 / 簡易PF 0.74 と弱い。
 - `paper_entry_sl_wait_redesign_20260526.md`: `sl_hit` 原因を切り分ける追加診断を実施。`wait>=80` は 7件 / 平均R -0.84 / `sl_hit=6件`、`execution<20` は 44件 / 平均R -0.02 / `sl_hit=29件`、`long` は 18件 / 平均R -0.51 / `sl_hit=15件`、`trend_flip_confirmed_up` は 7件すべて `sl_hit`。SL 失敗分類は `late_wait_sl=20件`、`trend_flip_long_sl=10件`、`other_sl=18件`。proposal は `suppress_long_high_wait`、`suppress_trend_flip_up_strong`、`require_execution_for_high_wait`、`delay_entry_on_sweep_wait` を出力した。
 - AI 事後評価 health は `feedback_daily_sync_20260601.md` 基準で `eligible=393 / AI済み=339 / backlog=54 / created=8 / request_failed=0`。daily cap 8 は継続可能。
-- quality guard 集計の初回反映では、`feedback_daily_sync_20260601.md` 基準で `quality guard blocked=15件`、内訳は `require_execution_for_high_wait=13件`、`suppress_long_high_wait=5件`、`suppress_trend_flip_up_strong=4件`。`market_map opportunity before/after guard` は `26件 -> 4件`。
+- 最新 daily-sync 基準は `feedback_daily_sync_20260601.md`。`trade_execution_gate=pass=0件`、`paper_orders planned=0件`、`quality guard blocked=2件`、`hard_quality_blocked=2件`、`soft_quality_risk=1件`、`market_map opportunity before/after hard guard=25件 -> 5件`。
 - AI事後評価は今後 `feedback_daily_sync` だけでなく `paper_opportunity_diagnostics` と `paper_entry_sl_wait_redesign` の設計根拠にも使う。`human_override` は例外で、日常判断は AI 評価を主系にする。
 
 ## 次のタスク
 
-1. quality guard 実装後も `trade_execution_gate=pass=0件` と `paper_orders planned=0件` は継続。実弾 gate 緩和ではなく、`quality guard blocked` 件数と `sl_hit` / `missed_opportunity` の変化を優先して見る。
+1. 最新 daily-sync は `2026-06-01` 基準で `hard_quality_blocked=2件`、`soft_quality_risk=1件`、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。Phase 1B や実弾寄りの緩和は進めず、hard / soft の推移を観測継続する。
 2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は ChatGPT 側で確定した仕様を受けて実装する。
 3. `paper_entry_sl_wait_redesign_20260526.md` で `sl_hit` の主因が高 wait、低 execution、long、上方向転換系に偏ることを追加確認した。ChatGPT 側は entry 発火条件、SL/TP 条件、wait/execution 抑制条件を分けて再設計する。
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
@@ -87,7 +87,7 @@
 11. `quality_guard_effectiveness_20260601.md` に reason別・複合条件別 counterfactual を追加した。次に ChatGPT が見るべき論点は、reason組み合わせ別の `sl_hit_rate` と `tp2_hit / missed_opportunity` 巻き込み率であり、guard 条件変更はまだ行っていない。
 12. builder 正式化は次回以降の論点とし、今回は `paper_positions.csv` と `shadow_log.csv` の後付け再計算で材料整理だけを行った。
 13. `paper opportunity quality guard` の hard / soft 分離を実装し、仕様書は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md` へ移した。`A=require_execution_for_high_wait` を含む group は hard blocker、`B/C` 単独と `B+C` は soft risk として扱う。
-14. `trade_execution_gate` と `phase1b_lite_gate` は変更していない。次回 ChatGPT が見るべき論点は、この hard / soft 分離の観測を続けるか、soft risk 側の閾値再調整へ進むかである。
+14. `trade_execution_gate` と `phase1b_lite_gate` は変更していない。`soft_quality_risk=1件` と少数のため、次回もまず観測継続とし、継続的に積み上がる場合だけ soft risk 側の閾値再調整を検討する。
 
 ## 残作業一覧
 
