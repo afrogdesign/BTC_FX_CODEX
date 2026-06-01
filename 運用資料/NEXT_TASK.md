@@ -47,7 +47,7 @@
 - AI 事後評価は `request_failed=0` を維持。最新 `feedback_daily_sync_20260601.md` 基準では `created=8 / request_failed=0 / backlog=54`。
 - `ver02.6-v2` では `src/trade/opportunity_gate.py` に paper opportunity quality guard の hard / soft 分離まで反映済み。`trade_execution_gate` と `phase1b_lite_gate` は変更していない。
 - 既存 CLI でレポートを再生成し、`feedback_daily_sync_20260601.md` と `paper_opportunity_diagnostics_20260601.md` に hard / soft 集計を反映済み。
-- `chatgpt/specs/active/` は現在 `.gitkeep` のみ。直近の quality guard 仕様は `archive/` へ移動済みで、次の実装は ChatGPT 側の新しい確定仕様待ち。
+- `chatgpt/specs/active/20260601_counterfactual_quality_guard_builder.md` を次の active spec として追加した。今回の作業は active spec 作成のみで、次の Codex 実装は `counterfactual_quality_guard` builder 正式化とする。
 
 ## 実装済みの前提
 
@@ -82,7 +82,7 @@
 ## 次のタスク
 
 1. 最新 daily-sync は `2026-06-01` 基準で `hard_quality_blocked=1件`、`soft_quality_risk=1件`、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。Phase 1B や実弾寄りの緩和は進めず、hard / soft の推移を観測継続する。
-2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は ChatGPT 側で確定した仕様を受けて実装する。
+2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は `chatgpt/specs/active/20260601_counterfactual_quality_guard_builder.md` を正本として次回実装する（今回は active spec 作成のみ）。
 3. `paper_entry_sl_wait_redesign_20260526.md` で `sl_hit` の主因が高 wait、低 execution、long、上方向転換系に偏ることを追加確認した。ChatGPT 側は entry 発火条件、SL/TP 条件、wait/execution 抑制条件を分けて再設計する。
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
