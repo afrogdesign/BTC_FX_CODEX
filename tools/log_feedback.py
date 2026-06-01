@@ -6260,6 +6260,109 @@ def build_paper_opportunity_diagnostics_report(
     return report
 
 
+def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
+    long_rows = [row for row in market_rows if str(row.get("side", "")).strip() == "long"]
+    trend_flip_up_rows = [
+        row
+        for row in market_rows
+        if _paper_position_has_flag(row, "trend_flip_confirmed_up")
+    ]
+
+    def _sl_majority(rows: list[dict[str, Any]]) -> tuple[bool, int, int]:
+        sl_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+        non_sl = max(0, len(rows) - sl_hit)
+        return (sl_hit > 0 and sl_hit >= non_sl, sl_hit, len(rows))
+
+    high_wait_triggered, high_wait_sl, high_wait_total = _sl_majority(high_wait_rows)
+    low_exec_triggered, low_exec_sl, low_exec_total = _sl_majority(low_execution_rows)
+    long_triggered, long_sl, long_total = _sl_majority(long_rows)
+    trend_triggered, trend_sl, trend_total = _sl_majority(trend_flip_up_rows)
+
+    sl_too_tight_count = sum(1 for row in market_rows if str(row.get("sl_eval", "")).strip() == "too_tight")
+    entry_delay_count = sum(
+        1
+        for row in market_rows
+        if str(row.get("user_verdict", "")).strip() == "too_early"
+        or str(row.get("tf_15m_eval", "")).strip() == "poor"
+    )
+
+    lines = [
+        f"- high_wait_sl_risk: {'triggered' if high_wait_triggered else 'monitor'} / wait>=60 sl_hit={high_wait_sl}件 / total={high_wait_total}件",
+        f"- low_execution_sl_risk: {'triggered' if low_exec_triggered else 'monitor'} / execution<24 sl_hit={low_exec_sl}件 / total={low_exec_total}件",
+        f"- long_side_sl_risk: {'triggered' if long_triggered else 'monitor'} / side=long sl_hit={long_sl}件 / total={long_total}件",
+        f"- trend_flip_up_sl_risk: {'triggered' if trend_triggered else 'monitor'} / trend_flip_confirmed_up sl_hit={trend_sl}件 / total={trend_total}件",
+        f"- sl_too_tight_review_risk: {'triggered' if sl_too_tight_count > 0 else 'monitor'} / sl_eval=too_tight {sl_too_tight_count}件",
+        f"- entry_delay_review_risk: {'triggered' if entry_delay_count > 0 else 'monitor'} / too_early or tf_15m_eval=poor {entry_delay_count}件",
+    ]
+    return lines
+
+
+def build_paper_entry_sl_wait_redesign_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if date_from and (dt is None or dt.strftime("%Y-%m-%d") < date_from):
+            continue
+        if date_to and (dt is None or dt.strftime("%Y-%m-%d") > date_to):
+            continue
+        merged = dict(shadow_by_id.get(signal_id, {}))
+        merged.update(row)
+        positions.append(merged)
+
+    market_rows = [
+        row
+        for row in positions
+        if str(row.get("position_status", "")).strip() == "closed"
+        and str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"
+    ]
+
+    base_report = build_paper_opportunity_diagnostics_report(
+        base_dir=base_dir,
+        paper_positions_path=paper_positions_path,
+        shadow_path=shadow_path,
+        output_md=None,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+    lines = base_report.rstrip("\n").split("\n")
+    label_section = ["", "## 設計判断ラベル", *_paper_entry_sl_wait_redesign_label_lines(market_rows)]
+    try:
+        proposal_idx = lines.index("## proposal")
+        lines = [*lines[:proposal_idx], *label_section, *lines[proposal_idx:]]
+    except ValueError:
+        lines.extend(label_section)
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def build_observation_paper_orders(
     *,
     base_dir: Path,
@@ -8601,6 +8704,12 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_diagnostics_parser.add_argument("--date-to", default="")
     paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
 
+    paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
+    paper_entry_redesign_parser.add_argument("--output-md")
+    paper_entry_redesign_parser.add_argument("--date-from", default="")
+    paper_entry_redesign_parser.add_argument("--date-to", default="")
+    paper_entry_redesign_parser.add_argument("--limit", type=int, default=20)
+
     quality_guard_effectiveness_parser = subparsers.add_parser("build-quality-guard-effectiveness-report")
     quality_guard_effectiveness_parser.add_argument("--output-md")
     quality_guard_effectiveness_parser.add_argument("--date-from", default="")
@@ -8635,6 +8744,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = _build_parser()
     argv = list(sys.argv[1:])
+    if argv and argv[0] == "--paper-entry-sl-wait-redesign":
+        argv = ["build-paper-entry-sl-wait-redesign-report", *argv[1:]]
     if argv and argv[0] == "--quality-guard-effectiveness":
         argv = ["build-quality-guard-effectiveness-report", *argv[1:]]
     if argv and argv[0] == "--report-hub":
@@ -8796,6 +8907,28 @@ def main() -> None:
     if args.command == "build-paper-opportunity-diagnostics-report":
         output_md = Path(args.output_md) if args.output_md else None
         report = build_paper_opportunity_diagnostics_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-paper-entry-sl-wait-redesign-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"paper_entry_sl_wait_redesign_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_paper_entry_sl_wait_redesign_report(
             base_dir=base_dir,
             output_md=output_md,
             date_from=str(args.date_from),

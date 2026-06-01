@@ -43,6 +43,7 @@ from tools.log_feedback import (
     build_market_map_effectiveness_report,
     build_market_map_readiness_report,
     build_observation_paper_orders,
+    build_paper_entry_sl_wait_redesign_report,
     build_paper_opportunity_diagnostics_report,
     build_quality_guard_effectiveness_report,
     build_paper_positions,
@@ -567,6 +568,106 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("suppress_trend_flip_up_strong", report)
             self.assertIn("require_execution_for_high_wait", report)
             self.assertIn("delay_entry_on_sweep_wait", report)
+
+    def test_paper_entry_sl_wait_redesign_report_includes_required_sections_and_labels(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                row_a = {field: "" for field in SHADOW_HEADER}
+                row_a.update(
+                    {
+                        "signal_id": "sig_a",
+                        "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                        "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
+                        "user_verdict": "too_early",
+                        "sl_eval": "too_tight",
+                        "tf_15m_eval": "poor",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:trend_flip_confirmed_up"]',
+                    }
+                )
+                writer.writerow(row_a)
+                row_b = {field: "" for field in SHADOW_HEADER}
+                row_b.update(
+                    {
+                        "signal_id": "sig_b",
+                        "timestamp_jst": "2026-06-01T12:06:00+09:00",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "user_verdict": "useful_wait",
+                        "sl_eval": "good",
+                        "tf_15m_eval": "good",
+                        "opportunity_type": "market_map_opportunity",
+                        "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                    }
+                )
+                writer.writerow(row_b)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_a",
+                        "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "side": "long",
+                        "exit_status": "sl_hit",
+                        "realized_r": "-1.0",
+                        "confidence_direction_shadow": "58",
+                        "confidence_execution_shadow": "18",
+                        "confidence_wait_shadow": "68",
+                        "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
+                        "primary_setup_reason": "confidence_below_min",
+                    }
+                )
+                writer.writerow(row)
+                row = {field: "" for field in PAPER_POSITION_HEADER}
+                row.update(
+                    {
+                        "signal_id": "sig_b",
+                        "timestamp_jst": "2026-06-01T12:06:00+09:00",
+                        "position_status": "closed",
+                        "opportunity_type": "market_map_opportunity",
+                        "side": "short",
+                        "exit_status": "missed_opportunity",
+                        "realized_r": "1.3",
+                        "confidence_direction_shadow": "65",
+                        "confidence_execution_shadow": "30",
+                        "confidence_wait_shadow": "52",
+                        "market_map_flags": "support_to_resistance_flip",
+                        "primary_setup_reason": "near_entry_zone_waiting_trigger",
+                    }
+                )
+                writer.writerow(row)
+
+            report = build_paper_entry_sl_wait_redesign_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+            )
+
+            self.assertIn("# 紙実行候補 entry/wait 診断", report)
+            self.assertIn("## 判断", report)
+            self.assertIn("## SL失敗分類", report)
+            self.assertIn("## AI事後評価サマリー", report)
+            self.assertIn("## proposal", report)
+            self.assertIn("## 設計判断ラベル", report)
+            self.assertIn("high_wait_sl_risk", report)
+            self.assertIn("low_execution_sl_risk", report)
+            self.assertIn("trend_flip_up_sl_risk", report)
+            self.assertIn("`mfe_atr`", report)
+            self.assertIn("`mae_atr`", report)
+            self.assertIn("`rr_estimate`", report)
 
     def test_quality_guard_effectiveness_report_includes_split_and_judgement(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -3957,6 +4058,19 @@ class LogFeedbackTest(unittest.TestCase):
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/qg.md"))
 
+    def test_main_build_paper_entry_sl_wait_redesign_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-paper-entry-sl-wait-redesign-report", "--output-md", "/tmp/paper_entry.md"],
+        ), patch("tools.log_feedback.build_paper_entry_sl_wait_redesign_report") as mocked_report:
+            mocked_report.return_value = "# paper entry redesign\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/paper_entry.md"))
+
     def test_main_quality_guard_effectiveness_alias_maps_to_subcommand(self) -> None:
         with patch.object(
             sys,
@@ -3969,6 +4083,19 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/qg_alias.md"))
+
+    def test_main_paper_entry_sl_wait_redesign_alias_maps_to_subcommand(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "--paper-entry-sl-wait-redesign", "--output-md", "/tmp/paper_entry_alias.md"],
+        ), patch("tools.log_feedback.build_paper_entry_sl_wait_redesign_report") as mocked_report:
+            mocked_report.return_value = "# paper entry redesign\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/paper_entry_alias.md"))
 
 
 if __name__ == "__main__":

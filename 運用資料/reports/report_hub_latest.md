@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-06-01 16:48 JST
+- generated_at: 2026-06-01 17:33 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順
@@ -59,11 +59,11 @@
 - last_date: `2026-05-26` / freshness: `fresh(6d)`
 
 ### SL/entry 再設計診断
-- latest: [運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md](運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md)
-- previous: `missing`
+- latest: [運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260601.md](運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260601.md)
+- previous: [運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md](運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md)
 - storage: `active`
 - purpose: sl_hit 偏重、高 wait、低 execution の切り分け。
-- last_date: `2026-05-26` / freshness: `fresh(6d)`
+- last_date: `2026-06-01` / freshness: `fresh(0d)`
 
 ### quality guard 有効性
 - latest: [運用資料/reports/analysis/quality_guard_effectiveness_20260601.md](運用資料/reports/analysis/quality_guard_effectiveness_20260601.md)
