@@ -77,6 +77,8 @@
 - BTCFX-20260601-13 で analysis `chatgpt/analysis/20260601_entry_recheck_counterfactual_next_judgement.md` を作成。
 - `chatgpt/specs/active/` は `.gitkeep` のみで、active spec はまだ空のまま。
 - 次回 ChatGPT は上記 analysis を先に読み、次に active spec 化する対象（entry recheck 条件微調整 / collateral damage 追加診断）を判断する。
+- BTCFX-20260601-14 で active spec `chatgpt/specs/active/20260601_entry_recheck_collateral_damage_breakdown.md` を作成。
+- 次回はこの active spec を正本に、paper_entry_sl_wait_redesign report へ collateral damage breakdown を実装する。
 
 ## 実装済みの前提
 
