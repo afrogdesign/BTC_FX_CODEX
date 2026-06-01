@@ -5774,6 +5774,51 @@ def _counterfactual_group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _counterfactual_entered_non_entered_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    entered_statuses = {"sl_hit", "tp2_hit", "timeout"}
+    non_entered_statuses = {"missed_opportunity", "entry_not_reached"}
+    entered_rows = [row for row in rows if str(row.get("exit_status", "")).strip() in entered_statuses]
+    non_entered_rows = [row for row in rows if str(row.get("exit_status", "")).strip() in non_entered_statuses]
+    count = len(rows)
+    entered_count = len(entered_rows)
+    non_entered_count = len(non_entered_rows)
+    entered_sl_hit = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+    entered_tp2_hit = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    entered_timeout = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "timeout")
+    missed = sum(1 for row in non_entered_rows if str(row.get("exit_status", "")).strip() == "missed_opportunity")
+    entry_not_reached = sum(1 for row in non_entered_rows if str(row.get("exit_status", "")).strip() == "entry_not_reached")
+    return {
+        "count": count,
+        "entered_count": entered_count,
+        "entered_sl_hit": entered_sl_hit,
+        "entered_sl_hit_rate": _ratio(entered_sl_hit, entered_count),
+        "entered_tp2_hit": entered_tp2_hit,
+        "entered_tp2_hit_rate": _ratio(entered_tp2_hit, entered_count),
+        "entered_timeout": entered_timeout,
+        "entered_avg_r": _mean_value(entered_rows, "realized_r"),
+        "non_entered_count": non_entered_count,
+        "missed_opportunity": missed,
+        "entry_not_reached": entry_not_reached,
+        "non_entered_avg_r": _mean_value(non_entered_rows, "realized_r"),
+    }
+
+
+def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    non_entered_count = int(split_stats.get("non_entered_count", 0))
+    entry_not_reached = int(split_stats.get("entry_not_reached", 0))
+    entered_sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    entered_avg_r = float(split_stats.get("entered_avg_r", 0.0))
+    if count < 10 or entered_count < 10:
+        return "insufficient_n"
+    if _ratio(non_entered_count, count) >= 0.5 or _ratio(entry_not_reached, count) >= 0.4:
+        return "defer_due_to_non_entered_mix"
+    if count >= 10 and entered_count >= 10 and entered_sl_hit_rate >= 0.7 and entered_avg_r <= -0.30:
+        return "blocker_candidate"
+    return "monitor"
+
+
 def build_quality_guard_effectiveness_report(
     *,
     base_dir: Path,
@@ -5899,11 +5944,59 @@ def build_quality_guard_effectiveness_report(
         )
 
     lines.append("")
+    lines.append("## entered / non-entered split")
+    lines.append("")
+    lines.append(
+        "| group | count | entered_count | entered_sl_hit | entered_sl_hit_rate | entered_tp2_hit | entered_tp2_hit_rate | entered_timeout | entered_avg_R | non_entered_count | missed_opportunity | entry_not_reached | non_entered_avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in [
+        "A only",
+        "B only",
+        "C only",
+        "A+B",
+        "A+C",
+        "B+C",
+        "A+B+C",
+        "guard該当全体",
+        "guard非該当全体",
+        "closed全体",
+    ]:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _counterfactual_group_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    f"{split_stats['entered_avg_r']:.2f}",
+                    str(split_stats["non_entered_count"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{split_stats['non_entered_avg_r']:.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
     lines.append("注記:")
     lines.append("- `avg_R` は `paper_positions.csv` の `realized_r` を使う。")
     lines.append("- `entry_not_reached` や `missed_opportunity` にも `realized_r` が入る可能性があり、純粋な約定後損益だけではない。")
+    lines.append("- `avg_R` は従来互換の全 `exit_status` 混在値。")
+    lines.append("- quality guard の blocker 判断では `entered_avg_R` を主判断に使う。")
+    lines.append("- `non_entered_avg_R` は参考値であり、約定後損益として扱わない。")
     lines.append("")
     lines.append("## interpretation")
+    lines.append("- `judgement` は `insufficient_n > defer_due_to_non_entered_mix > blocker_candidate` の優先順で判定し、未該当は `monitor` とする。")
     lines.append("- `A only` は失敗率が高く、hard blocker 維持を検討する材料。")
     lines.append("- `B only` / `C only` は missed / 未到達の巻き込みを必ず見る。")
     lines.append("- `B+C` や `A+B+C` は件数が少ない場合、断定しない。")

@@ -568,7 +568,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("require_execution_for_high_wait", report)
             self.assertIn("delay_entry_on_sweep_wait", report)
 
-    def test_quality_guard_effectiveness_report_includes_counterfactual_groups_and_missing_join(self) -> None:
+    def test_quality_guard_effectiveness_report_includes_split_and_judgement(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             logs_csv = base_dir / "logs" / "csv"
@@ -577,17 +577,23 @@ class LogFeedbackTest(unittest.TestCase):
             with shadow_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
                 writer.writeheader()
-                rows = [
-                    ("sig_a", '["require_execution_for_high_wait"]'),
-                    ("sig_b", '["soft_risk:suppress_long_high_wait"]'),
-                    ("sig_c", '["soft_risk:suppress_trend_flip_up_strong"]'),
-                    ("sig_ab", '["require_execution_for_high_wait+suppress_long_high_wait"]'),
-                    ("sig_ac", '["require_execution_for_high_wait+suppress_trend_flip_up_strong"]'),
-                    ("sig_bc", '["soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
-                    ("sig_abc", '["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
-                    ("sig_none", '["market_map:support_to_resistance_flip"]'),
-                    ("sig_pass", '["market_map:failed_breakout_down_reversal"]'),
-                ]
+                rows: list[tuple[str, str]] = []
+                for i in range(10):
+                    rows.append((f"sig_a_{i}", '["require_execution_for_high_wait"]'))
+                for i in range(20):
+                    rows.append((f"sig_ab_{i}", '["require_execution_for_high_wait+suppress_long_high_wait"]'))
+                rows.extend(
+                    [
+                        ("sig_b", '["soft_risk:suppress_long_high_wait"]'),
+                        ("sig_c_0", '["soft_risk:suppress_trend_flip_up_strong"]'),
+                        ("sig_c_1", '["soft_risk:suppress_trend_flip_up_strong"]'),
+                        ("sig_ac", '["require_execution_for_high_wait+suppress_trend_flip_up_strong"]'),
+                        ("sig_bc", '["soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
+                        ("sig_abc", '["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
+                        ("sig_none", '["market_map:support_to_resistance_flip"]'),
+                        ("sig_pass", '["market_map:failed_breakout_down_reversal"]'),
+                    ]
+                )
                 for signal_id, reasons in rows:
                     row = {field: "" for field in SHADOW_HEADER}
                     row.update(
@@ -603,6 +609,7 @@ class LogFeedbackTest(unittest.TestCase):
             with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
                 writer.writeheader()
+
                 def _write_row(signal_id: str, exit_status: str, realized_r: str) -> None:
                     row = {field: "" for field in PAPER_POSITION_HEADER}
                     row.update(
@@ -616,10 +623,15 @@ class LogFeedbackTest(unittest.TestCase):
                     )
                     writer.writerow(row)
 
-                _write_row("sig_a", "sl_hit", "-1.0")
+                for i in range(10):
+                    _write_row(f"sig_a_{i}", "sl_hit", "-1.0")
+                for i in range(10):
+                    _write_row(f"sig_ab_{i}", "sl_hit", "-0.5")
+                for i in range(10, 20):
+                    _write_row(f"sig_ab_{i}", "entry_not_reached", "1.3")
                 _write_row("sig_b", "missed_opportunity", "1.3")
-                _write_row("sig_c", "timeout", "0.2")
-                _write_row("sig_ab", "entry_not_reached", "1.3")
+                _write_row("sig_c_0", "timeout", "0.2")
+                _write_row("sig_c_1", "tp2_hit", "1.1")
                 _write_row("sig_ac", "sl_hit", "-1.0")
                 _write_row("sig_bc", "tp2_hit", "2.4")
                 _write_row("sig_abc", "sl_hit", "-0.8")
@@ -647,7 +659,17 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("| guard該当全体 |", report)
             self.assertIn("| guard非該当全体 |", report)
             self.assertIn("| closed全体 |", report)
+            self.assertIn("## entered / non-entered split", report)
+            self.assertIn("| group | count | entered_count |", report)
+            self.assertIn("| A only | 10 | 10 | 10 | 100.0% | 0 | 0.0% | 0 | -1.00 | 0 | 0 | 0 | 0.00 | blocker_candidate |", report)
+            self.assertIn(
+                "| A+B | 20 | 10 | 10 | 100.0% | 0 | 0.0% | 0 | -0.50 | 10 | 0 | 10 | 1.30 | defer_due_to_non_entered_mix |",
+                report,
+            )
+            self.assertIn("| C only | 2 | 2 | 0 | 0.0% | 1 | 50.0% | 1 | 0.65 | 0 | 0 | 0 | 0.00 | insufficient_n |", report)
             self.assertIn("純粋な約定後損益だけではない", report)
+            self.assertIn("quality guard の blocker 判断では `entered_avg_R` を主判断に使う。", report)
+            self.assertIn("`non_entered_avg_R` は参考値であり、約定後損益として扱わない。", report)
             self.assertIn("counterfactual は後付け再計算であり、実運用結果ではない。", report)
 
     def test_normalize_ai_post_review_applies_defaults(self) -> None:

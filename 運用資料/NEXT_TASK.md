@@ -49,7 +49,7 @@
 - 既存 CLI でレポートを再生成し、`feedback_daily_sync_20260601.md` と `paper_opportunity_diagnostics_20260601.md` に hard / soft 集計を反映済み。
 - `counterfactual_quality_guard` builder を `tools/log_feedback.py` に実装し、`./.venv312/bin/python tools/log_feedback.py --quality-guard-effectiveness` で `運用資料/reports/analysis/quality_guard_effectiveness_20260601.md` を再生成した。
 - report hub は `./.venv312/bin/python tools/log_feedback.py --report-hub` で更新済み。`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は今回も変更していない。
-- 実施済み仕様 `chatgpt/specs/archive/20260601_counterfactual_quality_guard_builder.md` へ移動済み。次回実装用 active spec は `chatgpt/specs/active/20260601_quality_guard_effectiveness_metric_split.md`（今回は仕様作成のみ）。
+- 実施済み仕様 `chatgpt/specs/archive/20260601_counterfactual_quality_guard_builder.md` と `chatgpt/specs/archive/20260601_quality_guard_effectiveness_metric_split.md` へ移動済み。BTCFX-20260601-02 で `quality_guard_effectiveness` の entered / non-entered split、`entered_avg_R` / `non_entered_avg_R` / `judgement` を実装し、`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更していない。
 
 ## 実装済みの前提
 
@@ -84,7 +84,7 @@
 ## 次のタスク
 
 1. 最新 daily-sync は `2026-06-01` 基準で `hard_quality_blocked=1件`、`soft_quality_risk=1件`、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。Phase 1B や実弾寄りの緩和は進めず、hard / soft の推移を観測継続する。
-2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。`counterfactual_quality_guard` builder は実装済みで、次回 active spec は `chatgpt/specs/active/20260601_quality_guard_effectiveness_metric_split.md`。目的は `quality_guard_effectiveness` report の entered / non-entered 分離と `avg_R` 誤読防止で、今回は仕様作成のみ。
+2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。`counterfactual_quality_guard` builder と `quality_guard_effectiveness` の entered / non-entered split は実装済みのため、次は `paper_entry_sl_wait_redesign` builder 正式化要否、`B/C` 単独 soft risk の collateral damage、entry / wait / price-distance 再設計を整理する。
 3. `paper_entry_sl_wait_redesign_20260526.md` で `sl_hit` の主因が高 wait、低 execution、long、上方向転換系に偏ることを追加確認した。ChatGPT 側は entry 発火条件、SL/TP 条件、wait/execution 抑制条件を分けて再設計する。
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
