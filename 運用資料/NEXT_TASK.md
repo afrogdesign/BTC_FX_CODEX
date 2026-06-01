@@ -67,6 +67,12 @@
 - BTCFX-20260601-11 で次回実装用 active spec `chatgpt/specs/active/20260601_entry_recheck_counterfactual_impact.md` を作成。
 - 目的は BTCFX-20260601-08 の entry recheck reason を過去 market_map_opportunity に後付け再計算し、counterfactual impact として `paper_entry_sl_wait_redesign` report 内で確認できるようにすること。
 - 今回は仕様作成のみ。実装は次回。
+- BTCFX-20260601-12 で `paper_entry_sl_wait_redesign` report に `entry recheck counterfactual impact` を追加済み。
+- BTCFX-20260601-08 の recheck 条件を過去 market_map_opportunity 行へ後付け再計算し、logged impact と counterfactual impact の差を同一 report 内で確認可能にした。
+- 新しい standalone report は追加していない。
+- `trade_execution_gate` / `phase1b_lite_gate` は変更していない。
+- B/C 単独 soft risk は hard blocker 化していない。
+- active spec は archive 済み。
 
 ## 実装済みの前提
 

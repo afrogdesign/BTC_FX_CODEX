@@ -702,6 +702,93 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("`mae_atr`", report)
             self.assertIn("`rr_estimate`", report)
 
+    def test_paper_entry_sl_wait_redesign_report_includes_counterfactual_impact_even_when_logged_reasons_empty(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                for idx, signal_id in enumerate(("sig_a", "sig_b", "sig_c", "sig_d", "sig_e", "sig_f")):
+                    row = {field: "" for field in SHADOW_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": f"2026-06-01T13:0{idx + 1}:00+09:00",
+                            "opportunity_type": "market_map_opportunity",
+                            "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                            "market_map_flags": "support_to_resistance_flip",
+                        }
+                    )
+                    writer.writerow(row)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                rows = [
+                    ("sig_a", "long", "entry_zone_not_reached", "sl_hit", "-1.0", "72", "18", "70", "trend_flip_confirmed_up,long_into_major_resistance"),
+                    ("sig_b", "short", "confidence_below_min", "sl_hit", "-1.0", "60", "18", "50", "support_to_resistance_flip"),
+                    ("sig_c", "long", "confidence_below_min", "timeout", "0.3", "62", "26", "70", "support_to_resistance_flip"),
+                    ("sig_d", "long", "confidence_below_min", "tp2_hit", "2.1", "66", "29", "50", "trend_flip_confirmed_up,resistance_to_support_flip"),
+                    ("sig_e", "short", "entry_zone_not_reached", "sl_hit", "-0.8", "63", "30", "50", "support_to_resistance_flip"),
+                    ("sig_f", "short", "confidence_below_min", "timeout", "0.2", "68", "30", "50", "support_to_resistance_flip"),
+                ]
+                for idx, (
+                    signal_id,
+                    side,
+                    setup_reason,
+                    exit_status,
+                    realized_r,
+                    direction,
+                    execution,
+                    wait,
+                    market_flags,
+                ) in enumerate(rows):
+                    row = {field: "" for field in PAPER_POSITION_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": f"2026-06-01T13:0{idx + 1}:00+09:00",
+                            "position_status": "closed",
+                            "opportunity_type": "market_map_opportunity",
+                            "side": side,
+                            "primary_setup_reason": setup_reason,
+                            "exit_status": exit_status,
+                            "realized_r": realized_r,
+                            "confidence_direction_shadow": direction,
+                            "confidence_execution_shadow": execution,
+                            "confidence_wait_shadow": wait,
+                            "market_map_flags": market_flags,
+                            "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                        }
+                    )
+                    writer.writerow(row)
+
+            report = build_paper_entry_sl_wait_redesign_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+            )
+
+            self.assertIn("## entry recheck reason impact", report)
+            self.assertIn("## entry recheck counterfactual impact", report)
+            reason_section = report.split("## entry recheck reason impact", 1)[1].split("## entry recheck counterfactual impact", 1)[0]
+            counterfactual_section = report.split("## entry recheck counterfactual impact", 1)[1]
+            self.assertIn("| entry_recheck_any | 0 | 0 |", reason_section)
+            self.assertIn("| entry_recheck_required_high_wait |", counterfactual_section)
+            self.assertIn("| entry_recheck_required_low_execution |", counterfactual_section)
+            self.assertIn("| entry_recheck_required_long_weakness |", counterfactual_section)
+            self.assertIn("| entry_recheck_required_trend_flip_up |", counterfactual_section)
+            self.assertIn("| price_distance_missing |", counterfactual_section)
+            self.assertIn("| entry_recheck_any | 5 | 5 |", counterfactual_section)
+            self.assertIn("| entry_recheck_none | 1 | 1 |", counterfactual_section)
+            self.assertIn("counterfactual であり、過去実行時に実際に出た reason ではない", counterfactual_section)
+
     def test_quality_guard_effectiveness_report_includes_split_and_judgement(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)

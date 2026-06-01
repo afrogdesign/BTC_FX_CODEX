@@ -36,7 +36,10 @@ from src.trade.observation_gate import (
     is_confidence_watch_learning_candidate,
     is_counter_long_short_watch_candidate,
 )
-from src.trade.opportunity_gate import determine_opportunity_gate
+from src.trade.opportunity_gate import (
+    _entry_wait_price_recheck_reasons as _opportunity_gate_entry_wait_price_recheck_reasons,
+    determine_opportunity_gate,
+)
 from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 
@@ -5923,6 +5926,108 @@ def _paper_entry_recheck_impact_section_lines(market_rows: list[dict[str, Any]])
     return lines
 
 
+def _entry_recheck_counterfactual_hits(row: dict[str, Any]) -> set[str]:
+    primary_side = str(row.get("primary_setup_side", "")).strip()
+    bias_side = str(row.get("bias", "")).strip()
+    side = primary_side if primary_side in {"long", "short"} else bias_side
+    if side not in {"long", "short"}:
+        side = str(row.get("side", "")).strip()
+    risk_flags = set(_split_values(str(row.get("risk_flags", ""))))
+    market_flags = set(_split_values(str(row.get("market_map_flags", ""))))
+    if not market_flags:
+        market_flags = {
+            reason.split(":", 1)[1]
+            for reason in _split_values(str(row.get("opportunity_reasons", "")))
+            if reason.startswith("market_map:")
+        }
+    blocking_reasons, non_blocking_reasons = _opportunity_gate_entry_wait_price_recheck_reasons(
+        side=side,
+        setup_reason=str(row.get("primary_setup_reason", "")).strip(),
+        execution_precision_action=str(row.get("execution_precision_action", "")).strip(),
+        direction=_parse_float(row.get("confidence_direction_shadow"), 0.0),
+        execution=_parse_float(row.get("confidence_execution_shadow"), 0.0),
+        wait=_parse_float(row.get("confidence_wait_shadow"), 0.0),
+        risk_flags=risk_flags,
+        market_flags=market_flags,
+        nearest_support_distance=row.get("nearest_support_distance"),
+        nearest_resistance_distance=row.get("nearest_resistance_distance"),
+    )
+    return set(blocking_reasons + non_blocking_reasons)
+
+
+def _paper_entry_recheck_counterfactual_impact_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_counterfactual_hits(row))
+        for row in market_rows
+    ]
+    group_order = [
+        "entry_recheck_required_high_wait",
+        "entry_recheck_required_low_execution",
+        "entry_recheck_required_long_weakness",
+        "entry_recheck_required_trend_flip_up",
+        "price_distance_missing",
+        "entry_recheck_any",
+        "entry_recheck_none",
+        "market_map_opportunity 全体",
+    ]
+    grouped_rows: dict[str, list[dict[str, Any]]] = {
+        "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
+        "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
+        "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
+        "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],
+        "entry_recheck_any": [row for row, hits in rows_with_hits if hits],
+        "entry_recheck_none": [row for row, hits in rows_with_hits if not hits],
+        "market_map_opportunity 全体": [row for row, _ in rows_with_hits],
+    }
+
+    lines = ["", "## entry recheck counterfactual impact", ""]
+    lines.append(
+        "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in group_order:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _entry_recheck_impact_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{_mean_value(grouped_rows[label], 'realized_r'):.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### interpretation",
+            "- このセクションは counterfactual であり、過去実行時に実際に出た reason ではない。",
+            "- logged impact が 0件でも、counterfactual impact で過去候補への影響を評価する。",
+            "- entry recheck reason は paper candidate 品質改善のための抑制理由であり、実弾 gate ではない。",
+            "- trade_execution_gate / phase1b_lite_gate は変更しない。",
+            "- price_distance_missing は非blocking reason として扱う。",
+            "- B/C 単独 soft risk は hard blocker 化しない。",
+            "- trend_flip_confirmed_up は強評価へ戻さない。",
+            "- この集計は Phase 1B 昇格材料ではなく、次の再設計判断材料。",
+            "",
+        ]
+    )
+    return lines
+
+
 def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
     count = int(split_stats.get("count", 0))
     entered_count = int(split_stats.get("entered_count", 0))
@@ -6662,12 +6767,14 @@ def build_paper_entry_sl_wait_redesign_report(
     lines = base_report.rstrip("\n").split("\n")
     label_section = ["", "## 設計判断ラベル", *_paper_entry_sl_wait_redesign_label_lines(market_rows)]
     impact_section = _paper_entry_recheck_impact_section_lines(market_rows)
+    counterfactual_impact_section = _paper_entry_recheck_counterfactual_impact_section_lines(market_rows)
     try:
         proposal_idx = lines.index("## proposal")
-        lines = [*lines[:proposal_idx], *label_section, *impact_section, *lines[proposal_idx:]]
+        lines = [*lines[:proposal_idx], *label_section, *impact_section, *counterfactual_impact_section, *lines[proposal_idx:]]
     except ValueError:
         lines.extend(label_section)
         lines.extend(impact_section)
+        lines.extend(counterfactual_impact_section)
 
     report = "\n".join(lines) + "\n"
     if output_md is not None:

@@ -1,6 +1,6 @@
 # 紙実行候補 entry/wait 診断
 
-- 対象 paper_positions: 513件
+- 対象 paper_positions: 514件
 - closed: 505件 / opportunity_type: setup_watch_learning=213件, direction_rr_learning=169件, market_map_opportunity=117件, confidence_watch_sweep_lite=5件, formal_execution_candidate=1件
 - closed 全体: 勝率=5.3% / 平均R=4.01 / 簡易PF=11.56 / 終了=sl_hit=216件, missed_opportunity=125件, entry_not_reached=116件, tp2_hit=27件, timeout=21件
 - market_map_opportunity: 117件 / 勝率=9.4% / 平均R=0.37 / 簡易PF=2.05 / 終了=sl_hit=56件, missed_opportunity=42件, tp2_hit=11件, timeout=8件
@@ -179,6 +179,30 @@
 - B/C 単独 soft risk は hard blocker 化しない。
 - trend_flip_confirmed_up は強評価へ戻さない。
 - この集計は次の再設計判断材料であり、即 Phase 1B 昇格材料ではない。
+
+
+## entry recheck counterfactual impact
+
+| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| entry_recheck_required_high_wait | 13 | 12 | 11 | 91.7% | 0 | 0.0% | 1 | 1 | 0 | -0.73 | risk_confirmed |
+| entry_recheck_required_low_execution | 55 | 41 | 34 | 82.9% | 4 | 9.8% | 3 | 14 | 0 | 0.04 | risk_confirmed |
+| entry_recheck_required_long_weakness | 0 | 0 | 0 | 0.0% | 0 | 0.0% | 0 | 0 | 0 | 0.00 | insufficient_n |
+| entry_recheck_required_trend_flip_up | 7 | 7 | 6 | 85.7% | 1 | 14.3% | 0 | 0 | 0 | -0.23 | insufficient_n |
+| price_distance_missing | 17 | 13 | 9 | 69.2% | 2 | 15.4% | 2 | 4 | 0 | 0.37 | monitor_only |
+| entry_recheck_any | 67 | 49 | 38 | 77.6% | 6 | 12.2% | 5 | 18 | 0 | 0.17 | risk_confirmed |
+| entry_recheck_none | 50 | 26 | 18 | 69.2% | 5 | 19.2% | 3 | 24 | 0 | 0.63 | collateral_damage_risk |
+| market_map_opportunity 全体 | 117 | 75 | 56 | 74.7% | 11 | 14.7% | 8 | 42 | 0 | 0.37 | risk_confirmed |
+
+### interpretation
+- このセクションは counterfactual であり、過去実行時に実際に出た reason ではない。
+- logged impact が 0件でも、counterfactual impact で過去候補への影響を評価する。
+- entry recheck reason は paper candidate 品質改善のための抑制理由であり、実弾 gate ではない。
+- trade_execution_gate / phase1b_lite_gate は変更しない。
+- price_distance_missing は非blocking reason として扱う。
+- B/C 単独 soft risk は hard blocker 化しない。
+- trend_flip_confirmed_up は強評価へ戻さない。
+- この集計は Phase 1B 昇格材料ではなく、次の再設計判断材料。
 
 ## proposal
 - suppress_long_high_wait: long かつ wait>=60 は 17件 / 平均R=-0.34 / 簡易PF=0.51 のため、紙候補でも一段抑制候補。
