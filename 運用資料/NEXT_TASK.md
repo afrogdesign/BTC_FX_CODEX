@@ -23,6 +23,7 @@
 
 - `chatgpt/analysis/20260526_entry_sl_tp_wait_redesign.md`
 - `chatgpt/analysis/20260526_trend_flip_confirmed_up_reassessment.md`
+- `chatgpt/analysis/20260601_entry_recheck_counterfactual_next_judgement.md`
 
 `chatgpt/specs/active/` が空のとき、ChatGPT はこの2本を継続メモとして使い、設計が固まったら `chatgpt/specs/active/` に確定仕様を書く。
 
@@ -73,6 +74,9 @@
 - `trade_execution_gate` / `phase1b_lite_gate` は変更していない。
 - B/C 単独 soft risk は hard blocker 化していない。
 - active spec は archive 済み。
+- BTCFX-20260601-13 で analysis `chatgpt/analysis/20260601_entry_recheck_counterfactual_next_judgement.md` を作成。
+- `chatgpt/specs/active/` は `.gitkeep` のみで、active spec はまだ空のまま。
+- 次回 ChatGPT は上記 analysis を先に読み、次に active spec 化する対象（entry recheck 条件微調整 / collateral damage 追加診断）を判断する。
 
 ## 実装済みの前提
 
