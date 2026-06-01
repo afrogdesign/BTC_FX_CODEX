@@ -579,75 +579,96 @@ class LogFeedbackTest(unittest.TestCase):
             with shadow_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
                 writer.writeheader()
-                row_a = {field: "" for field in SHADOW_HEADER}
-                row_a.update(
-                    {
-                        "signal_id": "sig_a",
-                        "timestamp_jst": "2026-06-01T12:05:00+09:00",
-                        "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
-                        "user_verdict": "too_early",
-                        "sl_eval": "too_tight",
-                        "tf_15m_eval": "poor",
-                        "opportunity_type": "market_map_opportunity",
-                        "opportunity_reasons": '["market_map:trend_flip_confirmed_up"]',
-                    }
-                )
-                writer.writerow(row_a)
-                row_b = {field: "" for field in SHADOW_HEADER}
-                row_b.update(
-                    {
-                        "signal_id": "sig_b",
-                        "timestamp_jst": "2026-06-01T12:06:00+09:00",
-                        "market_map_flags": "support_to_resistance_flip",
-                        "user_verdict": "useful_wait",
-                        "sl_eval": "good",
-                        "tf_15m_eval": "good",
-                        "opportunity_type": "market_map_opportunity",
-                        "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
-                    }
-                )
-                writer.writerow(row_b)
+                for idx, signal_id in enumerate(("sig_a", "sig_b", "sig_c", "sig_d", "sig_e", "sig_f", "sig_g", "sig_h")):
+                    row = {field: "" for field in SHADOW_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": f"2026-06-01T12:0{idx + 1}:00+09:00",
+                            "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
+                            "user_verdict": "too_early" if signal_id == "sig_a" else "useful_wait",
+                            "sl_eval": "too_tight" if signal_id == "sig_a" else "good",
+                            "tf_15m_eval": "poor" if signal_id == "sig_a" else "good",
+                            "opportunity_type": "market_map_opportunity",
+                            "opportunity_reasons": '["market_map:support_to_resistance_flip"]',
+                        }
+                    )
+                    writer.writerow(row)
 
             paper_positions_path = logs_csv / "paper_positions.csv"
             with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
                 writer.writeheader()
-                row = {field: "" for field in PAPER_POSITION_HEADER}
-                row.update(
-                    {
-                        "signal_id": "sig_a",
-                        "timestamp_jst": "2026-06-01T12:05:00+09:00",
-                        "position_status": "closed",
-                        "opportunity_type": "market_map_opportunity",
-                        "side": "long",
-                        "exit_status": "sl_hit",
-                        "realized_r": "-1.0",
-                        "confidence_direction_shadow": "58",
-                        "confidence_execution_shadow": "18",
-                        "confidence_wait_shadow": "68",
-                        "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
-                        "primary_setup_reason": "confidence_below_min",
-                    }
-                )
-                writer.writerow(row)
-                row = {field: "" for field in PAPER_POSITION_HEADER}
-                row.update(
-                    {
-                        "signal_id": "sig_b",
-                        "timestamp_jst": "2026-06-01T12:06:00+09:00",
-                        "position_status": "closed",
-                        "opportunity_type": "market_map_opportunity",
-                        "side": "short",
-                        "exit_status": "missed_opportunity",
-                        "realized_r": "1.3",
-                        "confidence_direction_shadow": "65",
-                        "confidence_execution_shadow": "30",
-                        "confidence_wait_shadow": "52",
-                        "market_map_flags": "support_to_resistance_flip",
-                        "primary_setup_reason": "near_entry_zone_waiting_trigger",
-                    }
-                )
-                writer.writerow(row)
+                rows = [
+                    (
+                        "sig_a",
+                        "sl_hit",
+                        "-1.0",
+                        '["entry_recheck_required_high_wait","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_b",
+                        "missed_opportunity",
+                        "1.3",
+                        '["entry_recheck_required_low_execution","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_c",
+                        "entry_not_reached",
+                        "1.3",
+                        '["entry_recheck_required_long_weakness","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_d",
+                        "tp2_hit",
+                        "2.4",
+                        '["entry_recheck_required_trend_flip_up","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_e",
+                        "timeout",
+                        "0.3",
+                        '["price_distance_missing","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_f",
+                        "sl_hit",
+                        "-0.8",
+                        '["entry_recheck_required_high_wait","entry_recheck_required_low_execution","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_g",
+                        "tp2_hit",
+                        "2.0",
+                        '["entry_recheck_required_trend_flip_up","price_distance_missing","market_map:support_to_resistance_flip"]',
+                    ),
+                    (
+                        "sig_h",
+                        "timeout",
+                        "0.1",
+                        '["market_map:support_to_resistance_flip"]',
+                    ),
+                ]
+                for idx, (signal_id, exit_status, realized_r, opportunity_reasons) in enumerate(rows):
+                    row = {field: "" for field in PAPER_POSITION_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": f"2026-06-01T12:0{idx + 1}:00+09:00",
+                            "position_status": "closed",
+                            "opportunity_type": "market_map_opportunity",
+                            "side": "long" if signal_id in {"sig_a", "sig_c", "sig_d", "sig_e"} else "short",
+                            "exit_status": exit_status,
+                            "realized_r": realized_r,
+                            "confidence_direction_shadow": "65",
+                            "confidence_execution_shadow": "30",
+                            "confidence_wait_shadow": "52",
+                            "market_map_flags": "trend_flip_confirmed_up,support_to_resistance_flip",
+                            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+                            "opportunity_reasons": opportunity_reasons,
+                        }
+                    )
+                    writer.writerow(row)
 
             report = build_paper_entry_sl_wait_redesign_report(
                 base_dir=base_dir,
@@ -663,6 +684,17 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("## AI事後評価サマリー", report)
             self.assertIn("## proposal", report)
             self.assertIn("## 設計判断ラベル", report)
+            self.assertIn("## entry recheck reason impact", report)
+            self.assertIn("| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |", report)
+            self.assertIn("| entry_recheck_required_high_wait |", report)
+            self.assertIn("| entry_recheck_required_low_execution |", report)
+            self.assertIn("| entry_recheck_required_long_weakness |", report)
+            self.assertIn("| entry_recheck_required_trend_flip_up |", report)
+            self.assertIn("| price_distance_missing |", report)
+            self.assertIn("| entry_recheck_any |", report)
+            self.assertIn("| entry_recheck_none |", report)
+            self.assertIn("| market_map_opportunity 全体 |", report)
+            self.assertIn("judgement", report)
             self.assertIn("high_wait_sl_risk", report)
             self.assertIn("low_execution_sl_risk", report)
             self.assertIn("trend_flip_up_sl_risk", report)

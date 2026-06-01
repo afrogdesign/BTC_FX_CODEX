@@ -58,6 +58,12 @@
 - BTCFX-20260601-09 で次回実装用 active spec `chatgpt/specs/active/20260601_entry_recheck_impact_report.md` を作成。
 - 目的は BTCFX-20260601-08 で追加した entry recheck reason の影響を `paper_entry_sl_wait_redesign` report 内で見える化すること。
 - 今回は仕様作成のみ。実装は次回。
+- BTCFX-20260601-10 で `paper_entry_sl_wait_redesign` report に `entry recheck reason impact` を追加済み。
+- BTCFX-20260601-08 で追加した entry recheck reason の影響を既存 report 内で確認可能にした。
+- 新しい standalone report は追加していない。
+- `trade_execution_gate` / `phase1b_lite_gate` は変更していない。
+- B/C 単独 soft risk は hard blocker 化していない。
+- active spec は archive 済み。
 
 ## 実装済みの前提
 

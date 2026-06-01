@@ -74,6 +74,13 @@ _QUALITY_GUARD_LEAF_REASONS = (
     "suppress_long_high_wait",
     "suppress_trend_flip_up_strong",
 )
+_ENTRY_RECHECK_REASONS = (
+    "entry_recheck_required_high_wait",
+    "entry_recheck_required_low_execution",
+    "entry_recheck_required_long_weakness",
+    "entry_recheck_required_trend_flip_up",
+    "price_distance_missing",
+)
 
 REPORT_FAMILY_SPECS = [
     {
@@ -5819,6 +5826,103 @@ def _counterfactual_entered_non_entered_stats(rows: list[dict[str, Any]]) -> dic
     }
 
 
+def _entry_recheck_reason_hits(row: dict[str, Any], allowed_reasons: tuple[str, ...] = _ENTRY_RECHECK_REASONS) -> set[str]:
+    hits: set[str] = set()
+    reasons = set(_split_values(str(row.get("opportunity_reasons", ""))))
+    for raw_reason in reasons:
+        for allowed_reason in allowed_reasons:
+            if raw_reason == allowed_reason or raw_reason.endswith(f":{allowed_reason}"):
+                hits.add(allowed_reason)
+    return hits
+
+
+def _entry_recheck_impact_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed_opportunity = int(split_stats.get("missed_opportunity", 0))
+
+    if count < 10 or entered_count < 10:
+        return "insufficient_n"
+    if tp2_hit_rate >= 0.2 or _ratio(missed_opportunity, count) >= 0.4:
+        return "collateral_damage_risk"
+    if entered_count >= 10 and sl_hit_rate >= 0.7 and tp2_hit_rate < 0.2:
+        return "risk_confirmed"
+    return "monitor_only"
+
+
+def _paper_entry_recheck_impact_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_reason_hits(row))
+        for row in market_rows
+    ]
+    group_order = [
+        "entry_recheck_required_high_wait",
+        "entry_recheck_required_low_execution",
+        "entry_recheck_required_long_weakness",
+        "entry_recheck_required_trend_flip_up",
+        "price_distance_missing",
+        "entry_recheck_any",
+        "entry_recheck_none",
+        "market_map_opportunity 全体",
+    ]
+    grouped_rows: dict[str, list[dict[str, Any]]] = {
+        "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
+        "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
+        "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
+        "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],
+        "entry_recheck_any": [row for row, hits in rows_with_hits if hits],
+        "entry_recheck_none": [row for row, hits in rows_with_hits if not hits],
+        "market_map_opportunity 全体": [row for row, _ in rows_with_hits],
+    }
+
+    lines = ["", "## entry recheck reason impact", ""]
+    lines.append(
+        "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in group_order:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _entry_recheck_impact_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{_mean_value(grouped_rows[label], 'realized_r'):.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### interpretation",
+            "- entry recheck reason は paper candidate 品質改善のための抑制理由であり、実弾 gate ではない。",
+            "- trade_execution_gate / phase1b_lite_gate は変更しない。",
+            "- price_distance_missing は非blocking reason として扱う。",
+            "- B/C 単独 soft risk は hard blocker 化しない。",
+            "- trend_flip_confirmed_up は強評価へ戻さない。",
+            "- この集計は次の再設計判断材料であり、即 Phase 1B 昇格材料ではない。",
+            "",
+        ]
+    )
+    return lines
+
+
 def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
     count = int(split_stats.get("count", 0))
     entered_count = int(split_stats.get("entered_count", 0))
@@ -6557,11 +6661,13 @@ def build_paper_entry_sl_wait_redesign_report(
     )
     lines = base_report.rstrip("\n").split("\n")
     label_section = ["", "## 設計判断ラベル", *_paper_entry_sl_wait_redesign_label_lines(market_rows)]
+    impact_section = _paper_entry_recheck_impact_section_lines(market_rows)
     try:
         proposal_idx = lines.index("## proposal")
-        lines = [*lines[:proposal_idx], *label_section, *lines[proposal_idx:]]
+        lines = [*lines[:proposal_idx], *label_section, *impact_section, *lines[proposal_idx:]]
     except ValueError:
         lines.extend(label_section)
+        lines.extend(impact_section)
 
     report = "\n".join(lines) + "\n"
     if output_md is not None:
