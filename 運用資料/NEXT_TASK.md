@@ -171,3 +171,7 @@
 - 次回は再生成された report の結果を見て、条件を維持するか追加調整するか判断。
 - BTCFX-20260601-18 で影響範囲を確認し、entry_recheck_required_short_low_execution の count=44 は market_map_opportunity 全体の short+execution<20 再計算（重複込み）であることを確認。
 - entry_recheck_none 内の9件は short_low_execution 単独ヒット分で、通知数44件減を直接意味しない点を確認メモとして残した。
+- BTCFX-20260601-19 で ver02.6-v2 の最新 commit (`aed8063fc64f8b57120d559ca24e143737493ac7`) を常駐 com.afrog.btc-monitor へ反映し、再起動を実施。
+- SYSTEM_LABEL / 通知ラベルは Ver02.6-v2 のまま維持（.env: `SYSTEM_LABEL=Ver02.6-v2` を確認）。
+- 常駐再起動後に launchctl state=running、runtime err=空、通知ディレクトリ未作成（当該確認対象なし）を確認。
+- trade_execution_gate / phase1b_lite_gate / paper_orders planned は変更していない。
