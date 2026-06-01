@@ -24,7 +24,7 @@ tags:
 - [[#✅ 実装済みとして扱うもの]]
 - [[#🟡 未実装だが今後取り入れる価値があるもの]]
 - [[#🚫 今は取り入れないもの]]
-- [[#🔥 現在の最優先実装]]
+- [[#🔥 現在の最優先テーマ]]
 - [[#🧪 次に見るべき検証数値]]
 - [[#🛡️ Phase E で必要になる安全装置]]
 - [[#📦 計画ディレクトリ整理方針]]
@@ -45,13 +45,14 @@ Phase D 初期段階
 Phase E 未到達
 ```
 
-今やるべきことは、次の active spec の実装である。
+現在の実装系は `ver02.6-v2` を正本として稼働中で、quality guard の hard / soft 分離まで反映済みである。
 
 ```text
-chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md
+chatgpt/specs/active/ は現在 .gitkeep のみ
+次の実装は ChatGPT 側の新しい確定仕様待ち
 ```
 
-この仕様は「自動トレード実装」ではなく、**自動トレードへ進む前に、紙候補の品質を上げるための仕様**である。
+したがって、ここでの優先事項は再実装ではなく、観測継続と次仕様化である。
 
 ---
 
@@ -61,12 +62,12 @@ chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md
 |---|---|
 | repo | `afrogdesign/BTC_FX_CODEX` |
 | 現在の作業ブランチ | `ver02.6-v2` |
-| 運用本体の参照ブランチ | `ver02.5-v8` |
-| 現在版 | `Ver02.5-v8` 稼働中 / `ver02.6-v2` で設計・仕様化中 |
+| 運用本体の参照ブランチ | `ver02.6-v2` |
+| 現在版 | `ver02.6-v2` 稼働中（`Ver02.5-v8` は旧節目版） |
 | 実務正本 | `運用資料/NEXT_TASK.md` |
 | レポート導線 | `運用資料/reports/report_hub_latest.md` |
 | ChatGPT 分析 | `chatgpt/analysis/` |
-| Codex 実装仕様 | `chatgpt/specs/active/` |
+| Codex 実装仕様 | `chatgpt/specs/active/`（現在 `.gitkeep` のみ） |
 | 現在フェーズ | `Phase C` 実装済み・観測中、`Phase D` 初期 |
 | 実弾発注 | 禁止・未実装 |
 
@@ -448,24 +449,16 @@ candidate_reasons
 
 ---
 
-## 🔥 現在の最優先実装
+## 🔥 現在の最優先テーマ
 
-現在の最優先は、以下。
+現在の最優先は、次の 4 点である。
 
-```text
-chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md
-```
+1. `hard_quality_blocked` / `soft_quality_risk` の推移観測を継続する。
+2. `counterfactual_quality_guard` の builder 正式化要否を判断する。
+3. `paper_entry_sl_wait_redesign` builder の扱いを判断する。
+4. entry / wait / price-distance 再設計の次仕様を ChatGPT 側で確定する。
 
-実装する blocker:
-
-| blocker | 条件 | 目的 |
-|---|---|---|
-| `paper_quality_high_wait_block` | `confidence_wait_shadow >= 80` | 高 wait で SL に寄る候補を止める。 |
-| `paper_quality_low_execution_block` | `confidence_execution_shadow < 20` | 低 execution の弱い entry を止める。 |
-| `paper_quality_long_wait_block` | `long_side=true` かつ `wait>=60` かつ `execution<25` | 弱い long + 高 wait を止める。 |
-| `paper_quality_trend_flip_up_block` | `long_side=true` かつ `trend_flip_confirmed_up` | 上方向転換系の弱い候補を止める。 |
-
-この実装では `trade_execution_gate` は緩めない。
+前提として、`entry / wait / trend_flip` 品質ガードと hard / soft 分離は実装済みであり、直近仕様は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md` を参照する。
 
 ---
 
@@ -562,7 +555,7 @@ logs/orders/dry_run_orders/*.json
 | 今やらないこと | 実弾発注、取引所API、秘密鍵、gate 緩和 |
 | 古い計画の扱い | ほとんど実装済み・置換済み |
 | 今後取り込む価値があるもの | `evaluation_trace`、`watch_prices`、価格乖離監視、`chart_pattern_shadow`、`config_change_log`、因子相関、A/B shadow、Phase E 安全装置 |
-| 次の実務正本 | `chatgpt/specs/active/20260526_entry_wait_trend_flip_quality_guard.md` |
+| 次の実務正本 | `運用資料/NEXT_TASK.md` と `chatgpt/specs/active/`（現在 `.gitkeep`、次仕様待ち） |
 
 最短ルートは、実弾化を急ぐことではない。
 

@@ -1,6 +1,6 @@
 # 計画フォルダ
 
-更新日: 2026-05-26 JST
+更新日: 2026-06-01 JST
 
 このフォルダは、自動取引直前まで最短で進めるための計画正本を置く場所です。
 
@@ -9,13 +9,13 @@
 ## 現在の正本
 
 - 現在の作業ブランチ: `ver02.6-v2`
-- 運用本体の参照ブランチ: `ver02.5-v8`
-- 現在版: `Ver02.5-v8` 稼働中 / `ver02.6-v2` で設計・仕様化中
+- 運用本体の参照ブランチ: `ver02.6-v2`
+- 現在版: `ver02.6-v2` 稼働中（`Ver02.5-v8` は旧節目版として履歴参照）
 - 現在フェーズ: `Phase C` 実装済み・観測中、`Phase D` 初期段階
 - 最新統合計画: `運用資料/計画/latest_integrated_plan_20260526.md`
 - 実務正本: `運用資料/NEXT_TASK.md`
 - レポート導線: `運用資料/reports/report_hub_latest.md`
-- Codex 実装正本: `chatgpt/specs/active/`
+- Codex 実装正本: `chatgpt/specs/active/`（現在は `.gitkeep` のみ）
 
 ## Ver02.6-v2 以降の設計運用
 
@@ -52,10 +52,10 @@
 
 ## 現在の重点
 
-- `entry / wait / trend_flip` 品質ガードの実装。
-- `wait>=80`、`execution<20`、`long + wait>=60 + execution<25`、`long + trend_flip_confirmed_up` の弱い紙候補を分離する。
-- `support_to_resistance_flip` など有効な market_map 型は維持し、候補化条件だけを整える。
-- SL/TP 倍率や RR 計算はまだ変更しない。
+- `entry / wait / trend_flip` 品質ガードは実装済み。
+- paper opportunity quality guard の hard / soft 分離も実装済み（直近仕様は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md`）。
+- `hard_quality_blocked` と `soft_quality_risk` の推移を観測継続する。
+- 次は ChatGPT 側で、`counterfactual_quality_guard` の builder 正式化要否、`paper_entry_sl_wait_redesign` builder の扱い、entry / wait / price-distance 再設計を仕様化する。
 
 ## archive / 履歴の扱い
 
