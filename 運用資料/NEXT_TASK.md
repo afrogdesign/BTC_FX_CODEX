@@ -54,6 +54,7 @@
 - BTCFX-20260601-05 で次回実装用 active spec `chatgpt/specs/active/20260601_soft_risk_collateral_damage_report.md` を作成。目的は B/C 単独 soft risk の collateral damage を評価する report builder / CLI 化で、今回は仕様作成のみ（実装は次回）。
 - BTCFX-20260601-06 で `soft_risk_collateral_damage` report の builder / CLI 化を実装済み。`build_soft_risk_collateral_damage_report(...)`、`build-soft-risk-collateral-damage-report`、`--soft-risk-collateral-damage` を追加し、report hub は最新 `soft_risk_collateral_damage_20260601.md` を参照するよう更新済み。B/C 単独 soft risk は現時点で hard blocker 化せず、`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は変更していない。active spec は `chatgpt/specs/archive/20260601_soft_risk_collateral_damage_report.md` へ移動済み。
 - BTCFX-20260601-07 で次回実装用 active spec `chatgpt/specs/active/20260601_entry_wait_price_distance_redesign.md` を作成。目的は high wait / low execution / long弱さ / trend_flip_confirmed_up 弱さを踏まえた entry / wait / price-distance 再設計で、今回は仕様作成のみ（実装は次回）。
+- BTCFX-20260601-08 で `entry / wait / price-distance` 再設計を実装済み。`entry_recheck_required_high_wait` / `entry_recheck_required_low_execution` / `entry_recheck_required_long_weakness` / `entry_recheck_required_trend_flip_up` / `price_distance_missing` を `market_map_opportunity` 候補の再確認 reason に追加し、`trade_execution_gate` / `phase1b_lite_gate` / 既存 hard quality guard は変更していない。B/C 単独 soft risk は hard blocker 化せず、`trend_flip_confirmed_up` を強評価へ戻していない。active spec は `chatgpt/specs/archive/20260601_entry_wait_price_distance_redesign.md` へ移動済み。
 
 ## 実装済みの前提
 

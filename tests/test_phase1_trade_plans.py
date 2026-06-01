@@ -393,6 +393,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             bias="short",
             primary_setup_side="short",
             primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
             data_quality_flag="ok",
             no_trade_flags=[],
             risk_flags=["failed_breakout_down_reversal"],
@@ -402,9 +403,10 @@ class Phase1TradePlanTests(unittest.TestCase):
             phase1b_lite_gate="blocked",
             phase1b_lite_type="blocked",
             trade_execution_gate="blocked",
-            confidence_direction_shadow=58,
-            confidence_execution_shadow=18,
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=23,
             confidence_wait_shadow=55,
+            execution_precision_action="keep",
         )
 
         self.assertEqual(result["opportunity_gate"], "pass")
@@ -461,10 +463,11 @@ class Phase1TradePlanTests(unittest.TestCase):
             bias="short",
             primary_setup_side="short",
             primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
             data_quality_flag="ok",
             no_trade_flags=[],
-            risk_flags=["failed_breakout_down_reversal"],
-            market_map_flags=["support_to_resistance_flip"],
+            risk_flags=[],
+            market_map_flags=["resistance_to_support_flip"],
             phase1_observation_gate="pass",
             phase1_observation_type="setup_watch_learning",
             phase1b_lite_gate="blocked",
@@ -473,16 +476,19 @@ class Phase1TradePlanTests(unittest.TestCase):
             confidence_direction_shadow=58,
             confidence_execution_shadow=23,
             confidence_wait_shadow=60,
+            execution_precision_action="wait_only",
         )
 
         self.assertEqual(result["opportunity_gate"], "blocked")
-        self.assertEqual(result["opportunity_reasons"], ["require_execution_for_high_wait"])
+        self.assertIn("require_execution_for_high_wait", result["opportunity_reasons"])
+        self.assertIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
 
     def test_opportunity_gate_blocks_a_plus_b_quality_candidate(self) -> None:
         result = determine_opportunity_gate(
             bias="long",
             primary_setup_side="long",
             primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
             data_quality_flag="ok",
             no_trade_flags=[],
             risk_flags=["failed_breakout_down_reversal"],
@@ -495,13 +501,139 @@ class Phase1TradePlanTests(unittest.TestCase):
             confidence_direction_shadow=58,
             confidence_execution_shadow=23,
             confidence_wait_shadow=60,
+            execution_precision_action="wait_only",
         )
 
         self.assertEqual(result["opportunity_gate"], "blocked")
-        self.assertEqual(
+        self.assertIn(
+            "require_execution_for_high_wait+suppress_long_high_wait",
             result["opportunity_reasons"],
-            ["require_execution_for_high_wait+suppress_long_high_wait"],
         )
+        self.assertIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
+        self.assertIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+        self.assertIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_low_execution_when_short_conditions_are_weak(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=65,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=55,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_long_weakness_when_long_confirmation_is_insufficient(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=[],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=72,
+            confidence_execution_shadow=25,
+            confidence_wait_shadow=58,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_trend_flip_up_when_confirmation_is_insufficient(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=["resistance_to_support_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=78,
+            confidence_execution_shadow=29,
+            confidence_wait_shadow=54,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_trend_flip_up", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_short_support_candidate_without_over_suppression(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=62,
+            confidence_execution_shadow=24,
+            confidence_wait_shadow=58,
+            execution_precision_action="wait_only",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "market_map_opportunity")
+
+    def test_opportunity_gate_adds_price_distance_missing_reason_without_forcing_block(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=63,
+            confidence_execution_shadow=25,
+            confidence_wait_shadow=52,
+            execution_precision_action="keep",
+            nearest_support_distance="",
+            nearest_resistance_distance="",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("price_distance_missing", result["opportunity_reasons"])
 
     def test_opportunity_gate_a_plus_c_conditions_collapse_into_a_plus_b_plus_c(self) -> None:
         result = determine_opportunity_gate(

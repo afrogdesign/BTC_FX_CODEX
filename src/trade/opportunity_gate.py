@@ -14,6 +14,18 @@ _MARKET_MAP_OPPORTUNITY_FLAGS = {
     "failed_breakout_down_reversal",
     "resistance_to_support_flip",
 }
+_SHORT_CONTINUATION_FLAGS = {
+    "failed_breakout_down_reversal",
+    "support_to_resistance_flip",
+}
+_LOW_EXEC_ALLOWED_FLAGS = {
+    "support_to_resistance_flip",
+    "trend_flip_confirmed_down",
+}
+_PRICE_DISTANCE_SETUP_REASONS = {
+    "entry_zone_not_reached",
+    "near_entry_zone_waiting_trigger",
+}
 _BLOCKED_TREND_FLAGS = {"standalone_trend_flip_confirmed_up"}
 _QUALITY_TREND_FLAGS = {"trend_flip_confirmed_up", *_BLOCKED_TREND_FLAGS}
 _SOFT_RISK_PREFIX = "soft_risk:"
@@ -51,11 +63,90 @@ def _quality_guard_reasons(*, execution: float, wait: float, long_side: bool, tr
     return hard_reason, soft_reason
 
 
+def _has_distance_value(value: Any) -> bool:
+    raw = str(value or "").strip()
+    if not raw:
+        return False
+    if raw.lower() in {"none", "nan", "null"}:
+        return False
+    return True
+
+
+def _entry_wait_price_recheck_reasons(
+    *,
+    side: str,
+    setup_reason: str,
+    execution_precision_action: str,
+    direction: float,
+    execution: float,
+    wait: float,
+    risk_flags: set[str],
+    market_flags: set[str],
+    nearest_support_distance: Any,
+    nearest_resistance_distance: Any,
+) -> tuple[list[str], list[str]]:
+    blocking_reasons: list[str] = []
+    non_blocking_reasons: list[str] = []
+    side_value = str(side or "").strip()
+    long_side = side_value == "long"
+    short_side = side_value == "short"
+    setup_reason_value = str(setup_reason or "").strip()
+    precision_action = str(execution_precision_action or "").strip()
+    combined_flags = set(risk_flags) | set(market_flags)
+
+    high_wait_keep = (
+        execution >= 24.0
+        or setup_reason_value == "near_entry_zone_waiting_trigger"
+        or (precision_action and precision_action != "wait_only")
+        or (short_side and bool(combined_flags & _SHORT_CONTINUATION_FLAGS))
+    )
+    if wait >= 60.0 and not high_wait_keep:
+        blocking_reasons.append("entry_recheck_required_high_wait")
+
+    low_exec_keep = (
+        direction >= 70.0
+        and wait < 60.0
+        and short_side
+        and bool(combined_flags & _LOW_EXEC_ALLOWED_FLAGS)
+    )
+    if execution < 24.0 and not low_exec_keep:
+        blocking_reasons.append("entry_recheck_required_low_execution")
+
+    has_resistance_flip_pair = "resistance_to_support_flip" in combined_flags and "resistance_to_support_retest_confirmed" in combined_flags
+    trend_flip_confirmed_up_only = "trend_flip_confirmed_up" in combined_flags and not (
+        combined_flags - {"trend_flip_confirmed_up"}
+    )
+    long_keep = (
+        execution >= 28.0
+        or wait < 55.0
+        or has_resistance_flip_pair
+        or ("major_support_rejection" in combined_flags and not trend_flip_confirmed_up_only)
+    )
+    if long_side and not long_keep:
+        blocking_reasons.append("entry_recheck_required_long_weakness")
+
+    trend_flip_up_keep = (
+        execution >= 30.0
+        and wait < 55.0
+        and ("resistance_to_support_flip" in combined_flags or "major_support_rejection" in combined_flags)
+        and "long_into_major_resistance" not in combined_flags
+    )
+    if long_side and "trend_flip_confirmed_up" in combined_flags and not trend_flip_up_keep:
+        blocking_reasons.append("entry_recheck_required_trend_flip_up")
+
+    if setup_reason_value in _PRICE_DISTANCE_SETUP_REASONS:
+        if not (_has_distance_value(nearest_support_distance) or _has_distance_value(nearest_resistance_distance)):
+            non_blocking_reasons.append("price_distance_missing")
+
+    return sorted(set(blocking_reasons)), sorted(set(non_blocking_reasons))
+
+
 def determine_opportunity_gate(
     *,
     bias: str,
     primary_setup_side: str,
     primary_setup_status: str,
+    primary_setup_reason: str = "",
     data_quality_flag: str,
     no_trade_flags: list[str] | tuple[str, ...] | set[str] | str | None,
     risk_flags: list[str] | tuple[str, ...] | set[str] | str | None,
@@ -68,6 +159,9 @@ def determine_opportunity_gate(
     confidence_direction_shadow: Any,
     confidence_execution_shadow: Any,
     confidence_wait_shadow: Any,
+    execution_precision_action: str = "",
+    nearest_support_distance: Any = None,
+    nearest_resistance_distance: Any = None,
 ) -> dict[str, Any]:
     blockers: list[str] = []
     reasons: list[str] = []
@@ -128,16 +222,34 @@ def determine_opportunity_gate(
             opportunity_type = "market_map_opportunity"
         reasons.extend(f"market_map:{flag}" for flag in market_hits)
 
+    if not unique_blockers and market_hits and not is_formal_candidate and opportunity_type != "blocked":
+        primary_side = str(primary_setup_side or "").strip()
+        bias_side = str(bias or "").strip()
+        side = primary_side if primary_side in {"long", "short"} else bias_side
+        recheck_blockers, recheck_reasons = _entry_wait_price_recheck_reasons(
+            side=side,
+            setup_reason=str(primary_setup_reason or "").strip(),
+            execution_precision_action=str(execution_precision_action or "").strip(),
+            direction=direction,
+            execution=execution,
+            wait=wait,
+            risk_flags=normalized_risk,
+            market_flags=normalized_market,
+            nearest_support_distance=nearest_support_distance,
+            nearest_resistance_distance=nearest_resistance_distance,
+        )
+        blockers.extend(recheck_blockers)
+        reasons.extend(recheck_reasons)
+        unique_blockers = sorted(set(blockers))
+
+    if hard_quality_reason and not is_formal_candidate:
+        blockers.append(hard_quality_reason)
+        unique_blockers = sorted(set(blockers))
+
     if not unique_blockers and soft_quality_reason and not is_formal_candidate and opportunity_type != "blocked":
         reasons.append(soft_quality_reason)
 
     unique_reasons = sorted(set(reasons))
-    if hard_quality_reason and not unique_blockers and not is_formal_candidate:
-        return {
-            "opportunity_gate": "blocked",
-            "opportunity_type": "blocked",
-            "opportunity_reasons": [hard_quality_reason],
-        }
     return {
         "opportunity_gate": "pass" if opportunity_type != "blocked" and not unique_blockers else "blocked",
         "opportunity_type": opportunity_type if not unique_blockers else "blocked",

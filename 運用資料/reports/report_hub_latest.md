@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-06-01 17:58 JST
+- generated_at: 2026-06-01 18:41 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順

@@ -5188,6 +5188,7 @@ def build_shadow_log(
             bias=str(trade.get("bias", "")),
             primary_setup_side=str(trade.get("primary_setup_side", "")),
             primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
             data_quality_flag=str(trade.get("data_quality_flag", "")),
             no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
             risk_flags=_split_values(str(trade.get("risk_flags", ""))),
@@ -5200,6 +5201,9 @@ def build_shadow_log(
             confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
             confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
             confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+            execution_precision_action=str(trade.get("execution_precision_action", "")),
+            nearest_support_distance=trade.get("nearest_support_distance", ""),
+            nearest_resistance_distance=trade.get("nearest_resistance_distance", ""),
         )
         shadow_rows.append(
             {
