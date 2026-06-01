@@ -5723,6 +5723,201 @@ def _paper_position_missing_data_notes(rows: list[dict[str, Any]]) -> list[str]:
     return notes
 
 
+def _counterfactual_leaf_hits_from_shadow_row(row: dict[str, Any]) -> set[str]:
+    hits: set[str] = set()
+    for raw_reason in _split_values(str(row.get("opportunity_reasons", ""))):
+        normalized = raw_reason.split(":", 1)[-1]
+        tokens = {token.strip() for token in normalized.split("+") if token.strip()}
+        for leaf in _QUALITY_GUARD_LEAF_REASONS:
+            if leaf in tokens:
+                hits.add(leaf)
+    return hits
+
+
+def _counterfactual_group_label(leaf_hits: set[str]) -> str | None:
+    mapping = {
+        frozenset({"require_execution_for_high_wait"}): "A only",
+        frozenset({"suppress_long_high_wait"}): "B only",
+        frozenset({"suppress_trend_flip_up_strong"}): "C only",
+        frozenset({"require_execution_for_high_wait", "suppress_long_high_wait"}): "A+B",
+        frozenset({"require_execution_for_high_wait", "suppress_trend_flip_up_strong"}): "A+C",
+        frozenset({"suppress_long_high_wait", "suppress_trend_flip_up_strong"}): "B+C",
+        frozenset(
+            {
+                "require_execution_for_high_wait",
+                "suppress_long_high_wait",
+                "suppress_trend_flip_up_strong",
+            }
+        ): "A+B+C",
+    }
+    return mapping.get(frozenset(leaf_hits))
+
+
+def _counterfactual_group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    sl_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+    tp2_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    missed = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "missed_opportunity")
+    timeout = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "timeout")
+    entry_not_reached = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "entry_not_reached")
+    return {
+        "count": count,
+        "sl_hit": sl_hit,
+        "sl_hit_rate": _ratio(sl_hit, count),
+        "tp2_hit": tp2_hit,
+        "tp2_hit_rate": _ratio(tp2_hit, count),
+        "missed_opportunity": missed,
+        "missed_rate": _ratio(missed, count),
+        "timeout": timeout,
+        "entry_not_reached": entry_not_reached,
+        "avg_r": _mean_value(rows, "realized_r"),
+    }
+
+
+def build_quality_guard_effectiveness_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    closed_rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        if str(row.get("position_status", "")).strip() != "closed":
+            continue
+        if date_from or date_to:
+            if not _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")).strip(),
+                date_from=date_from.strip(),
+                date_to=date_to.strip(),
+            ):
+                continue
+        closed_rows.append(row)
+
+    joined_rows: list[dict[str, Any]] = []
+    missing_shadow_join_ids: list[str] = []
+    for row in closed_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        shadow = shadow_by_id.get(signal_id)
+        if shadow is None:
+            missing_shadow_join_ids.append(signal_id)
+            continue
+        leaf_hits = _counterfactual_leaf_hits_from_shadow_row(shadow)
+        merged = dict(row)
+        merged["_leaf_hits"] = leaf_hits
+        merged["_group_label"] = _counterfactual_group_label(leaf_hits)
+        joined_rows.append(merged)
+
+    grouped_rows = {
+        "A only": [row for row in joined_rows if row.get("_group_label") == "A only"],
+        "B only": [row for row in joined_rows if row.get("_group_label") == "B only"],
+        "C only": [row for row in joined_rows if row.get("_group_label") == "C only"],
+        "A+B": [row for row in joined_rows if row.get("_group_label") == "A+B"],
+        "A+C": [row for row in joined_rows if row.get("_group_label") == "A+C"],
+        "B+C": [row for row in joined_rows if row.get("_group_label") == "B+C"],
+        "A+B+C": [row for row in joined_rows if row.get("_group_label") == "A+B+C"],
+        "guard該当全体": [row for row in joined_rows if row.get("_leaf_hits")],
+        "guard非該当全体": [row for row in joined_rows if not row.get("_leaf_hits")],
+        "closed全体": joined_rows,
+    }
+    memo_by_group = {
+        "A only": "高 wait と低 execution の単独該当。失敗寄りが強い。",
+        "B only": "long + high wait 単独。sl より missed / 未到達巻き込みを確認する。",
+        "C only": "trend flip up 単独。件数が少ない場合は断定しない。",
+        "A+B": "high wait + low execution に long が重なる群。未到達巻き込みを確認する。",
+        "A+C": "A と C の重複。件数が少ない場合は断定しない。",
+        "B+C": "B と C の重複。件数が少ない場合は断定しない。",
+        "A+B+C": "3 条件重複。件数が少ない場合は断定しない。",
+        "guard該当全体": "後付け guard 対象全体。",
+        "guard非該当全体": "後付け guard 非該当全体。",
+        "closed全体": "closed 全母集団。",
+    }
+
+    lines = ["# quality guard 有効性", ""]
+    lines.append("## counterfactual_quality_guard")
+    lines.append("")
+    lines.append(
+        "- 目的: `paper_positions.csv` と `shadow_log.csv` を `signal_id` で突き合わせ、closed 母集団に対して quality guard 条件を後付け再計算する。"
+    )
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed 全体件数: `{len(closed_rows)}件`")
+    lines.append(f"- joined closed 件数: `{len(joined_rows)}件`")
+    lines.append(f"- missing_shadow_join: `{len(missing_shadow_join_ids)}件`")
+    if missing_shadow_join_ids:
+        lines.append(f"- missing_shadow_join 代表: `{', '.join(missing_shadow_join_ids[:5])}`")
+    lines.append("")
+    lines.append("| group | count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | entry_not_reached | avg_R | memo |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in [
+        "A only",
+        "B only",
+        "C only",
+        "A+B",
+        "A+C",
+        "B+C",
+        "A+B+C",
+        "guard該当全体",
+        "guard非該当全体",
+        "closed全体",
+    ]:
+        stats = _counterfactual_group_stats(grouped_rows[label])
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(stats["count"]),
+                    str(stats["sl_hit"]),
+                    _format_pct(stats["sl_hit_rate"]),
+                    str(stats["tp2_hit"]),
+                    _format_pct(stats["tp2_hit_rate"]),
+                    str(stats["missed_opportunity"]),
+                    _format_pct(stats["missed_rate"]),
+                    str(stats["timeout"]),
+                    str(stats["entry_not_reached"]),
+                    f"{stats['avg_r']:.2f}",
+                    memo_by_group[label],
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append("注記:")
+    lines.append("- `avg_R` は `paper_positions.csv` の `realized_r` を使う。")
+    lines.append("- `entry_not_reached` や `missed_opportunity` にも `realized_r` が入る可能性があり、純粋な約定後損益だけではない。")
+    lines.append("")
+    lines.append("## interpretation")
+    lines.append("- `A only` は失敗率が高く、hard blocker 維持を検討する材料。")
+    lines.append("- `B only` / `C only` は missed / 未到達の巻き込みを必ず見る。")
+    lines.append("- `B+C` や `A+B+C` は件数が少ない場合、断定しない。")
+    lines.append("- counterfactual は後付け再計算であり、実運用結果ではない。")
+    lines.append("- この report は guard 条件を即時変更するためのものではない。")
+    lines.append("")
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def build_paper_opportunity_diagnostics_report(
     *,
     base_dir: Path,
@@ -8313,6 +8508,11 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_diagnostics_parser.add_argument("--date-to", default="")
     paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
 
+    quality_guard_effectiveness_parser = subparsers.add_parser("build-quality-guard-effectiveness-report")
+    quality_guard_effectiveness_parser.add_argument("--output-md")
+    quality_guard_effectiveness_parser.add_argument("--date-from", default="")
+    quality_guard_effectiveness_parser.add_argument("--date-to", default="")
+
     report_hub_parser = subparsers.add_parser("build-report-hub")
     report_hub_parser.add_argument("--output-md")
 
@@ -8341,7 +8541,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = _build_parser()
-    args = parser.parse_args()
+    argv = list(sys.argv[1:])
+    if argv and argv[0] == "--quality-guard-effectiveness":
+        argv = ["build-quality-guard-effectiveness-report", *argv[1:]]
+    if argv and argv[0] == "--report-hub":
+        argv = ["build-report-hub", *argv[1:]]
+    args = parser.parse_args(argv)
     base_dir = BASE_DIR
 
     if args.command == "update-outcomes":
@@ -8503,6 +8708,24 @@ def main() -> None:
             date_from=str(args.date_from),
             date_to=str(args.date_to),
             limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-quality-guard-effectiveness-report":
+        output_md = (
+            Path(args.output_md)
+            if args.output_md
+            else base_dir / "運用資料" / "reports" / "analysis" / f"quality_guard_effectiveness_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        report = build_quality_guard_effectiveness_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
         )
         if output_md:
             print(output_md)

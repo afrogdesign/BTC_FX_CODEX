@@ -44,6 +44,7 @@ from tools.log_feedback import (
     build_market_map_readiness_report,
     build_observation_paper_orders,
     build_paper_opportunity_diagnostics_report,
+    build_quality_guard_effectiveness_report,
     build_paper_positions,
     build_phase1b_lite_paper_orders,
     build_operational_focus_report,
@@ -566,6 +567,88 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("suppress_trend_flip_up_strong", report)
             self.assertIn("require_execution_for_high_wait", report)
             self.assertIn("delay_entry_on_sweep_wait", report)
+
+    def test_quality_guard_effectiveness_report_includes_counterfactual_groups_and_missing_join(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True)
+            shadow_path = logs_csv / "shadow_log.csv"
+            with shadow_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=SHADOW_HEADER)
+                writer.writeheader()
+                rows = [
+                    ("sig_a", '["require_execution_for_high_wait"]'),
+                    ("sig_b", '["soft_risk:suppress_long_high_wait"]'),
+                    ("sig_c", '["soft_risk:suppress_trend_flip_up_strong"]'),
+                    ("sig_ab", '["require_execution_for_high_wait+suppress_long_high_wait"]'),
+                    ("sig_ac", '["require_execution_for_high_wait+suppress_trend_flip_up_strong"]'),
+                    ("sig_bc", '["soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
+                    ("sig_abc", '["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"]'),
+                    ("sig_none", '["market_map:support_to_resistance_flip"]'),
+                    ("sig_pass", '["market_map:failed_breakout_down_reversal"]'),
+                ]
+                for signal_id, reasons in rows:
+                    row = {field: "" for field in SHADOW_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                            "opportunity_reasons": reasons,
+                        }
+                    )
+                    writer.writerow(row)
+
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            with paper_positions_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=PAPER_POSITION_HEADER)
+                writer.writeheader()
+                def _write_row(signal_id: str, exit_status: str, realized_r: str) -> None:
+                    row = {field: "" for field in PAPER_POSITION_HEADER}
+                    row.update(
+                        {
+                            "signal_id": signal_id,
+                            "timestamp_jst": "2026-06-01T12:05:00+09:00",
+                            "position_status": "closed",
+                            "exit_status": exit_status,
+                            "realized_r": realized_r,
+                        }
+                    )
+                    writer.writerow(row)
+
+                _write_row("sig_a", "sl_hit", "-1.0")
+                _write_row("sig_b", "missed_opportunity", "1.3")
+                _write_row("sig_c", "timeout", "0.2")
+                _write_row("sig_ab", "entry_not_reached", "1.3")
+                _write_row("sig_ac", "sl_hit", "-1.0")
+                _write_row("sig_bc", "tp2_hit", "2.4")
+                _write_row("sig_abc", "sl_hit", "-0.8")
+                _write_row("sig_none", "tp2_hit", "2.2")
+                _write_row("sig_pass", "missed_opportunity", "1.3")
+                _write_row("sig_missing", "sl_hit", "-1.0")
+
+            report = build_quality_guard_effectiveness_report(
+                base_dir=base_dir,
+                paper_positions_path=paper_positions_path,
+                shadow_path=shadow_path,
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+            )
+
+            self.assertIn("## counterfactual_quality_guard", report)
+            self.assertIn("missing_shadow_join: `1件`", report)
+            self.assertIn("| A only |", report)
+            self.assertIn("| B only |", report)
+            self.assertIn("| C only |", report)
+            self.assertIn("| A+B |", report)
+            self.assertIn("| A+C |", report)
+            self.assertIn("| B+C |", report)
+            self.assertIn("| A+B+C |", report)
+            self.assertIn("| guard該当全体 |", report)
+            self.assertIn("| guard非該当全体 |", report)
+            self.assertIn("| closed全体 |", report)
+            self.assertIn("純粋な約定後損益だけではない", report)
+            self.assertIn("counterfactual は後付け再計算であり、実運用結果ではない。", report)
 
     def test_normalize_ai_post_review_applies_defaults(self) -> None:
         row = _normalize_ai_post_review(
@@ -3838,6 +3921,32 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/report_hub.md"))
+
+    def test_main_build_quality_guard_effectiveness_report_accepts_output_path(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "build-quality-guard-effectiveness-report", "--output-md", "/tmp/qg.md"],
+        ), patch("tools.log_feedback.build_quality_guard_effectiveness_report") as mocked_report:
+            mocked_report.return_value = "# qg\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/qg.md"))
+
+    def test_main_quality_guard_effectiveness_alias_maps_to_subcommand(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            ["log_feedback.py", "--quality-guard-effectiveness", "--output-md", "/tmp/qg_alias.md"],
+        ), patch("tools.log_feedback.build_quality_guard_effectiveness_report") as mocked_report:
+            mocked_report.return_value = "# qg\n"
+
+            main()
+
+        mocked_report.assert_called_once()
+        self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/qg_alias.md"))
 
 
 if __name__ == "__main__":

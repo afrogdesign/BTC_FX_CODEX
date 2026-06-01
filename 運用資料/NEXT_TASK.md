@@ -47,7 +47,9 @@
 - AI 事後評価は `request_failed=0` を維持。最新 `feedback_daily_sync_20260601.md` 基準では `created=8 / request_failed=0 / backlog=54`。
 - `ver02.6-v2` では `src/trade/opportunity_gate.py` に paper opportunity quality guard の hard / soft 分離まで反映済み。`trade_execution_gate` と `phase1b_lite_gate` は変更していない。
 - 既存 CLI でレポートを再生成し、`feedback_daily_sync_20260601.md` と `paper_opportunity_diagnostics_20260601.md` に hard / soft 集計を反映済み。
-- `chatgpt/specs/active/20260601_counterfactual_quality_guard_builder.md` を次の active spec として追加した。今回の作業は active spec 作成のみで、次の Codex 実装は `counterfactual_quality_guard` builder 正式化とする。
+- `counterfactual_quality_guard` builder を `tools/log_feedback.py` に実装し、`./.venv312/bin/python tools/log_feedback.py --quality-guard-effectiveness` で `運用資料/reports/analysis/quality_guard_effectiveness_20260601.md` を再生成した。
+- report hub は `./.venv312/bin/python tools/log_feedback.py --report-hub` で更新済み。`trade_execution_gate` / `phase1b_lite_gate` / `opportunity_gate` は今回も変更していない。
+- 実施済み仕様 `chatgpt/specs/archive/20260601_counterfactual_quality_guard_builder.md` へ移動済み。`chatgpt/specs/active/` は `.gitkeep` のみ。
 
 ## 実装済みの前提
 
@@ -82,7 +84,7 @@
 ## 次のタスク
 
 1. 最新 daily-sync は `2026-06-01` 基準で `hard_quality_blocked=1件`、`soft_quality_risk=1件`、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`。Phase 1B や実弾寄りの緩和は進めず、hard / soft の推移を観測継続する。
-2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。Codex は `chatgpt/specs/active/20260601_counterfactual_quality_guard_builder.md` を正本として次回実装する（今回は active spec 作成のみ）。
+2. 次の診断、設計、フェーズ判断は ChatGPT プロジェクトへ渡す。`counterfactual_quality_guard` builder は実装済みのため、次は運用観測と設計論点整理を進める。
 3. `paper_entry_sl_wait_redesign_20260526.md` で `sl_hit` の主因が高 wait、低 execution、long、上方向転換系に偏ることを追加確認した。ChatGPT 側は entry 発火条件、SL/TP 条件、wait/execution 抑制条件を分けて再設計する。
 4. `market_map_opportunity` は累計では改善したが、`long`、`wait>=60`、`resistance_to_support_flip`、`trend_flip_confirmed_up` は弱い。特に `wait>=80` と `execution<20` の抑制案は ChatGPT 側で具体化する。
 5. `trend_flip_confirmed_up` は 32 件に到達したが依然弱く、紙ポジションでも 7 件すべて `sl_hit`。上方向転換系を強評価へ戻さず、次の扱いは ChatGPT 側で再判定する。
@@ -90,7 +92,7 @@
 7. AI backlog は 54 件で `request_failed=0`。daily cap 8 を維持し、backlog が自然減するか確認する。
 8. `paper_entry_sl_wait_redesign` は専用 CLI が見当たらず、今回の再生成対象から外した。既存 report builder 構造の中でどこに置くかを ChatGPT 側で判断する。
 9. `quality_guard_effectiveness_20260601.md` を追加し、daily-sync と paper diagnostics の `quality guard` 件数差は母集団差として整理した。`guard該当 closed sl_hit=0件` は成功証拠ではなく、保存仕様と集計母集団差を含めて解釈する。
-10. 次に見る論点は `counterfactual_quality_guard` の正式 builder 化要否と、`paper_entry_sl_wait_redesign` builder の扱いである。guard 条件そのものは今回は変更しない。
+10. 次に見る論点は `paper_entry_sl_wait_redesign` builder の正式化要否と、`B/C` 単独 soft risk の collateral damage である。guard 条件そのものは今回は変更しない。
 11. `quality_guard_effectiveness_20260601.md` に reason別・複合条件別 counterfactual を追加した。次に ChatGPT が見るべき論点は、reason組み合わせ別の `sl_hit_rate` と `tp2_hit / missed_opportunity` 巻き込み率であり、guard 条件変更はまだ行っていない。
 12. builder 正式化は次回以降の論点とし、今回は `paper_positions.csv` と `shadow_log.csv` の後付け再計算で材料整理だけを行った。
 13. `paper opportunity quality guard` の hard / soft 分離を実装し、仕様書は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md` へ移した。`A=require_execution_for_high_wait` を含む group は hard blocker、`B/C` 単独と `B+C` は soft risk として扱う。
