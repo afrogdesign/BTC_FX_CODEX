@@ -1,6 +1,6 @@
 # Report Hub
 
-- generated_at: 2026-06-01 03:20 JST
+- generated_at: 2026-06-01 13:05 JST
 - purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。
 
 ## ChatGPT が最初に開く順
@@ -26,21 +26,21 @@
 - previous: [運用資料/reports/archive/analysis/market_map_effectiveness_20260525.md](運用資料/reports/archive/analysis/market_map_effectiveness_20260525.md)
 - storage: `active`
 - purpose: market_map flag 別の有効性確認。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-05-26` / freshness: `fresh(6d)`
 
 ### 運用フォーカス
 - latest: [運用資料/reports/analysis/operational_focus_20260526.md](運用資料/reports/analysis/operational_focus_20260526.md)
 - previous: [運用資料/reports/archive/analysis/operational_focus_20260525.md](運用資料/reports/archive/analysis/operational_focus_20260525.md)
 - storage: `active`
 - purpose: blocked 理由、AI backlog、Phase1 観測の詰まりどころを見る。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-05-26` / freshness: `fresh(6d)`
 
 ### 紙候補診断
-- latest: [運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md](運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md)
-- previous: [運用資料/reports/archive/analysis/paper_opportunity_diagnostics_20260525.md](運用資料/reports/archive/analysis/paper_opportunity_diagnostics_20260525.md)
+- latest: [運用資料/reports/analysis/paper_opportunity_diagnostics_20260601.md](運用資料/reports/analysis/paper_opportunity_diagnostics_20260601.md)
+- previous: [運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md](運用資料/reports/analysis/paper_opportunity_diagnostics_20260526.md)
 - storage: `active`
 - purpose: 紙候補の entry / wait / flag 別診断。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-06-01` / freshness: `fresh(0d)`
 
 ## 設計テーマ用 / on-demand
 
@@ -49,21 +49,28 @@
 - previous: [運用資料/reports/archive/analysis/relaxation_candidates_20260525.md](運用資料/reports/archive/analysis/relaxation_candidates_20260525.md)
 - storage: `active`
 - purpose: gate 緩和候補の抽出。設計判断用。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-05-26` / freshness: `fresh(6d)`
 
 ### Phase 1B 昇格候補
 - latest: [運用資料/reports/analysis/phase1b_promotion_candidates_20260526.md](運用資料/reports/analysis/phase1b_promotion_candidates_20260526.md)
 - previous: [運用資料/reports/archive/analysis/phase1b_promotion_candidates_20260525.md](運用資料/reports/archive/analysis/phase1b_promotion_candidates_20260525.md)
 - storage: `active`
 - purpose: Phase 1B-lite からの昇格候補確認。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-05-26` / freshness: `fresh(6d)`
 
 ### SL/entry 再設計診断
 - latest: [運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md](運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md)
 - previous: `missing`
 - storage: `active`
 - purpose: sl_hit 偏重、高 wait、低 execution の切り分け。
-- last_date: `2026-05-26` / freshness: `stale(6d)`
+- last_date: `2026-05-26` / freshness: `fresh(6d)`
+
+### quality guard 有効性
+- latest: [運用資料/reports/analysis/quality_guard_effectiveness_20260601.md](運用資料/reports/analysis/quality_guard_effectiveness_20260601.md)
+- previous: `missing`
+- storage: `active`
+- purpose: paper opportunity quality guard の初回反映評価と counterfactual 論点整理。
+- last_date: `2026-06-01` / freshness: `fresh(0d)`
 
 ## Dormant / 補助診断
 
