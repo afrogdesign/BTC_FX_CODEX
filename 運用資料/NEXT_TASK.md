@@ -162,3 +162,5 @@
 - `market_map` の値入りログが増え、失敗型を分離できるか評価できる。
 - `Phase 1A` の観測と `Phase 1B` の本有効確認を分けて追える。
 - `phase1_active=true=30件以上` を Ver03 判断材料にできるだけの観測が貯まる。
+- BTCFX-20260601-16 で active spec `chatgpt/specs/active/20260601_short_low_execution_recheck.md` を作成。
+- 次回はこの active spec を正本に、short + execution<20 の entry recheck 追加を実装する。
