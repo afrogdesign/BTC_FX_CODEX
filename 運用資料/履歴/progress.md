@@ -486,3 +486,5 @@
   - 日次集計の入口数値は `完了36件 / 近似PF 3.69 / 勝率75.0% / AI backlog 52`、`trade_execution_gate=pass=0件` を確認した。
   - `./.venv312/bin/python tools/log_feedback.py --report-hub` を実行し、`運用資料/reports/report_hub_latest.md` の latest / previous を `20260604 / 20260603` へ更新した。
   - `運用資料/NEXT_TASK.md` を 6/4 基準へ更新し、`hard_quality_blocked=12件`、`soft_quality_risk=0件`、`market_map opportunity before/after hard guard=23件 -> 1件` を反映した。
+  - ChatGPT 側の考察入口を最新化するため、`market_map_effectiveness_20260604.md`、`operational_focus_20260604.md`、`relaxation_candidates_20260604.md`、`phase1b_promotion_candidates_20260604.md`、`paper_opportunity_diagnostics_20260604.md`、`paper_entry_sl_wait_redesign_20260604.md`、`quality_guard_effectiveness_20260604.md`、`soft_risk_collateral_damage_20260604.md` を再生成した。
+  - `運用資料/NEXT_TASK.md` の ChatGPT 入口レポートと分析基準名を 6/4 版へ差し替え、考察起点が stale レポートへ戻らないよう整理した。
