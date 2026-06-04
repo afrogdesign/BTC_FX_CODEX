@@ -476,3 +476,13 @@
 - 2026-03-31
   - AI 用入口資料を圧縮し、`NEXT_TASK.md` は日常判断、`開発ロードマップ.md` は現在地と節目、`スレッド引き継ぎファイル.md` は archive / sandbox の例外前提だけを残す形へ再整理した。
   - `Global_BOX` の `本番環境.md` も実機確認ベースへ更新し、`MBP2020` で現在ロード中なのは `ReceiptBox` と `Tweet Sync` のみ、`BTC監視 ver021` は停止・凍結済みであることを反映した。
+- 2026-06-03 JST
+  - `運用資料/reports/feedback_daily_sync_20260603.md` を最新 daily-sync 基準として確認し、入口資料を 2026-06-03 時点へ更新した。
+  - `運用資料/reports/report_hub_latest.md` の latest / previous を `20260603 / 20260602` へ差し替え、鮮度表記を更新した。
+  - `運用資料/NEXT_TASK.md` の daily-sync 基準値を 6/3 集計へ更新し、`hard_quality_blocked=11件`、`soft_quality_risk=0件`、`market_map opportunity before/after hard guard=28件 -> 3件` を反映した。
+  - 実装仕様の新規 active spec は作らず、次判断は引き続き ChatGPT 側の設計テーマ（entry / wait / price-distance 再設計）へ渡す前提を維持した。
+- 2026-06-04 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync` を実行し、`運用資料/reports/feedback_daily_sync_20260604.md` を生成した。
+  - 日次集計の入口数値は `完了36件 / 近似PF 3.69 / 勝率75.0% / AI backlog 52`、`trade_execution_gate=pass=0件` を確認した。
+  - `./.venv312/bin/python tools/log_feedback.py --report-hub` を実行し、`運用資料/reports/report_hub_latest.md` の latest / previous を `20260604 / 20260603` へ更新した。
+  - `運用資料/NEXT_TASK.md` を 6/4 基準へ更新し、`hard_quality_blocked=12件`、`soft_quality_risk=0件`、`market_map opportunity before/after hard guard=23件 -> 1件` を反映した。
