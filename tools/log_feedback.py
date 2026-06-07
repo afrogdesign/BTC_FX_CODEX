@@ -622,6 +622,50 @@ ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER = [
     "outcome_outcome",
 ]
 
+ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+    "evaluation_status",
+    "entry_reached",
+    "entry_reached_at_jst",
+    "entry_reached_price",
+    "first_exit",
+    "first_exit_at_jst",
+    "first_exit_price",
+    "tp1_reached",
+    "tp1_reached_at_jst",
+    "tp2_reached",
+    "tp2_reached_at_jst",
+    "sl_reached",
+    "sl_reached_at_jst",
+    "timeout_reached",
+    "timeout_at_jst",
+    "mfe",
+    "mae",
+    "mfe_price",
+    "mae_price",
+    "max_favorable_at_jst",
+    "max_adverse_at_jst",
+    "bars_evaluated",
+    "evaluation_window_hours",
+    "notes",
+]
+
 VALID_USER_VERDICTS = {
     "",
     "useful_entry",
@@ -7507,6 +7551,337 @@ def _candidate_close_reached(side: Any, forward_price: Any, level: Any, *, targe
     return "true" if forward >= target_level else "false"
 
 
+def _active_plan_parse_dt(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        try:
+            raw = float(text)
+        except ValueError:
+            return None
+        if raw > 10_000_000_000:
+            raw = raw / 1000
+        return datetime.fromtimestamp(raw, tz=timezone.utc).astimezone(JST)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=JST)
+    return dt.astimezone(JST)
+
+
+def _active_plan_format_jst(dt: datetime | None) -> str:
+    return "" if dt is None else dt.astimezone(JST).isoformat()
+
+
+def _active_plan_load_ohlcv_rows(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(path):
+        dt = (
+            _active_plan_parse_dt(row.get("timestamp_jst"))
+            or _active_plan_parse_dt(row.get("timestamp_utc"))
+            or _active_plan_parse_dt(row.get("timestamp"))
+        )
+        if dt is None:
+            continue
+        rows.append(
+            {
+                "dt": dt,
+                "open": _parse_float(row.get("open"), 0.0),
+                "high": _parse_float(row.get("high"), 0.0),
+                "low": _parse_float(row.get("low"), 0.0),
+                "close": _parse_float(row.get("close"), 0.0),
+            }
+        )
+    return sorted(rows, key=lambda item: item["dt"])
+
+
+def _active_plan_candidate_valid(candidate: dict[str, Any]) -> bool:
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_mode = str(candidate.get("entry_mode", "")).strip()
+    entry_price = _parse_float(candidate.get("entry_price"), 0.0)
+    stop_loss = _parse_float(candidate.get("stop_loss"), 0.0)
+    tp1 = _parse_float(candidate.get("tp1"), 0.0)
+    return side in {"long", "short"} and bool(entry_mode) and entry_price > 0 and stop_loss > 0 and tp1 > 0
+
+
+def _active_plan_touches_entry(side: str, high: float, low: float, entry: float) -> bool:
+    return low <= entry <= high
+
+
+def _active_plan_touches_tp(side: str, high: float, low: float, price: float) -> bool:
+    if side == "long":
+        return high >= price
+    if side == "short":
+        return low <= price
+    return False
+
+
+def _active_plan_touches_sl(side: str, high: float, low: float, stop_loss: float) -> bool:
+    if side == "long":
+        return low <= stop_loss
+    if side == "short":
+        return high >= stop_loss
+    return False
+
+
+def _active_plan_mfe_mae(
+    *,
+    side: str,
+    entry_price: float,
+    candles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not candles or entry_price <= 0:
+        return {
+            "mfe": "",
+            "mae": "",
+            "mfe_price": "",
+            "mae_price": "",
+            "max_favorable_at_jst": "",
+            "max_adverse_at_jst": "",
+        }
+
+    if side == "long":
+        favorable = max(candles, key=lambda item: float(item["high"]))
+        adverse = min(candles, key=lambda item: float(item["low"]))
+        mfe_price = float(favorable["high"])
+        mae_price = float(adverse["low"])
+        mfe = max(0.0, mfe_price - entry_price)
+        mae = max(0.0, entry_price - mae_price)
+    elif side == "short":
+        favorable = min(candles, key=lambda item: float(item["low"]))
+        adverse = max(candles, key=lambda item: float(item["high"]))
+        mfe_price = float(favorable["low"])
+        mae_price = float(adverse["high"])
+        mfe = max(0.0, entry_price - mfe_price)
+        mae = max(0.0, mae_price - entry_price)
+    else:
+        return {
+            "mfe": "",
+            "mae": "",
+            "mfe_price": "",
+            "mae_price": "",
+            "max_favorable_at_jst": "",
+            "max_adverse_at_jst": "",
+        }
+
+    return {
+        "mfe": f"{mfe:.2f}",
+        "mae": f"{mae:.2f}",
+        "mfe_price": f"{mfe_price:.2f}",
+        "mae_price": f"{mae_price:.2f}",
+        "max_favorable_at_jst": _active_plan_format_jst(favorable["dt"]),
+        "max_adverse_at_jst": _active_plan_format_jst(adverse["dt"]),
+    }
+
+
+def _evaluate_active_plan_intraperiod_candidate(
+    candidate: dict[str, Any],
+    ohlcv_rows: list[dict[str, Any]],
+    *,
+    evaluation_window_hours: float,
+) -> dict[str, Any]:
+    row = {column: "" for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER}
+    for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER:
+        if column in candidate:
+            row[column] = candidate.get(column, "")
+
+    row["evaluation_window_hours"] = str(
+        int(evaluation_window_hours) if float(evaluation_window_hours).is_integer() else evaluation_window_hours
+    )
+
+    candidate_dt = _active_plan_parse_dt(candidate.get("timestamp_jst"))
+    if candidate_dt is None or not _active_plan_candidate_valid(candidate):
+        row["evaluation_status"] = "invalid_candidate"
+        row["first_exit"] = "invalid_candidate"
+        row["notes"] = "invalid_candidate"
+        return row
+
+    if not ohlcv_rows:
+        row["evaluation_status"] = "no_ohlcv"
+        row["first_exit"] = "no_ohlcv"
+        row["notes"] = "no_ohlcv"
+        return row
+
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_mode = str(candidate.get("entry_mode", "")).strip()
+    entry_price = _parse_float(candidate.get("entry_price"), 0.0)
+    stop_loss = _parse_float(candidate.get("stop_loss"), 0.0)
+    tp1 = _parse_float(candidate.get("tp1"), 0.0)
+    tp2 = _parse_float(candidate.get("tp2"), 0.0)
+
+    window_end = candidate_dt + timedelta(hours=evaluation_window_hours)
+    future_rows = [
+        item
+        for item in ohlcv_rows
+        if candidate_dt <= item["dt"] <= window_end
+    ]
+
+    if not future_rows:
+        row["evaluation_status"] = "pending"
+        row["first_exit"] = "pending"
+        row["notes"] = "no_future_ohlcv_in_window"
+        return row
+
+    entry_row: dict[str, Any] | None = None
+    notes: list[str] = []
+
+    if entry_mode in {"market", "market_conditional"}:
+        entry_row = future_rows[0]
+        if entry_mode == "market_conditional":
+            notes.append("conditional_candidate_assumed_market_entry")
+    else:
+        for item in future_rows:
+            if _active_plan_touches_entry(side, float(item["high"]), float(item["low"]), entry_price):
+                entry_row = item
+                break
+
+    if entry_row is None:
+        if future_rows[-1]["dt"] >= window_end:
+            row["evaluation_status"] = "not_entered"
+            row["first_exit"] = "not_entered"
+        else:
+            row["evaluation_status"] = "pending"
+            row["first_exit"] = "pending"
+        row["entry_reached"] = "false"
+        row["bars_evaluated"] = str(len(future_rows))
+        row["notes"] = ";".join(notes)
+        return row
+
+    row["entry_reached"] = "true"
+    row["entry_reached_at_jst"] = _active_plan_format_jst(entry_row["dt"])
+    row["entry_reached_price"] = f"{entry_price:.2f}"
+
+    after_entry = [item for item in future_rows if item["dt"] >= entry_row["dt"]]
+    evaluated_candles: list[dict[str, Any]] = []
+    first_exit = ""
+    first_exit_row: dict[str, Any] | None = None
+    first_exit_price: float | None = None
+
+    for item in after_entry:
+        evaluated_candles.append(item)
+        high = float(item["high"])
+        low = float(item["low"])
+
+        tp1_hit = _active_plan_touches_tp(side, high, low, tp1)
+        tp2_hit = bool(tp2 > 0 and _active_plan_touches_tp(side, high, low, tp2))
+        sl_hit = _active_plan_touches_sl(side, high, low, stop_loss)
+
+        if tp1_hit:
+            row["tp1_reached"] = "true"
+            row["tp1_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+        if tp2_hit:
+            row["tp2_reached"] = "true"
+            row["tp2_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+        if sl_hit:
+            row["sl_reached"] = "true"
+            row["sl_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+
+        if sl_hit and tp1_hit:
+            first_exit = "ambiguous_sl_first"
+            first_exit_row = item
+            first_exit_price = stop_loss
+            notes.append("same_bar_tp_sl_ambiguous_conservative_sl")
+            break
+        if sl_hit:
+            first_exit = "sl"
+            first_exit_row = item
+            first_exit_price = stop_loss
+            break
+        if tp1_hit:
+            first_exit = "tp1"
+            first_exit_row = item
+            first_exit_price = tp1
+            break
+        if item["dt"] >= window_end:
+            first_exit = "timeout"
+            first_exit_row = item
+            first_exit_price = float(item["close"])
+            row["timeout_reached"] = "true"
+            row["timeout_at_jst"] = _active_plan_format_jst(window_end)
+            break
+
+    if not first_exit:
+        first_exit = "pending"
+
+    row["first_exit"] = first_exit
+    if first_exit_row is not None:
+        row["first_exit_at_jst"] = _active_plan_format_jst(first_exit_row["dt"])
+    if first_exit_price is not None:
+        row["first_exit_price"] = f"{first_exit_price:.2f}"
+
+    if first_exit in {"tp1", "tp2", "sl", "ambiguous_sl_first"}:
+        row["evaluation_status"] = "complete"
+    elif first_exit == "timeout":
+        row["evaluation_status"] = "timeout"
+    elif first_exit == "pending":
+        row["evaluation_status"] = "pending"
+    else:
+        row["evaluation_status"] = first_exit
+
+    mfe_mae = _active_plan_mfe_mae(
+        side=side,
+        entry_price=entry_price,
+        candles=evaluated_candles,
+    )
+    row.update(mfe_mae)
+    row["bars_evaluated"] = str(len(evaluated_candles))
+    row["notes"] = ";".join(note for note in notes if note)
+    return row
+
+
+def build_active_plan_candidate_intraperiod_outcomes(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    ohlcv_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    evaluation_window_hours: float = 24.0,
+) -> Path:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+
+    candidates = _load_csv_rows(candidates_path)
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        candidates = [
+            row
+            for row in candidates
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    ohlcv_rows = _active_plan_load_ohlcv_rows(ohlcv_path)
+
+    rows = [
+        _evaluate_active_plan_intraperiod_candidate(
+            candidate,
+            ohlcv_rows,
+            evaluation_window_hours=float(evaluation_window_hours),
+        )
+        for candidate in candidates
+    ]
+
+    _ensure_parent(output_csv)
+    with output_csv.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER})
+
+    return output_csv
+
+
 def _active_plan_candidate_outcome_row(
     candidate: dict[str, Any],
     outcome: dict[str, Any],
@@ -10388,6 +10763,14 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_candidate_outcomes_parser.add_argument("--date-from", default="")
     active_plan_candidate_outcomes_parser.add_argument("--date-to", default="")
 
+    active_plan_intraperiod_parser = subparsers.add_parser("build-active-plan-candidate-intraperiod-outcomes")
+    active_plan_intraperiod_parser.add_argument("--candidates-path")
+    active_plan_intraperiod_parser.add_argument("--ohlcv-path")
+    active_plan_intraperiod_parser.add_argument("--output-csv")
+    active_plan_intraperiod_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_parser.add_argument("--evaluation-window-hours", type=float, default=24.0)
+
     active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
     active_plan_candidate_outcomes_report_parser.add_argument("--candidate-outcomes-path")
     active_plan_candidate_outcomes_report_parser.add_argument("--output-md")
@@ -10684,6 +11067,19 @@ def main() -> None:
             output_csv=Path(args.output_csv) if args.output_csv else None,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
+        )
+        print(path)
+        return
+
+    if args.command == "build-active-plan-candidate-intraperiod-outcomes":
+        path = build_active_plan_candidate_intraperiod_outcomes(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            ohlcv_path=Path(args.ohlcv_path) if args.ohlcv_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            evaluation_window_hours=float(args.evaluation_window_hours),
         )
         print(path)
         return
