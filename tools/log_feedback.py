@@ -9790,6 +9790,10 @@ def daily_sync(
     observation_paper_orders_path = build_observation_paper_orders(base_dir=base_dir, trades_path=shadow_path)
     phase1b_lite_paper_orders_path = build_phase1b_lite_paper_orders(base_dir=base_dir, trades_path=shadow_path)
     paper_positions_path = build_paper_positions(base_dir=base_dir, trades_path=shadow_path)
+    active_plan_paper_candidates_path = build_active_plan_paper_candidates(
+        base_dir=base_dir,
+        trades_path=base_dir / "logs" / "csv" / "trades.csv",
+    )
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -9820,6 +9824,7 @@ def daily_sync(
         "observation_paper_orders_path": observation_paper_orders_path,
         "phase1b_lite_paper_orders_path": phase1b_lite_paper_orders_path,
         "paper_positions_path": paper_positions_path,
+        "active_plan_paper_candidates_path": active_plan_paper_candidates_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
