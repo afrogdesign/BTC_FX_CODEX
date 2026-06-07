@@ -5614,6 +5614,53 @@ def _paper_position_realized_stats(rows: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+_FILLED_PAPER_EXIT_STATUSES = {"sl_hit", "tp2_hit", "timeout"}
+_NON_ENTERED_PAPER_EXIT_STATUSES = {"missed_opportunity", "entry_not_reached"}
+
+
+def _paper_position_exit_status(row: dict[str, Any]) -> str:
+    return str(row.get("exit_status", "")).strip()
+
+
+def _paper_position_filled_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if _paper_position_exit_status(row) in _FILLED_PAPER_EXIT_STATUSES]
+
+
+def _paper_position_non_entered_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if _paper_position_exit_status(row) in _NON_ENTERED_PAPER_EXIT_STATUSES]
+
+
+def _paper_position_r_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    r_values = [_parse_float(row.get("realized_r"), 0.0) for row in rows if str(row.get("realized_r", "")).strip()]
+    positive = sum(value for value in r_values if value > 0)
+    negative = abs(sum(value for value in r_values if value < 0))
+    wins = sum(1 for row in rows if _paper_position_exit_status(row) == "tp2_hit")
+    return {
+        "count": len(rows),
+        "r_count": len(r_values),
+        "win_rate": _ratio(wins, len(rows)),
+        "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+        "approx_pf": (positive / negative) if negative > 0 else 0.0,
+    }
+
+
+def _paper_position_filled_only_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    filled_rows = _paper_position_filled_rows(rows)
+    non_entered_rows = _paper_position_non_entered_rows(rows)
+    filled_stats = _paper_position_r_stats(filled_rows)
+    all_stats = _paper_position_realized_stats(rows)
+    return {
+        **filled_stats,
+        "all_count": len(rows),
+        "filled_count": len(filled_rows),
+        "non_entered_count": len(non_entered_rows),
+        "missed_opportunity_count": sum(1 for row in non_entered_rows if _paper_position_exit_status(row) == "missed_opportunity"),
+        "entry_not_reached_count": sum(1 for row in non_entered_rows if _paper_position_exit_status(row) == "entry_not_reached"),
+        "all_avg_realized_r": all_stats["avg_realized_r"],
+        "all_approx_pf": all_stats["approx_pf"],
+    }
+
+
 def _paper_position_group_lines(
     *,
     title: str,
@@ -5625,11 +5672,13 @@ def _paper_position_group_lines(
     for label, subset in labels:
         if not subset:
             continue
-        stats = _paper_position_realized_stats(subset)
+        stats = _paper_position_filled_only_stats(subset)
         exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in subset)
         lines.append(
-            f"- {label}: {stats['count']}件 / 勝率={_format_pct(stats['win_rate'])} / "
-            f"平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} / "
+            f"- {label}: {stats['all_count']}件 / all={stats['all_count']}件 / filled={stats['filled_count']}件 / "
+            f"filled勝率={_format_pct(stats['win_rate'])} / filled平均R={stats['avg_realized_r']:.2f} / "
+            f"filled簡易PF={stats['approx_pf']:.2f} / "
+            f"missed={stats['missed_opportunity_count']}件 / entry_not_reached={stats['entry_not_reached_count']}件 / "
             f"終了={_format_counter(exit_counts, limit=4)}"
         )
         emitted += 1
@@ -5693,10 +5742,10 @@ def _paper_position_sl_group_lines(rows: list[dict[str, Any]]) -> list[str]:
     for label, subset in summaries:
         if not subset:
             continue
-        stats = _paper_position_realized_stats(subset)
+        stats = _paper_position_filled_only_stats(subset)
         sample_ids = ", ".join(str(row.get("signal_id", "")).strip() for row in subset[:3] if str(row.get("signal_id", "")).strip())
         lines.append(
-            f"- {label}: {len(subset)}件 / 平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} / "
+            f"- {label}: {len(subset)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled簡易PF={stats['approx_pf']:.2f} / "
             f"平均MFE={_mean_value(subset, 'mfe_atr'):.2f} / 平均MAE={_mean_value(subset, 'mae_atr'):.2f} / "
             f"代表={sample_ids or 'なし'}"
         )
@@ -5780,11 +5829,11 @@ def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[s
         and _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0
     ]
     if long_high_wait_rows:
-        stats = _paper_position_realized_stats(long_high_wait_rows)
+        stats = _paper_position_filled_only_stats(long_high_wait_rows)
         proposals.append(
             (
                 "suppress_long_high_wait",
-                f"long かつ wait>=60 は {len(long_high_wait_rows)}件 / 平均R={stats['avg_realized_r']:.2f} / 簡易PF={stats['approx_pf']:.2f} のため、紙候補でも一段抑制候補。",
+                f"long かつ wait>=60 は {len(long_high_wait_rows)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled簡易PF={stats['approx_pf']:.2f} のため、紙候補でも一段抑制候補。",
             )
         )
 
@@ -5793,11 +5842,11 @@ def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[s
         if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
     ]
     if trend_flip_up_rows:
-        stats = _paper_position_realized_stats(trend_flip_up_rows)
+        stats = _paper_position_filled_only_stats(trend_flip_up_rows)
         proposals.append(
             (
                 "suppress_trend_flip_up_strong",
-                f"上方向転換系は {len(trend_flip_up_rows)}件 / 平均R={stats['avg_realized_r']:.2f} / 勝率={_format_pct(stats['win_rate'])} のため、強評価へ戻さない候補。",
+                f"上方向転換系は {len(trend_flip_up_rows)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled勝率={_format_pct(stats['win_rate'])} のため、強評価へ戻さない候補。",
             )
         )
 
@@ -5805,11 +5854,11 @@ def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[s
     if high_wait_rows:
         weak_exec_rows = [row for row in high_wait_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 35.0]
         target_rows = weak_exec_rows or high_wait_rows
-        stats = _paper_position_realized_stats(target_rows)
+        stats = _paper_position_filled_only_stats(target_rows)
         proposals.append(
             (
                 "require_execution_for_high_wait",
-                f"wait>=60 群は execution 下限強化候補。対象 {len(target_rows)}件 / 平均 execution={_mean_value(target_rows, 'confidence_execution_shadow'):.1f} / 平均R={stats['avg_realized_r']:.2f}。",
+                f"wait>=60 群は execution 下限強化候補。対象 {len(target_rows)}件 / 平均 execution={_mean_value(target_rows, 'confidence_execution_shadow'):.1f} / filled平均R={stats['avg_realized_r']:.2f}。",
             )
         )
 
@@ -6734,8 +6783,8 @@ def build_paper_opportunity_diagnostics_report(
     closed_rows = [row for row in positions if str(row.get("position_status", "")).strip() == "closed"]
     market_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"]
     observation_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() != "market_map_opportunity"]
-    all_stats = _paper_position_realized_stats(closed_rows)
-    market_stats = _paper_position_realized_stats(market_rows)
+    all_stats = _paper_position_filled_only_stats(closed_rows)
+    market_stats = _paper_position_filled_only_stats(market_rows)
 
     exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in closed_rows if str(row.get("exit_status", "")).strip())
     market_exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in market_rows if str(row.get("exit_status", "")).strip())
@@ -6752,7 +6801,7 @@ def build_paper_opportunity_diagnostics_report(
         (flag, [row for row in market_rows if flag in _split_values(str(row.get("market_map_flags", "")))])
         for flag in flag_names
     ]
-    by_flag.sort(key=lambda item: (len(item[1]), _paper_position_realized_stats(item[1])["avg_realized_r"]), reverse=True)
+    by_flag.sort(key=lambda item: (len(item[1]), _paper_position_filled_only_stats(item[1])["avg_realized_r"]), reverse=True)
 
     reason_names = sorted(
         {
@@ -6765,7 +6814,7 @@ def build_paper_opportunity_diagnostics_report(
         (reason, [row for row in market_rows if reason in _split_values(str(row.get("opportunity_reasons", "")))])
         for reason in reason_names
     ]
-    by_reason.sort(key=lambda item: (len(item[1]), _paper_position_realized_stats(item[1])["avg_realized_r"]), reverse=True)
+    by_reason.sort(key=lambda item: (len(item[1]), _paper_position_filled_only_stats(item[1])["avg_realized_r"]), reverse=True)
 
     exit_groups = [
         (label, [row for row in market_rows if str(row.get("exit_status", "")).strip() == label])
@@ -6836,7 +6885,13 @@ def build_paper_opportunity_diagnostics_report(
         if str(row.get("exit_status", "")).strip() in {"sl_hit", "missed_opportunity", "timeout", "entry_not_reached"}
     ][:limit]
 
-    lines = ["# 紙実行候補 entry/wait 診断", ""]
+    lines = [
+        "# 紙実行候補 entry/wait 診断",
+        "",
+        "- 成績の主指標は filled-only です。`missed_opportunity` と `entry_not_reached` は未約定系として別集計します。",
+        "- 既存互換のため `realized_r` は残していますが、gate / score 判断では filled-only を優先します。",
+        "",
+    ]
     lines.append(f"- 対象 paper_positions: {len(positions)}件")
     if date_from:
         lines.append(f"- フィルタ: date_from={date_from}")
@@ -6844,19 +6899,23 @@ def build_paper_opportunity_diagnostics_report(
         lines.append(f"- フィルタ: date_to={date_to}")
     lines.append(f"- closed: {len(closed_rows)}件 / opportunity_type: {_format_counter(closed_type_counts, limit=6)}")
     lines.append(
-        f"- closed 全体: 勝率={_format_pct(all_stats['win_rate'])} / 平均R={all_stats['avg_realized_r']:.2f} / "
-        f"簡易PF={all_stats['approx_pf']:.2f} / 終了={_format_counter(exit_counts, limit=6)}"
+        f"- closed 全体: {all_stats['all_count']}件 / all={all_stats['all_count']}件 / filled={all_stats['filled_count']}件 / "
+        f"filled勝率={_format_pct(all_stats['win_rate'])} / filled平均R={all_stats['avg_realized_r']:.2f} / "
+        f"filled簡易PF={all_stats['approx_pf']:.2f} / missed={all_stats['missed_opportunity_count']}件 / "
+        f"entry_not_reached={all_stats['entry_not_reached_count']}件 / 終了={_format_counter(exit_counts, limit=6)}"
     )
     lines.append(
-        f"- market_map_opportunity: {market_stats['count']}件 / 勝率={_format_pct(market_stats['win_rate'])} / "
-        f"平均R={market_stats['avg_realized_r']:.2f} / 簡易PF={market_stats['approx_pf']:.2f} / "
-        f"終了={_format_counter(market_exit_counts, limit=6)}"
+        f"- market_map_opportunity: {market_stats['all_count']}件 / all={market_stats['all_count']}件 / filled={market_stats['filled_count']}件 / "
+        f"filled勝率={_format_pct(market_stats['win_rate'])} / filled平均R={market_stats['avg_realized_r']:.2f} / "
+        f"filled簡易PF={market_stats['approx_pf']:.2f} / missed={market_stats['missed_opportunity_count']}件 / "
+        f"entry_not_reached={market_stats['entry_not_reached_count']}件 / 終了={_format_counter(market_exit_counts, limit=6)}"
     )
     if observation_rows:
-        obs_stats = _paper_position_realized_stats(observation_rows)
+        obs_stats = _paper_position_filled_only_stats(observation_rows)
         lines.append(
-            f"- その他 opportunity: {obs_stats['count']}件 / 勝率={_format_pct(obs_stats['win_rate'])} / "
-            f"平均R={obs_stats['avg_realized_r']:.2f} / 簡易PF={obs_stats['approx_pf']:.2f}"
+            f"- その他 opportunity: {obs_stats['all_count']}件 / all={obs_stats['all_count']}件 / filled={obs_stats['filled_count']}件 / "
+            f"filled勝率={_format_pct(obs_stats['win_rate'])} / filled平均R={obs_stats['avg_realized_r']:.2f} / "
+            f"filled簡易PF={obs_stats['approx_pf']:.2f}"
         )
     lines.append("")
     lines.append("## 判断")
@@ -6879,8 +6938,8 @@ def build_paper_opportunity_diagnostics_report(
         f"- soft_quality_risk: {len(soft_quality_risk_rows)}件 / "
         f"理由={_format_counter(soft_quality_counts, limit=6) or 'なし'}"
     )
-    lines.append(f"- market_map candidate before/after guard: {pre_guard_market_map_count}件 -> {market_stats['count']}件")
-    lines.append(f"- market_map candidate before/after hard guard: {pre_guard_market_map_count}件 -> {market_stats['count']}件")
+    lines.append(f"- market_map candidate before/after guard: {pre_guard_market_map_count}件 -> {market_stats['all_count']}件")
+    lines.append(f"- market_map candidate before/after hard guard: {pre_guard_market_map_count}件 -> {market_stats['all_count']}件")
     lines.append(f"- closed sl_hit: {exit_counts.get('sl_hit', 0)}件 / quality guard 該当 closed sl_hit: {guarded_sl_hit_count}件")
 
     lines.extend(_paper_position_group_lines(title="exit_status 別", labels=exit_groups))
