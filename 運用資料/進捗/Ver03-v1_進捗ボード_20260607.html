@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>BTC_FX_CODEX Ver03-v1 進捗ボード</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #374151;
+      --done: #22c55e;
+      --current: #f59e0b;
+      --next: #38bdf8;
+      --todo: #94a3b8;
+      --paused: #a78bfa;
+      --risk: #ef4444;
+      --warn: #f97316;
+      --card: #111827;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+    header {
+      padding: 32px 24px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, #111827, #172554);
+    }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin-top: 40px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    .meta { color: var(--muted); font-size: 14px; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+    }
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .metric .num { font-size: 24px; font-weight: 700; }
+    .metric .label { color: var(--muted); font-size: 13px; }
+    .notice {
+      background: #1e293b;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--current);
+      border-radius: 12px;
+      padding: 16px;
+      margin: 20px 0;
+    }
+    .phase {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      margin: 18px 0;
+      overflow: hidden;
+    }
+    .phase-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--line);
+    }
+    .phase-body { padding: 8px 18px 18px; }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: #020617;
+      white-space: nowrap;
+    }
+    .done { background: var(--done); }
+    .current { background: var(--current); }
+    .next { background: var(--next); }
+    .todo { background: var(--todo); }
+    .paused { background: var(--paused); }
+    .risk { background: var(--risk); color: white; }
+    .warn { background: var(--warn); color: #111827; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    code {
+      background: #020617;
+      border: 1px solid #1f2937;
+      padding: 1px 5px;
+      border-radius: 5px;
+      color: #bae6fd;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .small { color: var(--muted); font-size: 13px; }
+    .progress-bar {
+      height: 12px;
+      background: #020617;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 60%;
+      background: linear-gradient(90deg, var(--done), var(--next));
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .update-rule {
+      background: #020617;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cards { grid-template-columns: 1fr; }
+      .phase-header { align-items: flex-start; flex-direction: column; }
+      table { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>BTC_FX_CODEX Ver03-v1 進捗ボード</h1>
+    <div class="meta">
+      repo: <code>afrogdesign/BTC_FX_CODEX</code> /
+      branch: <code>Ver03-v1</code> /
+      更新日: 2026-06-07 JST /
+      現在地: <code>BTCFX-20260607-059</code>
+    </div>
+    <div class="progress-bar" aria-label="overall progress">
+      <div class="progress-fill"></div>
+    </div>
+    <div class="legend">
+      <span class="badge done">DONE</span>
+      <span class="badge current">CURRENT</span>
+      <span class="badge next">NEXT</span>
+      <span class="badge todo">TODO</span>
+      <span class="badge paused">PAUSED</span>
+      <span class="badge risk">RISK</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary-grid">
+      <div class="metric">
+        <div class="num">28</div>
+        <div class="label">完了済み作業 031〜058</div>
+      </div>
+      <div class="metric">
+        <div class="num">1</div>
+        <div class="label">現在作業 059</div>
+      </div>
+      <div class="metric">
+        <div class="num">8+</div>
+        <div class="label">予定マイルストーン</div>
+      </div>
+      <div class="metric">
+        <div class="num">279</div>
+        <div class="label">filled rows</div>
+      </div>
+      <div class="metric">
+        <div class="num">0.47</div>
+        <div class="label">filled PF</div>
+      </div>
+    </section>
+
+    <div class="notice">
+      <strong>現在の判断:</strong>
+      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、
+      P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。現在は進捗ボードを作成中。次は P1-2 出来高 trigger 方向付き化。
+    </div>
+
+    <section>
+      <h2>1. マイルストーン全体像</h2>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase A: Ver03-v1 計画・棚卸し</h3>
+          <span class="badge done">DONE</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr>
+                <th>作業番号</th>
+                <th>状態</th>
+                <th>内容</th>
+                <th>成果物</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>031</td><td><span class="badge done">DONE</span></td><td>現行資産棚卸し</td><td>Ver03-v1 現行資産棚卸し Markdown</td></tr>
+              <tr><td>032</td><td><span class="badge done">DONE</span></td><td>Active Trade Plan 再精査</td><td>Active Plan 再精査 Markdown</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase B: Active Trade Plan 第一段階</h3>
+          <span class="badge done">DONE</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>033</td><td><span class="badge done">DONE</span></td><td>Active Plan core 実装</td><td><code>src/trade/active_plan.py</code></td></tr>
+              <tr><td>034</td><td><span class="badge done">DONE</span></td><td>neutral bias hardening</td><td>neutral / wait / unknown 安全化</td></tr>
+              <tr><td>035</td><td><span class="badge done">DONE</span></td><td>main payload 接続</td><td><code>active_trade_plan</code> payload</td></tr>
+              <tr><td>036</td><td><span class="badge done">DONE</span></td><td>notification context 接続</td><td>Active Plan context fields</td></tr>
+              <tr><td>037</td><td><span class="badge done">DONE</span></td><td>subject label 追加</td><td><code>active_subject_label</code></td></tr>
+              <tr><td>038</td><td><span class="badge done">DONE</span></td><td>通知件名 Active Plan 優先化</td><td><code>src/ai/summary.py</code></td></tr>
+              <tr><td>039</td><td><span class="badge done">DONE</span></td><td>HTML hero Active Plan 優先化</td><td><code>src/notification/detail_page.py</code></td></tr>
+              <tr><td>040</td><td><span class="badge done">DONE</span></td><td>trades.csv Active Plan logging</td><td>Active Plan CSV列</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase C: Active Plan 診断・候補・outcome</h3>
+          <span class="badge done">DONE</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>041</td><td><span class="badge done">DONE</span></td><td>Active Plan diagnostics</td><td>diagnostics report builder</td></tr>
+              <tr><td>042</td><td><span class="badge done">DONE</span></td><td>Active Plan effectiveness</td><td>effectiveness report builder</td></tr>
+              <tr><td>043</td><td><span class="badge done">DONE</span></td><td>paper candidates builder</td><td><code>active_plan_paper_candidates.csv</code></td></tr>
+              <tr><td>044</td><td><span class="badge done">DONE</span></td><td>candidates daily-sync 接続</td><td>daily-sync output</td></tr>
+              <tr><td>045</td><td><span class="badge done">DONE</span></td><td>candidate outcomes builder</td><td><code>active_plan_candidate_outcomes.csv</code></td></tr>
+              <tr><td>046</td><td><span class="badge done">DONE</span></td><td>candidate outcomes daily-sync 接続</td><td>daily-sync output</td></tr>
+              <tr><td>047</td><td><span class="badge done">DONE</span></td><td>candidate outcomes report</td><td>Markdown report builder</td></tr>
+              <tr><td>048</td><td><span class="badge done">DONE</span></td><td>candidate outcomes report daily-sync 接続</td><td>analysis report</td></tr>
+              <tr><td>049</td><td><span class="badge done">DONE</span></td><td>report family registry 固定</td><td>registry tests</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase D: intraperiod 検証設計・最小実装</h3>
+          <span class="badge done">DONE</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>050</td><td><span class="badge done">DONE</span></td><td>Active Plan 実装棚卸し</td><td>実装棚卸し Markdown</td></tr>
+              <tr><td>051</td><td><span class="badge done">DONE</span></td><td>intraperiod 検証設計</td><td>検証設計 Markdown</td></tr>
+              <tr><td>052</td><td><span class="badge done">DONE</span></td><td>実装前 repo 調査</td><td>repo調査 Markdown</td></tr>
+              <tr><td>053</td><td><span class="badge done">DONE</span></td><td>intraperiod outcomes 最小実装</td><td><code>build_active_plan_candidate_intraperiod_outcomes()</code></td></tr>
+            </tbody>
+          </table>
+          <p class="small">注意: intraperiod outcomes の report / daily-sync 接続は、P0/P1修正のため一時停止。</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase E: P0/P1 取り込み・土台修正</h3>
+          <span class="badge current">CURRENT</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物・目的</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>054</td><td><span class="badge done">DONE</span></td><td>P0/P1 取り込み計画</td><td>転換点失敗P0P1取り込み計画</td></tr>
+              <tr><td>055</td><td><span class="badge done">DONE</span></td><td>P0-1 counter watch paper position 修正</td><td>反対側 setup 保存</td></tr>
+              <tr><td>056</td><td><span class="badge done">DONE</span></td><td>P0-2 filled-only 集計分離</td><td>filled-only / non-entered 分離</td></tr>
+              <tr><td>057</td><td><span class="badge done">DONE</span></td><td>P0 実データ確認</td><td>filled PF 0.47 / all PF 11.57 の乖離確認</td></tr>
+              <tr><td>058</td><td><span class="badge done">DONE</span></td><td>P1-1 formal candidate hard quality blocker 化</td><td>hard quality conflict を blocker 化</td></tr>
+              <tr><td>059</td><td><span class="badge current">CURRENT</span></td><td>進捗ボード作成</td><td>本HTML</td></tr>
+              <tr><td>060</td><td><span class="badge next">NEXT</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>volumeだけで両方向triggerを防ぐ</td></tr>
+              <tr><td>061</td><td><span class="badge todo">TODO</span></td><td>P1-3 short_reversal_risk 追加</td><td>上方向転換を short invalidation として扱う</td></tr>
+              <tr><td>062</td><td><span class="badge todo">TODO</span></td><td>P1 実データ確認 report</td><td>trigger / reversal risk / hard blocker 実データ確認</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase F: Active Plan intraperiod 再開</h3>
+          <span class="badge paused">PAUSED</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物・目的</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>063</td><td><span class="badge todo">TODO</span></td><td>intraperiod outcomes report builder</td><td>entry / TP / SL / timeout / MFE / MAE report</td></tr>
+              <tr><td>064</td><td><span class="badge todo">TODO</span></td><td>intraperiod outcomes daily-sync 接続</td><td>標準成果物化</td></tr>
+              <tr><td>065</td><td><span class="badge todo">TODO</span></td><td>intraperiod report family registry 固定</td><td>report hub から落ちないようにする</td></tr>
+              <tr><td>066</td><td><span class="badge todo">TODO</span></td><td>Active Plan intraperiod 実データ確認</td><td>limit / market / counter の実成績確認</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header">
+          <h3>Phase G: 転換専用 entry / score / gate 再設計</h3>
+          <span class="badge todo">TODO</span>
+        </div>
+        <div class="phase-body">
+          <table>
+            <thead>
+              <tr><th>作業番号</th><th>状態</th><th>内容</th><th>成果物・目的</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>067</td><td><span class="badge todo">TODO</span></td><td>転換専用 entry / follow 設計</td><td>Markdown 設計</td></tr>
+              <tr><td>068</td><td><span class="badge todo">TODO</span></td><td>転換専用 entry 最小実装</td><td>反転候補の実務 entry 化</td></tr>
+              <tr><td>069</td><td><span class="badge todo">TODO</span></td><td>score / gate 緩和検討</td><td>filled-only と intraperiod 結果を根拠に判断</td></tr>
+              <tr><td>070</td><td><span class="badge todo">TODO</span></td><td>Ver03-v1 統合レビュー</td><td>Go / No-Go 判断資料</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. 重要な実データ指標</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>P0 実データ確認</h3>
+          <ul>
+            <li>paper position rows: <strong>570</strong></li>
+            <li>closed rows: <strong>564</strong></li>
+            <li>filled rows: <strong>279</strong></li>
+            <li>non-entered rows: <strong>285</strong></li>
+            <li>missed_opportunity rows: <strong>169</strong></li>
+            <li>entry_not_reached rows: <strong>116</strong></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>filled-only と all closed の乖離</h3>
+          <ul>
+            <li>filled win rate: <strong>11.5%</strong></li>
+            <li>filled avg R: <strong>-0.37</strong></li>
+            <li>filled PF: <strong>0.47</strong></li>
+            <li>all closed avg R: <strong>3.71</strong></li>
+            <li>all closed PF: <strong>11.57</strong></li>
+          </ul>
+        </div>
+      </div>
+      <p class="small">この乖離により、未約定系を含む all closed 成績を gate / score 緩和の根拠にしない方針を維持する。</p>
+    </section>
+
+    <section>
+      <h2>3. 現在のリスク・保留事項</h2>
+      <table>
+        <thead>
+          <tr><th>項目</th><th>状態</th><th>説明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>counter_long_short_watch 実データ確認</td>
+            <td><span class="badge warn">未確認</span></td>
+            <td>現行 paper_positions.csv では 0 件。P0-1 の実データ確認は今後のログ蓄積後に行う。</td>
+          </tr>
+          <tr>
+            <td>formal candidate hard quality</td>
+            <td><span class="badge done">DONE</span></td>
+            <td>hard quality reason がある場合は blocker 化済み。</td>
+          </tr>
+          <tr>
+            <td>volume trigger</td>
+            <td><span class="badge next">NEXT</span></td>
+            <td>出来高だけで long / short 両方向 trigger が立つ構造を修正予定。</td>
+          </tr>
+          <tr>
+            <td>short_reversal_risk</td>
+            <td><span class="badge todo">TODO</span></td>
+            <td>上方向転換材料を short invalidation として扱う予定。</td>
+          </tr>
+          <tr>
+            <td>intraperiod report</td>
+            <td><span class="badge paused">PAUSED</span></td>
+            <td>P1修正後に再開。</td>
+          </tr>
+          <tr>
+            <td>実弾発注 API</td>
+            <td><span class="badge risk">禁止</span></td>
+            <td>Ver03-v1 現段階では追加禁止。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>4. 更新ルール</h2>
+      <div class="update-rule">
+        <p>節目が完了するたびに、この HTML を更新する。</p>
+        <ul>
+          <li>完了した作業は <span class="badge done">DONE</span> にする。</li>
+          <li>現在作業は <span class="badge current">CURRENT</span> にする。</li>
+          <li>次に着手する作業は <span class="badge next">NEXT</span> にする。</li>
+          <li>保留中の作業は <span class="badge paused">PAUSED</span> にする。</li>
+          <li>実データ確認で重要な数値が出た場合は「重要な実データ指標」に追記する。</li>
+          <li>作業番号が繰り下がった場合は、表内の番号と現在地を更新する。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. 次の作業</h2>
+      <div class="notice">
+        <strong>NEXT:</strong>
+        <code>BTCFX-20260607-060</code>
+        出来高 trigger 方向付き化。
+        出来高だけで long / short 両方向 trigger が立つ構造を修正する。
+      </div>
+    </section>
+  </main>
+</body>
+</html>
