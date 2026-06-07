@@ -88,6 +88,21 @@ CSV_HEADER = [
     "opportunity_type",
     "opportunity_reasons",
     "paper_order_status",
+    "active_plan_version",
+    "active_primary_action",
+    "active_subject_label",
+    "active_headline",
+    "active_market_entry_long",
+    "active_market_entry_short",
+    "active_limit_retest_long",
+    "active_limit_retest_short",
+    "active_breakout_follow_long",
+    "active_breakout_follow_short",
+    "active_countertrend_scalp_long",
+    "active_countertrend_scalp_short",
+    "active_position_management_long",
+    "active_position_management_short",
+    "active_trade_plan_json",
     "funding_rate",
     "funding_rate_raw",
     "funding_rate_pct",
@@ -149,10 +164,55 @@ def _first_zone(zones: list[dict[str, Any]] | None) -> dict[str, Any]:
     return first if isinstance(first, dict) else {}
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
+
+
+def _active_plan_row_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    raw_active_plan = payload.get("active_trade_plan")
+    active_plan = _dict_or_empty(raw_active_plan)
+    notification_context = _dict_or_empty(payload.get("notification_context"))
+
+    market_entry_now = _dict_or_empty(active_plan.get("market_entry_now"))
+    limit_retest_entry = _dict_or_empty(active_plan.get("limit_retest_entry"))
+    breakout_follow_entry = _dict_or_empty(active_plan.get("breakout_follow_entry"))
+    countertrend_scalp_entry = _dict_or_empty(active_plan.get("countertrend_scalp_entry"))
+    position_management = _dict_or_empty(active_plan.get("position_management"))
+
+    return {
+        "active_plan_version": active_plan.get("plan_version", ""),
+        "active_primary_action": (
+            payload.get("active_primary_action")
+            or active_plan.get("primary_action")
+            or ""
+        ),
+        "active_subject_label": notification_context.get("active_subject_label", ""),
+        "active_headline": (
+            payload.get("active_headline")
+            or active_plan.get("headline")
+            or ""
+        ),
+        "active_market_entry_long": market_entry_now.get("long", ""),
+        "active_market_entry_short": market_entry_now.get("short", ""),
+        "active_limit_retest_long": limit_retest_entry.get("long", ""),
+        "active_limit_retest_short": limit_retest_entry.get("short", ""),
+        "active_breakout_follow_long": breakout_follow_entry.get("long", ""),
+        "active_breakout_follow_short": breakout_follow_entry.get("short", ""),
+        "active_countertrend_scalp_long": countertrend_scalp_entry.get("long", ""),
+        "active_countertrend_scalp_short": countertrend_scalp_entry.get("short", ""),
+        "active_position_management_long": position_management.get("if_long_holding", ""),
+        "active_position_management_short": position_management.get("if_short_holding", ""),
+        "active_trade_plan_json": _json_dumps(raw_active_plan if isinstance(raw_active_plan, dict) else ""),
+    }
+
+
 def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     support_zone = _first_zone(payload.get("support_zones"))
     resistance_zone = _first_zone(payload.get("resistance_zones"))
-    json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
     return {
         "signal_id": payload.get("signal_id"),
         "timestamp_utc": payload.get("timestamp_utc"),
@@ -166,8 +226,8 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "transition_direction": payload.get("transition_direction"),
         "market_map_primary_state": payload.get("market_map_primary_state"),
         "market_map_flags": ",".join(payload.get("market_map_flags", [])),
-        "nearest_major_support": json_dumps(payload.get("nearest_major_support")),
-        "nearest_major_resistance": json_dumps(payload.get("nearest_major_resistance")),
+        "nearest_major_support": _json_dumps(payload.get("nearest_major_support")),
+        "nearest_major_resistance": _json_dumps(payload.get("nearest_major_resistance")),
         "active_level_role": payload.get("active_level_role"),
         "level_flip_state": payload.get("level_flip_state"),
         "failed_breakout_state": payload.get("failed_breakout_state"),
@@ -179,10 +239,10 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "long_raw_score": payload.get("long_raw_score"),
         "short_raw_score": payload.get("short_raw_score"),
         "score_gap": payload.get("score_gap"),
-        "score_factor_breakdown_long": json_dumps(payload.get("score_factor_breakdown_long")),
-        "score_factor_breakdown_short": json_dumps(payload.get("score_factor_breakdown_short")),
-        "top_positive_factors": json_dumps(payload.get("top_positive_factors")),
-        "top_negative_factors": json_dumps(payload.get("top_negative_factors")),
+        "score_factor_breakdown_long": _json_dumps(payload.get("score_factor_breakdown_long")),
+        "score_factor_breakdown_short": _json_dumps(payload.get("score_factor_breakdown_short")),
+        "top_positive_factors": _json_dumps(payload.get("top_positive_factors")),
+        "top_negative_factors": _json_dumps(payload.get("top_negative_factors")),
         "confidence": payload.get("confidence"),
         "raw_confidence": payload.get("raw_confidence"),
         "confidence_direction_shadow": payload.get("confidence_direction_shadow"),
@@ -210,7 +270,7 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "phase1_active": payload.get("phase1_active"),
         "phase1_activation_reason": payload.get("phase1_activation_reason"),
         "max_size_capped": payload.get("max_size_capped"),
-        "size_reduction_reasons": json_dumps(payload.get("size_reduction_reasons")),
+        "size_reduction_reasons": _json_dumps(payload.get("size_reduction_reasons")),
         "tp1_price": payload.get("tp1_price"),
         "tp2_price": payload.get("tp2_price"),
         "breakeven_after_tp1": payload.get("breakeven_after_tp1"),
@@ -224,17 +284,18 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "shadow_timeout_hours": payload.get("shadow_timeout_hours"),
         "shadow_exit_rule_version": payload.get("shadow_exit_rule_version"),
         "trade_execution_gate": payload.get("trade_execution_gate"),
-        "trade_execution_blockers": json_dumps(payload.get("trade_execution_blockers")),
+        "trade_execution_blockers": _json_dumps(payload.get("trade_execution_blockers")),
         "phase1_observation_gate": payload.get("phase1_observation_gate"),
         "phase1_observation_type": payload.get("phase1_observation_type"),
-        "phase1_observation_reasons": json_dumps(payload.get("phase1_observation_reasons")),
+        "phase1_observation_reasons": _json_dumps(payload.get("phase1_observation_reasons")),
         "phase1b_lite_gate": payload.get("phase1b_lite_gate"),
         "phase1b_lite_type": payload.get("phase1b_lite_type"),
-        "phase1b_lite_reasons": json_dumps(payload.get("phase1b_lite_reasons")),
+        "phase1b_lite_reasons": _json_dumps(payload.get("phase1b_lite_reasons")),
         "opportunity_gate": payload.get("opportunity_gate"),
         "opportunity_type": payload.get("opportunity_type"),
-        "opportunity_reasons": json_dumps(payload.get("opportunity_reasons")),
+        "opportunity_reasons": _json_dumps(payload.get("opportunity_reasons")),
         "paper_order_status": payload.get("paper_order_status"),
+        **_active_plan_row_fields(payload),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
         "funding_rate_pct": payload.get("funding_rate_pct"),
@@ -260,17 +321,17 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "risk_flags": ",".join(payload.get("risk_flags", [])),
         "signal_tier": payload.get("signal_tier"),
         "signal_badge": payload.get("signal_badge"),
-        "signal_tier_reason_codes": json_dumps(payload.get("signal_tier_reason_codes")),
+        "signal_tier_reason_codes": _json_dumps(payload.get("signal_tier_reason_codes")),
         "ai_decision": payload.get("ai_decision"),
         "ai_confidence": payload.get("ai_confidence"),
         "ai_audit_status": payload.get("ai_audit_status"),
         "ai_audit_verdict": payload.get("ai_audit_verdict"),
         "ai_audit_agreement": payload.get("ai_audit_agreement"),
         "ai_audit_reason": payload.get("ai_audit_reason"),
-        "ai_audit_unique_risks": json_dumps(payload.get("ai_audit_unique_risks")),
+        "ai_audit_unique_risks": _json_dumps(payload.get("ai_audit_unique_risks")),
         "ai_audit_next_review_focus": payload.get("ai_audit_next_review_focus"),
         "data_quality_flag": payload.get("data_quality_flag"),
-        "data_missing_fields": json_dumps(payload.get("data_missing_fields")),
+        "data_missing_fields": _json_dumps(payload.get("data_missing_fields")),
         "nearest_support_low": support_zone.get("low"),
         "nearest_support_high": support_zone.get("high"),
         "nearest_support_distance": support_zone.get("distance_from_price"),
@@ -283,8 +344,8 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "prompt_variant": payload.get("prompt_variant"),
         "evaluation_trace_version": payload.get("evaluation_trace_version"),
         "no_trade_flags": ",".join(payload.get("no_trade_flags", [])),
-        "notify_reason_codes": json_dumps(payload.get("notify_reason_codes")),
-        "suppress_reason_codes": json_dumps(payload.get("suppress_reason_codes")),
+        "notify_reason_codes": _json_dumps(payload.get("notify_reason_codes")),
+        "suppress_reason_codes": _json_dumps(payload.get("suppress_reason_codes")),
         "reason_for_notification": ",".join(payload.get("reason_for_notification", [])),
     }
 
