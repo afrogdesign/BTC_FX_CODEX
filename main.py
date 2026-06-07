@@ -70,6 +70,7 @@ from src.storage.json_store import (
     save_json,
     save_signal_snapshot,
 )
+from src.trade.active_plan import build_active_trade_plan
 from src.trade.activation import determine_phase1_activation
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
@@ -932,6 +933,28 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         core_result.update(opportunity_gate)
         if core_result["trade_execution_gate"] == "pass":
             core_result["paper_order_status"] = "planned"
+
+    active_trade_plan = build_active_trade_plan(
+        current_price=float(core_result.get("current_price", 0.0) or 0.0),
+        bias=bias,
+        market_regime=market_regime,
+        long_setup=long_setup,
+        short_setup=short_setup,
+        confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+        confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+        confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        risk_flags=result_flags["risk_flags"],
+        market_map_flags=market_map["flags"],
+        no_trade_flags=result_flags["no_trade_flags"],
+        data_quality_flag=core_result["data_quality_flag"],
+        breakout_up=breakout_up,
+        breakout_down=breakout_down,
+        volume_ratio=float(tf_15m["volume_ratio"].iloc[-1]),
+        trigger_volume_ratio_threshold=float(cfg.TRIGGER_VOLUME_RATIO),
+    )
+    core_result["active_trade_plan"] = active_trade_plan
+    core_result["active_primary_action"] = active_trade_plan.get("primary_action", "NO_ACTION")
+    core_result["active_headline"] = active_trade_plan.get("headline", "")
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
