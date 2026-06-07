@@ -169,7 +169,7 @@
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
       branch: <code>Ver03-v1</code> /
       更新日: 2026-06-07 JST /
-      現在地: <code>BTCFX-20260607-060</code>
+      現在地: <code>BTCFX-20260607-060 完了 / repo運用調整前</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -187,12 +187,16 @@
   <main>
     <section class="summary-grid">
       <div class="metric">
-        <div class="num">29</div>
-        <div class="label">完了済み作業 031〜059</div>
+        <div class="num">30</div>
+        <div class="label">完了済み作業 031〜060</div>
+      </div>
+      <div class="metric">
+        <div class="num">0</div>
+        <div class="label">現在作業 なし</div>
       </div>
       <div class="metric">
         <div class="num">1</div>
-        <div class="label">現在作業 059</div>
+        <div class="label">一時停止 061</div>
       </div>
       <div class="metric">
         <div class="num">8+</div>
@@ -210,7 +214,7 @@
 
     <div class="notice">
       <strong>現在の判断:</strong>
-      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。現在は P1-2 出来高 trigger 方向付き化を実装中。次は P1-3 short_reversal_risk 追加。
+      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。BTCFX-20260607-060 は完了区切り。repo運用調整前のため、061 は保留中。
     </div>
 
     <section>
@@ -312,7 +316,7 @@
       <div class="phase">
         <div class="phase-header">
           <h3>Phase E: P0/P1 取り込み・土台修正</h3>
-          <span class="badge current">CURRENT</span>
+          <span class="badge paused">PAUSED</span>
         </div>
         <div class="phase-body">
           <table>
@@ -326,8 +330,8 @@
               <tr><td>057</td><td><span class="badge done">DONE</span></td><td>P0 実データ確認</td><td>filled PF 0.47 / all PF 11.57 の乖離確認</td></tr>
               <tr><td>058</td><td><span class="badge done">DONE</span></td><td>P1-1 formal candidate hard quality blocker 化</td><td>hard quality conflict を blocker 化</td></tr>
               <tr><td>059</td><td><span class="badge done">DONE</span></td><td>進捗ボード作成</td><td>本HTML</td></tr>
-              <tr><td>060</td><td><span class="badge current">CURRENT</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>volumeだけで両方向triggerを防ぐ</td></tr>
-              <tr><td>061</td><td><span class="badge next">NEXT</span></td><td>P1-3 short_reversal_risk 追加</td><td>上方向転換を short invalidation として扱う</td></tr>
+              <tr><td>060</td><td><span class="badge done">DONE</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>volumeだけで両方向triggerを防ぐ</td></tr>
+              <tr><td>061</td><td><span class="badge paused">PAUSED</span></td><td>P1-3 short_reversal_risk 追加</td><td>repo運用調整後に再開</td></tr>
               <tr><td>062</td><td><span class="badge todo">TODO</span></td><td>P1 実データ確認 report</td><td>trigger / reversal risk / hard blocker 実データ確認</td></tr>
             </tbody>
           </table>
@@ -422,13 +426,13 @@
           </tr>
           <tr>
             <td>volume trigger</td>
-            <td><span class="badge current">CURRENT</span></td>
-            <td>出来高だけで long / short 両方向 trigger が立つ構造を修正予定。</td>
+            <td><span class="badge done">DONE</span></td>
+            <td>出来高だけで long / short 両方向 trigger が立つ構造を修正済み。</td>
           </tr>
           <tr>
             <td>short_reversal_risk</td>
-            <td><span class="badge next">NEXT</span></td>
-            <td>上方向転換材料を short invalidation として扱う予定。</td>
+            <td><span class="badge paused">PAUSED</span></td>
+            <td>repo運用調整後に再開する予定。</td>
           </tr>
           <tr>
             <td>intraperiod report</td>
@@ -465,7 +469,8 @@
         <strong>NEXT:</strong>
         <code>BTCFX-20260607-061</code>
         short_reversal_risk 追加。
-        上方向転換材料を、いきなり long 強化ではなく short invalidation として扱う。
+        repo運用調整後に BTCFX-20260607-061 short_reversal_risk 追加へ進む。
+        それまでは新規BTC実装を開始しない。
       </div>
     </section>
   </main>
