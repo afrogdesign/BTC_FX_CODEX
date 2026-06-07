@@ -255,6 +255,69 @@ def _reason_cards_html(reasons: list[str]) -> str:
     return "".join(cards)
 
 
+def _active_plan_hero_label(notification_context: dict[str, Any], result: dict[str, Any]) -> str:
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+
+    if notification_kind == "attention":
+        return "注意報・売買非推奨"
+
+    if trade_gate == "pass" and paper_order_status == "planned":
+        return "正式GO・紙トレード記録候補"
+
+    active_label = str(notification_context.get("active_subject_label", "")).strip()
+    if active_label:
+        return f"{active_label} / 実弾不可・行動計画"
+
+    return "見送り / 実弾不可・行動計画"
+
+
+def _active_plan_hero_summary(
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+    result: dict[str, Any],
+) -> str:
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+
+    if notification_kind == "attention":
+        return "これは売買推奨ではなく、方向変化や初動を早めに共有する注意通知です。"
+
+    if trade_gate == "pass" and paper_order_status == "planned":
+        return "これは正式な執行候補です。ただし現段階では自動売買ではなく、紙トレード記録対象です。"
+
+    active_headline = str(notification_context.get("active_headline", "")).strip()
+    if active_headline:
+        return active_headline
+
+    return f"{display_context.get('direction_label', '相場は中立です')}。現時点では実弾不可の行動計画として確認します。"
+
+
+def _active_plan_status_rows(notification_context: dict[str, Any]) -> list[tuple[str, str]]:
+    market = notification_context.get("active_market_entry_now", {}) or {}
+    limit = notification_context.get("active_limit_retest_entry", {}) or {}
+    breakout = notification_context.get("active_breakout_follow_entry", {}) or {}
+    counter = notification_context.get("active_countertrend_scalp_entry", {}) or {}
+    position = notification_context.get("active_position_management", {}) or {}
+
+    return [
+        ("成行", f"long: {market.get('long', 'blocked')} / short: {market.get('short', 'blocked')}"),
+        ("指値・戻り待ち", f"long: {limit.get('long', 'blocked')} / short: {limit.get('short', 'blocked')}"),
+        ("ブレイク追随", f"long: {breakout.get('long', 'blocked')} / short: {breakout.get('short', 'blocked')}"),
+        ("逆方向短期", f"long: {counter.get('long', 'blocked')} / short: {counter.get('short', 'blocked')}"),
+        (
+            "保有中処理",
+            str(
+                position.get("if_short_holding")
+                or position.get("if_long_holding")
+                or "保有中なら主要価格帯で利確・建値撤退・撤退条件を確認"
+            ),
+        ),
+    ]
+
+
 def _price_position(value: float, chart_min: float, chart_max: float, left: float, width: float) -> float:
     if chart_max <= chart_min:
         return left + width / 2
@@ -640,9 +703,12 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     summary_chips = [
         notification_context.get("final_rank_label", "送信なし"),
         notification_context.get("status_label", "中立"),
-        display_context.get("direction_compact_label", "中立"),
         display_context.get("entry_quality_label", "内部評価あり"),
     ]
+    active_subject_label = str(notification_context.get("active_subject_label", "")).strip()
+    if active_subject_label:
+        summary_chips.append(active_subject_label)
+    summary_chips.append(display_context.get("direction_compact_label", "中立"))
     if notification_context.get("final_rank_emoji"):
         summary_chips[0] = f"{notification_context.get('final_rank_emoji', '')} {summary_chips[0]}".strip()
 
@@ -651,6 +717,16 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
 
     def chips_html(items: list[str], class_name: str = "chip") -> str:
         return "".join(f'<span class="{class_name}">{esc(item)}</span>' for item in items if str(item).strip())
+
+    active_hero_label = _active_plan_hero_label(notification_context, result)
+    active_hero_summary = _active_plan_hero_summary(notification_context, display_context, result)
+    active_status_rows = _active_plan_status_rows(notification_context)
+    active_status_rows_html = "".join(
+        '<li><span class="emoji">🧭</span><div>'
+        f'<strong>{esc(label)}:</strong> {esc(value)}'
+        '</div></li>'
+        for label, value in active_status_rows
+    )
 
     metric_points = [
         ("方向", _clamp(_safe_float(result.get("confidence_direction_shadow")))),
@@ -1205,20 +1281,18 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       <p class="muted">{esc(timestamp_jst)} / signal_id {esc(result.get('signal_id', ''))}</p>
       <div class="hero-kicker">{esc(notification_context.get('final_rank_emoji', ''))} {esc(notification_context.get('final_rank_label', '送信なし'))} / {esc(notification_context.get('status_label', '中立'))}</div>
       <h1>{esc(subject)}</h1>
-      <p class="hero-summary">{esc(display_context.get('direction_label', ''))}。今回の最終ランクは「{esc(notification_context.get('final_rank_label', '送信なし'))}」で、補足状態は「{esc(notification_context.get('status_label', '中立'))}」です。</p>
-      <p class="hero-sub">方向とタイミングを分けて読むため、まずは「入っていいか」を先に判断できる構成にしています。</p>
+      <p class="hero-summary">{esc(active_hero_label)}</p>
+      <p class="hero-sub">{esc(active_hero_summary)}</p>
       <div>{chips_html(summary_chips)}</div>
       <div class="overview-grid">
         <div class="verdict-card">
           <h2>最初に読む結論</h2>
           <ul class="summary-list">
-            <li><span class="emoji">🎯</span><div><strong>今の行動:</strong> {esc(notification_context.get('execution_label', ''))}</div></li>
-            <li><span class="emoji">🪜</span><div><strong>現値帯の扱い:</strong> {esc(notification_context.get('entry_window_label', ''))}</div></li>
-            <li><span class="emoji">🕒</span><div><strong>有効目安:</strong> {esc(notification_context.get('validity_label', ''))}</div></li>
-            <li><span class="emoji">🔁</span><div><strong>次に見る条件:</strong> {esc(notification_context.get('next_condition_label', '次回更新で再評価'))}</div></li>
-            <li><span class="emoji">🧯</span><div><strong>無効化目安:</strong> {esc(notification_context.get('invalidation_label', '主要価格帯の反応崩れで無効寄り'))}</div></li>
+            <li><span class="emoji">🎯</span><div><strong>Active Plan:</strong> {esc(active_hero_label)}</div></li>
+            <li><span class="emoji">🧩</span><div><strong>今の行動:</strong> {esc(active_hero_label)}</div></li>
+            {active_status_rows_html}
           </ul>
-          <div class="takeaway">要するに、方向とタイミングは別物です。今回は <strong>{esc(display_context.get('direction_compact_label', '中立'))}</strong> ですが、<strong>{esc(notification_context.get('execution_label', '見送り'))}</strong> が先です。</div>
+          <div class="takeaway">まず方向ではなく、実際に取れる行動を確認します。今回は <strong>{esc(active_hero_label)}</strong> です。</div>
         </div>
         <div class="balance-panel">
           <h2>ひと目で分かるバランス</h2>
