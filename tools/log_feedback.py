@@ -10213,6 +10213,19 @@ def daily_sync(
         candidates_path=active_plan_paper_candidates_path,
         outcomes_path=outcomes_path,
     )
+    today = datetime.now(tz=JST).strftime("%Y%m%d")
+    active_plan_candidate_outcomes_report_path = (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_outcomes_{today}.md"
+    )
+    build_active_plan_candidate_outcomes_report(
+        base_dir=base_dir,
+        candidate_outcomes_path=active_plan_candidate_outcomes_path,
+        output_md=active_plan_candidate_outcomes_report_path,
+    )
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -10245,6 +10258,7 @@ def daily_sync(
         "paper_positions_path": paper_positions_path,
         "active_plan_paper_candidates_path": active_plan_paper_candidates_path,
         "active_plan_candidate_outcomes_path": active_plan_candidate_outcomes_path,
+        "active_plan_candidate_outcomes_report_path": active_plan_candidate_outcomes_report_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
