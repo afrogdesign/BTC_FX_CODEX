@@ -545,6 +545,34 @@ SHADOW_HEADER = [
     "paper_order_status",
 ]
 
+ACTIVE_PLAN_PAPER_CANDIDATE_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "rr_current_tp1",
+    "rr_current_tp2",
+    "rr_zone_mid_tp1",
+    "rr_zone_mid_tp2",
+    "market_entry_status",
+    "limit_entry_status",
+    "counter_scalp_status",
+    "breakout_status",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+]
+
 VALID_USER_VERDICTS = {
     "",
     "useful_entry",
@@ -7224,6 +7252,178 @@ def build_active_trade_plan_effectiveness_report(
     return report
 
 
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _active_plan_side_plan(active_plan: dict[str, Any], side: str) -> dict[str, Any]:
+    side_plans = active_plan.get("side_plans")
+    if not isinstance(side_plans, dict):
+        return {}
+    plan = side_plans.get(side)
+    return plan if isinstance(plan, dict) else {}
+
+
+def _active_plan_candidate_row(
+    *,
+    row: dict[str, Any],
+    active_plan: dict[str, Any],
+    side: str,
+    candidate_type: str,
+    entry_mode: str,
+    candidate_status: str,
+) -> dict[str, Any]:
+    side_plan = _active_plan_side_plan(active_plan, side)
+    signal_id = str(row.get("signal_id", "")).strip()
+    timestamp_jst = str(row.get("timestamp_jst", "")).strip()
+    active_action = str(row.get("active_primary_action", "") or active_plan.get("primary_action", "")).strip()
+    candidate_id = f"{signal_id}:{candidate_type}:{side}"
+
+    if entry_mode == "market":
+        entry_price = _parse_float(row.get("current_price"), 0.0)
+    else:
+        entry_price = _parse_float(side_plan.get("entry_mid"), 0.0)
+
+    return {
+        "candidate_id": candidate_id,
+        "source_signal_id": signal_id,
+        "timestamp_jst": timestamp_jst,
+        "active_primary_action": active_action,
+        "candidate_type": candidate_type,
+        "candidate_status": candidate_status,
+        "side": side,
+        "entry_mode": entry_mode,
+        "entry_price": entry_price,
+        "entry_zone_low": _parse_float(side_plan.get("entry_zone_low"), 0.0),
+        "entry_zone_high": _parse_float(side_plan.get("entry_zone_high"), 0.0),
+        "stop_loss": _parse_float(side_plan.get("stop_loss"), 0.0),
+        "tp1": _parse_float(side_plan.get("tp1"), 0.0),
+        "tp2": _parse_float(side_plan.get("tp2"), 0.0),
+        "rr_current_tp1": side_plan.get("rr_current_tp1", ""),
+        "rr_current_tp2": side_plan.get("rr_current_tp2", ""),
+        "rr_zone_mid_tp1": side_plan.get("rr_zone_mid_tp1", ""),
+        "rr_zone_mid_tp2": side_plan.get("rr_zone_mid_tp2", ""),
+        "market_entry_status": str(side_plan.get("market_entry_status", "")),
+        "limit_entry_status": str(side_plan.get("limit_entry_status", "")),
+        "counter_scalp_status": str(side_plan.get("counter_scalp_status", "")),
+        "breakout_status": str(side_plan.get("breakout_status", "")),
+        "active_subject_label": str(row.get("active_subject_label", "")).strip(),
+        "active_headline": str(row.get("active_headline", "") or active_plan.get("headline", "")).strip(),
+        "next_condition": str(side_plan.get("next_condition", "")),
+    }
+
+
+def _active_plan_candidate_rows_from_trade(row: dict[str, Any]) -> list[dict[str, Any]]:
+    active_plan = _json_dict(row.get("active_trade_plan_json"))
+    if not active_plan:
+        return []
+
+    candidates: list[dict[str, Any]] = []
+    signal_id = str(row.get("signal_id", "")).strip()
+    if not signal_id:
+        return []
+
+    for side in ["long", "short"]:
+        side_plan = _active_plan_side_plan(active_plan, side)
+        if not side_plan:
+            continue
+
+        market_status = str(side_plan.get("market_entry_status", "")).strip()
+        limit_status = str(side_plan.get("limit_entry_status", "")).strip()
+        counter_status = str(side_plan.get("counter_scalp_status", "")).strip()
+
+        if market_status == "allowed":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_market_small",
+                    entry_mode="market",
+                    candidate_status="candidate",
+                )
+            )
+
+        if limit_status == "allowed":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_limit_retest",
+                    entry_mode="limit_zone_mid",
+                    candidate_status="candidate",
+                )
+            )
+
+        if counter_status == "conditional":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_counter_scalp",
+                    entry_mode="market_conditional",
+                    candidate_status="conditional",
+                )
+            )
+
+    return candidates
+
+
+def build_active_plan_paper_candidates(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+
+    rows = _load_csv_rows(trades_path)
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        for candidate in _active_plan_candidate_rows_from_trade(row):
+            candidate_id = str(candidate.get("candidate_id", "")).strip()
+            if not candidate_id or candidate_id in seen:
+                continue
+            seen.add(candidate_id)
+            candidates.append(candidate)
+
+    _ensure_parent(output_csv)
+    with output_csv.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_PAPER_CANDIDATE_HEADER)
+        writer.writeheader()
+        for candidate in candidates:
+            writer.writerow({column: candidate.get(column, "") for column in ACTIVE_PLAN_PAPER_CANDIDATE_HEADER})
+
+    return output_csv
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -9736,6 +9936,12 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_effectiveness_parser.add_argument("--date-to", default="")
     active_plan_effectiveness_parser.add_argument("--limit", type=int, default=20)
 
+    active_plan_candidates_parser = subparsers.add_parser("build-active-plan-paper-candidates")
+    active_plan_candidates_parser.add_argument("--trades-path")
+    active_plan_candidates_parser.add_argument("--output-csv")
+    active_plan_candidates_parser.add_argument("--date-from", default="")
+    active_plan_candidates_parser.add_argument("--date-to", default="")
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -10004,6 +10210,17 @@ def main() -> None:
             print(output_md)
         else:
             print(report)
+        return
+
+    if args.command == "build-active-plan-paper-candidates":
+        path = build_active_plan_paper_candidates(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        print(path)
         return
 
     if args.command == "build-paper-entry-sl-wait-redesign-report":
