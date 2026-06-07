@@ -186,6 +186,18 @@ REPORT_FAMILY_SPECS = [
         "section": "current",
     },
     {
+        "name": "active_trade_plan_diagnostics",
+        "label": "Active Trade Plan 診断",
+        "pattern": "active_trade_plan_diagnostics_*.md",
+        "date_pattern": r"active_trade_plan_diagnostics_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan の action 別件数、成行/指値/逆方向短期の偏り、NO_ACTION 比率を確認する。",
+        "section": "current",
+    },
+    {
         "name": "paper_entry_sl_wait_redesign",
         "label": "SL/entry 再設計診断",
         "pattern": "paper_entry_sl_wait_redesign_*.md",
@@ -6801,6 +6813,156 @@ def build_paper_opportunity_diagnostics_report(
     return report
 
 
+def build_active_trade_plan_diagnostics_report(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    rows = _load_csv_rows(trades_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    active_rows = [
+        row
+        for row in rows
+        if str(row.get("active_primary_action", "")).strip()
+        or str(row.get("active_trade_plan_json", "")).strip()
+    ]
+    action_counts = _active_plan_action_counts(active_rows)
+    total = len(active_rows)
+
+    market_short_allowed = _active_plan_status_count(active_rows, "active_market_entry_short", "allowed")
+    market_long_allowed = _active_plan_status_count(active_rows, "active_market_entry_long", "allowed")
+    limit_short_allowed = _active_plan_status_count(active_rows, "active_limit_retest_short", "allowed")
+    limit_long_allowed = _active_plan_status_count(active_rows, "active_limit_retest_long", "allowed")
+    counter_long_conditional = _active_plan_status_count(active_rows, "active_countertrend_scalp_long", "conditional")
+    counter_short_conditional = _active_plan_status_count(active_rows, "active_countertrend_scalp_short", "conditional")
+    breakout_long_armed = _active_plan_status_count(active_rows, "active_breakout_follow_long", "armed")
+    breakout_short_armed = _active_plan_status_count(active_rows, "active_breakout_follow_short", "armed")
+
+    market_small_count = action_counts.get("ACTIVE_MARKET_SMALL", 0)
+    limit_retest_count = (
+        action_counts.get("ACTIVE_LIMIT_RETEST", 0)
+        + action_counts.get("ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0)
+    )
+    counter_scalp_count = (
+        action_counts.get("ACTIVE_COUNTER_SCALP", 0)
+        + action_counts.get("ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0)
+    )
+    no_action_count = action_counts.get("NO_ACTION", 0)
+
+    lines = [
+        "# Active Trade Plan 診断",
+        "",
+        "## 1. まず結論",
+    ]
+
+    if not active_rows:
+        lines.extend(
+            [
+                "- Active Trade Plan の記録はまだありません。",
+                "- `logs/csv/trades.csv` に Active Plan 列が入った後のデータ蓄積を待ってください。",
+                "",
+            ]
+        )
+    else:
+        lines.append(f"- 集計対象は {total} 件です。")
+        lines.append(f"- `ACTIVE_LIMIT_RETEST` 系は {limit_retest_count} 件 ({_format_pct(_ratio(limit_retest_count, total))}) です。")
+        lines.append(f"- `ACTIVE_MARKET_SMALL` は {market_small_count} 件 ({_format_pct(_ratio(market_small_count, total))}) です。")
+        lines.append(f"- `ACTIVE_COUNTER_SCALP` 系は {counter_scalp_count} 件 ({_format_pct(_ratio(counter_scalp_count, total))}) です。")
+        lines.append(f"- `NO_ACTION` は {no_action_count} 件 ({_format_pct(_ratio(no_action_count, total))}) です。")
+        if market_small_count > limit_retest_count:
+            lines.append("- 注意: `ACTIVE_MARKET_SMALL` が `ACTIVE_LIMIT_RETEST` 系より多く、成行寄りに偏っています。")
+        else:
+            lines.append("- 判定: 主戦場は成行よりも指値・戻り待ち側に寄っています。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- trades_path: `{trades_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- total rows: {len(rows)}",
+            f"- active plan rows: {total}",
+            "",
+            "## 3. action 別件数",
+        ]
+    )
+
+    if active_rows:
+        emitted = set()
+        for action in _ACTIVE_PLAN_ACTION_ORDER:
+            count = action_counts.get(action, 0)
+            emitted.add(action)
+            lines.append(f"- `{action}`: {count} 件 ({_format_pct(_ratio(count, total))})")
+        for action, count in action_counts.most_common():
+            if action in emitted:
+                continue
+            lines.append(f"- `{action}`: {count} 件 ({_format_pct(_ratio(count, total))})")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. entry status 別件数",
+            f"- 成行 allowed: long={market_long_allowed} / short={market_short_allowed}",
+            f"- 指値・戻り待ち allowed: long={limit_long_allowed} / short={limit_short_allowed}",
+            f"- ブレイク armed: long={breakout_long_armed} / short={breakout_short_armed}",
+            f"- 逆方向短期 conditional: long={counter_long_conditional} / short={counter_short_conditional}",
+            "",
+            "## 5. 監視ポイント",
+            "- `ACTIVE_MARKET_SMALL` が増えすぎていないか。",
+            "- `ACTIVE_LIMIT_RETEST` が主戦場として十分に出ているか。",
+            "- `ACTIVE_COUNTER_SCALP` は allowed ではなく conditional に留まっているか。",
+            "- `NO_ACTION` が期待値のない局面を除外する正常分類として機能しているか。",
+            "",
+            "## 6. 代表例",
+        ]
+    )
+
+    if active_rows:
+        sorted_rows = sorted(active_rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for item in _active_plan_representatives(sorted_rows, limit=limit):
+            lines.append(f"- {item}")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. 次の判断",
+            "- このレポートは売買判断ではなく、Active Plan の出方を確認する診断である。",
+            "- 成行候補が多すぎる場合は `ACTIVE_MARKET_SMALL` の条件をさらに絞る。",
+            "- 指値・戻り待ちが主に出ている場合は、次に active plan 別の紙検証へ進む。",
+            "- `NO_ACTION` が少なすぎる場合は、無理に行動計画を出しすぎていないか確認する。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -7068,6 +7230,46 @@ def _format_counter(counter: Counter[str], *, limit: int = 3) -> str:
     if not items:
         return "なし"
     return ", ".join(f"{key}={count}件" for key, count in items)
+
+
+_ACTIVE_PLAN_ACTION_ORDER = [
+    "FORMAL_GO",
+    "ACTIVE_MARKET_SMALL",
+    "ACTIVE_LIMIT_RETEST",
+    "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP",
+    "ACTIVE_BREAKOUT_FOLLOW",
+    "ACTIVE_COUNTER_SCALP",
+    "NO_ACTION",
+]
+
+
+def _active_plan_status_count(rows: list[dict[str, Any]], column: str, status: str) -> int:
+    return sum(1 for row in rows if str(row.get(column, "")).strip() == status)
+
+
+def _active_plan_action_counts(rows: list[dict[str, Any]]) -> Counter[str]:
+    return Counter(str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION" for row in rows)
+
+
+def _active_plan_rows_with_action(rows: list[dict[str, Any]], action: str) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if (str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION") == action
+    ]
+
+
+def _active_plan_representatives(rows: list[dict[str, Any]], *, limit: int = 5) -> list[str]:
+    representatives: list[str] = []
+    for row in rows[:limit]:
+        signal_id = str(row.get("signal_id", "")).strip()
+        timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+        action = str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION"
+        label = str(row.get("active_subject_label", "")).strip()
+        headline = str(row.get("active_headline", "")).strip()
+        parts = [part for part in [timestamp, signal_id, action, label, headline] if part]
+        representatives.append(" / ".join(parts))
+    return representatives
 
 
 def _sample_note(count: int) -> str:
@@ -9258,6 +9460,13 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_diagnostics_parser.add_argument("--date-to", default="")
     paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
 
+    active_plan_parser = subparsers.add_parser("build-active-trade-plan-diagnostics-report")
+    active_plan_parser.add_argument("--output-md")
+    active_plan_parser.add_argument("--trades-path")
+    active_plan_parser.add_argument("--date-from", default="")
+    active_plan_parser.add_argument("--date-to", default="")
+    active_plan_parser.add_argument("--limit", type=int, default=20)
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -9470,6 +9679,29 @@ def main() -> None:
         output_md = Path(args.output_md) if args.output_md else None
         report = build_paper_opportunity_diagnostics_report(
             base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-active-trade-plan-diagnostics-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_trade_plan_diagnostics_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_active_trade_plan_diagnostics_report(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
             output_md=output_md,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
