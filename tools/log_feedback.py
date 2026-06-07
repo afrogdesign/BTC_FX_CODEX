@@ -9953,6 +9953,11 @@ def daily_sync(
         base_dir=base_dir,
         trades_path=base_dir / "logs" / "csv" / "trades.csv",
     )
+    active_plan_candidate_outcomes_path = build_active_plan_candidate_outcomes(
+        base_dir=base_dir,
+        candidates_path=active_plan_paper_candidates_path,
+        outcomes_path=outcomes_path,
+    )
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -9984,6 +9989,7 @@ def daily_sync(
         "phase1b_lite_paper_orders_path": phase1b_lite_paper_orders_path,
         "paper_positions_path": paper_positions_path,
         "active_plan_paper_candidates_path": active_plan_paper_candidates_path,
+        "active_plan_candidate_outcomes_path": active_plan_candidate_outcomes_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
