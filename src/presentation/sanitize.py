@@ -523,6 +523,53 @@ def _format_zone_label(name: str, zones: Any) -> str:
         return f"{name}: 抽出なし"
 
 
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _active_plan_notification_context(result: dict[str, Any]) -> dict[str, Any]:
+    active_plan = _dict_or_empty(result.get("active_trade_plan"))
+
+    market_entry_now = _dict_or_empty(active_plan.get("market_entry_now"))
+    limit_retest_entry = _dict_or_empty(active_plan.get("limit_retest_entry"))
+    breakout_follow_entry = _dict_or_empty(active_plan.get("breakout_follow_entry"))
+    countertrend_scalp_entry = _dict_or_empty(active_plan.get("countertrend_scalp_entry"))
+    position_management = _dict_or_empty(active_plan.get("position_management"))
+
+    return {
+        "active_primary_action": str(
+            result.get("active_primary_action")
+            or active_plan.get("primary_action")
+            or "NO_ACTION"
+        ),
+        "active_headline": str(
+            result.get("active_headline")
+            or active_plan.get("headline")
+            or ""
+        ),
+        "active_market_entry_now": {
+            "long": str(market_entry_now.get("long", "blocked")),
+            "short": str(market_entry_now.get("short", "blocked")),
+        },
+        "active_limit_retest_entry": {
+            "long": str(limit_retest_entry.get("long", "blocked")),
+            "short": str(limit_retest_entry.get("short", "blocked")),
+        },
+        "active_breakout_follow_entry": {
+            "long": str(breakout_follow_entry.get("long", "blocked")),
+            "short": str(breakout_follow_entry.get("short", "blocked")),
+        },
+        "active_countertrend_scalp_entry": {
+            "long": str(countertrend_scalp_entry.get("long", "blocked")),
+            "short": str(countertrend_scalp_entry.get("short", "blocked")),
+        },
+        "active_position_management": {
+            "if_long_holding": str(position_management.get("if_long_holding", "")),
+            "if_short_holding": str(position_management.get("if_short_holding", "")),
+        },
+    }
+
+
 def build_notification_context(result: dict[str, Any]) -> dict[str, Any]:
     display_context = build_display_context(result)
     status_code, status_label, status_explanation = _notification_status(result)
@@ -549,4 +596,5 @@ def build_notification_context(result: dict[str, Any]) -> dict[str, Any]:
             "support_label": _format_zone_label("サポート", result.get("support_zones", [])),
             "resistance_label": _format_zone_label("レジスタンス", result.get("resistance_zones", [])),
         },
+        **_active_plan_notification_context(result),
     }
