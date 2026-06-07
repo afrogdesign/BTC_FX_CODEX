@@ -169,7 +169,7 @@
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
       branch: <code>Ver03-v1</code> /
       更新日: 2026-06-07 JST /
-      現在地: <code>BTCFX-20260607-059</code>
+      現在地: <code>BTCFX-20260607-060</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -187,8 +187,8 @@
   <main>
     <section class="summary-grid">
       <div class="metric">
-        <div class="num">28</div>
-        <div class="label">完了済み作業 031〜058</div>
+        <div class="num">29</div>
+        <div class="label">完了済み作業 031〜059</div>
       </div>
       <div class="metric">
         <div class="num">1</div>
@@ -210,8 +210,7 @@
 
     <div class="notice">
       <strong>現在の判断:</strong>
-      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、
-      P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。現在は進捗ボードを作成中。次は P1-2 出来高 trigger 方向付き化。
+      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。現在は P1-2 出来高 trigger 方向付き化を実装中。次は P1-3 short_reversal_risk 追加。
     </div>
 
     <section>
@@ -326,9 +325,9 @@
               <tr><td>056</td><td><span class="badge done">DONE</span></td><td>P0-2 filled-only 集計分離</td><td>filled-only / non-entered 分離</td></tr>
               <tr><td>057</td><td><span class="badge done">DONE</span></td><td>P0 実データ確認</td><td>filled PF 0.47 / all PF 11.57 の乖離確認</td></tr>
               <tr><td>058</td><td><span class="badge done">DONE</span></td><td>P1-1 formal candidate hard quality blocker 化</td><td>hard quality conflict を blocker 化</td></tr>
-              <tr><td>059</td><td><span class="badge current">CURRENT</span></td><td>進捗ボード作成</td><td>本HTML</td></tr>
-              <tr><td>060</td><td><span class="badge next">NEXT</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>volumeだけで両方向triggerを防ぐ</td></tr>
-              <tr><td>061</td><td><span class="badge todo">TODO</span></td><td>P1-3 short_reversal_risk 追加</td><td>上方向転換を short invalidation として扱う</td></tr>
+              <tr><td>059</td><td><span class="badge done">DONE</span></td><td>進捗ボード作成</td><td>本HTML</td></tr>
+              <tr><td>060</td><td><span class="badge current">CURRENT</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>volumeだけで両方向triggerを防ぐ</td></tr>
+              <tr><td>061</td><td><span class="badge next">NEXT</span></td><td>P1-3 short_reversal_risk 追加</td><td>上方向転換を short invalidation として扱う</td></tr>
               <tr><td>062</td><td><span class="badge todo">TODO</span></td><td>P1 実データ確認 report</td><td>trigger / reversal risk / hard blocker 実データ確認</td></tr>
             </tbody>
           </table>
@@ -423,12 +422,12 @@
           </tr>
           <tr>
             <td>volume trigger</td>
-            <td><span class="badge next">NEXT</span></td>
+            <td><span class="badge current">CURRENT</span></td>
             <td>出来高だけで long / short 両方向 trigger が立つ構造を修正予定。</td>
           </tr>
           <tr>
             <td>short_reversal_risk</td>
-            <td><span class="badge todo">TODO</span></td>
+            <td><span class="badge next">NEXT</span></td>
             <td>上方向転換材料を short invalidation として扱う予定。</td>
           </tr>
           <tr>
@@ -464,9 +463,9 @@
       <h2>5. 次の作業</h2>
       <div class="notice">
         <strong>NEXT:</strong>
-        <code>BTCFX-20260607-060</code>
-        出来高 trigger 方向付き化。
-        出来高だけで long / short 両方向 trigger が立つ構造を修正する。
+        <code>BTCFX-20260607-061</code>
+        short_reversal_risk 追加。
+        上方向転換材料を、いきなり long 強化ではなく short invalidation として扱う。
       </div>
     </section>
   </main>

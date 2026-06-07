@@ -117,6 +117,67 @@ def _round_optional(value: float | None, digits: int = 2) -> float | None:
     return round(float(value), digits)
 
 
+_DIRECTIONAL_VOLUME_LONG_FLAGS = {
+    "failed_breakout_up_reversal",
+    "resistance_to_support_flip",
+    "resistance_to_support_retest_confirmed",
+}
+
+_DIRECTIONAL_VOLUME_SHORT_FLAGS = {
+    "failed_breakout_down_reversal",
+    "support_to_resistance_flip",
+    "support_to_resistance_retest_confirmed",
+}
+
+
+def _directional_volume_triggers(
+    *,
+    volume_ratio: float,
+    volume_threshold: float,
+    candle_open: float,
+    candle_high: float,
+    candle_low: float,
+    candle_close: float,
+    range_high: float,
+    range_low: float,
+    breakout_up: bool,
+    breakout_down: bool,
+    market_map: dict[str, Any] | None,
+) -> dict[str, bool]:
+    flags = set((market_map or {}).get("flags") or [])
+    trigger_up = bool(breakout_up)
+    trigger_down = bool(breakout_down)
+
+    if flags & _DIRECTIONAL_VOLUME_LONG_FLAGS:
+        trigger_up = True
+    if flags & _DIRECTIONAL_VOLUME_SHORT_FLAGS:
+        trigger_down = True
+
+    if float(volume_ratio) < float(volume_threshold):
+        return {"trigger_up": trigger_up, "trigger_down": trigger_down}
+
+    candle_range = max(float(candle_high) - float(candle_low), 1e-9)
+    body = abs(float(candle_close) - float(candle_open))
+    body_ratio = body / candle_range
+    close_position = (float(candle_close) - float(candle_low)) / candle_range
+
+    if body_ratio < 0.20:
+        return {"trigger_up": trigger_up, "trigger_down": trigger_down}
+
+    bullish = float(candle_close) > float(candle_open)
+    bearish = float(candle_close) < float(candle_open)
+
+    range_span = max(float(range_high) - float(range_low), 1e-9)
+    range_close_position = (float(candle_close) - float(range_low)) / range_span
+
+    if bullish and (close_position >= 0.60 or range_close_position >= 0.60):
+        trigger_up = True
+    if bearish and (close_position <= 0.40 or range_close_position <= 0.40):
+        trigger_down = True
+
+    return {"trigger_up": trigger_up, "trigger_down": trigger_down}
+
+
 def _dedupe_preserve(values: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
@@ -533,8 +594,21 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     opposite_gap_atr = opposite_gap / atr_15m if atr_15m > 0 and opposite_gap != float("inf") else 10.0
 
-    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
-    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO
+    directional_triggers = _directional_volume_triggers(
+        volume_ratio=float(tf_15m["volume_ratio"].iloc[-1]),
+        volume_threshold=float(cfg.TRIGGER_VOLUME_RATIO),
+        candle_open=float(df_15m["open"].iloc[-1]),
+        candle_high=float(df_15m["high"].iloc[-1]),
+        candle_low=float(df_15m["low"].iloc[-1]),
+        candle_close=float(df_15m["close"].iloc[-1]),
+        range_high=float(range_high),
+        range_low=float(range_low),
+        breakout_up=bool(breakout_up),
+        breakout_down=bool(breakout_down),
+        market_map=market_map,
+    )
+    trigger_up = bool(directional_triggers["trigger_up"])
+    trigger_down = bool(directional_triggers["trigger_down"])
     confidence_inputs = {
         "bias": bias,
         "long_display_score": score_info["long_display_score"],
