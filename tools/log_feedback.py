@@ -210,6 +210,18 @@ REPORT_FAMILY_SPECS = [
         "section": "current",
     },
     {
+        "name": "active_plan_candidate_outcomes",
+        "label": "Active Plan 候補別暫定評価",
+        "pattern": "active_plan_candidate_outcomes_*.md",
+        "date_pattern": r"active_plan_candidate_outcomes_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan 候補別に forward close ベースの暫定結果、TP/SL close 到達、候補タイプ別の偏りを確認する。",
+        "section": "current",
+    },
+    {
         "name": "paper_entry_sl_wait_redesign",
         "label": "SL/entry 再設計診断",
         "pattern": "paper_entry_sl_wait_redesign_*.md",
@@ -7583,6 +7595,249 @@ def build_active_plan_candidate_outcomes(
     return output_csv
 
 
+_ACTIVE_PLAN_CANDIDATE_TYPE_ORDER = [
+    "active_market_small",
+    "active_limit_retest",
+    "active_counter_scalp",
+]
+
+
+def _active_candidate_bool_count(rows: list[dict[str, Any]], column: str, value: str = "true") -> int:
+    expected = str(value).strip().lower()
+    return sum(1 for row in rows if str(row.get(column, "")).strip().lower() == expected)
+
+
+def _active_candidate_result_count(rows: list[dict[str, Any]], column: str, result: str) -> int:
+    expected = str(result).strip().lower()
+    return sum(1 for row in rows if str(row.get(column, "")).strip().lower() == expected)
+
+
+def _active_candidate_mean_delta(rows: list[dict[str, Any]], column: str) -> float:
+    return _mean_value(rows, column)
+
+
+def _active_candidate_type_value(row: dict[str, Any]) -> str:
+    return str(row.get("candidate_type", "") or "unknown").strip() or "unknown"
+
+
+def _active_candidate_side_value(row: dict[str, Any]) -> str:
+    return str(row.get("side", "") or "unknown").strip() or "unknown"
+
+
+def _active_candidate_report_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    favorable_12h = _active_candidate_result_count(rows, "candidate_result_12h", "favorable")
+    favorable_24h = _active_candidate_result_count(rows, "candidate_result_24h", "favorable")
+    adverse_24h = _active_candidate_result_count(rows, "candidate_result_24h", "adverse")
+    flat_24h = _active_candidate_result_count(rows, "candidate_result_24h", "flat")
+    tp1_close = _active_candidate_bool_count(rows, "tp1_close_reached_24h", "true")
+    tp2_close = _active_candidate_bool_count(rows, "tp2_close_reached_24h", "true")
+    sl_close = _active_candidate_bool_count(rows, "sl_close_reached_24h", "true")
+    return {
+        "count": count,
+        "favorable_12h": favorable_12h,
+        "favorable_24h": favorable_24h,
+        "adverse_24h": adverse_24h,
+        "flat_24h": flat_24h,
+        "favorable_12h_rate": _ratio(favorable_12h, count),
+        "favorable_24h_rate": _ratio(favorable_24h, count),
+        "tp1_close": tp1_close,
+        "tp2_close": tp2_close,
+        "sl_close": sl_close,
+        "tp1_close_rate": _ratio(tp1_close, count),
+        "tp2_close_rate": _ratio(tp2_close, count),
+        "sl_close_rate": _ratio(sl_close, count),
+        "avg_delta_12h": _active_candidate_mean_delta(rows, "candidate_delta_12h"),
+        "avg_delta_24h": _active_candidate_mean_delta(rows, "candidate_delta_24h"),
+    }
+
+
+def build_active_plan_candidate_outcomes_report(
+    *,
+    base_dir: Path,
+    candidate_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    candidate_outcomes_path = candidate_outcomes_path or base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"
+    rows = _load_csv_rows(candidate_outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    total_stats = _active_candidate_report_stats(rows)
+    type_counts = Counter(_active_candidate_type_value(row) for row in rows)
+    side_counts = Counter(_active_candidate_side_value(row) for row in rows)
+
+    lines = [
+        "# Active Plan 候補別暫定評価",
+        "",
+        "## 1. まず結論",
+    ]
+
+    if not rows:
+        lines.extend(
+            [
+                "- Active Plan candidate outcomes の記録はまだありません。",
+                "- `daily-sync` で `active_plan_candidate_outcomes.csv` が生成された後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.append(f"- 集計対象は {total_stats['count']} 候補です。")
+        lines.append(
+            f"- 24h favorable は {total_stats['favorable_24h']} 件 "
+            f"({_format_pct(total_stats['favorable_24h_rate'])}) です。"
+        )
+        lines.append(
+            f"- 24h終値ベースの TP1 close 到達は {total_stats['tp1_close']} 件 "
+            f"({_format_pct(total_stats['tp1_close_rate'])}) です。"
+        )
+        lines.append(
+            f"- 24h終値ベースの SL close 到達は {total_stats['sl_close']} 件 "
+            f"({_format_pct(total_stats['sl_close_rate'])}) です。"
+        )
+        lines.append(
+            f"- 平均deltaは 12h={total_stats['avg_delta_12h']:.2f} / "
+            f"24h={total_stats['avg_delta_24h']:.2f} です。"
+        )
+        if total_stats["sl_close"] > total_stats["tp1_close"]:
+            lines.append("- 注意: 24h終値ベースでは TP1 close 到達より SL close 到達が多く、候補条件の絞り込みが必要です。")
+        else:
+            lines.append("- 判定: 24h終値ベースでは SL close 到達より TP1 close 到達が優勢または同等です。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- candidate_outcomes_path: `{candidate_outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- rows: {len(rows)}",
+            "",
+            "## 3. 候補タイプ別",
+        ]
+    )
+
+    if rows:
+        emitted = set()
+        for candidate_type in _ACTIVE_PLAN_CANDIDATE_TYPE_ORDER:
+            subset = [row for row in rows if _active_candidate_type_value(row) == candidate_type]
+            emitted.add(candidate_type)
+            if not subset:
+                continue
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{candidate_type}`: count={stats['count']} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"TP1 close={_format_pct(stats['tp1_close_rate'])} / "
+                f"SL close={_format_pct(stats['sl_close_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+        for candidate_type, _count in type_counts.most_common():
+            if candidate_type in emitted:
+                continue
+            subset = [row for row in rows if _active_candidate_type_value(row) == candidate_type]
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{candidate_type}`: count={stats['count']} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"TP1 close={_format_pct(stats['tp1_close_rate'])} / "
+                f"SL close={_format_pct(stats['sl_close_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. side 別",
+        ]
+    )
+
+    if rows:
+        for side, count in side_counts.most_common():
+            subset = [row for row in rows if _active_candidate_side_value(row) == side]
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{side}`: count={count} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. status 集計",
+            f"- 12h favorable: {total_stats['favorable_12h']}",
+            f"- 24h favorable: {total_stats['favorable_24h']}",
+            f"- 24h adverse: {total_stats['adverse_24h']}",
+            f"- 24h flat: {total_stats['flat_24h']}",
+            f"- TP1 close reached 24h: {total_stats['tp1_close']}",
+            f"- TP2 close reached 24h: {total_stats['tp2_close']}",
+            f"- SL close reached 24h: {total_stats['sl_close']}",
+            "",
+            "## 6. 代表例",
+        ]
+    )
+
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_rows[:limit]:
+            timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+            candidate_id = str(row.get("candidate_id", "")).strip()
+            candidate_type = _active_candidate_type_value(row)
+            side = _active_candidate_side_value(row)
+            result_24h = str(row.get("candidate_result_24h", "")).strip() or "unknown"
+            delta_24h = _parse_float(row.get("candidate_delta_24h"), 0.0)
+            tp1_close = str(row.get("tp1_close_reached_24h", "")).strip() or ""
+            sl_close = str(row.get("sl_close_reached_24h", "")).strip() or ""
+            headline = str(row.get("active_headline", "")).strip()
+            lines.append(
+                f"- {timestamp} / {candidate_id} / {candidate_type} / {side} / "
+                f"24h={result_24h} / delta24h={delta_24h:.2f} / "
+                f"TP1close={tp1_close} / SLclose={sl_close} / {headline}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. 注意",
+            "- このレポートは forward close ベースの暫定評価であり、実際の途中到達判定ではない。",
+            "- TP1/TP2/SL close reached は、24h終値が水準を超えたかだけを見る。",
+            "- intraperiod の高値/安値到達、entry zone 到達、timeout は後続作業で扱う。",
+            "",
+            "## 8. 次の判断",
+            "- `active_limit_retest` の 24h favorable と TP1 close が高い場合は、本格的な候補別紙検証へ進む。",
+            "- `active_market_small` の SL close が多い場合は、成行許可条件をさらに絞る。",
+            "- `active_counter_scalp` は conditional として機能しているかを、side 別と代表例で確認する。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -10119,6 +10374,13 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_candidate_outcomes_parser.add_argument("--date-from", default="")
     active_plan_candidate_outcomes_parser.add_argument("--date-to", default="")
 
+    active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
+    active_plan_candidate_outcomes_report_parser.add_argument("--candidate-outcomes-path")
+    active_plan_candidate_outcomes_report_parser.add_argument("--output-md")
+    active_plan_candidate_outcomes_report_parser.add_argument("--date-from", default="")
+    active_plan_candidate_outcomes_report_parser.add_argument("--date-to", default="")
+    active_plan_candidate_outcomes_report_parser.add_argument("--limit", type=int, default=20)
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -10410,6 +10672,29 @@ def main() -> None:
             date_to=str(args.date_to),
         )
         print(path)
+        return
+
+    if args.command == "build-active-plan-candidate-outcomes-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_plan_candidate_outcomes_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_active_plan_candidate_outcomes_report(
+            base_dir=base_dir,
+            candidate_outcomes_path=Path(args.candidate_outcomes_path) if args.candidate_outcomes_path else None,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
         return
 
     if args.command == "build-paper-entry-sl-wait-redesign-report":
