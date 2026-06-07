@@ -198,6 +198,18 @@ REPORT_FAMILY_SPECS = [
         "section": "current",
     },
     {
+        "name": "active_trade_plan_effectiveness",
+        "label": "Active Trade Plan 有効性検証",
+        "pattern": "active_trade_plan_effectiveness_*.md",
+        "date_pattern": r"active_trade_plan_effectiveness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan の action 別に MFE / MAE / TP1先行 / direction outcome を確認する。",
+        "section": "current",
+    },
+    {
         "name": "paper_entry_sl_wait_redesign",
         "label": "SL/entry 再設計診断",
         "pattern": "paper_entry_sl_wait_redesign_*.md",
@@ -6963,6 +6975,255 @@ def build_active_trade_plan_diagnostics_report(
     return report
 
 
+def _active_plan_join_outcomes(
+    trades: list[dict[str, Any]],
+    outcomes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    outcomes_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in outcomes
+        if str(row.get("signal_id", "")).strip()
+    }
+    joined: list[dict[str, Any]] = []
+    for trade in trades:
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        action = str(trade.get("active_primary_action", "") or "").strip()
+        active_json = str(trade.get("active_trade_plan_json", "") or "").strip()
+        if not action and not active_json:
+            continue
+        outcome = outcomes_by_id.get(signal_id, {})
+        joined.append({**trade, **{f"outcome_{key}": value for key, value in outcome.items()}})
+    return joined
+
+
+def _active_plan_action_value(row: dict[str, Any]) -> str:
+    return str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION"
+
+
+def _active_plan_effectiveness_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    completed_rows = [
+        row
+        for row in rows
+        if str(row.get("outcome_evaluation_status", "")).strip() == "complete"
+        or str(row.get("outcome_outcome", "")).strip()
+        or str(row.get("outcome_direction_outcome", "")).strip()
+    ]
+    direction_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_direction_outcome", "")).strip() in {"correct", "wrong"}
+    ]
+    direction_correct = sum(
+        1
+        for row in direction_pool
+        if str(row.get("outcome_direction_outcome", "")).strip() == "correct"
+    )
+    tp1_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_tp1_hit_first", "")).strip().lower() in {"true", "false"}
+    ]
+    tp1_first = sum(
+        1
+        for row in tp1_pool
+        if str(row.get("outcome_tp1_hit_first", "")).strip().lower() == "true"
+    )
+    win_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_outcome", "")).strip() in {"win", "loss", "expired"}
+    ]
+    wins = sum(1 for row in win_pool if str(row.get("outcome_outcome", "")).strip() == "win")
+    return {
+        "count": count,
+        "completed_count": len(completed_rows),
+        "direction_pool": len(direction_pool),
+        "direction_correct_rate": _ratio(direction_correct, len(direction_pool)),
+        "tp1_pool": len(tp1_pool),
+        "tp1_first_rate": _ratio(tp1_first, len(tp1_pool)),
+        "win_pool": len(win_pool),
+        "win_rate": _ratio(wins, len(win_pool)),
+        "avg_mfe_24h": _mean_value(completed_rows, "outcome_signal_based_MFE_24h"),
+        "avg_mae_24h": _mean_value(completed_rows, "outcome_signal_based_MAE_24h"),
+        "avg_mfe_12h": _mean_value(completed_rows, "outcome_signal_based_MFE_12h"),
+        "avg_mae_12h": _mean_value(completed_rows, "outcome_signal_based_MAE_12h"),
+    }
+
+
+def build_active_trade_plan_effectiveness_report(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+
+    trades = _load_csv_rows(trades_path)
+    outcomes = _load_csv_rows(outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        trades = [
+            row
+            for row in trades
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    joined = _active_plan_join_outcomes(trades, outcomes)
+    total_stats = _active_plan_effectiveness_stats(joined)
+    action_counts = Counter(_active_plan_action_value(row) for row in joined)
+
+    lines = [
+        "# Active Trade Plan 有効性検証",
+        "",
+        "## 1. まず結論",
+    ]
+
+    if not joined:
+        lines.extend(
+            [
+                "- Active Trade Plan と outcome を結合できるデータはまだありません。",
+                "- `trades.csv` と `signal_outcomes.csv` の蓄積後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.append(f"- Active Plan 対象は {total_stats['count']} 件です。")
+        lines.append(f"- outcome 評価済みは {total_stats['completed_count']} 件です。")
+        lines.append(
+            f"- direction 正解率は {_format_pct(total_stats['direction_correct_rate'])} "
+            f"(n={total_stats['direction_pool']}) です。"
+        )
+        lines.append(
+            f"- TP1先行率は {_format_pct(total_stats['tp1_first_rate'])} "
+            f"(n={total_stats['tp1_pool']}) です。"
+        )
+        lines.append(
+            f"- 平均MFE24h={total_stats['avg_mfe_24h']:.2f} / "
+            f"平均MAE24h={total_stats['avg_mae_24h']:.2f} です。"
+        )
+        market_small = action_counts.get("ACTIVE_MARKET_SMALL", 0)
+        limit_retest = action_counts.get("ACTIVE_LIMIT_RETEST", 0) + action_counts.get(
+            "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0
+        )
+        if market_small > limit_retest:
+            lines.append("- 注意: 成行小ロット候補が指値・戻り待ち系より多く、過剰売買の検証を優先してください。")
+        else:
+            lines.append("- 判定: action 分布は成行より指値・戻り待ち側を主戦場にしやすい構造です。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- trades_path: `{trades_path}`",
+            f"- outcomes_path: `{outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- joined rows: {len(joined)}",
+            "",
+            "## 3. action 別 effectiveness",
+        ]
+    )
+
+    if joined:
+        emitted = set()
+        action_order = _ACTIVE_PLAN_ACTION_ORDER if "_ACTIVE_PLAN_ACTION_ORDER" in globals() else [
+            "FORMAL_GO",
+            "ACTIVE_MARKET_SMALL",
+            "ACTIVE_LIMIT_RETEST",
+            "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP",
+            "ACTIVE_BREAKOUT_FOLLOW",
+            "ACTIVE_COUNTER_SCALP",
+            "NO_ACTION",
+        ]
+        for action in action_order:
+            subset = [row for row in joined if _active_plan_action_value(row) == action]
+            emitted.add(action)
+            if not subset:
+                continue
+            stats = _active_plan_effectiveness_stats(subset)
+            lines.append(
+                f"- `{action}`: count={stats['count']} / evaluated={stats['completed_count']} / "
+                f"direction={_format_pct(stats['direction_correct_rate'])} (n={stats['direction_pool']}) / "
+                f"TP1先行={_format_pct(stats['tp1_first_rate'])} (n={stats['tp1_pool']}) / "
+                f"MFE24h={stats['avg_mfe_24h']:.2f} / MAE24h={stats['avg_mae_24h']:.2f}"
+            )
+        for action, _count in action_counts.most_common():
+            if action in emitted:
+                continue
+            subset = [row for row in joined if _active_plan_action_value(row) == action]
+            stats = _active_plan_effectiveness_stats(subset)
+            lines.append(
+                f"- `{action}`: count={stats['count']} / evaluated={stats['completed_count']} / "
+                f"direction={_format_pct(stats['direction_correct_rate'])} (n={stats['direction_pool']}) / "
+                f"TP1先行={_format_pct(stats['tp1_first_rate'])} (n={stats['tp1_pool']}) / "
+                f"MFE24h={stats['avg_mfe_24h']:.2f} / MAE24h={stats['avg_mae_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. 重点確認",
+            "- `ACTIVE_MARKET_SMALL`: MFE より MAE が大きい場合、成行条件をさらに絞る。",
+            "- `ACTIVE_LIMIT_RETEST`: TP1先行率と MFE24h が改善するかを見る。",
+            "- `ACTIVE_COUNTER_SCALP`: conditional のまま、短期反発/反落警告として機能しているかを見る。",
+            "- `NO_ACTION`: 見送り後に大きな MFE が出ていないかを後続で missed opportunity と結合する。",
+            "",
+            "## 5. 代表例",
+        ]
+    )
+
+    if joined:
+        sorted_rows = sorted(joined, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_rows[:limit]:
+            signal_id = str(row.get("signal_id", "")).strip()
+            timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+            action = _active_plan_action_value(row)
+            direction = str(row.get("outcome_direction_outcome", "")).strip() or "pending"
+            outcome = str(row.get("outcome_outcome", "")).strip() or "pending"
+            mfe = _parse_float(row.get("outcome_signal_based_MFE_24h"), 0.0)
+            mae = _parse_float(row.get("outcome_signal_based_MAE_24h"), 0.0)
+            headline = str(row.get("active_headline", "")).strip()
+            lines.append(
+                f"- {timestamp} / {signal_id} / {action} / direction={direction} / "
+                f"outcome={outcome} / MFE24h={mfe:.2f} / MAE24h={mae:.2f} / {headline}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. 次の判断",
+            "- このレポートは実弾売買判断ではなく、Active Plan の後追い検証である。",
+            "- `ACTIVE_MARKET_SMALL` の MAE が大きい場合は、成行許可条件を強化する。",
+            "- `ACTIVE_LIMIT_RETEST` の TP1先行率が高い場合は、次に active plan 別の紙検証レーンを作る。",
+            "- `NO_ACTION` 後の MFE が大きい場合は、見送り条件と missed opportunity の切り分けを行う。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -9467,6 +9728,14 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_parser.add_argument("--date-to", default="")
     active_plan_parser.add_argument("--limit", type=int, default=20)
 
+    active_plan_effectiveness_parser = subparsers.add_parser("build-active-trade-plan-effectiveness-report")
+    active_plan_effectiveness_parser.add_argument("--output-md")
+    active_plan_effectiveness_parser.add_argument("--trades-path")
+    active_plan_effectiveness_parser.add_argument("--outcomes-path")
+    active_plan_effectiveness_parser.add_argument("--date-from", default="")
+    active_plan_effectiveness_parser.add_argument("--date-to", default="")
+    active_plan_effectiveness_parser.add_argument("--limit", type=int, default=20)
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -9702,6 +9971,30 @@ def main() -> None:
         report = build_active_trade_plan_diagnostics_report(
             base_dir=base_dir,
             trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-active-trade-plan-effectiveness-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_trade_plan_effectiveness_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_active_trade_plan_effectiveness_report(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            outcomes_path=Path(args.outcomes_path) if args.outcomes_path else None,
             output_md=output_md,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
