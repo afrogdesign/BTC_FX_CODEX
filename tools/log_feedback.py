@@ -573,6 +573,43 @@ ACTIVE_PLAN_PAPER_CANDIDATE_HEADER = [
     "next_condition",
 ]
 
+ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "rr_current_tp1",
+    "rr_current_tp2",
+    "rr_zone_mid_tp1",
+    "rr_zone_mid_tp2",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+    "outcome_evaluation_status",
+    "outcome_forward_price_12h",
+    "outcome_forward_price_24h",
+    "candidate_delta_12h",
+    "candidate_delta_24h",
+    "candidate_result_12h",
+    "candidate_result_24h",
+    "tp1_close_reached_24h",
+    "tp2_close_reached_24h",
+    "sl_close_reached_24h",
+    "outcome_direction_outcome",
+    "outcome_tp1_hit_first",
+    "outcome_outcome",
+]
+
 VALID_USER_VERDICTS = {
     "",
     "useful_entry",
@@ -7424,6 +7461,128 @@ def build_active_plan_paper_candidates(
     return output_csv
 
 
+def _candidate_delta(side: Any, entry_price: Any, forward_price: Any) -> float:
+    normalized_side = str(side or "").strip().lower()
+    entry = _parse_float(entry_price, 0.0)
+    forward = _parse_float(forward_price, 0.0)
+    if normalized_side not in {"long", "short"} or entry <= 0 or forward <= 0:
+        return 0.0
+    if normalized_side == "long":
+        return forward - entry
+    return entry - forward
+
+
+def _candidate_close_result(delta: float) -> str:
+    if delta > 0:
+        return "favorable"
+    if delta < 0:
+        return "adverse"
+    return "flat"
+
+
+def _candidate_close_reached(side: Any, forward_price: Any, level: Any, *, target: bool) -> str:
+    normalized_side = str(side or "").strip().lower()
+    forward = _parse_float(forward_price, 0.0)
+    target_level = _parse_float(level, 0.0)
+    if normalized_side not in {"long", "short"} or forward <= 0 or target_level <= 0:
+        return ""
+    if target:
+        if normalized_side == "long":
+            return "true" if forward >= target_level else "false"
+        return "true" if forward <= target_level else "false"
+    if normalized_side == "long":
+        return "true" if forward <= target_level else "false"
+    return "true" if forward >= target_level else "false"
+
+
+def _active_plan_candidate_outcome_row(
+    candidate: dict[str, Any],
+    outcome: dict[str, Any],
+) -> dict[str, Any]:
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_price = candidate.get("entry_price")
+    forward_12h = outcome.get("forward_price_12h", "")
+    forward_24h = outcome.get("forward_price_24h", "")
+
+    delta_12h = _candidate_delta(side, entry_price, forward_12h)
+    delta_24h = _candidate_delta(side, entry_price, forward_24h)
+
+    row = {column: "" for column in ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER}
+    for column in ACTIVE_PLAN_PAPER_CANDIDATE_HEADER:
+        if column in row:
+            row[column] = candidate.get(column, "")
+
+    row.update(
+        {
+            "outcome_evaluation_status": outcome.get("evaluation_status", ""),
+            "outcome_forward_price_12h": forward_12h,
+            "outcome_forward_price_24h": forward_24h,
+            "candidate_delta_12h": f"{delta_12h:.2f}",
+            "candidate_delta_24h": f"{delta_24h:.2f}",
+            "candidate_result_12h": _candidate_close_result(delta_12h),
+            "candidate_result_24h": _candidate_close_result(delta_24h),
+            "tp1_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("tp1"), target=True),
+            "tp2_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("tp2"), target=True),
+            "sl_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("stop_loss"), target=False),
+            "outcome_direction_outcome": outcome.get("direction_outcome", ""),
+            "outcome_tp1_hit_first": outcome.get("tp1_hit_first", ""),
+            "outcome_outcome": outcome.get("outcome", ""),
+        }
+    )
+    return row
+
+
+def build_active_plan_candidate_outcomes(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    outcomes_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> Path:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"
+
+    candidates = _load_csv_rows(candidates_path)
+    outcomes = _load_csv_rows(outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        candidates = [
+            row
+            for row in candidates
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    outcomes_by_signal_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in outcomes
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates:
+        source_signal_id = str(candidate.get("source_signal_id", "")).strip()
+        outcome = outcomes_by_signal_id.get(source_signal_id, {})
+        rows.append(_active_plan_candidate_outcome_row(candidate, outcome))
+
+    _ensure_parent(output_csv)
+    with output_csv.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER})
+
+    return output_csv
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -9947,6 +10106,13 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_candidates_parser.add_argument("--date-from", default="")
     active_plan_candidates_parser.add_argument("--date-to", default="")
 
+    active_plan_candidate_outcomes_parser = subparsers.add_parser("build-active-plan-candidate-outcomes")
+    active_plan_candidate_outcomes_parser.add_argument("--candidates-path")
+    active_plan_candidate_outcomes_parser.add_argument("--outcomes-path")
+    active_plan_candidate_outcomes_parser.add_argument("--output-csv")
+    active_plan_candidate_outcomes_parser.add_argument("--date-from", default="")
+    active_plan_candidate_outcomes_parser.add_argument("--date-to", default="")
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -10221,6 +10387,18 @@ def main() -> None:
         path = build_active_plan_paper_candidates(
             base_dir=base_dir,
             trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        print(path)
+        return
+
+    if args.command == "build-active-plan-candidate-outcomes":
+        path = build_active_plan_candidate_outcomes(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            outcomes_path=Path(args.outcomes_path) if args.outcomes_path else None,
             output_csv=Path(args.output_csv) if args.output_csv else None,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
