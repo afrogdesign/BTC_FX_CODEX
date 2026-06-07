@@ -96,6 +96,14 @@ def _normalize_text_list(value: Any) -> list[str]:
     return [part.strip() for part in text.split(",") if part.strip()]
 
 
+def _active_subject_detail(notification_context: dict[str, Any]) -> str:
+    headline = str(notification_context.get("active_headline", "")).strip()
+    if headline:
+        return headline
+    reasons = notification_context.get("reason_labels") or ["理由未整理"]
+    return str(reasons[0])
+
+
 def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
     trade_gate = str(result.get("trade_execution_gate", "blocked")).strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).strip()
@@ -309,11 +317,31 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
     rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
     rank_label = str(notification_context.get("final_rank_label", "送信なし")).strip()
-    subject = (
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+    use_existing_subject = (
+        notification_kind == "attention"
+        or (trade_gate == "pass" and paper_order_status == "planned")
+    )
+    active_plan_present = any(
+        key in result for key in ("active_primary_action", "active_headline", "active_trade_plan")
+    )
+    legacy_subject = (
         f"{rank_emoji} [{rank_label}] "
         f"{display_context['direction_compact_label']} | {headline_reason} "
         f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()
+    active_label = str(notification_context.get("active_subject_label", "")).strip()
+    active_detail = _active_subject_detail(notification_context)
+    if use_existing_subject or not active_plan_present or not active_label:
+        subject = legacy_subject
+    else:
+        subject = (
+            f"{rank_emoji} [{rank_label}] "
+            f"{active_label} / 実弾不可・行動計画 | {active_detail} "
+            f"【BTC:{price_text}】 {jst_ts}{suffix}"
+        ).strip()
     if result.get("ai_advice") is None:
         subject = f"[機械判定のみ] {subject}"
     return subject
