@@ -350,6 +350,44 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _paper_position_setup_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    opportunity_type = str(payload.get("opportunity_type", "")).strip()
+    bias = str(payload.get("bias", "")).strip()
+
+    if opportunity_type == "counter_long_short_watch":
+        if bias == "long":
+            setup = _dict_or_empty(payload.get("short_setup"))
+            if setup:
+                return {
+                    "side": "short",
+                    "entry_price": setup.get("entry_mid", ""),
+                    "stop_loss_price": setup.get("stop_loss", ""),
+                    "tp1_price": setup.get("tp1", ""),
+                    "tp2_price": setup.get("tp2", ""),
+                    "rr_estimate": setup.get("rr_estimate", ""),
+                }
+        elif bias == "short":
+            setup = _dict_or_empty(payload.get("long_setup"))
+            if setup:
+                return {
+                    "side": "long",
+                    "entry_price": setup.get("entry_mid", ""),
+                    "stop_loss_price": setup.get("stop_loss", ""),
+                    "tp1_price": setup.get("tp1", ""),
+                    "tp2_price": setup.get("tp2", ""),
+                    "rr_estimate": setup.get("rr_estimate", ""),
+                }
+
+    return {
+        "side": payload.get("primary_setup_side", ""),
+        "entry_price": payload.get("primary_entry_mid", ""),
+        "stop_loss_price": payload.get("primary_stop_loss", ""),
+        "tp1_price": payload.get("shadow_tp1_price", payload.get("tp1_price", "")),
+        "tp2_price": payload.get("shadow_tp2_price", payload.get("tp2_price", "")),
+        "rr_estimate": payload.get("rr_estimate", ""),
+    }
+
+
 def _load_existing_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
     if not path.exists():
         return [], []
@@ -643,6 +681,7 @@ def append_paper_position(base_dir: Path, payload: dict[str, Any]) -> Path:
     json_dumps = lambda value: json.dumps(value, ensure_ascii=False) if value not in (None, "", []) else ""
     setup_status = str(payload.get("primary_setup_status", "")).strip()
     position_status = "opened" if setup_status == "ready" else "pending"
+    setup_fields = _paper_position_setup_fields(payload)
     row = {
         "signal_id": signal_id,
         "timestamp_jst": payload.get("timestamp_jst", ""),
@@ -650,16 +689,16 @@ def append_paper_position(base_dir: Path, payload: dict[str, Any]) -> Path:
         "position_status": position_status,
         "opportunity_type": payload.get("opportunity_type", ""),
         "opportunity_reasons": json_dumps(payload.get("opportunity_reasons")),
-        "side": payload.get("primary_setup_side", ""),
+        "side": setup_fields["side"],
         "reference_price": payload.get("current_price", ""),
-        "entry_price": payload.get("primary_entry_mid", ""),
-        "stop_loss_price": payload.get("primary_stop_loss", ""),
-        "tp1_price": payload.get("shadow_tp1_price", payload.get("tp1_price", "")),
-        "tp2_price": payload.get("shadow_tp2_price", payload.get("tp2_price", "")),
+        "entry_price": setup_fields["entry_price"],
+        "stop_loss_price": setup_fields["stop_loss_price"],
+        "tp1_price": setup_fields["tp1_price"],
+        "tp2_price": setup_fields["tp2_price"],
         "breakeven_after_tp1": payload.get("shadow_breakeven_after_tp1", payload.get("breakeven_after_tp1", "")),
         "timeout_hours": payload.get("shadow_timeout_hours", payload.get("timeout_hours", "")),
         "exit_rule_version": payload.get("shadow_exit_rule_version", payload.get("exit_rule_version", "")),
-        "rr_estimate": payload.get("rr_estimate", ""),
+        "rr_estimate": setup_fields["rr_estimate"],
         "prelabel": payload.get("prelabel", ""),
         "primary_setup_status": setup_status,
         "primary_setup_reason": payload.get("primary_setup_reason", ""),

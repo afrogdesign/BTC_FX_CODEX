@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -54,6 +55,10 @@ class Phase1TradePlanTests(unittest.TestCase):
                 for ts, high, low, close in items
             ]
         )
+
+    def _read_csv_rows(self, path: Path) -> list[dict[str, str]]:
+        with path.open("r", newline="", encoding="utf-8") as fp:
+            return list(csv.DictReader(fp))
 
     def test_ready_paper_position_opens_immediately(self) -> None:
         row = self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00")
@@ -1004,6 +1009,180 @@ class Phase1TradePlanTests(unittest.TestCase):
             self.assertIn("pre_auto_paper", rows[1])
             self.assertIn("pending", rows[1])
             self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_counter_watch_paper_position_uses_short_setup_when_bias_long(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_long_bias",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                    "long_setup": {
+                        "entry_mid": 101,
+                        "stop_loss": 96,
+                        "tp1": 108,
+                        "tp2": 114,
+                        "rr_estimate": 1.4,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "counter_long_short_watch")
+        self.assertEqual(row["side"], "short")
+        self.assertEqual(row["entry_price"], "99")
+        self.assertEqual(row["stop_loss_price"], "104")
+        self.assertEqual(row["tp1_price"], "92")
+        self.assertEqual(row["tp2_price"], "88")
+        self.assertEqual(row["rr_estimate"], "1.8")
+
+    def test_counter_watch_paper_position_uses_long_setup_when_bias_short(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_short_bias",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "short",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "short",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 99,
+                    "primary_stop_loss": 104,
+                    "shadow_tp1_price": 92,
+                    "shadow_tp2_price": 88,
+                    "rr_estimate": 1.8,
+                    "long_setup": {
+                        "entry_mid": 101,
+                        "stop_loss": 96,
+                        "tp1": 108,
+                        "tp2": 114,
+                        "rr_estimate": 1.4,
+                    },
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "counter_long_short_watch")
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
+
+    def test_paper_position_keeps_primary_setup_for_non_counter_opportunity(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "normal_opportunity",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "market_map_opportunity",
+                    "opportunity_reasons": ["market_map:resistance_to_support_flip"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "market_map_opportunity")
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
+
+    def test_counter_watch_paper_position_falls_back_to_primary_when_opposite_setup_missing(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_missing_opposite",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
 
     def test_append_observation_paper_order_uses_short_side_for_counter_long_short_watch(self) -> None:
         with TemporaryDirectory() as tmpdir:
