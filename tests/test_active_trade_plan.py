@@ -173,6 +173,31 @@ class ActiveTradePlanTests(unittest.TestCase):
         self.assertIn("short_market_warning_trend_flip_up", plan["side_plans"]["short"]["blockers"])
         self.assertEqual(plan["side_plans"]["short"]["limit_entry_status"], "allowed")
 
+    def test_neutral_bias_returns_no_action_even_if_side_plans_have_candidates(self) -> None:
+        for bias in ["wait", "neutral", "", "none", "unknown"]:
+            with self.subTest(bias=bias):
+                plan = build_active_trade_plan(
+                    current_price=60750.0,
+                    bias=bias,
+                    market_regime="range",
+                    long_setup=self._long_setup(),
+                    short_setup=self._short_setup(),
+                    confidence_direction_shadow=50.0,
+                    confidence_execution_shadow=30.0,
+                    confidence_wait_shadow=30.0,
+                    risk_flags=[],
+                    market_map_flags=["support_to_resistance_flip"],
+                    no_trade_flags=[],
+                    data_quality_flag="ok",
+                    breakout_up=False,
+                    breakout_down=False,
+                    volume_ratio=1.0,
+                    trigger_volume_ratio_threshold=1.5,
+                )
+
+                self.assertEqual(plan["primary_action"], "NO_ACTION")
+                self.assertEqual(plan["headline"], "方向は中立。現時点では見送り。")
+
 
 if __name__ == "__main__":
     unittest.main()

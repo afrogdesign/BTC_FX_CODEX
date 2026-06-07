@@ -281,25 +281,22 @@ def _headline(
     *,
     bias: str,
     primary_action: str,
-    primary_plan: dict[str, Any],
-    counter_plan: dict[str, Any],
+    primary_plan: dict[str, Any] | None,
+    counter_plan: dict[str, Any] | None,
 ) -> str:
     normalized_bias = str(bias).strip().lower()
+    if normalized_bias not in {"long", "short"}:
+        return "方向は中立。現時点では見送り。"
     if normalized_bias == "short":
         direction = "下方向優勢。"
-        market_text = "成行ショート可。" if primary_plan["market_entry_status"] == "allowed" else "ただし成行ショート不可。"
-        limit_text = "戻り売り待ち。" if primary_plan["limit_entry_status"] == "allowed" else ""
-        counter_text = "現値は短期反発帯。" if counter_plan["counter_scalp_status"] == "conditional" else ""
+        market_text = "成行ショート可。" if primary_plan and primary_plan["market_entry_status"] == "allowed" else "ただし成行ショート不可。"
+        limit_text = "戻り売り待ち。" if primary_plan and primary_plan["limit_entry_status"] == "allowed" else ""
+        counter_text = "現値は短期反発帯。" if counter_plan and counter_plan["counter_scalp_status"] == "conditional" else ""
     elif normalized_bias == "long":
         direction = "上方向優勢。"
-        market_text = "成行ロング可。" if primary_plan["market_entry_status"] == "allowed" else "ただし成行ロング不可。"
-        limit_text = "押し目買い待ち。" if primary_plan["limit_entry_status"] == "allowed" else ""
-        counter_text = "現値は短期反落帯。" if counter_plan["counter_scalp_status"] == "conditional" else ""
-    else:
-        direction = "方向は中立。"
-        market_text = ""
-        limit_text = ""
-        counter_text = ""
+        market_text = "成行ロング可。" if primary_plan and primary_plan["market_entry_status"] == "allowed" else "ただし成行ロング不可。"
+        limit_text = "押し目買い待ち。" if primary_plan and primary_plan["limit_entry_status"] == "allowed" else ""
+        counter_text = "現値は短期反落帯。" if counter_plan and counter_plan["counter_scalp_status"] == "conditional" else ""
 
     if primary_action == "NO_ACTION":
         return f"{direction} 現時点では見送り。"
@@ -369,11 +366,16 @@ def build_active_trade_plan(
     if normalized_bias == "long":
         primary_plan = long_plan
         counter_plan = short_plan
-    else:
+    elif normalized_bias == "short":
         primary_plan = short_plan
         counter_plan = long_plan
+    else:
+        primary_plan = None
+        counter_plan = None
 
-    if primary_plan["market_entry_status"] == "allowed":
+    if primary_plan is None or counter_plan is None:
+        primary_action = "NO_ACTION"
+    elif primary_plan["market_entry_status"] == "allowed":
         primary_action = "ACTIVE_MARKET_SMALL"
     elif primary_plan["limit_entry_status"] == "allowed" and counter_plan["counter_scalp_status"] == "conditional":
         primary_action = "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP"
