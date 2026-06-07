@@ -527,6 +527,47 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _active_plan_subject_label(action: Any, bias: Any = "") -> str:
+    normalized_action = str(action or "").strip().upper()
+    normalized_bias = str(bias or "").strip().lower()
+
+    if normalized_action == "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP":
+        if normalized_bias == "short":
+            return "戻り売り待ち・短期反発注意"
+        if normalized_bias == "long":
+            return "押し目買い待ち・短期反落注意"
+        return "指値待ち・逆方向短期注意"
+
+    if normalized_action == "ACTIVE_MARKET_SMALL":
+        if normalized_bias == "short":
+            return "小ロット成行ショート候補"
+        if normalized_bias == "long":
+            return "小ロット成行ロング候補"
+        return "小ロット成行候補"
+
+    if normalized_action == "ACTIVE_LIMIT_RETEST":
+        if normalized_bias == "short":
+            return "戻り売り待ち"
+        if normalized_bias == "long":
+            return "押し目買い待ち"
+        return "指値・戻り待ち"
+
+    if normalized_action == "ACTIVE_BREAKOUT_FOLLOW":
+        return "ブレイク追随待ち"
+
+    if normalized_action == "ACTIVE_COUNTER_SCALP":
+        return "逆方向短期注意"
+
+    if normalized_action == "FORMAL_GO":
+        if normalized_bias == "short":
+            return "正式GO・ショート"
+        if normalized_bias == "long":
+            return "正式GO・ロング"
+        return "正式GO"
+
+    return "見送り"
+
+
 def _active_plan_notification_context(result: dict[str, Any]) -> dict[str, Any]:
     active_plan = _dict_or_empty(result.get("active_trade_plan"))
 
@@ -541,6 +582,12 @@ def _active_plan_notification_context(result: dict[str, Any]) -> dict[str, Any]:
             result.get("active_primary_action")
             or active_plan.get("primary_action")
             or "NO_ACTION"
+        ),
+        "active_subject_label": _active_plan_subject_label(
+            result.get("active_primary_action")
+            or active_plan.get("primary_action")
+            or "NO_ACTION",
+            result.get("bias", ""),
         ),
         "active_headline": str(
             result.get("active_headline")
