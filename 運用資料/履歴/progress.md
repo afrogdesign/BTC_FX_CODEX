@@ -27,6 +27,14 @@
 
 ## 重要な節目ログ
 
+- 2026-06-07 JST
+  - `./.venv312/bin/python tools/log_feedback.py daily-sync --output-md 運用資料/reports/feedback_daily_sync_20260607.md --max-new-ai-reviews 0` を実行し、6/7 基準の daily-sync を再生成した。完了 37 件、近似PF 10.18、全体勝率 97.3%、`trade_execution_gate=pass=0件`、`paper_orders planned=0件`、`quality guard blocked=9件`、`soft_quality_risk=0件` を確認した。
+  - 6/7 基準の設計用 report を再生成した。対象は `market_map_effectiveness_20260607.md`、`operational_focus_20260607.md`、`paper_opportunity_diagnostics_20260607.md`、`paper_entry_sl_wait_redesign_20260607.md`、`quality_guard_effectiveness_20260607.md`、`soft_risk_collateral_damage_20260607.md`、`relaxation_candidates_20260607.md`、`phase1b_promotion_candidates_20260607.md`。
+  - `market_map_effectiveness_20260607.md` では `market_map` 記録 589 件、`support_to_resistance_flip=385件` は勝率 70.2% と有効を維持した。一方 `trend_flip_confirmed_up=49件` は勝率 36.4%、wrong_rate 32.7% で依然弱く、上方向転換系を強評価へ戻さない判断を維持した。
+  - `paper_opportunity_diagnostics_20260607.md` と `paper_entry_sl_wait_redesign_20260607.md` では closed 376 件、`market_map_opportunity=117件`、`execution<24=79件`、`wait>=80=7件`、`trend_flip_confirmed_up=9件` の弱さが継続した。`entry_recheck_any` の counterfactual は 76 件 / `sl_hit_rate=78.9%` / `avg_R=0.12` で、entry 発火条件の再設計を優先すべき状態が続いている。
+  - `quality_guard_effectiveness_20260607.md` と `soft_risk_collateral_damage_20260607.md` では、`A=require_execution_for_high_wait` を含む群は hard blocker 維持材料、`B/C` 単独 soft risk は `monitor_only` で hard blocker 化しない判断を再確認した。`trade_execution_gate`、`phase1b_lite_gate`、`opportunity_gate` は今回も変更していない。
+  - `report_hub_latest.md`、`NEXT_TASK.md`、標準比較 3 本も 6/7 基準へ更新し、ChatGPT が `report_hub_latest.md` から最新 raw report に進める入口を揃えた。AI 事後評価 backlog は `46件`、`request_failed=0`、daily cap 8 は継続可能と整理した。
+
 - 2026-05-26 JST
   - 実行実体の表記を修正した。`com.afrog.btc-monitor` は `Ver02.5-v8` ではなく、現在の worktree である `ver02.6-v2` のコードを実行している。`Ver02.5-v8` は節目版や件名ラベル文脈でだけ使い、実行 branch 表記とは分ける。
   - 最新の申次状態として、`chatgpt/specs/active/` は `.gitkeep` のみになった。直近 2 本の仕様は `archive/` へ移し、次の実装は ChatGPT 側の新しい確定仕様待ちであることを `NEXT_TASK.md` に反映した。
