@@ -202,14 +202,15 @@ def determine_opportunity_gate(
         trend_flags=(normalized_risk | normalized_market) & _QUALITY_TREND_FLAGS,
     )
 
+    if hard_quality_reason:
+        blockers.append(hard_quality_reason)
+
     unique_blockers = sorted(set(blockers))
     is_formal_candidate = str(trade_execution_gate or "").strip() == "pass"
 
     if not unique_blockers and is_formal_candidate:
         opportunity_type = "formal_execution_candidate"
         reasons.append("trade_execution_gate_pass")
-        if hard_quality_reason:
-            reasons.append(f"formal_candidate_quality_conflict:{hard_quality_reason}")
         if soft_quality_reason:
             reasons.append(f"formal_candidate_quality_conflict:{soft_quality_reason}")
     elif not unique_blockers and str(phase1b_lite_gate or "").strip() == "pass":
@@ -243,10 +244,6 @@ def determine_opportunity_gate(
         )
         blockers.extend(recheck_blockers)
         reasons.extend(recheck_reasons)
-        unique_blockers = sorted(set(blockers))
-
-    if hard_quality_reason and not is_formal_candidate:
-        blockers.append(hard_quality_reason)
         unique_blockers = sorted(set(blockers))
 
     if not unique_blockers and soft_quality_reason and not is_formal_candidate and opportunity_type != "blocked":

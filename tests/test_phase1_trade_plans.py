@@ -485,8 +485,9 @@ class Phase1TradePlanTests(unittest.TestCase):
         )
 
         self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
         self.assertIn("require_execution_for_high_wait", result["opportunity_reasons"])
-        self.assertIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
 
     def test_opportunity_gate_blocks_a_plus_b_quality_candidate(self) -> None:
         result = determine_opportunity_gate(
@@ -510,13 +511,14 @@ class Phase1TradePlanTests(unittest.TestCase):
         )
 
         self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
         self.assertIn(
             "require_execution_for_high_wait+suppress_long_high_wait",
             result["opportunity_reasons"],
         )
-        self.assertIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
-        self.assertIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
-        self.assertIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
 
     def test_opportunity_gate_blocks_low_execution_when_short_conditions_are_weak(self) -> None:
         result = determine_opportunity_gate(
@@ -807,7 +809,7 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertEqual(result["opportunity_type"], "market_map_opportunity")
         self.assertIn("market_map:support_to_resistance_flip", result["opportunity_reasons"])
 
-    def test_opportunity_gate_keeps_formal_candidate_and_adds_quality_conflicts(self) -> None:
+    def test_opportunity_gate_blocks_formal_candidate_with_hard_quality_conflict(self) -> None:
         result = determine_opportunity_gate(
             bias="long",
             primary_setup_side="long",
@@ -826,13 +828,13 @@ class Phase1TradePlanTests(unittest.TestCase):
             confidence_wait_shadow=70,
         )
 
-        self.assertEqual(result["opportunity_gate"], "pass")
-        self.assertEqual(result["opportunity_type"], "formal_execution_candidate")
-        self.assertIn("trade_execution_gate_pass", result["opportunity_reasons"])
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
         self.assertIn(
-            "formal_candidate_quality_conflict:require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong",
+            "require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong",
             result["opportunity_reasons"],
         )
+        self.assertNotIn("trade_execution_gate_pass", result["opportunity_reasons"])
 
     def test_opportunity_gate_keeps_formal_candidate_and_adds_soft_risk_conflicts(self) -> None:
         result = determine_opportunity_gate(
