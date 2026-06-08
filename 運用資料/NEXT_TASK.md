@@ -159,6 +159,8 @@
 4. 既知の未追跡ファイル 3 件は `BTCFX-20260608-036` で扱い決定済み。
    - 生成レポート候補2件は repo 外へ退避。
    - 参考資料1件は repo に採用。
+- Active Plan runtime確認結果: `運用資料/作業ログ/BTCFX-20260608-038_active_plan_runtime_status.md`
+- `active_plan_candidates.csv` はまだ未生成。次は Ver03-v1 の監視サイクルが最新commitで走っているか確認する。
 
 ## 残作業一覧
 

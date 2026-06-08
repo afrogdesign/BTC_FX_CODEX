@@ -36,7 +36,7 @@
 
 ## commit hash
 
-- commit後に確定
+- `113e7c6` Add Active Plan runtime check runbook
 
 ## 未解決事項
 
