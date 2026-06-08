@@ -54,6 +54,7 @@ from tools.log_feedback import (
     build_report_hub,
     build_relaxation_candidates_report,
     build_active_plan_candidate_intraperiod_outcomes,
+    build_active_plan_candidate_intraperiod_outcomes_report,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
@@ -61,6 +62,7 @@ from tools.log_feedback import (
     main,
     refresh_standard_setup_comparison_reports,
     sync_ai_post_reviews,
+    JST,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS
@@ -88,6 +90,7 @@ class LogFeedbackTest(unittest.TestCase):
             (analysis_dir / "market_map_readiness_20260514.md").write_text("# readiness 14\n", encoding="utf-8")
             (analysis_dir / "operational_focus_20260526.md").write_text("# focus 26\n", encoding="utf-8")
             (analysis_dir / "paper_opportunity_diagnostics_20260526.md").write_text("# paper 26\n", encoding="utf-8")
+            (analysis_dir / "active_plan_candidate_intraperiod_outcomes_20260601.md").write_text("# intraperiod\n", encoding="utf-8")
             (analysis_dir / "quality_guard_effectiveness_20260601.md").write_text("# qg 0601\n", encoding="utf-8")
             (analysis_dir / "rr_to_confidence.md").write_text("# rr confidence\n", encoding="utf-8")
             (legacy_v23 / "README.md").write_text("# legacy v23\n", encoding="utf-8")
@@ -104,6 +107,8 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("market_map_readiness_20260514.md", report)
             self.assertIn("## Archived / 現行運用外", report)
             self.assertIn("rr_to_confidence.md", report)
+            self.assertIn("active_plan_candidate_intraperiod_outcomes_20260601.md", report)
+            self.assertIn("Active Plan 候補別 intraperiod 評価", report)
             self.assertIn("quality_guard_effectiveness_20260601.md", report)
             self.assertIn("missing: `paper_entry_sl_wait_redesign`", report)
             self.assertIn("legacy", report)
@@ -4732,6 +4737,396 @@ class LogFeedbackTest(unittest.TestCase):
 
             self.assertIn(str(output_path), buffer.getvalue())
             self.assertTrue(output_path.exists())
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_report_writes_default_markdown_and_summarizes_counts(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            fieldnames = [
+                "timestamp_jst",
+                "candidate_id",
+                "signal_id",
+                "candidate_type",
+                "active_primary_action",
+                "side",
+                "entry_mode",
+                "entry_price",
+                "stop_price",
+                "tp1_price",
+                "tp2_price",
+                "outcome",
+                "entry_reached_time",
+                "first_exit_time",
+                "first_exit_reason",
+                "mfe_price",
+                "mae_price",
+            ]
+            rows = [
+                {
+                    "timestamp_jst": "2026-06-07T12:00:00+09:00",
+                    "candidate_id": "cand-1",
+                    "signal_id": "sig-1",
+                    "candidate_type": "active_limit_retest",
+                    "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                    "side": "long",
+                    "entry_mode": "limit",
+                    "entry_price": "100",
+                    "stop_price": "95",
+                    "tp1_price": "105",
+                    "tp2_price": "110",
+                    "outcome": "entry_reached",
+                    "entry_reached_time": "2026-06-07T12:15:00+09:00",
+                    "first_exit_time": "",
+                    "first_exit_reason": "",
+                    "mfe_price": "5.0",
+                    "mae_price": "1.0",
+                },
+                {
+                    "timestamp_jst": "2026-06-06T12:00:00+09:00",
+                    "candidate_id": "cand-2",
+                    "signal_id": "sig-2",
+                    "candidate_type": "active_limit_retest",
+                    "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                    "side": "long",
+                    "entry_mode": "limit",
+                    "entry_price": "101",
+                    "stop_price": "96",
+                    "tp1_price": "106",
+                    "tp2_price": "111",
+                    "outcome": "tp1_first",
+                    "entry_reached_time": "2026-06-06T12:20:00+09:00",
+                    "first_exit_time": "2026-06-06T13:00:00+09:00",
+                    "first_exit_reason": "tp1",
+                    "mfe_price": "6.0",
+                    "mae_price": "2.0",
+                },
+                {
+                    "timestamp_jst": "2026-06-05T12:00:00+09:00",
+                    "candidate_id": "cand-3",
+                    "signal_id": "sig-3",
+                    "candidate_type": "active_market_small",
+                    "active_primary_action": "ACTIVE_MARKET_SMALL",
+                    "side": "short",
+                    "entry_mode": "market",
+                    "entry_price": "102",
+                    "stop_price": "107",
+                    "tp1_price": "97",
+                    "tp2_price": "95",
+                    "outcome": "sl_first",
+                    "entry_reached_time": "2026-06-05T12:10:00+09:00",
+                    "first_exit_time": "2026-06-05T12:30:00+09:00",
+                    "first_exit_reason": "sl",
+                    "mfe_price": "3.0",
+                    "mae_price": "2.5",
+                },
+                {
+                    "timestamp_jst": "2026-06-04T12:00:00+09:00",
+                    "candidate_id": "cand-4",
+                    "signal_id": "sig-4",
+                    "candidate_type": "active_counter_scalp",
+                    "active_primary_action": "ACTIVE_COUNTER_SCALP",
+                    "side": "short",
+                    "entry_mode": "limit",
+                    "entry_price": "103",
+                    "stop_price": "108",
+                    "tp1_price": "98",
+                    "tp2_price": "96",
+                    "outcome": "timeout",
+                    "entry_reached_time": "2026-06-04T12:05:00+09:00",
+                    "first_exit_time": "2026-06-04T15:00:00+09:00",
+                    "first_exit_reason": "timeout",
+                    "mfe_price": "2.2",
+                    "mae_price": "0.9",
+                },
+                {
+                    "timestamp_jst": "2026-06-03T12:00:00+09:00",
+                    "candidate_id": "cand-5",
+                    "signal_id": "sig-5",
+                    "candidate_type": "active_counter_scalp",
+                    "active_primary_action": "ACTIVE_COUNTER_SCALP",
+                    "side": "long",
+                    "entry_mode": "limit",
+                    "entry_price": "104",
+                    "stop_price": "99",
+                    "tp1_price": "109",
+                    "tp2_price": "111",
+                    "outcome": "ambiguous",
+                    "entry_reached_time": "2026-06-03T12:08:00+09:00",
+                    "first_exit_time": "2026-06-03T12:15:00+09:00",
+                    "first_exit_reason": "ambiguous",
+                    "mfe_price": "4.2",
+                    "mae_price": "1.1",
+                },
+                {
+                    "timestamp_jst": "2026-06-02T12:00:00+09:00",
+                    "candidate_id": "cand-6",
+                    "signal_id": "sig-6",
+                    "candidate_type": "active_market_small",
+                    "active_primary_action": "ACTIVE_MARKET_SMALL",
+                    "side": "long",
+                    "entry_mode": "market",
+                    "entry_price": "105",
+                    "stop_price": "100",
+                    "tp1_price": "110",
+                    "tp2_price": "112",
+                    "outcome": "no_ohlcv",
+                    "first_exit_reason": "",
+                    "mfe_price": "",
+                    "mae_price": "",
+                },
+                {
+                    "timestamp_jst": "2026-06-01T12:00:00+09:00",
+                    "candidate_id": "cand-7",
+                    "signal_id": "sig-7",
+                    "candidate_type": "active_limit_retest",
+                    "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                    "side": "short",
+                    "entry_mode": "limit",
+                    "entry_price": "106",
+                    "stop_price": "111",
+                    "tp1_price": "101",
+                    "tp2_price": "99",
+                    "outcome": "pending",
+                    "first_exit_reason": "",
+                    "mfe_price": "",
+                    "mae_price": "",
+                },
+            ]
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            report = build_active_plan_candidate_intraperiod_outcomes_report(
+                base_dir=base_dir,
+                intraperiod_outcomes_path=outcomes_path,
+                date_from="2026-06-01",
+                date_to="2026-06-07",
+                limit=3,
+            )
+
+            expected_path = (
+                base_dir
+                / "運用資料"
+                / "reports"
+                / "analysis"
+                / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+            )
+            self.assertTrue(expected_path.exists())
+            self.assertIn("BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価", report)
+            self.assertIn("実弾売買判断ではない", report)
+            self.assertIn("Active Plan は正式GOではない", report)
+            self.assertIn("自動発注候補ではない", report)
+            self.assertIn("daily-sync接続は別タスク", report)
+            self.assertIn("outcome別集計", report)
+            self.assertIn("`tp1_first`: 1件", report)
+            self.assertIn("`sl_first`: 1件", report)
+            self.assertIn("`timeout`: 1件", report)
+            self.assertIn("`no_ohlcv`: 1件", report)
+            self.assertIn("`pending`: 1件", report)
+            self.assertIn("## 4. candidate_type別集計", report)
+            self.assertIn("`active_limit_retest`: 3件", report)
+            self.assertIn("## 5. active_primary_action別集計", report)
+            self.assertIn("`ACTIVE_LIMIT_RETEST`: 3件", report)
+            self.assertIn("## 6. side別集計", report)
+            self.assertIn("`long`: 4件", report)
+            self.assertIn("`short`: 3件", report)
+            self.assertIn("## 9. 代表例", report)
+            self.assertIn("cand-1", report)
+            self.assertIn("cand-2", report)
+            self.assertIn("cand-3", report)
+            self.assertIn("## 10. 未解決事項", report)
+            self.assertIn("pending=1件", report)
+            self.assertIn("ambiguous=1件", report)
+            self.assertIn("no_ohlcv=1件", report)
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_report_handles_missing_input_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            (base_dir / "logs" / "csv").mkdir(parents=True, exist_ok=True)
+            report = build_active_plan_candidate_intraperiod_outcomes_report(
+                base_dir=base_dir,
+                intraperiod_outcomes_path=base_dir / "logs" / "csv" / "missing.csv",
+            )
+            expected_path = (
+                base_dir
+                / "運用資料"
+                / "reports"
+                / "analysis"
+                / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+            )
+            self.assertTrue(expected_path.exists())
+            self.assertIn("入力CSVが見つかりません", report)
+            self.assertIn("build-active-plan-candidate-intraperiod-outcomes", report)
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_report_filters_date_range(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "timestamp_jst",
+                        "candidate_id",
+                        "signal_id",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "stop_price",
+                        "tp1_price",
+                        "tp2_price",
+                        "outcome",
+                        "entry_reached_time",
+                        "first_exit_time",
+                        "first_exit_reason",
+                        "mfe_price",
+                        "mae_price",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T12:00:00+09:00",
+                        "candidate_id": "cand-in",
+                        "signal_id": "sig-in",
+                        "candidate_type": "active_limit_retest",
+                        "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "stop_price": "95",
+                        "tp1_price": "105",
+                        "tp2_price": "110",
+                        "outcome": "tp1_first",
+                        "entry_reached_time": "2026-06-01T12:10:00+09:00",
+                        "first_exit_time": "2026-06-01T12:20:00+09:00",
+                        "first_exit_reason": "tp1",
+                        "mfe_price": "5.0",
+                        "mae_price": "1.0",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-02T12:00:00+09:00",
+                        "candidate_id": "cand-out",
+                        "signal_id": "sig-out",
+                        "candidate_type": "active_market_small",
+                        "active_primary_action": "ACTIVE_MARKET_SMALL",
+                        "side": "short",
+                        "entry_mode": "market",
+                        "entry_price": "101",
+                        "stop_price": "106",
+                        "tp1_price": "96",
+                        "tp2_price": "94",
+                        "outcome": "sl_first",
+                        "entry_reached_time": "2026-06-02T12:10:00+09:00",
+                        "first_exit_time": "2026-06-02T12:20:00+09:00",
+                        "first_exit_reason": "sl",
+                        "mfe_price": "3.0",
+                        "mae_price": "2.0",
+                    }
+                )
+
+            report = build_active_plan_candidate_intraperiod_outcomes_report(
+                base_dir=base_dir,
+                intraperiod_outcomes_path=outcomes_path,
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+            )
+
+            self.assertIn("rows: 1", report)
+            self.assertIn("cand-in", report)
+            self.assertNotIn("cand-out", report)
+
+    def test_main_build_active_plan_candidate_intraperiod_outcomes_report_accepts_output_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "timestamp_jst",
+                        "candidate_id",
+                        "signal_id",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "stop_price",
+                        "tp1_price",
+                        "tp2_price",
+                        "outcome",
+                        "entry_reached_time",
+                        "first_exit_time",
+                        "first_exit_reason",
+                        "mfe_price",
+                        "mae_price",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T12:00:00+09:00",
+                        "candidate_id": "cand-cli-report",
+                        "signal_id": "sig-cli-report",
+                        "candidate_type": "active_limit_retest",
+                        "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "stop_price": "95",
+                        "tp1_price": "105",
+                        "tp2_price": "110",
+                        "outcome": "tp1_first",
+                        "entry_reached_time": "2026-06-01T12:10:00+09:00",
+                        "first_exit_time": "2026-06-01T12:20:00+09:00",
+                        "first_exit_reason": "tp1",
+                        "mfe_price": "5.0",
+                        "mae_price": "1.0",
+                    }
+                )
+
+            output_md = base_dir / "custom_report.md"
+            from io import StringIO
+            from contextlib import redirect_stdout
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "log_feedback.py",
+                    "build-active-plan-candidate-intraperiod-outcomes-report",
+                    "--intraperiod-outcomes-path",
+                    str(outcomes_path),
+                    "--output-md",
+                    str(output_md),
+                    "--date-from",
+                    "2026-06-01",
+                    "--date-to",
+                    "2026-06-01",
+                    "--limit",
+                    "5",
+                ],
+            ):
+                buffer = StringIO()
+                with redirect_stdout(buffer):
+                    main()
+
+            self.assertIn(str(output_md), buffer.getvalue())
+            self.assertTrue(output_md.exists())
+            self.assertIn("BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価", output_md.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

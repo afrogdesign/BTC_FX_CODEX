@@ -227,6 +227,18 @@ REPORT_FAMILY_SPECS = [
         "section": "current",
     },
     {
+        "name": "active_plan_candidate_intraperiod_outcomes",
+        "label": "Active Plan 候補別 intraperiod 評価",
+        "pattern": "active_plan_candidate_intraperiod_outcomes_*.md",
+        "date_pattern": r"active_plan_candidate_intraperiod_outcomes_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan 候補別に entry到達、TP/SL先行、timeout、MFE/MAE を intraperiod で確認する。",
+        "section": "current",
+    },
+    {
         "name": "paper_entry_sl_wait_redesign",
         "label": "SL/entry 再設計診断",
         "pattern": "paper_entry_sl_wait_redesign_*.md",
@@ -8577,6 +8589,260 @@ def build_active_plan_candidate_outcomes_report(
     return report
 
 
+def build_active_plan_candidate_intraperiod_outcomes_report(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    intraperiod_outcomes_path = intraperiod_outcomes_path or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    resolved_report_date = datetime.now(tz=JST).strftime("%Y%m%d")
+    resolved_output_md = output_md or (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{resolved_report_date}.md"
+    )
+
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    input_exists = intraperiod_outcomes_path.exists()
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    total_count = len(rows)
+    outcome_counts = Counter(str(row.get("outcome", "")).strip() or "blank" for row in rows)
+    candidate_type_counts = Counter(str(row.get("candidate_type", "")).strip() or "blank" for row in rows)
+    action_counts = Counter(str(row.get("active_primary_action", "")).strip() or "blank" for row in rows)
+    side_counts = Counter(str(row.get("side", "")).strip() or "blank" for row in rows)
+    exit_reason_counts = Counter(str(row.get("first_exit_reason", "")).strip() or "blank" for row in rows)
+
+    entry_reached_count = sum(1 for row in rows if _active_plan_intraperiod_entry_reached(row))
+    tp1_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "tp1_first")
+    tp2_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "tp2_first")
+    sl_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "sl_first")
+    timeout_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "timeout")
+    ambiguous_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "ambiguous")
+    no_ohlcv_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "no_ohlcv")
+    pending_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "pending")
+    not_entered_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "not_entered")
+
+    all_mfe_r = _active_plan_intraperiod_mean_metric(rows, "mfe_r", "mfe_price")
+    all_mae_r = _active_plan_intraperiod_mean_metric(rows, "mae_r", "mae_price")
+    all_mfe_price = _active_plan_intraperiod_mean_metric(rows, "mfe_price")
+    all_mae_price = _active_plan_intraperiod_mean_metric(rows, "mae_price")
+    entry_rows = [row for row in rows if _active_plan_intraperiod_entry_reached(row)]
+    entry_mfe_r = _active_plan_intraperiod_mean_metric(entry_rows, "mfe_r", "mfe_price")
+    entry_mae_r = _active_plan_intraperiod_mean_metric(entry_rows, "mae_r", "mae_price")
+    entry_mfe_price = _active_plan_intraperiod_mean_metric(entry_rows, "mfe_price")
+    entry_mae_price = _active_plan_intraperiod_mean_metric(entry_rows, "mae_price")
+
+    lines = [
+        "# BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価",
+        "",
+        "## 1. まず結論",
+        "- 実弾売買判断ではない。",
+        "- Active Plan は正式GOではない。",
+        "- 自動発注候補ではない。",
+        "- daily-sync接続は別タスク。",
+    ]
+
+    if not input_exists:
+        lines.extend(
+            [
+                "- 入力CSVが見つかりません。",
+                "- 先に `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成してください。",
+                "",
+            ]
+        )
+    elif not rows:
+        lines.extend(
+            [
+                "- intraperiod outcome rows はまだありません。",
+                "- `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成した後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- 集計対象は {total_count} 行です。",
+                f"- entry到達は {entry_reached_count} 行です。",
+                f"- TP1先行は {tp1_first_count} 行、TP2先行は {tp2_first_count} 行、SL先行は {sl_first_count} 行です。",
+                f"- timeout は {timeout_count} 行、ambiguous は {ambiguous_count} 行、no_ohlcv は {no_ohlcv_count} 行、pending は {pending_count} 行です。",
+                f"- 平均MFE/R={all_mfe_r:.2f} / 平均MAE/R={all_mae_r:.2f} / 平均MFE価格={all_mfe_price:.2f} / 平均MAE価格={all_mae_price:.2f} です。",
+                "- 未解決事項として pending / ambiguous / no_ohlcv を残しています。" if (pending_count or ambiguous_count or no_ohlcv_count) else "- 未解決事項はありません。",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- intraperiod_outcomes_path: `{intraperiod_outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- limit: `{limit}`",
+            f"- rows: {len(rows)}",
+            "",
+            "## 3. outcome別集計",
+        ]
+    )
+
+    if rows:
+        emitted = set()
+        for outcome in _ACTIVE_PLAN_INTRAPERIOD_OUTCOME_ORDER:
+            count = outcome_counts.get(outcome, 0)
+            if count <= 0:
+                continue
+            lines.append(f"- `{outcome}`: {count}件")
+            emitted.add(outcome)
+        for outcome, count in outcome_counts.most_common():
+            if outcome in emitted:
+                continue
+            lines.append(f"- `{outcome}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. candidate_type別集計",
+        ]
+    )
+    if rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. active_primary_action別集計",
+        ]
+    )
+    if rows:
+        for action, count in action_counts.most_common():
+            lines.append(f"- `{action}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. side別集計",
+        ]
+    )
+    if rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. entry到達 / TP1先行 / TP2先行 / SL先行 / timeout / ambiguous / no_ohlcv / pending",
+            f"- entry到達: {entry_reached_count}件",
+            f"- TP1先行: {tp1_first_count}件",
+            f"- TP2先行: {tp2_first_count}件",
+            f"- SL先行: {sl_first_count}件",
+            f"- timeout: {timeout_count}件",
+            f"- ambiguous: {ambiguous_count}件",
+            f"- no_ohlcv: {no_ohlcv_count}件",
+            f"- pending: {pending_count}件",
+            f"- not_entered: {not_entered_count}件",
+            "",
+            "## 8. MFE/MAE/Rの概要",
+            f"- 全体平均MFE/R: {all_mfe_r:.2f}",
+            f"- 全体平均MAE/R: {all_mae_r:.2f}",
+            f"- 全体平均MFE価格: {all_mfe_price:.2f}",
+            f"- 全体平均MAE価格: {all_mae_price:.2f}",
+            f"- entry到達後平均MFE/R: {entry_mfe_r:.2f}",
+            f"- entry到達後平均MAE/R: {entry_mae_r:.2f}",
+            f"- entry到達後平均MFE価格: {entry_mfe_price:.2f}",
+            f"- entry到達後平均MAE価格: {entry_mae_price:.2f}",
+            "",
+            "## 9. 代表例",
+        ]
+    )
+
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_rows[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                + " / ".join(
+                    [
+                        str(row.get("timestamp_jst", "")).strip(),
+                        str(row.get("candidate_id", "")).strip(),
+                        str(row.get("signal_id", "")).strip(),
+                        str(row.get("candidate_type", "")).strip(),
+                        str(row.get("active_primary_action", "")).strip(),
+                        str(row.get("side", "")).strip(),
+                        str(row.get("entry_mode", "")).strip(),
+                        str(row.get("entry_price", "")).strip(),
+                        str(row.get("stop_price", "")).strip(),
+                        str(row.get("tp1_price", "")).strip(),
+                        str(row.get("tp2_price", "")).strip(),
+                        str(row.get("outcome", "")).strip(),
+                        str(row.get("first_exit_reason", "")).strip(),
+                        str(row.get("entry_reached_time", "")).strip(),
+                        str(row.get("first_exit_time", "")).strip(),
+                        str(row.get("mfe_r", "")).strip(),
+                        str(row.get("mae_r", "")).strip(),
+                    ]
+                )
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 10. 未解決事項",
+        ]
+    )
+    unresolved_items: list[str] = []
+    if pending_count:
+        unresolved_items.append(f"pending={pending_count}件")
+    if ambiguous_count:
+        unresolved_items.append(f"ambiguous={ambiguous_count}件")
+    if no_ohlcv_count:
+        unresolved_items.append(f"no_ohlcv={no_ohlcv_count}件")
+
+    if not input_exists:
+        lines.append("- 入力CSVが見つからないため、まず `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成してください。")
+    elif not rows:
+        lines.append("- intraperiod outcome rows が空なので、まず CSV を生成してください。")
+    elif unresolved_items:
+        for item in unresolved_items:
+            lines.append(f"- {item}")
+        lines.append("- daily-sync接続は別タスクです。")
+    else:
+        lines.append("- 現時点で大きな未解決事項はありません。")
+
+    report = "\n".join(lines)
+    _ensure_parent(resolved_output_md)
+    resolved_output_md.write_text(report, encoding="utf-8")
+    return report
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -8856,6 +9122,18 @@ _ACTIVE_PLAN_ACTION_ORDER = [
     "NO_ACTION",
 ]
 
+_ACTIVE_PLAN_INTRAPERIOD_OUTCOME_ORDER = [
+    "entry_reached",
+    "tp1_first",
+    "tp2_first",
+    "sl_first",
+    "timeout",
+    "ambiguous",
+    "no_ohlcv",
+    "pending",
+    "not_entered",
+]
+
 
 def _active_plan_status_count(rows: list[dict[str, Any]], column: str, status: str) -> int:
     return sum(1 for row in rows if str(row.get(column, "")).strip() == status)
@@ -8871,6 +9149,49 @@ def _active_plan_rows_with_action(rows: list[dict[str, Any]], action: str) -> li
         for row in rows
         if (str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION") == action
     ]
+
+
+def _active_plan_intraperiod_entry_reached(row: dict[str, Any]) -> bool:
+    if str(row.get("entry_reached_time", "")).strip():
+        return True
+    return str(row.get("outcome", "")).strip() in {
+        "entry_reached",
+        "tp1_first",
+        "tp2_first",
+        "sl_first",
+        "timeout",
+        "ambiguous",
+    }
+
+
+def _active_plan_intraperiod_metric_value(
+    row: dict[str, Any],
+    primary_key: str,
+    fallback_key: str = "",
+) -> float | None:
+    for key in (primary_key, fallback_key):
+        if not key:
+            continue
+        raw_value = str(row.get(key, "")).strip()
+        if not raw_value:
+            continue
+        value = _parse_float(raw_value, default=float("nan"))
+        if value == value:
+            return value
+    return None
+
+
+def _active_plan_intraperiod_mean_metric(
+    rows: list[dict[str, Any]],
+    primary_key: str,
+    fallback_key: str = "",
+) -> float:
+    values = [
+        value
+        for row in rows
+        if (value := _active_plan_intraperiod_metric_value(row, primary_key, fallback_key)) is not None
+    ]
+    return mean(values) if values else 0.0
 
 
 def _active_plan_representatives(rows: list[dict[str, Any]], *, limit: int = 5) -> list[str]:
@@ -11147,6 +11468,13 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_candidate_outcomes_report_parser.add_argument("--date-to", default="")
     active_plan_candidate_outcomes_report_parser.add_argument("--limit", type=int, default=20)
 
+    active_plan_intraperiod_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-intraperiod-outcomes-report")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--intraperiod-outcomes-path")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--output-md")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--limit", type=int, default=20)
+
     paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
     paper_entry_redesign_parser.add_argument("--output-md")
     paper_entry_redesign_parser.add_argument("--date-from", default="")
@@ -11477,6 +11805,26 @@ def main() -> None:
             / "reports"
             / "analysis"
             / f"active_plan_candidate_outcomes_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        print(resolved_output_md)
+        return
+
+    if args.command == "build-active-plan-candidate-intraperiod-outcomes-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_active_plan_candidate_intraperiod_outcomes_report(
+            base_dir=base_dir,
+            intraperiod_outcomes_path=Path(args.intraperiod_outcomes_path) if args.intraperiod_outcomes_path else None,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        resolved_output_md = output_md or (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
         )
         print(resolved_output_md)
         return
