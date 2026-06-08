@@ -8,7 +8,8 @@
 | BTCFX-20260608-050 | 2026-06-08 | done | Simplified NEXT_TASK.md to human-facing entry | `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | `git diff --check` pass | `90bfe9f` | yes |
 | BTCFX-20260608-051 | 2026-06-08 | done | Recorded first Ver03-v2 implementation decision | `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/DECISIONS.md` | `git diff --check` pass | `29d3745` | yes |
 | BTCFX-20260608-052 | 2026-06-09 | done | Draft Active Plan intraperiod outcome specification | `docs/specs/active-plan-intraperiod-outcomes.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `4303d5b` | yes |
-| BTCFX-20260608-053 | 2026-06-09 | done | Implemented active plan intraperiod evaluator helper | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_intraperiod.py`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `4744a68` | yes |
+| BTCFX-20260608-053 | 2026-06-09 | done | Implemented active plan intraperiod evaluator helper and fixed edge cases | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_intraperiod.py`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `cd0e07f` | yes |
+| BTCFX-20260608-054 | 2026-06-09 | done | Documented MBAM4 SMB working-directory and execution policy | `AGENTS.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | `git diff --check` pending | `TBD` | no |
 
 ## Status definitions
 

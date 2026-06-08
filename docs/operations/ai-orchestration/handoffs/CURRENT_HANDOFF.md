@@ -1,15 +1,15 @@
 # Current Handoff
 
-last_updated: 2026-06-08
+last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `943fe55`
+current_commit: `cd0e07f`
 
 ## Objective
 
-Ver03-v2 is transitioning from AI orchestration anchor setup to the first implementation task.
+Ver03-v2 has completed the helper evaluator, fixture test, and edge-case fix work for Active Plan intraperiod outcomes.
 
-The next product implementation should wait until AI / Codex operation anchors and `NEXT_TASK.md` are stable.
+This handoff now records the MBAM4 SMB working-directory and execution policy before the next builder task starts.
 
 ## Current state
 
@@ -17,7 +17,21 @@ The next product implementation should wait until AI / Codex operation anchors a
 - Ver03-v2 was started at `6ec1da1 Start Ver03-v2 branch`.
 - Product planning folder was rebuilt.
 - AI orchestration anchor files are in place.
-- `NEXT_TASK.md` is now a human-facing entry.
+- `BTCFX-20260608-053` is complete at `cd0e07f Fix active plan intraperiod edge cases`.
+- `BTCFX-20260608-054` is the policy task that documents the MBAM4 SMB working-directory and execution policy.
+- `NEXT_TASK.md` remains the human-facing entry.
+
+## Machine roles and paths
+
+- Codex edits from MBAM4 using the SMB-mounted iMac repository path.
+- MBAM4 working directory: `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- iMac repository path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- These two paths point to the same repository data via SMB.
+- The iMac is canonical for the repository body, runtime, deployment, logs, and execution.
+- Default tests and execution should run on the iMac via `ssh marupro@192.168.50.51`.
+- Do not use `imac` or `imac.afrog.jp` as SSH targets.
+- Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
+- Do not run runtime processes unless explicitly instructed.
 
 ## Important constraints
 
@@ -36,14 +50,16 @@ The next product implementation should wait until AI / Codex operation anchors a
 | BTCFX-20260608-047 | done | `6ec1da1` | Started Ver03-v2 branch |
 | BTCFX-20260608-048 | done | `b904e13` | Add AI orchestration anchors |
 | BTCFX-20260608-049 | done | `943fe55` | Sync AI orchestration state |
+| BTCFX-20260608-053 | done | `cd0e07f` | Implemented active plan intraperiod evaluator helper and fixed edge cases |
+| BTCFX-20260608-054 | done | `TBD` | Documented MBAM4 SMB working-directory and execution policy |
 
 ## Next prompt for Codex
 
 ```text
-NEXT BTCFX-20260608-051
-Goal: Decide the first Ver03-v2 implementation task after AI anchors and NEXT_TASK are stable.
-Read: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/REPO_MAP.md, 運用資料/NEXT_TASK.md, 運用資料/計画/README.md
-Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-055
+Goal: Implement the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
+Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: src/trade/active_plan_intraperiod.py, tests/test_active_plan_candidate_intraperiod_outcomes.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: git diff --check
 Stop: if source code changes are needed
 Report: compact

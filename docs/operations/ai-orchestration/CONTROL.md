@@ -1,9 +1,9 @@
 # AI Orchestration Control
 
-last_updated: 2026-06-08
+last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `4744a68`
+current_commit: `cd0e07f`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -11,7 +11,11 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-Ver03-v2 has completed the helper evaluator and fixture test phase for Active Plan intraperiod outcomes. The next step is the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
+BTCFX-20260608-054 is the policy task to document the MBAM4 SMB working-directory and execution policy before continuing builder work.
+
+BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
+
+The next builder task after this policy update is BTCFX-20260608-055.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -26,6 +30,18 @@ The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 - Codex should read only files named in the task.
 - Real order APIs, exchange API keys, secrets, and live trading are out of scope.
 - Runtime monitor restart is out of scope unless explicitly requested.
+
+### 2.1 Machine roles and paths
+
+- Codex edits from MBAM4 using the SMB-mounted iMac repository path.
+- MBAM4 working directory: `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- iMac repository path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- These two paths point to the same repository data via SMB.
+- The iMac is canonical for the repository body, runtime, deployment, logs, and execution.
+- Default tests and execution should run on the iMac via `ssh marupro@192.168.50.51`.
+- Do not use `imac` or `imac.afrog.jp` as SSH targets.
+- Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
+- Do not run runtime processes unless explicitly instructed.
 
 ---
 
@@ -80,14 +96,15 @@ Current staged direction:
 | BTCFX-20260608-050 | done | Simplify NEXT_TASK.md to human-facing entry | Ver03-v2 | `90bfe9f` | NEXT_TASK.md simplified |
 | BTCFX-20260608-051 | done | Record first Ver03-v2 implementation decision | Ver03-v2 | `29d3745` | Active Plan intraperiod outcome specification selected |
 | BTCFX-20260608-052 | done | Draft Active Plan intraperiod outcome specification | Ver03-v2 | `4303d5b` | Active Plan intraperiod outcome specification drafted |
-| BTCFX-20260608-053 | done | Implement helper functions and fixture tests for the Active Plan intraperiod outcome evaluator | Ver03-v2 | `4744a68` | Helper evaluator and fixture tests implemented |
+| BTCFX-20260608-053 | done | Implement helper functions and fixture tests for the Active Plan intraperiod outcome evaluator | Ver03-v2 | `cd0e07f` | Helper evaluator and edge-case fixes completed |
+| BTCFX-20260608-054 | done | Document MBAM4 SMB working-directory and execution policy | Ver03-v2 | `TBD` | This policy update |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-054
+NEXT BTCFX-20260608-055
 Goal: Implement the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
 Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Edit: src/trade/active_plan_intraperiod.py, tests/test_active_plan_candidate_intraperiod_outcomes.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md

@@ -7,6 +7,18 @@ You are Codex acting as the implementation worker for this repository.
 ChatGPT is the commander, planner, and reviewer.
 Do not take over planning unless explicitly asked.
 
+## Machine roles and paths
+
+- Codex edits from MBAM4 using the SMB-mounted iMac repository path.
+- MBAM4 working directory: `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- iMac repository path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- These two paths point to the same repository data via SMB.
+- The iMac is canonical for the repository body, runtime, deployment, logs, and execution.
+- Default tests and execution should run on the iMac via `ssh marupro@192.168.50.51`.
+- Do not use `imac` or `imac.afrog.jp` as SSH targets.
+- Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
+- Do not run runtime processes unless explicitly instructed.
+
 ## Cost policy
 
 - Prefer narrow file reads over broad repository exploration.
