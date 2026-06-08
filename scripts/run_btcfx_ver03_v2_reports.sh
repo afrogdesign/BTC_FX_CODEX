@@ -47,6 +47,7 @@ echo "building outcome report: ${OUTCOME_REPORT_PATH}"
   --output-md "${OUTCOME_REPORT_PATH}"
 
 echo "building report hub: ${REPORT_HUB_PATH}"
-"${PYTHON_BIN}" tools/log_feedback.py build-report-hub
+"${PYTHON_BIN}" tools/log_feedback.py build-report-hub \
+  --output-md "${REPORT_HUB_PATH}"
 
 echo "done: ${LABEL}"

@@ -31,7 +31,7 @@ scripts/run_btcfx_ver03_v2_reports.sh
 
 - `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`
 - `運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md`
-- `運用資料/reports/analysis/report_hub_YYYYMMDD.md`
+- `運用資料/reports/report_hub_latest.md`
 
 ## 6. Preconditions
 
