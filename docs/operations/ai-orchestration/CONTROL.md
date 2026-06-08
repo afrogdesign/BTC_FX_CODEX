@@ -3,7 +3,7 @@
 last_updated: 2026-06-08
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `b904e13`
+current_commit: `90bfe9f`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -11,9 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-Ver03-v2 begins by rebuilding AI operation anchors before returning to trading-system implementation.
-
-The immediate goal is to make ChatGPT / Codex / future agents use stable repository files instead of long repeated prompts.
+Ver03-v2 has completed AI orchestration bootstrap. The next phase is product implementation planning, starting with Active Plan intraperiod outcome specification.
 
 ---
 
@@ -77,16 +75,17 @@ Current staged direction:
 | BTCFX-20260608-047 | done | Start Ver03-v2 branch | Ver03-v2 | `6ec1da1` | Branch start |
 | BTCFX-20260608-048 | done | Add AI orchestration anchor files | Ver03-v2 | `b904e13` | AI orchestration anchors added |
 | BTCFX-20260608-049 | done | Sync AI orchestration state | Ver03-v2 | `943fe55` | AI orchestration state synced |
+| BTCFX-20260608-050 | done | Simplify NEXT_TASK.md to human-facing entry | Ver03-v2 | `90bfe9f` | NEXT_TASK.md simplified |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-051
-Goal: Decide the first Ver03-v2 implementation task after AI anchors and NEXT_TASK are stable.
-Read: `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/REPO_MAP.md`, `運用資料/NEXT_TASK.md`, `運用資料/計画/README.md`
-Edit: `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`
+NEXT BTCFX-20260608-052
+Goal: Draft the Active Plan intraperiod outcome specification without changing source code.
+Read: 運用資料/計画/02_Ver03-v1_実装ロードマップ_20260608.md, 運用資料/計画/00_Ver03-v1_統合再計画_20260608.md, docs/operations/ai-orchestration/CONTROL.md
+Edit: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
 Stop: if source code changes are needed
 Report: compact
