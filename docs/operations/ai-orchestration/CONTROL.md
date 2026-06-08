@@ -3,7 +3,7 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `14e6fa3`
+current_commit: `1d23850`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -17,7 +17,7 @@ BTCFX-20260609-056 is complete, and its fix commit is `447b0c6 Replace split wor
 
 BTCFX-20260608-055 is complete, and its implementation commit is `8eecd4e Implement active plan intraperiod outcome builder`.
 
-BTCFX-20260608-057 is complete, and its implementation commit is pending this task's commit.
+BTCFX-20260608-057 is complete, and its implementation commit is `1d23850 Wire active plan intraperiod outcome CLI`.
 
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
@@ -115,19 +115,19 @@ Current staged direction:
 | BTCFX-20260608-055B | done | Document SMB file access and iMac SSH git workflow | Ver03-v2 | `4ea589f` | SMB read/write only; git/tests/commit/push on iMac via SSH |
 | BTCFX-20260608-055 | done | Implement builder for Active Plan intraperiod outcome rows and CSV output | Ver03-v2 | `8eecd4e` | Builder layer only; no CLI/report wiring |
 | BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `447b0c6` | Docs-only workflow sync before builder task |
-| BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `pending` | CLI wiring only; evaluator semantics unchanged |
+| BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `1d23850` | CLI wiring only; evaluator semantics unchanged |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-057
-Goal: Add CLI/report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
-Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, src/trade/active_plan_intraperiod.py
-Edit: wiring-only files required for CLI/report output, plus docs/operations/ai-orchestration/CONTROL.md and docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: `git diff --check`
-Stop: if evaluator semantics or runtime integration are required
+NEXT BTCFX-20260608-058
+Goal: Add Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
+Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, tools/log_feedback.py, src/trade/active_plan_intraperiod.py
+Edit: tools/log_feedback.py, tests/test_log_feedback.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Test: `./.venv312/bin/python -m unittest tests/test_log_feedback.py`
+Stop: if evaluator semantics, runtime integration, daily-sync integration, or deployment changes are required
 Report: compact
 ```
 
