@@ -3,7 +3,7 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `4ea589f`
+current_commit: `447b0c6`
 
 ## Objective
 
@@ -59,7 +59,7 @@ The mandatory Codex response rule is that the final compact report must also be 
 | BTCFX-20260608-054-FIX | done | `46f7bfb` | Completed policy metadata and added the response output rule |
 | BTCFX-20260608-055A | done | `6bc8ac8` | Updated the thread handoff before builder work |
 | BTCFX-20260608-055B | done | `4ea589f` | Documented SMB file access and iMac SSH git workflow |
-| BTCFX-20260609-056 | done | `pending` | Replaced split MBAM4/SMB rules with local iMac-only workflow |
+| BTCFX-20260609-056 | done | `447b0c6` | Replaced split MBAM4/SMB rules with local iMac-only workflow |
 
 ## Next prompt for Codex
 
