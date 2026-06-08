@@ -76,3 +76,10 @@ Recommendation: <A/B if obvious>
 - For every `NEXT`, `FIX`, `SYNC`, and `HANDOFF` task, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
 - The filename must be exactly `response.txt`.
 - Do not verify whether the file still exists after writing.
+
+## Execution rule note
+
+- Use the MBAM4 SMB path only for direct file reading and editing.
+- Run git, tests, commit, and push on the iMac via `ssh marupro@192.168.50.51` unless the task explicitly says otherwise.
+- Do not run local git commands on the SMB-mounted repository path unless explicitly instructed.
+- Do not switch to `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.

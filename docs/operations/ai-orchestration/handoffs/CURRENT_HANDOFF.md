@@ -7,9 +7,9 @@ current_commit: `6bc8ac8`
 
 ## Objective
 
-BTCFX-20260608-055A updates the ChatGPT/Codex thread handoff before builder work resumes.
+BTCFX-20260608-055B documents that SMB is for file access only and that git, tests, commit, and push run on the iMac via SSH.
 
-This handoff now records the MBAM4 SMB working-directory and execution policy before the next builder task starts.
+This handoff now records the MBAM4 SMB file-access rule before the next builder task starts.
 The mandatory Codex response rule is that the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` as `response.txt`.
 
 ## Current state
@@ -21,18 +21,22 @@ The mandatory Codex response rule is that the final compact report must also be 
 - `BTCFX-20260608-053` is complete at `cd0e07f Fix active plan intraperiod edge cases`.
 - `BTCFX-20260608-054` is the policy task that documents the MBAM4 SMB working-directory and execution policy.
 - `BTCFX-20260608-055A` is the handoff task that refreshes this thread before the builder task starts.
+- `BTCFX-20260608-055B` is the policy task that documents SMB file access and iMac SSH git workflow.
 - `NEXT_TASK.md` remains the human-facing entry.
 
 ## Machine roles and paths
 
 - Codex edits from MBAM4 using the SMB-mounted iMac repository path.
+- The MBAM4 SMB path is for direct file reading and editing only.
+- Do not run local git commands on the SMB-mounted path unless explicitly instructed.
 - MBAM4 working directory: `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 - iMac repository path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 - These two paths point to the same repository data via SMB.
 - The iMac is canonical for the repository body, runtime, deployment, logs, and execution.
 - Default tests and execution should run on the iMac via `ssh marupro@192.168.50.51`.
+- Commit and push must run on the iMac via `ssh marupro@192.168.50.51`.
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
-- Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
+- Pure unit tests may run on MBAM4 only when explicitly instructed and independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
 - Do not run runtime processes unless explicitly instructed.
 - For NEXT, FIX, SYNC, and HANDOFF tasks, write the final compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
 
@@ -57,6 +61,7 @@ The mandatory Codex response rule is that the final compact report must also be 
 | BTCFX-20260608-054 | done | `82be32b` | Documented MBAM4 SMB working-directory and execution policy |
 | BTCFX-20260608-054-FIX | done | `46f7bfb` | Completed policy metadata and added the response output rule |
 | BTCFX-20260608-055A | done | `6bc8ac8` | Updated the thread handoff before builder work |
+| BTCFX-20260608-055B | done | pending | Documented SMB file access and iMac SSH git workflow |
 
 ## Next prompt for Codex
 
