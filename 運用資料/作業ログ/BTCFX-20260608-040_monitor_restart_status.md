@@ -70,4 +70,4 @@
 
 ## commit hash
 
-- commit後に確定
+- `ae9f6b5` Restart monitor for Ver03-v1 runtime
