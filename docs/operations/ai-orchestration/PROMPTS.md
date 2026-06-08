@@ -40,9 +40,12 @@ Report: answer only the fact, max 10 lines
 ```text
 SYNC <WORK_ID>
 Update only:
+- AGENTS.md
 - docs/operations/ai-orchestration/CONTROL.md
 - docs/operations/ai-orchestration/TASK_LEDGER.md
-Reflect latest commit, current objective, next task, and blockers.
+- docs/operations/ai-orchestration/PROMPTS.md
+- docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
+Reflect latest commit, current objective, workflow rules, next task, and blockers.
 No source code changes.
 Test: git diff --check
 Report: compact
@@ -79,7 +82,9 @@ Recommendation: <A/B if obvious>
 
 ## Execution rule note
 
-- Use the MBAM4 SMB path only for direct file reading and editing.
-- Run git, tests, commit, and push on the iMac via `ssh marupro@192.168.50.51` unless the task explicitly says otherwise.
-- Do not run local git commands on the SMB-mounted repository path unless explicitly instructed.
-- Do not switch to `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
+- Use only the local iMac repo path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
+- Run file reads, edits, tests, git, commit, push, and deployment/runtime operations on this iMac local repository.
+- Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
+- Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
+- Do not use `imac` or `imac.afrog.jp` as SSH targets.
+- Do not use `ssh marupro@192.168.50.51` for normal repo work unless the task explicitly requires confirming the current machine state.

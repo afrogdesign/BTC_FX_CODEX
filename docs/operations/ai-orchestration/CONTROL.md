@@ -11,15 +11,17 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-055B documents the SMB file-access rule and the iMac SSH rule for git, tests, commit, and push.
+BTCFX-20260609-056 completes the workflow sync from the MBAM4/SMB split model to an iMac-only local workflow.
 
-BTCFX-20260608-054 is complete, and its fix commit is `82be32b Document iMac SMB working directory policy`.
+BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
+
+BTCFX-20260608-055A is complete, and its fix commit is `6bc8ac8 Update CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work`.
 
 BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex response outbox rule`.
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next builder task after this policy update is BTCFX-20260608-055.
+The next builder task after this workflow sync remains BTCFX-20260608-055.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -37,18 +39,13 @@ The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
 ### 2.1 Machine roles and paths
 
-- Codex edits from MBAM4 using the SMB-mounted iMac repository path.
-- The MBAM4 SMB path is for direct file reading and editing only.
-- Codex must not run local git commands on `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` unless explicitly instructed.
-- Codex must not search for alternative repo paths or switch to `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
-- MBAM4 working directory: `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- iMac repository path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- These two paths point to the same repository data via SMB.
-- The iMac is canonical for the repository body, runtime, deployment, logs, and execution.
-- Default tests and execution should run on the iMac via `ssh marupro@192.168.50.51`.
-- Commit and push must run on the iMac via `ssh marupro@192.168.50.51`.
+- Canonical working directory: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- All file reading and editing must use the local iMac repository path.
+- All tests, git commands, commit, push, and deployment/runtime operations must run on this iMac local repository.
+- Codex must not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
+- Codex must not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
-- Pure unit tests may run on MBAM4 only when explicitly instructed and independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
+- Do not use `ssh marupro@192.168.50.51` for normal repo work unless a task explicitly requires confirming the current machine state.
 - Do not run runtime processes unless explicitly instructed.
 - For NEXT, FIX, SYNC, and HANDOFF tasks, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
 
@@ -110,6 +107,7 @@ Current staged direction:
 | BTCFX-20260608-054-FIX | done | Complete MBAM4/iMac policy metadata and add mandatory Codex response output rule | Ver03-v2 | `46f7bfb` | Metadata correction and response rule |
 | BTCFX-20260608-055A | done | Update CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work | Ver03-v2 | `6bc8ac8` | Handoff refresh before builder task |
 | BTCFX-20260608-055B | done | Document SMB file access and iMac SSH git workflow | Ver03-v2 | `4ea589f` | SMB read/write only; git/tests/commit/push on iMac via SSH |
+| BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `pending` | Docs-only workflow sync before builder task |
 
 ---
 
