@@ -4,6 +4,7 @@ last_updated: 2026-06-08
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
 current_commit: `b904e13`
+note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
 ---
@@ -75,16 +76,17 @@ Current staged direction:
 |---|---|---|---|---|---|
 | BTCFX-20260608-047 | done | Start Ver03-v2 branch | Ver03-v2 | `6ec1da1` | Branch start |
 | BTCFX-20260608-048 | done | Add AI orchestration anchor files | Ver03-v2 | `b904e13` | AI orchestration anchors added |
+| BTCFX-20260608-049 | done | Sync AI orchestration state | Ver03-v2 | `943fe55` | AI orchestration state synced |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-050
-Goal: Reduce `運用資料/NEXT_TASK.md` to a human-facing pointer that references `CONTROL.md`, `REPO_MAP.md`, and product planning entry files.
-Read: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/REPO_MAP.md`
-Edit: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`
+NEXT BTCFX-20260608-051
+Goal: Decide the first Ver03-v2 implementation task after AI anchors and NEXT_TASK are stable.
+Read: `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/REPO_MAP.md`, `運用資料/NEXT_TASK.md`, `運用資料/計画/README.md`
+Edit: `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`
 Test: `git diff --check`
 Stop: if source code changes are needed
 Report: compact

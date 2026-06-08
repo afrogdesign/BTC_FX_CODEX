@@ -3,13 +3,13 @@
 last_updated: 2026-06-08
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `b904e13`
+current_commit: `943fe55`
 
 ## Objective
 
-Ver03-v2 is starting with AI orchestration anchor files.
+Ver03-v2 is transitioning from AI orchestration anchor setup to the first implementation task.
 
-The next product implementation should wait until AI / Codex operation anchors are stable.
+The next product implementation should wait until AI / Codex operation anchors and `NEXT_TASK.md` are stable.
 
 ## Current state
 
@@ -17,6 +17,7 @@ The next product implementation should wait until AI / Codex operation anchors a
 - Ver03-v2 was started at `6ec1da1 Start Ver03-v2 branch`.
 - Product planning folder was rebuilt.
 - AI orchestration anchor files are in place.
+- `NEXT_TASK.md` is now a human-facing entry.
 
 ## Important constraints
 
@@ -34,15 +35,16 @@ The next product implementation should wait until AI / Codex operation anchors a
 | BTCFX-20260608-046 | done | `e3506e4` | Rebuilt Ver03-v1 planning folder |
 | BTCFX-20260608-047 | done | `6ec1da1` | Started Ver03-v2 branch |
 | BTCFX-20260608-048 | done | `b904e13` | Add AI orchestration anchors |
+| BTCFX-20260608-049 | done | `943fe55` | Sync AI orchestration state |
 
 ## Next prompt for Codex
 
 ```text
-NEXT BTCFX-20260608-050
-Goal: Reduce `運用資料/NEXT_TASK.md` to a human-facing pointer that references `CONTROL.md`, `REPO_MAP.md`, and product planning entry files.
-Read: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/REPO_MAP.md`
-Edit: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`
-Test: `git diff --check`
+NEXT BTCFX-20260608-051
+Goal: Decide the first Ver03-v2 implementation task after AI anchors and NEXT_TASK are stable.
+Read: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/REPO_MAP.md, 運用資料/NEXT_TASK.md, 運用資料/計画/README.md
+Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Test: git diff --check
 Stop: if source code changes are needed
 Report: compact
 ```
