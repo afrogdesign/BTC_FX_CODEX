@@ -1,13 +1,13 @@
-# BTCFX-20260608-041 active_plan post restart status
+# BTCFX-20260608-042 active_plan cycle status
 
 ## 作業番号
 
-- `BTCFX-20260608-041`
+- `BTCFX-20260608-042`
 
 ## 目的
 
-- `BTCFX-20260608-040` 作業ログの commit hash placeholder を補正する。
-- LaunchAgent 再起動後の定刻監視サイクルで Active Plan 実装が runtime 出力へ反映されたか確認する。
+- `BTCFX-20260608-041` 作業ログの commit hash placeholder を補正する。
+- 040再起動後の次サイクルで Active Plan 実装が runtime 出力へ反映されたか確認する。
 - 監視プロセスの起動・停止・再起動、run_cycle 手動実行、コード変更は行わない。
 
 ## 確認対象
@@ -27,13 +27,20 @@
 - process start: `Mon Jun 8 19:32:34 2026`
 - monitor.err: `empty`
 
+## heartbeat / last_result
+
+- heartbeat mtime: `2026-06-08 19:05:00 +0900`
+- last_result mtime: `2026-06-08 19:05:07 +0900`
+- last_result updated after 040 restart: `no`
+- last_result updated after 041 check: `no`
+
 ## last_result.json
 
 - exists: `yes`
-- updated after 040 restart: `no`
 - signal_id: `20260608_100500`
 - timestamp_jst: `2026-06-08T19:05:00.093581+09:00`
 - summary_subject: `[機械判定のみ] ⚪ [送信なし] 中立 | 上方向転換は慎重評価 【BTC:63,470】 2026-06-08 19:05 [Ver02.6-v2] [CLI]`
+- system_label: `Ver02.6-v2`
 - active_trade_plan present: `no`
 - active_plan_version: ``
 - active_primary_action: ``
@@ -69,7 +76,7 @@
 
 ## 判断
 
-- Active Plan はまだ runtime 出力に反映されていない。監視サイクルがまだ再起動後に走っていない可能性がある。
+- Active Plan はまだ runtime 出力に反映されていないが、last_result も再起動後サイクルへ更新されていないため、もう1サイクル待つ必要がある。
 
 ## 次にやること
 
@@ -80,4 +87,4 @@
 
 ## commit hash
 
-- `67c285f` Record Active Plan post-restart status
+- commit後に確定

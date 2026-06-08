@@ -163,6 +163,7 @@
 - 監視実行コード確認結果: `運用資料/作業ログ/BTCFX-20260608-039_monitor_runtime_code_status.md`
 - 監視再起動確認結果: `運用資料/作業ログ/BTCFX-20260608-040_monitor_restart_status.md`
 - 再起動後 Active Plan 反映確認結果: `運用資料/作業ログ/BTCFX-20260608-041_active_plan_post_restart_status.md`
+- 再起動後サイクル Active Plan 確認結果: `運用資料/作業ログ/BTCFX-20260608-042_active_plan_cycle_status.md`
 - `active_plan_candidates.csv` はまだ未生成。次は Ver03-v1 の監視サイクルが最新commitで走っているか確認する。
 - LaunchAgent の起動対象は `Ver03-v1` / `97c0c9b` / `.venv312/bin/python` だが、監視 PID は `2026-06-06 16:24:40` 起動の継続稼働だった。次は、安全に監視 worktree と実行中プロセスの同期状態を確認し、必要なら LaunchAgent 再起動手順を出す。
 - `com.afrog.btc-monitor` は再起動済み。次の監視サイクル後に `active_trade_plan` / `active_plan_candidates.csv` の生成を確認する。
