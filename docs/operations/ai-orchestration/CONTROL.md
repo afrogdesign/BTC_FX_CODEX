@@ -3,7 +3,7 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `8f0b18c`
+current_commit: `d7c38073b75d1faa7868146288b5a69cf2c76356`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest pushed commit by one or more tasks.
 project_key: `BTCFX`
 
@@ -27,17 +27,17 @@ BTCFX-20260608-061 captured a temporary Ver03-v2 execution review with a report 
 
 BTCFX-20260608-061-FIX fixes the temporary Ver03-v2 execution report hub path and reruns the diagnostic entrypoint.
 
-BTCFX-20260608-062 is complete, and its decision-prep commit is `pending_review`.
+BTCFX-20260608-062 is complete, and its decision-prep commit is `f150951 Prepare Ver03-v2 next boundary decision`.
 
-BTCFX-20260608-063 is complete, and its implementation commit is `pending_review`.
+BTCFX-20260608-063 is complete, and its implementation commit is `856e945 Add Ver03-v2 execution preflight checks`.
 
-BTCFX-20260608-064 is complete, and its implementation commit is `pending_review`.
+BTCFX-20260608-064 is complete, and its implementation commit is `fa86c67 Wire Ver03-v2 intraperiod diagnostics into daily sync`.
 
-BTCFX-20260608-064-FIX is complete, and its fix commit is `pending_review`.
+BTCFX-20260608-064-FIX is complete, and its fix commit is `d615247 Fix Ver03-v2 intraperiod daily sync wording`.
 
-BTCFX-20260608-066 is complete, and its implementation commit is `pending_review`.
+BTCFX-20260608-066 is complete, and its implementation commit is `497ffc8 Apply Ver03-v2 email subject prefix`.
 
-BTCFX-20260608-065 is complete, and its audit commit is `pending_review`.
+BTCFX-20260608-065 is complete, and its audit commit is `0c6ff38 Audit Ver03-v2 email and report labels`.
 
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
@@ -49,11 +49,11 @@ BTCFX-20260608-055 is complete, and its implementation commit is `8eecd4e Implem
 
 BTCFX-20260608-057 is complete, and its implementation commit is `1d23850 Wire active plan intraperiod outcome CLI`.
 
-BTCFX-20260609-059 is complete, and its sync commit is `pending_review`.
+BTCFX-20260609-059 is complete, and its sync commit is `1372f1e Sync AI orchestration metadata rules`.
 
-BTCFX-20260608-058 is complete, and its implementation commit is `pending_review`.
+BTCFX-20260608-058 is complete, and its implementation commit is `7f6d880 Add active plan intraperiod outcome report`.
 
-BTCFX-20260608-060 is complete, and its implementation commit is `pending_review`.
+BTCFX-20260608-060 is complete, and its implementation commit is `a7ea8d3 Prepare Ver03-v2 execution entrypoint`.
 
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
@@ -63,7 +63,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-069 is the batch sync of reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks.
+The next recommended task after BTCFX-20260608-069 is the exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files.
 
 The active deliverable is `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md`.
 
@@ -157,32 +157,33 @@ Current staged direction:
 | BTCFX-20260608-055 | done | Implement builder for Active Plan intraperiod outcome rows and CSV output | Ver03-v2 | `8eecd4e` | Builder layer only; no CLI/report wiring |
 | BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `447b0c6` | Docs-only workflow sync before builder task |
 | BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `1d23850` | CLI wiring only; evaluator semantics unchanged |
-| BTCFX-20260608-058 | done | Add Markdown report wiring for Active Plan intraperiod outcome CSV | Ver03-v2 | `pending_review` | Report wiring only; no builder changes |
-| BTCFX-20260609-059 | done | Sync AI orchestration metadata rules | Ver03-v2 | `pending_review` | AI orchestration metadata rule sync |
-| BTCFX-20260608-060 | done | Prepare temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit | Ver03-v2 | `pending_review` | Temporary diagnostic entrypoint and label audit |
-| BTCFX-20260608-060-FIX | done | Align temporary Ver03-v2 report hub output path | Ver03-v2 | `pending_review` | Report hub output path alignment |
-| BTCFX-20260608-061 | partial | Capture temporary Ver03-v2 execution review facts | Ver03-v2 | `pending_review` | Execution failed during report hub step; facts captured |
-| BTCFX-20260608-061-FIX | done | Fix temporary Ver03-v2 execution report hub path and rerun | Ver03-v2 | `pending_review` | Temporary execution path fixed and rerun succeeded |
-| BTCFX-20260608-062 | done | Prepare next boundary decision for Ver03-v2 temporary execution results | Ver03-v2 | `pending_review` | Decision-prep document for next integration boundary |
-| BTCFX-20260608-063 | done | Add preflight checks for Ver03-v2 manual diagnostic execution | Ver03-v2 | `pending_review` | Preflight checks and warning summaries added |
-| BTCFX-20260608-064 | done | Wire Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics | Ver03-v2 | `pending_review` | Report-only daily-sync diagnostics wired |
-| BTCFX-20260608-064-FIX | done | Fix stale daily-sync wording in Ver03-v2 intraperiod diagnostics report | Ver03-v2 | `pending_review` | Report wording updated to report-only daily-sync diagnostics |
-| BTCFX-20260608-065 | done | Audit BTCFX Ver03-v2 email and report label migration without runtime behavior changes | Ver03-v2 | `pending_review` | Label audit for future migration boundaries |
-| BTCFX-20260608-066 | done | Apply BTCFX Ver03-v2 prefix to the approved email subject builder | Ver03-v2 | `pending_review` | Email subject prefix migration only |
-| BTCFX-20260608-067 | done | Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | Ver03-v2 | `pending_review` | Daily-sync output review for report-only diagnostics |
-| BTCFX-20260608-069 | done | Define generated output lifecycle policy for Ver03-v2 report-only diagnostics | Ver03-v2 | `pending_review` | Generated output lifecycle policy for report-only diagnostics |
+| BTCFX-20260608-058 | done | Add Markdown report wiring for Active Plan intraperiod outcome CSV | Ver03-v2 | `7f6d880` | Report wiring only; no builder changes |
+| BTCFX-20260609-059 | done | Sync AI orchestration metadata rules | Ver03-v2 | `1372f1e` | AI orchestration metadata rule sync |
+| BTCFX-20260608-060 | done | Prepare temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit | Ver03-v2 | `a7ea8d3` | Temporary diagnostic entrypoint and label audit |
+| BTCFX-20260608-060-FIX | done | Align temporary Ver03-v2 report hub output path | Ver03-v2 | `06f4bc5` | Report hub output path alignment |
+| BTCFX-20260608-061 | partial | Capture temporary Ver03-v2 execution review facts | Ver03-v2 | `87890fa` | Execution failed during report hub step; facts captured |
+| BTCFX-20260608-061-FIX | done | Fix temporary Ver03-v2 execution report hub path and rerun | Ver03-v2 | `3dc6cf4` | Temporary execution path fixed and rerun succeeded |
+| BTCFX-20260608-062 | done | Prepare next boundary decision for Ver03-v2 temporary execution results | Ver03-v2 | `f150951` | Decision-prep document for next integration boundary |
+| BTCFX-20260608-063 | done | Add preflight checks for Ver03-v2 manual diagnostic execution | Ver03-v2 | `856e945` | Preflight checks and warning summaries added |
+| BTCFX-20260608-064 | done | Wire Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics | Ver03-v2 | `fa86c67` | Report-only daily-sync diagnostics wired |
+| BTCFX-20260608-064-FIX | done | Fix stale daily-sync wording in Ver03-v2 intraperiod diagnostics report | Ver03-v2 | `d615247` | Report wording updated to report-only daily-sync diagnostics |
+| BTCFX-20260608-065 | done | Audit BTCFX Ver03-v2 email and report label migration without runtime behavior changes | Ver03-v2 | `0c6ff38` | Label audit for future migration boundaries |
+| BTCFX-20260608-066 | done | Apply BTCFX Ver03-v2 prefix to the approved email subject builder | Ver03-v2 | `497ffc8` | Email subject prefix migration only |
+| BTCFX-20260608-067 | done | Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | Ver03-v2 | `e4a9a65` | Daily-sync output review for report-only diagnostics |
+| BTCFX-20260608-069 | done | Define generated output lifecycle policy for Ver03-v2 report-only diagnostics | Ver03-v2 | `d7c3807` | Generated output lifecycle policy for report-only diagnostics |
+| BTCFX-20260609-SYNC | done | Batch-sync reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks | Ver03-v2 | `pending_review` | Reviewed metadata synced through BTCFX-20260608-069 |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260609-SYNC
-Goal: Batch-sync reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks.
-Read: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-070
+Goal: Prepare exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files.
+Read: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
-Stop: if implementation code changes are required
+Stop: if file deletion, code changes, runtime restart, live trading, API keys, or automatic order execution are required
 Report: compact
 ```
 
