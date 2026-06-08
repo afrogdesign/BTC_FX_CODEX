@@ -23,6 +23,7 @@
 注記:
 - `feedback_daily_sync_20260608.md` はローカル未追跡として存在する可能性があるが、現時点では Ver03-v1 の正本参照に入れない。
 - `active_plan_candidates.csv` はまだ未生成のため、Active Plan 診断はレーン接続確認段階。
+- Active Plan runtime確認手順: `運用資料/計画/Ver03-v1_ActivePlan_runtime確認手順_20260608.md`
 
 ## ChatGPT が次に引き継ぐ分析メモ
 

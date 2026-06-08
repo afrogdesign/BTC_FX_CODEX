@@ -43,7 +43,7 @@
 
 ## commit hash
 
-- commit後に確定
+- `8d23f21` Resolve Ver03-v1 untracked files
 
 ## 未解決事項
 
