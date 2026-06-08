@@ -13,6 +13,8 @@ project_key: `BTCFX`
 
 BTCFX-20260608-064 wires Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics.
 
+BTCFX-20260608-064-FIX fixes stale daily-sync wording in the Ver03-v2 intraperiod diagnostics report.
+
 BTCFX-20260608-060 prepares a temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit.
 
 BTCFX-20260608-060-FIX aligns the temporary Ver03-v2 report hub output path.
@@ -26,6 +28,8 @@ BTCFX-20260608-062 is complete, and its decision-prep commit is `pending_review`
 BTCFX-20260608-063 is complete, and its implementation commit is `pending_review`.
 
 BTCFX-20260608-064 is complete, and its implementation commit is `pending_review`.
+
+BTCFX-20260608-064-FIX is complete, and its fix commit is `pending_review`.
 
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
@@ -154,6 +158,7 @@ Current staged direction:
 | BTCFX-20260608-062 | done | Prepare next boundary decision for Ver03-v2 temporary execution results | Ver03-v2 | `pending_review` | Decision-prep document for next integration boundary |
 | BTCFX-20260608-063 | done | Add preflight checks for Ver03-v2 manual diagnostic execution | Ver03-v2 | `pending_review` | Preflight checks and warning summaries added |
 | BTCFX-20260608-064 | done | Wire Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics | Ver03-v2 | `pending_review` | Report-only daily-sync diagnostics wired |
+| BTCFX-20260608-064-FIX | done | Fix stale daily-sync wording in Ver03-v2 intraperiod diagnostics report | Ver03-v2 | `pending_review` | Report wording updated to report-only daily-sync diagnostics |
 
 ---
 

@@ -235,7 +235,7 @@ class LogFeedbackTest(unittest.TestCase):
             report_text = intraperiod_report_path.read_text(encoding="utf-8")
             self.assertIn("BTCFX Ver03-v2", report_text)
             self.assertIn("no_ohlcv", report_text)
-            self.assertIn("daily-sync接続は別タスク", report_text)
+            self.assertIn("daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。", report_text)
 
     def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -5041,7 +5041,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("実弾売買判断ではない", report)
             self.assertIn("Active Plan は正式GOではない", report)
             self.assertIn("自動発注候補ではない", report)
-            self.assertIn("daily-sync接続は別タスク", report)
+            self.assertIn("daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。", report)
             self.assertIn("outcome別集計", report)
             self.assertIn("`tp1_first`: 1件", report)
             self.assertIn("`sl_first`: 1件", report)

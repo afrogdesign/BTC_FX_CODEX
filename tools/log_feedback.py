@@ -8658,7 +8658,7 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
         "- 実弾売買判断ではない。",
         "- Active Plan は正式GOではない。",
         "- 自動発注候補ではない。",
-        "- daily-sync接続は別タスク。",
+        "- daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。",
     ]
 
     if not input_exists:
@@ -8833,9 +8833,9 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
     elif unresolved_items:
         for item in unresolved_items:
             lines.append(f"- {item}")
-        lines.append("- daily-sync接続は別タスクです。")
+        lines.append("- daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。")
     else:
-        lines.append("- 現時点で大きな未解決事項はありません。")
+        lines.append("- 現時点で大きな未解決事項はありません。daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。")
 
     report = "\n".join(lines)
     _ensure_parent(resolved_output_md)
