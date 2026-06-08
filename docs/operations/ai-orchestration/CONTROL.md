@@ -11,6 +11,8 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
+BTCFX-20260608-067 adds the daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration.
+
 BTCFX-20260608-066 applies the approved BTCFX Ver03-v2 email subject prefix migration without runtime behavior changes.
 
 BTCFX-20260608-064-FIX fixes stale daily-sync wording in the Ver03-v2 intraperiod diagnostics report.
@@ -59,9 +61,9 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-066 is the daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration.
+The next recommended task after BTCFX-20260608-067 is the generated output lifecycle rules task for Ver03-v2 report-only diagnostics.
 
-The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md`.
 
 ---
 
@@ -165,18 +167,19 @@ Current staged direction:
 | BTCFX-20260608-064-FIX | done | Fix stale daily-sync wording in Ver03-v2 intraperiod diagnostics report | Ver03-v2 | `pending_review` | Report wording updated to report-only daily-sync diagnostics |
 | BTCFX-20260608-065 | done | Audit BTCFX Ver03-v2 email and report label migration without runtime behavior changes | Ver03-v2 | `pending_review` | Label audit for future migration boundaries |
 | BTCFX-20260608-066 | done | Apply BTCFX Ver03-v2 prefix to the approved email subject builder | Ver03-v2 | `pending_review` | Email subject prefix migration only |
+| BTCFX-20260608-067 | done | Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | Ver03-v2 | `pending_review` | Daily-sync output review for report-only diagnostics |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-067
-Goal: Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration.
-Read: docs/operations/deploy/Ver03-v2_EMAIL_LABEL_AUDIT_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-069
+Goal: Define generated output lifecycle rules for Ver03-v2 report-only diagnostics.
+Read: docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
-Stop: if runtime restart, live trading, API keys, automatic order execution, or code changes are required
+Stop: if code changes, runtime restart, live trading, API keys, or automatic order execution are required
 Report: compact
 ```
 
