@@ -11,6 +11,8 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
+BTCFX-20260608-068 captures controlled daily-sync review facts with AI review creation disabled.
+
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files.
 
 BTCFX-20260608-069 defines the generated output lifecycle policy for BTCFX Ver03-v2 report-only diagnostics.
@@ -65,9 +67,9 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-070 is the controlled daily-sync dry-run/review task after explicit approval.
+The next recommended task after BTCFX-20260608-070 is the exact-path archive task for explicitly approved Ver03-v2 generated report artifacts.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_DAILY_SYNC_DRY_RUN_REVIEW_20260609.md`.
 
 ---
 
@@ -172,6 +174,7 @@ Current staged direction:
 | BTCFX-20260608-065 | done | Audit BTCFX Ver03-v2 email and report label migration without runtime behavior changes | Ver03-v2 | `0c6ff38` | Label audit for future migration boundaries |
 | BTCFX-20260608-066 | done | Apply BTCFX Ver03-v2 prefix to the approved email subject builder | Ver03-v2 | `497ffc8` | Email subject prefix migration only |
 | BTCFX-20260608-067 | done | Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | Ver03-v2 | `e4a9a65` | Daily-sync output review for report-only diagnostics |
+| BTCFX-20260608-068 | done | Capture controlled daily-sync review facts with AI review creation disabled | Ver03-v2 | `pending_review` | Controlled daily-sync review facts captured with AI review creation disabled |
 | BTCFX-20260608-069 | done | Define generated output lifecycle policy for Ver03-v2 report-only diagnostics | Ver03-v2 | `d7c3807` | Generated output lifecycle policy for report-only diagnostics |
 | BTCFX-20260609-SYNC | done | Batch-sync reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks | Ver03-v2 | `pending_review` | Reviewed metadata synced through BTCFX-20260608-069 |
 | BTCFX-20260608-070 | done | Prepare exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files | Ver03-v2 | `pending_review` | Exact-path cleanup/archive plan for generated diagnostics |
@@ -181,12 +184,12 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-068
-Goal: Run one controlled daily-sync dry-run/review command only if explicitly approved, then capture output facts.
-Read: docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md, docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md, docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/deploy/Ver03-v2_DAILY_SYNC_DRY_RUN_REVIEW_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-071
+Goal: Archive explicitly approved Ver03-v2 generated report artifacts by exact path.
+Read: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: only exact archive destination files approved by ChatGPT plus CONTROL/TASK_LEDGER
 Test: `git diff --check`
-Stop: if runtime restart, live trading, API keys, automatic order execution, paper_positions.csv integration, or unclear generated output handling is required
+Stop: if source code changes, runtime restart, live trading, API keys, automatic order execution, or unapproved generated paths are involved
 Report: compact
 ```
 
