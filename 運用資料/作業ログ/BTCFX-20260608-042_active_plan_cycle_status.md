@@ -87,4 +87,4 @@
 
 ## commit hash
 
-- commit後に確定
+- `72931e8` Record Active Plan cycle status
