@@ -3,7 +3,7 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `cd0e07f`
+current_commit: `e57b101`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -11,9 +11,11 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-054-FIX completes the MBAM4/iMac policy metadata and adds the mandatory Codex `response.txt` output rule.
+BTCFX-20260608-055A updates the thread handoff in `CURRENT_HANDOFF.md` before builder work resumes.
 
 BTCFX-20260608-054 is complete, and its fix commit is `82be32b Document iMac SMB working directory policy`.
+
+BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex response outbox rule`.
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
@@ -102,6 +104,7 @@ Current staged direction:
 | BTCFX-20260608-053 | done | Implement helper functions and fixture tests for the Active Plan intraperiod outcome evaluator | Ver03-v2 | `cd0e07f` | Helper evaluator and edge-case fixes completed |
 | BTCFX-20260608-054 | done | Document MBAM4 SMB working-directory and execution policy | Ver03-v2 | `82be32b` | This policy update |
 | BTCFX-20260608-054-FIX | done | Complete MBAM4/iMac policy metadata and add mandatory Codex response output rule | Ver03-v2 | `46f7bfb` | Metadata correction and response rule |
+| BTCFX-20260608-055A | done | Update CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work | Ver03-v2 | `e57b101` | Handoff refresh before builder task |
 
 ---
 

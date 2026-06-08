@@ -3,11 +3,11 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `cd0e07f`
+current_commit: `e57b101`
 
 ## Objective
 
-Ver03-v2 has completed the helper evaluator, fixture test, and edge-case fix work for Active Plan intraperiod outcomes.
+BTCFX-20260608-055A updates the ChatGPT/Codex thread handoff before builder work resumes.
 
 This handoff now records the MBAM4 SMB working-directory and execution policy before the next builder task starts.
 The mandatory Codex response rule is that the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` as `response.txt`.
@@ -20,6 +20,7 @@ The mandatory Codex response rule is that the final compact report must also be 
 - AI orchestration anchor files are in place.
 - `BTCFX-20260608-053` is complete at `cd0e07f Fix active plan intraperiod edge cases`.
 - `BTCFX-20260608-054` is the policy task that documents the MBAM4 SMB working-directory and execution policy.
+- `BTCFX-20260608-055A` is the handoff task that refreshes this thread before the builder task starts.
 - `NEXT_TASK.md` remains the human-facing entry.
 
 ## Machine roles and paths
@@ -55,6 +56,7 @@ The mandatory Codex response rule is that the final compact report must also be 
 | BTCFX-20260608-053 | done | `cd0e07f` | Implemented active plan intraperiod evaluator helper and fixed edge cases |
 | BTCFX-20260608-054 | done | `82be32b` | Documented MBAM4 SMB working-directory and execution policy |
 | BTCFX-20260608-054-FIX | done | `46f7bfb` | Completed policy metadata and added the response output rule |
+| BTCFX-20260608-055A | done | `e57b101` | Updated the thread handoff before builder work |
 
 ## Next prompt for Codex
 

@@ -11,6 +11,7 @@
 | BTCFX-20260608-053 | 2026-06-09 | done | Implemented active plan intraperiod evaluator helper and fixed edge cases | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_intraperiod.py`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `cd0e07f` | yes |
 | BTCFX-20260608-054 | 2026-06-09 | done | Documented MBAM4 SMB working-directory and execution policy | `AGENTS.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | `git diff --check` pass | `82be32b` | yes |
 | BTCFX-20260608-054-FIX | 2026-06-09 | done | Completed MBAM4/iMac policy metadata and added mandatory Codex response output rule | `AGENTS.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/PROMPTS.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | `git diff --check` pass | `46f7bfb` | yes |
+| BTCFX-20260608-055A | 2026-06-09 | done | Updated CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work | `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`, `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | `git diff --check` pending | `e57b101` | no |
 
 ## Status definitions
 
