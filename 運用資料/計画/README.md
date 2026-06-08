@@ -1,65 +1,36 @@
-# 計画フォルダ
+# Ver03-v1 計画フォルダ README
 
-更新日: 2026-06-01 JST
+更新日: 2026-06-08 JST
 
-このフォルダは、自動取引直前まで最短で進めるための計画正本を置く場所です。
+このフォルダは、BTC Monitor / BTCトレードシステム Ver03-v1 の計画正本を置く場所です。
 
-`latest_integrated_plan_20260526.md` を最新統合計画として最上位に置き、過去の個別計画は履歴・archive に整理します。
+目的は、実際の BTC 市場に合わせた、実践的で実用性の高いトレード支援システムを作ることです。
 
-## 現在の正本
+短期方針:
 
-- 現在の作業ブランチ: `ver02.6-v2`
-- 運用本体の参照ブランチ: `ver02.6-v2`
-- 現在版: `ver02.6-v2` 稼働中（`Ver02.5-v8` は旧節目版として履歴参照）
-- 現在フェーズ: `Phase C` 実装済み・観測中、`Phase D` 初期段階
-- 最新統合計画: `運用資料/計画/latest_integrated_plan_20260526.md`
-- 実務正本: `運用資料/NEXT_TASK.md`
-- レポート導線: `運用資料/reports/report_hub_latest.md`
-- Codex 実装正本: `chatgpt/specs/active/`（現在は `.gitkeep` のみ）
+- まずはメール通知を見て人間が取引判断する。
+- 取引所への注文送信、秘密鍵連携、実弾発注 API はまだ行わない。
+- `trade_execution_gate` は高信頼 gate として残す。
+- 実務上の行動計画は `active_trade_plan` / `ACTIVE_*` レーンで出す。
+- 自動売買へ進む前に、候補ごとの entry 到達、TP / SL 先行、timeout、MFE / MAE を検証する。
 
-## Ver02.6-v2 以降の設計運用
+## この再構成ZIPの中身
 
-- 診断、設計、再考、フェーズ判断、改善案比較は ChatGPT プロジェクトで行う。
-- Codex は、`chatgpt/specs/active/` に置かれた確定仕様の実装、検証、レポート生成、Git 操作を担当する。
-- この `運用資料/計画/` には、長期方針・フェーズ定義・現在地の整理だけを置く。
-- 日々の最新状態と次タスクは `運用資料/NEXT_TASK.md` を正本にする。
-- branch 名は `NEXT_TASK.md` の `現在の作業ブランチ` を最優先する。
-- Codex は未確定の設計案をこのフォルダで膨らませない。必要な材料整理は行ってよいが、最終判断は ChatGPT 側へ戻す。
+1. `00_Ver03-v1_統合再計画_20260608.md`
+   - 今後の最上位計画。
+2. `01_計画フォルダ再構成案_20260608.md`
+   - 既存計画書の正本 / 参考 / 履歴の仕分け。
+3. `02_Ver03-v1_実装ロードマップ_20260608.md`
+   - 今後の作業順。
+4. `03_AI参照ファイル設計_20260608.md`
+   - ChatGPT / Codex / 将来の自動化エージェントが読むファイル構成。
+5. `04_次にCodexへ渡す作業方針_20260608.md`
+   - 次のCodex作業を重くしすぎないための作業方針。
+6. `source_review_notes_20260608.md`
+   - 今回読んだ計画書と判断メモ。
 
-## まず見るもの
+## 正本として扱う考え方
 
-1. [latest_integrated_plan_20260526.md](latest_integrated_plan_20260526.md)
-   - 現在の最新統合計画。Phase C 観測中・Phase D 初期の計画正本。
-2. [../NEXT_TASK.md](../NEXT_TASK.md)
-   - 最新の作業ブランチ、現在状態、次タスクの実務正本。
-3. [../reports/report_hub_latest.md](../reports/report_hub_latest.md)
-   - 最新レポートへの案内板。
-4. [マイルストーン定義.md](マイルストーン定義.md)
-   - Phase A-E と Ver 昇格条件の定義。
-5. [../開発ロードマップ.md](../開発ロードマップ.md)
-   - 現在地と次に見る数値の整理。
+Ver03-v1 の正本は、古い `latest_integrated_plan_20260526.md` ではなく、本ZIPの `00_Ver03-v1_統合再計画_20260608.md` を入口にする。
 
-## 現行方針
-
-- 正式 `trade_execution_gate` は安全基準として残す。
-- `trade_execution_gate=pass` と `paper_orders planned` が自然発生するまでは、実弾 gate を緩和しない。
-- フェーズ前進は、厳格 gate 待ちだけではなく `opportunity_gate` と `paper_positions.csv` の型別成績で進める。
-- `opportunity_gate=pass` は `紙実行候補・実弾不可` であり、実弾候補ではない。
-- `Phase 1B-lite` は正式 `Phase 1B` ではなく、専用紙トレード観測レーンとして扱う。
-- 実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
-- 勝てる型の判断は、紙実行ログと quality blocker 後の型別成績を見てから行う。
-- 型別の再調整案は ChatGPT 側で決め、Codex は確定後に実装と検証を担当する。
-
-## 現在の重点
-
-- `entry / wait / trend_flip` 品質ガードは実装済み。
-- paper opportunity quality guard の hard / soft 分離も実装済み（直近仕様は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md`）。
-- `hard_quality_blocked` と `soft_quality_risk` の推移を観測継続する。
-- 次は ChatGPT 側で、`counterfactual_quality_guard` の builder 正式化要否、`paper_entry_sl_wait_redesign` builder の扱い、entry / wait / price-distance 再設計を仕様化する。
-
-## archive / 履歴の扱い
-
-- `archive/implemented/`: 実装済み計画。履歴参照用。
-- `archive/superseded/`: 現行計画に置き換えた古い計画。現行判断の正本にはしない。
-- `履歴/`: 経緯確認用。現行判断の正本にはしない。
-- `履歴/2026-05-26_plan_consolidation/`: 最新統合計画へ吸収した旧計画の退避先。
+既存repoへ反映する場合は、まず Codex にこのZIPの内容を `運用資料/計画/` へ入れさせる。既存ファイルの削除や移動は、次の作業で差分確認しながら行う。
