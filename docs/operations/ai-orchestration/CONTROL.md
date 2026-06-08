@@ -15,6 +15,8 @@ BTCFX-20260608-060 prepares a temporary Ver03-v2 execution/deploy entrypoint and
 
 BTCFX-20260608-060-FIX aligns the temporary Ver03-v2 report hub output path.
 
+BTCFX-20260608-061 captured a temporary Ver03-v2 execution review with a report hub path failure.
+
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
 BTCFX-20260608-057 wires the Active Plan intraperiod outcome builder into `tools/log_feedback.py`.
@@ -137,16 +139,17 @@ Current staged direction:
 | BTCFX-20260609-059 | done | Sync AI orchestration metadata rules | Ver03-v2 | `pending_review` | AI orchestration metadata rule sync |
 | BTCFX-20260608-060 | done | Prepare temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit | Ver03-v2 | `pending_review` | Temporary diagnostic entrypoint and label audit |
 | BTCFX-20260608-060-FIX | done | Align temporary Ver03-v2 report hub output path | Ver03-v2 | `pending_review` | Report hub output path alignment |
+| BTCFX-20260608-061 | partial | Capture temporary Ver03-v2 execution review facts | Ver03-v2 | `pending_review` | Execution failed during report hub step; facts captured |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-061
-Goal: Review temporary Ver03-v2 execution output and decide whether to wire it into daily-sync or keep manual.
-Read: docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, and only explicitly scoped follow-up docs
+NEXT BTCFX-20260608-062
+Goal: Review BTCFX Ver03-v2 temporary execution results and decide the next integration boundary.
+Read: docs/operations/deploy/Ver03-v2_EXECUTION_REVIEW_20260609.md, docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, and only explicitly scoped decision docs
 Test: `git diff --check`
 Stop: if runtime restart, live trading, API keys, automatic order execution, or daily-sync code changes are required
 Report: compact
