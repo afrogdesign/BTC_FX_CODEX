@@ -38,7 +38,7 @@
 
 ## commit hash
 
-- commit後に確定
+- `f75b40a` Sync Ver03-v1 next task tracker
 
 ## 未解決事項
 
