@@ -11,6 +11,8 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
+BTCFX-20260608-062 prepares the next boundary decision after the temporary Ver03-v2 execution review.
+
 BTCFX-20260608-060 prepares a temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit.
 
 BTCFX-20260608-060-FIX aligns the temporary Ver03-v2 report hub output path.
@@ -18,6 +20,8 @@ BTCFX-20260608-060-FIX aligns the temporary Ver03-v2 report hub output path.
 BTCFX-20260608-061 captured a temporary Ver03-v2 execution review with a report hub path failure.
 
 BTCFX-20260608-061-FIX fixes the temporary Ver03-v2 execution report hub path and reruns the diagnostic entrypoint.
+
+BTCFX-20260608-062 is complete, and its decision-prep commit is `pending_review`.
 
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
@@ -43,7 +47,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-060 is review of the temporary Ver03-v2 execution output and the daily-sync decision.
+The next recommended task after BTCFX-20260608-062 is the preflight-check task for manual diagnostic execution outputs and input availability.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -143,18 +147,19 @@ Current staged direction:
 | BTCFX-20260608-060-FIX | done | Align temporary Ver03-v2 report hub output path | Ver03-v2 | `pending_review` | Report hub output path alignment |
 | BTCFX-20260608-061 | partial | Capture temporary Ver03-v2 execution review facts | Ver03-v2 | `pending_review` | Execution failed during report hub step; facts captured |
 | BTCFX-20260608-061-FIX | done | Fix temporary Ver03-v2 execution report hub path and rerun | Ver03-v2 | `pending_review` | Temporary execution path fixed and rerun succeeded |
+| BTCFX-20260608-062 | done | Prepare next boundary decision for Ver03-v2 temporary execution results | Ver03-v2 | `pending_review` | Decision-prep document for next integration boundary |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-062
-Goal: Review BTCFX Ver03-v2 temporary execution results and decide the next integration boundary.
-Read: docs/operations/deploy/Ver03-v2_EXECUTION_REVIEW_20260609.md, docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, and only explicitly scoped decision docs
-Test: `git diff --check`
-Stop: if runtime restart, live trading, API keys, automatic order execution, or daily-sync code changes are required
+NEXT BTCFX-20260608-063
+Goal: Add preflight checks for Ver03-v2 manual diagnostic execution outputs and input availability.
+Read: scripts/run_btcfx_ver03_v2_reports.sh, docs/operations/deploy/Ver03-v2_NEXT_BOUNDARY_DECISION_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: scripts/run_btcfx_ver03_v2_reports.sh, docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Test: `bash -n scripts/run_btcfx_ver03_v2_reports.sh`; `git diff --check`
+Stop: if daily-sync code changes, runtime restart, live trading, API keys, or automatic order execution are required
 Report: compact
 ```
 
