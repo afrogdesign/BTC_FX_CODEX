@@ -160,12 +160,14 @@
    - 生成レポート候補2件は repo 外へ退避。
    - 参考資料1件は repo に採用。
 - Active Plan runtime確認結果: `運用資料/作業ログ/BTCFX-20260608-038_active_plan_runtime_status.md`
+- 監視実行コード確認結果: `運用資料/作業ログ/BTCFX-20260608-039_monitor_runtime_code_status.md`
 - `active_plan_candidates.csv` はまだ未生成。次は Ver03-v1 の監視サイクルが最新commitで走っているか確認する。
+- LaunchAgent の起動対象は `Ver03-v1` / `97c0c9b` / `.venv312/bin/python` だが、監視 PID は `2026-06-06 16:24:40` 起動の継続稼働だった。次は、安全に監視 worktree と実行中プロセスの同期状態を確認し、必要なら LaunchAgent 再起動手順を出す。
 
 ## 残作業一覧
 
 - `trend_flip_confirmed_up` は最新 `market_map_effectiveness_20260607.md` でも弱いため、ChatGPT 側で上方向転換系の扱いを再判定する。
-- `com.afrog.btc-monitor` は `ver02.6-v2` で稼働中。ローカル更新痕跡として `logs/heartbeat.txt` と `logs/last_result.json` は 2026-06-01 03:05 更新、`logs/runtime/monitor.err` は空を確認済み。次サイクル確認待ち。
+- `com.afrog.btc-monitor` の LaunchAgent 実行先は `Ver03-v1` worktree / `.venv312/bin/python` / `main.py`。ただし監視 PID は `2026-06-06 16:24:40` 起動の継続稼働で、`logs/heartbeat.txt` と `logs/last_result.json` は 2026-06-08 19:05 更新、`logs/runtime/monitor.err` は空だった。runtime 出力にはまだ Active Plan が反映されていない。
 - `feedback_daily_sync_YYYYMMDD.md` を次回生成し、AI事後評価の `eligible / AI済み / backlog / created / request_failed` を更新する。現状は `request_failed=0` だが backlog は 46 件残っている。
 - `paper_opportunity_diagnostics_20260607.md` の quality guard 集計を基準に、`require_execution_for_high_wait`、`suppress_long_high_wait`、`suppress_trend_flip_up_strong` が `sl_hit` 偏重の抑制に効くかを次回も追う。
 - `quality_guard_effectiveness_20260607.md` を基準に、daily-sync の新規観測と diagnostics の累積 closed 母集団を混同せずに評価する。必要なら `counterfactual_quality_guard` を report builder 化する。

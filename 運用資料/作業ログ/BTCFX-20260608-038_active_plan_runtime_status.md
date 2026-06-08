@@ -67,4 +67,4 @@
 
 ## commit hash
 
-- commit後に確定
+- `97c0c9b` Record Active Plan runtime status
