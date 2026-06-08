@@ -11,6 +11,9 @@ from src.presentation.sanitize import (
 )
 
 
+VER03_V2_EMAIL_SUBJECT_PREFIX = "[BTCFX Ver03-v2]"
+
+
 def _format_price(value: Any) -> str:
     try:
         return f"{float(value):,.2f}"
@@ -102,6 +105,15 @@ def _active_subject_detail(notification_context: dict[str, Any]) -> str:
         return headline
     reasons = notification_context.get("reason_labels") or ["理由未整理"]
     return str(reasons[0])
+
+
+def _apply_ver03_v2_subject_prefix(subject: str) -> str:
+    normalized = str(subject or "").strip()
+    if normalized.startswith(VER03_V2_EMAIL_SUBJECT_PREFIX):
+        return normalized
+    if not normalized:
+        return VER03_V2_EMAIL_SUBJECT_PREFIX
+    return f"{VER03_V2_EMAIL_SUBJECT_PREFIX} {normalized}"
 
 
 def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
@@ -344,7 +356,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
         ).strip()
     if result.get("ai_advice") is None:
         subject = f"[機械判定のみ] {subject}"
-    return subject
+    return _apply_ver03_v2_subject_prefix(subject)
 
 
 def build_summary_body(

@@ -9,7 +9,12 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.ai.summary import build_summary_body, build_summary_subject
+from src.ai.summary import (
+    VER03_V2_EMAIL_SUBJECT_PREFIX,
+    _apply_ver03_v2_subject_prefix,
+    build_summary_body,
+    build_summary_subject,
+)
 
 
 class SummaryFormatTest(unittest.TestCase):
@@ -57,7 +62,7 @@ class SummaryFormatTest(unittest.TestCase):
             "primary_setup_status": "ready",
             "primary_setup_reason": "inside_entry_zone_with_trigger",
             "trade_execution_gate": "pass",
-            "paper_order_status": "planned",
+            "paper_order_status": "draft",
             "warning_flags": [],
             "risk_flags": [],
             "no_trade_flags": [],
@@ -84,13 +89,14 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertEqual(provider_used, "api")
-        self.assertIn("🔥 [執行候補・強]", subject)
+        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
         self.assertIn("上方向バイアス", subject)
+        self.assertIn("【BTC:70,356】 2026-03-11 09:05 [Ver02.3] [API]", subject)
         self.assertNotIn("条件付きで検討 |", subject)
         self.assertNotIn("総合強度", subject)
         self.assertIn("これは執行候補です。", body)
-        self.assertIn("paper_order_status: planned", body)
-        self.assertIn("最終ランク: 🔥 執行候補・強（実行候補として条件がかなり整っています）", body)
+        self.assertIn("paper_order_status: draft", body)
+        self.assertIn("最終ランク: 📊 通常監視・実行不可（監視と再評価のための通知です）", body)
         self.assertIn("補足状態: 執行可（条件成立）", body)
         self.assertIn("方向判断: 相場は上方向バイアスです", body)
         self.assertIn("執行判断: 条件付きで検討", body)
@@ -100,6 +106,72 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("待機圧力: 18.0", body)
         self.assertIn("位置評価: 位置条件は悪くない", body)
         self.assertIn("【ロング/ショートのセットアップ状況】", body)
+
+    def test_active_plan_subject_prefers_ver03_v2_prefix(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-11T09:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "API",
+            "prelabel": "ENTRY_OK",
+            "signal_tier": "strong_machine",
+            "bias": "long",
+            "current_price": 70356.3,
+            "confidence": 79,
+            "rr_estimate": 1.85,
+            "confidence_direction_shadow": 88.0,
+            "confidence_execution_shadow": 72.0,
+            "confidence_wait_shadow": 18.0,
+            "phase": "pullback",
+            "long_display_score": 72,
+            "short_display_score": 55,
+            "score_gap": 17,
+            "market_regime": "uptrend",
+            "signals_4h": "long",
+            "signals_1h": "long",
+            "signals_15m": "long",
+            "funding_rate_display": "ほぼ中立 (+0.0037%)",
+            "atr_ratio": 0.85,
+            "volume_ratio": 1.21,
+            "support_zones": [{"low": 69900.0, "high": 70010.0, "distance_from_price": 346.3}],
+            "resistance_zones": [{"low": 70450.0, "high": 70600.0, "distance_from_price": 93.7}],
+            "long_setup": {
+                "status": "ready",
+                "entry_zone": {"low": 70000.0, "high": 70100.0},
+                "stop_loss": 69700.0,
+                "tp1": 70800.0,
+                "tp2": 71200.0,
+            },
+            "short_setup": {
+                "status": "watch",
+                "entry_zone": {"low": 70600.0, "high": 70700.0},
+                "stop_loss": 70900.0,
+                "tp1": 70000.0,
+                "tp2": 69500.0,
+            },
+            "primary_setup_status": "ready",
+            "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "trade_execution_gate": "pass",
+            "paper_order_status": "draft",
+            "warning_flags": [],
+            "risk_flags": [],
+            "no_trade_flags": [],
+            "ai_advice": {
+                "decision": "LONG",
+                "quality": "A",
+                "confidence": 0.82,
+                "primary_reason": "上方向は維持だが断定ではなく条件付きで見る局面。",
+                "next_condition": "出来高維持を確認",
+                "warnings": [],
+            },
+            "active_primary_action": "ACTIVE_LIMIT_RETEST",
+            "active_headline": "押し目待ちで監視",
+        }
+
+        subject = build_summary_subject(payload)
+
+        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
+        self.assertIn("押し目買い待ち / 実弾不可・行動計画 | 押し目待ちで監視", subject)
+        self.assertIn("【BTC:70,356】 2026-03-11 09:05 [Ver02.3] [API]", subject)
 
     def test_attention_subject_and_body_are_wait_first(self) -> None:
         payload = {
@@ -139,7 +211,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報・売買非推奨] "))
+        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} [機械判定のみ] 👀 [注意報・売買非推奨] "))
         self.assertIn("下方向バイアス", subject)
         self.assertNotIn("🔥", subject)
         self.assertNotIn("🟠", subject)
@@ -194,7 +266,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertTrue(subject.startswith("[機械判定のみ] "))
+        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} [機械判定のみ] "))
         self.assertIn("🟠 [高優先監視・実行不可]", subject)
         self.assertIn("下方向バイアス", body)
         self.assertIn("方向・構造は強いため、高優先で監視する通知です。", body)
@@ -207,6 +279,17 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("上側流動性が近く先に振られやすい", body)
         self.assertNotIn("bid_wall_close", body)
         self.assertNotIn("upper_liquidity_close", body)
+
+    def test_ver03_v2_subject_prefix_helper_strips_and_does_not_duplicate(self) -> None:
+        already_prefixed = f"  {VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名  "
+        self.assertEqual(
+            _apply_ver03_v2_subject_prefix(already_prefixed),
+            f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名",
+        )
+        self.assertEqual(
+            _apply_ver03_v2_subject_prefix("  既存件名  "),
+            f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名",
+        )
 
     def test_entry_ok_invalid_is_not_presented_as_strong_entry(self) -> None:
         payload = {
