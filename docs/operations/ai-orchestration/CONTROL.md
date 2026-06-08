@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-072 proves the Ver03-v2 Active Plan intraperiod verification path can escape `no_ohlcv` with a minimal local OHLCV sample.
+BTCFX-20260608-073 defines a safe local OHLCV manual import workflow for Ver03-v2 intraperiod verification.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
@@ -67,9 +67,9 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-072 is the safe local OHLCV supply or manual import workflow design task, not archive.
+The next recommended task after BTCFX-20260608-073 is a small safe coverage or quality checker for local OHLCV input.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_OHLCV_SAMPLE_RUN_20260609.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_OHLCV_MANUAL_IMPORT_20260609.md`.
 
 ---
 
@@ -180,16 +180,17 @@ Current staged direction:
 | BTCFX-20260608-070 | done | Prepare exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files | Ver03-v2 | `pending_review` | Exact-path cleanup/archive plan for generated diagnostics |
 | BTCFX-20260608-071 | done | Lock a purpose-specific OHLCV input contract view for Ver03-v2 intraperiod verification | Ver03-v2 | `pending_review` | Safe contract view for local OHLCV input and preflight-only review |
 | BTCFX-20260608-072 | done | Prove the Ver03-v2 Active Plan intraperiod verification path can escape `no_ohlcv` with a minimal local OHLCV sample | Ver03-v2 | `pending_review` | Minimal local OHLCV sample run reached non-`no_ohlcv` outcomes |
+| BTCFX-20260608-073 | done | Define a safe local OHLCV manual import workflow for Ver03-v2 intraperiod verification | Ver03-v2 | `pending_review` | Safe maintained-local OHLCV import workflow defined |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-073
-Goal: Define a safe local OHLCV supply or manual import workflow for Ver03-v2 intraperiod verification.
-Read: docs/operations/deploy/Ver03-v2_OHLCV_SAMPLE_RUN_20260609.md, docs/operations/deploy/Ver03-v2_OHLCV_INPUT_CONTRACT_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/deploy/Ver03-v2_OHLCV_MANUAL_IMPORT_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-074
+Goal: Add a small safe coverage or quality checker for local OHLCV input.
+Read: docs/operations/deploy/Ver03-v2_OHLCV_MANUAL_IMPORT_20260609.md, docs/operations/deploy/Ver03-v2_OHLCV_INPUT_CONTRACT_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/deploy/Ver03-v2_OHLCV_COVERAGE_CHECKER_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
 Stop: if external OHLCV fetch, API keys, runtime restart, main.py, run_cycle, live trading, automatic order execution, evaluator semantics changes, or paper_positions.csv integration are required
 Report: compact
