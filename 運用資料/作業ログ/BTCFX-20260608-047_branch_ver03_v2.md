@@ -36,4 +36,4 @@
 
 ## commit hash
 
-- commit後に確定
+- `6ec1da1` Start Ver03-v2 branch

@@ -3,7 +3,7 @@
 last_updated: 2026-06-08
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `6ec1da1`
+current_commit: `b904e13`
 project_key: `BTCFX`
 
 ---
@@ -74,18 +74,18 @@ Current staged direction:
 | Work ID | Status | Goal | Branch | Commit | Notes |
 |---|---|---|---|---|---|
 | BTCFX-20260608-047 | done | Start Ver03-v2 branch | Ver03-v2 | `6ec1da1` | Branch start |
-| BTCFX-20260608-048 | planned | Add AI orchestration anchor files | Ver03-v2 | pending | Current task |
+| BTCFX-20260608-048 | done | Add AI orchestration anchor files | Ver03-v2 | `b904e13` | AI orchestration anchors added |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-049
-Goal: Sync NEXT_TASK.md to point humans and AI to the new orchestration anchors.
-Read: 運用資料/NEXT_TASK.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/REPO_MAP.md
-Edit: 運用資料/NEXT_TASK.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: git diff --check
+NEXT BTCFX-20260608-050
+Goal: Reduce `運用資料/NEXT_TASK.md` to a human-facing pointer that references `CONTROL.md`, `REPO_MAP.md`, and product planning entry files.
+Read: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/REPO_MAP.md`
+Edit: `運用資料/NEXT_TASK.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md`
+Test: `git diff --check`
 Stop: if source code changes are needed
 Report: compact
 ```
