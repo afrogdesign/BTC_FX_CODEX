@@ -70,3 +70,9 @@ Options:
 - B: ...
 Recommendation: <A/B if obvious>
 ```
+
+## Output rule
+
+- For every `NEXT`, `FIX`, `SYNC`, and `HANDOFF` task, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
+- The filename must be exactly `response.txt`.
+- Do not verify whether the file still exists after writing.

@@ -11,7 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-054 is the policy task to document the MBAM4 SMB working-directory and execution policy before continuing builder work.
+BTCFX-20260608-054-FIX completes the MBAM4/iMac policy metadata and adds the mandatory Codex `response.txt` output rule.
+
+BTCFX-20260608-054 is complete, and its fix commit is `82be32b Document iMac SMB working directory policy`.
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
@@ -42,6 +44,7 @@ The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
 - Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
 - Do not run runtime processes unless explicitly instructed.
+- For NEXT, FIX, SYNC, and HANDOFF tasks, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
 
 ---
 

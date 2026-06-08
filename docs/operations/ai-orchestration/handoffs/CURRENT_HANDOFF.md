@@ -10,6 +10,7 @@ current_commit: `cd0e07f`
 Ver03-v2 has completed the helper evaluator, fixture test, and edge-case fix work for Active Plan intraperiod outcomes.
 
 This handoff now records the MBAM4 SMB working-directory and execution policy before the next builder task starts.
+The mandatory Codex response rule is that the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` as `response.txt`.
 
 ## Current state
 
@@ -32,6 +33,7 @@ This handoff now records the MBAM4 SMB working-directory and execution policy be
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
 - Pure unit tests may run on MBAM4 only when they are independent of runtime state, deployment paths, logs, APIs, or iMac-only files.
 - Do not run runtime processes unless explicitly instructed.
+- For NEXT, FIX, SYNC, and HANDOFF tasks, write the final compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
 
 ## Important constraints
 
@@ -51,7 +53,8 @@ This handoff now records the MBAM4 SMB working-directory and execution policy be
 | BTCFX-20260608-048 | done | `b904e13` | Add AI orchestration anchors |
 | BTCFX-20260608-049 | done | `943fe55` | Sync AI orchestration state |
 | BTCFX-20260608-053 | done | `cd0e07f` | Implemented active plan intraperiod evaluator helper and fixed edge cases |
-| BTCFX-20260608-054 | done | `TBD` | Documented MBAM4 SMB working-directory and execution policy |
+| BTCFX-20260608-054 | done | `82be32b` | Documented MBAM4 SMB working-directory and execution policy |
+| BTCFX-20260608-054-FIX | done | `82be32b` | Completed policy metadata and added the response output rule |
 
 ## Next prompt for Codex
 

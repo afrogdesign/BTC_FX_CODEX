@@ -83,6 +83,10 @@ PUSH: origin/<branch> | none
 NOTES: <one line only if needed>
 ```
 
+- After commit and push, write the same compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
+- The filename must be exactly `response.txt`.
+- Do not verify whether the file still exists after writing.
+
 ## Project-specific prohibitions
 
 - Do not add live order APIs.
