@@ -11,6 +11,8 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
+BTCFX-20260608-060 prepares a temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit.
+
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
 BTCFX-20260608-057 wires the Active Plan intraperiod outcome builder into `tools/log_feedback.py`.
@@ -25,6 +27,8 @@ BTCFX-20260609-059 is complete, and its sync commit is `pending_review`.
 
 BTCFX-20260608-058 is complete, and its implementation commit is `pending_review`.
 
+BTCFX-20260608-060 is complete, and its implementation commit is `pending_review`.
+
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
 BTCFX-20260608-055A is complete, and its fix commit is `6bc8ac8 Update CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work`.
@@ -33,7 +37,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-058 is deployment prep for the Ver03-v2 label and execution entrypoint audit.
+The next recommended task after BTCFX-20260608-060 is review of the temporary Ver03-v2 execution output and the daily-sync decision.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -129,18 +133,19 @@ Current staged direction:
 | BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `1d23850` | CLI wiring only; evaluator semantics unchanged |
 | BTCFX-20260608-058 | done | Add Markdown report wiring for Active Plan intraperiod outcome CSV | Ver03-v2 | `pending_review` | Report wiring only; no builder changes |
 | BTCFX-20260609-059 | done | Sync AI orchestration metadata rules | Ver03-v2 | `pending_review` | AI orchestration metadata rule sync |
+| BTCFX-20260608-060 | done | Prepare temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit | Ver03-v2 | `pending_review` | Temporary diagnostic entrypoint and label audit |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-060
-Goal: Prepare a temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit.
-Read: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, tools/log_feedback.py
-Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, and only explicitly scoped deploy/entrypoint docs or scripts
+NEXT BTCFX-20260608-061
+Goal: Review temporary Ver03-v2 execution output and decide whether to wire it into daily-sync or keep manual.
+Read: docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, and only explicitly scoped follow-up docs
 Test: `git diff --check`
-Stop: if runtime restart, live trading, API keys, or automatic order execution are required
+Stop: if runtime restart, live trading, API keys, automatic order execution, or daily-sync code changes are required
 Report: compact
 ```
 
