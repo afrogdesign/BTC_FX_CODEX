@@ -1024,6 +1024,15 @@ def _load_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fp))
 
 
+def _load_csv_rows_with_fieldnames(path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    if not path.exists():
+        return [], []
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        rows = list(reader)
+        return rows, list(reader.fieldnames or [])
+
+
 def _is_stale_file(target: Path, sources: list[Path]) -> bool:
     if not target.exists():
         return True
@@ -8148,7 +8157,7 @@ def _active_candidate_report_stats(rows: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
-def build_active_plan_candidate_outcomes_report(
+def _build_active_plan_candidate_outcomes_report_from_candidate_outcomes(
     *,
     base_dir: Path,
     candidate_outcomes_path: Path | None = None,
@@ -8331,6 +8340,234 @@ def build_active_plan_candidate_outcomes_report(
     if output_md is not None:
         _ensure_parent(output_md)
         output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_active_plan_candidate_outcomes_report(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    trades_path: Path | None = None,
+    candidate_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
+    resolved_output_md = output_md or (
+        base_dir / "運用資料" / "reports" / "analysis" / f"active_plan_candidate_outcomes_{resolved_report_date}.md"
+    )
+
+    if candidate_outcomes_path is not None and candidates_path is None and trades_path is None:
+        return _build_active_plan_candidate_outcomes_report_from_candidate_outcomes(
+            base_dir=base_dir,
+            candidate_outcomes_path=candidate_outcomes_path,
+            output_md=resolved_output_md,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_candidates.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+
+    candidate_rows, candidate_fields = _load_csv_rows_with_fieldnames(candidates_path)
+    trade_rows, trade_fields = _load_csv_rows_with_fieldnames(trades_path)
+
+    if date_from_filter or date_to_filter:
+        candidate_rows = [
+            row
+            for row in candidate_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+        trade_rows = [
+            row
+            for row in trade_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    def _count_value(row: dict[str, Any], key: str) -> str:
+        return str(row.get(key, "")).strip() or "blank"
+
+    def _has_complete_entry_tp_sl(row: dict[str, Any]) -> bool:
+        return all(str(row.get(field, "")).strip() for field in ("entry_price", "stop_loss", "tp1", "tp2"))
+
+    def _has_followup_trade(row: dict[str, Any]) -> bool:
+        candidate_dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if candidate_dt is None:
+            return False
+        for trade_row in trade_rows:
+            trade_dt = _parse_dt(str(trade_row.get("timestamp_jst", "")))
+            if trade_dt is not None and trade_dt > candidate_dt:
+                return True
+        return False
+
+    candidate_type_counts = Counter(_count_value(row, "candidate_type") for row in candidate_rows)
+    candidate_status_counts = Counter(_count_value(row, "candidate_status") for row in candidate_rows)
+    side_counts = Counter(_count_value(row, "side") for row in candidate_rows)
+    entry_mode_counts = Counter(_count_value(row, "entry_mode") for row in candidate_rows)
+
+    entry_tp_sl_columns_present = all(field in candidate_fields for field in ("entry_price", "stop_loss", "tp1", "tp2"))
+    trades_active_primary_action_present = "active_primary_action" in trade_fields
+    complete_entry_tp_sl_count = sum(1 for row in candidate_rows if _has_complete_entry_tp_sl(row))
+    followup_trade_count = sum(1 for row in candidate_rows if _has_followup_trade(row))
+
+    if not candidate_rows:
+        provisional_outcome = "候補なし"
+    elif not entry_tp_sl_columns_present:
+        provisional_outcome = "候補あり・entry/TP/SL列不足"
+    elif complete_entry_tp_sl_count == 0:
+        provisional_outcome = "候補あり・entry/TP/SL値未充足"
+    elif followup_trade_count == 0:
+        provisional_outcome = "候補あり・後続trade未確認"
+    else:
+        provisional_outcome = "候補あり・後続tradeあり"
+
+    lines = [
+        "# Active Plan 候補別暫定評価",
+        "",
+        "## 1. 概要",
+        f"- report_date: `{resolved_report_date}`",
+        f"- candidates_path: `{candidates_path}`",
+        f"- trades_path: `{trades_path}`",
+        f"- date_from: `{date_from_filter or 'all'}`",
+        f"- date_to: `{date_to_filter or 'all'}`",
+        f"- candidate rows: {len(candidate_rows)}",
+        f"- trade rows: {len(trade_rows)}",
+        "",
+        "## 2. 入力状態",
+    ]
+
+    if not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv: missing")
+    elif candidate_rows:
+        lines.append(f"- active_plan_candidates.csv: rows={len(candidate_rows)}")
+    else:
+        lines.append("- active_plan_candidates.csv: header only")
+
+    if not trades_path.exists():
+        lines.append("- trades.csv: missing")
+    elif trade_rows:
+        lines.append(f"- trades.csv: rows={len(trade_rows)}")
+    else:
+        lines.append("- trades.csv: header only")
+
+    lines.extend(
+        [
+            f"- entry/tp/sl columns present: {'yes' if entry_tp_sl_columns_present else 'no'}",
+            f"- trades has active_primary_action column: {'yes' if trades_active_primary_action_present else 'no'}",
+            f"- candidates with complete entry/tp/sl values: {complete_entry_tp_sl_count}/{len(candidate_rows)}",
+            f"- candidates with followup trade rows: {followup_trade_count}/{len(candidate_rows)}",
+            "",
+            "## 3. 候補タイプ別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. candidate_status別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for candidate_status, count in candidate_status_counts.most_common():
+            lines.append(f"- `{candidate_status}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. side別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. entry_mode別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for entry_mode, count in entry_mode_counts.most_common():
+            lines.append(f"- `{entry_mode}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. 暫定outcome",
+            f"- candidates with complete entry/tp/sl values: {complete_entry_tp_sl_count}/{len(candidate_rows)}",
+            f"- candidates with followup trade rows: {followup_trade_count}/{len(candidate_rows)}",
+            f"- provisional verdict: {provisional_outcome}",
+            "",
+            "## 8. 代表候補",
+        ]
+    )
+
+    if candidate_rows:
+        sorted_candidates = sorted(candidate_rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_candidates[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                f"{str(row.get('timestamp_jst', '')).strip()} / "
+                f"{str(row.get('candidate_id', '')).strip()} / "
+                f"{str(row.get('active_primary_action', '')).strip()} / "
+                f"{str(row.get('candidate_type', '')).strip()} / "
+                f"{str(row.get('candidate_status', '')).strip()} / "
+                f"{str(row.get('side', '')).strip()} / "
+                f"{str(row.get('entry_mode', '')).strip()} / "
+                f"{str(row.get('entry_price', '')).strip()} / "
+                f"{str(row.get('stop_loss', '')).strip()} / "
+                f"{str(row.get('tp1', '')).strip()} / "
+                f"{str(row.get('tp2', '')).strip()} / "
+                f"{str(row.get('rr_current_tp1', '')).strip()} / "
+                f"{str(row.get('rr_zone_mid_tp1', '')).strip()} / "
+                f"{str(row.get('next_condition', '')).strip()}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 9. 未解決事項",
+            "- このレポートは暫定版で、TP/SL 到達の厳密判定はまだ行っていない。",
+            "- 後続trade行の有無は timestamp_jst の後続行で簡易判定している。",
+            "- `active_plan_candidates.csv` が header only の場合は、候補行が発生するまで再評価を待つ。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    _ensure_parent(resolved_output_md)
+    resolved_output_md.write_text(report, encoding="utf-8")
     return report
 
 
@@ -10895,8 +11132,11 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_intraperiod_parser.add_argument("--evaluation-window-hours", type=float, default=24.0)
 
     active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
+    active_plan_candidate_outcomes_report_parser.add_argument("--candidates-path")
+    active_plan_candidate_outcomes_report_parser.add_argument("--trades-path")
     active_plan_candidate_outcomes_report_parser.add_argument("--candidate-outcomes-path")
     active_plan_candidate_outcomes_report_parser.add_argument("--output-md")
+    active_plan_candidate_outcomes_report_parser.add_argument("--active-plan-report-date")
     active_plan_candidate_outcomes_report_parser.add_argument("--date-from", default="")
     active_plan_candidate_outcomes_report_parser.add_argument("--date-to", default="")
     active_plan_candidate_outcomes_report_parser.add_argument("--limit", type=int, default=20)
@@ -10957,6 +11197,8 @@ def main() -> None:
         argv = ["build-report-hub", *argv[1:]]
     if argv and argv[0] == "--build-active-trade-plan-diagnostics":
         argv = ["build-active-trade-plan-diagnostics-report", *argv[1:]]
+    if argv and argv[0] == "--build-active-plan-candidate-outcomes":
+        argv = ["build-active-plan-candidate-outcomes-report", *argv[1:]]
     args = parser.parse_args(argv)
     base_dir = BASE_DIR
 
@@ -11210,26 +11452,27 @@ def main() -> None:
         return
 
     if args.command == "build-active-plan-candidate-outcomes-report":
-        default_output_md = (
-            base_dir
-            / "運用資料"
-            / "reports"
-            / "analysis"
-            / f"active_plan_candidate_outcomes_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
-        )
-        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report_date = str(args.active_plan_report_date or "").strip()
+        output_md = Path(args.output_md) if args.output_md else None
         report = build_active_plan_candidate_outcomes_report(
             base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
             candidate_outcomes_path=Path(args.candidate_outcomes_path) if args.candidate_outcomes_path else None,
             output_md=output_md,
+            report_date=report_date or None,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
             limit=int(args.limit),
         )
-        if output_md:
-            print(output_md)
-        else:
-            print(report)
+        resolved_output_md = output_md or (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_plan_candidate_outcomes_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        print(resolved_output_md)
         return
 
     if args.command == "build-paper-entry-sl-wait-redesign-report":
