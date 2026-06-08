@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-076 maps required market information to existing exchange/public data sources and designs the automatic fetch-to-local-diagnostic data flow before any execution or implementation.
+BTCFX-20260608-077 defines the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output before any implementation.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
@@ -71,9 +71,11 @@ Execution and deployment are paused until the automatic exchange/public market-d
 
 Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/reference only, not the operating path.
 
-The next recommended task after BTCFX-20260608-076 is BTCFX-20260608-077: design the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output.
+After 077, stop for human / ChatGPT review before any implementation task.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_MARKET_DATA_SOURCE_MAP_20260609.md`.
+The next recommended task after review / meeting is BTCFX-20260608-078: implement standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool.
+
+The active deliverable is `docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_BOUNDARY_20260609.md`.
 
 ---
 
@@ -188,6 +190,7 @@ Current staged direction:
 | BTCFX-20260608-074 | done | Re-align Ver03-v2 from manual/local OHLCV proof toward exchange-auto market data design before further execution, deployment, or script expansion | Ver03-v2 | `pending_review` | Docs-only auto market data replan; manual OHLCV downgraded to fallback/reference |
 | BTCFX-20260608-075 | done | Define winning-trade criteria and required market information for Ver03-v2 Active Plan intraperiod verification before further execution or implementation | Ver03-v2 | `pending_review` | Docs-only winning-trade criteria and required market information defined |
 | BTCFX-20260608-076 | done | Map required market information to existing exchange/public data sources and design the automatic fetch-to-local-diagnostic data flow before execution or implementation | Ver03-v2 | `pending_review` | Docs-only market-data source map and fetch-to-local-diagnostic design |
+| BTCFX-20260608-077 | done | Define the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output before implementation | Ver03-v2 | `pending_review` | Docs-only fetch-to-local-diagnostic boundary with review checkpoint |
 
 ---
 
