@@ -2,9 +2,34 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+
+MIN_OUTCOME_COLUMNS = [
+    "candidate_id",
+    "signal_id",
+    "timestamp_jst",
+    "candidate_type",
+    "active_primary_action",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "stop_price",
+    "tp1_price",
+    "tp2_price",
+    "outcome",
+    "entry_reached_time",
+    "first_exit_time",
+    "first_exit_reason",
+    "mfe_price",
+    "mae_price",
+    "mfe_r",
+    "mae_r",
+    "notes",
+]
 
 
 def _as_dict(candidate_row: Any) -> dict[str, Any]:
@@ -72,6 +97,14 @@ def _format_price(value: float | None) -> str:
 
 def _format_ratio(value: float | None) -> str:
     return "" if value is None else f"{value:.4f}"
+
+
+def _blank_if_missing(value: Any) -> Any:
+    if value is None:
+        return ""
+    if pd.isna(value):
+        return ""
+    return value
 
 
 def _normalize_dt(value: datetime) -> datetime:
@@ -310,4 +343,56 @@ def evaluate_active_plan_intraperiod_candidate(
     return result
 
 
-__all__ = ["evaluate_active_plan_intraperiod_candidate"]
+def build_active_plan_intraperiod_outcome_rows(
+    candidates_df: pd.DataFrame | None,
+    ohlcv_df: pd.DataFrame | None,
+    *,
+    now: datetime | None = None,
+    timeout_hours: float = 24.0,
+) -> pd.DataFrame:
+    if candidates_df is None or candidates_df.empty:
+        return pd.DataFrame(columns=MIN_OUTCOME_COLUMNS)
+
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates_df.to_dict(orient="records"):
+        evaluated = evaluate_active_plan_intraperiod_candidate(
+            candidate,
+            ohlcv_df,
+            now=now,
+            timeout_hours=timeout_hours,
+        )
+        row = {key: _blank_if_missing(value) for key, value in evaluated.items()}
+        for column in MIN_OUTCOME_COLUMNS:
+            row.setdefault(column, "")
+        rows.append(row)
+
+    output_df = pd.DataFrame(rows)
+    ordered_columns = MIN_OUTCOME_COLUMNS + [column for column in output_df.columns if column not in MIN_OUTCOME_COLUMNS]
+    return output_df.loc[:, ordered_columns]
+
+
+def write_active_plan_intraperiod_outcomes(
+    candidates_csv_path: str | Path,
+    ohlcv_df: pd.DataFrame | None,
+    output_csv_path: str | Path,
+    *,
+    now: datetime | None = None,
+    timeout_hours: float = 24.0,
+) -> pd.DataFrame:
+    candidates_df = pd.read_csv(candidates_csv_path)
+    output_df = build_active_plan_intraperiod_outcome_rows(
+        candidates_df,
+        ohlcv_df,
+        now=now,
+        timeout_hours=timeout_hours,
+    )
+    output_df.to_csv(output_csv_path, index=False)
+    return output_df
+
+
+__all__ = [
+    "MIN_OUTCOME_COLUMNS",
+    "build_active_plan_intraperiod_outcome_rows",
+    "evaluate_active_plan_intraperiod_candidate",
+    "write_active_plan_intraperiod_outcomes",
+]

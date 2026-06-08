@@ -11,9 +11,11 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260609-056 completes the workflow sync from the MBAM4/SMB split model to an iMac-only local workflow.
+BTCFX-20260608-055 implements the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
 
 BTCFX-20260609-056 is complete, and its fix commit is `447b0c6 Replace split workflow with local iMac-only workflow`.
+
+BTCFX-20260608-055 is complete, and its implementation commit is pending this task's commit.
 
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
@@ -23,7 +25,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next builder task after this workflow sync remains BTCFX-20260608-055.
+The next recommended task after BTCFX-20260608-055 is CLI/report wiring for the intraperiod outcome CSV.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -109,6 +111,7 @@ Current staged direction:
 | BTCFX-20260608-054-FIX | done | Complete MBAM4/iMac policy metadata and add mandatory Codex response output rule | Ver03-v2 | `46f7bfb` | Metadata correction and response rule |
 | BTCFX-20260608-055A | done | Update CURRENT_HANDOFF.md for ChatGPT/Codex thread handoff before builder work | Ver03-v2 | `6bc8ac8` | Handoff refresh before builder task |
 | BTCFX-20260608-055B | done | Document SMB file access and iMac SSH git workflow | Ver03-v2 | `4ea589f` | SMB read/write only; git/tests/commit/push on iMac via SSH |
+| BTCFX-20260608-055 | done | Implement builder for Active Plan intraperiod outcome rows and CSV output | Ver03-v2 | `pending` | Builder layer only; no CLI/report wiring |
 | BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `447b0c6` | Docs-only workflow sync before builder task |
 
 ---
@@ -116,12 +119,12 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-055
-Goal: Implement the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
-Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: src/trade/active_plan_intraperiod.py, tests/test_active_plan_candidate_intraperiod_outcomes.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-057
+Goal: Add CLI/report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
+Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, src/trade/active_plan_intraperiod.py
+Edit: wiring-only files required for CLI/report output, plus docs/operations/ai-orchestration/CONTROL.md and docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
-Stop: if source code changes are needed beyond the builder and its tests
+Stop: if evaluator semantics or runtime integration are required
 Report: compact
 ```
 
