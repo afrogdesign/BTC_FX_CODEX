@@ -53,6 +53,7 @@ from tools.log_feedback import (
     build_phase1b_promotion_report,
     build_report_hub,
     build_relaxation_candidates_report,
+    build_active_plan_candidate_intraperiod_outcomes,
     build_shadow_log,
     evaluate_trade_row,
     export_review_queue,
@@ -62,6 +63,7 @@ from tools.log_feedback import (
     sync_ai_post_reviews,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
+from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS
 
 
 class LogFeedbackTest(unittest.TestCase):
@@ -4373,6 +4375,363 @@ class LogFeedbackTest(unittest.TestCase):
 
         mocked_report.assert_called_once()
         self.assertEqual(mocked_report.call_args.kwargs["output_md"], Path("/tmp/soft_risk_alias.md"))
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_writes_default_csv_and_preserves_mapping(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            candidates_path = logs_csv / "active_plan_paper_candidates.csv"
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "entry_zone_low",
+                        "entry_zone_high",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                        "notes",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-001",
+                        "source_signal_id": "sig-001",
+                        "signal_id": "legacy-sig-001",
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                        "notes": "seed",
+                    }
+                )
+
+            ohlcv_path = logs_csv / "active_plan_intraperiod_ohlcv.csv"
+            with ohlcv_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "open": "100",
+                        "high": "101",
+                        "low": "99",
+                        "close": "100.5",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T11:00:00+09:00",
+                        "open": "100.5",
+                        "high": "105.2",
+                        "low": "100",
+                        "close": "104.8",
+                    }
+                )
+
+            output_path = build_active_plan_candidate_intraperiod_outcomes(
+                base_dir=base_dir,
+                candidates_path=candidates_path,
+                ohlcv_path=ohlcv_path,
+                evaluation_window_hours=24.0,
+            )
+
+            self.assertEqual(output_path, logs_csv / "active_plan_candidate_intraperiod_outcomes.csv")
+            self.assertTrue(output_path.exists())
+            with output_path.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertTrue(set(MIN_OUTCOME_COLUMNS).issubset(row.keys()))
+            self.assertEqual(row["candidate_id"], "cand-001")
+            self.assertEqual(row["source_signal_id"], "sig-001")
+            self.assertEqual(row["signal_id"], "sig-001")
+            self.assertEqual(row["outcome"], "tp1_first")
+            self.assertEqual(row["first_exit_reason"], "tp1")
+            self.assertEqual(row["entry_reached_time"], "2026-06-01T10:00:00+09:00")
+            self.assertEqual(row["first_exit_time"], "2026-06-01T11:00:00+09:00")
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_returns_no_ohlcv_when_ohlcv_path_missing_or_omitted(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            candidates_path = logs_csv / "active_plan_paper_candidates.csv"
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "entry_zone_low",
+                        "entry_zone_high",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-no-ohlcv",
+                        "source_signal_id": "sig-no-ohlcv",
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                    }
+                )
+
+            omitted_output = build_active_plan_candidate_intraperiod_outcomes(
+                base_dir=base_dir,
+                candidates_path=candidates_path,
+                evaluation_window_hours=24.0,
+            )
+            missing_output = build_active_plan_candidate_intraperiod_outcomes(
+                base_dir=base_dir,
+                candidates_path=candidates_path,
+                ohlcv_path=logs_csv / "missing.csv",
+                output_csv=logs_csv / "active_plan_candidate_intraperiod_outcomes_missing.csv",
+                evaluation_window_hours=24.0,
+            )
+
+            for output_path in [omitted_output, missing_output]:
+                with output_path.open("r", newline="", encoding="utf-8") as fp:
+                    rows = list(csv.DictReader(fp))
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["outcome"], "no_ohlcv")
+                self.assertEqual(rows[0]["first_exit_reason"], "")
+                self.assertEqual(rows[0]["candidate_id"], "cand-no-ohlcv")
+
+    def test_build_active_plan_candidate_intraperiod_outcomes_filters_date_range_without_changing_outcome(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            candidates_path = logs_csv / "active_plan_paper_candidates.csv"
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "entry_zone_low",
+                        "entry_zone_high",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-in-range",
+                        "source_signal_id": "sig-in-range",
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-out-range",
+                        "source_signal_id": "sig-out-range",
+                        "timestamp_jst": "2026-06-02T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                    }
+                )
+
+            ohlcv_path = logs_csv / "active_plan_intraperiod_ohlcv.csv"
+            with ohlcv_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "open": "100",
+                        "high": "101",
+                        "low": "99",
+                        "close": "100.5",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T11:00:00+09:00",
+                        "open": "100.5",
+                        "high": "105.2",
+                        "low": "100",
+                        "close": "104.8",
+                    }
+                )
+
+            output_path = build_active_plan_candidate_intraperiod_outcomes(
+                base_dir=base_dir,
+                candidates_path=candidates_path,
+                ohlcv_path=ohlcv_path,
+                output_csv=logs_csv / "active_plan_candidate_intraperiod_outcomes_filtered.csv",
+                date_from="2026-06-01",
+                date_to="2026-06-01",
+                evaluation_window_hours=24.0,
+            )
+
+            with output_path.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+
+            self.assertEqual([row["candidate_id"] for row in rows], ["cand-in-range"])
+            self.assertEqual(rows[0]["outcome"], "tp1_first")
+
+    def test_main_build_active_plan_candidate_intraperiod_outcomes_accepts_cli_arguments(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            candidates_path = logs_csv / "active_plan_paper_candidates.csv"
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "entry_zone_low",
+                        "entry_zone_high",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-cli",
+                        "source_signal_id": "sig-cli",
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                    }
+                )
+
+            ohlcv_path = logs_csv / "active_plan_intraperiod_ohlcv.csv"
+            with ohlcv_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T10:00:00+09:00",
+                        "open": "100",
+                        "high": "101",
+                        "low": "99",
+                        "close": "100.5",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-01T11:00:00+09:00",
+                        "open": "100.5",
+                        "high": "105.2",
+                        "low": "100",
+                        "close": "104.8",
+                    }
+                )
+
+            output_path = logs_csv / "active_plan_candidate_intraperiod_outcomes_cli.csv"
+            from io import StringIO
+            from contextlib import redirect_stdout
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "log_feedback.py",
+                    "build-active-plan-candidate-intraperiod-outcomes",
+                    "--candidates-path",
+                    str(candidates_path),
+                    "--ohlcv-path",
+                    str(ohlcv_path),
+                    "--output-csv",
+                    str(output_path),
+                    "--evaluation-window-hours",
+                    "24",
+                ],
+            ):
+                buffer = StringIO()
+                with redirect_stdout(buffer):
+                    main()
+
+            self.assertIn(str(output_path), buffer.getvalue())
+            self.assertTrue(output_path.exists())
 
 
 if __name__ == "__main__":

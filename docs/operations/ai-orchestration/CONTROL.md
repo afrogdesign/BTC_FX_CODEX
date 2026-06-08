@@ -3,7 +3,7 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `8eecd4e`
+current_commit: `14e6fa3`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -11,11 +11,13 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-055 implements the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
+BTCFX-20260608-057 wires the Active Plan intraperiod outcome builder into `tools/log_feedback.py`.
 
 BTCFX-20260609-056 is complete, and its fix commit is `447b0c6 Replace split workflow with local iMac-only workflow`.
 
 BTCFX-20260608-055 is complete, and its implementation commit is `8eecd4e Implement active plan intraperiod outcome builder`.
+
+BTCFX-20260608-057 is complete, and its implementation commit is pending this task's commit.
 
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
@@ -25,7 +27,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-055 is CLI/report wiring for the intraperiod outcome CSV.
+The next recommended task after BTCFX-20260608-057 is report wiring for the intraperiod outcome CSV.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -113,6 +115,7 @@ Current staged direction:
 | BTCFX-20260608-055B | done | Document SMB file access and iMac SSH git workflow | Ver03-v2 | `4ea589f` | SMB read/write only; git/tests/commit/push on iMac via SSH |
 | BTCFX-20260608-055 | done | Implement builder for Active Plan intraperiod outcome rows and CSV output | Ver03-v2 | `8eecd4e` | Builder layer only; no CLI/report wiring |
 | BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `447b0c6` | Docs-only workflow sync before builder task |
+| BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `pending` | CLI wiring only; evaluator semantics unchanged |
 
 ---
 

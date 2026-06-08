@@ -31,6 +31,11 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
+from src.trade.active_plan_intraperiod import (
+    MIN_OUTCOME_COLUMNS,
+    build_active_plan_intraperiod_outcome_rows,
+    write_active_plan_intraperiod_outcomes,
+)
 from src.trade.observation_gate import (
     determine_phase1_observation_gate,
     is_confidence_watch_learning_candidate,
@@ -7730,6 +7735,15 @@ def _active_plan_load_ohlcv_rows(path: Path | None) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda item: item["dt"])
 
 
+def _load_active_plan_intraperiod_ohlcv_df(path: Path | None) -> pd.DataFrame | None:
+    if path is None or not path.exists():
+        return None
+    try:
+        return pd.read_csv(path, keep_default_na=False)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
 def _active_plan_candidate_valid(candidate: dict[str, Any]) -> bool:
     side = str(candidate.get("side", "")).strip().lower()
     entry_mode = str(candidate.get("entry_mode", "")).strip()
@@ -7977,38 +7991,30 @@ def build_active_plan_candidate_intraperiod_outcomes(
     candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
     output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
 
-    candidates = _load_csv_rows(candidates_path)
+    candidates_df = pd.read_csv(candidates_path, keep_default_na=False)
     date_from_filter = str(date_from).strip()
     date_to_filter = str(date_to).strip()
     if date_from_filter or date_to_filter:
-        candidates = [
-            row
-            for row in candidates
-            if _timestamp_in_jst_date_range(
-                str(row.get("timestamp_jst", "")),
-                date_from=date_from_filter,
-                date_to=date_to_filter,
+        if "timestamp_jst" in candidates_df.columns:
+            mask = candidates_df["timestamp_jst"].map(
+                lambda value: _timestamp_in_jst_date_range(
+                    str(value),
+                    date_from=date_from_filter,
+                    date_to=date_to_filter,
+                )
             )
-        ]
+            candidates_df = candidates_df.loc[mask].copy()
+        else:
+            candidates_df = candidates_df.iloc[0:0].copy()
 
-    ohlcv_rows = _active_plan_load_ohlcv_rows(ohlcv_path)
-
-    rows = [
-        _evaluate_active_plan_intraperiod_candidate(
-            candidate,
-            ohlcv_rows,
-            evaluation_window_hours=float(evaluation_window_hours),
-        )
-        for candidate in candidates
-    ]
-
+    ohlcv_df = _load_active_plan_intraperiod_ohlcv_df(ohlcv_path)
+    output_df = build_active_plan_intraperiod_outcome_rows(
+        candidates_df,
+        ohlcv_df,
+        timeout_hours=float(evaluation_window_hours),
+    )
     _ensure_parent(output_csv)
-    with output_csv.open("w", newline="", encoding="utf-8") as fp:
-        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER})
-
+    output_df.to_csv(output_csv, index=False)
     return output_csv
 
 
