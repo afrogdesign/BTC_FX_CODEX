@@ -157,6 +157,35 @@ CSV_HEADER = [
 ]
 
 
+ACTIVE_PLAN_CANDIDATE_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "rr_current_tp1",
+    "rr_current_tp2",
+    "rr_zone_mid_tp1",
+    "rr_zone_mid_tp2",
+    "market_entry_status",
+    "limit_entry_status",
+    "counter_scalp_status",
+    "breakout_status",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+]
+
+
 def _first_zone(zones: list[dict[str, Any]] | None) -> dict[str, Any]:
     if not zones:
         return {}
@@ -208,6 +237,107 @@ def _active_plan_row_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "active_position_management_short": position_management.get("if_short_holding", ""),
         "active_trade_plan_json": _json_dumps(raw_active_plan if isinstance(raw_active_plan, dict) else ""),
     }
+
+
+def _active_plan_candidate_base_row(payload: dict[str, Any], side: str, side_plan: dict[str, Any]) -> dict[str, Any]:
+    active_plan = _dict_or_empty(payload.get("active_trade_plan"))
+    notification_context = _dict_or_empty(payload.get("notification_context"))
+    source_signal_id = str(payload.get("signal_id", "")).strip() or "unknown_signal"
+    active_primary_action = (
+        str(payload.get("active_primary_action", "")).strip()
+        or str(active_plan.get("primary_action", "")).strip()
+    )
+    active_headline = (
+        str(payload.get("active_headline", "")).strip()
+        or str(active_plan.get("headline", "")).strip()
+    )
+    active_subject_label = (
+        str(payload.get("active_subject_label", "")).strip()
+        or str(notification_context.get("active_subject_label", "")).strip()
+    )
+    return {
+        "candidate_id": "",
+        "source_signal_id": source_signal_id,
+        "timestamp_jst": payload.get("timestamp_jst", ""),
+        "active_primary_action": active_primary_action,
+        "candidate_type": "",
+        "candidate_status": "",
+        "side": side,
+        "entry_mode": "",
+        "entry_price": "",
+        "entry_zone_low": side_plan.get("entry_zone_low", ""),
+        "entry_zone_high": side_plan.get("entry_zone_high", ""),
+        "stop_loss": side_plan.get("stop_loss", ""),
+        "tp1": side_plan.get("tp1", ""),
+        "tp2": side_plan.get("tp2", ""),
+        "rr_current_tp1": side_plan.get("rr_current_tp1", ""),
+        "rr_current_tp2": side_plan.get("rr_current_tp2", ""),
+        "rr_zone_mid_tp1": side_plan.get("rr_zone_mid_tp1", ""),
+        "rr_zone_mid_tp2": side_plan.get("rr_zone_mid_tp2", ""),
+        "market_entry_status": side_plan.get("market_entry_status", ""),
+        "limit_entry_status": side_plan.get("limit_entry_status", ""),
+        "counter_scalp_status": side_plan.get("counter_scalp_status", ""),
+        "breakout_status": side_plan.get("breakout_status", ""),
+        "active_subject_label": active_subject_label,
+        "active_headline": active_headline,
+        "next_condition": side_plan.get("next_condition", ""),
+    }
+
+
+def _active_plan_candidate_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    active_plan = _dict_or_empty(payload.get("active_trade_plan"))
+    side_plans = _dict_or_empty(active_plan.get("side_plans"))
+    rows: list[dict[str, Any]] = []
+
+    for side in ("long", "short"):
+        side_plan = _dict_or_empty(side_plans.get(side))
+        if not side_plan:
+            continue
+
+        base_row = _active_plan_candidate_base_row(payload, side, side_plan)
+        directional_candidate_added = False
+        is_primary_side = str(side_plan.get("bias_alignment", "")).strip() == "primary"
+        is_counter_side = str(side_plan.get("bias_alignment", "")).strip() == "counter"
+
+        if is_primary_side and str(side_plan.get("market_entry_status", "")).strip() == "allowed":
+            row = dict(base_row)
+            row["candidate_type"] = "market"
+            row["candidate_status"] = "allowed"
+            row["entry_mode"] = "market"
+            row["entry_price"] = payload.get("current_price", side_plan.get("current_price", ""))
+            row["candidate_id"] = f"{row['source_signal_id']}:{side}:market"
+            rows.append(row)
+            directional_candidate_added = True
+        elif is_primary_side and str(side_plan.get("limit_entry_status", "")).strip() == "allowed":
+            row = dict(base_row)
+            row["candidate_type"] = "limit_retest"
+            row["candidate_status"] = "allowed"
+            row["entry_mode"] = "limit"
+            row["entry_price"] = side_plan.get("entry_mid", "")
+            row["candidate_id"] = f"{row['source_signal_id']}:{side}:limit_retest"
+            rows.append(row)
+            directional_candidate_added = True
+
+        breakout_status = str(side_plan.get("breakout_status", "")).strip()
+        if is_primary_side and not directional_candidate_added and breakout_status in {"armed", "watch"}:
+            row = dict(base_row)
+            row["candidate_type"] = "breakout_follow"
+            row["candidate_status"] = breakout_status
+            row["entry_mode"] = "breakout"
+            row["entry_price"] = payload.get("current_price", side_plan.get("current_price", ""))
+            row["candidate_id"] = f"{row['source_signal_id']}:{side}:breakout_follow"
+            rows.append(row)
+
+        if is_counter_side and str(side_plan.get("counter_scalp_status", "")).strip() == "conditional":
+            row = dict(base_row)
+            row["candidate_type"] = "counter_scalp"
+            row["candidate_status"] = "conditional"
+            row["entry_mode"] = "conditional"
+            row["entry_price"] = payload.get("current_price", side_plan.get("current_price", ""))
+            row["candidate_id"] = f"{row['source_signal_id']}:{side}:counter_scalp"
+            rows.append(row)
+
+    return rows
 
 
 def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -414,6 +544,34 @@ def append_trade_log(base_dir: Path, payload: dict[str, Any]) -> Path:
             for existing in existing_rows:
                 writer.writerow({field: existing.get(field, "") for field in CSV_HEADER})
         writer.writerow(row)
+    return path
+
+
+def append_active_plan_candidates(base_dir: Path, payload: dict[str, Any]) -> Path:
+    path = base_dir / "logs" / "csv" / "active_plan_candidates.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current_header, existing_rows = _load_existing_rows(path)
+    candidate_rows = _active_plan_candidate_rows(payload)
+    existing_ids = {
+        str(row.get("candidate_id", "")).strip()
+        for row in existing_rows
+        if str(row.get("candidate_id", "")).strip()
+    }
+    new_rows = [row for row in candidate_rows if str(row.get("candidate_id", "")).strip() not in existing_ids]
+
+    needs_rewrite = current_header and current_header != ACTIVE_PLAN_CANDIDATE_HEADER
+    mode = "a"
+    if not path.exists() or needs_rewrite:
+        mode = "w"
+
+    with path.open(mode, newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_CANDIDATE_HEADER)
+        if mode == "w":
+            writer.writeheader()
+            for existing in existing_rows:
+                writer.writerow({field: existing.get(field, "") for field in ACTIVE_PLAN_CANDIDATE_HEADER})
+        for row in new_rows:
+            writer.writerow({field: row.get(field, "") for field in ACTIVE_PLAN_CANDIDATE_HEADER})
     return path
 
 

@@ -56,6 +56,7 @@ from src.notification.detail_page import (
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
 from src.storage.csv_logger import (
+    append_active_plan_candidates,
     append_observation_paper_order,
     append_paper_order,
     append_paper_position,
@@ -1154,6 +1155,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     save_signal_snapshot(base_dir, persisted_result)
     append_trade_log(base_dir, persisted_result)
+    append_active_plan_candidates(base_dir, persisted_result)
     if persisted_result.get("phase1_observation_gate") == "pass":
         append_observation_paper_order(base_dir, persisted_result)
     if persisted_result.get("phase1b_lite_gate") == "pass":
