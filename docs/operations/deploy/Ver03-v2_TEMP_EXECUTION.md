@@ -32,6 +32,7 @@ scripts/run_btcfx_ver03_v2_reports.sh
 - `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`
 - `運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md`
 - `運用資料/reports/report_hub_latest.md`
+- The script passes the report hub path to the CLI as an absolute repo-root path while displaying it as `運用資料/reports/report_hub_latest.md`.
 
 ## 6. Preconditions
 

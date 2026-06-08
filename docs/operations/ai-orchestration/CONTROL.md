@@ -17,6 +17,8 @@ BTCFX-20260608-060-FIX aligns the temporary Ver03-v2 report hub output path.
 
 BTCFX-20260608-061 captured a temporary Ver03-v2 execution review with a report hub path failure.
 
+BTCFX-20260608-061-FIX fixes the temporary Ver03-v2 execution report hub path and reruns the diagnostic entrypoint.
+
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
 BTCFX-20260608-057 wires the Active Plan intraperiod outcome builder into `tools/log_feedback.py`.
@@ -140,6 +142,7 @@ Current staged direction:
 | BTCFX-20260608-060 | done | Prepare temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit | Ver03-v2 | `pending_review` | Temporary diagnostic entrypoint and label audit |
 | BTCFX-20260608-060-FIX | done | Align temporary Ver03-v2 report hub output path | Ver03-v2 | `pending_review` | Report hub output path alignment |
 | BTCFX-20260608-061 | partial | Capture temporary Ver03-v2 execution review facts | Ver03-v2 | `pending_review` | Execution failed during report hub step; facts captured |
+| BTCFX-20260608-061-FIX | done | Fix temporary Ver03-v2 execution report hub path and rerun | Ver03-v2 | `pending_review` | Temporary execution path fixed and rerun succeeded |
 
 ---
 
