@@ -93,4 +93,4 @@
 
 ## commit hash
 
-- commit後に確定
+- `2c3e575` Record Active Plan second cycle status
