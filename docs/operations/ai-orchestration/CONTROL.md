@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-068 captures controlled daily-sync review facts with AI review creation disabled.
+BTCFX-20260608-071 locks a purpose-specific OHLCV input contract view for Ver03-v2 intraperiod verification.
 
-BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files.
+BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
 BTCFX-20260608-069 defines the generated output lifecycle policy for BTCFX Ver03-v2 report-only diagnostics.
 
@@ -67,9 +67,9 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-070 is the exact-path archive task for explicitly approved Ver03-v2 generated report artifacts.
+The next recommended task after BTCFX-20260608-071 is the minimal local OHLCV sample/run task to unblock `no_ohlcv` without archive drift.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_DAILY_SYNC_DRY_RUN_REVIEW_20260609.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_OHLCV_INPUT_CONTRACT_20260609.md`.
 
 ---
 
@@ -178,18 +178,19 @@ Current staged direction:
 | BTCFX-20260608-069 | done | Define generated output lifecycle policy for Ver03-v2 report-only diagnostics | Ver03-v2 | `d7c3807` | Generated output lifecycle policy for report-only diagnostics |
 | BTCFX-20260609-SYNC | done | Batch-sync reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks | Ver03-v2 | `pending_review` | Reviewed metadata synced through BTCFX-20260608-069 |
 | BTCFX-20260608-070 | done | Prepare exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files | Ver03-v2 | `pending_review` | Exact-path cleanup/archive plan for generated diagnostics |
+| BTCFX-20260608-071 | done | Lock a purpose-specific OHLCV input contract view for Ver03-v2 intraperiod verification | Ver03-v2 | `pending_review` | Safe contract view for local OHLCV input and preflight-only review |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-071
-Goal: Archive explicitly approved Ver03-v2 generated report artifacts by exact path.
-Read: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: only exact archive destination files approved by ChatGPT plus CONTROL/TASK_LEDGER
+NEXT BTCFX-20260608-072
+Goal: Create or supply a minimal local OHLCV CSV and run the existing intraperiod builder to produce at least one non-no_ohlcv outcome.
+Read: docs/operations/deploy/Ver03-v2_OHLCV_INPUT_CONTRACT_20260609.md, scripts/run_btcfx_ver03_v2_reports.sh, tools/log_feedback.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/deploy/Ver03-v2_OHLCV_SAMPLE_RUN_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
-Stop: if source code changes, runtime restart, live trading, API keys, automatic order execution, or unapproved generated paths are involved
+Stop: if external OHLCV fetch, API keys, runtime restart, main.py, run_cycle, live trading, automatic order execution, evaluator semantics changes, or paper_positions.csv integration are required
 Report: compact
 ```
 

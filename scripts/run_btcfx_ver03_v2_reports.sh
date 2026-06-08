@@ -12,10 +12,14 @@ fi
 cd "${REPO_ROOT}"
 
 PRELIGHT_ONLY=0
+SHOW_INPUT_CONTRACT=0
 for arg in "$@"; do
   case "${arg}" in
     --preflight-only)
       PRELIGHT_ONLY=1
+      ;;
+    --show-input-contract)
+      SHOW_INPUT_CONTRACT=1
       ;;
     *)
       echo "error: unknown argument: ${arg}" >&2
@@ -124,6 +128,20 @@ run_preflight() {
   echo "intended_output: ${REPORT_HUB_REL_PATH}"
 }
 
+show_input_contract() {
+  cat <<EOF
+purpose: Active Plan intraperiod verification input contract
+candidate CSV path: logs/csv/active_plan_paper_candidates.csv
+OHLCV CSV path: logs/csv/active_plan_intraperiod_ohlcv.csv
+accepted OHLCV timestamp column names: timestamp_jst, timestamp_utc, timestamp, datetime, dt
+required OHLCV price columns: high, low
+recommended OHLCV columns for human-maintained input: timestamp_jst, open, high, low, close
+output CSV path: logs/csv/active_plan_candidate_intraperiod_outcomes.csv
+output report pattern: 運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_<YYYYMMDD>.md
+safety note: report-only, no live trading, no auto orders, no paper_positions integration
+EOF
+}
+
 echo "${LABEL} temporary execution entrypoint"
 echo "repo: ${REPO_ROOT}"
 echo "python: ${PYTHON_BIN}"
@@ -131,6 +149,11 @@ echo "python: ${PYTHON_BIN}"
 run_preflight
 if [[ "${preflight_status}" == "fail" ]]; then
   exit 1
+fi
+
+if [[ "${SHOW_INPUT_CONTRACT}" -eq 1 ]]; then
+  show_input_contract
+  exit 0
 fi
 
 if [[ "${PRELIGHT_ONLY}" -eq 1 ]]; then
