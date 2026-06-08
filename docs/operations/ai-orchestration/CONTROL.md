@@ -3,13 +3,15 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `1d23850`
-note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
+current_commit: `8f0b18c`
+note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest pushed commit by one or more tasks.
 project_key: `BTCFX`
 
 ---
 
 ## 1. Current objective
+
+BTCFX-20260609-059 updates AI orchestration metadata rules so implementation tasks use `pending_review` until ChatGPT review is complete.
 
 BTCFX-20260608-057 wires the Active Plan intraperiod outcome builder into `tools/log_feedback.py`.
 
@@ -18,6 +20,8 @@ BTCFX-20260609-056 is complete, and its fix commit is `447b0c6 Replace split wor
 BTCFX-20260608-055 is complete, and its implementation commit is `8eecd4e Implement active plan intraperiod outcome builder`.
 
 BTCFX-20260608-057 is complete, and its implementation commit is `1d23850 Wire active plan intraperiod outcome CLI`.
+
+BTCFX-20260609-059 is complete, and its sync commit is `pending_review`.
 
 BTCFX-20260608-055B is complete, and its fix commit is `4ea589f Document SMB file access and iMac SSH git workflow`.
 
@@ -42,6 +46,11 @@ The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 - Codex should read only files named in the task.
 - Real order APIs, exchange API keys, secrets, and live trading are out of scope.
 - Runtime monitor restart is out of scope unless explicitly requested.
+- Implementation tasks must not write their own final commit hash into `CONTROL.md` or `TASK_LEDGER.md`.
+- While an implementation task is active, `TASK_LEDGER.md` should use `pending_review` for `Commit` and may use `reported` for `Push` after push.
+- ChatGPT reviews GitHub after Codex reports, then later `SYNC` tasks batch-update reviewed commit metadata.
+- Do not create a per-task `FIX` only to replace `pending_review` with the same task's commit hash.
+- `BTCFX Ver03-v2` is the temporary label convention for deploy/runtime-facing labels, report titles, and email subject prefixes on this branch.
 
 ### 2.1 Machine roles and paths
 
@@ -116,6 +125,7 @@ Current staged direction:
 | BTCFX-20260608-055 | done | Implement builder for Active Plan intraperiod outcome rows and CSV output | Ver03-v2 | `8eecd4e` | Builder layer only; no CLI/report wiring |
 | BTCFX-20260609-056 | done | Replace split MBAM4/SMB workflow with iMac-only local workflow | Ver03-v2 | `447b0c6` | Docs-only workflow sync before builder task |
 | BTCFX-20260608-057 | done | Wire Active Plan intraperiod outcome builder into `tools/log_feedback.py` CLI | Ver03-v2 | `1d23850` | CLI wiring only; evaluator semantics unchanged |
+| BTCFX-20260609-059 | done | Sync AI orchestration metadata rules | Ver03-v2 | `pending_review` | AI orchestration metadata rule sync |
 
 ---
 

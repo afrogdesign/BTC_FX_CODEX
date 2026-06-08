@@ -3,13 +3,15 @@
 last_updated: 2026-06-09
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `447b0c6`
+current_commit: `8f0b18c`
 
 ## Objective
 
-BTCFX-20260609-056 completes the workflow sync to an iMac-only local repository workflow.
+BTCFX-20260609-059 completes the orchestration metadata sync that adopts `pending_review` for in-flight implementation commits.
 
 This handoff now records that all repo work runs directly on the local iMac path before the next builder task starts.
+Implementation tasks use `pending_review` in TASK_LEDGER rows until ChatGPT review is complete, and later SYNC tasks batch-update reviewed commit metadata.
+Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch use `BTCFX Ver03-v2`.
 The mandatory Codex response rule is that the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` as `response.txt`.
 
 ## Current state
@@ -23,7 +25,20 @@ The mandatory Codex response rule is that the final compact report must also be 
 - `BTCFX-20260608-055A` is the handoff task that refreshes this thread before the builder task starts.
 - `BTCFX-20260608-055B` is the policy task that documents SMB file access and iMac SSH git workflow.
 - `BTCFX-20260609-056` is the sync task that replaces those split-workflow rules with a local iMac-only workflow.
+- `BTCFX-20260609-059` is the metadata sync task that formalizes `pending_review` for in-flight implementation commits.
 - `NEXT_TASK.md` remains the human-facing entry.
+
+## Next prompt for Codex
+
+```text
+NEXT BTCFX-20260608-058
+Goal: Add Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
+Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, tools/log_feedback.py, src/trade/active_plan_intraperiod.py
+Edit: tools/log_feedback.py, tests/test_log_feedback.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Test: `./.venv312/bin/python -m unittest tests/test_log_feedback.py`
+Stop: if evaluator semantics, runtime integration, daily-sync integration, or deployment changes are required
+Report: compact
+```
 
 ## Machine roles and paths
 

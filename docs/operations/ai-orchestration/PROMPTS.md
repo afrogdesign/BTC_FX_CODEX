@@ -45,7 +45,8 @@ Update only:
 - docs/operations/ai-orchestration/TASK_LEDGER.md
 - docs/operations/ai-orchestration/PROMPTS.md
 - docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
-Reflect latest commit, current objective, workflow rules, next task, and blockers.
+Reflect latest reviewed baseline, current objective, workflow rules, next task, and blockers.
+Implementation tasks must not write their own final commit hash into CONTROL.md or TASK_LEDGER.md; use `pending_review` until ChatGPT review is complete and batch-update later in a SYNC task.
 No source code changes.
 Test: git diff --check
 Report: compact
@@ -79,6 +80,9 @@ Recommendation: <A/B if obvious>
 - For every `NEXT`, `FIX`, `SYNC`, and `HANDOFF` task, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
 - The filename must be exactly `response.txt`.
 - Do not verify whether the file still exists after writing.
+- For implementation tasks, report the actual commit hash in the final report, but leave the current task's CONTROL/TASK_LEDGER commit fields as `pending_review` unless ChatGPT explicitly supplied a prior reviewed hash to record.
+- ChatGPT ACCEPT can accept `pending_review` metadata when the commit is verified on GitHub; later `SYNC` tasks can batch-update reviewed commit metadata.
+- Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch should use `BTCFX Ver03-v2`.
 
 ## Execution rule note
 

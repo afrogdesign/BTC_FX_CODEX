@@ -36,6 +36,17 @@ Before doing non-trivial work, check:
 Use these files as the current operating context.
 Do not rely only on chat history.
 
+## AI orchestration metadata
+
+- `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
+- implementation task は、自分自身の最終 commit hash を `CONTROL.md` や `TASK_LEDGER.md` に書き込まない。
+- 進行中の implementation task の `TASK_LEDGER.md` の `Commit` は `pending_review` を使う。
+- `TASK_LEDGER.md` の `Push` は、push 後に `reported` を使ってよい。
+- ChatGPT は Codex の報告後に GitHub を確認し、後続の `SYNC` task で reviewed metadata をまとめて更新する。
+- `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
+- `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
+- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v2` を使う。
+
 ## Standard workflow
 
 For each task:
