@@ -38,6 +38,9 @@ class ActivePlanIntraperiodTests(unittest.TestCase):
     def _ohlcv(self, rows: list[dict[str, str]]) -> pd.DataFrame:
         return pd.DataFrame(rows)
 
+    def _ms(self, dt: datetime) -> int:
+        return int(dt.astimezone(timezone.utc).timestamp() * 1000)
+
     def test_long_candidate_reaches_entry_then_tp1(self) -> None:
         candidate = self._candidate(
             candidate_id="long-tp",
@@ -200,12 +203,24 @@ class ActivePlanIntraperiodTests(unittest.TestCase):
         self.assertEqual(result["entry_reached_time"], "2026-06-08T09:15:00+09:00")
         self.assertEqual(result["first_exit_time"], "")
 
-    def test_same_bar_tp_sl_ambiguity(self) -> None:
-        candidate = self._candidate(candidate_id="ambiguous", source_signal_id="sig-ambiguous", entry_price="100", stop_loss="95", tp1="110", tp2="120")
+    def test_numeric_millisecond_ohlcv_and_entry_bar_ambiguity(self) -> None:
+        candidate = self._candidate(
+            candidate_id="ambiguous",
+            source_signal_id="sig-ambiguous",
+            entry_price="100",
+            stop_loss="95",
+            tp1="110",
+            tp2="120",
+        )
         ohlcv = self._ohlcv(
             [
-                {"timestamp_jst": "2026-06-08T09:15:00+09:00", "open": "100", "high": "101", "low": "99", "close": "100"},
-                {"timestamp_jst": "2026-06-08T09:30:00+09:00", "open": "100", "high": "111", "low": "94", "close": "105"},
+                {
+                    "timestamp": self._ms(datetime(2026, 6, 8, 9, 15, tzinfo=JST)),
+                    "open": "100",
+                    "high": "111",
+                    "low": "94",
+                    "close": "105",
+                },
             ]
         )
 
@@ -213,7 +228,7 @@ class ActivePlanIntraperiodTests(unittest.TestCase):
 
         self.assertEqual(result["outcome"], "ambiguous")
         self.assertEqual(result["first_exit_reason"], "ambiguous")
-        self.assertEqual(result["first_exit_time"], "2026-06-08T09:30:00+09:00")
+        self.assertEqual(result["first_exit_time"], "2026-06-08T00:15:00+00:00")
 
     def test_missing_ohlcv(self) -> None:
         candidate = self._candidate(candidate_id="missing-ohlcv", source_signal_id="sig-missing-ohlcv")

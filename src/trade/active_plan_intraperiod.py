@@ -29,7 +29,20 @@ def _parse_float(value: Any) -> float | None:
 
 
 def _parse_dt(value: Any) -> datetime | None:
-    text = str(value or "").strip()
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, pd.Timestamp):
+        dt = value.to_pydatetime()
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        numeric = float(value)
+        if abs(numeric) > 10_000_000_000:
+            numeric /= 1000.0
+        return datetime.fromtimestamp(numeric, tz=timezone.utc)
+
+    text = str(value).strip()
     if not text:
         return None
     if text.endswith("Z"):
@@ -37,7 +50,13 @@ def _parse_dt(value: Any) -> datetime | None:
     try:
         dt = datetime.fromisoformat(text)
     except ValueError:
-        return None
+        try:
+            numeric = float(text)
+        except ValueError:
+            return None
+        if abs(numeric) > 10_000_000_000:
+            numeric /= 1000.0
+        return datetime.fromtimestamp(numeric, tz=timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
@@ -238,7 +257,7 @@ def evaluate_active_plan_intraperiod_candidate(
     exit_reason = ""
     outcome = ""
 
-    for index, row in enumerate(window_records[entry_index + 1 :], start=entry_index + 1):
+    for index, row in enumerate(window_records[entry_index:], start=entry_index):
         tp1_hit = tp1_price is not None and _touches_tp(side, row["high"], row["low"], tp1_price)
         tp2_hit = tp2_price is not None and _touches_tp(side, row["high"], row["low"], tp2_price)
         stop_hit = stop_price is not None and _touches_stop(side, row["high"], row["low"], stop_price)
