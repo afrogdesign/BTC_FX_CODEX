@@ -100,7 +100,8 @@ Current staged direction:
 | BTCFX-20260608-051 | done | Record first Ver03-v2 implementation decision | Ver03-v2 | `29d3745` | Active Plan intraperiod outcome specification selected |
 | BTCFX-20260608-052 | done | Draft Active Plan intraperiod outcome specification | Ver03-v2 | `4303d5b` | Active Plan intraperiod outcome specification drafted |
 | BTCFX-20260608-053 | done | Implement helper functions and fixture tests for the Active Plan intraperiod outcome evaluator | Ver03-v2 | `cd0e07f` | Helper evaluator and edge-case fixes completed |
-| BTCFX-20260608-054 | done | Document MBAM4 SMB working-directory and execution policy | Ver03-v2 | `TBD` | This policy update |
+| BTCFX-20260608-054 | done | Document MBAM4 SMB working-directory and execution policy | Ver03-v2 | `82be32b` | This policy update |
+| BTCFX-20260608-054-FIX | done | Complete MBAM4/iMac policy metadata and add mandatory Codex response output rule | Ver03-v2 | `46f7bfb` | Metadata correction and response rule |
 
 ---
 

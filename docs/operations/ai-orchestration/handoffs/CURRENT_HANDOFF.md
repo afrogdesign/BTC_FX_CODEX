@@ -54,7 +54,7 @@ The mandatory Codex response rule is that the final compact report must also be 
 | BTCFX-20260608-049 | done | `943fe55` | Sync AI orchestration state |
 | BTCFX-20260608-053 | done | `cd0e07f` | Implemented active plan intraperiod evaluator helper and fixed edge cases |
 | BTCFX-20260608-054 | done | `82be32b` | Documented MBAM4 SMB working-directory and execution policy |
-| BTCFX-20260608-054-FIX | done | `82be32b` | Completed policy metadata and added the response output rule |
+| BTCFX-20260608-054-FIX | done | `46f7bfb` | Completed policy metadata and added the response output rule |
 
 ## Next prompt for Codex
 
