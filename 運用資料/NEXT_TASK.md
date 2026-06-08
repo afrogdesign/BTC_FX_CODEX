@@ -6,7 +6,8 @@
 
 ## 現在のブランチ
 
-- 現在の作業ブランチ: `Ver03-v1`
+- 現在の作業ブランチ: `Ver03-v2`
+- Ver03-v2 は、Ver03-v1 の計画フォルダ再構成完了点 `e3506e4` から分岐した開始ブランチ。
 - Ver03-v1 は、Ver02.6-v2 までの資産を土台に Active Trade Plan レイヤーを追加する再設計ブランチ。
 - 実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
 - `trade_execution_gate` は高信頼 gate として維持し、実務上の行動計画は `active_trade_plan` で別レーン化する。
@@ -14,11 +15,12 @@
 ## ChatGPT が最初に開くレポート
 
 1. `運用資料/reports/report_hub_latest.md`
-2. `運用資料/計画/Ver03-v1_現行資産棚卸し_20260607.md`
-3. `運用資料/reports/analysis/active_trade_plan_diagnostics_20260608.md`
-4. `運用資料/reports/feedback_daily_sync_20260607.md`
-5. `運用資料/reports/analysis/market_map_effectiveness_20260607.md`
-6. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260607.md`
+2. `運用資料/計画/Ver03-v2_開始メモ_20260608.md`
+3. `運用資料/計画/Ver03-v1_現行資産棚卸し_20260607.md`
+4. `運用資料/reports/analysis/active_trade_plan_diagnostics_20260608.md`
+5. `運用資料/reports/feedback_daily_sync_20260607.md`
+6. `運用資料/reports/analysis/market_map_effectiveness_20260607.md`
+7. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260607.md`
 
 注記:
 - `feedback_daily_sync_20260608.md` はローカル未追跡として存在する可能性があるが、現時点では Ver03-v1 の正本参照に入れない。
