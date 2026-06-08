@@ -11,6 +11,8 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
+BTCFX-20260608-069 defines the generated output lifecycle policy for BTCFX Ver03-v2 report-only diagnostics.
+
 BTCFX-20260608-067 adds the daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration.
 
 BTCFX-20260608-066 applies the approved BTCFX Ver03-v2 email subject prefix migration without runtime behavior changes.
@@ -61,9 +63,9 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-067 is the generated output lifecycle rules task for Ver03-v2 report-only diagnostics.
+The next recommended task after BTCFX-20260608-069 is the batch sync of reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md`.
 
 ---
 
@@ -168,18 +170,19 @@ Current staged direction:
 | BTCFX-20260608-065 | done | Audit BTCFX Ver03-v2 email and report label migration without runtime behavior changes | Ver03-v2 | `pending_review` | Label audit for future migration boundaries |
 | BTCFX-20260608-066 | done | Apply BTCFX Ver03-v2 prefix to the approved email subject builder | Ver03-v2 | `pending_review` | Email subject prefix migration only |
 | BTCFX-20260608-067 | done | Add daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | Ver03-v2 | `pending_review` | Daily-sync output review for report-only diagnostics |
+| BTCFX-20260608-069 | done | Define generated output lifecycle policy for Ver03-v2 report-only diagnostics | Ver03-v2 | `pending_review` | Generated output lifecycle policy for report-only diagnostics |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-069
-Goal: Define generated output lifecycle rules for Ver03-v2 report-only diagnostics.
-Read: docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260609-SYNC
+Goal: Batch-sync reviewed pending_review metadata after accepted Ver03-v2 orchestration tasks.
+Read: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
-Stop: if code changes, runtime restart, live trading, API keys, or automatic order execution are required
+Stop: if implementation code changes are required
 Report: compact
 ```
 

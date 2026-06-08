@@ -29,6 +29,7 @@
 | BTCFX-20260608-065 | 2026-06-09 | done | Audited BTCFX Ver03-v2 email and report label migration without runtime behavior changes | `docs/operations/deploy/Ver03-v2_EMAIL_LABEL_AUDIT_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `pending_review` | reported |
 | BTCFX-20260608-066 | 2026-06-09 | done | Applied BTCFX Ver03-v2 prefix to the approved email subject builder | `src/ai/summary.py`, `tests/test_summary_format.py`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `./.venv312/bin/python -m unittest tests/test_summary_format.py` pass; `git diff --check` pass | `pending_review` | reported |
 | BTCFX-20260608-067 | 2026-06-09 | done | Added daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | `docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `pending_review` | reported |
+| BTCFX-20260608-069 | 2026-06-09 | done | Defined generated output lifecycle rules for Ver03-v2 report-only diagnostics | `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `pending_review` | reported |
 
 ## Status definitions
 
