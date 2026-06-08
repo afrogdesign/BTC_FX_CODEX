@@ -1,0 +1,72 @@
+# AI Orchestration Prompts
+
+## NEXT
+
+```text
+NEXT <WORK_ID>
+Goal: <one sentence>
+Read: <files>
+Edit: <files>
+Test: <commands>
+Stop: <conditions>
+Report: compact
+```
+
+## FIX
+
+```text
+FIX <WORK_ID>
+Issue: <specific issue>
+Read: <files>
+Edit: <files>
+Test: <commands>
+Stop: if the fix requires design changes outside this scope
+Report: compact
+```
+
+## REVIEW_ONLY
+
+```text
+REVIEW_ONLY <WORK_ID>
+Goal: confirm <specific fact>
+Read: <files or commands>
+Edit: none
+Test: none
+Report: answer only the fact, max 10 lines
+```
+
+## SYNC
+
+```text
+SYNC <WORK_ID>
+Update only:
+- docs/operations/ai-orchestration/CONTROL.md
+- docs/operations/ai-orchestration/TASK_LEDGER.md
+Reflect latest commit, current objective, next task, and blockers.
+No source code changes.
+Test: git diff --check
+Report: compact
+```
+
+## HANDOFF
+
+```text
+HANDOFF <WORK_ID>
+Create or update:
+- docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
+Include repo, branch, current commit, objective, constraints, completed work, open questions, and next task.
+No source code changes.
+Test: git diff --check
+Report: compact
+```
+
+## BLOCKED
+
+```text
+BLOCKED <WORK_ID>: <one specific question>
+Evidence: <file/path or command>
+Options:
+- A: ...
+- B: ...
+Recommendation: <A/B if obvious>
+```

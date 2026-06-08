@@ -4,6 +4,16 @@
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
+## AI運用正本
+
+- AI / Codex 運用の正本: `docs/operations/ai-orchestration/CONTROL.md`
+- AI向けrepo地図: `docs/operations/ai-orchestration/REPO_MAP.md`
+- Codex固定ルール: `AGENTS.md`
+- 作業台帳: `docs/operations/ai-orchestration/TASK_LEDGER.md`
+
+今後、Codexへの通常作業は `NEXT <WORK_ID>` 形式で短く渡す。
+長い背景は `CONTROL.md` に集約する。
+
 ## 現在のブランチ
 
 - 現在の作業ブランチ: `Ver03-v2`
