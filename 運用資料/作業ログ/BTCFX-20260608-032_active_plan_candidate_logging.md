@@ -41,7 +41,7 @@
 
 ## commit hash
 
-- 実行後に追記
+- `2546081` Add active plan candidate logging
 
 ## 未解決事項
 

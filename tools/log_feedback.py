@@ -7008,21 +7008,44 @@ def build_paper_opportunity_diagnostics_report(
 def build_active_trade_plan_diagnostics_report(
     *,
     base_dir: Path,
+    candidates_path: Path | None = None,
     trades_path: Path | None = None,
     output_md: Path | None = None,
+    report_date: str | None = None,
     date_from: str = "",
     date_to: str = "",
     limit: int = 20,
 ) -> str:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_candidates.csv"
     trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
-    rows = _load_csv_rows(trades_path)
+    resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
+    output_md = output_md or (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_trade_plan_diagnostics_{resolved_report_date}.md"
+    )
 
     date_from_filter = str(date_from).strip()
     date_to_filter = str(date_to).strip()
+
+    candidate_rows = _load_csv_rows(candidates_path) if candidates_path.exists() else []
+    trade_rows = _load_csv_rows(trades_path) if trades_path.exists() else []
+
     if date_from_filter or date_to_filter:
-        rows = [
+        candidate_rows = [
             row
-            for row in rows
+            for row in candidate_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+        trade_rows = [
+            row
+            for row in trade_rows
             if _timestamp_in_jst_date_range(
                 str(row.get("timestamp_jst", "")),
                 date_from=date_from_filter,
@@ -7030,128 +7053,167 @@ def build_active_trade_plan_diagnostics_report(
             )
         ]
 
-    active_rows = [
-        row
-        for row in rows
-        if str(row.get("active_primary_action", "")).strip()
-        or str(row.get("active_trade_plan_json", "")).strip()
-    ]
-    action_counts = _active_plan_action_counts(active_rows)
-    total = len(active_rows)
-
-    market_short_allowed = _active_plan_status_count(active_rows, "active_market_entry_short", "allowed")
-    market_long_allowed = _active_plan_status_count(active_rows, "active_market_entry_long", "allowed")
-    limit_short_allowed = _active_plan_status_count(active_rows, "active_limit_retest_short", "allowed")
-    limit_long_allowed = _active_plan_status_count(active_rows, "active_limit_retest_long", "allowed")
-    counter_long_conditional = _active_plan_status_count(active_rows, "active_countertrend_scalp_long", "conditional")
-    counter_short_conditional = _active_plan_status_count(active_rows, "active_countertrend_scalp_short", "conditional")
-    breakout_long_armed = _active_plan_status_count(active_rows, "active_breakout_follow_long", "armed")
-    breakout_short_armed = _active_plan_status_count(active_rows, "active_breakout_follow_short", "armed")
-
-    market_small_count = action_counts.get("ACTIVE_MARKET_SMALL", 0)
-    limit_retest_count = (
-        action_counts.get("ACTIVE_LIMIT_RETEST", 0)
-        + action_counts.get("ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0)
+    candidate_action_counts = Counter(
+        str(row.get("active_primary_action", "")).strip() or "blank"
+        for row in candidate_rows
     )
-    counter_scalp_count = (
-        action_counts.get("ACTIVE_COUNTER_SCALP", 0)
-        + action_counts.get("ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0)
+    candidate_type_counts = Counter(str(row.get("candidate_type", "")).strip() or "blank" for row in candidate_rows)
+    side_counts = Counter(str(row.get("side", "")).strip() or "blank" for row in candidate_rows)
+    candidate_status_counts = Counter(
+        str(row.get("candidate_status", "")).strip() or "blank"
+        for row in candidate_rows
     )
-    no_action_count = action_counts.get("NO_ACTION", 0)
+    entry_mode_counts = Counter(str(row.get("entry_mode", "")).strip() or "blank" for row in candidate_rows)
+
+    trade_action_counts = Counter(
+        str(row.get("active_primary_action", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    active_plan_version_counts = Counter(
+        str(row.get("active_plan_version", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    market_long_counts = Counter(str(row.get("active_market_entry_long", "")).strip() or "blank" for row in trade_rows)
+    market_short_counts = Counter(str(row.get("active_market_entry_short", "")).strip() or "blank" for row in trade_rows)
+    limit_long_counts = Counter(str(row.get("active_limit_retest_long", "")).strip() or "blank" for row in trade_rows)
+    limit_short_counts = Counter(str(row.get("active_limit_retest_short", "")).strip() or "blank" for row in trade_rows)
+    counter_long_counts = Counter(
+        str(row.get("active_countertrend_scalp_long", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    counter_short_counts = Counter(
+        str(row.get("active_countertrend_scalp_short", "")).strip() or "blank"
+        for row in trade_rows
+    )
+
+    total_trade_rows = len(trade_rows)
+    no_action_count = trade_action_counts.get("NO_ACTION", 0)
+    blank_action_count = trade_action_counts.get("blank", 0)
 
     lines = [
         "# Active Trade Plan 診断",
         "",
-        "## 1. まず結論",
+        "## 1. 概要",
+        f"- report_date: `{resolved_report_date}`",
+        f"- candidates_path: `{candidates_path}`",
+        f"- trades_path: `{trades_path}`",
+        f"- date_from: `{date_from_filter or 'all'}`",
+        f"- date_to: `{date_to_filter or 'all'}`",
     ]
-
-    if not active_rows:
-        lines.extend(
-            [
-                "- Active Trade Plan の記録はまだありません。",
-                "- `logs/csv/trades.csv` に Active Plan 列が入った後のデータ蓄積を待ってください。",
-                "",
-            ]
-        )
+    if candidates_path.exists():
+        lines.append(f"- candidate rows: {len(candidate_rows)}")
     else:
-        lines.append(f"- 集計対象は {total} 件です。")
-        lines.append(f"- `ACTIVE_LIMIT_RETEST` 系は {limit_retest_count} 件 ({_format_pct(_ratio(limit_retest_count, total))}) です。")
-        lines.append(f"- `ACTIVE_MARKET_SMALL` は {market_small_count} 件 ({_format_pct(_ratio(market_small_count, total))}) です。")
-        lines.append(f"- `ACTIVE_COUNTER_SCALP` 系は {counter_scalp_count} 件 ({_format_pct(_ratio(counter_scalp_count, total))}) です。")
-        lines.append(f"- `NO_ACTION` は {no_action_count} 件 ({_format_pct(_ratio(no_action_count, total))}) です。")
-        if market_small_count > limit_retest_count:
-            lines.append("- 注意: `ACTIVE_MARKET_SMALL` が `ACTIVE_LIMIT_RETEST` 系より多く、成行寄りに偏っています。")
-        else:
-            lines.append("- 判定: 主戦場は成行よりも指値・戻り待ち側に寄っています。")
-        lines.append("")
+        lines.append("- active_plan_candidates.csv: missing")
+    if trades_path.exists():
+        lines.append(f"- trade rows: {total_trade_rows}")
+    else:
+        lines.append("- trades.csv: missing")
 
-    lines.extend(
-        [
-            "## 2. 集計条件",
-            f"- trades_path: `{trades_path}`",
-            f"- date_from: `{date_from_filter or 'all'}`",
-            f"- date_to: `{date_to_filter or 'all'}`",
-            f"- total rows: {len(rows)}",
-            f"- active plan rows: {total}",
-            "",
-            "## 3. action 別件数",
-        ]
-    )
+    lines.extend(["", "## 2. active_primary_action 分布"])
+    if trades_path.exists() and trade_rows:
+        for action, count in trade_action_counts.most_common():
+            lines.append(f"- trades `{action}`: {count} 件")
+    else:
+        lines.append("- trades action distribution: trades.csv missing or no rows")
+    if candidates_path.exists() and candidate_rows:
+        for action, count in candidate_action_counts.most_common():
+            lines.append(f"- candidates `{action}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- candidate action distribution: active_plan_candidates.csv missing")
+    else:
+        lines.append("- candidate action distribution: no rows")
 
-    if active_rows:
-        emitted = set()
-        for action in _ACTIVE_PLAN_ACTION_ORDER:
-            count = action_counts.get(action, 0)
-            emitted.add(action)
-            lines.append(f"- `{action}`: {count} 件 ({_format_pct(_ratio(count, total))})")
-        for action, count in action_counts.most_common():
-            if action in emitted:
-                continue
-            lines.append(f"- `{action}`: {count} 件 ({_format_pct(_ratio(count, total))})")
+    lines.extend(["", "## 3. 候補タイプ別件数"])
+    if candidate_rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 4. side別件数"])
+    if candidate_rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 5. candidate_status別件数"])
+    if candidate_rows:
+        for candidate_status, count in candidate_status_counts.most_common():
+            lines.append(f"- `{candidate_status}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 6. entry_mode別件数"])
+    if candidate_rows:
+        for entry_mode, count in entry_mode_counts.most_common():
+            lines.append(f"- `{entry_mode}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 7. NO_ACTION 比率"])
+    if trades_path.exists():
+        lines.append(f"- total trades: {total_trade_rows}")
+        lines.append(f"- `NO_ACTION`: {no_action_count} 件 ({_format_pct(_ratio(no_action_count, total_trade_rows))})")
+        lines.append(f"- blank action: {blank_action_count} 件 ({_format_pct(_ratio(blank_action_count, total_trade_rows))})")
+        if active_plan_version_counts:
+            lines.append(f"- active_plan_version counts: {_format_counter(active_plan_version_counts, limit=5)}")
+        if total_trade_rows:
+            lines.append(
+                f"- market entry status: long={_format_counter(market_long_counts, limit=3)} / short={_format_counter(market_short_counts, limit=3)}"
+            )
+            lines.append(
+                f"- limit retest status: long={_format_counter(limit_long_counts, limit=3)} / short={_format_counter(limit_short_counts, limit=3)}"
+            )
+            lines.append(
+                f"- counter scalp status: long={_format_counter(counter_long_counts, limit=3)} / short={_format_counter(counter_short_counts, limit=3)}"
+            )
+    else:
+        lines.append("- trades.csv missing")
+
+    lines.extend(["", "## 8. 代表候補"])
+    if candidate_rows:
+        sorted_candidates = sorted(candidate_rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_candidates[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                f"{row.get('timestamp_jst', '')} / "
+                f"{row.get('candidate_id', '')} / "
+                f"{row.get('active_primary_action', '')} / "
+                f"{row.get('candidate_type', '')} / "
+                f"{row.get('candidate_status', '')} / "
+                f"{row.get('side', '')} / "
+                f"{row.get('entry_mode', '')} / "
+                f"entry={row.get('entry_price', '')} / "
+                f"rr_current_tp1={row.get('rr_current_tp1', '')} / "
+                f"rr_zone_mid_tp1={row.get('rr_zone_mid_tp1', '')} / "
+                f"next={row.get('next_condition', '')}"
+            )
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
     else:
         lines.append("- なし")
 
     lines.extend(
         [
             "",
-            "## 4. entry status 別件数",
-            f"- 成行 allowed: long={market_long_allowed} / short={market_short_allowed}",
-            f"- 指値・戻り待ち allowed: long={limit_long_allowed} / short={limit_short_allowed}",
-            f"- ブレイク armed: long={breakout_long_armed} / short={breakout_short_armed}",
-            f"- 逆方向短期 conditional: long={counter_long_conditional} / short={counter_short_conditional}",
-            "",
-            "## 5. 監視ポイント",
-            "- `ACTIVE_MARKET_SMALL` が増えすぎていないか。",
-            "- `ACTIVE_LIMIT_RETEST` が主戦場として十分に出ているか。",
-            "- `ACTIVE_COUNTER_SCALP` は allowed ではなく conditional に留まっているか。",
-            "- `NO_ACTION` が期待値のない局面を除外する正常分類として機能しているか。",
-            "",
-            "## 6. 代表例",
-        ]
-    )
-
-    if active_rows:
-        sorted_rows = sorted(active_rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
-        for item in _active_plan_representatives(sorted_rows, limit=limit):
-            lines.append(f"- {item}")
-    else:
-        lines.append("- なし")
-
-    lines.extend(
-        [
-            "",
-            "## 7. 次の判断",
-            "- このレポートは売買判断ではなく、Active Plan の出方を確認する診断である。",
-            "- 成行候補が多すぎる場合は `ACTIVE_MARKET_SMALL` の条件をさらに絞る。",
-            "- 指値・戻り待ちが主に出ている場合は、次に active plan 別の紙検証へ進む。",
-            "- `NO_ACTION` が少なすぎる場合は、無理に行動計画を出しすぎていないか確認する。",
+            "## 9. 未解決事項",
+            "- Active Plan の判定ロジック自体は今回変更していない。",
+            "- candidate outcomes / daily-sync 接続は今回対象外。",
         ]
     )
 
     report = "\n".join(lines)
-    if output_md is not None:
-        _ensure_parent(output_md)
-        output_md.write_text(report, encoding="utf-8")
+    _ensure_parent(output_md)
+    output_md.write_text(report, encoding="utf-8")
     return report
 
 
@@ -10796,7 +10858,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     active_plan_parser = subparsers.add_parser("build-active-trade-plan-diagnostics-report")
     active_plan_parser.add_argument("--output-md")
+    active_plan_parser.add_argument("--candidates-path")
     active_plan_parser.add_argument("--trades-path")
+    active_plan_parser.add_argument("--active-plan-report-date")
     active_plan_parser.add_argument("--date-from", default="")
     active_plan_parser.add_argument("--date-to", default="")
     active_plan_parser.add_argument("--limit", type=int, default=20)
@@ -10891,6 +10955,8 @@ def main() -> None:
         argv = ["build-soft-risk-collateral-damage-report", *argv[1:]]
     if argv and argv[0] == "--report-hub":
         argv = ["build-report-hub", *argv[1:]]
+    if argv and argv[0] == "--build-active-trade-plan-diagnostics":
+        argv = ["build-active-trade-plan-diagnostics-report", *argv[1:]]
     args = parser.parse_args(argv)
     base_dir = BASE_DIR
 
@@ -11061,26 +11127,26 @@ def main() -> None:
         return
 
     if args.command == "build-active-trade-plan-diagnostics-report":
-        default_output_md = (
-            base_dir
-            / "運用資料"
-            / "reports"
-            / "analysis"
-            / f"active_trade_plan_diagnostics_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
-        )
-        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report_date = str(args.active_plan_report_date or "").strip()
+        output_md = Path(args.output_md) if args.output_md else None
         report = build_active_trade_plan_diagnostics_report(
             base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
             trades_path=Path(args.trades_path) if args.trades_path else None,
             output_md=output_md,
+            report_date=report_date or None,
             date_from=str(args.date_from),
             date_to=str(args.date_to),
             limit=int(args.limit),
         )
-        if output_md:
-            print(output_md)
-        else:
-            print(report)
+        resolved_output_md = output_md or (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_trade_plan_diagnostics_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        print(resolved_output_md)
         return
 
     if args.command == "build-active-trade-plan-effectiveness-report":
