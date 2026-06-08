@@ -3,7 +3,7 @@
 last_updated: 2026-06-08
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `90bfe9f`
+current_commit: `29d3745`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest commit by one task.
 project_key: `BTCFX`
 
@@ -12,6 +12,8 @@ project_key: `BTCFX`
 ## 1. Current objective
 
 Ver03-v2 has completed AI orchestration bootstrap. The next phase is product implementation planning, starting with Active Plan intraperiod outcome specification.
+
+The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
 ---
 
@@ -76,16 +78,18 @@ Current staged direction:
 | BTCFX-20260608-048 | done | Add AI orchestration anchor files | Ver03-v2 | `b904e13` | AI orchestration anchors added |
 | BTCFX-20260608-049 | done | Sync AI orchestration state | Ver03-v2 | `943fe55` | AI orchestration state synced |
 | BTCFX-20260608-050 | done | Simplify NEXT_TASK.md to human-facing entry | Ver03-v2 | `90bfe9f` | NEXT_TASK.md simplified |
+| BTCFX-20260608-051 | done | Record first Ver03-v2 implementation decision | Ver03-v2 | `29d3745` | Active Plan intraperiod outcome specification selected |
+| BTCFX-20260608-052 | done | Draft Active Plan intraperiod outcome specification | Ver03-v2 | `4303d5b` | Active Plan intraperiod outcome specification drafted |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-052
-Goal: Draft the Active Plan intraperiod outcome specification without changing source code.
-Read: 運用資料/計画/02_Ver03-v1_実装ロードマップ_20260608.md, 運用資料/計画/00_Ver03-v1_統合再計画_20260608.md, docs/operations/ai-orchestration/CONTROL.md
-Edit: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+NEXT BTCFX-20260608-053
+Goal: Implement helper functions and fixture tests for the Active Plan intraperiod outcome evaluator.
+Read: docs/specs/active-plan-intraperiod-outcomes.md, 運用資料/計画/02_Ver03-v1_実装ロードマップ_20260608.md, docs/operations/ai-orchestration/CONTROL.md
+Edit: docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
 Test: `git diff --check`
 Stop: if source code changes are needed
 Report: compact
