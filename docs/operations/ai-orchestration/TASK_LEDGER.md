@@ -31,6 +31,7 @@
 | BTCFX-20260608-067 | 2026-06-09 | done | Added daily-sync output review for BTCFX Ver03-v2 report-only diagnostics after subject label migration | `docs/operations/deploy/Ver03-v2_DAILY_SYNC_OUTPUT_REVIEW_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `e4a9a65` | reported |
 | BTCFX-20260608-069 | 2026-06-09 | done | Defined generated output lifecycle rules for Ver03-v2 report-only diagnostics | `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_POLICY_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `d7c3807` | reported |
 | BTCFX-20260609-SYNC | 2026-06-09 | done | Synced reviewed pending_review metadata through BTCFX-20260608-069 | `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `pending_review` | reported |
+| BTCFX-20260608-070 | 2026-06-09 | done | Prepared exact-path cleanup/archive plan for Ver03-v2 generated diagnostics without deleting files | `docs/operations/deploy/Ver03-v2_GENERATED_OUTPUT_CLEANUP_PLAN_20260609.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/TASK_LEDGER.md` | `git diff --check` pass | `pending_review` | reported |
 
 ## Status definitions
 
