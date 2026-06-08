@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-063 adds preflight checks for Ver03-v2 manual diagnostic execution outputs and input availability.
+BTCFX-20260608-064 wires Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics.
 
 BTCFX-20260608-060 prepares a temporary Ver03-v2 execution/deploy entrypoint and BTCFX Ver03-v2 label audit.
 
@@ -24,6 +24,8 @@ BTCFX-20260608-061-FIX fixes the temporary Ver03-v2 execution report hub path an
 BTCFX-20260608-062 is complete, and its decision-prep commit is `pending_review`.
 
 BTCFX-20260608-063 is complete, and its implementation commit is `pending_review`.
+
+BTCFX-20260608-064 is complete, and its implementation commit is `pending_review`.
 
 BTCFX-20260608-058 adds Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
 
@@ -49,7 +51,7 @@ BTCFX-20260608-054-FIX is complete, and its fix commit is `46f7bfb Add Codex res
 
 BTCFX-20260608-053 is complete, and its fix commit is `cd0e07f Fix active plan intraperiod edge cases`.
 
-The next recommended task after BTCFX-20260608-063 is the report-only daily-sync decision task after explicit approval.
+The next recommended task after BTCFX-20260608-064 is the email label audit task.
 
 The active deliverable is `docs/specs/active-plan-intraperiod-outcomes.md`.
 
@@ -151,18 +153,19 @@ Current staged direction:
 | BTCFX-20260608-061-FIX | done | Fix temporary Ver03-v2 execution report hub path and rerun | Ver03-v2 | `pending_review` | Temporary execution path fixed and rerun succeeded |
 | BTCFX-20260608-062 | done | Prepare next boundary decision for Ver03-v2 temporary execution results | Ver03-v2 | `pending_review` | Decision-prep document for next integration boundary |
 | BTCFX-20260608-063 | done | Add preflight checks for Ver03-v2 manual diagnostic execution | Ver03-v2 | `pending_review` | Preflight checks and warning summaries added |
+| BTCFX-20260608-064 | done | Wire Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics | Ver03-v2 | `pending_review` | Report-only daily-sync diagnostics wired |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-064
-Goal: Decide and, if approved, wire Ver03-v2 intraperiod report generation into daily-sync as report-only diagnostics.
-Read: tools/log_feedback.py, scripts/run_btcfx_ver03_v2_reports.sh, docs/operations/deploy/Ver03-v2_NEXT_BOUNDARY_DECISION_20260609.md, docs/operations/deploy/Ver03-v2_TEMP_EXECUTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: tools/log_feedback.py, tests/test_log_feedback.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: `./.venv312/bin/python -m unittest tests/test_log_feedback.py`; `git diff --check`
-Stop: if runtime restart, live trading, API keys, automatic order execution, paper_positions.csv integration, or evaluator changes are required
+NEXT BTCFX-20260608-065
+Goal: Audit and prepare BTCFX Ver03-v2 email subject/report label migration without changing runtime behavior.
+Read: docs/operations/deploy/Ver03-v2_NEXT_BOUNDARY_DECISION_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Edit: docs/operations/deploy/Ver03-v2_EMAIL_LABEL_AUDIT_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
+Test: `git diff --check`
+Stop: if email sending code, runtime restart, API keys, live trading, or automatic order execution changes are required
 Report: compact
 ```
 

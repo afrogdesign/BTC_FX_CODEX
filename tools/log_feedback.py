@@ -11286,6 +11286,24 @@ def daily_sync(
         candidate_outcomes_path=active_plan_candidate_outcomes_path,
         output_md=active_plan_candidate_outcomes_report_path,
     )
+    active_plan_intraperiod_ohlcv_path = base_dir / "logs" / "csv" / "active_plan_intraperiod_ohlcv.csv"
+    active_plan_candidate_intraperiod_outcomes_path = build_active_plan_candidate_intraperiod_outcomes(
+        base_dir=base_dir,
+        candidates_path=active_plan_paper_candidates_path,
+        ohlcv_path=active_plan_intraperiod_ohlcv_path if active_plan_intraperiod_ohlcv_path.exists() else None,
+    )
+    active_plan_candidate_intraperiod_outcomes_report_path = (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{today}.md"
+    )
+    build_active_plan_candidate_intraperiod_outcomes_report(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=active_plan_candidate_intraperiod_outcomes_path,
+        output_md=active_plan_candidate_intraperiod_outcomes_report_path,
+    )
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
@@ -11319,6 +11337,8 @@ def daily_sync(
         "active_plan_paper_candidates_path": active_plan_paper_candidates_path,
         "active_plan_candidate_outcomes_path": active_plan_candidate_outcomes_path,
         "active_plan_candidate_outcomes_report_path": active_plan_candidate_outcomes_report_path,
+        "active_plan_candidate_intraperiod_outcomes_path": active_plan_candidate_intraperiod_outcomes_path,
+        "active_plan_candidate_intraperiod_outcomes_report_path": active_plan_candidate_intraperiod_outcomes_report_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,

@@ -56,6 +56,7 @@ from tools.log_feedback import (
     build_active_plan_candidate_intraperiod_outcomes,
     build_active_plan_candidate_intraperiod_outcomes_report,
     build_shadow_log,
+    daily_sync,
     evaluate_trade_row,
     export_review_queue,
     import_reviews,
@@ -115,6 +116,126 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertNotIn("stale: `feedback_weekly`", report)
             self.assertNotIn("stale: `market_map_readiness`", report)
             self.assertTrue((reports_dir / "report_hub_latest.md").exists())
+
+    def test_daily_sync_wires_active_plan_candidate_intraperiod_diagnostics(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            reports_analysis = base_dir / "運用資料" / "reports" / "analysis"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            reports_analysis.mkdir(parents=True, exist_ok=True)
+
+            candidate_path = logs_csv / "active_plan_paper_candidates.csv"
+            with candidate_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "entry_zone_low",
+                        "entry_zone_high",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-no-ohlcv",
+                        "source_signal_id": "sig-no-ohlcv",
+                        "timestamp_jst": "2026-06-09T10:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "entry_zone_low": "99",
+                        "entry_zone_high": "101",
+                        "stop_loss": "95",
+                        "tp1": "105",
+                        "tp2": "110",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            outcomes_path.write_text("signal_id,evaluation_status\n", encoding="utf-8")
+            reviews_path = logs_csv / "user_reviews.csv"
+            reviews_path.write_text(",".join(USER_REVIEW_HEADER) + "\n", encoding="utf-8")
+            shadow_path = logs_csv / "shadow_log.csv"
+            shadow_path.write_text("signal_id,timestamp_jst\n", encoding="utf-8")
+            observation_paper_orders_path = logs_csv / "observation_paper_orders.csv"
+            phase1b_lite_paper_orders_path = logs_csv / "phase1b_lite_paper_orders.csv"
+            paper_positions_path = logs_csv / "paper_positions.csv"
+            active_plan_candidate_outcomes_path = logs_csv / "active_plan_candidate_outcomes.csv"
+            active_plan_candidate_outcomes_report_path = reports_analysis / "active_plan_candidate_outcomes_20260609.md"
+            review_note_path = base_dir / "notes" / "review_note.md"
+            daily_report_path = base_dir / "運用資料" / "reports" / "feedback_daily_sync_20260609.md"
+
+            with (
+                patch("tools.log_feedback.update_outcomes", return_value=outcomes_path),
+                patch("tools.log_feedback.import_reviews", return_value=reviews_path),
+                patch(
+                    "tools.log_feedback.sync_ai_post_reviews",
+                    return_value=(
+                        reviews_path,
+                        {
+                            "eligible": 0,
+                            "reused": 0,
+                            "created": 0,
+                            "skipped_existing_ai": 0,
+                            "skipped_human_override": 0,
+                            "request_failed": 0,
+                            "backlog_pending": 0,
+                            "resolved_cli_fallback": 0,
+                        },
+                    ),
+                ),
+                patch("tools.log_feedback.build_shadow_log", return_value=shadow_path),
+                patch("tools.log_feedback.build_observation_paper_orders", return_value=observation_paper_orders_path),
+                patch("tools.log_feedback.build_phase1b_lite_paper_orders", return_value=phase1b_lite_paper_orders_path),
+                patch("tools.log_feedback.build_paper_positions", return_value=paper_positions_path),
+                patch("tools.log_feedback.build_active_plan_paper_candidates", return_value=candidate_path),
+                patch("tools.log_feedback.build_active_plan_candidate_outcomes", return_value=active_plan_candidate_outcomes_path),
+                patch("tools.log_feedback.build_active_plan_candidate_outcomes_report", return_value=active_plan_candidate_outcomes_report_path),
+                patch("tools.log_feedback.export_review_queue", return_value=review_note_path),
+                patch("tools.log_feedback.build_feedback_report", return_value=daily_report_path),
+            ):
+                result = daily_sync(
+                    base_dir=base_dir,
+                    review_note_path=review_note_path,
+                    output_md=daily_report_path,
+                    max_new_reviews=0,
+                )
+
+            intraperiod_outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            intraperiod_report_path = (
+                reports_analysis
+                / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+            )
+
+            self.assertEqual(result["active_plan_candidate_intraperiod_outcomes_path"], intraperiod_outcomes_path)
+            self.assertEqual(result["active_plan_candidate_intraperiod_outcomes_report_path"], intraperiod_report_path)
+            self.assertEqual(result["paper_positions_path"], paper_positions_path)
+            self.assertIn("report_path", result)
+            self.assertTrue(intraperiod_outcomes_path.exists())
+            self.assertTrue(intraperiod_report_path.exists())
+
+            with intraperiod_outcomes_path.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["outcome"], "no_ohlcv")
+
+            report_text = intraperiod_report_path.read_text(encoding="utf-8")
+            self.assertIn("BTCFX Ver03-v2", report_text)
+            self.assertIn("no_ohlcv", report_text)
+            self.assertIn("daily-sync接続は別タスク", report_text)
 
     def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:
         with TemporaryDirectory() as tmpdir:
