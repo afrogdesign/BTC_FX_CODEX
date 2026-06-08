@@ -40,7 +40,7 @@
 
 ## commit hash
 
-- commit後に確定
+- `662da68` Document Ver03-v1 untracked files
 
 ## 未解決事項
 

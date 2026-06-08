@@ -155,7 +155,9 @@
 1. 新しい監視サイクル後に `logs/csv/active_plan_candidates.csv` が生成されるか確認する。
 2. 生成後、`python tools/log_feedback.py --build-active-trade-plan-diagnostics --active-plan-report-date <YYYYMMDD>` で Active Plan 診断を再生成する。
 3. 候補CSVに実データが入ったら、`active_plan_candidate_outcomes` / daily-sync 接続を次作業にする。
-4. `active_plan_candidate_outcomes_20260608.md`、`feedback_daily_sync_20260608.md`、`BTC自動トレードシステムの理想条件まとめ_06-02.md` の扱いを別途決める。
+4. 既知の未追跡ファイル 3 件は `BTCFX-20260608-036` で扱い決定済み。
+   - 生成レポート候補2件は repo 外へ退避。
+   - 参考資料1件は repo に採用。
 
 ## 残作業一覧
 
