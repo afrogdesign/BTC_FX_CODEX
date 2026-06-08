@@ -37,7 +37,7 @@
 
 ## commit hash
 
-- commit後に確定
+- `bb0208f` Add active trade plan diagnostics report
 
 ## 未解決事項
 

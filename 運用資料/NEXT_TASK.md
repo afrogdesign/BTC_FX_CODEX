@@ -1,23 +1,28 @@
 ﻿# NEXT TASK TRACKER
 
-更新日: 2026-06-07 JST
+更新日: 2026-06-08 JST
 
 運用メモ: AI の日常入口として使う。履歴や経緯は `履歴/progress.md`、数値詳細は `reports/analysis/` に残し、ここには次判断に必要な情報だけを書く。
 
 ## 現在のブランチ
 
-- 現在の作業ブランチ: `ver02.6-v2`
-- 運用本体の参照ブランチ: `ver02.6-v2`
-- 新しいブランチを切ったら、この節を同じ作業単位で必ず更新する。
+- 現在の作業ブランチ: `Ver03-v1`
+- Ver03-v1 は、Ver02.6-v2 までの資産を土台に Active Trade Plan レイヤーを追加する再設計ブランチ。
+- 実弾発注、取引所API送信、秘密鍵連携はまだ行わない。
+- `trade_execution_gate` は高信頼 gate として維持し、実務上の行動計画は `active_trade_plan` で別レーン化する。
 
 ## ChatGPT が最初に開くレポート
 
 1. `運用資料/reports/report_hub_latest.md`
-2. `運用資料/reports/feedback_daily_sync_20260607.md`
-3. `運用資料/reports/analysis/market_map_effectiveness_20260607.md`
-4. `運用資料/reports/analysis/operational_focus_20260607.md`
-5. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260607.md`
-6. 設計テーマが `sl_hit` 偏重なら `運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260607.md`
+2. `運用資料/計画/Ver03-v1_現行資産棚卸し_20260607.md`
+3. `運用資料/reports/analysis/active_trade_plan_diagnostics_20260608.md`
+4. `運用資料/reports/feedback_daily_sync_20260607.md`
+5. `運用資料/reports/analysis/market_map_effectiveness_20260607.md`
+6. `運用資料/reports/analysis/paper_opportunity_diagnostics_20260607.md`
+
+注記:
+- `feedback_daily_sync_20260608.md` はローカル未追跡として存在する可能性があるが、現時点では Ver03-v1 の正本参照に入れない。
+- `active_plan_candidates.csv` はまだ未生成のため、Active Plan 診断はレーン接続確認段階。
 
 ## ChatGPT が次に引き継ぐ分析メモ
 
@@ -28,6 +33,18 @@
 `chatgpt/specs/active/` が空のとき、ChatGPT はこの3本を継続メモとして使い、設計が固まったら `chatgpt/specs/active/` に確定仕様を書く。
 
 ## 現在の状況
+
+### Ver03-v1 現在の状況
+
+- `BTCFX-20260607-031` で `運用資料/計画/Ver03-v1_現行資産棚卸し_20260607.md` を作成済み。commit: `fad5316`
+- `BTCFX-20260608-032` で `active_trade_plan` 候補を `logs/csv/active_plan_candidates.csv` へ記録するレーンを追加済み。commit: `2546081`
+- `BTCFX-20260608-033` で `active_trade_plan_diagnostics_YYYYMMDD.md` builder / CLI を追加済み。commit: `bb0208f`
+- `main.py` は `active_trade_plan` を生成し、`active_primary_action` と `active_headline` を payload に入れる。
+- `src/storage/csv_logger.py` は `active_trade_plan` の主要列を `trades.csv` へ保存し、候補別CSV `active_plan_candidates.csv` も出力できる。
+- 2026-06-08 時点の `active_trade_plan_diagnostics_20260608.md` では、`active_plan_candidates.csv: missing`。これは、032以降の新しい監視サイクルがまだ候補CSVを生成していないため。
+- 既存 `trades.csv` は 2075 行あるが、過去データのため `active_primary_action` は blank。
+- 次に必要なのは、新しい監視サイクルで `active_plan_candidates.csv` が生成されることを確認し、その後に Active Plan 候補別 outcome / daily-sync 接続へ進むこと。
+- 既知のローカル未追跡ファイルは、別作業で採用・保留・削除を判断する。今回の正本には混ぜない。
 
 - 実行系の主状態は `iMac 2019` の `ver02.6-v2`。現在の常駐 `com.afrog.btc-monitor` はこの worktree の branch / commit で動いている。`paper_positions.csv` を紙ポジション台帳から `pending -> opened -> closed` の状態管理へ拡張中。
 - `ver02.6-v2` では役割分担を変更する。診断、設計、再考、フェーズ管理は ChatGPT プロジェクトで行い、Codex は確定済み仕様の実装、検証、Git 操作、常駐確認に徹する。
@@ -132,6 +149,13 @@
 12. `paper_entry_sl_wait_redesign` builder は `paper_positions.csv` と `shadow_log.csv` の後付け再計算で再生成可能になった。次回は出力推移を使って設計判断へ進める。
 13. `paper opportunity quality guard` の hard / soft 分離を実装し、仕様書は `chatgpt/specs/archive/20260601_quality_guard_hard_soft_split.md` へ移した。`A=require_execution_for_high_wait` を含む group は hard blocker、`B/C` 単独と `B+C` は soft risk として扱う。
 14. `trade_execution_gate` と `phase1b_lite_gate` は変更していない。直近も `soft_quality_risk=0件` のため、次回もまず観測継続とし、再発時だけ soft risk 側の閾値再調整を検討する。
+
+## 次にやること
+
+1. 新しい監視サイクル後に `logs/csv/active_plan_candidates.csv` が生成されるか確認する。
+2. 生成後、`python tools/log_feedback.py --build-active-trade-plan-diagnostics --active-plan-report-date <YYYYMMDD>` で Active Plan 診断を再生成する。
+3. 候補CSVに実データが入ったら、`active_plan_candidate_outcomes` / daily-sync 接続を次作業にする。
+4. `active_plan_candidate_outcomes_20260608.md`、`feedback_daily_sync_20260608.md`、`BTC自動トレードシステムの理想条件まとめ_06-02.md` の扱いを別途決める。
 
 ## 残作業一覧
 
