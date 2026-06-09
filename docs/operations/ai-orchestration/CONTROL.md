@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-081 records the first controlled intraperiod builder run using generated exchange-auto-public 15m OHLCV and stops before report/daily-sync/runtime/deploy/trading integration.
+BTCFX-20260610-082 records the first controlled Markdown report generation from exchange-auto-public intraperiod outcomes and stops before daily-sync/runtime/deploy/trading integration.
 
-BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
+BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the report review task is complete.
 
 BTCFX-20260608-069 defines the generated output lifecycle policy for BTCFX Ver03-v2 report-only diagnostics.
 
@@ -71,17 +71,17 @@ Execution and deployment are paused until the automatic exchange/public market-d
 
 Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/reference only, not the operating path.
 
-BTCFX-20260610-081 builder succeeded with 88 rows of intraperiod outcomes from generated exchange-auto-public 15m OHLCV.
+BTCFX-20260610-082 report succeeded with 88 lines and 7327 characters from generated exchange-auto-public intraperiod outcomes.
 
-Outcome summary: entry_reached=1, pending=12, sl_first=39, timeout=1, tp1_first=35; non-`no_ohlcv` rows exist.
+Expected markers are present: Active Plan, intraperiod, tp1_first, sl_first, timeout.
 
 Report/daily-sync/runtime/deploy/trading were not run.
 
-After 081, stop for human / ChatGPT review before any report-generation task.
+After 082, stop for human / ChatGPT review before any report-quality or wiring task.
 
-The next recommended task after review / meeting is controlled report generation only if the builder run is accepted, to be assigned a new work ID only after review.
+The next recommended task after review / meeting is report quality and candidate coverage review, to be assigned a new work ID only after review.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_CONTROLLED_BUILDER_RUN_20260610.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_CONTROLLED_REPORT_RUN_20260610.md`.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -206,6 +206,7 @@ Current staged direction:
 | BTCFX-20260608-078 | done | Implement standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool | Ver03-v2 | `pending_review` | Mocked fetch-only tests; no real external fetch was run |
 | BTCFX-20260610-080 | done | Record the first controlled real public 15m OHLCV fetch run for Ver03-v2 | Ver03-v2 | `pending_review` | Fetch succeeded with 499 rows; builder/report/daily-sync not run |
 | BTCFX-20260610-081 | done | Record the first controlled intraperiod builder run using generated exchange-auto-public 15m OHLCV | Ver03-v2 | `pending_review` | Builder succeeded with 88 rows; non-`no_ohlcv` rows exist; report/daily-sync/runtime/deploy/trading not run |
+| BTCFX-20260610-082 | done | Record the first controlled Markdown report generation from exchange-auto-public intraperiod outcomes | Ver03-v2 | `pending_review` | Report succeeded with 88 lines / 7327 chars; expected markers present; daily-sync/runtime/deploy/trading not run |
 
 ---
 
@@ -213,7 +214,7 @@ Current staged direction:
 
 ```text
 Review checkpoint:
-Decide whether to generate one markdown report from the controlled builder run outcome CSV.
+Decide whether to review the controlled report output quality and candidate coverage before any wiring.
 This is not an implementation task yet.
 Work ID to be assigned only after review.
 ```
