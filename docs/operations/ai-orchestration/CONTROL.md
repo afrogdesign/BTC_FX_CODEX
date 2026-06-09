@@ -220,10 +220,10 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-Review checkpoint:
-Decide whether to review the controlled report output quality and candidate coverage before any wiring.
-This is not an implementation task yet.
-Work ID to be assigned only after review.
+NEXT BTCFX-20260610-087
+Goal: docs-only wiring boundary design for the Ver03-v2 pending-outcome review path.
+This is still not implementation.
+Stop before daily-sync, deploy, runtime, trading, or automatic order work.
 ```
 
 ---
