@@ -77,6 +77,12 @@ The next recommended task after review / meeting is BTCFX-20260608-078: implemen
 
 The active deliverable is `docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_BOUNDARY_20260609.md`.
 
+MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
+
+Detailed record is in `docs/operations/deploy/Ver02_6_v2_MBP2020_FROZEN_RUNNER_20260609.md`.
+
+This does not change Ver03-v2 implementation scope or the BTCFX-20260608-078 boundary.
+
 ---
 
 ## 2. Current constraints
