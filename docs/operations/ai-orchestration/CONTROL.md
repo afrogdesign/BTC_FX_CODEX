@@ -11,7 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-085 reviews candidate coverage and OHLCV window alignment for the generated exchange-auto-public intraperiod artifacts and stops before any wiring, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-086 classifies the 12 pending intraperiod outcomes using existing generated artifacts only and stops before any wiring, execution, daily-sync, deploy, runtime, or trading task.
+
+BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the report review gate is complete.
 
@@ -74,14 +76,15 @@ Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/refe
 BTCFX-20260610-085 coverage review selected the conservative boundary `COVERAGE_NEEDS_PENDING_REASON_REVIEW`.
 
 Coverage summary: 499 OHLCV rows, 88 outcome rows, all candidate timestamps inside the OHLCV window, and `pending` rows remain concentrated in recent rows.
+Pending summary: 12 pending rows, 76 resolved rows, 11 recent unresolved windows, and 1 entry-not-touched-by-simple-range-check.
 
 Report/daily-sync/runtime/deploy/trading were not run.
 
-After 085, stop for human review of pending reason classification before any wiring design.
+After 086, stop for human review of docs-only wiring boundary design before any implementation.
 
-The next recommended task after review / meeting is docs-only pending reason classification review, to be assigned a new work ID only after review.
+The next recommended task after review / meeting is docs-only wiring boundary design, to be assigned work ID `BTCFX-20260610-087` only after review.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_CANDIDATE_COVERAGE_WINDOW_REVIEW_20260610.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_PENDING_REASON_CLASSIFICATION_REVIEW_20260610.md`.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -210,6 +213,7 @@ Current staged direction:
 | BTCFX-20260610-083 | done | Review exchange-auto-public intraperiod report quality and candidate coverage | Ver03-v2 | `pending_review` | Conservative boundary selected: NEXT_MANUAL_REPORT_REVIEW; report quality clear; coverage includes pending bucket; wiring not run |
 | BTCFX-20260610-084 | done | Provide a human-facing checklist for the generated exchange-auto-public intraperiod report | Ver03-v2 | `pending_review` | Checklist-only review gate; human selects REPORT_ACCEPT_FOR_WIRING_DESIGN / REPORT_NEEDS_WORDING_FIX / REPORT_NEEDS_COVERAGE_REVIEW / REPORT_HOLD |
 | BTCFX-20260610-085 | done | Review candidate coverage and OHLCV window alignment for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: COVERAGE_NEEDS_PENDING_REASON_REVIEW; all candidate timestamps inside OHLCV window; pending rows concentrated in recent rows |
+| BTCFX-20260610-086 | done | Review pending outcome reasons for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN; 11 recent unresolved windows and 1 entry-not-touched-by-simple-range-check |
 
 ---
 
