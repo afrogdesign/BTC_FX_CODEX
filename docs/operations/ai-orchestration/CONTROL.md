@@ -1,6 +1,6 @@
 # AI Orchestration Control
 
-last_updated: 2026-06-09
+last_updated: 2026-06-10
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
 current_commit: `d7c38073b75d1faa7868146288b5a69cf2c76356`
@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-077 defines the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output before any implementation.
+BTCFX-20260608-078 implements the standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool with mock/unit tests only and no real external fetch.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
@@ -71,11 +71,11 @@ Execution and deployment are paused until the automatic exchange/public market-d
 
 Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/reference only, not the operating path.
 
-After 077, stop for human / ChatGPT review before any implementation task.
+After 078, stop for human / ChatGPT review before any further implementation task.
 
-The next recommended task after review / meeting is BTCFX-20260608-078: implement standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool.
+The next recommended task after review / meeting is a controlled public 15m fetch-run decision, to be assigned a new work ID only after review.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_BOUNDARY_20260609.md`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_IMPLEMENTATION_20260609.md`.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -197,19 +197,17 @@ Current staged direction:
 | BTCFX-20260608-075 | done | Define winning-trade criteria and required market information for Ver03-v2 Active Plan intraperiod verification before further execution or implementation | Ver03-v2 | `pending_review` | Docs-only winning-trade criteria and required market information defined |
 | BTCFX-20260608-076 | done | Map required market information to existing exchange/public data sources and design the automatic fetch-to-local-diagnostic data flow before execution or implementation | Ver03-v2 | `pending_review` | Docs-only market-data source map and fetch-to-local-diagnostic design |
 | BTCFX-20260608-077 | done | Define the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output before implementation | Ver03-v2 | `pending_review` | Docs-only fetch-to-local-diagnostic boundary with review checkpoint |
+| BTCFX-20260608-078 | done | Implement standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool | Ver03-v2 | `pending_review` | Mocked fetch-only tests; no real external fetch was run |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260608-077
-Goal: Design the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output.
-Read: docs/operations/deploy/Ver03-v2_MARKET_DATA_SOURCE_MAP_20260609.md, docs/operations/deploy/Ver03-v2_WINNING_TRADE_CRITERIA_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_BOUNDARY_20260609.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: `git diff --check`
-Stop: if external OHLCV fetch, API keys, runtime restart, main.py, run_cycle, live trading, automatic order execution, evaluator semantics changes, or paper_positions.csv integration are required
-Report: compact
+Review checkpoint:
+Decide whether to permit one controlled public 15m fetch run after reviewing BTCFX-20260608-078.
+This is not an implementation task yet.
+Work ID to be assigned only after review.
 ```
 
 ---
