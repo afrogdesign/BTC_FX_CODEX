@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-080 records the first controlled real public 15m OHLCV fetch run for Ver03-v2 and stops before builder/report/daily-sync integration.
+BTCFX-20260610-081 records the first controlled intraperiod builder run using generated exchange-auto-public 15m OHLCV and stops before report/daily-sync/runtime/deploy/trading integration.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
@@ -71,15 +71,17 @@ Execution and deployment are paused until the automatic exchange/public market-d
 
 Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/reference only, not the operating path.
 
-BTCFX-20260610-080 fetch succeeded with 499 rows from public exchange-auto-public 15m OHLCV.
+BTCFX-20260610-081 builder succeeded with 88 rows of intraperiod outcomes from generated exchange-auto-public 15m OHLCV.
 
-Builder/report/daily-sync/runtime/deploy/trading were not run.
+Outcome summary: entry_reached=1, pending=12, sl_first=39, timeout=1, tp1_first=35; non-`no_ohlcv` rows exist.
 
-After 080, stop for human / ChatGPT review before any builder/report/daily-sync/runtime/deploy task.
+Report/daily-sync/runtime/deploy/trading were not run.
 
-The next recommended task after review / meeting is a controlled builder-run decision only if the fetch run is accepted, to be assigned a new work ID only after review.
+After 081, stop for human / ChatGPT review before any report-generation task.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_CONTROLLED_PUBLIC_FETCH_RUN_20260610.md`.
+The next recommended task after review / meeting is controlled report generation only if the builder run is accepted, to be assigned a new work ID only after review.
+
+The active deliverable is `docs/operations/deploy/Ver03-v2_CONTROLLED_BUILDER_RUN_20260610.md`.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -202,6 +204,8 @@ Current staged direction:
 | BTCFX-20260608-076 | done | Map required market information to existing exchange/public data sources and design the automatic fetch-to-local-diagnostic data flow before execution or implementation | Ver03-v2 | `pending_review` | Docs-only market-data source map and fetch-to-local-diagnostic design |
 | BTCFX-20260608-077 | done | Define the exact safe implementation boundary for automatic public 15m OHLCV fetch-to-local-diagnostic output before implementation | Ver03-v2 | `pending_review` | Docs-only fetch-to-local-diagnostic boundary with review checkpoint |
 | BTCFX-20260608-078 | done | Implement standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool | Ver03-v2 | `pending_review` | Mocked fetch-only tests; no real external fetch was run |
+| BTCFX-20260610-080 | done | Record the first controlled real public 15m OHLCV fetch run for Ver03-v2 | Ver03-v2 | `pending_review` | Fetch succeeded with 499 rows; builder/report/daily-sync not run |
+| BTCFX-20260610-081 | done | Record the first controlled intraperiod builder run using generated exchange-auto-public 15m OHLCV | Ver03-v2 | `pending_review` | Builder succeeded with 88 rows; non-`no_ohlcv` rows exist; report/daily-sync/runtime/deploy/trading not run |
 
 ---
 
@@ -209,7 +213,7 @@ Current staged direction:
 
 ```text
 Review checkpoint:
-Decide whether to permit one controlled public 15m fetch run after reviewing BTCFX-20260608-078.
+Decide whether to generate one markdown report from the controlled builder run outcome CSV.
 This is not an implementation task yet.
 Work ID to be assigned only after review.
 ```
