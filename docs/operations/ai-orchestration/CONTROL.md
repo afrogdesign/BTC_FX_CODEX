@@ -221,8 +221,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-087
-Goal: docs-only wiring boundary design for the Ver03-v2 pending-outcome review path.
+Review checkpoint:
+human review of the 087 boundary design before any implementation task is approved.
 This is still not implementation.
 Stop before daily-sync, deploy, runtime, trading, or automatic order work.
 ```
