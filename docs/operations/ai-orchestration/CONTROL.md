@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260608-078 implements the standalone automatic public 15m OHLCV fetch-to-local-diagnostic CSV tool with mock/unit tests only and no real external fetch.
+BTCFX-20260610-080 records the first controlled real public 15m OHLCV fetch run for Ver03-v2 and stops before builder/report/daily-sync integration.
 
 BTCFX-20260608-070 prepares an exact-path cleanup/archive plan for BTCFX Ver03-v2 generated diagnostics without deleting files, but that archive step is deferred until the OHLCV sample/run task is complete.
 
@@ -71,11 +71,15 @@ Execution and deployment are paused until the automatic exchange/public market-d
 
 Manual OHLCV work from BTCFX-20260608-071 to BTCFX-20260608-073 is fallback/reference only, not the operating path.
 
-After 078, stop for human / ChatGPT review before any further implementation task.
+BTCFX-20260610-080 fetch succeeded with 499 rows from public exchange-auto-public 15m OHLCV.
 
-The next recommended task after review / meeting is a controlled public 15m fetch-run decision, to be assigned a new work ID only after review.
+Builder/report/daily-sync/runtime/deploy/trading were not run.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_FETCH_TO_LOCAL_DIAGNOSTIC_IMPLEMENTATION_20260609.md`.
+After 080, stop for human / ChatGPT review before any builder/report/daily-sync/runtime/deploy task.
+
+The next recommended task after review / meeting is a controlled builder-run decision only if the fetch run is accepted, to be assigned a new work ID only after review.
+
+The active deliverable is `docs/operations/deploy/Ver03-v2_CONTROLLED_PUBLIC_FETCH_RUN_20260610.md`.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
