@@ -214,7 +214,7 @@ Current staged direction:
 | BTCFX-20260610-084 | done | Provide a human-facing checklist for the generated exchange-auto-public intraperiod report | Ver03-v2 | `pending_review` | Checklist-only review gate; human selects REPORT_ACCEPT_FOR_WIRING_DESIGN / REPORT_NEEDS_WORDING_FIX / REPORT_NEEDS_COVERAGE_REVIEW / REPORT_HOLD |
 | BTCFX-20260610-085 | done | Review candidate coverage and OHLCV window alignment for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: COVERAGE_NEEDS_PENDING_REASON_REVIEW; all candidate timestamps inside OHLCV window; pending rows concentrated in recent rows |
 | BTCFX-20260610-086 | done | Review pending outcome reasons for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN; 11 recent unresolved windows and 1 entry-not-touched-by-simple-range-check |
-| BTCFX-20260610-087 | in_progress | Define docs-only wiring boundary design for Ver03-v2 exchange-auto-public intraperiod diagnostics | Ver03-v2 | `pending_review` | Preserves heuristic pending categories, non-FORMAL_GO ACTIVE_* guidance, no automatic orders, and no paper_positions.csv integration yet |
+| BTCFX-20260610-087 | done | Define docs-only wiring boundary design for Ver03-v2 exchange-auto-public intraperiod diagnostics | Ver03-v2 | `pending_review` | Preserves heuristic pending categories, non-FORMAL_GO ACTIVE_* guidance, no automatic orders, and no paper_positions.csv integration yet |
 
 ---
 
