@@ -8905,6 +8905,49 @@ def format_active_plan_notification_contract(
     return "\n".join(lines)
 
 
+def write_active_plan_notification_preview(
+    *,
+    output_path: Path,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    body = format_active_plan_notification_contract(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+    _ensure_parent(output_path)
+    output_path.write_text(body, encoding="utf-8")
+    return body
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
