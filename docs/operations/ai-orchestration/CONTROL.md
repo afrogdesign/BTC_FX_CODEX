@@ -3,7 +3,7 @@
 last_updated: 2026-06-10
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `d7c38073b75d1faa7868146288b5a69cf2c76356`
+current_commit: `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest pushed commit by one or more tasks.
 project_key: `BTCFX`
 
@@ -11,7 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-087 defines the docs-only wiring boundary design for Ver03-v2 exchange-auto-public intraperiod diagnostics after the pending-outcome review and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-SYNC updates reviewed AI orchestration metadata after ChatGPT accepted BTCFX-20260610-087 and BTCFX-20260610-087-FIX and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
+
+BTCFX-20260610-SYNC keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
@@ -82,7 +84,7 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The next recommended task after review / meeting is human review of the 087 boundary design before any implementation task is approved.
+The next recommended task after review / meeting is a minimal report-only notification readiness step for human BTC trading support, to be assigned work ID `BTCFX-20260610-088` only after review.
 
 The active deliverable is `docs/operations/deploy/Ver03-v2_WIRING_BOUNDARY_DESIGN_20260610.md`.
 
@@ -213,18 +215,20 @@ Current staged direction:
 | BTCFX-20260610-083 | done | Review exchange-auto-public intraperiod report quality and candidate coverage | Ver03-v2 | `pending_review` | Conservative boundary selected: NEXT_MANUAL_REPORT_REVIEW; report quality clear; coverage includes pending bucket; wiring not run |
 | BTCFX-20260610-084 | done | Provide a human-facing checklist for the generated exchange-auto-public intraperiod report | Ver03-v2 | `pending_review` | Checklist-only review gate; human selects REPORT_ACCEPT_FOR_WIRING_DESIGN / REPORT_NEEDS_WORDING_FIX / REPORT_NEEDS_COVERAGE_REVIEW / REPORT_HOLD |
 | BTCFX-20260610-085 | done | Review candidate coverage and OHLCV window alignment for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: COVERAGE_NEEDS_PENDING_REASON_REVIEW; all candidate timestamps inside OHLCV window; pending rows concentrated in recent rows |
-| BTCFX-20260610-086 | done | Review pending outcome reasons for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `pending_review` | Conservative boundary selected: PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN; 11 recent unresolved windows and 1 entry-not-touched-by-simple-range-check |
-| BTCFX-20260610-087 | done | Define docs-only wiring boundary design for Ver03-v2 exchange-auto-public intraperiod diagnostics | Ver03-v2 | `pending_review` | Preserves heuristic pending categories, non-FORMAL_GO ACTIVE_* guidance, no automatic orders, and no paper_positions.csv integration yet |
+| BTCFX-20260610-086 | done | Review pending outcome reasons for generated exchange-auto-public intraperiod artifacts | Ver03-v2 | `c5e8dfb78ca0dbb5396d7ddbb8731e6106094120` | Conservative boundary selected: PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN; 11 recent unresolved windows and 1 entry-not-touched-by-simple-range-check |
+| BTCFX-20260610-087 | done | Define docs-only wiring boundary design for Ver03-v2 exchange-auto-public intraperiod diagnostics | Ver03-v2 | `0f9282226e18103b0baead2d190bdc75416e390c` | Preserves heuristic pending categories, non-FORMAL_GO ACTIVE_* guidance, no automatic orders, and no paper_positions.csv integration yet |
 
 ---
 
 ## 7. Next recommended task
 
 ```text
-Review checkpoint:
-human review of the 087 boundary design before any implementation task is approved.
-This is still not implementation.
-Stop before daily-sync, deploy, runtime, trading, or automatic order work.
+NEXT BTCFX-20260610-088
+Goal: prepare a minimal report-only notification readiness step for human BTC trading support.
+This remains diagnostic/report-only.
+No automatic trading.
+No live order path.
+No paper_positions.csv integration.
 ```
 
 ---
