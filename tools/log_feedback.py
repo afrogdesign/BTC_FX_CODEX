@@ -8843,6 +8843,68 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
     return report
 
 
+def format_active_plan_notification_contract(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    lines = [
+        "BTCFX Ver03-v2 report-only notification",
+        "",
+        "Notification Purpose",
+        "- This notification supports human BTC trading decisions.",
+        "- This notification is report-only.",
+        "- This notification is not FORMAL_GO.",
+        "- This notification is not an automatic order.",
+        "- The notification is meant to help a human decide whether to trade manually.",
+        "",
+        "Required Header Fields",
+        f"generated_at_jst: {generated_at_jst}",
+        f"data_freshness: {data_freshness}",
+        f"symbol: {symbol}",
+        f"timeframe: {timeframe}",
+        f"data_source: {data_source}",
+        "report_mode: report-only diagnostic",
+        "formal_go_status: not FORMAL_GO",
+        "auto_order_status: no automatic order",
+        f"detail_report_path: {detail_report_path}",
+        "",
+        "Required Market Summary Fields",
+        f"market_status_summary: {market_status_summary}",
+        f"active_plan_label: {active_plan_label}",
+        f"side: {side}",
+        f"entry_mode: {entry_mode}",
+        f"entry_condition: {entry_condition}",
+        f"tp_plan: {tp_plan}",
+        f"sl_or_invalidation: {sl_or_invalidation}",
+        f"timeout_or_wait_limit: {timeout_or_wait_limit}",
+        f"intraperiod_evidence_summary: {intraperiod_evidence_summary}",
+        f"pending_caveat: {pending_caveat or 'none'}",
+        "",
+        "Human Action Interpretation",
+        "- A human may use this notification to decide whether to inspect the detailed report, review the market, or consider a manual trade.",
+        "- A human must still decide the trade manually.",
+        "- ACTIVE_* is action guidance only.",
+        "- pending or unresolved outcomes reduce confidence and should be called out clearly.",
+        "- The notification must not be read as permission for automatic trading.",
+    ]
+    return "\n".join(lines)
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
