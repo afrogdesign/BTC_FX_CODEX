@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-091 reviews the formatted report-only notification output for human BTC trading support and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-091-METADATA-FIX corrects TASK_LEDGER metadata after BTCFX-20260610-091 and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
 
-BTCFX-20260610-091 keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
+BTCFX-20260610-091-METADATA-FIX keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
