@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-090 implements minimal report-only notification formatting for human BTC trading support and stops before any email sending, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-091 reviews the formatted report-only notification output for human BTC trading support and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
 
-BTCFX-20260610-090 keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
+BTCFX-20260610-091 keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is `tools/log_feedback.py` notification formatting plus `tests/test_active_plan_notification_formatting.py`.
+The active deliverable is `docs/operations/deploy/Ver03-v2_NOTIFICATION_OUTPUT_REVIEW_20260610.md`.
 
-The next recommended task after this implementation is human review of the formatted notification output before any later integration step.
+The next recommended task after this review is minimal report-only notification preview generation only if the output review is accepted; otherwise the next task is a docs wording fix.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -223,8 +223,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-091
-Goal: human review of the formatted notification output before any later integration step.
+NEXT BTCFX-20260610-092
+Goal: minimal report-only notification preview generation if the output review is accepted.
 This remains report-only.
 No automatic trading.
 No live order path.
