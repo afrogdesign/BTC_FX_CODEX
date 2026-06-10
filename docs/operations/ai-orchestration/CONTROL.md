@@ -86,7 +86,7 @@ BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetc
 
 The active deliverable is `docs/operations/deploy/Ver03-v2_NOTIFICATION_OUTPUT_REVIEW_20260610.md`.
 
-The next recommended task after this review is minimal report-only notification preview generation only if the output review is accepted; otherwise the next task is a docs wording fix.
+The next recommended task after this review is BTCFX-20260610-092 minimal report-only notification preview generation.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -224,7 +224,7 @@ Current staged direction:
 
 ```text
 NEXT BTCFX-20260610-092
-Goal: minimal report-only notification preview generation if the output review is accepted.
+Goal: minimal report-only notification preview generation for human BTC trading support.
 This remains report-only.
 No automatic trading.
 No live order path.
