@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-SYNC updates reviewed AI orchestration metadata after ChatGPT accepted BTCFX-20260610-087 and BTCFX-20260610-087-FIX and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-088 prepares a minimal report-only notification readiness review for human BTC trading support and stops before any implementation, execution, daily-sync, deploy, runtime, or trading task.
 
-BTCFX-20260610-SYNC keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
+BTCFX-20260610-088 keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The next recommended task after review / meeting is a minimal report-only notification readiness step for human BTC trading support, to be assigned work ID `BTCFX-20260610-088` only after review.
+The active deliverable is `docs/operations/deploy/Ver03-v2_NOTIFICATION_READINESS_REVIEW_20260610.md`.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_WIRING_BOUNDARY_DESIGN_20260610.md`.
+The next recommended task after this review is a docs wording fix for the notification contract unless human review explicitly approves the later minimal report-only email/notification formatting step.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -223,9 +223,9 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-088
-Goal: prepare a minimal report-only notification readiness step for human BTC trading support.
-This remains diagnostic/report-only.
+NEXT BTCFX-20260610-089
+Goal: docs wording fix for the notification contract after human review of BTCFX-20260610-088.
+This remains report-only.
 No automatic trading.
 No live order path.
 No paper_positions.csv integration.
