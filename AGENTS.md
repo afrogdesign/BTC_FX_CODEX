@@ -45,6 +45,10 @@ Do not rely only on chat history.
 ## AI orchestration metadata
 
 - `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
+- `current_commit` は実際の branch HEAD より意図的に遅れることがある。
+- branch HEAD と `current_commit` の不一致だけでは `BLOCKED` にはしない。
+- `BLOCKED` にするのは、その不一致が個別 task、repo正本、または依頼された編集範囲と矛盾するときだけにする。
+- `git status` で branch/head 状態を確認し、push 後は実際の commit を報告する。
 - implementation task は、自分自身の最終 commit hash を `CONTROL.md` や `TASK_LEDGER.md` に書き込まない。
 - 進行中の implementation task の `TASK_LEDGER.md` の `Commit` は `pending_review` を使う。
 - `TASK_LEDGER.md` の `Push` は、push 後に `reported` を使ってよい。

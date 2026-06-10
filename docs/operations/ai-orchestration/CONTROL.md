@@ -4,7 +4,7 @@ last_updated: 2026-06-10
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
 current_commit: `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`
-note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the latest pushed commit by one or more tasks.
+note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
 ---
@@ -86,7 +86,7 @@ BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetc
 
 The active deliverable is this context-rule update across repo 正本 metadata files.
 
-The next recommended task after this rule is reviewed is BTCFX-20260610-094.
+The next recommended task after this clarification is reviewed is BTCFX-20260610-094.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

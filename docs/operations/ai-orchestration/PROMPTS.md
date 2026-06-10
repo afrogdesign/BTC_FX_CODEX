@@ -46,6 +46,10 @@ Update only:
 - docs/operations/ai-orchestration/PROMPTS.md
 - docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
 Reflect latest reviewed baseline, current objective, workflow rules, next task, and blockers.
+`CONTROL.md` current_commit means the latest ChatGPT-reviewed baseline and may intentionally lag branch HEAD or the latest pushed commit.
+A branch HEAD/current_commit mismatch is not by itself a BLOCK condition.
+Codex should block only when the mismatch contradicts the specific task, the repo正本, or the requested edit scope.
+Codex must still verify branch/head status with `git status` and report the actual commit after push.
 Implementation tasks must not write their own final commit hash into CONTROL.md or TASK_LEDGER.md; use `pending_review` until ChatGPT review is complete and batch-update later in a SYNC task.
 No source code changes.
 Test: git diff --check
@@ -91,6 +95,7 @@ Recommendation: <A/B if obvious>
 - When context migration is recommended, ChatGPT should first provide the reason for migration and wait for the user's direction.
 - If Codex sees contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or evidence that the task context is confused, Codex must stop and report `BLOCKED` rather than guessing or continuing.
 - Repo正本, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`, takes priority over chat history.
+- A `current_commit` lag alone is not contradictory context.
 - The rule is universal and should apply before all future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
 
 ## Execution rule note
