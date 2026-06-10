@@ -84,6 +84,15 @@ Recommendation: <A/B if obvious>
 - ChatGPT ACCEPT can accept `pending_review` metadata when the commit is verified on GitHub; later `SYNC` tasks can batch-update reviewed commit metadata.
 - Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch should use `BTCFX Ver03-v2`.
 
+## Context migration rule
+
+- If ChatGPT judges that ChatGPT context or Codex context has become overloaded, unstable, contradictory, or likely to cause task confusion, ChatGPT must say so at the beginning of the reply.
+- If ChatGPT recommends moving to a new ChatGPT thread or a new Codex thread, ChatGPT must not output the next Codex work prompt until the user gives the next instruction.
+- When context migration is recommended, ChatGPT should first provide the reason for migration and wait for the user's direction.
+- If Codex sees contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or evidence that the task context is confused, Codex must stop and report `BLOCKED` rather than guessing or continuing.
+- Repo正本, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`, takes priority over chat history.
+- The rule is universal and should apply before all future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
+
 ## Execution rule note
 
 - Use only the local iMac repo path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.

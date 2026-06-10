@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-093 reviews the generated report-only notification preview output for human BTC trading support and stops before any later email sending, execution, daily-sync, deploy, runtime, or trading task.
+BTCFX-20260610-CONTEXT-RULE codifies the universal context-overload and thread-migration rule for ChatGPT/Codex orchestration before continuing BTCFX-20260610-094.
 
-BTCFX-20260610-093 keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
+BTCFX-20260610-CONTEXT-RULE keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is `docs/operations/deploy/Ver03-v2_NOTIFICATION_PREVIEW_OUTPUT_REVIEW_20260610.md`.
+The active deliverable is this context-rule update across repo 正本 metadata files.
 
-The next recommended task after this review is BTCFX-20260610-094 minimal report-only preview CLI / manual-output boundary design, if the preview output is accepted.
+The next recommended task after this rule is reviewed is BTCFX-20260610-094.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -224,11 +224,7 @@ Current staged direction:
 
 ```text
 NEXT BTCFX-20260610-094
-Goal: minimal report-only preview CLI / manual-output boundary design after the 093 preview output review, if the preview output is accepted.
-This remains report-only.
-No automatic trading.
-No live order path.
-No paper_positions.csv integration.
+Goal: <to be defined after the context-rule review>
 ```
 
 ---

@@ -36,6 +36,12 @@ Before doing non-trivial work, check:
 Use these files as the current operating context.
 Do not rely only on chat history.
 
+## Context migration and overload
+
+- If the local orchestration context appears overloaded, unstable, contradictory, or likely to cause task confusion, stop and report `BLOCKED` rather than guessing or continuing.
+- If contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or other confused context appears, trust the repo正本 first, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`.
+- This rule applies before future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
+
 ## AI orchestration metadata
 
 - `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
