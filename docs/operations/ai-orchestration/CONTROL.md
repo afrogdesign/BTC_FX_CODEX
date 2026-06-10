@@ -223,8 +223,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-090
-Goal: minimal report-only notification formatting for human BTC trading support.
+NEXT BTCFX-20260610-091
+Goal: human review of the formatted notification output before any later integration step.
 This remains report-only.
 No automatic trading.
 No live order path.
