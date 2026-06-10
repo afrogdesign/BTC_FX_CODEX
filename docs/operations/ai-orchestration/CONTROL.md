@@ -11,9 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-CONTEXT-RULE codifies the universal context-overload and thread-migration rule for ChatGPT/Codex orchestration before continuing BTCFX-20260610-094.
+BTCFX-20260610-094 defines the docs-only boundary for a future minimal report-only notification preview CLI / manual-output path before implementation.
 
-BTCFX-20260610-CONTEXT-RULE keeps the reviewed baseline at the accepted branch head `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`.
+BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
 BTCFX-20260610-086 selected the conservative pending decision `PENDING_ACCEPT_WITH_CAVEAT_FOR_WIRING_BOUNDARY_DESIGN`.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is this context-rule update across repo 正本 metadata files.
+The active deliverable is this docs-only boundary design across repo 正本 metadata files.
 
-The next recommended task after this clarification is reviewed is BTCFX-20260610-094.
+The next recommended task after this boundary is reviewed is BTCFX-20260610-094-REVIEW.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
