@@ -102,7 +102,15 @@ Recommendation: <A/B if obvious>
 
 ## Output rule
 
-- For every `NEXT`, `FIX`, `SYNC`, and `HANDOFF` task, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
+- The final compact report must be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access.
+- This applies to every Codex task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, `READY`, `NEEDS_REVIEW`, resume checks, branch checks, metadata checks, docs-only work, no-commit review work, `done`, `partial`, `failed`, and `not run`.
+- If the thread is ChatGPT-only and does not have local filesystem access, this file write is not required.
+```text
+Report: compact
+
+Also write the final compact report to:
+/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt
+```
 - The filename must be exactly `response.txt`.
 - Do not verify whether the file still exists after writing.
 - For implementation tasks, report the actual commit hash in the final report, but leave the current task's CONTROL/TASK_LEDGER commit fields as `pending_review` unless ChatGPT explicitly supplied a prior reviewed hash to record.

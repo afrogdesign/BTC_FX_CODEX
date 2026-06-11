@@ -39,6 +39,13 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 - `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
 - `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
 
+## Outbox Reporting
+
+- If Codex has local filesystem access, write the final compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, `done`, `partial`, `failed`, resume checks, metadata checks, and no-commit checks.
+- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access.
+- If the thread is ChatGPT-only and does not have local filesystem access, this file write is not required.
+- Keep this rule even when the task only confirms repo state or reports `READY`, `BLOCKED`, or `NEEDS_REVIEW`.
+
 ## When to Use Codex
 
 - Use Codex when the task has a fixed scope and explicit file list.

@@ -59,6 +59,7 @@ Do not rely only on chat history.
 - `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
 - `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
 - 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v2` を使う。
+- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
 ## Standard workflow
 
@@ -106,7 +107,7 @@ PUSH: origin/<branch> | none
 NOTES: <one line only if needed>
 ```
 
-- After commit and push, write the same compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`.
+- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome when Codex has local filesystem access, including resume checks and no-commit review work.
 - The filename must be exactly `response.txt`.
 - Do not verify whether the file still exists after writing.
 

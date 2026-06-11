@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `da032ed2f8591f2aa7de0f72aad0853253976672`
+current_commit: `b8e30927f80ac20a4accfb1d3a23cb97fdc2f6f8`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,9 +11,11 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-RESUME-FINAL-SYNC finalizes the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
+BTCFX-20260611-UNIVERSAL-OUTBOX-RULE makes the Codex compact-report outbox rule universal across all Codex task types and resume checks.
 
-BTCFX-20260611-RESUME-PROTOCOL, BTCFX-20260611-RESUME-PROTOCOL-FIX, and BTCFX-20260610-099-SYNC-REVIEW are accepted.
+BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
+
+BTCFX-20260611-RESUME-PROTOCOL, BTCFX-20260611-RESUME-PROTOCOL-FIX, BTCFX-20260610-099-SYNC-REVIEW, and BTCFX-20260611-RESUME-FINAL-SYNC are accepted.
 
 The low-cost universal resume protocol is reviewed and accepted, and the repo is ready to resume future work from `docs/operations/ai-orchestration/INITIAL_PROMPT.md` and `docs/operations/ai-orchestration/RESUME.md`.
 
@@ -88,9 +90,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is this reviewed resume protocol baseline.
+The active deliverable is this docs-only universal outbox rule.
 
-The next recommended task is a human/ChatGPT product-planning checkpoint rather than a Codex implementation task.
+The next recommended task is a human/ChatGPT checkpoint rather than a Codex implementation task.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -125,7 +127,7 @@ This does not change Ver03-v2 implementation scope or the BTCFX-20260608-078 bou
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
 - Do not use `ssh marupro@192.168.50.51` for normal repo work unless a task explicitly requires confirming the current machine state.
 - Do not run runtime processes unless explicitly instructed.
-- For NEXT, FIX, SYNC, and HANDOFF tasks, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
+- If Codex has local filesystem access, the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, no-commit review work, and resume checks.
 
 ---
 
@@ -227,7 +229,7 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-STOP: Choose next product step from the reviewed Ver03-v3 resume baseline.
+STOP: Choose next product step from the reviewed Ver03-v3 universal outbox baseline.
 ```
 
 ---
