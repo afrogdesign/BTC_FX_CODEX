@@ -90,9 +90,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the reviewed manual-preview operating package baseline and its reviewed-baseline metadata sync.
+The active deliverable is the reviewed manual-delivery file bundle baseline and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step from the reviewed manual-preview operating package baseline.
+The next recommended task is STOP: choose the next product step from the reviewed manual-delivery file bundle baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

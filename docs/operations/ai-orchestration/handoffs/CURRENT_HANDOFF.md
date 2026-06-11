@@ -51,5 +51,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose next product step from the reviewed manual-preview operating package baseline.
+STOP: Choose next product step from the reviewed manual-delivery file bundle baseline.
 ```
