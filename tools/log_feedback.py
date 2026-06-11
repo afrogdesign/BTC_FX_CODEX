@@ -8905,9 +8905,29 @@ def format_active_plan_notification_contract(
     return "\n".join(lines)
 
 
+def _format_manual_delivery_checklist() -> str:
+    lines = [
+        "Manual delivery checklist",
+        "",
+        "- report-only wording is visible",
+        "- not FORMAL_GO is visible",
+        "- no automatic order wording is visible",
+        "- ACTIVE_* guidance-only wording is visible",
+        "- pending caveat is visible",
+        "- detail_report_path is visible",
+        "- symbol, timeframe, and data freshness are visible",
+        "- entry, TP, SL, and timeout are visible",
+        "- a human inspected the detailed report and market context or intentionally chose not to trade",
+        "- no automatic trade/order action will be taken from the message",
+        "- the external app choice and any send/post/share action are human actions outside repo automation",
+    ]
+    return "\n".join(lines)
+
+
 def write_active_plan_notification_preview(
     *,
     output_path: Path | None = None,
+    include_manual_delivery_checklist: bool = False,
     generated_at_jst: str,
     data_freshness: str,
     symbol: str,
@@ -8943,6 +8963,8 @@ def write_active_plan_notification_preview(
         intraperiod_evidence_summary=intraperiod_evidence_summary,
         pending_caveat=pending_caveat,
     )
+    if include_manual_delivery_checklist:
+        body = f"{body}\n\n{_format_manual_delivery_checklist()}"
     if output_path is not None:
         _ensure_parent(output_path)
         output_path.write_text(body, encoding="utf-8")
@@ -8967,6 +8989,7 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
     parser.add_argument("--intraperiod-evidence-summary", required=True)
     parser.add_argument("--pending-caveat", required=True)
     parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
 
 
 def _run_active_plan_notification_preview_command(args: argparse.Namespace) -> None:
@@ -8988,6 +9011,7 @@ def _run_active_plan_notification_preview_command(args: argparse.Namespace) -> N
         timeout_or_wait_limit=str(args.timeout_or_wait_limit),
         intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
         pending_caveat=str(args.pending_caveat),
+        include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
     )
     sys.stdout.write(body)
 
