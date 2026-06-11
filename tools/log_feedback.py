@@ -9047,6 +9047,10 @@ def _latest_active_plan_manual_preview_input_template() -> dict[str, Any]:
     }
 
 
+def _latest_active_plan_manual_preview_input_template_text() -> str:
+    return json.dumps(_latest_active_plan_manual_preview_input_template(), ensure_ascii=False, indent=2)
+
+
 def _load_json_object(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -9283,7 +9287,14 @@ def write_latest_active_plan_manual_preview(
 
 
 def _print_latest_active_plan_manual_preview_input_template() -> None:
-    sys.stdout.write(json.dumps(_latest_active_plan_manual_preview_input_template(), ensure_ascii=False, indent=2) + "\n")
+    sys.stdout.write(_latest_active_plan_manual_preview_input_template_text() + "\n")
+
+
+def _write_latest_active_plan_manual_preview_input_template(output_path: Path) -> Path:
+    template_text = _latest_active_plan_manual_preview_input_template_text()
+    _ensure_parent(output_path)
+    output_path.write_text(template_text, encoding="utf-8")
+    return output_path
 
 
 def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentParser) -> None:
@@ -9324,6 +9335,7 @@ def _add_latest_active_plan_manual_preview_arguments(parser: argparse.ArgumentPa
     parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     parser.add_argument("--input-json")
     parser.add_argument("--print-input-json-template", action="store_true")
+    parser.add_argument("--write-input-json-template", metavar="PATH")
     parser.add_argument("--market-status-summary")
     parser.add_argument("--active-plan-label")
     parser.add_argument("--side")
@@ -9389,8 +9401,15 @@ def _run_active_plan_notification_preview_command(
 
 
 def _run_latest_active_plan_manual_preview_command(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
-    if bool(getattr(args, "print_input_json_template", False)):
-        _print_latest_active_plan_manual_preview_input_template()
+    if bool(getattr(args, "print_input_json_template", False)) or getattr(args, "write_input_json_template", None):
+        template_text = _latest_active_plan_manual_preview_input_template_text()
+        if bool(getattr(args, "print_input_json_template", False)):
+            sys.stdout.write(template_text + "\n")
+        write_input_json_template = getattr(args, "write_input_json_template", None)
+        if write_input_json_template:
+            written_path = _write_latest_active_plan_manual_preview_input_template(Path(write_input_json_template))
+            if not bool(getattr(args, "print_input_json_template", False)):
+                sys.stdout.write(f"{written_path}\n")
         return
 
     merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)

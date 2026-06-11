@@ -472,6 +472,75 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         )
         self.assertNotIn("manual trading support preview", result.stdout)
 
+    def test_write_latest_active_plan_manual_preview_cli_writes_input_json_template(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "nested" / "manual-preview-input.json"
+
+            result = subprocess.run(
+                self._latest_manual_preview_cli_args(["--write-input-json-template", str(output_path)]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertTrue(output_path.parent.exists())
+            self.assertTrue(output_path.exists())
+            self.assertIn(str(output_path), result.stdout)
+            template = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertIsInstance(template, dict)
+            self.assertEqual(template["include_manual_delivery_checklist"], False)
+            self.assertEqual(
+                set(template),
+                {
+                    "generated_at_jst",
+                    "symbol",
+                    "timeframe",
+                    "data_source",
+                    "data_freshness",
+                    "detail_report_path",
+                    "market_status_summary",
+                    "active_plan_label",
+                    "side",
+                    "entry_mode",
+                    "entry_condition",
+                    "tp_plan",
+                    "sl_or_invalidation",
+                    "timeout_or_wait_limit",
+                    "intraperiod_evidence_summary",
+                    "pending_caveat",
+                    "include_manual_delivery_checklist",
+                },
+            )
+            self.assertIn("report-only", template["market_status_summary"])
+            self.assertIn("not FORMAL_GO", template["market_status_summary"])
+            self.assertIn("no automatic order", template["market_status_summary"])
+            self.assertIn("human must decide manually", template["pending_caveat"])
+
+    def test_write_latest_active_plan_manual_preview_cli_prints_and_writes_input_json_template(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "nested" / "manual-preview-input.json"
+
+            result = subprocess.run(
+                self._latest_manual_preview_cli_args(
+                    ["--print-input-json-template", "--write-input-json-template", str(output_path)]
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertTrue(output_path.exists())
+            stdout_template = json.loads(result.stdout)
+            file_template = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(stdout_template, file_template)
+            self.assertEqual(stdout_template["include_manual_delivery_checklist"], False)
+            self.assertIn("report-only", stdout_template["market_status_summary"])
+            self.assertIn("not FORMAL_GO", stdout_template["market_status_summary"])
+            self.assertIn("no automatic order", stdout_template["market_status_summary"])
+            self.assertIn("human must decide manually", stdout_template["pending_caveat"])
+
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
