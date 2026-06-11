@@ -1007,6 +1007,77 @@ def _resolve_manual_delivery_source_detail_report_path(
         return ""
 
 
+def _latest_manual_delivery_input_json_seed_data(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+    recent_row_window: int,
+    generated_at_jst: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    data_freshness: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    include_manual_delivery_checklist: bool,
+) -> dict[str, Any]:
+    resolved_intraperiod_outcomes_path = str(intraperiod_outcomes_path or "").strip()
+    if not resolved_intraperiod_outcomes_path:
+        resolved_intraperiod_outcomes_path = "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
+    intraperiod_outcomes_path_obj = Path(resolved_intraperiod_outcomes_path)
+    if not intraperiod_outcomes_path_obj.is_absolute():
+        intraperiod_outcomes_path_obj = base_dir / intraperiod_outcomes_path_obj
+    intraperiod_outcomes_exists = intraperiod_outcomes_path_obj.exists()
+
+    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(base_dir, detail_report_path)
+    detail_report_exists = _manual_delivery_source_path_exists(base_dir, resolved_detail_report_path)
+
+    summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+        intraperiod_outcomes_path_obj,
+        recent_row_window=recent_row_window,
+    )
+    pending_caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(summary["total_outcome_rows"]),
+        resolved_rows=int(summary["resolved_rows"]),
+        pending_rows=int(summary["pending_rows"]),
+        recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+        entry_not_touched_count=int(summary["entry_not_touched_count"]),
+    )
+
+    market_status_summary = "report-only manual preview; not FORMAL_GO; no automatic order; JSON seed"
+    intraperiod_evidence_summary = (
+        f"detail_report_exists={str(detail_report_exists).lower()}; "
+        f"intraperiod_outcomes_exists={str(intraperiod_outcomes_exists).lower()}; "
+        "local source resolver seed"
+    )
+
+    return {
+        "generated_at_jst": generated_at_jst,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "data_source": data_source,
+        "data_freshness": data_freshness,
+        "detail_report_path": resolved_detail_report_path,
+        "market_status_summary": market_status_summary,
+        "active_plan_label": active_plan_label,
+        "side": side,
+        "entry_mode": entry_mode,
+        "entry_condition": entry_condition,
+        "tp_plan": tp_plan,
+        "sl_or_invalidation": sl_or_invalidation,
+        "timeout_or_wait_limit": timeout_or_wait_limit,
+        "intraperiod_evidence_summary": intraperiod_evidence_summary,
+        "pending_caveat": pending_caveat,
+        "include_manual_delivery_checklist": bool(include_manual_delivery_checklist),
+    }
+
+
 def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
     now_jst = datetime.now(tz=JST)
     output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
@@ -10094,6 +10165,36 @@ def _run_resolve_latest_manual_delivery_source_files_command(
     sys.stdout.write("\n".join(lines) + "\n")
 
 
+def _run_write_latest_manual_delivery_input_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    del parser
+    seed_data = _latest_manual_delivery_input_json_seed_data(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")),
+        detail_report_path=getattr(args, "detail_report_path", None),
+        recent_row_window=int(getattr(args, "recent_row_window", 12)),
+        generated_at_jst=_current_jst_iso_like_timestamp(),
+        symbol=str(getattr(args, "symbol", "BTC_USDT")),
+        timeframe=str(getattr(args, "timeframe", "15m")),
+        data_source=str(getattr(args, "data_source", "exchange-auto-public")),
+        data_freshness=str(getattr(args, "data_freshness", "15m latest-window exchange-auto-public")),
+        active_plan_label=str(getattr(args, "active_plan_label", "NO_ACTION_REVIEW_REQUIRED")),
+        side=str(getattr(args, "side", "review_required")),
+        entry_mode=str(getattr(args, "entry_mode", "review_required")),
+        entry_condition=str(getattr(args, "entry_condition", "review latest report before any manual decision")),
+        tp_plan=str(getattr(args, "tp_plan", "review_required")),
+        sl_or_invalidation=str(getattr(args, "sl_or_invalidation", "review_required")),
+        timeout_or_wait_limit=str(getattr(args, "timeout_or_wait_limit", "review_required")),
+        include_manual_delivery_checklist=bool(getattr(args, "include_manual_delivery_checklist", False)),
+    )
+    output_json = Path(args.output_json)
+    _ensure_parent(output_json)
+    output_json.write_text(json.dumps(seed_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    sys.stdout.write(f"{output_json}\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -12796,6 +12897,27 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_source_files_parser.add_argument("--detail-report-path")
     manual_delivery_source_files_parser.add_argument("--format", choices=["key-value"], default="key-value")
 
+    manual_delivery_input_json_parser = subparsers.add_parser("write-latest-manual-delivery-input-json")
+    manual_delivery_input_json_parser.add_argument("--output-json", required=True)
+    manual_delivery_input_json_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_input_json_parser.add_argument("--detail-report-path")
+    manual_delivery_input_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_input_json_parser.add_argument("--symbol", default="BTC_USDT")
+    manual_delivery_input_json_parser.add_argument("--timeframe", default="15m")
+    manual_delivery_input_json_parser.add_argument("--data-source", default="exchange-auto-public")
+    manual_delivery_input_json_parser.add_argument("--data-freshness", default="15m latest-window exchange-auto-public")
+    manual_delivery_input_json_parser.add_argument("--active-plan-label", default="NO_ACTION_REVIEW_REQUIRED")
+    manual_delivery_input_json_parser.add_argument("--side", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--entry-mode", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--entry-condition", default="review latest report before any manual decision")
+    manual_delivery_input_json_parser.add_argument("--tp-plan", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--sl-or-invalidation", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--timeout-or-wait-limit", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13233,6 +13355,10 @@ def main() -> None:
 
     if args.command == "resolve-latest-manual-delivery-source-files":
         _run_resolve_latest_manual_delivery_source_files_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-input-json":
+        _run_write_latest_manual_delivery_input_json_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

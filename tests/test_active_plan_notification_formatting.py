@@ -237,6 +237,18 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _manual_delivery_input_json_argv(self, output_json: Path, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-manual-delivery-input-json",
+            "--output-json",
+            str(output_json),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             sys.executable,
@@ -388,6 +400,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "resolve-latest-manual-delivery-source-files", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_manual_delivery_input_json_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-input-json", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -1600,6 +1635,271 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("detail_report_path=", stdout)
             self.assertIn("detail_report_exists=false", stdout)
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", stdout)
+
+    def test_write_latest_manual_delivery_input_json_cli_help_includes_command_arguments(self) -> None:
+        result = subprocess.run(
+            self._manual_delivery_input_json_argv(Path("/tmp/manual-delivery-input.json"), ["--help"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("write-latest-manual-delivery-input-json", result.stdout)
+        self.assertIn("--output-json", result.stdout)
+        self.assertIn("--intraperiod-outcomes-path", result.stdout)
+        self.assertIn("--detail-report-path", result.stdout)
+        self.assertIn("--recent-row-window", result.stdout)
+
+    def test_write_latest_manual_delivery_input_json_cli_writes_default_seed_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "nested" / "manual-delivery-input.json"
+
+            code, stdout, stderr = self._run_manual_delivery_input_json_main_with_argv(
+                ["--output-json", str(output_json)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertEqual(stdout, f"{output_json}\n")
+            self.assertTrue(output_json.exists())
+
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(
+                set(seed),
+                {
+                    "generated_at_jst",
+                    "symbol",
+                    "timeframe",
+                    "data_source",
+                    "data_freshness",
+                    "detail_report_path",
+                    "market_status_summary",
+                    "active_plan_label",
+                    "side",
+                    "entry_mode",
+                    "entry_condition",
+                    "tp_plan",
+                    "sl_or_invalidation",
+                    "timeout_or_wait_limit",
+                    "intraperiod_evidence_summary",
+                    "pending_caveat",
+                    "include_manual_delivery_checklist",
+                },
+            )
+            self.assertTrue(seed["generated_at_jst"])
+            self.assertEqual(seed["symbol"], "BTC_USDT")
+            self.assertEqual(seed["timeframe"], "15m")
+            self.assertEqual(seed["data_source"], "exchange-auto-public")
+            self.assertEqual(seed["data_freshness"], "15m latest-window exchange-auto-public")
+            self.assertEqual(seed["detail_report_path"], "")
+            self.assertIn("report-only manual preview", seed["market_status_summary"])
+            self.assertIn("not FORMAL_GO", seed["market_status_summary"])
+            self.assertIn("no automatic order", seed["market_status_summary"])
+            self.assertIn("JSON seed", seed["market_status_summary"])
+            self.assertEqual(seed["active_plan_label"], "NO_ACTION_REVIEW_REQUIRED")
+            self.assertEqual(seed["side"], "review_required")
+            self.assertEqual(seed["entry_mode"], "review_required")
+            self.assertEqual(seed["entry_condition"], "review latest report before any manual decision")
+            self.assertEqual(seed["tp_plan"], "review_required")
+            self.assertEqual(seed["sl_or_invalidation"], "review_required")
+            self.assertEqual(seed["timeout_or_wait_limit"], "review_required")
+            self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("local source resolver seed", seed["intraperiod_evidence_summary"])
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
+            self.assertFalse(seed["include_manual_delivery_checklist"])
+
+    def test_write_latest_manual_delivery_input_json_cli_derives_pending_caveat_from_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "manual-delivery-input.json"
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            before_csv = csv_path.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_manual_delivery_input_json_main_with_argv(
+                [
+                    "--output-json",
+                    str(output_json),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(base_dir / "運用資料" / "reports" / "analysis" / "manual-detail.md"),
+                    "--include-manual-delivery-checklist",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_json}\n")
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertIn("pending_coverage_caveat:", seed["pending_caveat"])
+            self.assertIn("diagnostic=coverage_caveat", seed["pending_caveat"])
+            self.assertIn("report-only", seed["pending_caveat"])
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
+            self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_exists=true", seed["intraperiod_evidence_summary"])
+            self.assertTrue(seed["include_manual_delivery_checklist"])
+            self.assertEqual(csv_path.read_text(encoding="utf-8"), before_csv)
+
+    def test_write_latest_manual_delivery_input_json_cli_missing_csv_uses_no_evidence_caveat(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "manual-delivery-input.json"
+            missing_csv = base_dir / "logs" / "csv" / "missing.csv"
+
+            code, stdout, stderr = self._run_manual_delivery_input_json_main_with_argv(
+                [
+                    "--output-json",
+                    str(output_json),
+                    "--intraperiod-outcomes-path",
+                    str(missing_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_json}\n")
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertIn("diagnostic=no_intraperiod_evidence", seed["pending_caveat"])
+            self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+
+    def test_write_latest_manual_delivery_input_json_cli_uses_explicit_detail_report_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "manual-delivery-input.json"
+            detail_report_path = base_dir / "custom" / "manual-detail.md"
+            detail_report_path.parent.mkdir(parents=True, exist_ok=True)
+            detail_report_path.write_text("manual detail", encoding="utf-8")
+            before_detail = detail_report_path.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_manual_delivery_input_json_main_with_argv(
+                [
+                    "--output-json",
+                    str(output_json),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--symbol",
+                    "ETH_USDT",
+                    "--timeframe",
+                    "30m",
+                    "--data-source",
+                    "exchange-auto-public",
+                    "--data-freshness",
+                    "30m latest-window exchange-auto-public",
+                    "--active-plan-label",
+                    "ACTIVE_LIMIT_RETEST",
+                    "--side",
+                    "long",
+                    "--entry-mode",
+                    "limit_zone_mid",
+                    "--entry-condition",
+                    "entry zone must be touched before consideration",
+                    "--tp-plan",
+                    "TP1/TP2 from report context",
+                    "--sl-or-invalidation",
+                    "SL from report context",
+                    "--timeout-or-wait-limit",
+                    "timeout after configured window",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_json}\n")
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(seed["detail_report_path"], str(detail_report_path))
+            self.assertIn("detail_report_exists=true", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
+
+    def test_write_latest_manual_delivery_input_json_cli_missing_latest_detail_report_uses_empty_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "manual-delivery-input.json"
+
+            code, stdout, stderr = self._run_manual_delivery_input_json_main_with_argv(
+                ["--output-json", str(output_json)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_json}\n")
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(seed["detail_report_path"], "")
+            self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
+
+    def test_write_latest_manual_delivery_input_json_cli_overrides_fields_and_rejects_negative_recent_window(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_json = base_dir / "manual-delivery-input.json"
+            result = subprocess.run(
+                self._manual_delivery_input_json_argv(
+                    output_json,
+                    [
+                        "--recent-row-window",
+                        "-1",
+                    ],
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("must be a non-negative integer", result.stderr)
+
+            override_result = subprocess.run(
+                self._manual_delivery_input_json_argv(
+                    output_json,
+                    [
+                        "--symbol",
+                        "ETH_USDT",
+                        "--timeframe",
+                        "30m",
+                        "--data-source",
+                        "custom-source",
+                        "--data-freshness",
+                        "custom freshness",
+                        "--active-plan-label",
+                        "ACTIVE_LIMIT_RETEST",
+                        "--side",
+                        "long",
+                        "--entry-mode",
+                        "limit_zone_mid",
+                        "--entry-condition",
+                        "entry zone must be touched before consideration",
+                        "--tp-plan",
+                        "TP1/TP2 custom",
+                        "--sl-or-invalidation",
+                        "SL custom",
+                        "--timeout-or-wait-limit",
+                        "timeout custom",
+                    ],
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(override_result.returncode, 0, msg=override_result.stderr)
+            self.assertEqual(override_result.stdout, f"{output_json}\n")
+            seed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(seed["symbol"], "ETH_USDT")
+            self.assertEqual(seed["timeframe"], "30m")
+            self.assertEqual(seed["data_source"], "custom-source")
+            self.assertEqual(seed["data_freshness"], "custom freshness")
+            self.assertEqual(seed["active_plan_label"], "ACTIVE_LIMIT_RETEST")
+            self.assertEqual(seed["side"], "long")
+            self.assertEqual(seed["entry_mode"], "limit_zone_mid")
+            self.assertEqual(seed["entry_condition"], "entry zone must be touched before consideration")
+            self.assertEqual(seed["tp_plan"], "TP1/TP2 custom")
+            self.assertEqual(seed["sl_or_invalidation"], "SL custom")
+            self.assertEqual(seed["timeout_or_wait_limit"], "timeout custom")
 
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
         with TemporaryDirectory() as tmpdir:

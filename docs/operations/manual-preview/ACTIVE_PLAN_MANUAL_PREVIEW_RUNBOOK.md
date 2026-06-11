@@ -31,6 +31,13 @@ Purpose: report-only human manual trading support preview.
 - It stays local/report-only and does not fetch, rebuild, regenerate, notify, trade, or send anything.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
 
+## Latest Manual Delivery Input JSON Seed
+
+- Use `write-latest-manual-delivery-input-json --output-json <path>` as Step 2 after the source resolver and before local bundle generation.
+- It removes manual JSON bootstrapping, but the resulting JSON still requires human review before any later local bundle step.
+- It does not infer trade approval or FORMAL_GO.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, human must decide manually, no external notification integration.
+
 ## Manual Delivery Copy Package
 
 - Use `write-latest-active-plan-manual-delivery-package` when you need a copy-ready subject/body/checklist package for human copy/paste only.
