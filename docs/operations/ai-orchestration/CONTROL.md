@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `1d12e9251d4ee79e17675d4702691a7c9c9c7127`
+current_commit: `b2f3de2460c7ab7e151745f7bf1707f994f119f2`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,13 +11,15 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-UNIVERSAL-OUTBOX-RULE has been accepted and reviewed; this task only records the reviewed-baseline metadata for the accepted Ver03-v3 HEAD.
+BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK has been accepted and BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW passed as REVIEW_ONLY; this sync only records reviewed-baseline metadata for the accepted Ver03-v3 preview-link HEAD.
 
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-BTCFX-20260611-RESUME-PROTOCOL, BTCFX-20260611-RESUME-PROTOCOL-FIX, BTCFX-20260610-099-SYNC-REVIEW, and BTCFX-20260611-RESUME-FINAL-SYNC are accepted.
+BTCFX-20260611-RESUME-PROTOCOL, BTCFX-20260611-RESUME-PROTOCOL-FIX, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK, and BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW are accepted or reviewed as noted.
 
-The low-cost universal resume protocol and universal outbox rule are reviewed and accepted, and the repo is ready to resume future work from `docs/operations/ai-orchestration/INITIAL_PROMPT.md` and `docs/operations/ai-orchestration/RESUME.md`.
+The low-cost universal resume protocol and preview-link bridge are reviewed and accepted, and the repo is ready to resume future work from `docs/operations/ai-orchestration/INITIAL_PROMPT.md` and `docs/operations/ai-orchestration/RESUME.md`.
+
+Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
 BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
@@ -90,9 +92,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is this docs-only universal outbox rule.
+The active deliverable is the report-only preview-link bridge and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step from the reviewed Ver03-v3 universal outbox baseline.
+The next recommended task is STOP: choose the next product step from the reviewed Ver03-v3 preview-link baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
