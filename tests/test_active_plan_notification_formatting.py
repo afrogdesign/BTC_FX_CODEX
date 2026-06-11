@@ -105,12 +105,56 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _latest_manual_preview_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-active-plan-manual-preview",
+            "--market-status-summary",
+            "intraperiod evidence shows mixed TP1 / SL / pending outcomes",
+            "--active-plan-label",
+            "ACTIVE_LIMIT_RETEST",
+            "--side",
+            "long",
+            "--entry-mode",
+            "limit_zone_mid",
+            "--entry-condition",
+            "entry zone must be touched before consideration",
+            "--tp-plan",
+            "TP1 63507.96, TP2 64004.74",
+            "--sl-or-invalidation",
+            "SL 62469.23",
+            "--timeout-or-wait-limit",
+            "timeout after 4h",
+            "--intraperiod-evidence-summary",
+            "88 outcomes with 35 tp1_first, 39 sl_first, 12 pending",
+            "--pending-caveat",
+            "12 pending rows remain and reduce confidence",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _run_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
         resolved_base_dir = base_dir or BASE_DIR
         with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
             with mock.patch.object(sys, "argv", self._preview_argv(extra_args)):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(sys, "argv", self._latest_manual_preview_argv(extra_args)):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
                         log_feedback.main()
@@ -356,6 +400,103 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("human must decide manually", result.stdout)
         self.assertIn("detail_report_path", result.stdout)
         self.assertEqual(result.stdout.count("Manual delivery checklist"), 1)
+
+    def test_write_latest_active_plan_manual_preview_cli_uses_latest_report_without_modifying_it(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            before_text = latest_report.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main([], base_dir=base_dir)
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+            self.assertIn("human must decide manually", stdout)
+            self.assertIn("BTC_USDT", stdout)
+            self.assertIn("15m", stdout)
+            self.assertIn("exchange-auto-public", stdout)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), before_text)
+
+    def test_write_latest_active_plan_manual_preview_cli_supports_explicit_detail_report_override(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            override_report = base_dir / "custom" / "manual-detail.md"
+            override_report.parent.mkdir(parents=True, exist_ok=True)
+            override_report.write_text("override report", encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main(
+                ["--detail-report-path", str(override_report)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn(override_report.as_posix(), stdout)
+            self.assertNotIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(override_report.read_text(encoding="utf-8"), "override report")
+
+    def test_write_latest_active_plan_manual_preview_cli_shows_default_values_when_omitted(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            self._write_intraperiod_report(base_dir, "20260611", "latest report")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main(
+                [
+                    "--market-status-summary",
+                    "intraperiod evidence review only",
+                    "--active-plan-label",
+                    "ACTIVE_LIMIT_RETEST",
+                    "--side",
+                    "long",
+                    "--entry-mode",
+                    "limit_zone_mid",
+                    "--entry-condition",
+                    "entry zone must be touched before consideration",
+                    "--tp-plan",
+                    "TP1/TP2 from report context",
+                    "--sl-or-invalidation",
+                    "SL from report context",
+                    "--timeout-or-wait-limit",
+                    "timeout after configured window",
+                    "--intraperiod-evidence-summary",
+                    "latest intraperiod report linked",
+                    "--pending-caveat",
+                    "pending rows may reduce confidence",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn("symbol: BTC_USDT", stdout)
+            self.assertIn("timeframe: 15m", stdout)
+            self.assertIn("data_source: exchange-auto-public", stdout)
+            self.assertIn("data_freshness: 15m latest-window exchange-auto-public", stdout)
+            self.assertRegex(stdout, r"generated_at_jst: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", stdout)
+
+    def test_write_latest_active_plan_manual_preview_cli_supports_manual_delivery_checklist(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            self._write_intraperiod_report(base_dir, "20260611", "latest report")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main(
+                ["--include-manual-delivery-checklist"],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn("Manual delivery checklist", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+            self.assertIn("human must decide manually", stdout)
+            self.assertEqual(stdout.count("Manual delivery checklist"), 1)
 
     def test_resolve_latest_intraperiod_report_relative_path_uses_latest_matching_report(self) -> None:
         with TemporaryDirectory() as tmpdir:

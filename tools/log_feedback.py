@@ -8987,6 +8987,10 @@ def _format_active_plan_practical_manual_preview(
     return "\n".join(lines)
 
 
+def _current_jst_iso_like_timestamp() -> str:
+    return datetime.now(tz=JST).isoformat(timespec="seconds")
+
+
 def _format_manual_delivery_checklist() -> str:
     lines = [
         "Manual delivery checklist",
@@ -9059,6 +9063,55 @@ def write_active_plan_notification_preview(
     return body
 
 
+def write_latest_active_plan_manual_preview(
+    *,
+    output_path: Path | None = None,
+    include_manual_delivery_checklist: bool = False,
+    generated_at_jst: str | None = None,
+    symbol: str = "BTC_USDT",
+    timeframe: str = "15m",
+    data_source: str = "exchange-auto-public",
+    data_freshness: str = "15m latest-window exchange-auto-public",
+    detail_report_path: str | None = None,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    resolved_detail_report_path = (
+        detail_report_path
+        if detail_report_path is not None
+        else _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
+    )
+    return write_active_plan_notification_preview(
+        output_path=output_path,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+        practical_manual_preview=True,
+        generated_at_jst=generated_at_jst or _current_jst_iso_like_timestamp(),
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=resolved_detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+
+
 def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--generated-at-jst", required=True)
     parser.add_argument("--data-freshness", required=True)
@@ -9084,6 +9137,27 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
     parser.add_argument("--output-path")
     parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     parser.add_argument("--practical-manual-preview", action="store_true")
+
+
+def _add_latest_active_plan_manual_preview_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol", default="BTC_USDT")
+    parser.add_argument("--timeframe", default="15m")
+    parser.add_argument("--data-source", default="exchange-auto-public")
+    parser.add_argument("--data-freshness", default="15m latest-window exchange-auto-public")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--market-status-summary", required=True)
+    parser.add_argument("--active-plan-label", required=True)
+    parser.add_argument("--side", required=True)
+    parser.add_argument("--entry-mode", required=True)
+    parser.add_argument("--entry-condition", required=True)
+    parser.add_argument("--tp-plan", required=True)
+    parser.add_argument("--sl-or-invalidation", required=True)
+    parser.add_argument("--timeout-or-wait-limit", required=True)
+    parser.add_argument("--intraperiod-evidence-summary", required=True)
+    parser.add_argument("--pending-caveat", required=True)
 
 
 def _resolve_active_plan_notification_detail_report_path(
@@ -9134,6 +9208,39 @@ def _run_active_plan_notification_preview_command(
         pending_caveat=str(args.pending_caveat),
         include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
         practical_manual_preview=bool(args.practical_manual_preview),
+    )
+    sys.stdout.write(body)
+
+
+def _run_latest_active_plan_manual_preview_command(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
+    detail_report_path = str(args.detail_report_path).strip() if getattr(args, "detail_report_path", None) else None
+    if detail_report_path is None:
+        try:
+            detail_report_path = _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
+        except FileNotFoundError as exc:
+            if parser is not None:
+                parser.error(str(exc))
+            raise
+    body = write_active_plan_notification_preview(
+        output_path=Path(args.output_path) if args.output_path else None,
+        include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
+        practical_manual_preview=True,
+        generated_at_jst=str(args.generated_at_jst) if getattr(args, "generated_at_jst", None) else _current_jst_iso_like_timestamp(),
+        data_freshness=str(getattr(args, "data_freshness", "15m latest-window exchange-auto-public")),
+        symbol=str(getattr(args, "symbol", "BTC_USDT")),
+        timeframe=str(getattr(args, "timeframe", "15m")),
+        data_source=str(getattr(args, "data_source", "exchange-auto-public")),
+        detail_report_path=detail_report_path,
+        market_status_summary=str(args.market_status_summary),
+        active_plan_label=str(args.active_plan_label),
+        side=str(args.side),
+        entry_mode=str(args.entry_mode),
+        entry_condition=str(args.entry_condition),
+        tp_plan=str(args.tp_plan),
+        sl_or_invalidation=str(args.sl_or_invalidation),
+        timeout_or_wait_limit=str(args.timeout_or_wait_limit),
+        intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
+        pending_caveat=str(args.pending_caveat),
     )
     sys.stdout.write(body)
 
@@ -11813,6 +11920,9 @@ def _build_parser() -> argparse.ArgumentParser:
     notification_preview_parser = subparsers.add_parser("write-active-plan-notification-preview")
     _add_active_plan_notification_preview_arguments(notification_preview_parser)
 
+    latest_manual_preview_parser = subparsers.add_parser("write-latest-active-plan-manual-preview")
+    _add_latest_active_plan_manual_preview_arguments(latest_manual_preview_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12224,6 +12334,10 @@ def main() -> None:
 
     if args.command == "write-active-plan-notification-preview":
         _run_active_plan_notification_preview_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-preview":
+        _run_latest_active_plan_manual_preview_command(args, parser)
         return
 
     if args.command == "build-paper-positions":
