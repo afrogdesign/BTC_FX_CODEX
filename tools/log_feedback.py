@@ -963,6 +963,20 @@ def _report_hub_section_lines(base_dir: Path, specs: list[dict[str, Any]], secti
     return lines
 
 
+def _resolve_latest_report_family_relative_path(base_dir: Path, family_name: str) -> str:
+    spec = next((item for item in REPORT_FAMILY_SPECS if item["name"] == family_name), None)
+    if spec is None:
+        raise ValueError(f"unknown report family: {family_name}")
+    entries = _gather_report_family_entries(base_dir, spec)
+    if not entries:
+        raise FileNotFoundError(f"no report found for family: {family_name}")
+    return entries[0]["path"].relative_to(base_dir).as_posix()
+
+
+def _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir: Path) -> str:
+    return _resolve_latest_report_family_relative_path(base_dir, "active_plan_candidate_intraperiod_outcomes")
+
+
 def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
     now_jst = datetime.now(tz=JST)
     output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
@@ -8977,7 +8991,12 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
     parser.add_argument("--symbol", required=True)
     parser.add_argument("--timeframe", required=True)
     parser.add_argument("--data-source", required=True)
-    parser.add_argument("--detail-report-path", required=True)
+    parser.add_argument("--detail-report-path")
+    parser.add_argument(
+        "--use-latest-intraperiod-report",
+        action="store_true",
+        help="Use the latest active_plan_candidate_intraperiod_outcomes report as detail_report_path.",
+    )
     parser.add_argument("--market-status-summary", required=True)
     parser.add_argument("--active-plan-label", required=True)
     parser.add_argument("--side", required=True)
@@ -8992,7 +9011,34 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
     parser.add_argument("--include-manual-delivery-checklist", action="store_true")
 
 
-def _run_active_plan_notification_preview_command(args: argparse.Namespace) -> None:
+def _resolve_active_plan_notification_detail_report_path(
+    *,
+    base_dir: Path,
+    detail_report_path: str | None,
+    use_latest_intraperiod_report: bool,
+) -> str:
+    if use_latest_intraperiod_report:
+        return _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir)
+    resolved_detail_report_path = str(detail_report_path or "").strip()
+    if not resolved_detail_report_path:
+        raise ValueError("--detail-report-path is required unless --use-latest-intraperiod-report is supplied")
+    return resolved_detail_report_path
+
+
+def _run_active_plan_notification_preview_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    try:
+        detail_report_path = _resolve_active_plan_notification_detail_report_path(
+            base_dir=BASE_DIR,
+            detail_report_path=getattr(args, "detail_report_path", None),
+            use_latest_intraperiod_report=bool(getattr(args, "use_latest_intraperiod_report", False)),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        if parser is not None:
+            parser.error(str(exc))
+        raise
     body = write_active_plan_notification_preview(
         output_path=Path(args.output_path) if args.output_path else None,
         generated_at_jst=str(args.generated_at_jst),
@@ -9000,7 +9046,7 @@ def _run_active_plan_notification_preview_command(args: argparse.Namespace) -> N
         symbol=str(args.symbol),
         timeframe=str(args.timeframe),
         data_source=str(args.data_source),
-        detail_report_path=str(args.detail_report_path),
+        detail_report_path=detail_report_path,
         market_status_summary=str(args.market_status_summary),
         active_plan_label=str(args.active_plan_label),
         side=str(args.side),
@@ -12101,7 +12147,7 @@ def main() -> None:
         return
 
     if args.command == "write-active-plan-notification-preview":
-        _run_active_plan_notification_preview_command(args)
+        _run_active_plan_notification_preview_command(args, parser)
         return
 
     if args.command == "build-paper-positions":
