@@ -223,8 +223,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-096
-Goal: Review the actual minimal report-only preview CLI output before any email, daily-sync, runtime, deploy, or trading integration.
+NEXT BTCFX-20260610-097
+Goal: Define the boundary for a future manual delivery workflow after reviewing the CLI output, without approving email sending, daily-sync, runtime, deploy, or trading integration.
 ```
 
 ---
