@@ -3,14 +3,14 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `8c3ae39e2b6e6fdbcd1d0e4c1ddba82410feddb6`
-latest_branch_head: `1ccbf583d8160fd70490432aac29fcc5bf2b53e2`
+current_commit: `da032ed2f8591f2aa7de0f72aad0853253976672`
+latest_branch_head: `da032ed2f8591f2aa7de0f72aad0853253976672`
 
 ## Objective
 
-BTCFX-20260611-RESUME-PROTOCOL-FIX corrects the resume protocol handoff head metadata after the resume protocol branch checkpoint.
+BTCFX-20260611-RESUME-FINAL-SYNC finalizes the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, and the resume protocol branch checkpoint.
+This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
 
 ## Current state
@@ -18,8 +18,9 @@ The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` 
 - BTCFX-20260610-098 is complete at `8c3ae39 Add manual delivery checklist output`.
 - BTCFX-20260610-098-REVIEW was REVIEW_ONLY and confirmed the checklist output.
 - BTCFX-20260610-099-SYNC is complete at `d2b93f2 Sync reviewed baseline after manual checklist review`.
+- BTCFX-20260610-099-SYNC-REVIEW passed and confirmed the reviewed-baseline metadata sync and resume protocol state.
 - BTCFX-20260611-RESUME-PROTOCOL was pushed at `1ccbf58 Add low-cost universal resume protocol`.
-- `CONTROL.md` now points at the resume protocol task and keeps the next product step deferred for review.
+- `CONTROL.md` now records the reviewed resume baseline and defers the next step to a human/ChatGPT product-planning checkpoint.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -37,11 +38,5 @@ The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` 
 ## Next task
 
 ```text
-NEXT BTCFX-20260610-099-SYNC-REVIEW
-Goal: Review the reviewed-baseline metadata sync before choosing the next product step.
-Read: docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
-Edit: none
-Test: none
-Stop: if the repo state is contradictory or if a design decision outside the metadata sync is required
-Report: compact
+STOP: Choose next product step from the reviewed Ver03-v3 resume baseline.
 ```
