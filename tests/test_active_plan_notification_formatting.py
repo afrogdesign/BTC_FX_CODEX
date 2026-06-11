@@ -237,16 +237,6 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
-    def _manual_delivery_source_files_argv(self, extra_args: list[str] | None = None) -> list[str]:
-        argv = [
-            sys.executable,
-            str(BASE_DIR / "tools" / "log_feedback.py"),
-            "resolve-latest-manual-delivery-source-files",
-        ]
-        if extra_args:
-            argv.extend(extra_args)
-        return argv
-
     def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             sys.executable,
@@ -375,29 +365,6 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-delivery-files", *argv],
-            ):
-                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                    try:
-                        log_feedback.main()
-                    except SystemExit as exc:
-                        code = int(exc.code) if isinstance(exc.code, int) else 1
-                    else:
-                        code = 0
-        return code, stdout.getvalue(), stderr.getvalue()
-
-    def _run_manual_delivery_source_files_main_with_argv(
-        self,
-        argv: list[str],
-        base_dir: Path | None = None,
-    ) -> tuple[int, str, str]:
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-        resolved_base_dir = base_dir or BASE_DIR
-        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
-            with mock.patch.object(
-                sys,
-                "argv",
-                [str(BASE_DIR / "tools" / "log_feedback.py"), "resolve-latest-manual-delivery-source-files", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
