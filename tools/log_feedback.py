@@ -8907,7 +8907,7 @@ def format_active_plan_notification_contract(
 
 def write_active_plan_notification_preview(
     *,
-    output_path: Path,
+    output_path: Path | None = None,
     generated_at_jst: str,
     data_freshness: str,
     symbol: str,
@@ -8943,9 +8943,53 @@ def write_active_plan_notification_preview(
         intraperiod_evidence_summary=intraperiod_evidence_summary,
         pending_caveat=pending_caveat,
     )
-    _ensure_parent(output_path)
-    output_path.write_text(body, encoding="utf-8")
+    if output_path is not None:
+        _ensure_parent(output_path)
+        output_path.write_text(body, encoding="utf-8")
     return body
+
+
+def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst", required=True)
+    parser.add_argument("--data-freshness", required=True)
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--timeframe", required=True)
+    parser.add_argument("--data-source", required=True)
+    parser.add_argument("--detail-report-path", required=True)
+    parser.add_argument("--market-status-summary", required=True)
+    parser.add_argument("--active-plan-label", required=True)
+    parser.add_argument("--side", required=True)
+    parser.add_argument("--entry-mode", required=True)
+    parser.add_argument("--entry-condition", required=True)
+    parser.add_argument("--tp-plan", required=True)
+    parser.add_argument("--sl-or-invalidation", required=True)
+    parser.add_argument("--timeout-or-wait-limit", required=True)
+    parser.add_argument("--intraperiod-evidence-summary", required=True)
+    parser.add_argument("--pending-caveat", required=True)
+    parser.add_argument("--output-path")
+
+
+def _run_active_plan_notification_preview_command(args: argparse.Namespace) -> None:
+    body = write_active_plan_notification_preview(
+        output_path=Path(args.output_path) if args.output_path else None,
+        generated_at_jst=str(args.generated_at_jst),
+        data_freshness=str(args.data_freshness),
+        symbol=str(args.symbol),
+        timeframe=str(args.timeframe),
+        data_source=str(args.data_source),
+        detail_report_path=str(args.detail_report_path),
+        market_status_summary=str(args.market_status_summary),
+        active_plan_label=str(args.active_plan_label),
+        side=str(args.side),
+        entry_mode=str(args.entry_mode),
+        entry_condition=str(args.entry_condition),
+        tp_plan=str(args.tp_plan),
+        sl_or_invalidation=str(args.sl_or_invalidation),
+        timeout_or_wait_limit=str(args.timeout_or_wait_limit),
+        intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
+        pending_caveat=str(args.pending_caveat),
+    )
+    sys.stdout.write(body)
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -11620,6 +11664,9 @@ def _build_parser() -> argparse.ArgumentParser:
     report_hub_parser = subparsers.add_parser("build-report-hub")
     report_hub_parser.add_argument("--output-md")
 
+    notification_preview_parser = subparsers.add_parser("write-active-plan-notification-preview")
+    _add_active_plan_notification_preview_arguments(notification_preview_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12027,6 +12074,10 @@ def main() -> None:
         else:
             print(base_dir / "運用資料" / "reports" / "report_hub_latest.md")
             print(report)
+        return
+
+    if args.command == "write-active-plan-notification-preview":
+        _run_active_plan_notification_preview_command(args)
         return
 
     if args.command == "build-paper-positions":
