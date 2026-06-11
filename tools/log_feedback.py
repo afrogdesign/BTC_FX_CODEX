@@ -9286,6 +9286,79 @@ def write_latest_active_plan_manual_preview(
     )
 
 
+def _format_manual_delivery_copy_package(
+    *,
+    subject_prefix: str,
+    delivery_target_label: str,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    include_manual_delivery_checklist: bool = False,
+) -> str:
+    body = write_active_plan_notification_preview(
+        output_path=None,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+        practical_manual_preview=True,
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+    subject = f"{subject_prefix} | {symbol} | {timeframe} | {active_plan_label} | {side} | report-only"
+    lines = [
+        "Manual delivery copy package",
+        "",
+        "Copy-ready subject",
+        f"subject: {subject}",
+        f"delivery_target_label: {delivery_target_label}",
+        "",
+        "Copy-ready body",
+        body,
+        "",
+        "Human send checklist",
+        "- human must decide manually",
+        "- copy/paste is a human action outside repo automation",
+        "- confirm no automatic order is triggered",
+        "- confirm not FORMAL_GO",
+        "- confirm generated preview files are not committed unless explicitly approved",
+        f"- delivery target label: {delivery_target_label}",
+        "",
+        "Safety boundary",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+    ]
+    return "\n".join(lines)
+
+
 def _print_latest_active_plan_manual_preview_input_template() -> None:
     sys.stdout.write(_latest_active_plan_manual_preview_input_template_text() + "\n")
 
@@ -9346,6 +9419,30 @@ def _add_latest_active_plan_manual_preview_arguments(parser: argparse.ArgumentPa
     parser.add_argument("--timeout-or-wait-limit")
     parser.add_argument("--intraperiod-evidence-summary")
     parser.add_argument("--pending-caveat")
+
+
+def _add_latest_active_plan_manual_delivery_package_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--input-json")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
+    parser.add_argument("--subject-prefix", default="BTCFX Ver03-v2 report-only")
+    parser.add_argument("--delivery-target-label", default="manual external app")
 
 
 def _resolve_active_plan_notification_detail_report_path(
@@ -9435,6 +9532,39 @@ def _run_latest_active_plan_manual_preview_command(args: argparse.Namespace, par
         pending_caveat=str(merged["pending_caveat"]),
     )
     sys.stdout.write(body)
+
+
+def _run_latest_active_plan_manual_delivery_package_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    package = _format_manual_delivery_copy_package(
+        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
+        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app")),
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    if getattr(args, "output_path", None):
+        output_path = Path(args.output_path)
+        _ensure_parent(output_path)
+        output_path.write_text(package, encoding="utf-8")
+    sys.stdout.write(package)
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -12115,6 +12245,9 @@ def _build_parser() -> argparse.ArgumentParser:
     latest_manual_preview_parser = subparsers.add_parser("write-latest-active-plan-manual-preview")
     _add_latest_active_plan_manual_preview_arguments(latest_manual_preview_parser)
 
+    manual_delivery_package_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-package")
+    _add_latest_active_plan_manual_delivery_package_arguments(manual_delivery_package_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12530,6 +12663,10 @@ def main() -> None:
 
     if args.command == "write-latest-active-plan-manual-preview":
         _run_latest_active_plan_manual_preview_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-package":
+        _run_latest_active_plan_manual_delivery_package_command(args, parser)
         return
 
     if args.command == "build-paper-positions":

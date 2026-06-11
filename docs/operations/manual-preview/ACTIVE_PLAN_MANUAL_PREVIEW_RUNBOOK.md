@@ -24,6 +24,12 @@ Purpose: report-only human manual trading support preview.
 4. Optionally write the preview to a local file.
    - Add `--output-path <path>` when you need a saved preview.
 
+## Manual Delivery Copy Package
+
+- Use `write-latest-active-plan-manual-delivery-package` when you need a copy-ready subject/body/checklist package for human copy/paste only.
+- This package is for manual handling only and does not perform email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or any other external notification integration.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
+
 ## Operational Notes
 
 - Generated preview files and generated reports must not be committed unless explicitly approved.

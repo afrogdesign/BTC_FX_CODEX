@@ -145,6 +145,35 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             args.extend(extra_args)
         return args
 
+    def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-active-plan-manual-delivery-package",
+            "--market-status-summary",
+            "intraperiod evidence shows mixed TP1 / SL / pending outcomes",
+            "--active-plan-label",
+            "ACTIVE_LIMIT_RETEST",
+            "--side",
+            "long",
+            "--entry-mode",
+            "limit_zone_mid",
+            "--entry-condition",
+            "entry zone must be touched before consideration",
+            "--tp-plan",
+            "TP1 63507.96, TP2 64004.74",
+            "--sl-or-invalidation",
+            "SL 62469.23",
+            "--timeout-or-wait-limit",
+            "timeout after 4h",
+            "--intraperiod-evidence-summary",
+            "88 outcomes with 35 tp1_first, 39 sl_first, 12 pending",
+            "--pending-caveat",
+            "12 pending rows remain and reduce confidence",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _run_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -184,6 +213,40 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-preview", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_delivery_package_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(sys, "argv", self._latest_manual_delivery_package_argv(extra_args)):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_delivery_package_main_with_argv(self, argv: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-delivery-package", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -540,6 +603,109 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("not FORMAL_GO", stdout_template["market_status_summary"])
             self.assertIn("no automatic order", stdout_template["market_status_summary"])
             self.assertIn("human must decide manually", stdout_template["pending_caveat"])
+
+    def test_write_latest_active_plan_manual_delivery_package_cli_uses_latest_report_and_orders_sections(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            older_report = self._write_intraperiod_report(base_dir, "20260610", "older report")
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            latest_before = latest_report.read_text(encoding="utf-8")
+            older_before = older_report.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_delivery_package_main([], base_dir=base_dir)
+
+            self.assertEqual(code, 0, msg=stderr)
+            sections = [
+                "Manual delivery copy package",
+                "Copy-ready subject",
+                "Copy-ready body",
+                "Human send checklist",
+                "Safety boundary",
+            ]
+            positions = [stdout.index(section) for section in sections]
+            self.assertEqual(positions, sorted(positions))
+            self.assertIn("subject: BTCFX Ver03-v2 report-only | BTC_USDT | 15m | ACTIVE_LIMIT_RETEST | long | report-only", stdout)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+            self.assertIn("human must decide manually", stdout)
+            self.assertIn("copy/paste is a human action outside repo automation", stdout)
+            self.assertIn("confirm no automatic order is triggered", stdout)
+            self.assertIn("confirm not FORMAL_GO", stdout)
+            self.assertIn("confirm generated preview files are not committed unless explicitly approved", stdout)
+            self.assertIn("manual external app", stdout)
+            self.assertIn("no external notification integration", stdout)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertNotIn(older_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), latest_before)
+            self.assertEqual(older_report.read_text(encoding="utf-8"), older_before)
+
+    def test_write_latest_active_plan_manual_delivery_package_cli_subject_prefix_and_target_override(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            self._write_intraperiod_report(base_dir, "20260611", "latest report")
+
+            code, stdout, stderr = self._run_latest_manual_delivery_package_main(
+                ["--subject-prefix", "BTCFX CUSTOM report-only", "--delivery-target-label", "custom external app"],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn("subject: BTCFX CUSTOM report-only | BTC_USDT | 15m | ACTIVE_LIMIT_RETEST | long | report-only", stdout)
+            self.assertIn("custom external app", stdout)
+
+    def test_write_latest_active_plan_manual_delivery_package_cli_supports_input_json_and_output_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            input_json = base_dir / "manual-delivery-input.json"
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                        "symbol": "ETH_USDT",
+                        "timeframe": "30m",
+                        "data_source": "exchange-auto-public",
+                        "data_freshness": "30m latest-window exchange-auto-public",
+                        "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+                        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                        "side": "short",
+                        "entry_mode": "limit_zone_mid",
+                        "entry_condition": "entry zone must be touched before consideration",
+                        "tp_plan": "TP1/TP2 from JSON",
+                        "sl_or_invalidation": "SL from JSON",
+                        "timeout_or_wait_limit": "timeout after JSON window",
+                        "intraperiod_evidence_summary": "JSON provided evidence summary",
+                        "pending_caveat": "report-only manual preview; human must decide manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            output_path = base_dir / "nested" / "manual-delivery-package.txt"
+
+            code, stdout, stderr = self._run_latest_manual_delivery_package_main_with_argv(
+                ["--input-json", str(input_json), "--output-path", str(output_path)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertTrue(output_path.exists())
+            self.assertEqual(stdout, output_path.read_text(encoding="utf-8"))
+            self.assertIn("subject: BTCFX Ver03-v2 report-only | ETH_USDT | 30m | ACTIVE_LIMIT_RETEST | short | report-only", stdout)
+            self.assertIn("ETH_USDT", stdout)
+            self.assertIn("30m", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+            self.assertIn("human must decide manually", stdout)
+            self.assertIn("manual external app", stdout)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), "latest report")
 
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
