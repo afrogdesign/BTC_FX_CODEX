@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `53e00d381087e4ac9be78bb5ae7cdd66d867aeba`
+current_commit: `b7718446f10e6098737e84f08333ee7165768bee`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,11 +11,11 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK, BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW, BTCFX-20260611-091-PREVIEW-LINK-BASELINE-SYNC, BTCFX-20260611-092-PRACTICAL-MANUAL-PREVIEW, BTCFX-20260611-093-LATEST-MANUAL-PREVIEW-SHORTCUT, BTCFX-20260611-094-MANUAL-PREVIEW-JSON-INPUT, and BTCFX-20260611-095-MANUAL-PREVIEW-OPERATING-PACKAGE are accepted or REVIEW_ONLY as noted; BTCFX-20260611-097-MANUAL-DELIVERY-COPY-PACKAGE at `d31578204cf2a2f1ca7cf909345e72f84ba370f7` and BTCFX-20260611-098-MANUAL-DELIVERY-FILE-BUNDLE at `53e00d381087e4ac9be78bb5ae7cdd66d867aeba` are accepted; this sync only records reviewed-baseline metadata for the accepted Ver03-v3 manual-delivery file bundle HEAD.
+BTCFX-20260611-100-PENDING-COVERAGE-CAVEAT-DIAGNOSTIC is accepted at `b7718446f10e6098737e84f08333ee7165768bee`; BTCFX-20260611-101-PENDING-CAVEAT-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit; this sync only records reviewed-baseline metadata for the accepted Ver03-v3 pending/coverage caveat baseline HEAD.
 
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-The reviewed manual-delivery workflow now supports `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, copy-ready manual delivery package output, local file bundle output, `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, `README.txt`, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
+The reviewed manual-delivery workflow now supports `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, deterministic pending/coverage caveat generation via `format-active-plan-pending-coverage-caveat`, copy-ready manual delivery package output, local file bundle output, `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, `README.txt`, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
 Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration, no clipboard/address-book integration, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
@@ -92,7 +92,7 @@ BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetc
 
 The active deliverable is the reviewed manual-delivery file bundle baseline and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step from the reviewed manual-delivery file bundle baseline.
+The next recommended task is STOP: choose the next product step from the reviewed pending/coverage caveat manual-delivery baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

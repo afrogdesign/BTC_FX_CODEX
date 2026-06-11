@@ -3,12 +3,12 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `53e00d381087e4ac9be78bb5ae7cdd66d867aeba`
-latest_reviewed_baseline: `53e00d381087e4ac9be78bb5ae7cdd66d867aeba`
+current_commit: `b7718446f10e6098737e84f08333ee7165768bee`
+latest_reviewed_baseline: `b7718446f10e6098737e84f08333ee7165768bee`
 
 ## Objective
 
-BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK, BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW, BTCFX-20260611-091-PREVIEW-LINK-BASELINE-SYNC, BTCFX-20260611-092-PRACTICAL-MANUAL-PREVIEW, BTCFX-20260611-093-LATEST-MANUAL-PREVIEW-SHORTCUT, BTCFX-20260611-094-MANUAL-PREVIEW-JSON-INPUT, and BTCFX-20260611-095-MANUAL-PREVIEW-OPERATING-PACKAGE are accepted or REVIEW_ONLY as noted; BTCFX-20260611-097-MANUAL-DELIVERY-COPY-PACKAGE and BTCFX-20260611-098-MANUAL-DELIVERY-FILE-BUNDLE are accepted; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 manual-delivery file bundle HEAD.
+BTCFX-20260611-100-PENDING-COVERAGE-CAVEAT-DIAGNOSTIC is accepted at `b7718446f10e6098737e84f08333ee7165768bee`; BTCFX-20260611-101-PENDING-CAVEAT-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 pending/coverage caveat baseline HEAD.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -30,10 +30,10 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-093-LATEST-MANUAL-PREVIEW-SHORTCUT is accepted at `c835c6e Add latest manual preview shortcut`.
 - BTCFX-20260611-094-MANUAL-PREVIEW-JSON-INPUT is accepted at `c2bef8d Add JSON input for latest manual preview`.
 - BTCFX-20260611-095-MANUAL-PREVIEW-OPERATING-PACKAGE is accepted at `1ff74d1 Add manual preview operating package`.
-- BTCFX-20260611-097-MANUAL-DELIVERY-COPY-PACKAGE is accepted at `d315782 Add manual delivery copy package`.
-- BTCFX-20260611-098-MANUAL-DELIVERY-FILE-BUNDLE is accepted at `53e00d3 Add manual delivery file bundle`.
-- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-active-plan-manual-delivery-package` and `write-latest-active-plan-manual-delivery-files`.
-- `CONTROL.md` now records the reviewed manual-delivery file bundle baseline and defers the next step to STOP: choose the next product step from the reviewed manual-delivery file bundle baseline.
+- BTCFX-20260611-100-PENDING-COVERAGE-CAVEAT-DIAGNOSTIC is accepted at `b771844 Add pending coverage caveat diagnostic`.
+- BTCFX-20260611-101-PENDING-CAVEAT-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit.
+- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `format-active-plan-pending-coverage-caveat`, `write-latest-active-plan-manual-delivery-package`, and `write-latest-active-plan-manual-delivery-files`.
+- `CONTROL.md` now records the reviewed pending/coverage caveat manual-delivery baseline and defers the next step to STOP: choose the next product step from the reviewed pending/coverage caveat manual-delivery baseline.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -51,5 +51,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose next product step from the reviewed manual-delivery file bundle baseline.
+STOP: Choose next product step from the reviewed pending/coverage caveat manual-delivery baseline.
 ```
