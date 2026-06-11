@@ -16,6 +16,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from tools.log_feedback import format_active_plan_notification_contract
+from tools.log_feedback import format_active_plan_pending_coverage_caveat
 import tools.log_feedback as log_feedback
 
 
@@ -200,6 +201,16 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             "88 outcomes with 35 tp1_first, 39 sl_first, 12 pending",
             "--pending-caveat",
             "12 pending rows remain and reduce confidence",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
+    def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "format-active-plan-pending-coverage-caveat",
         ]
         if extra_args:
             argv.extend(extra_args)
@@ -408,6 +419,122 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("ACTIVE_* is action guidance only", body)
         self.assertIn("12 pending rows remain and reduce confidence", body)
         self.assertIn("BTCFX Ver03-v2 report-only notification", body)
+
+    def test_format_active_plan_pending_coverage_caveat_is_deterministic_across_core_cases(self) -> None:
+        cases = [
+            (
+                "coverage_caveat",
+                {
+                    "total_outcome_rows": 88,
+                    "resolved_rows": 76,
+                    "pending_rows": 12,
+                    "recent_unresolved_windows": 11,
+                    "entry_not_touched_count": 1,
+                },
+                "pending_coverage_caveat: total_outcome_rows=88; resolved_rows=76; pending_rows=12; pending_rate=13.6%; recent_unresolved_windows=11; entry_not_touched_count=1; count_consistency=matches; diagnostic=coverage_caveat; action=reduce_confidence_and_review_detail_report_manually; safety=report-only_not_FORMAL_GO_no_automatic_order",
+            ),
+            (
+                "no_intraperiod_evidence",
+                {
+                    "total_outcome_rows": 0,
+                    "resolved_rows": 0,
+                    "pending_rows": 0,
+                    "recent_unresolved_windows": 0,
+                    "entry_not_touched_count": 0,
+                },
+                "pending_coverage_caveat: total_outcome_rows=0; resolved_rows=0; pending_rows=0; pending_rate=n/a; recent_unresolved_windows=0; entry_not_touched_count=0; count_consistency=matches; diagnostic=no_intraperiod_evidence; action=do_not_use_as_trade_trigger; safety=report-only_not_FORMAL_GO_no_automatic_order",
+            ),
+            (
+                "coverage_ok",
+                {
+                    "total_outcome_rows": 76,
+                    "resolved_rows": 76,
+                    "pending_rows": 0,
+                    "recent_unresolved_windows": 0,
+                    "entry_not_touched_count": 0,
+                },
+                "pending_coverage_caveat: total_outcome_rows=76; resolved_rows=76; pending_rows=0; pending_rate=0.0%; recent_unresolved_windows=0; entry_not_touched_count=0; count_consistency=matches; diagnostic=coverage_ok; action=still_review_detail_report_manually; safety=report-only_not_FORMAL_GO_no_automatic_order",
+            ),
+            (
+                "count_mismatch",
+                {
+                    "total_outcome_rows": 10,
+                    "resolved_rows": 6,
+                    "pending_rows": 3,
+                    "recent_unresolved_windows": 0,
+                    "entry_not_touched_count": 0,
+                },
+                "pending_coverage_caveat: total_outcome_rows=10; resolved_rows=6; pending_rows=3; pending_rate=30.0%; recent_unresolved_windows=0; entry_not_touched_count=0; count_consistency=mismatch_review_required; diagnostic=coverage_caveat; action=reduce_confidence_and_review_detail_report_manually; safety=report-only_not_FORMAL_GO_no_automatic_order",
+            ),
+        ]
+
+        for name, kwargs, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(format_active_plan_pending_coverage_caveat(**kwargs), expected)
+
+    def test_format_active_plan_pending_coverage_caveat_cli_stdout_and_help(self) -> None:
+        help_result = subprocess.run(
+            self._pending_coverage_caveat_argv(["--help"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(help_result.returncode, 0, msg=help_result.stderr)
+        self.assertIn("format-active-plan-pending-coverage-caveat", help_result.stdout)
+        self.assertIn("--total-outcome-rows", help_result.stdout)
+        self.assertIn("--pending-rows", help_result.stdout)
+
+        result = subprocess.run(
+            self._pending_coverage_caveat_argv(
+                [
+                    "--total-outcome-rows",
+                    "88",
+                    "--resolved-rows",
+                    "76",
+                    "--pending-rows",
+                    "12",
+                    "--recent-unresolved-windows",
+                    "11",
+                    "--entry-not-touched-count",
+                    "1",
+                ]
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        expected = (
+            "pending_coverage_caveat: total_outcome_rows=88; resolved_rows=76; pending_rows=12; "
+            "pending_rate=13.6%; recent_unresolved_windows=11; entry_not_touched_count=1; "
+            "count_consistency=matches; diagnostic=coverage_caveat; "
+            "action=reduce_confidence_and_review_detail_report_manually; "
+            "safety=report-only_not_FORMAL_GO_no_automatic_order"
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.stdout, f"{expected}\n")
+
+    def test_format_active_plan_pending_coverage_caveat_cli_rejects_negative_input(self) -> None:
+        result = subprocess.run(
+            self._pending_coverage_caveat_argv(
+                [
+                    "--total-outcome-rows",
+                    "88",
+                    "--resolved-rows",
+                    "76",
+                    "--pending-rows",
+                    "-1",
+                ]
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("must be a non-negative integer", result.stderr)
 
     def test_write_active_plan_notification_preview_cli_stdout_only(self) -> None:
         result = subprocess.run(

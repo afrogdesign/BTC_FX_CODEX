@@ -8919,6 +8919,49 @@ def format_active_plan_notification_contract(
     return "\n".join(lines)
 
 
+def format_active_plan_pending_coverage_caveat(
+    *,
+    total_outcome_rows: int,
+    resolved_rows: int,
+    pending_rows: int,
+    recent_unresolved_windows: int = 0,
+    entry_not_touched_count: int = 0,
+) -> str:
+    count_consistency = (
+        "matches" if resolved_rows + pending_rows == total_outcome_rows else "mismatch_review_required"
+    )
+    if total_outcome_rows <= 0:
+        pending_rate = "n/a"
+        diagnostic = "no_intraperiod_evidence"
+        action = "do_not_use_as_trade_trigger"
+    else:
+        pending_rate_value = (pending_rows / total_outcome_rows) * 100.0
+        pending_rate = f"{pending_rate_value:.1f}%"
+        if pending_rows == 0 and recent_unresolved_windows == 0 and entry_not_touched_count == 0:
+            diagnostic = "coverage_ok"
+            action = "still_review_detail_report_manually"
+        elif pending_rate_value >= 10.0 or recent_unresolved_windows > 0 or entry_not_touched_count > 0:
+            diagnostic = "coverage_caveat"
+            action = "reduce_confidence_and_review_detail_report_manually"
+        else:
+            diagnostic = "pending_monitor"
+            action = "review_pending_rows_before_manual_decision"
+
+    return (
+        "pending_coverage_caveat: "
+        f"total_outcome_rows={total_outcome_rows}; "
+        f"resolved_rows={resolved_rows}; "
+        f"pending_rows={pending_rows}; "
+        f"pending_rate={pending_rate}; "
+        f"recent_unresolved_windows={recent_unresolved_windows}; "
+        f"entry_not_touched_count={entry_not_touched_count}; "
+        f"count_consistency={count_consistency}; "
+        f"diagnostic={diagnostic}; "
+        f"action={action}; "
+        "safety=report-only_not_FORMAL_GO_no_automatic_order"
+    )
+
+
 def _format_active_plan_practical_manual_preview(
     *,
     generated_at_jst: str,
@@ -9444,6 +9487,38 @@ def _manual_delivery_file_bundle_readme() -> str:
         "- this workflow does not run daily-sync, report hub generation, runtime, deploy, trading, API keys, private endpoints, or paper_positions.csv changes",
     ]
     return "\n".join(lines)
+
+
+def _non_negative_int_arg(value: str) -> int:
+    try:
+        parsed = int(value, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _add_pending_coverage_caveat_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--total-outcome-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--resolved-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--pending-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--recent-unresolved-windows", type=_non_negative_int_arg, default=0)
+    parser.add_argument("--entry-not-touched-count", type=_non_negative_int_arg, default=0)
+
+
+def _run_format_active_plan_pending_coverage_caveat_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(args.total_outcome_rows),
+        resolved_rows=int(args.resolved_rows),
+        pending_rows=int(args.pending_rows),
+        recent_unresolved_windows=int(getattr(args, "recent_unresolved_windows", 0)),
+        entry_not_touched_count=int(getattr(args, "entry_not_touched_count", 0)),
+    )
+    print(caveat)
 
 
 def _print_latest_active_plan_manual_preview_input_template() -> None:
@@ -12436,6 +12511,9 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_files_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files")
     _add_latest_active_plan_manual_delivery_files_arguments(manual_delivery_files_parser)
 
+    pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
+    _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12859,6 +12937,10 @@ def main() -> None:
 
     if args.command == "write-latest-active-plan-manual-delivery-files":
         _run_latest_active_plan_manual_delivery_files_command(args, parser)
+        return
+
+    if args.command == "format-active-plan-pending-coverage-caveat":
+        _run_format_active_plan_pending_coverage_caveat_command(args, parser)
         return
 
     if args.command == "build-paper-positions":

@@ -38,6 +38,12 @@ Purpose: report-only human manual trading support preview.
 - This bundle does not perform email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or any other external notification integration.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
 
+## Pending Coverage Caveat Diagnostic
+
+- Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.
+- Paste the output into `--pending-caveat` when running preview or delivery commands, or copy the same string into `pending_caveat` in JSON input.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
+
 ## Operational Notes
 
 - Generated preview files and generated reports must not be committed unless explicitly approved.
