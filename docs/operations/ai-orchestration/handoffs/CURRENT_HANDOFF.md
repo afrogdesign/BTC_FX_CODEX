@@ -47,7 +47,7 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - ChatGPT is commander, planner, design judge, and reviewer.
 - Codex is implementation/edit/test/commit/push worker.
 - Codex must not make product or design decisions.
-- Do not edit source code, tests, generated reports, or generated previews for this resume protocol task.
+- For the current STOP state, do not edit source code, tests, generated reports, generated previews, or generated manual-delivery artifacts unless the next task explicitly authorizes a narrow edit scope.
 - Do not run fetch, builder reruns, report regeneration, daily-sync, report hub generation, runtime/deploy, `main.py`, or `run_cycle`.
 - Do not access API keys, secrets, private/account/order endpoints, live trading, automatic orders, or `paper_positions.csv`.
 - Do not add email, SMTP, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or notification service integration.
