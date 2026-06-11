@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import io
 import json
 import subprocess
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -216,6 +218,16 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _pending_coverage_caveat_from_csv_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "format-active-plan-pending-coverage-caveat-from-csv",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _run_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -339,6 +351,42 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
         return path
+
+    def _write_intraperiod_outcomes_csv(self, base_dir: Path, rows: list[dict[str, str]]) -> Path:
+        path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "outcome", "first_exit_reason"])
+            writer.writeheader()
+            writer.writerows(rows)
+        return path
+
+    def _pending_coverage_caveat_csv_rows(self) -> list[dict[str, str]]:
+        jst = timezone(timedelta(hours=9))
+        base_dt = datetime(2026, 6, 11, 0, 0, 0, tzinfo=jst)
+        rows: list[dict[str, str]] = []
+        for index in range(88):
+            timestamp = (base_dt - timedelta(minutes=index)).isoformat(timespec="seconds")
+            if index < 11:
+                outcome = "pending"
+                first_exit_reason = ""
+            elif index == 11:
+                outcome = "entry_not_touched_by_simple_range_check"
+                first_exit_reason = "entry_not_touched_by_simple_range_check"
+            elif index == 12:
+                outcome = "pending"
+                first_exit_reason = ""
+            else:
+                outcome = "tp1_first"
+                first_exit_reason = "tp1_hit_first"
+            rows.append(
+                {
+                    "timestamp_jst": timestamp,
+                    "outcome": outcome,
+                    "first_exit_reason": first_exit_reason,
+                }
+            )
+        return rows
 
     def _preview_kwargs(self) -> dict[str, str]:
         return {
@@ -535,6 +583,158 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
         self.assertIn("must be a non-negative integer", result.stderr)
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_summarizes_counts(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            before_text = csv_path.read_text(encoding="utf-8")
+
+            result = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(
+                    ["--intraperiod-outcomes-path", str(csv_path), "--recent-row-window", "12"]
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            expected = (
+                "pending_coverage_caveat: total_outcome_rows=88; resolved_rows=76; pending_rows=12; "
+                "pending_rate=13.6%; recent_unresolved_windows=11; entry_not_touched_count=1; "
+                "count_consistency=matches; diagnostic=coverage_caveat; "
+                "action=reduce_confidence_and_review_detail_report_manually; "
+                "safety=report-only_not_FORMAL_GO_no_automatic_order"
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(result.stdout, f"{expected}\n")
+            self.assertEqual(csv_path.read_text(encoding="utf-8"), before_text)
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_missing_path_uses_no_evidence(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            missing_path = base_dir / "missing.csv"
+
+            result = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--intraperiod-outcomes-path", str(missing_path)]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            expected = (
+                "pending_coverage_caveat: total_outcome_rows=0; resolved_rows=0; pending_rows=0; "
+                "pending_rate=n/a; recent_unresolved_windows=0; entry_not_touched_count=0; "
+                "count_consistency=matches; diagnostic=no_intraperiod_evidence; "
+                "action=do_not_use_as_trade_trigger; safety=report-only_not_FORMAL_GO_no_automatic_order"
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(result.stdout, f"{expected}\n")
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_empty_file_uses_no_evidence(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            csv_path = base_dir / "empty.csv"
+            csv_path.write_text("timestamp_jst,outcome,first_exit_reason\n", encoding="utf-8")
+            before_text = csv_path.read_text(encoding="utf-8")
+
+            result = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--intraperiod-outcomes-path", str(csv_path)]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            expected = (
+                "pending_coverage_caveat: total_outcome_rows=0; resolved_rows=0; pending_rows=0; "
+                "pending_rate=n/a; recent_unresolved_windows=0; entry_not_touched_count=0; "
+                "count_consistency=matches; diagnostic=no_intraperiod_evidence; "
+                "action=do_not_use_as_trade_trigger; safety=report-only_not_FORMAL_GO_no_automatic_order"
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(result.stdout, f"{expected}\n")
+            self.assertEqual(csv_path.read_text(encoding="utf-8"), before_text)
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_recent_window_is_deterministic(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            csv_path = base_dir / "intraperiod.csv"
+            rows = [
+                {
+                    "timestamp_jst": (datetime(2026, 6, 11, 0, 30, tzinfo=timezone(timedelta(hours=9))) - timedelta(minutes=index)).isoformat(timespec="seconds"),
+                    "outcome": "pending" if index in {0, 2} else "tp1_first",
+                    "first_exit_reason": "",
+                }
+                for index in range(3)
+            ]
+            self._write_intraperiod_outcomes_csv(base_dir, rows).rename(csv_path)
+
+            result_window_1 = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--intraperiod-outcomes-path", str(csv_path), "--recent-row-window", "1"]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            result_window_3 = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--intraperiod-outcomes-path", str(csv_path), "--recent-row-window", "3"]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result_window_1.returncode, 0, msg=result_window_1.stderr)
+            self.assertEqual(result_window_3.returncode, 0, msg=result_window_3.stderr)
+            self.assertIn("recent_unresolved_windows=1", result_window_1.stdout)
+            self.assertIn("recent_unresolved_windows=2", result_window_3.stdout)
+            self.assertNotEqual(result_window_1.stdout, result_window_3.stdout)
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_rejects_negative_recent_window(self) -> None:
+        result = subprocess.run(
+            self._pending_coverage_caveat_from_csv_argv(
+                [
+                    "--intraperiod-outcomes-path",
+                    str(BASE_DIR / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"),
+                    "--recent-row-window",
+                    "-1",
+                ]
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("must be a non-negative integer", result.stderr)
+
+    def test_format_active_plan_pending_coverage_caveat_from_csv_cli_stdout_is_single_line(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+
+            help_result = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--help"]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            result = subprocess.run(
+                self._pending_coverage_caveat_from_csv_argv(["--intraperiod-outcomes-path", str(csv_path)]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(help_result.returncode, 0, msg=help_result.stderr)
+            self.assertIn("format-active-plan-pending-coverage-caveat-from-csv", help_result.stdout)
+            self.assertIn("--recent-row-window", help_result.stdout)
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertTrue(result.stdout.endswith("\n"))
+            self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 1)
 
     def test_write_active_plan_notification_preview_cli_stdout_only(self) -> None:
         result = subprocess.run(

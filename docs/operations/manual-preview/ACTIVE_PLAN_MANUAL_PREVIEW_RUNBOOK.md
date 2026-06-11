@@ -44,6 +44,12 @@ Purpose: report-only human manual trading support preview.
 - Paste the output into `--pending-caveat` when running preview or delivery commands, or copy the same string into `pending_caveat` in JSON input.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
 
+## Pending Coverage Caveat From CSV
+
+- Use `format-active-plan-pending-coverage-caveat-from-csv --intraperiod-outcomes-path <csv>` to derive the same caveat from an existing intraperiod outcomes CSV.
+- Paste the resulting line into `--pending-caveat` or copy it into the JSON `pending_caveat` field.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
+
 ## Operational Notes
 
 - Generated preview files and generated reports must not be committed unless explicitly approved.

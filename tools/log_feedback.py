@@ -8962,6 +8962,79 @@ def format_active_plan_pending_coverage_caveat(
     )
 
 
+_ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES = {
+    "entry_not_touched",
+    "entry_not_reached",
+    "entry_not_touched_by_simple_range_check",
+}
+
+
+def _active_plan_intraperiod_outcomes_timestamp_sort_key(row: dict[str, Any]) -> tuple[datetime, str]:
+    raw_timestamp = str(row.get("timestamp_jst", "")).strip()
+    parsed_timestamp = _parse_dt(raw_timestamp)
+    if parsed_timestamp is None:
+        return datetime.min.replace(tzinfo=JST), raw_timestamp
+    if parsed_timestamp.tzinfo is None:
+        return parsed_timestamp.replace(tzinfo=JST), raw_timestamp
+    return parsed_timestamp.astimezone(JST), raw_timestamp
+
+
+def _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_rows(
+    rows: list[dict[str, Any]],
+    *,
+    recent_row_window: int = 12,
+) -> dict[str, int]:
+    total_outcome_rows = len(rows)
+    if total_outcome_rows <= 0:
+        return {
+            "total_outcome_rows": 0,
+            "resolved_rows": 0,
+            "pending_rows": 0,
+            "recent_unresolved_windows": 0,
+            "entry_not_touched_count": 0,
+        }
+
+    pending_rows = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "pending")
+    recent_rows = sorted(rows, key=_active_plan_intraperiod_outcomes_timestamp_sort_key, reverse=True)
+    recent_unresolved_windows = sum(
+        1 for row in recent_rows[: max(0, int(recent_row_window))] if str(row.get("outcome", "")).strip() == "pending"
+    )
+    entry_not_touched_count = sum(
+        1
+        for row in rows
+        if str(row.get("outcome", "")).strip() in _ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES
+        or str(row.get("first_exit_reason", "")).strip()
+        in _ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES
+    )
+    return {
+        "total_outcome_rows": total_outcome_rows,
+        "resolved_rows": total_outcome_rows - pending_rows,
+        "pending_rows": pending_rows,
+        "recent_unresolved_windows": recent_unresolved_windows,
+        "entry_not_touched_count": entry_not_touched_count,
+    }
+
+
+def _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+    intraperiod_outcomes_path: Path,
+    *,
+    recent_row_window: int = 12,
+) -> dict[str, int]:
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    if not intraperiod_outcomes_path.exists() or not rows:
+        return {
+            "total_outcome_rows": 0,
+            "resolved_rows": 0,
+            "pending_rows": 0,
+            "recent_unresolved_windows": 0,
+            "entry_not_touched_count": 0,
+        }
+    return _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_rows(
+        rows,
+        recent_row_window=recent_row_window,
+    )
+
+
 def _format_active_plan_practical_manual_preview(
     *,
     generated_at_jst: str,
@@ -9507,6 +9580,14 @@ def _add_pending_coverage_caveat_arguments(parser: argparse.ArgumentParser) -> N
     parser.add_argument("--entry-not-touched-count", type=_non_negative_int_arg, default=0)
 
 
+def _add_pending_coverage_caveat_from_csv_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+
+
 def _run_format_active_plan_pending_coverage_caveat_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -9519,6 +9600,27 @@ def _run_format_active_plan_pending_coverage_caveat_command(
         entry_not_touched_count=int(getattr(args, "entry_not_touched_count", 0)),
     )
     print(caveat)
+
+
+def _run_format_active_plan_pending_coverage_caveat_from_csv_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    intraperiod_outcomes_path = Path(str(getattr(args, "intraperiod_outcomes_path", "")).strip())
+    if not intraperiod_outcomes_path.is_absolute():
+        intraperiod_outcomes_path = BASE_DIR / intraperiod_outcomes_path
+    summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+        intraperiod_outcomes_path,
+        recent_row_window=int(getattr(args, "recent_row_window", 12)),
+    )
+    caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(summary["total_outcome_rows"]),
+        resolved_rows=int(summary["resolved_rows"]),
+        pending_rows=int(summary["pending_rows"]),
+        recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+        entry_not_touched_count=int(summary["entry_not_touched_count"]),
+    )
+    sys.stdout.write(caveat + "\n")
 
 
 def _print_latest_active_plan_manual_preview_input_template() -> None:
@@ -12514,6 +12616,9 @@ def _build_parser() -> argparse.ArgumentParser:
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
+    pending_coverage_caveat_from_csv_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat-from-csv")
+    _add_pending_coverage_caveat_from_csv_arguments(pending_coverage_caveat_from_csv_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12941,6 +13046,10 @@ def main() -> None:
 
     if args.command == "format-active-plan-pending-coverage-caveat":
         _run_format_active_plan_pending_coverage_caveat_command(args, parser)
+        return
+
+    if args.command == "format-active-plan-pending-coverage-caveat-from-csv":
+        _run_format_active_plan_pending_coverage_caveat_from_csv_command(args, parser)
         return
 
     if args.command == "build-paper-positions":
