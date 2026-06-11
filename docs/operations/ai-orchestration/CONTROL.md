@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v2`
-current_commit: `d9230c3ca0ff29d04bae20bd7064c2bc48d53805`
+current_commit: `8c3ae39e2b6e6fdbcd1d0e4c1ddba82410feddb6`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-098 defines the minimal manual-delivery checklist option for the report-only preview CLI.
+BTCFX-20260610-098 and BTCFX-20260610-098-REVIEW are accepted/reviewed, and this metadata sync records the reviewed baseline only.
 
 BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is this implementation and test coverage.
+The active deliverable is this reviewed-baseline metadata sync.
 
-The next recommended task after this implementation is reviewed is BTCFX-20260610-098-REVIEW.
+The next recommended task after this metadata sync is reviewed is BTCFX-20260610-099-SYNC-REVIEW.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
@@ -223,8 +223,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-098-REVIEW
-Goal: Review the manual-delivery checklist CLI output before deciding any further manual workflow support.
+NEXT BTCFX-20260610-099-SYNC-REVIEW
+Goal: Review the reviewed-baseline metadata sync before choosing the next product step.
 ```
 
 ---
