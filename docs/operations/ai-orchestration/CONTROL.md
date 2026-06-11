@@ -223,8 +223,8 @@ Current staged direction:
 ## 7. Next recommended task
 
 ```text
-NEXT BTCFX-20260610-094
-Goal: <to be defined after the context-rule review>
+NEXT BTCFX-20260610-094-REVIEW
+Goal: Review the accepted BTCFX-20260610-094 notification preview CLI / manual-output boundary before deciding whether to proceed to preview CLI implementation.
 ```
 
 ---
