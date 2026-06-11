@@ -30,6 +30,14 @@ Purpose: report-only human manual trading support preview.
 - This package is for manual handling only and does not perform email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or any other external notification integration.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
 
+## Manual Delivery Local File Bundle
+
+- Use `write-latest-active-plan-manual-delivery-files --output-dir <path>` when you need explicit local files for manual copy/paste only.
+- The bundle writes `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, and `README.txt` to the requested local directory.
+- Generated files must not be committed unless explicitly approved.
+- This bundle does not perform email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or any other external notification integration.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
+
 ## Operational Notes
 
 - Generated preview files and generated reports must not be committed unless explicitly approved.

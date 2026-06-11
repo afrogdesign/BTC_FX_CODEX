@@ -174,6 +174,37 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _latest_manual_delivery_files_argv(self, output_dir: Path, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-active-plan-manual-delivery-files",
+            "--output-dir",
+            str(output_dir),
+            "--market-status-summary",
+            "intraperiod evidence shows mixed TP1 / SL / pending outcomes",
+            "--active-plan-label",
+            "ACTIVE_LIMIT_RETEST",
+            "--side",
+            "long",
+            "--entry-mode",
+            "limit_zone_mid",
+            "--entry-condition",
+            "entry zone must be touched before consideration",
+            "--tp-plan",
+            "TP1 63507.96, TP2 64004.74",
+            "--sl-or-invalidation",
+            "SL 62469.23",
+            "--timeout-or-wait-limit",
+            "timeout after 4h",
+            "--intraperiod-evidence-summary",
+            "88 outcomes with 35 tp1_first, 39 sl_first, 12 pending",
+            "--pending-caveat",
+            "12 pending rows remain and reduce confidence",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _run_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -247,6 +278,41 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-delivery-package", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_delivery_files_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        output_dir = resolved_base_dir / "tmp-manual-delivery-files"
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(sys, "argv", self._latest_manual_delivery_files_argv(output_dir, extra_args)):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_delivery_files_main_with_argv(self, argv: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-delivery-files", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -705,6 +771,175 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("human must decide manually", stdout)
             self.assertIn("manual external app", stdout)
             self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), "latest report")
+
+    def test_write_latest_active_plan_manual_delivery_files_cli_creates_bundle_and_keeps_latest_report_unchanged(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            older_report = self._write_intraperiod_report(base_dir, "20260610", "older report")
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            latest_before = latest_report.read_text(encoding="utf-8")
+            output_dir = base_dir / "nested" / "manual-delivery-bundle"
+
+            code, stdout, stderr = self._run_latest_manual_delivery_files_main_with_argv(
+                self._latest_manual_delivery_files_argv(output_dir, ["--include-manual-delivery-checklist"])[2:],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            lines = stdout.strip().splitlines()
+            self.assertEqual(len(lines), 5)
+            self.assertTrue(lines[0].startswith("subject_path="))
+            self.assertTrue(lines[1].startswith("body_path="))
+            self.assertTrue(lines[2].startswith("checklist_path="))
+            self.assertTrue(lines[3].startswith("package_path="))
+            self.assertTrue(lines[4].startswith("readme_path="))
+            path_map: dict[str, Path] = {}
+            for line in lines:
+                key, value = line.split("=", 1)
+                path_map[key] = Path(value)
+
+            self.assertEqual(
+                set(path_map),
+                {"subject_path", "body_path", "checklist_path", "package_path", "readme_path"},
+            )
+            self.assertTrue(output_dir.exists())
+            self.assertTrue(output_dir.parent.exists())
+            for path in path_map.values():
+                self.assertTrue(path.exists(), msg=str(path))
+
+            subject_text = path_map["subject_path"].read_text(encoding="utf-8")
+            body_text = path_map["body_path"].read_text(encoding="utf-8")
+            checklist_text = path_map["checklist_path"].read_text(encoding="utf-8")
+            package_text = path_map["package_path"].read_text(encoding="utf-8")
+            readme_text = path_map["readme_path"].read_text(encoding="utf-8")
+            package_stdout = self._run_latest_manual_delivery_package_main(
+                ["--include-manual-delivery-checklist"],
+                base_dir=base_dir,
+            )[1]
+
+            self.assertEqual(subject_text, "BTCFX Ver03-v2 report-only | BTC_USDT | 15m | ACTIVE_LIMIT_RETEST | long | report-only")
+            self.assertNotIn("\n", subject_text)
+            self.assertIn("report-only", subject_text)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", body_text)
+            self.assertNotIn("Manual delivery copy package", body_text)
+            self.assertNotIn("Manual delivery checklist", body_text)
+            self.assertIn("Human send checklist", checklist_text)
+            self.assertIn("report-only", checklist_text)
+            self.assertIn("not FORMAL_GO", checklist_text)
+            self.assertIn("no automatic order", checklist_text)
+            self.assertIn("ACTIVE_* is action guidance only", checklist_text)
+            self.assertIn("human must decide manually", checklist_text)
+            self.assertIn("manual external app", checklist_text)
+            self.assertEqual(package_text, package_stdout)
+            self.assertIn("Manual delivery local file bundle", readme_text)
+            self.assertIn("report-only", readme_text)
+            self.assertIn("not FORMAL_GO", readme_text)
+            self.assertIn("no automatic order", readme_text)
+            self.assertIn("ACTIVE_* is action guidance only", readme_text)
+            self.assertIn("human must decide manually", readme_text)
+            self.assertIn("no external notification integration", readme_text)
+            self.assertIn("files are for manual copy/paste only", readme_text)
+            self.assertIn("generated files must not be committed unless explicitly approved", readme_text)
+            self.assertIn("no email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, or address-book integration is performed", readme_text)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), package_text)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), latest_before)
+            self.assertEqual(older_report.read_text(encoding="utf-8"), "older report")
+
+    def test_write_latest_active_plan_manual_delivery_files_cli_supports_input_json_and_overrides(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            input_json = base_dir / "manual-delivery-input.json"
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                        "symbol": "ETH_USDT",
+                        "timeframe": "30m",
+                        "data_source": "exchange-auto-public",
+                        "data_freshness": "30m latest-window exchange-auto-public",
+                        "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+                        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                        "side": "short",
+                        "entry_mode": "limit_zone_mid",
+                        "entry_condition": "entry zone must be touched before consideration",
+                        "tp_plan": "TP1/TP2 from JSON",
+                        "sl_or_invalidation": "SL from JSON",
+                        "timeout_or_wait_limit": "timeout after JSON window",
+                        "intraperiod_evidence_summary": "JSON provided evidence summary",
+                        "pending_caveat": "report-only manual preview; human must decide manually",
+                        "include_manual_delivery_checklist": True,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            before_text = input_json.read_text(encoding="utf-8")
+            output_dir = base_dir / "bundle" / "json"
+
+            code, stdout, stderr = self._run_latest_manual_delivery_files_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--input-json",
+                    str(input_json),
+                    "--subject-prefix",
+                    "BTCFX CUSTOM report-only",
+                    "--delivery-target-label",
+                    "custom external app",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(input_json.read_text(encoding="utf-8"), before_text)
+            lines = stdout.strip().splitlines()
+            self.assertEqual(len(lines), 5)
+            self.assertTrue(lines[0].startswith("subject_path="))
+            self.assertTrue(lines[1].startswith("body_path="))
+            self.assertTrue(lines[2].startswith("checklist_path="))
+            self.assertTrue(lines[3].startswith("package_path="))
+            self.assertTrue(lines[4].startswith("readme_path="))
+            path_map: dict[str, Path] = {}
+            for line in lines:
+                key, value = line.split("=", 1)
+                path_map[key] = Path(value)
+            self.assertTrue(output_dir.exists())
+            self.assertIn("subject_path", path_map)
+            self.assertIn("body_path", path_map)
+            self.assertIn("checklist_path", path_map)
+            self.assertIn("package_path", path_map)
+            self.assertIn("readme_path", path_map)
+
+            subject_text = path_map["subject_path"].read_text(encoding="utf-8")
+            body_text = path_map["body_path"].read_text(encoding="utf-8")
+            checklist_text = path_map["checklist_path"].read_text(encoding="utf-8")
+            package_text = path_map["package_path"].read_text(encoding="utf-8")
+            readme_text = path_map["readme_path"].read_text(encoding="utf-8")
+            package_stdout = self._run_latest_manual_delivery_package_main_with_argv(
+                [
+                    "--input-json",
+                    str(input_json),
+                    "--subject-prefix",
+                    "BTCFX CUSTOM report-only",
+                    "--delivery-target-label",
+                    "custom external app",
+                ],
+                base_dir=base_dir,
+            )[1]
+
+            self.assertEqual(subject_text, "BTCFX CUSTOM report-only | ETH_USDT | 30m | ACTIVE_LIMIT_RETEST | short | report-only")
+            self.assertIn("ETH_USDT", body_text)
+            self.assertIn("30m", body_text)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", body_text)
+            self.assertIn("custom external app", checklist_text)
+            self.assertIn("custom external app", package_text)
+            self.assertIn("report-only", readme_text)
+            self.assertIn("no external notification integration", readme_text)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), package_text)
+            self.assertEqual(package_text, package_stdout)
             self.assertEqual(latest_report.read_text(encoding="utf-8"), "latest report")
 
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:

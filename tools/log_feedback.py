@@ -9308,7 +9308,81 @@ def _format_manual_delivery_copy_package(
     pending_caveat: str,
     include_manual_delivery_checklist: bool = False,
 ) -> str:
-    body = write_active_plan_notification_preview(
+    body = _manual_delivery_copy_package_body(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+    )
+    subject = _manual_delivery_copy_package_subject(
+        subject_prefix=subject_prefix,
+        symbol=symbol,
+        timeframe=timeframe,
+        active_plan_label=active_plan_label,
+        side=side,
+    )
+    checklist = _manual_delivery_copy_package_checklist(delivery_target_label=delivery_target_label)
+    lines = [
+        "Manual delivery copy package",
+        "",
+        "Copy-ready subject",
+        f"subject: {subject}",
+        f"delivery_target_label: {delivery_target_label}",
+        "",
+        "Copy-ready body",
+        body,
+        "",
+        "Human send checklist",
+        *checklist.splitlines()[1:],
+    ]
+    return "\n".join(lines)
+
+
+def _manual_delivery_copy_package_subject(
+    *,
+    subject_prefix: str,
+    symbol: str,
+    timeframe: str,
+    active_plan_label: str,
+    side: str,
+) -> str:
+    return f"{subject_prefix} | {symbol} | {timeframe} | {active_plan_label} | {side} | report-only"
+
+
+def _manual_delivery_copy_package_body(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    include_manual_delivery_checklist: bool = False,
+) -> str:
+    return write_active_plan_notification_preview(
         output_path=None,
         include_manual_delivery_checklist=include_manual_delivery_checklist,
         practical_manual_preview=True,
@@ -9329,18 +9403,12 @@ def _format_manual_delivery_copy_package(
         intraperiod_evidence_summary=intraperiod_evidence_summary,
         pending_caveat=pending_caveat,
     )
-    subject = f"{subject_prefix} | {symbol} | {timeframe} | {active_plan_label} | {side} | report-only"
+
+
+def _manual_delivery_copy_package_checklist(*, delivery_target_label: str) -> str:
     lines = [
-        "Manual delivery copy package",
-        "",
-        "Copy-ready subject",
-        f"subject: {subject}",
-        f"delivery_target_label: {delivery_target_label}",
-        "",
-        "Copy-ready body",
-        body,
-        "",
         "Human send checklist",
+        "",
         "- human must decide manually",
         "- copy/paste is a human action outside repo automation",
         "- confirm no automatic order is triggered",
@@ -9355,6 +9423,25 @@ def _format_manual_delivery_copy_package(
         "- ACTIVE_* is action guidance only",
         "- human must decide manually",
         "- no external notification integration",
+    ]
+    return "\n".join(lines)
+
+
+def _manual_delivery_file_bundle_readme() -> str:
+    lines = [
+        "Manual delivery local file bundle",
+        "",
+        "- explicit local output only",
+        "- files are for manual copy/paste only",
+        "- generated files must not be committed unless explicitly approved",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+        "- no email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, or address-book integration is performed",
+        "- this workflow does not run daily-sync, report hub generation, runtime, deploy, trading, API keys, private endpoints, or paper_positions.csv changes",
     ]
     return "\n".join(lines)
 
@@ -9443,6 +9530,30 @@ def _add_latest_active_plan_manual_delivery_package_arguments(parser: argparse.A
     parser.add_argument("--pending-caveat")
     parser.add_argument("--subject-prefix", default="BTCFX Ver03-v2 report-only")
     parser.add_argument("--delivery-target-label", default="manual external app")
+
+
+def _add_latest_active_plan_manual_delivery_files_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--input-json")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
+    parser.add_argument("--subject-prefix", default="BTCFX Ver03-v2 report-only")
+    parser.add_argument("--delivery-target-label", default="manual external app")
+    parser.add_argument("--output-dir", required=True)
 
 
 def _resolve_active_plan_notification_detail_report_path(
@@ -9565,6 +9676,80 @@ def _run_latest_active_plan_manual_delivery_package_command(
         _ensure_parent(output_path)
         output_path.write_text(package, encoding="utf-8")
     sys.stdout.write(package)
+
+
+def _run_latest_active_plan_manual_delivery_files_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    subject = _manual_delivery_copy_package_subject(
+        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+    )
+    body = _manual_delivery_copy_package_body(
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        include_manual_delivery_checklist=False,
+    )
+    checklist = _manual_delivery_copy_package_checklist(
+        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app"))
+    )
+    package = _format_manual_delivery_copy_package(
+        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
+        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app")),
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    readme = _manual_delivery_file_bundle_readme()
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = {
+        "subject_path": output_dir / "subject.txt",
+        "body_path": output_dir / "body.txt",
+        "checklist_path": output_dir / "checklist.txt",
+        "package_path": output_dir / "package.txt",
+        "readme_path": output_dir / "README.txt",
+    }
+    outputs["subject_path"].write_text(subject, encoding="utf-8")
+    outputs["body_path"].write_text(body, encoding="utf-8")
+    outputs["checklist_path"].write_text(checklist, encoding="utf-8")
+    outputs["package_path"].write_text(package, encoding="utf-8")
+    outputs["readme_path"].write_text(readme, encoding="utf-8")
+    for key, path in outputs.items():
+        sys.stdout.write(f"{key}={path}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -12248,6 +12433,9 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_package_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-package")
     _add_latest_active_plan_manual_delivery_package_arguments(manual_delivery_package_parser)
 
+    manual_delivery_files_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files")
+    _add_latest_active_plan_manual_delivery_files_arguments(manual_delivery_files_parser)
+
     paper_positions_parser = subparsers.add_parser("build-paper-positions")
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
@@ -12667,6 +12855,10 @@ def main() -> None:
 
     if args.command == "write-latest-active-plan-manual-delivery-package":
         _run_latest_active_plan_manual_delivery_package_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-files":
+        _run_latest_active_plan_manual_delivery_files_command(args, parser)
         return
 
     if args.command == "build-paper-positions":
