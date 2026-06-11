@@ -3,12 +3,12 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `b8e30927f80ac20a4accfb1d3a23cb97fdc2f6f8`
-latest_reviewed_baseline: `b8e30927f80ac20a4accfb1d3a23cb97fdc2f6f8`
+current_commit: `1d12e9251d4ee79e17675d4702691a7c9c9c7127`
+latest_reviewed_baseline: `1d12e9251d4ee79e17675d4702691a7c9c9c7127`
 
 ## Objective
 
-BTCFX-20260611-UNIVERSAL-OUTBOX-RULE makes the Codex compact-report outbox rule universal across all Codex task types and resume checks.
+BTCFX-20260611-UNIVERSAL-OUTBOX-RULE has been accepted and reviewed; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 HEAD.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -21,7 +21,7 @@ The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` 
 - BTCFX-20260610-099-SYNC-REVIEW passed and confirmed the reviewed-baseline metadata sync and resume protocol state.
 - BTCFX-20260611-RESUME-PROTOCOL was pushed at `1ccbf58 Add low-cost universal resume protocol`.
 - BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata at `b8e3092 Finalize Ver03-v3 resume protocol metadata`.
-- `CONTROL.md` now records the reviewed resume baseline and the universal outbox rule, and defers the next step to a human/ChatGPT checkpoint.
+- `CONTROL.md` now records the reviewed resume baseline and the accepted universal outbox rule, and defers the next step to STOP: choose the next product step from the reviewed Ver03-v3 universal outbox baseline.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
