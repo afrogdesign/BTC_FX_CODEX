@@ -8919,6 +8919,74 @@ def format_active_plan_notification_contract(
     return "\n".join(lines)
 
 
+def _format_active_plan_practical_manual_preview(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    lines = [
+        "BTCFX Ver03-v2 manual trading support preview",
+        "",
+        "Safety status",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "",
+        "Market context",
+        f"generated_at_jst: {generated_at_jst}",
+        f"data_freshness: {data_freshness}",
+        f"symbol: {symbol}",
+        f"timeframe: {timeframe}",
+        f"data_source: {data_source}",
+        f"market_status_summary: {market_status_summary}",
+        "",
+        "Active Plan guidance",
+        f"active_plan_label: {active_plan_label}",
+        f"side: {side}",
+        f"entry_mode: {entry_mode}",
+        f"entry_condition: {entry_condition}",
+        f"tp_plan: {tp_plan}",
+        f"sl_or_invalidation: {sl_or_invalidation}",
+        f"timeout_or_wait_limit: {timeout_or_wait_limit}",
+        f"intraperiod_evidence_summary: {intraperiod_evidence_summary}",
+        f"pending_caveat: {pending_caveat or 'none'}",
+        "",
+        "Manual decision checklist",
+        "- Review the latest intraperiod report before deciding.",
+        "- Confirm the safety status above is still valid for the current market.",
+        "- Compare the entry, TP, SL, and timeout guidance against current conditions.",
+        "- Decide manually whether to wait, skip, or trade.",
+        "- Do not treat this preview as permission for automatic execution.",
+        "",
+        "Detail report",
+        f"detail_report_path: {detail_report_path}",
+        "- Open the linked report manually and inspect the intraperiod evidence.",
+        "",
+        "Caveats",
+        f"- pending_caveat: {pending_caveat or 'none'}",
+        "- The preview is report-only and does not authorize any automatic order.",
+        "- The human must decide manually.",
+        "- ACTIVE_* remains action guidance only.",
+    ]
+    return "\n".join(lines)
+
+
 def _format_manual_delivery_checklist() -> str:
     lines = [
         "Manual delivery checklist",
@@ -8942,6 +9010,7 @@ def write_active_plan_notification_preview(
     *,
     output_path: Path | None = None,
     include_manual_delivery_checklist: bool = False,
+    practical_manual_preview: bool = False,
     generated_at_jst: str,
     data_freshness: str,
     symbol: str,
@@ -8959,7 +9028,12 @@ def write_active_plan_notification_preview(
     intraperiod_evidence_summary: str,
     pending_caveat: str,
 ) -> str:
-    body = format_active_plan_notification_contract(
+    preview_formatter = (
+        _format_active_plan_practical_manual_preview
+        if practical_manual_preview
+        else format_active_plan_notification_contract
+    )
+    body = preview_formatter(
         generated_at_jst=generated_at_jst,
         data_freshness=data_freshness,
         symbol=symbol,
@@ -9009,6 +9083,7 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
     parser.add_argument("--pending-caveat", required=True)
     parser.add_argument("--output-path")
     parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--practical-manual-preview", action="store_true")
 
 
 def _resolve_active_plan_notification_detail_report_path(
@@ -9058,6 +9133,7 @@ def _run_active_plan_notification_preview_command(
         intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
         pending_caveat=str(args.pending_caveat),
         include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
+        practical_manual_preview=bool(args.practical_manual_preview),
     )
     sys.stdout.write(body)
 

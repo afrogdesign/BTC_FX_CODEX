@@ -223,6 +223,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("detail_report_path", result.stdout)
         self.assertNotIn("Manual delivery checklist", result.stdout)
         self.assertNotIn("notification_kind", result.stdout)
+        self.assertNotIn("manual trading support preview", result.stdout)
         self.assertEqual(result.stdout, self._expected_preview_body())
 
     def test_write_active_plan_notification_preview_cli_output_path(self) -> None:
@@ -246,7 +247,115 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("detail_report_path", result.stdout)
             self.assertNotIn("Manual delivery checklist", result.stdout)
             self.assertNotIn("notification_kind", result.stdout)
+            self.assertNotIn("manual trading support preview", result.stdout)
             self.assertEqual(result.stdout, self._expected_preview_body())
+
+    def test_write_active_plan_notification_preview_cli_practical_manual_preview_with_explicit_detail_report_path(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            detail_report_path = Path(tmpdir) / "detail_report.md"
+            detail_report_path.write_text("practical preview detail", encoding="utf-8")
+            before_text = detail_report_path.read_text(encoding="utf-8")
+            result = subprocess.run(
+                self._preview_cli_args(["--practical-manual-preview", "--detail-report-path", str(detail_report_path)]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_text)
+
+            stdout = result.stdout
+            sections = [
+                "BTCFX Ver03-v2 manual trading support preview",
+                "Safety status",
+                "Market context",
+                "Active Plan guidance",
+                "Manual decision checklist",
+                "Detail report",
+                "Caveats",
+            ]
+            positions = [stdout.index(section) for section in sections]
+            self.assertEqual(positions, sorted(positions))
+
+            required_fields = [
+                "generated_at_jst",
+                "data_freshness",
+                "symbol",
+                "timeframe",
+                "data_source",
+                "active_plan_label",
+                "side",
+                "entry_mode",
+                "entry_condition",
+                "tp_plan",
+                "sl_or_invalidation",
+                "timeout_or_wait_limit",
+                "intraperiod_evidence_summary",
+                "pending_caveat",
+                "detail_report_path",
+            ]
+            for field in required_fields:
+                with self.subTest(field=field):
+                    self.assertIn(field, stdout)
+
+            safety_phrases = [
+                "report-only",
+                "not FORMAL_GO",
+                "no automatic order",
+                "ACTIVE_* is action guidance only",
+                "human must decide manually",
+            ]
+            for phrase in safety_phrases:
+                with self.subTest(phrase=phrase):
+                    self.assertIn(phrase, stdout)
+
+            self.assertNotIn("formal_go_status: FORMAL_GO", stdout)
+            self.assertNotIn("place a trade automatically", stdout)
+            self.assertNotIn("automatic order should be placed", stdout)
+
+    def test_write_active_plan_notification_preview_cli_practical_manual_preview_uses_latest_intraperiod_report(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            older_report = self._write_intraperiod_report(base_dir, "20260610", "older report")
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            latest_before = latest_report.read_text(encoding="utf-8")
+            older_before = older_report.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_preview_main(
+                ["--use-latest-intraperiod-report", "--practical-manual-preview"],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertNotIn(older_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(latest_report.read_text(encoding="utf-8"), latest_before)
+            self.assertEqual(older_report.read_text(encoding="utf-8"), older_before)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+
+    def test_write_active_plan_notification_preview_cli_practical_manual_preview_with_manual_delivery_checklist(self) -> None:
+        result = subprocess.run(
+            self._preview_cli_args(["--practical-manual-preview", "--include-manual-delivery-checklist"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("BTCFX Ver03-v2 manual trading support preview", result.stdout)
+        self.assertIn("Manual delivery checklist", result.stdout)
+        self.assertIn("report-only", result.stdout)
+        self.assertIn("not FORMAL_GO", result.stdout)
+        self.assertIn("no automatic order", result.stdout)
+        self.assertIn("ACTIVE_* is action guidance only", result.stdout)
+        self.assertIn("human must decide manually", result.stdout)
+        self.assertIn("detail_report_path", result.stdout)
+        self.assertEqual(result.stdout.count("Manual delivery checklist"), 1)
 
     def test_resolve_latest_intraperiod_report_relative_path_uses_latest_matching_report(self) -> None:
         with TemporaryDirectory() as tmpdir:
