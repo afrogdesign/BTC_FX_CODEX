@@ -3,12 +3,12 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `b59a0c325286d17b75bb95351431750f7c4b1113`
-latest_reviewed_baseline: `b59a0c325286d17b75bb95351431750f7c4b1113`
+current_commit: `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`
+latest_reviewed_baseline: `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`
 
 ## Objective
 
-BTCFX-20260611-105-ONE-COMMAND-MANUAL-DELIVERY-FILES is accepted at `b59a0c325286d17b75bb95351431750f7c4b1113`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 one-command local manual-delivery baseline HEAD.
+BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 local manual-delivery flow through BTCFX-20260611-110.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -32,8 +32,14 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-095-MANUAL-PREVIEW-OPERATING-PACKAGE is accepted at `1ff74d1 Add manual preview operating package`.
 - BTCFX-20260611-100-PENDING-COVERAGE-CAVEAT-DIAGNOSTIC is accepted at `b771844 Add pending coverage caveat diagnostic`.
 - BTCFX-20260611-101-PENDING-CAVEAT-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit.
-- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed one-command local manual-delivery baseline and defers the next step to STOP: choose the next product step from the reviewed one-command local manual-delivery baseline.
+- BTCFX-20260611-103-PENDING-CAVEAT-FROM-INTRAPERIOD-CSV is accepted at `229752f Add pending caveat CSV helper`.
+- BTCFX-20260611-106-ONE-COMMAND-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit.
+- BTCFX-20260611-108-LATEST-MANUAL-DELIVERY-SOURCE-RESOLVER is accepted at `5088e42538a60258edad86c00594ff79ad198e0b`.
+- BTCFX-20260611-108-LATEST-MANUAL-DELIVERY-SOURCE-RESOLVER-FIX is accepted at `c15c6446b344d6388592d6cc05fe89f124f7eb85`.
+- BTCFX-20260611-109-LATEST-MANUAL-DELIVERY-INPUT-JSON-SEED is accepted at `5347f2b49c8f89ebd12ebb15acab8c7c9439fa02`.
+- BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`.
+- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
+- `CONTROL.md` now records the reviewed local manual-delivery flow and defers the next step to STOP: choose whether to run an end-to-end no-commit review of the local manual-delivery flow or choose the next product step.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -51,5 +57,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose next product step from the reviewed one-command local manual-delivery baseline.
+STOP: Choose whether to run an end-to-end no-commit review of the local manual-delivery flow or choose the next product step.
 ```
