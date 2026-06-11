@@ -8991,6 +8991,176 @@ def _current_jst_iso_like_timestamp() -> str:
     return datetime.now(tz=JST).isoformat(timespec="seconds")
 
 
+LATEST_MANUAL_PREVIEW_JSON_KEYS = (
+    "generated_at_jst",
+    "symbol",
+    "timeframe",
+    "data_source",
+    "data_freshness",
+    "detail_report_path",
+    "market_status_summary",
+    "active_plan_label",
+    "side",
+    "entry_mode",
+    "entry_condition",
+    "tp_plan",
+    "sl_or_invalidation",
+    "timeout_or_wait_limit",
+    "intraperiod_evidence_summary",
+    "pending_caveat",
+    "include_manual_delivery_checklist",
+)
+
+LATEST_MANUAL_PREVIEW_REQUIRED_FIELDS = (
+    "market_status_summary",
+    "active_plan_label",
+    "side",
+    "entry_mode",
+    "entry_condition",
+    "tp_plan",
+    "sl_or_invalidation",
+    "timeout_or_wait_limit",
+    "intraperiod_evidence_summary",
+    "pending_caveat",
+)
+
+
+def _latest_active_plan_manual_preview_input_template() -> dict[str, Any]:
+    return {
+        "generated_at_jst": "YYYY-MM-DDTHH:MM:SS+09:00",
+        "symbol": "BTC_USDT",
+        "timeframe": "15m",
+        "data_source": "exchange-auto-public",
+        "data_freshness": "15m latest-window exchange-auto-public",
+        "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md",
+        "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+        "side": "long",
+        "entry_mode": "limit_zone_mid",
+        "entry_condition": "entry zone must be touched before consideration",
+        "tp_plan": "TP1/TP2 from report context",
+        "sl_or_invalidation": "SL from report context",
+        "timeout_or_wait_limit": "timeout after configured window",
+        "intraperiod_evidence_summary": "latest intraperiod report linked",
+        "pending_caveat": "report-only manual preview; human must decide manually",
+        "include_manual_delivery_checklist": False,
+    }
+
+
+def _load_json_object(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        message = f"failed to read JSON input: {path}: {exc}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message) from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        message = f"invalid JSON in {path}: {exc.msg}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message) from exc
+    if not isinstance(data, dict):
+        message = f"JSON input must be an object: {path}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return data
+
+
+def _latest_manual_preview_json_value(
+    args: argparse.Namespace,
+    json_data: dict[str, Any],
+    field_name: str,
+    default: Any = None,
+) -> Any:
+    value = getattr(args, field_name, None)
+    if value is not None:
+        return value
+    if field_name in json_data:
+        return json_data[field_name]
+    return default
+
+
+def _latest_manual_preview_required_value(
+    args: argparse.Namespace,
+    json_data: dict[str, Any],
+    field_name: str,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    value = _latest_manual_preview_json_value(args, json_data, field_name)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        message = f"{field_name} is required after merging --input-json and CLI arguments"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return str(value)
+
+
+def _resolve_latest_active_plan_manual_preview_inputs(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    json_data: dict[str, Any] = {}
+    input_json_path = getattr(args, "input_json", None)
+    if input_json_path:
+        json_data = _load_json_object(Path(input_json_path), parser)
+
+    if "include_manual_delivery_checklist" in json_data and not isinstance(json_data["include_manual_delivery_checklist"], bool):
+        message = "include_manual_delivery_checklist in --input-json must be a boolean"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+
+    generated_at_jst = _latest_manual_preview_json_value(args, json_data, "generated_at_jst")
+    generated_at_jst = str(generated_at_jst).strip() if generated_at_jst is not None else ""
+    if not generated_at_jst:
+        generated_at_jst = _current_jst_iso_like_timestamp()
+
+    symbol = _latest_manual_preview_json_value(args, json_data, "symbol")
+    symbol = str(symbol).strip() if symbol is not None else ""
+    if not symbol:
+        symbol = "BTC_USDT"
+
+    timeframe = _latest_manual_preview_json_value(args, json_data, "timeframe")
+    timeframe = str(timeframe).strip() if timeframe is not None else ""
+    if not timeframe:
+        timeframe = "15m"
+
+    data_source = _latest_manual_preview_json_value(args, json_data, "data_source")
+    data_source = str(data_source).strip() if data_source is not None else ""
+    if not data_source:
+        data_source = "exchange-auto-public"
+
+    data_freshness = _latest_manual_preview_json_value(args, json_data, "data_freshness")
+    data_freshness = str(data_freshness).strip() if data_freshness is not None else ""
+    if not data_freshness:
+        data_freshness = "15m latest-window exchange-auto-public"
+
+    detail_report_path = _latest_manual_preview_json_value(args, json_data, "detail_report_path")
+    detail_report_path = str(detail_report_path).strip() if detail_report_path is not None else ""
+    if not detail_report_path:
+        detail_report_path = _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
+
+    merged = {
+        "generated_at_jst": generated_at_jst,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "data_source": data_source,
+        "data_freshness": data_freshness,
+        "detail_report_path": detail_report_path,
+        "include_manual_delivery_checklist": bool(
+            getattr(args, "include_manual_delivery_checklist", False)
+            or json_data.get("include_manual_delivery_checklist", False)
+        ),
+    }
+    for field_name in LATEST_MANUAL_PREVIEW_REQUIRED_FIELDS:
+        merged[field_name] = _latest_manual_preview_required_value(args, json_data, field_name, parser)
+    return merged
+
+
 def _format_manual_delivery_checklist() -> str:
     lines = [
         "Manual delivery checklist",
@@ -9112,6 +9282,10 @@ def write_latest_active_plan_manual_preview(
     )
 
 
+def _print_latest_active_plan_manual_preview_input_template() -> None:
+    sys.stdout.write(json.dumps(_latest_active_plan_manual_preview_input_template(), ensure_ascii=False, indent=2) + "\n")
+
+
 def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--generated-at-jst", required=True)
     parser.add_argument("--data-freshness", required=True)
@@ -9141,23 +9315,25 @@ def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentPar
 
 def _add_latest_active_plan_manual_preview_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--generated-at-jst")
-    parser.add_argument("--symbol", default="BTC_USDT")
-    parser.add_argument("--timeframe", default="15m")
-    parser.add_argument("--data-source", default="exchange-auto-public")
-    parser.add_argument("--data-freshness", default="15m latest-window exchange-auto-public")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
     parser.add_argument("--detail-report-path")
     parser.add_argument("--output-path")
     parser.add_argument("--include-manual-delivery-checklist", action="store_true")
-    parser.add_argument("--market-status-summary", required=True)
-    parser.add_argument("--active-plan-label", required=True)
-    parser.add_argument("--side", required=True)
-    parser.add_argument("--entry-mode", required=True)
-    parser.add_argument("--entry-condition", required=True)
-    parser.add_argument("--tp-plan", required=True)
-    parser.add_argument("--sl-or-invalidation", required=True)
-    parser.add_argument("--timeout-or-wait-limit", required=True)
-    parser.add_argument("--intraperiod-evidence-summary", required=True)
-    parser.add_argument("--pending-caveat", required=True)
+    parser.add_argument("--input-json")
+    parser.add_argument("--print-input-json-template", action="store_true")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
 
 
 def _resolve_active_plan_notification_detail_report_path(
@@ -9213,34 +9389,31 @@ def _run_active_plan_notification_preview_command(
 
 
 def _run_latest_active_plan_manual_preview_command(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
-    detail_report_path = str(args.detail_report_path).strip() if getattr(args, "detail_report_path", None) else None
-    if detail_report_path is None:
-        try:
-            detail_report_path = _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
-        except FileNotFoundError as exc:
-            if parser is not None:
-                parser.error(str(exc))
-            raise
+    if bool(getattr(args, "print_input_json_template", False)):
+        _print_latest_active_plan_manual_preview_input_template()
+        return
+
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
     body = write_active_plan_notification_preview(
         output_path=Path(args.output_path) if args.output_path else None,
-        include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
+        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
         practical_manual_preview=True,
-        generated_at_jst=str(args.generated_at_jst) if getattr(args, "generated_at_jst", None) else _current_jst_iso_like_timestamp(),
-        data_freshness=str(getattr(args, "data_freshness", "15m latest-window exchange-auto-public")),
-        symbol=str(getattr(args, "symbol", "BTC_USDT")),
-        timeframe=str(getattr(args, "timeframe", "15m")),
-        data_source=str(getattr(args, "data_source", "exchange-auto-public")),
-        detail_report_path=detail_report_path,
-        market_status_summary=str(args.market_status_summary),
-        active_plan_label=str(args.active_plan_label),
-        side=str(args.side),
-        entry_mode=str(args.entry_mode),
-        entry_condition=str(args.entry_condition),
-        tp_plan=str(args.tp_plan),
-        sl_or_invalidation=str(args.sl_or_invalidation),
-        timeout_or_wait_limit=str(args.timeout_or_wait_limit),
-        intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
-        pending_caveat=str(args.pending_caveat),
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
     )
     sys.stdout.write(body)
 

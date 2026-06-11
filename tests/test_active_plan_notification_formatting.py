@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import subprocess
 import sys
 import unittest
@@ -134,6 +135,16 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _latest_manual_preview_cli_args(self, extra_args: list[str] | None = None) -> list[str]:
+        args = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-active-plan-manual-preview",
+        ]
+        if extra_args:
+            args.extend(extra_args)
+        return args
+
     def _run_preview_main(self, extra_args: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -155,6 +166,25 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         resolved_base_dir = base_dir or BASE_DIR
         with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
             with mock.patch.object(sys, "argv", self._latest_manual_preview_argv(extra_args)):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_latest_manual_preview_main_with_argv(self, argv: list[str], base_dir: Path | None = None) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-preview", *argv],
+            ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
                         log_feedback.main()
@@ -400,6 +430,259 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("human must decide manually", result.stdout)
         self.assertIn("detail_report_path", result.stdout)
         self.assertEqual(result.stdout.count("Manual delivery checklist"), 1)
+
+    def test_write_latest_active_plan_manual_preview_cli_prints_input_json_template(self) -> None:
+        result = subprocess.run(
+            self._latest_manual_preview_cli_args(["--print-input-json-template"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        template = json.loads(result.stdout)
+        self.assertIsInstance(template, dict)
+        self.assertEqual(template["include_manual_delivery_checklist"], False)
+        self.assertIn("report-only", template["market_status_summary"])
+        self.assertIn("not FORMAL_GO", template["market_status_summary"])
+        self.assertIn("no automatic order", template["market_status_summary"])
+        self.assertIn("report-only", template["pending_caveat"])
+        self.assertIn("human must decide manually", template["pending_caveat"])
+        self.assertEqual(
+            set(template),
+            {
+                "generated_at_jst",
+                "symbol",
+                "timeframe",
+                "data_source",
+                "data_freshness",
+                "detail_report_path",
+                "market_status_summary",
+                "active_plan_label",
+                "side",
+                "entry_mode",
+                "entry_condition",
+                "tp_plan",
+                "sl_or_invalidation",
+                "timeout_or_wait_limit",
+                "intraperiod_evidence_summary",
+                "pending_caveat",
+                "include_manual_delivery_checklist",
+            },
+        )
+        self.assertNotIn("manual trading support preview", result.stdout)
+
+    def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            input_json = base_dir / "manual-preview-input.json"
+            input_data = {
+                "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                "symbol": "ETH_USDT",
+                "timeframe": "30m",
+                "data_source": "exchange-auto-public",
+                "data_freshness": "30m latest-window exchange-auto-public",
+                "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+                "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                "side": "long",
+                "entry_mode": "limit_zone_mid",
+                "entry_condition": "entry zone must be touched before consideration",
+                "tp_plan": "TP1/TP2 from JSON",
+                "sl_or_invalidation": "SL from JSON",
+                "timeout_or_wait_limit": "timeout after JSON window",
+                "intraperiod_evidence_summary": "JSON provided evidence summary",
+                "pending_caveat": "report-only manual preview; human must decide manually",
+                "include_manual_delivery_checklist": True,
+            }
+            input_json.write_text(json.dumps(input_data, ensure_ascii=False, indent=2), encoding="utf-8")
+            before_text = input_json.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main_with_argv(
+                ["--input-json", str(input_json)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(input_json.read_text(encoding="utf-8"), before_text)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", stdout)
+            self.assertIn("symbol: ETH_USDT", stdout)
+            self.assertIn("timeframe: 30m", stdout)
+            self.assertIn("data_source: exchange-auto-public", stdout)
+            self.assertIn("data_freshness: 30m latest-window exchange-auto-public", stdout)
+            self.assertIn("report-only", stdout)
+            self.assertIn("not FORMAL_GO", stdout)
+            self.assertIn("no automatic order", stdout)
+            self.assertIn("ACTIVE_* is action guidance only", stdout)
+            self.assertIn("human must decide manually", stdout)
+            self.assertIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertIn("Manual delivery checklist", stdout)
+
+    def test_write_latest_active_plan_manual_preview_cli_overrides_input_json_values(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            json_report = base_dir / "custom" / "json-detail.md"
+            json_report.parent.mkdir(parents=True, exist_ok=True)
+            json_report.write_text("json report", encoding="utf-8")
+            cli_report = base_dir / "custom" / "cli-detail.md"
+            cli_report.parent.mkdir(parents=True, exist_ok=True)
+            cli_report.write_text("cli report", encoding="utf-8")
+            input_json = base_dir / "manual-preview-input.json"
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                        "symbol": "ETH_USDT",
+                        "timeframe": "30m",
+                        "data_source": "json-data-source",
+                        "data_freshness": "json freshness",
+                        "detail_report_path": json_report.relative_to(base_dir).as_posix(),
+                        "market_status_summary": "json market status",
+                        "active_plan_label": "JSON_ACTIVE_LIMIT_RETEST",
+                        "side": "short",
+                        "entry_mode": "json-entry-mode",
+                        "entry_condition": "json entry condition",
+                        "tp_plan": "json tp plan",
+                        "sl_or_invalidation": "json sl",
+                        "timeout_or_wait_limit": "json timeout",
+                        "intraperiod_evidence_summary": "json evidence",
+                        "pending_caveat": "json caveat",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            code, stdout, stderr = self._run_latest_manual_preview_main(
+                [
+                    "--input-json",
+                    str(input_json),
+                    "--generated-at-jst",
+                    "2026-06-11T09:00:00+09:00",
+                    "--symbol",
+                    "BTC_USDT",
+                    "--data-source",
+                    "exchange-auto-public",
+                    "--detail-report-path",
+                    str(cli_report.relative_to(base_dir)),
+                    "--market-status-summary",
+                    "CLI market status",
+                    "--active-plan-label",
+                    "ACTIVE_LIMIT_RETEST",
+                    "--side",
+                    "long",
+                    "--entry-mode",
+                    "limit_zone_mid",
+                    "--entry-condition",
+                    "CLI entry condition",
+                    "--tp-plan",
+                    "CLI tp plan",
+                    "--sl-or-invalidation",
+                    "CLI sl",
+                    "--timeout-or-wait-limit",
+                    "CLI timeout",
+                    "--intraperiod-evidence-summary",
+                    "CLI evidence",
+                    "--pending-caveat",
+                    "CLI caveat",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertIn("generated_at_jst: 2026-06-11T09:00:00+09:00", stdout)
+            self.assertIn("symbol: BTC_USDT", stdout)
+            self.assertIn("data_source: exchange-auto-public", stdout)
+            self.assertIn(cli_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertNotIn(json_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertIn("CLI market status", stdout)
+            self.assertIn("CLI entry condition", stdout)
+            self.assertIn("CLI tp plan", stdout)
+            self.assertIn("CLI sl", stdout)
+            self.assertIn("CLI timeout", stdout)
+            self.assertIn("CLI evidence", stdout)
+            self.assertIn("CLI caveat", stdout)
+
+    def test_write_latest_active_plan_manual_preview_cli_uses_json_detail_report_override(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            latest_report = self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            json_report = base_dir / "custom" / "json-detail.md"
+            json_report.parent.mkdir(parents=True, exist_ok=True)
+            json_report.write_text("json report", encoding="utf-8")
+            input_json = base_dir / "manual-preview-input.json"
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                        "symbol": "ETH_USDT",
+                        "timeframe": "30m",
+                        "data_source": "exchange-auto-public",
+                        "data_freshness": "30m latest-window exchange-auto-public",
+                        "detail_report_path": json_report.relative_to(base_dir).as_posix(),
+                        "market_status_summary": "json market status",
+                        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                        "side": "long",
+                        "entry_mode": "limit_zone_mid",
+                        "entry_condition": "json entry condition",
+                        "tp_plan": "json tp plan",
+                        "sl_or_invalidation": "json sl",
+                        "timeout_or_wait_limit": "json timeout",
+                        "intraperiod_evidence_summary": "json evidence",
+                        "pending_caveat": "json caveat",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            before_text = input_json.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_preview_main_with_argv(
+                ["--input-json", str(input_json)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(input_json.read_text(encoding="utf-8"), before_text)
+            self.assertIn(json_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertNotIn(latest_report.relative_to(base_dir).as_posix(), stdout)
+            self.assertEqual(json_report.read_text(encoding="utf-8"), "json report")
+
+    def test_write_latest_active_plan_manual_preview_cli_reports_missing_merged_fields(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            self._write_intraperiod_report(base_dir, "20260611", "latest report")
+            input_json = base_dir / "manual-preview-input.json"
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "market_status_summary": "json market status",
+                        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                        "side": "long",
+                        "entry_mode": "limit_zone_mid",
+                        "entry_condition": "json entry condition",
+                        "tp_plan": "json tp plan",
+                        "sl_or_invalidation": "json sl",
+                        "timeout_or_wait_limit": "json timeout",
+                        "intraperiod_evidence_summary": "json evidence",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            code, stdout, stderr = self._run_latest_manual_preview_main_with_argv(
+                ["--input-json", str(input_json)],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("pending_caveat is required after merging --input-json and CLI arguments", stderr)
 
     def test_write_latest_active_plan_manual_preview_cli_uses_latest_report_without_modifying_it(self) -> None:
         with TemporaryDirectory() as tmpdir:
