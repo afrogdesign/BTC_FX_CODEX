@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260610-095 implements the minimal report-only notification preview CLI / manual-output path within the accepted BTCFX-20260610-094 boundary.
+BTCFX-20260610-096 reviews the actual minimal report-only notification preview CLI output before any delivery or integration step.
 
 BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
@@ -84,9 +84,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the minimal report-only notification preview CLI implementation and test coverage.
+The active deliverable is the actual minimal report-only notification preview CLI output review.
 
-The next recommended task after this implementation is reviewed is BTCFX-20260610-096.
+The next recommended task after this review is BTCFX-20260610-097.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
