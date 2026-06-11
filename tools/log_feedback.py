@@ -10289,6 +10289,107 @@ def _run_write_latest_manual_delivery_local_inbox_command(
     sys.stdout.write(f"{output_md}\n")
 
 
+def _manual_delivery_source_files_lines(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+) -> list[str]:
+    resolved_intraperiod_outcomes_path = _manual_delivery_source_display_path(
+        intraperiod_outcomes_path
+    ) or "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
+    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(
+        base_dir,
+        detail_report_path,
+    )
+    return [
+        f"intraperiod_outcomes_path={resolved_intraperiod_outcomes_path}",
+        f"intraperiod_outcomes_exists={str(_manual_delivery_source_path_exists(base_dir, resolved_intraperiod_outcomes_path)).lower()}",
+        f"detail_report_path={resolved_detail_report_path}",
+        f"detail_report_exists={str(_manual_delivery_source_path_exists(base_dir, resolved_detail_report_path)).lower()}",
+        "safety=report-only_not_FORMAL_GO_no_automatic_order",
+    ]
+
+
+def _run_latest_manual_delivery_local_flow_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    intraperiod_outcomes_path = str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"))
+    detail_report_path = getattr(args, "detail_report_path", None)
+    recent_row_window = int(getattr(args, "recent_row_window", 12))
+    include_manual_delivery_checklist = bool(getattr(args, "include_manual_delivery_checklist", False))
+
+    source_files_text = "\n".join(
+        _manual_delivery_source_files_lines(
+            base_dir=BASE_DIR,
+            intraperiod_outcomes_path=intraperiod_outcomes_path,
+            detail_report_path=detail_report_path,
+        )
+    ) + "\n"
+    (output_dir / "source-files.txt").write_text(source_files_text, encoding="utf-8")
+
+    seed_data = _latest_manual_delivery_input_json_seed_data(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        recent_row_window=recent_row_window,
+        generated_at_jst=_current_jst_iso_like_timestamp(),
+        symbol="BTC_USDT",
+        timeframe="15m",
+        data_source="exchange-auto-public",
+        data_freshness="15m latest-window exchange-auto-public",
+        active_plan_label="NO_ACTION_REVIEW_REQUIRED",
+        side="review_required",
+        entry_mode="review_required",
+        entry_condition="review latest report before any manual decision",
+        tp_plan="review_required",
+        sl_or_invalidation="review_required",
+        timeout_or_wait_limit="review_required",
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+    )
+    input_json_path = output_dir / "manual-delivery-input.json"
+    input_json_path.write_text(json.dumps(seed_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    bundle_dir = output_dir / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_texts = _manual_delivery_file_bundle_texts(
+        subject_prefix="BTCFX Ver03-v2 report-only",
+        delivery_target_label="manual external app",
+        generated_at_jst=str(seed_data["generated_at_jst"]),
+        data_freshness=str(seed_data["data_freshness"]),
+        symbol=str(seed_data["symbol"]),
+        timeframe=str(seed_data["timeframe"]),
+        data_source=str(seed_data["data_source"]),
+        detail_report_path=str(seed_data["detail_report_path"]),
+        market_status_summary=str(seed_data["market_status_summary"]),
+        active_plan_label=str(seed_data["active_plan_label"]),
+        side=str(seed_data["side"]),
+        entry_mode=str(seed_data["entry_mode"]),
+        entry_condition=str(seed_data["entry_condition"]),
+        tp_plan=str(seed_data["tp_plan"]),
+        sl_or_invalidation=str(seed_data["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(seed_data["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(seed_data["intraperiod_evidence_summary"]),
+        pending_caveat=str(seed_data["pending_caveat"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(seed_data["include_manual_delivery_checklist"]),
+    )
+    for filename, text in bundle_texts.items():
+        (bundle_dir / filename).write_text(text, encoding="utf-8")
+
+    inbox_markdown = _manual_delivery_local_inbox_markdown(
+        input_json_path=input_json_path,
+        bundle_dir=bundle_dir,
+        input_json=seed_data,
+    )
+    (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
+    sys.stdout.write(f"{output_dir}\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -13017,6 +13118,16 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_inbox_parser.add_argument("--bundle-dir", required=True)
     manual_delivery_local_inbox_parser.add_argument("--output-md", required=True)
 
+    manual_delivery_local_flow_parser = subparsers.add_parser("write-latest-manual-delivery-local-flow")
+    manual_delivery_local_flow_parser.add_argument("--output-dir", required=True)
+    manual_delivery_local_flow_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_local_flow_parser.add_argument("--detail-report-path")
+    manual_delivery_local_flow_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_local_flow_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13462,6 +13573,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-local-inbox":
         _run_write_latest_manual_delivery_local_inbox_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-flow":
+        _run_latest_manual_delivery_local_flow_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

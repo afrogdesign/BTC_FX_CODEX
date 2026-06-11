@@ -478,6 +478,41 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _manual_delivery_local_flow_argv(self, output_dir: Path, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-manual-delivery-local-flow",
+            "--output-dir",
+            str(output_dir),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
+    def _run_manual_delivery_local_flow_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-local-flow", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _write_intraperiod_report(self, base_dir: Path, date: str, contents: str) -> Path:
         path = base_dir / "運用資料" / "reports" / "analysis" / f"active_plan_candidate_intraperiod_outcomes_{date}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1863,6 +1898,181 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(result.stdout, "")
             self.assertIn("invalid JSON in", result.stderr)
             self.assertFalse(output_md.exists())
+
+    def test_write_latest_manual_delivery_local_flow_cli_help_includes_command_arguments(self) -> None:
+        result = subprocess.run(
+            self._manual_delivery_local_flow_argv(Path("/tmp/manual-delivery-local-flow"), ["--help"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("write-latest-manual-delivery-local-flow", result.stdout)
+        self.assertIn("--output-dir", result.stdout)
+        self.assertIn("--intraperiod-outcomes-path", result.stdout)
+        self.assertIn("--detail-report-path", result.stdout)
+        self.assertIn("--recent-row-window", result.stdout)
+        self.assertIn("--include-manual-delivery-checklist", result.stdout)
+
+    def test_write_latest_manual_delivery_local_flow_cli_creates_expected_output_structure(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                ["--output-dir", str(output_dir)],
+                base_dir=base_dir,
+            )
+
+            expected_files = {
+                Path("source-files.txt"),
+                Path("manual-delivery-input.json"),
+                Path("bundle") / "subject.txt",
+                Path("bundle") / "body.txt",
+                Path("bundle") / "checklist.txt",
+                Path("bundle") / "package.txt",
+                Path("bundle") / "README.txt",
+                Path("inbox.md"),
+            }
+            actual_files = {
+                path.relative_to(output_dir)
+                for path in output_dir.rglob("*")
+                if path.is_file()
+            }
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(actual_files, expected_files)
+
+            source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
+            self.assertIn("intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv", source_files)
+            self.assertIn("intraperiod_outcomes_exists=false", source_files)
+            self.assertIn("detail_report_path=", source_files)
+            self.assertIn("detail_report_exists=false", source_files)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", source_files)
+
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(seed), {
+                "generated_at_jst",
+                "symbol",
+                "timeframe",
+                "data_source",
+                "data_freshness",
+                "detail_report_path",
+                "market_status_summary",
+                "active_plan_label",
+                "side",
+                "entry_mode",
+                "entry_condition",
+                "tp_plan",
+                "sl_or_invalidation",
+                "timeout_or_wait_limit",
+                "intraperiod_evidence_summary",
+                "pending_caveat",
+                "include_manual_delivery_checklist",
+            })
+            self.assertIn("report-only", seed["market_status_summary"])
+            self.assertIn("not FORMAL_GO", seed["market_status_summary"])
+            self.assertIn("no automatic order", seed["market_status_summary"])
+            self.assertEqual(seed["active_plan_label"], "NO_ACTION_REVIEW_REQUIRED")
+            self.assertEqual(seed["side"], "review_required")
+            self.assertEqual(seed["entry_mode"], "review_required")
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
+
+            bundle_dir = output_dir / "bundle"
+            self.assertIn("report-only", (bundle_dir / "subject.txt").read_text(encoding="utf-8"))
+
+            body_text = (bundle_dir / "body.txt").read_text(encoding="utf-8")
+            self.assertIn("report-only", body_text)
+            self.assertIn("not FORMAL_GO", body_text)
+            self.assertIn("no automatic order", body_text)
+            self.assertIn("ACTIVE_* is action guidance only", body_text)
+            self.assertIn("human must decide manually", body_text)
+            self.assertIn("pending_coverage_caveat:", body_text)
+
+            checklist_text = (bundle_dir / "checklist.txt").read_text(encoding="utf-8")
+            self.assertIn("report-only", checklist_text)
+            self.assertIn("not FORMAL_GO", checklist_text)
+            self.assertIn("no automatic order", checklist_text)
+            self.assertIn("human must decide manually", checklist_text)
+            self.assertIn("no external notification integration", checklist_text)
+
+            package_text = (bundle_dir / "package.txt").read_text(encoding="utf-8")
+            self.assertIn("report-only", package_text)
+            self.assertIn("not FORMAL_GO", package_text)
+            self.assertIn("no automatic order", package_text)
+            self.assertIn("human must decide manually", package_text)
+            self.assertIn("no external notification integration", package_text)
+            self.assertIn("pending_coverage_caveat:", package_text)
+
+            readme_text = (bundle_dir / "README.txt").read_text(encoding="utf-8")
+            self.assertIn("report-only", readme_text)
+            self.assertIn("not FORMAL_GO", readme_text)
+            self.assertIn("no automatic order", readme_text)
+            self.assertIn("human must decide manually", readme_text)
+            self.assertIn("no external notification integration", readme_text)
+
+            inbox = (output_dir / "inbox.md").read_text(encoding="utf-8")
+            self.assertIn("Manual Delivery Local Inbox", inbox)
+            self.assertIn("report-only", inbox)
+            self.assertIn("not FORMAL_GO", inbox)
+            self.assertIn("no automatic order", inbox)
+            self.assertIn("ACTIVE_* guidance only", inbox)
+            self.assertIn("human must decide manually", inbox)
+            self.assertIn("no external notification integration", inbox)
+            self.assertIn("do not treat the inbox as trade approval", inbox)
+            self.assertIn("subject.txt exists=true", inbox)
+            self.assertIn("body.txt exists=true", inbox)
+            self.assertIn("checklist.txt exists=true", inbox)
+            self.assertIn("package.txt exists=true", inbox)
+            self.assertIn("README.txt exists=true", inbox)
+
+    def test_write_latest_manual_delivery_local_flow_cli_uses_explicit_source_paths_and_preserves_inputs(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260612", "detail report")
+            before_csv = csv_path.read_text(encoding="utf-8")
+            before_detail = detail_report_path.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--include-manual-delivery-checklist",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
+            self.assertIn(f"intraperiod_outcomes_path={csv_path}", source_files)
+            self.assertIn("intraperiod_outcomes_exists=true", source_files)
+            self.assertIn(f"detail_report_path={detail_report_path}", source_files)
+            self.assertIn("detail_report_exists=true", source_files)
+            self.assertEqual(csv_path.read_text(encoding="utf-8"), before_csv)
+            self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
+
+    def test_write_latest_manual_delivery_local_flow_cli_rejects_negative_recent_window(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                ["--output-dir", str(output_dir), "--recent-row-window", "-1"],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("must be a non-negative integer", stderr)
 
     def test_write_latest_manual_delivery_input_json_cli_help_includes_command_arguments(self) -> None:
         result = subprocess.run(

@@ -66,6 +66,13 @@ Purpose: report-only human manual trading support preview.
 - The output is still local files only, and the generated bundle remains `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, and `README.txt`.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, human must decide manually, no external notification integration.
 
+## One-Command Local Manual Delivery Flow
+
+- Use `write-latest-manual-delivery-local-flow --output-dir <path>` as the next product step after the reviewed and E2E-verified local manual-delivery flow.
+- It generates `source-files.txt`, `manual-delivery-input.json`, `bundle/subject.txt`, `bundle/body.txt`, `bundle/checklist.txt`, `bundle/package.txt`, `bundle/README.txt`, and `inbox.md` under one local output directory.
+- It reduces manual steps, but it still does not send, notify, fetch, rebuild, trade, or approve anything.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.
