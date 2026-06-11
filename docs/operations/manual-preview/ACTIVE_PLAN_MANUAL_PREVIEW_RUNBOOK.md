@@ -38,6 +38,13 @@ Purpose: report-only human manual trading support preview.
 - This bundle does not perform email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or any other external notification integration.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
 
+## One-Command Local Manual Delivery Bundle From JSON + CSV
+
+- Use `write-latest-active-plan-manual-delivery-files-from-json --input-json <path> --output-dir <path> --auto-pending-caveat-from-csv` when you want a one-command local bundle path.
+- This removes the manual caveat copy/paste step by deriving `pending_caveat` from the existing intraperiod outcomes CSV.
+- The output is still local files only, and the generated bundle remains `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, and `README.txt`.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, human must decide manually, no external notification integration.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.

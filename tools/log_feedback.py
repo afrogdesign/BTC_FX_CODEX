@@ -9562,6 +9562,87 @@ def _manual_delivery_file_bundle_readme() -> str:
     return "\n".join(lines)
 
 
+def _manual_delivery_file_bundle_texts(
+    *,
+    subject_prefix: str,
+    delivery_target_label: str,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    body_include_manual_delivery_checklist: bool,
+    package_include_manual_delivery_checklist: bool,
+) -> dict[str, str]:
+    subject = _manual_delivery_copy_package_subject(
+        subject_prefix=subject_prefix,
+        symbol=symbol,
+        timeframe=timeframe,
+        active_plan_label=active_plan_label,
+        side=side,
+    )
+    body = _manual_delivery_copy_package_body(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=body_include_manual_delivery_checklist,
+    )
+    checklist = _manual_delivery_copy_package_checklist(delivery_target_label=delivery_target_label)
+    package = _format_manual_delivery_copy_package(
+        subject_prefix=subject_prefix,
+        delivery_target_label=delivery_target_label,
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=package_include_manual_delivery_checklist,
+    )
+    readme = _manual_delivery_file_bundle_readme()
+    return {
+        "subject.txt": subject,
+        "body.txt": body,
+        "checklist.txt": checklist,
+        "package.txt": package,
+        "README.txt": readme,
+    }
+
+
 def _non_negative_int_arg(value: str) -> int:
     try:
         parsed = int(value, 10)
@@ -9860,36 +9941,7 @@ def _run_latest_active_plan_manual_delivery_files_command(
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
     merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
-    subject = _manual_delivery_copy_package_subject(
-        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
-        symbol=str(merged["symbol"]),
-        timeframe=str(merged["timeframe"]),
-        active_plan_label=str(merged["active_plan_label"]),
-        side=str(merged["side"]),
-    )
-    body = _manual_delivery_copy_package_body(
-        generated_at_jst=str(merged["generated_at_jst"]),
-        data_freshness=str(merged["data_freshness"]),
-        symbol=str(merged["symbol"]),
-        timeframe=str(merged["timeframe"]),
-        data_source=str(merged["data_source"]),
-        detail_report_path=str(merged["detail_report_path"]),
-        market_status_summary=str(merged["market_status_summary"]),
-        active_plan_label=str(merged["active_plan_label"]),
-        side=str(merged["side"]),
-        entry_mode=str(merged["entry_mode"]),
-        entry_condition=str(merged["entry_condition"]),
-        tp_plan=str(merged["tp_plan"]),
-        sl_or_invalidation=str(merged["sl_or_invalidation"]),
-        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
-        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
-        pending_caveat=str(merged["pending_caveat"]),
-        include_manual_delivery_checklist=False,
-    )
-    checklist = _manual_delivery_copy_package_checklist(
-        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app"))
-    )
-    package = _format_manual_delivery_copy_package(
+    texts = _manual_delivery_file_bundle_texts(
         subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
         delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app")),
         generated_at_jst=str(merged["generated_at_jst"]),
@@ -9908,9 +9960,9 @@ def _run_latest_active_plan_manual_delivery_files_command(
         timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
         intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
         pending_caveat=str(merged["pending_caveat"]),
-        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
     )
-    readme = _manual_delivery_file_bundle_readme()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs = {
@@ -9920,13 +9972,74 @@ def _run_latest_active_plan_manual_delivery_files_command(
         "package_path": output_dir / "package.txt",
         "readme_path": output_dir / "README.txt",
     }
-    outputs["subject_path"].write_text(subject, encoding="utf-8")
-    outputs["body_path"].write_text(body, encoding="utf-8")
-    outputs["checklist_path"].write_text(checklist, encoding="utf-8")
-    outputs["package_path"].write_text(package, encoding="utf-8")
-    outputs["readme_path"].write_text(readme, encoding="utf-8")
+    for filename, text in texts.items():
+        key = {
+            "subject.txt": "subject_path",
+            "body.txt": "body_path",
+            "checklist.txt": "checklist_path",
+            "package.txt": "package_path",
+            "README.txt": "readme_path",
+        }[filename]
+        outputs[key].write_text(text, encoding="utf-8")
     for key, path in outputs.items():
         sys.stdout.write(f"{key}={path}\n")
+
+
+def _resolve_manual_delivery_files_from_json_inputs(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    if bool(getattr(args, "auto_pending_caveat_from_csv", False)):
+        intraperiod_outcomes_path = Path(str(getattr(args, "intraperiod_outcomes_path", "")).strip())
+        if not intraperiod_outcomes_path.is_absolute():
+            intraperiod_outcomes_path = BASE_DIR / intraperiod_outcomes_path
+        summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+            intraperiod_outcomes_path,
+            recent_row_window=int(getattr(args, "recent_row_window", 12)),
+        )
+        merged["pending_caveat"] = format_active_plan_pending_coverage_caveat(
+            total_outcome_rows=int(summary["total_outcome_rows"]),
+            resolved_rows=int(summary["resolved_rows"]),
+            pending_rows=int(summary["pending_rows"]),
+            recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+            entry_not_touched_count=int(summary["entry_not_touched_count"]),
+        )
+    return merged
+
+
+def _run_latest_active_plan_manual_delivery_files_from_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_manual_delivery_files_from_json_inputs(args, parser)
+    texts = _manual_delivery_file_bundle_texts(
+        subject_prefix="BTCFX Ver03-v2 report-only",
+        delivery_target_label="manual external app",
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for filename, text in texts.items():
+        (output_dir / filename).write_text(text, encoding="utf-8")
+    sys.stdout.write(f"{output_dir}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -12613,6 +12726,16 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_files_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files")
     _add_latest_active_plan_manual_delivery_files_arguments(manual_delivery_files_parser)
 
+    manual_delivery_files_from_json_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files-from-json")
+    manual_delivery_files_from_json_parser.add_argument("--input-json", required=True)
+    manual_delivery_files_from_json_parser.add_argument("--output-dir", required=True)
+    manual_delivery_files_from_json_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_files_from_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_files_from_json_parser.add_argument("--auto-pending-caveat-from-csv", action="store_true")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13042,6 +13165,10 @@ def main() -> None:
 
     if args.command == "write-latest-active-plan-manual-delivery-files":
         _run_latest_active_plan_manual_delivery_files_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-files-from-json":
+        _run_latest_active_plan_manual_delivery_files_from_json_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

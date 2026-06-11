@@ -208,6 +208,25 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _latest_manual_delivery_files_from_json_argv(
+        self,
+        input_json: Path,
+        output_dir: Path,
+        extra_args: list[str] | None = None,
+    ) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-active-plan-manual-delivery-files-from-json",
+            "--input-json",
+            str(input_json),
+            "--output-dir",
+            str(output_dir),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             sys.executable,
@@ -359,6 +378,35 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "outcome", "first_exit_reason"])
             writer.writeheader()
             writer.writerows(rows)
+        return path
+
+    def _write_manual_delivery_input_json(self, base_dir: Path, *, pending_caveat: str, include_manual_delivery_checklist: bool = False) -> Path:
+        path = base_dir / "manual-delivery-input.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "generated_at_jst": "2026-06-11T01:23:45+09:00",
+                    "symbol": "ETH_USDT",
+                    "timeframe": "30m",
+                    "data_source": "exchange-auto-public",
+                    "data_freshness": "30m latest-window exchange-auto-public",
+                    "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+                    "active_plan_label": "ACTIVE_LIMIT_RETEST",
+                    "side": "short",
+                    "entry_mode": "limit_zone_mid",
+                    "entry_condition": "entry zone must be touched before consideration",
+                    "tp_plan": "TP1/TP2 from JSON",
+                    "sl_or_invalidation": "SL from JSON",
+                    "timeout_or_wait_limit": "timeout after JSON window",
+                    "intraperiod_evidence_summary": "JSON provided evidence summary",
+                    "pending_caveat": pending_caveat,
+                    "include_manual_delivery_checklist": include_manual_delivery_checklist,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         return path
 
     def _pending_coverage_caveat_csv_rows(self) -> list[dict[str, str]]:
@@ -1268,6 +1316,154 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn(latest_report.relative_to(base_dir).as_posix(), package_text)
             self.assertEqual(package_text, package_stdout)
             self.assertEqual(latest_report.read_text(encoding="utf-8"), "latest report")
+
+    def test_write_latest_active_plan_manual_delivery_files_from_json_cli_writes_bundle_and_auto_caveat(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="manual json caveat",
+                include_manual_delivery_checklist=True,
+            )
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            output_dir = base_dir / "bundle" / "from-json"
+
+            result = subprocess.run(
+                self._latest_manual_delivery_files_from_json_argv(
+                    input_json,
+                    output_dir,
+                    [
+                        "--auto-pending-caveat-from-csv",
+                        "--intraperiod-outcomes-path",
+                        str(csv_path),
+                        "--recent-row-window",
+                        "12",
+                    ],
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(result.stdout, f"{output_dir}\n")
+
+            subject_path = output_dir / "subject.txt"
+            body_path = output_dir / "body.txt"
+            checklist_path = output_dir / "checklist.txt"
+            package_path = output_dir / "package.txt"
+            readme_path = output_dir / "README.txt"
+            for path in [subject_path, body_path, checklist_path, package_path, readme_path]:
+                self.assertTrue(path.exists(), msg=str(path))
+
+            self.assertEqual(
+                subject_path.read_text(encoding="utf-8"),
+                "BTCFX Ver03-v2 report-only | ETH_USDT | 30m | ACTIVE_LIMIT_RETEST | short | report-only",
+            )
+            body_text = body_path.read_text(encoding="utf-8")
+            package_text = package_path.read_text(encoding="utf-8")
+            checklist_text = checklist_path.read_text(encoding="utf-8")
+            readme_text = readme_path.read_text(encoding="utf-8")
+
+            self.assertIn("pending_coverage_caveat:", body_text)
+            self.assertIn("diagnostic=coverage_caveat", body_text)
+            self.assertIn("report-only", body_text)
+            self.assertIn("not FORMAL_GO", body_text)
+            self.assertIn("no automatic order", body_text)
+            self.assertIn("ACTIVE_* is action guidance only", body_text)
+            self.assertIn("human must decide manually", body_text)
+            self.assertIn("BTCFX Ver03-v2 manual trading support preview", package_text)
+            self.assertIn("pending_coverage_caveat:", package_text)
+            self.assertIn("diagnostic=coverage_caveat", package_text)
+            self.assertIn("Human send checklist", package_text)
+            self.assertIn("delivery target label: manual external app", checklist_text)
+            self.assertIn("human must decide manually", checklist_text)
+            self.assertIn("no external notification integration", readme_text)
+            self.assertIn("files are for manual copy/paste only", readme_text)
+
+    def test_write_latest_active_plan_manual_delivery_files_from_json_cli_preserves_json_pending_caveat_without_auto_flag(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="manual json caveat",
+                include_manual_delivery_checklist=False,
+            )
+            output_dir = base_dir / "bundle" / "json-only"
+
+            result = subprocess.run(
+                self._latest_manual_delivery_files_from_json_argv(input_json, output_dir),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stdout, f"{output_dir}\n")
+            body_text = (output_dir / "body.txt").read_text(encoding="utf-8")
+            package_text = (output_dir / "package.txt").read_text(encoding="utf-8")
+            self.assertIn("manual json caveat", body_text)
+            self.assertIn("manual json caveat", package_text)
+            self.assertNotIn("diagnostic=no_intraperiod_evidence", package_text)
+
+    def test_write_latest_active_plan_manual_delivery_files_from_json_cli_missing_csv_uses_no_evidence_caveat(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="manual json caveat",
+                include_manual_delivery_checklist=True,
+            )
+            output_dir = base_dir / "bundle" / "missing-csv"
+            missing_csv = base_dir / "logs" / "csv" / "missing.csv"
+
+            result = subprocess.run(
+                self._latest_manual_delivery_files_from_json_argv(
+                    input_json,
+                    output_dir,
+                    [
+                        "--auto-pending-caveat-from-csv",
+                        "--intraperiod-outcomes-path",
+                        str(missing_csv),
+                    ],
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertEqual(result.stdout, f"{output_dir}\n")
+            package_text = (output_dir / "package.txt").read_text(encoding="utf-8")
+            body_text = (output_dir / "body.txt").read_text(encoding="utf-8")
+            self.assertIn("diagnostic=no_intraperiod_evidence", package_text)
+            self.assertIn("diagnostic=no_intraperiod_evidence", body_text)
+
+    def test_write_latest_active_plan_manual_delivery_files_from_json_cli_rejects_negative_recent_window(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = self._write_manual_delivery_input_json(base_dir, pending_caveat="manual json caveat")
+            output_dir = base_dir / "bundle" / "negative-window"
+
+            result = subprocess.run(
+                self._latest_manual_delivery_files_from_json_argv(
+                    input_json,
+                    output_dir,
+                    [
+                        "--auto-pending-caveat-from-csv",
+                        "--recent-row-window",
+                        "-1",
+                    ],
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("must be a non-negative integer", result.stderr)
 
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
