@@ -1,5 +1,25 @@
 # AI Orchestration Prompts
 
+## Operation Modes
+
+- `CHATGPT_ONLY`: use when ChatGPT should handle repo review, scope selection, or design judgment without spending Codex credits.
+- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed.
+- `NORMAL_CODEX`: use for fixed-scope edit/test/commit/push work.
+- `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
+- `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
+
+## LOW_COST_RESUME
+
+```text
+RESUME <WORK_ID>
+Goal: restart from the repo-local baseline with minimal reading.
+Read: AGENTS.md, docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
+Inspect: docs/operations/ai-orchestration/TASK_LEDGER.md only as needed, preferably the latest rows
+Report: READY | BLOCKED | NEEDS_REVIEW
+Stop: if repo正本 and chat history conflict, or if the scope is not fixed yet
+Do not start implementation until the user explicitly asks.
+```
+
 ## NEXT
 
 ```text
@@ -63,6 +83,7 @@ HANDOFF <WORK_ID>
 Create or update:
 - docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
 Include repo, branch, current commit, objective, constraints, completed work, open questions, and next task.
+Update `CURRENT_HANDOFF.md` only at thread migration, context overload, major milestone, or explicit handoff; do not update it for every task.
 No source code changes.
 Test: git diff --check
 Report: compact

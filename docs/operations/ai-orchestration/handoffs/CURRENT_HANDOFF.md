@@ -1,89 +1,46 @@
 # Current Handoff
 
-last_updated: 2026-06-09
+last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
-branch: `Ver03-v2`
-current_commit: `8f0b18c`
+branch: `Ver03-v3`
+current_commit: `8c3ae39e2b6e6fdbcd1d0e4c1ddba82410feddb6`
+latest_branch_head: `d2b93f2a599a571bc2062796199a5acd0d9c3d7f`
 
 ## Objective
 
-BTCFX-20260609-059 completes the orchestration metadata sync that adopts `pending_review` for in-flight implementation commits.
+BTCFX-20260611-RESUME-PROTOCOL adds a low-cost universal resume protocol and stable repo-local restart entrypoints for new ChatGPT/Codex threads.
 
-This handoff now records that all repo work runs directly on the local iMac path before the next builder task starts.
-Implementation tasks use `pending_review` in TASK_LEDGER rows until ChatGPT review is complete, and later SYNC tasks batch-update reviewed commit metadata.
-Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch use `BTCFX Ver03-v2`.
-The mandatory Codex response rule is that the final compact report must also be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` as `response.txt`.
+This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, and BTCFX-20260610-099-SYNC.
+The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
 
 ## Current state
 
-- Ver03-v1 was fixed at `e3506e4 Rebuild Ver03-v1 planning folder`.
-- Ver03-v2 was started at `6ec1da1 Start Ver03-v2 branch`.
-- Product planning folder was rebuilt.
-- AI orchestration anchor files are in place.
-- `BTCFX-20260608-053` is complete at `cd0e07f Fix active plan intraperiod edge cases`.
-- `BTCFX-20260608-054` is the policy task that documents the MBAM4 SMB working-directory and execution policy.
-- `BTCFX-20260608-055A` is the handoff task that refreshes this thread before the builder task starts.
-- `BTCFX-20260608-055B` is the policy task that documents SMB file access and iMac SSH git workflow.
-- `BTCFX-20260609-056` is the sync task that replaces those split-workflow rules with a local iMac-only workflow.
-- `BTCFX-20260609-059` is the metadata sync task that formalizes `pending_review` for in-flight implementation commits.
-- `NEXT_TASK.md` remains the human-facing entry.
+- BTCFX-20260610-098 is complete at `8c3ae39 Add manual delivery checklist output`.
+- BTCFX-20260610-098-REVIEW was REVIEW_ONLY and confirmed the checklist output.
+- BTCFX-20260610-099-SYNC is complete at `d2b93f2 Sync reviewed baseline after manual checklist review`.
+- `CONTROL.md` now points at the resume protocol task and keeps the next product step deferred for review.
+- Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
-## Next prompt for Codex
+## Constraints
 
-```text
-NEXT BTCFX-20260608-058
-Goal: Add Markdown report wiring for `logs/csv/active_plan_candidate_intraperiod_outcomes.csv`.
-Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, tools/log_feedback.py, src/trade/active_plan_intraperiod.py
-Edit: tools/log_feedback.py, tests/test_log_feedback.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: `./.venv312/bin/python -m unittest tests/test_log_feedback.py`
-Stop: if evaluator semantics, runtime integration, daily-sync integration, or deployment changes are required
-Report: compact
-```
+- ChatGPT is commander, planner, design judge, and reviewer.
+- Codex is implementation/edit/test/commit/push worker.
+- Codex must not make product or design decisions.
+- Do not edit source code, tests, generated reports, or generated previews for this resume protocol task.
+- Do not run fetch, builder reruns, report regeneration, daily-sync, report hub generation, runtime/deploy, `main.py`, or `run_cycle`.
+- Do not access API keys, secrets, private/account/order endpoints, live trading, automatic orders, or `paper_positions.csv`.
+- Do not add email, SMTP, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, address-book, or notification service integration.
+- `current_commit` may lag branch HEAD, and that lag alone is not BLOCK.
+- The current next task must come from `CONTROL.md`, not chat memory.
 
-## Machine roles and paths
-
-- Canonical working directory: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- All file reading and editing must use the local iMac repository path.
-- All tests, git commands, commit, push, and deployment/runtime operations must run on this iMac local repository.
-- Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
-- Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
-- Do not use `imac` or `imac.afrog.jp` as SSH targets.
-- Do not use `ssh marupro@192.168.50.51` for normal repo work unless a task explicitly requires confirming the current machine state.
-- Do not run runtime processes unless explicitly instructed.
-- For NEXT, FIX, SYNC, and HANDOFF tasks, write the final compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` exactly as `response.txt`.
-
-## Important constraints
-
-- No live trading.
-- No exchange API keys.
-- No secrets.
-- No runtime restart unless explicitly requested.
-- Codex must not make product design decisions.
-- Codex reports should be compact.
-
-## Recent work
-
-| Work ID | Status | Commit | Summary |
-|---|---|---|---|
-| BTCFX-20260608-046 | done | `e3506e4` | Rebuilt Ver03-v1 planning folder |
-| BTCFX-20260608-047 | done | `6ec1da1` | Started Ver03-v2 branch |
-| BTCFX-20260608-048 | done | `b904e13` | Add AI orchestration anchors |
-| BTCFX-20260608-049 | done | `943fe55` | Sync AI orchestration state |
-| BTCFX-20260608-053 | done | `cd0e07f` | Implemented active plan intraperiod evaluator helper and fixed edge cases |
-| BTCFX-20260608-054 | done | `82be32b` | Documented MBAM4 SMB working-directory and execution policy |
-| BTCFX-20260608-054-FIX | done | `46f7bfb` | Completed policy metadata and added the response output rule |
-| BTCFX-20260608-055A | done | `6bc8ac8` | Updated the thread handoff before builder work |
-| BTCFX-20260608-055B | done | `4ea589f` | Documented SMB file access and iMac SSH git workflow |
-| BTCFX-20260609-056 | done | `447b0c6` | Replaced split MBAM4/SMB rules with local iMac-only workflow |
-
-## Next prompt for Codex
+## Next task
 
 ```text
-NEXT BTCFX-20260608-055
-Goal: Implement the builder for `active_plan_candidate_intraperiod_outcomes.csv`.
-Read: docs/specs/active-plan-intraperiod-outcomes.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Edit: src/trade/active_plan_intraperiod.py, tests/test_active_plan_candidate_intraperiod_outcomes.py, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md
-Test: git diff --check
-Stop: if source code changes are needed
+NEXT BTCFX-20260610-099-SYNC-REVIEW
+Goal: Review the reviewed-baseline metadata sync before choosing the next product step.
+Read: docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/TASK_LEDGER.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
+Edit: none
+Test: none
+Stop: if the repo state is contradictory or if a design decision outside the metadata sync is required
 Report: compact
 ```

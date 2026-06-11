@@ -30,8 +30,11 @@ Do not take over planning unless explicitly asked.
 
 Before doing non-trivial work, check:
 
+- `docs/operations/ai-orchestration/RESUME.md`
 - `docs/operations/ai-orchestration/CONTROL.md`
 - `docs/operations/ai-orchestration/TASK_LEDGER.md` when updating task status
+
+After starting in the repo root, read `docs/operations/ai-orchestration/RESUME.md` first as the low-cost fixed entrypoint, then rely on `CONTROL.md`, `PROMPTS.md`, and `CURRENT_HANDOFF.md` instead of chat history.
 
 Use these files as the current operating context.
 Do not rely only on chat history.
