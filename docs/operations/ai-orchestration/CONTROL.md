@@ -13,6 +13,8 @@ project_key: `BTCFX`
 
 BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`; this sync records reviewed-baseline metadata for the accepted Ver03-v3 local manual-delivery flow through BTCFX-20260611-110.
 
+BTCFX-20260612-112-LOCAL-MANUAL-DELIVERY-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and confirmed `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, and `write-latest-manual-delivery-local-inbox`.
+
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
 The reviewed manual-delivery workflow now supports `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-files`, `write-latest-active-plan-manual-delivery-package`, deterministic pending/coverage caveat generation via `format-active-plan-pending-coverage-caveat`, copy-ready manual delivery package output, local file bundle output, `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, `README.txt`, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
@@ -92,7 +94,7 @@ BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetc
 
 The active deliverable is the reviewed local manual-delivery flow baseline and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose whether to run an end-to-end no-commit review of the local manual-delivery flow or choose the next product step.
+The next recommended task is STOP: choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

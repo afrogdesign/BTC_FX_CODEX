@@ -38,8 +38,9 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-108-LATEST-MANUAL-DELIVERY-SOURCE-RESOLVER-FIX is accepted at `c15c6446b344d6388592d6cc05fe89f124f7eb85`.
 - BTCFX-20260611-109-LATEST-MANUAL-DELIVERY-INPUT-JSON-SEED is accepted at `5347f2b49c8f89ebd12ebb15acab8c7c9439fa02`.
 - BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`.
+- BTCFX-20260612-112-LOCAL-MANUAL-DELIVERY-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and no repo file changes.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed local manual-delivery flow and defers the next step to STOP: choose whether to run an end-to-end no-commit review of the local manual-delivery flow or choose the next product step.
+- `CONTROL.md` now records the reviewed local manual-delivery flow and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -57,5 +58,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose whether to run an end-to-end no-commit review of the local manual-delivery flow or choose the next product step.
+STOP: Choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
 ```
