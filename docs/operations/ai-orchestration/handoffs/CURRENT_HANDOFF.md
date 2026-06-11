@@ -4,13 +4,13 @@ last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
 current_commit: `8c3ae39e2b6e6fdbcd1d0e4c1ddba82410feddb6`
-latest_branch_head: `d2b93f2a599a571bc2062796199a5acd0d9c3d7f`
+latest_branch_head: `1ccbf583d8160fd70490432aac29fcc5bf2b53e2`
 
 ## Objective
 
-BTCFX-20260611-RESUME-PROTOCOL adds a low-cost universal resume protocol and stable repo-local restart entrypoints for new ChatGPT/Codex threads.
+BTCFX-20260611-RESUME-PROTOCOL-FIX corrects the resume protocol handoff head metadata after the resume protocol branch checkpoint.
 
-This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, and BTCFX-20260610-099-SYNC.
+This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, and the resume protocol branch checkpoint.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
 
 ## Current state
@@ -18,6 +18,7 @@ The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` 
 - BTCFX-20260610-098 is complete at `8c3ae39 Add manual delivery checklist output`.
 - BTCFX-20260610-098-REVIEW was REVIEW_ONLY and confirmed the checklist output.
 - BTCFX-20260610-099-SYNC is complete at `d2b93f2 Sync reviewed baseline after manual checklist review`.
+- BTCFX-20260611-RESUME-PROTOCOL was pushed at `1ccbf58 Add low-cost universal resume protocol`.
 - `CONTROL.md` now points at the resume protocol task and keeps the next product step deferred for review.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 

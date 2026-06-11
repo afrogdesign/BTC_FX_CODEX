@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-RESUME-PROTOCOL adds a low-cost universal resume protocol and stable repo-local restart entrypoints for new ChatGPT/Codex threads.
+BTCFX-20260611-RESUME-PROTOCOL-FIX corrects the resume protocol handoff head metadata while keeping the stable repo-local restart entrypoints in place.
 
 BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
