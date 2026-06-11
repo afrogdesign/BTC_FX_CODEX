@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `b2f3de2460c7ab7e151745f7bf1707f994f119f2`
+current_commit: `1ff74d15fe65765f746d2da0f2968642d98a9e7a`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,15 +11,13 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK has been accepted and BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW passed as REVIEW_ONLY; this sync only records reviewed-baseline metadata for the accepted Ver03-v3 preview-link HEAD.
+BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK, BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW, BTCFX-20260611-091-PREVIEW-LINK-BASELINE-SYNC, BTCFX-20260611-092-PRACTICAL-MANUAL-PREVIEW, BTCFX-20260611-093-LATEST-MANUAL-PREVIEW-SHORTCUT, BTCFX-20260611-094-MANUAL-PREVIEW-JSON-INPUT, and BTCFX-20260611-095-MANUAL-PREVIEW-OPERATING-PACKAGE are accepted or REVIEW_ONLY as noted; this sync only records reviewed-baseline metadata for the accepted Ver03-v3 manual-preview operating package HEAD.
 
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-BTCFX-20260611-RESUME-PROTOCOL, BTCFX-20260611-RESUME-PROTOCOL-FIX, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, BTCFX-20260611-089-LATEST-INTRAPERIOD-PREVIEW-LINK, and BTCFX-20260611-090-LATEST-INTRAPERIOD-PREVIEW-E2E-REVIEW are accepted or reviewed as noted.
+The reviewed manual-preview operating package now supports practical manual preview mode, latest intraperiod report shortcut, JSON input, JSON template stdout output, JSON template file output, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
-The low-cost universal resume protocol and preview-link bridge are reviewed and accepted, and the repo is ready to resume future work from `docs/operations/ai-orchestration/INITIAL_PROMPT.md` and `docs/operations/ai-orchestration/RESUME.md`.
-
-Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
+Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no paper_positions.csv integration, no runtime/deploy/trading/API key/private endpoint changes, and no external notification integration.
 
 BTCFX-20260610-CONTEXT-RULE and BTCFX-20260610-CONTEXT-RULE-FIX keep the reviewed baseline rules in place while this boundary is defined.
 
@@ -92,9 +90,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the report-only preview-link bridge and its reviewed-baseline metadata sync.
+The active deliverable is the reviewed manual-preview operating package baseline and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step from the reviewed Ver03-v3 preview-link baseline.
+The next recommended task is STOP: choose the next product step from the reviewed manual-preview operating package baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
