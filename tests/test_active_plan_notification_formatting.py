@@ -249,6 +249,28 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _manual_delivery_local_inbox_argv(
+        self,
+        input_json: Path,
+        bundle_dir: Path,
+        output_md: Path,
+        extra_args: list[str] | None = None,
+    ) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "write-latest-manual-delivery-local-inbox",
+            "--input-json",
+            str(input_json),
+            "--bundle-dir",
+            str(bundle_dir),
+            "--output-md",
+            str(output_md),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             sys.executable,
@@ -423,6 +445,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-input-json", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_manual_delivery_local_inbox_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-local-inbox", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -1635,6 +1680,189 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("detail_report_path=", stdout)
             self.assertIn("detail_report_exists=false", stdout)
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", stdout)
+
+    def test_write_latest_manual_delivery_local_inbox_cli_help_includes_command_arguments(self) -> None:
+        result = subprocess.run(
+            self._manual_delivery_local_inbox_argv(
+                Path("/tmp/input.json"),
+                Path("/tmp/bundle"),
+                Path("/tmp/inbox.md"),
+                ["--help"],
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("write-latest-manual-delivery-local-inbox", result.stdout)
+        self.assertIn("--input-json", result.stdout)
+        self.assertIn("--bundle-dir", result.stdout)
+        self.assertIn("--output-md", result.stdout)
+
+    def test_write_latest_manual_delivery_local_inbox_cli_writes_markdown_and_stdout_path_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = base_dir / "input.json"
+            bundle_dir = base_dir / "bundle"
+            output_md = base_dir / "inbox.md"
+            bundle_dir.mkdir(parents=True, exist_ok=True)
+            input_json.write_text(
+                json.dumps(
+                    {
+                        "generated_at_jst": "2026-06-11T00:00:00+09:00",
+                        "symbol": "BTC_USDT",
+                        "timeframe": "15m",
+                        "data_source": "exchange-auto-public",
+                        "data_freshness": "15m latest-window exchange-auto-public",
+                        "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
+                        "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order; JSON seed",
+                        "active_plan_label": "NO_ACTION_REVIEW_REQUIRED",
+                        "side": "review_required",
+                        "entry_mode": "review_required",
+                        "entry_condition": "review latest report before any manual decision",
+                        "tp_plan": "review_required",
+                        "sl_or_invalidation": "review_required",
+                        "timeout_or_wait_limit": "review_required",
+                        "intraperiod_evidence_summary": "detail_report_exists=true; intraperiod_outcomes_exists=true; local source resolver seed",
+                        "pending_caveat": "pending_coverage_caveat: total_outcome_rows=0; resolved_rows=0; pending_rows=0; pending_rate=n/a; recent_unresolved_windows=0; entry_not_touched_count=0; count_consistency=matches; diagnostic=no_intraperiod_evidence; action=do_not_use_as_trade_trigger; safety=report-only_not_FORMAL_GO_no_automatic_order",
+                        "include_manual_delivery_checklist": True,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            before_json = input_json.read_text(encoding="utf-8")
+            expected_bundle_texts = {
+                "subject.txt": "subject text",
+                "body.txt": "body report-only not FORMAL_GO no automatic order",
+                "checklist.txt": "checklist human must decide manually",
+                "package.txt": "package ACTIVE_* guidance only",
+                "README.txt": "README no external notification integration",
+            }
+            for name, text in expected_bundle_texts.items():
+                (bundle_dir / name).write_text(text, encoding="utf-8")
+            before_bundle_texts = {name: (bundle_dir / name).read_text(encoding="utf-8") for name in expected_bundle_texts}
+
+            code, stdout, stderr = self._run_manual_delivery_local_inbox_main_with_argv(
+                [
+                    "--input-json",
+                    str(input_json),
+                    "--bundle-dir",
+                    str(bundle_dir),
+                    "--output-md",
+                    str(output_md),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertEqual(stdout, f"{output_md}\n")
+            self.assertTrue(output_md.exists())
+            self.assertEqual(input_json.read_text(encoding="utf-8"), before_json)
+            for name, before_text in before_bundle_texts.items():
+                self.assertEqual((bundle_dir / name).read_text(encoding="utf-8"), before_text)
+
+            markdown = output_md.read_text(encoding="utf-8")
+            self.assertIn("# Manual Delivery Local Inbox", markdown)
+            self.assertIn("## Safety Status", markdown)
+            self.assertIn("## Input JSON", markdown)
+            self.assertIn("## Bundle Files", markdown)
+            self.assertIn("## Human Review Checklist", markdown)
+            self.assertIn("## Next Human Action", markdown)
+            self.assertIn("report-only", markdown)
+            self.assertIn("not FORMAL_GO", markdown)
+            self.assertIn("no automatic order", markdown)
+            self.assertIn("ACTIVE_* guidance only", markdown)
+            self.assertIn("human must decide manually", markdown)
+            self.assertIn("no external notification integration", markdown)
+            self.assertIn("generated_at_jst=2026-06-11T00:00:00+09:00", markdown)
+            self.assertIn("symbol=BTC_USDT", markdown)
+            self.assertIn("timeframe=15m", markdown)
+            self.assertIn("data_source=exchange-auto-public", markdown)
+            self.assertIn("data_freshness=15m latest-window exchange-auto-public", markdown)
+            self.assertIn(
+                "detail_report_path=運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
+                markdown,
+            )
+            self.assertIn("active_plan_label=NO_ACTION_REVIEW_REQUIRED", markdown)
+            self.assertIn("side=review_required", markdown)
+            self.assertIn("entry_mode=review_required", markdown)
+            self.assertIn("pending_caveat=pending_coverage_caveat:", markdown)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", markdown)
+            self.assertIn("subject.txt exists=true", markdown)
+            self.assertIn("body.txt exists=true", markdown)
+            self.assertIn("checklist.txt exists=true", markdown)
+            self.assertIn("package.txt exists=true", markdown)
+            self.assertIn("README.txt exists=true", markdown)
+            self.assertIn("confirm JSON was reviewed by a human", markdown)
+            self.assertIn("confirm body/package wording is report-only", markdown)
+            self.assertIn("confirm not FORMAL_GO is visible", markdown)
+            self.assertIn("confirm no automatic order is visible", markdown)
+            self.assertIn("confirm pending caveat is visible", markdown)
+            self.assertIn("confirm human decides manually", markdown)
+            self.assertIn("confirm any send/post/share action is outside repo automation", markdown)
+            self.assertIn("inspect the generated local files manually", markdown)
+            self.assertIn("optionally copy/paste manually into an external app", markdown)
+            self.assertIn("do not treat the inbox as trade approval", markdown)
+
+    def test_write_latest_manual_delivery_local_inbox_cli_handles_missing_input_json_and_missing_bundle_files(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = base_dir / "missing.json"
+            bundle_dir = base_dir / "bundle"
+            output_md = base_dir / "missing-inbox.md"
+
+            code, stdout, stderr = self._run_manual_delivery_local_inbox_main_with_argv(
+                [
+                    "--input-json",
+                    str(input_json),
+                    "--bundle-dir",
+                    str(bundle_dir),
+                    "--output-md",
+                    str(output_md),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_md}\n")
+            markdown = output_md.read_text(encoding="utf-8")
+            self.assertIn("input_json_exists=false", markdown)
+            self.assertIn("subject.txt exists=false", markdown)
+            self.assertIn("body.txt exists=false", markdown)
+            self.assertIn("checklist.txt exists=false", markdown)
+            self.assertIn("package.txt exists=false", markdown)
+            self.assertIn("README.txt exists=false", markdown)
+            self.assertIn("report-only", markdown)
+            self.assertIn("not FORMAL_GO", markdown)
+            self.assertIn("no automatic order", markdown)
+            self.assertIn("ACTIVE_* guidance only", markdown)
+            self.assertIn("human must decide manually", markdown)
+            self.assertIn("no external notification integration", markdown)
+
+    def test_write_latest_manual_delivery_local_inbox_cli_rejects_invalid_input_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json = base_dir / "invalid.json"
+            input_json.write_text("{not json", encoding="utf-8")
+            output_md = base_dir / "inbox.md"
+
+            result = subprocess.run(
+                self._manual_delivery_local_inbox_argv(input_json, base_dir / "bundle", output_md),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("invalid JSON in", result.stderr)
+            self.assertFalse(output_md.exists())
 
     def test_write_latest_manual_delivery_input_json_cli_help_includes_command_arguments(self) -> None:
         result = subprocess.run(

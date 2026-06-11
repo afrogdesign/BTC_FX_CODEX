@@ -10195,6 +10195,100 @@ def _run_write_latest_manual_delivery_input_json_command(
     sys.stdout.write(f"{output_json}\n")
 
 
+def _load_manual_delivery_input_json_if_exists(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return _load_json_object(path, parser)
+
+
+def _manual_delivery_local_inbox_markdown(
+    *,
+    input_json_path: Path,
+    bundle_dir: Path,
+    input_json: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Local Inbox",
+        "",
+        "## Safety Status",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+        "",
+        "## Input JSON",
+        f"- input_json_path={input_json_path}",
+        f"- input_json_exists={str(input_json_path.exists()).lower()}",
+    ]
+    for key in [
+        "generated_at_jst",
+        "symbol",
+        "timeframe",
+        "data_source",
+        "data_freshness",
+        "detail_report_path",
+        "active_plan_label",
+        "side",
+        "entry_mode",
+        "pending_caveat",
+    ]:
+        if key in input_json:
+            lines.append(f"- {key}={input_json[key]}")
+
+    lines.extend(
+        [
+            "",
+            "## Bundle Files",
+        ]
+    )
+    for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]:
+        bundle_path = bundle_dir / filename
+        lines.append(f"- {filename} exists={str(bundle_path.exists()).lower()} path={bundle_path}")
+
+    lines.extend(
+        [
+            "",
+            "## Human Review Checklist",
+            "- confirm JSON was reviewed by a human",
+            "- confirm body/package wording is report-only",
+            "- confirm not FORMAL_GO is visible",
+            "- confirm no automatic order is visible",
+            "- confirm pending caveat is visible",
+            "- confirm human decides manually",
+            "- confirm any send/post/share action is outside repo automation",
+            "",
+            "## Next Human Action",
+            "- inspect the generated local files manually",
+            "- optionally copy/paste manually into an external app",
+            "- do not treat the inbox as trade approval",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _run_write_latest_manual_delivery_local_inbox_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    input_json_path = Path(args.input_json)
+    try:
+        input_json = _load_manual_delivery_input_json_if_exists(input_json_path, parser)
+    except (OSError, ValueError):
+        raise
+    bundle_dir = Path(args.bundle_dir)
+    markdown = _manual_delivery_local_inbox_markdown(
+        input_json_path=input_json_path,
+        bundle_dir=bundle_dir,
+        input_json=input_json,
+    )
+    output_md = Path(args.output_md)
+    _ensure_parent(output_md)
+    output_md.write_text(markdown, encoding="utf-8")
+    sys.stdout.write(f"{output_md}\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -12918,6 +13012,11 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_input_json_parser.add_argument("--timeout-or-wait-limit", default="review_required")
     manual_delivery_input_json_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
 
+    manual_delivery_local_inbox_parser = subparsers.add_parser("write-latest-manual-delivery-local-inbox")
+    manual_delivery_local_inbox_parser.add_argument("--input-json", required=True)
+    manual_delivery_local_inbox_parser.add_argument("--bundle-dir", required=True)
+    manual_delivery_local_inbox_parser.add_argument("--output-md", required=True)
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13359,6 +13458,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-input-json":
         _run_write_latest_manual_delivery_input_json_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-inbox":
+        _run_write_latest_manual_delivery_local_inbox_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

@@ -38,6 +38,13 @@ Purpose: report-only human manual trading support preview.
 - It does not infer trade approval or FORMAL_GO.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, human must decide manually, no external notification integration.
 
+## Local Manual Delivery Inbox
+
+- Use `write-latest-manual-delivery-local-inbox --input-json <path> --bundle-dir <path> --output-md <path>` as Step 3 after the source resolver and JSON seed.
+- It summarizes the local JSON plus bundle files for human review.
+- It does not send, notify, fetch, rebuild, trade, or approve anything.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, human must decide manually, no external notification integration.
+
 ## Manual Delivery Copy Package
 
 - Use `write-latest-active-plan-manual-delivery-package` when you need a copy-ready subject/body/checklist package for human copy/paste only.
