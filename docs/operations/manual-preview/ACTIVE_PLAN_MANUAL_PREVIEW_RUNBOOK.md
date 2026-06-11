@@ -24,6 +24,13 @@ Purpose: report-only human manual trading support preview.
 4. Optionally write the preview to a local file.
    - Add `--output-path <path>` when you need a saved preview.
 
+## Latest Manual Delivery Source Resolver
+
+- Use `resolve-latest-manual-delivery-source-files` as Step 1 before JSON generation when you want the current local source paths first.
+- It reduces manual file-path selection before the JSON template or bundle steps.
+- It stays local/report-only and does not fetch, rebuild, regenerate, notify, trade, or send anything.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually.
+
 ## Manual Delivery Copy Package
 
 - Use `write-latest-active-plan-manual-delivery-package` when you need a copy-ready subject/body/checklist package for human copy/paste only.

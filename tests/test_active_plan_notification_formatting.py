@@ -227,6 +227,26 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _manual_delivery_source_files_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "resolve-latest-manual-delivery-source-files",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
+    def _manual_delivery_source_files_argv(self, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            sys.executable,
+            str(BASE_DIR / "tools" / "log_feedback.py"),
+            "resolve-latest-manual-delivery-source-files",
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _pending_coverage_caveat_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             sys.executable,
@@ -355,6 +375,52 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-active-plan-manual-delivery-files", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_manual_delivery_source_files_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "resolve-latest-manual-delivery-source-files", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_manual_delivery_source_files_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "resolve-latest-manual-delivery-source-files", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -1464,6 +1530,109 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "")
             self.assertIn("must be a non-negative integer", result.stderr)
+
+    def test_resolve_latest_manual_delivery_source_files_cli_help_includes_command_arguments(self) -> None:
+        result = subprocess.run(
+            self._manual_delivery_source_files_argv(["--help"]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("resolve-latest-manual-delivery-source-files", result.stdout)
+        self.assertIn("--intraperiod-outcomes-path", result.stdout)
+        self.assertIn("--detail-report-path", result.stdout)
+        self.assertIn("--format", result.stdout)
+
+    def test_resolve_latest_manual_delivery_source_files_cli_prints_default_key_value_lines(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            code, stdout, stderr = self._run_manual_delivery_source_files_main_with_argv([], base_dir=base_dir)
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            lines = stdout.splitlines()
+            self.assertEqual(lines, [
+                "intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+                "intraperiod_outcomes_exists=false",
+                "detail_report_path=",
+                "detail_report_exists=false",
+                "safety=report-only_not_FORMAL_GO_no_automatic_order",
+            ])
+            self.assertTrue(stdout.endswith("\n"))
+
+    def test_resolve_latest_manual_delivery_source_files_cli_reports_existing_paths_without_mutating_inputs(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            intraperiod_outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+            intraperiod_outcomes_path.parent.mkdir(parents=True, exist_ok=True)
+            intraperiod_outcomes_path.write_text("timestamp_jst,outcome,first_exit_reason\n", encoding="utf-8")
+            detail_report_path = base_dir / "運用資料" / "reports" / "analysis" / "manual-detail.md"
+            detail_report_path.parent.mkdir(parents=True, exist_ok=True)
+            detail_report_path.write_text("manual detail", encoding="utf-8")
+            before_intraperiod = intraperiod_outcomes_path.read_text(encoding="utf-8")
+            before_detail = detail_report_path.read_text(encoding="utf-8")
+
+            code, stdout, stderr = self._run_manual_delivery_source_files_main_with_argv(
+                [
+                    "--intraperiod-outcomes-path",
+                    str(intraperiod_outcomes_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertEqual(
+                stdout.splitlines(),
+                [
+                    f"intraperiod_outcomes_path={intraperiod_outcomes_path}",
+                    "intraperiod_outcomes_exists=true",
+                    f"detail_report_path={detail_report_path}",
+                    "detail_report_exists=true",
+                    "safety=report-only_not_FORMAL_GO_no_automatic_order",
+                ],
+            )
+            self.assertEqual(intraperiod_outcomes_path.read_text(encoding="utf-8"), before_intraperiod)
+            self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
+
+    def test_resolve_latest_manual_delivery_source_files_cli_reports_missing_intraperiod_outcomes_path_without_failing(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            missing_intraperiod_outcomes_path = base_dir / "logs" / "csv" / "missing.csv"
+
+            code, stdout, stderr = self._run_manual_delivery_source_files_main_with_argv(
+                ["--intraperiod-outcomes-path", str(missing_intraperiod_outcomes_path)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertIn(f"intraperiod_outcomes_path={missing_intraperiod_outcomes_path}", stdout)
+            self.assertIn("intraperiod_outcomes_exists=false", stdout)
+            self.assertIn("detail_report_path=", stdout)
+            self.assertIn("detail_report_exists=false", stdout)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", stdout)
+
+    def test_resolve_latest_manual_delivery_source_files_cli_reports_missing_latest_detail_report_without_failing(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            code, stdout, stderr = self._run_manual_delivery_source_files_main_with_argv([], base_dir=base_dir)
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertIn("detail_report_path=", stdout)
+            self.assertIn("detail_report_exists=false", stdout)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", stdout)
 
     def test_write_latest_active_plan_manual_preview_cli_loads_fields_from_input_json(self) -> None:
         with TemporaryDirectory() as tmpdir:

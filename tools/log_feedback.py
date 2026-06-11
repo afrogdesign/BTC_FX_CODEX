@@ -977,6 +977,36 @@ def _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir: Path)
     return _resolve_latest_report_family_relative_path(base_dir, "active_plan_candidate_intraperiod_outcomes")
 
 
+def _manual_delivery_source_display_path(path_text: str) -> str:
+    resolved_path = str(path_text).strip()
+    if not resolved_path:
+        return ""
+    return resolved_path
+
+
+def _manual_delivery_source_path_exists(base_dir: Path, path_text: str) -> bool:
+    resolved_path = _manual_delivery_source_display_path(path_text)
+    if not resolved_path:
+        return False
+    path = Path(resolved_path)
+    if path.is_absolute():
+        return path.exists()
+    return (base_dir / path).exists()
+
+
+def _resolve_manual_delivery_source_detail_report_path(
+    base_dir: Path,
+    detail_report_path: str | None,
+) -> str:
+    resolved_detail_report_path = str(detail_report_path or "").strip()
+    if resolved_detail_report_path:
+        return resolved_detail_report_path
+    try:
+        return _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir)
+    except FileNotFoundError:
+        return ""
+
+
 def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
     now_jst = datetime.now(tz=JST)
     output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
@@ -10042,6 +10072,28 @@ def _run_latest_active_plan_manual_delivery_files_from_json_command(
     sys.stdout.write(f"{output_dir}\n")
 
 
+def _run_resolve_latest_manual_delivery_source_files_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    del parser
+    intraperiod_outcomes_path = _manual_delivery_source_display_path(
+        getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")
+    ) or "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
+    detail_report_path = _resolve_manual_delivery_source_detail_report_path(
+        BASE_DIR,
+        getattr(args, "detail_report_path", None),
+    )
+    lines = [
+        f"intraperiod_outcomes_path={intraperiod_outcomes_path}",
+        f"intraperiod_outcomes_exists={str(_manual_delivery_source_path_exists(BASE_DIR, intraperiod_outcomes_path)).lower()}",
+        f"detail_report_path={detail_report_path}",
+        f"detail_report_exists={str(_manual_delivery_source_path_exists(BASE_DIR, detail_report_path)).lower()}",
+        "safety=report-only_not_FORMAL_GO_no_automatic_order",
+    ]
+    sys.stdout.write("\n".join(lines) + "\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -12736,6 +12788,14 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_files_from_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
     manual_delivery_files_from_json_parser.add_argument("--auto-pending-caveat-from-csv", action="store_true")
 
+    manual_delivery_source_files_parser = subparsers.add_parser("resolve-latest-manual-delivery-source-files")
+    manual_delivery_source_files_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_source_files_parser.add_argument("--detail-report-path")
+    manual_delivery_source_files_parser.add_argument("--format", choices=["key-value"], default="key-value")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13169,6 +13229,10 @@ def main() -> None:
 
     if args.command == "write-latest-active-plan-manual-delivery-files-from-json":
         _run_latest_active_plan_manual_delivery_files_from_json_command(args, parser)
+        return
+
+    if args.command == "resolve-latest-manual-delivery-source-files":
+        _run_resolve_latest_manual_delivery_source_files_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":
