@@ -33,7 +33,7 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-100-PENDING-COVERAGE-CAVEAT-DIAGNOSTIC is accepted at `b771844 Add pending coverage caveat diagnostic`.
 - BTCFX-20260611-101-PENDING-CAVEAT-MANUAL-DELIVERY-E2E-REVIEW passed as REVIEW_ONLY with no commit.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed pending/coverage caveat manual-delivery baseline and defers the next step to STOP: choose the next product step from the reviewed pending/coverage caveat manual-delivery baseline.
+- `CONTROL.md` now records the reviewed one-command local manual-delivery baseline and defers the next step to STOP: choose the next product step from the reviewed one-command local manual-delivery baseline.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
