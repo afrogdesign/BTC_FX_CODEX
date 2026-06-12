@@ -36,6 +36,7 @@ from src.trade.active_plan_intraperiod import (
     build_active_plan_intraperiod_outcome_rows,
     write_active_plan_intraperiod_outcomes,
 )
+from src.trade.actionability_gate import ACTIONABILITY_SAFETY, compute_actionability_gate_v1 as _compute_actionability_gate_v1
 from src.trade.observation_gate import (
     determine_phase1_observation_gate,
     is_confidence_watch_learning_candidate,
@@ -1100,78 +1101,6 @@ def _manual_delivery_source_readiness_state(
         "detail_report_age_minutes": detail_report_fields["age_minutes"],
         "detail_report_freshness": detail_report_fields["freshness"],
         "source_readiness": source_readiness,
-    }
-
-
-ACTIONABILITY_SAFETY = "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually"
-
-
-def _compute_actionability_gate_v1(
-    *,
-    active_plan_label: str,
-    source_readiness: str,
-    pending_caveat: str,
-    side: str,
-    entry_mode: str,
-    tp_plan: str,
-    sl_or_invalidation: str,
-    timeout_or_wait_limit: str,
-) -> dict[str, Any]:
-    normalized_label = str(active_plan_label).strip()
-    normalized_source_readiness = str(source_readiness).strip()
-    normalized_pending_caveat = str(pending_caveat).strip()
-    context_fields = (
-        str(side).strip(),
-        str(entry_mode).strip(),
-        str(tp_plan).strip(),
-        str(sl_or_invalidation).strip(),
-        str(timeout_or_wait_limit).strip(),
-    )
-    reasons: list[str]
-    actionability_label: str
-    human_action: str
-
-    if normalized_label == "NO_ACTION":
-        actionability_label = "NO_ACTION"
-        human_action = "do_nothing"
-        reasons = ["active_plan_no_action"]
-    elif normalized_source_readiness != "ready":
-        actionability_label = "AUTO_REJECT"
-        human_action = "do_nothing"
-        reasons = [f"source_not_ready:{normalized_source_readiness or 'unknown'}"]
-    elif (
-        "diagnostic=no_intraperiod_evidence" in normalized_pending_caveat
-        or "action=do_not_use_as_trade_trigger" in normalized_pending_caveat
-    ):
-        actionability_label = "AUTO_REJECT"
-        human_action = "do_nothing"
-        reasons = ["no_intraperiod_evidence"]
-    elif normalized_label == "NO_ACTION_REVIEW_REQUIRED":
-        actionability_label = "REVIEW_REQUIRED"
-        human_action = "review_only"
-        reasons = ["no_action_review_required"]
-    elif any("review_required" in field for field in context_fields):
-        actionability_label = "REVIEW_REQUIRED"
-        human_action = "review_only"
-        reasons = ["manual_context_review_required"]
-    elif "action=reduce_confidence" in normalized_pending_caveat:
-        actionability_label = "REVIEW_REQUIRED"
-        human_action = "review_only"
-        reasons = ["pending_coverage_review_required"]
-    elif normalized_label.startswith("ACTIVE_"):
-        actionability_label = "ACTIONABLE_COPY_READY"
-        human_action = "manual_copy_review"
-        reasons = ["deterministic_checks_passed"]
-    else:
-        actionability_label = "REVIEW_REQUIRED"
-        human_action = "review_only"
-        reasons = ["unknown_active_plan_label"]
-
-    return {
-        "actionability_label": actionability_label,
-        "actionability_reasons": reasons,
-        "human_action": human_action,
-        "actionability_safety": ACTIONABILITY_SAFETY,
     }
 
 

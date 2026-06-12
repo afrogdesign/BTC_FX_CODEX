@@ -420,3 +420,109 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("執行判断: 監視継続（実行不可）", body)
         self.assertIn("位置評価: 位置は悪くないが未到達", body)
         self.assertIn("最終ランク: 📊 通常監視・実行不可（監視と再評価のための通知です）", body)
+
+    def test_normal_summary_body_surfaces_actionability_section_near_top(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-06-12T10:05:00+09:00",
+            "system_label": "Ver03-v3",
+            "system_mode_label": "CLI",
+            "prelabel": "ENTRY_OK",
+            "bias": "long",
+            "signal_tier": "normal",
+            "primary_setup_status": "ready",
+            "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "trade_execution_gate": "blocked",
+            "phase1_observation_gate": "blocked",
+            "current_price": 70200.0,
+            "confidence_direction_shadow": 74.0,
+            "confidence_execution_shadow": 41.0,
+            "confidence_wait_shadow": 22.0,
+            "warning_flags": [],
+            "risk_flags": [],
+            "no_trade_flags": [],
+            "actionability_label": "ACTIONABLE_COPY_READY",
+            "human_action": "manual_copy_review",
+            "actionability_reasons": ["deterministic_checks_passed"],
+            "actionability_safety": "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            "active_primary_action": "ACTIVE_LIMIT_RETEST",
+            "active_headline": "押し目待ちで監視",
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Actionability】", body)
+        self.assertIn("- actionability_label: ACTIONABLE_COPY_READY", body)
+        self.assertIn("- human_action: manual_copy_review", body)
+        self.assertIn("- actionability_reasons: deterministic_checks_passed", body)
+        self.assertIn(
+            "- actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            body,
+        )
+        self.assertIn("- report-only", body)
+        self.assertIn("- not FORMAL_GO", body)
+        self.assertIn("- no automatic order", body)
+        self.assertIn("- human decides manually", body)
+        self.assertLess(body.index("【Actionability】"), body.index("【実行ゲート】"))
+
+    def test_attention_summary_body_surfaces_non_actionable_actionability_section(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-06-12T11:05:00+09:00",
+            "system_label": "Ver03-v3",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "prelabel": "SWEEP_WAIT",
+            "bias": "short",
+            "current_price": 70123.4,
+            "long_display_score": 42,
+            "short_display_score": 61,
+            "score_gap": -19,
+            "signals_4h": "wait",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence_direction_shadow": 58.0,
+            "confidence_execution_shadow": 18.0,
+            "confidence_wait_shadow": 71.0,
+            "warning_flags": [],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": [],
+            "actionability_label": "AUTO_REJECT",
+            "human_action": "do_nothing",
+            "actionability_reasons": ["source_not_ready:review_required_data_quality_not_ok"],
+            "actionability_safety": "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Actionability】", body)
+        self.assertIn("- actionability_label: AUTO_REJECT", body)
+        self.assertIn("- human_action: do_nothing", body)
+        self.assertIn("- actionability_reasons: source_not_ready:review_required_data_quality_not_ok", body)
+        self.assertIn(
+            "- actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            body,
+        )
+        self.assertIn("- report-only", body)
+        self.assertIn("- not FORMAL_GO", body)
+        self.assertIn("- no automatic order", body)
+        self.assertIn("- human decides manually", body)
+        self.assertLess(body.index("【Actionability】"), body.index("【実行ゲート】"))

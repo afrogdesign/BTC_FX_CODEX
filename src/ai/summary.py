@@ -139,6 +139,31 @@ def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
         lines.extend(f"- {reason}" for reason in observation_reasons)
 
 
+def _actionability_lines(result: dict[str, Any]) -> list[str]:
+    label = str(result.get("actionability_label", "")).strip()
+    human_action = str(result.get("human_action", "")).strip()
+    safety = str(result.get("actionability_safety", "")).strip()
+    reasons = result.get("actionability_reasons", [])
+    if not label and not human_action and not safety and not reasons:
+        return []
+    if isinstance(reasons, list):
+        reason_text = ", ".join(str(item).strip() for item in reasons if str(item).strip()) or "none"
+    else:
+        reason_text = str(reasons).strip() or "none"
+    return [
+        "",
+        "【Actionability】",
+        f"- actionability_label: {label or 'none'}",
+        f"- human_action: {human_action or 'none'}",
+        f"- actionability_reasons: {reason_text}",
+        f"- actionability_safety: {safety or 'none'}",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- human decides manually",
+    ]
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -181,6 +206,7 @@ def _root_summary_lines(
                 "通常監視と再評価のための通知です。",
             ]
         )
+    lines.extend(_actionability_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -271,6 +297,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
         "これは売買推奨メールではありません。",
         "方向変化や初動を早めに共有する注意通知です。",
     ]
+    lines.extend(_actionability_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [

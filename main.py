@@ -72,6 +72,7 @@ from src.storage.json_store import (
     save_signal_snapshot,
 )
 from src.trade.active_plan import build_active_trade_plan
+from src.trade.actionability_gate import compute_actionability_gate_v1
 from src.trade.activation import determine_phase1_activation
 from src.trade.execution_gate import determine_trade_execution_gate
 from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
@@ -116,6 +117,79 @@ def _round_optional(value: float | None, digits: int = 2) -> float | None:
     if value is None:
         return None
     return round(float(value), digits)
+
+
+def _runtime_actionability_fields(
+    *,
+    core_result: dict[str, Any],
+    active_trade_plan: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_bias = str(core_result.get("bias", "")).strip().lower()
+    primary_action = str(active_trade_plan.get("primary_action", "NO_ACTION")).strip()
+    side_plans = active_trade_plan.get("side_plans", {})
+    if not isinstance(side_plans, dict):
+        side_plans = {}
+
+    if primary_action == "ACTIVE_COUNTER_SCALP":
+        if normalized_bias == "long":
+            derived_side = "short"
+        elif normalized_bias == "short":
+            derived_side = "long"
+        else:
+            derived_side = "review_required"
+    elif primary_action.startswith("ACTIVE_") or primary_action == "NO_ACTION":
+        derived_side = normalized_bias if normalized_bias in {"long", "short"} else "review_required"
+    else:
+        derived_side = "review_required"
+
+    selected_plan = side_plans.get(derived_side) if derived_side in {"long", "short"} and isinstance(side_plans.get(derived_side), dict) else {}
+
+    if primary_action == "ACTIVE_MARKET_SMALL":
+        entry_mode = "market"
+    elif primary_action == "ACTIVE_LIMIT_RETEST":
+        entry_mode = "limit_zone_mid"
+    elif primary_action == "ACTIVE_BREAKOUT_FOLLOW":
+        entry_mode = "breakout_follow"
+    elif primary_action == "ACTIVE_COUNTER_SCALP":
+        entry_mode = "counter_scalp"
+    else:
+        entry_mode = "review_required"
+
+    tp1 = selected_plan.get("tp1")
+    tp2 = selected_plan.get("tp2")
+    stop_loss = selected_plan.get("stop_loss")
+    tp_plan = "review_required"
+    if tp1 and tp2:
+        tp_plan = f"TP1 {tp1}, TP2 {tp2}"
+    elif tp1:
+        tp_plan = f"TP1 {tp1}"
+    sl_or_invalidation = f"SL {stop_loss}" if stop_loss else "review_required"
+
+    timeout_or_wait_limit = "review_required"
+    try:
+        timeout_value = float(core_result.get("timeout_hours"))
+        if timeout_value > 0:
+            timeout_or_wait_limit = f"timeout after {int(timeout_value) if timeout_value.is_integer() else timeout_value}h"
+    except (TypeError, ValueError):
+        timeout_or_wait_limit = "review_required"
+
+    source_readiness = (
+        "ready"
+        if str(core_result.get("data_quality_flag", "")).strip() == "ok"
+        else "review_required_data_quality_not_ok"
+    )
+    pending_caveat = str(core_result.get("pending_caveat", "") or "").strip()
+
+    return compute_actionability_gate_v1(
+        active_plan_label=primary_action,
+        source_readiness=source_readiness,
+        pending_caveat=pending_caveat,
+        side=derived_side,
+        entry_mode=entry_mode,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+    )
 
 
 _DIRECTIONAL_VOLUME_LONG_FLAGS = {
@@ -1030,6 +1104,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result["active_trade_plan"] = active_trade_plan
     core_result["active_primary_action"] = active_trade_plan.get("primary_action", "NO_ACTION")
     core_result["active_headline"] = active_trade_plan.get("headline", "")
+    core_result.update(_runtime_actionability_fields(core_result=core_result, active_trade_plan=active_trade_plan))
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
