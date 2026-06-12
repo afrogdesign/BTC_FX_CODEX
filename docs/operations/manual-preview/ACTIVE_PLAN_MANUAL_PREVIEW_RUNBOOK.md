@@ -73,6 +73,14 @@ Purpose: report-only human manual trading support preview.
 - It reduces manual steps, but it still does not send, notify, fetch, rebuild, trade, or approve anything.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
 
+### Source Freshness Guard
+
+- Use `--source-stale-after-hours <hours>` with the one-command local manual delivery flow when you want local file freshness checked before manual use.
+- It uses local file mtimes only.
+- It marks missing or stale sources as `source_readiness=review_required_missing_or_stale_source`.
+- It does not fetch, rebuild, send, notify, trade, or approve anything.
+- Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.

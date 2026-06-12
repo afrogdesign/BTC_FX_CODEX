@@ -994,6 +994,51 @@ def _manual_delivery_source_path_exists(base_dir: Path, path_text: str) -> bool:
     return (base_dir / path).exists()
 
 
+def _manual_delivery_format_jst_timestamp(dt: datetime | None) -> str:
+    return "" if dt is None else dt.astimezone(JST).isoformat(timespec="seconds")
+
+
+def _manual_delivery_source_freshness_fields(
+    *,
+    base_dir: Path,
+    path_text: str,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
+) -> dict[str, str]:
+    resolved_path_text = _manual_delivery_source_display_path(path_text)
+    if not resolved_path_text:
+        return {
+            "exists": "false",
+            "mtime_jst": "",
+            "age_minutes": "n/a",
+            "freshness": "missing",
+        }
+
+    path = Path(resolved_path_text)
+    if not path.is_absolute():
+        path = base_dir / path
+    if not path.exists():
+        return {
+            "exists": "false",
+            "mtime_jst": "",
+            "age_minutes": "n/a",
+            "freshness": "missing",
+        }
+
+    now_jst = (reference_jst or datetime.now(tz=JST)).astimezone(JST)
+    modified_jst = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).astimezone(JST)
+    age_seconds = max(0.0, (now_jst - modified_jst).total_seconds())
+    age_hours = age_seconds / 3600
+    age_minutes = int(age_seconds // 60)
+    freshness = "fresh" if age_hours <= source_stale_after_hours else "stale"
+    return {
+        "exists": "true",
+        "mtime_jst": _manual_delivery_format_jst_timestamp(modified_jst),
+        "age_minutes": str(age_minutes),
+        "freshness": freshness,
+    }
+
+
 def _resolve_manual_delivery_source_detail_report_path(
     base_dir: Path,
     detail_report_path: str | None,
@@ -1007,12 +1052,63 @@ def _resolve_manual_delivery_source_detail_report_path(
         return ""
 
 
+def _manual_delivery_source_readiness_state(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
+) -> dict[str, str]:
+    generated_at_jst = (reference_jst or datetime.now(tz=JST)).astimezone(JST)
+    resolved_intraperiod_outcomes_path = _manual_delivery_source_display_path(intraperiod_outcomes_path)
+    if not resolved_intraperiod_outcomes_path:
+        resolved_intraperiod_outcomes_path = "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
+    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(
+        base_dir,
+        detail_report_path,
+    )
+    intraperiod_outcomes_fields = _manual_delivery_source_freshness_fields(
+        base_dir=base_dir,
+        path_text=resolved_intraperiod_outcomes_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=generated_at_jst,
+    )
+    detail_report_fields = _manual_delivery_source_freshness_fields(
+        base_dir=base_dir,
+        path_text=resolved_detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=generated_at_jst,
+    )
+    source_readiness = (
+        "ready"
+        if intraperiod_outcomes_fields["freshness"] == "fresh" and detail_report_fields["freshness"] == "fresh"
+        else "review_required_missing_or_stale_source"
+    )
+    return {
+        "generated_at_jst": _manual_delivery_format_jst_timestamp(generated_at_jst),
+        "source_stale_after_hours": str(source_stale_after_hours),
+        "intraperiod_outcomes_path": resolved_intraperiod_outcomes_path,
+        "intraperiod_outcomes_exists": intraperiod_outcomes_fields["exists"],
+        "intraperiod_outcomes_mtime_jst": intraperiod_outcomes_fields["mtime_jst"],
+        "intraperiod_outcomes_age_minutes": intraperiod_outcomes_fields["age_minutes"],
+        "intraperiod_outcomes_freshness": intraperiod_outcomes_fields["freshness"],
+        "detail_report_path": resolved_detail_report_path,
+        "detail_report_exists": detail_report_fields["exists"],
+        "detail_report_mtime_jst": detail_report_fields["mtime_jst"],
+        "detail_report_age_minutes": detail_report_fields["age_minutes"],
+        "detail_report_freshness": detail_report_fields["freshness"],
+        "source_readiness": source_readiness,
+    }
+
+
 def _latest_manual_delivery_input_json_seed_data(
     *,
     base_dir: Path,
     intraperiod_outcomes_path: str,
     detail_report_path: str | None,
     recent_row_window: int,
+    source_stale_after_hours: float,
     generated_at_jst: str,
     symbol: str,
     timeframe: str,
@@ -1027,16 +1123,16 @@ def _latest_manual_delivery_input_json_seed_data(
     timeout_or_wait_limit: str,
     include_manual_delivery_checklist: bool,
 ) -> dict[str, Any]:
-    resolved_intraperiod_outcomes_path = str(intraperiod_outcomes_path or "").strip()
-    if not resolved_intraperiod_outcomes_path:
-        resolved_intraperiod_outcomes_path = "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
-    intraperiod_outcomes_path_obj = Path(resolved_intraperiod_outcomes_path)
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=datetime.fromisoformat(generated_at_jst),
+    )
+    intraperiod_outcomes_path_obj = Path(source_state["intraperiod_outcomes_path"])
     if not intraperiod_outcomes_path_obj.is_absolute():
         intraperiod_outcomes_path_obj = base_dir / intraperiod_outcomes_path_obj
-    intraperiod_outcomes_exists = intraperiod_outcomes_path_obj.exists()
-
-    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(base_dir, detail_report_path)
-    detail_report_exists = _manual_delivery_source_path_exists(base_dir, resolved_detail_report_path)
 
     summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
         intraperiod_outcomes_path_obj,
@@ -1052,8 +1148,12 @@ def _latest_manual_delivery_input_json_seed_data(
 
     market_status_summary = "report-only manual preview; not FORMAL_GO; no automatic order; JSON seed"
     intraperiod_evidence_summary = (
-        f"detail_report_exists={str(detail_report_exists).lower()}; "
-        f"intraperiod_outcomes_exists={str(intraperiod_outcomes_exists).lower()}; "
+        f"detail_report_exists={source_state['detail_report_exists']}; "
+        f"intraperiod_outcomes_exists={source_state['intraperiod_outcomes_exists']}; "
+        f"source_readiness={source_state['source_readiness']}; "
+        f"intraperiod_outcomes_freshness={source_state['intraperiod_outcomes_freshness']}; "
+        f"detail_report_freshness={source_state['detail_report_freshness']}; "
+        f"source_stale_after_hours={source_state['source_stale_after_hours']}; "
         "local source resolver seed"
     )
 
@@ -1063,7 +1163,7 @@ def _latest_manual_delivery_input_json_seed_data(
         "timeframe": timeframe,
         "data_source": data_source,
         "data_freshness": data_freshness,
-        "detail_report_path": resolved_detail_report_path,
+        "detail_report_path": source_state["detail_report_path"],
         "market_status_summary": market_status_summary,
         "active_plan_label": active_plan_label,
         "side": side,
@@ -9754,6 +9854,16 @@ def _non_negative_int_arg(value: str) -> int:
     return parsed
 
 
+def _non_negative_float_arg(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative float") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative float")
+    return parsed
+
+
 def _add_pending_coverage_caveat_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--total-outcome-rows", required=True, type=_non_negative_int_arg)
     parser.add_argument("--resolved-rows", required=True, type=_non_negative_int_arg)
@@ -10148,20 +10258,21 @@ def _run_resolve_latest_manual_delivery_source_files_command(
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
     del parser
-    intraperiod_outcomes_path = _manual_delivery_source_display_path(
-        getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")
-    ) or "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
-    detail_report_path = _resolve_manual_delivery_source_detail_report_path(
-        BASE_DIR,
-        getattr(args, "detail_report_path", None),
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=str(
+            getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")
+        ),
+        detail_report_path=getattr(args, "detail_report_path", None),
+        source_stale_after_hours=float(getattr(args, "source_stale_after_hours", 24.0)),
     )
-    lines = [
-        f"intraperiod_outcomes_path={intraperiod_outcomes_path}",
-        f"intraperiod_outcomes_exists={str(_manual_delivery_source_path_exists(BASE_DIR, intraperiod_outcomes_path)).lower()}",
-        f"detail_report_path={detail_report_path}",
-        f"detail_report_exists={str(_manual_delivery_source_path_exists(BASE_DIR, detail_report_path)).lower()}",
-        "safety=report-only_not_FORMAL_GO_no_automatic_order",
-    ]
+    lines = _manual_delivery_source_files_lines(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=source_state["intraperiod_outcomes_path"],
+        detail_report_path=source_state["detail_report_path"],
+        source_stale_after_hours=float(source_state["source_stale_after_hours"]),
+        reference_jst=datetime.fromisoformat(source_state["generated_at_jst"]),
+    )
     sys.stdout.write("\n".join(lines) + "\n")
 
 
@@ -10170,12 +10281,14 @@ def _run_write_latest_manual_delivery_input_json_command(
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
     del parser
+    generated_at_jst = _current_jst_iso_like_timestamp()
     seed_data = _latest_manual_delivery_input_json_seed_data(
         base_dir=BASE_DIR,
         intraperiod_outcomes_path=str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")),
         detail_report_path=getattr(args, "detail_report_path", None),
         recent_row_window=int(getattr(args, "recent_row_window", 12)),
-        generated_at_jst=_current_jst_iso_like_timestamp(),
+        source_stale_after_hours=float(getattr(args, "source_stale_after_hours", 24.0)),
+        generated_at_jst=generated_at_jst,
         symbol=str(getattr(args, "symbol", "BTC_USDT")),
         timeframe=str(getattr(args, "timeframe", "15m")),
         data_source=str(getattr(args, "data_source", "exchange-auto-public")),
@@ -10232,6 +10345,7 @@ def _manual_delivery_local_inbox_markdown(
         "active_plan_label",
         "side",
         "entry_mode",
+        "intraperiod_evidence_summary",
         "pending_caveat",
     ]:
         if key in input_json:
@@ -10294,19 +10408,30 @@ def _manual_delivery_source_files_lines(
     base_dir: Path,
     intraperiod_outcomes_path: str,
     detail_report_path: str | None,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
 ) -> list[str]:
-    resolved_intraperiod_outcomes_path = _manual_delivery_source_display_path(
-        intraperiod_outcomes_path
-    ) or "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
-    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(
-        base_dir,
-        detail_report_path,
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=reference_jst,
     )
     return [
-        f"intraperiod_outcomes_path={resolved_intraperiod_outcomes_path}",
-        f"intraperiod_outcomes_exists={str(_manual_delivery_source_path_exists(base_dir, resolved_intraperiod_outcomes_path)).lower()}",
-        f"detail_report_path={resolved_detail_report_path}",
-        f"detail_report_exists={str(_manual_delivery_source_path_exists(base_dir, resolved_detail_report_path)).lower()}",
+        f"intraperiod_outcomes_path={source_state['intraperiod_outcomes_path']}",
+        f"intraperiod_outcomes_exists={source_state['intraperiod_outcomes_exists']}",
+        f"detail_report_path={source_state['detail_report_path']}",
+        f"detail_report_exists={source_state['detail_report_exists']}",
+        f"generated_at_jst={source_state['generated_at_jst']}",
+        f"source_stale_after_hours={source_state['source_stale_after_hours']}",
+        f"intraperiod_outcomes_mtime_jst={source_state['intraperiod_outcomes_mtime_jst']}",
+        f"intraperiod_outcomes_age_minutes={source_state['intraperiod_outcomes_age_minutes']}",
+        f"intraperiod_outcomes_freshness={source_state['intraperiod_outcomes_freshness']}",
+        f"detail_report_mtime_jst={source_state['detail_report_mtime_jst']}",
+        f"detail_report_age_minutes={source_state['detail_report_age_minutes']}",
+        f"detail_report_freshness={source_state['detail_report_freshness']}",
+        f"source_readiness={source_state['source_readiness']}",
         "safety=report-only_not_FORMAL_GO_no_automatic_order",
     ]
 
@@ -10321,13 +10446,18 @@ def _run_latest_manual_delivery_local_flow_command(
     intraperiod_outcomes_path = str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"))
     detail_report_path = getattr(args, "detail_report_path", None)
     recent_row_window = int(getattr(args, "recent_row_window", 12))
+    source_stale_after_hours = float(getattr(args, "source_stale_after_hours", 24.0))
     include_manual_delivery_checklist = bool(getattr(args, "include_manual_delivery_checklist", False))
+    generated_at_jst = _current_jst_iso_like_timestamp()
+    reference_jst = datetime.fromisoformat(generated_at_jst)
 
     source_files_text = "\n".join(
         _manual_delivery_source_files_lines(
             base_dir=BASE_DIR,
             intraperiod_outcomes_path=intraperiod_outcomes_path,
             detail_report_path=detail_report_path,
+            source_stale_after_hours=source_stale_after_hours,
+            reference_jst=reference_jst,
         )
     ) + "\n"
     (output_dir / "source-files.txt").write_text(source_files_text, encoding="utf-8")
@@ -10337,7 +10467,8 @@ def _run_latest_manual_delivery_local_flow_command(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
         detail_report_path=detail_report_path,
         recent_row_window=recent_row_window,
-        generated_at_jst=_current_jst_iso_like_timestamp(),
+        source_stale_after_hours=source_stale_after_hours,
+        generated_at_jst=generated_at_jst,
         symbol="BTC_USDT",
         timeframe="15m",
         data_source="exchange-auto-public",
@@ -13090,6 +13221,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
     )
     manual_delivery_source_files_parser.add_argument("--detail-report-path")
+    manual_delivery_source_files_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     manual_delivery_source_files_parser.add_argument("--format", choices=["key-value"], default="key-value")
 
     manual_delivery_input_json_parser = subparsers.add_parser("write-latest-manual-delivery-input-json")
@@ -13100,6 +13232,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     manual_delivery_input_json_parser.add_argument("--detail-report-path")
     manual_delivery_input_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_input_json_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     manual_delivery_input_json_parser.add_argument("--symbol", default="BTC_USDT")
     manual_delivery_input_json_parser.add_argument("--timeframe", default="15m")
     manual_delivery_input_json_parser.add_argument("--data-source", default="exchange-auto-public")
@@ -13126,6 +13259,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     manual_delivery_local_flow_parser.add_argument("--detail-report-path")
     manual_delivery_local_flow_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_local_flow_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     manual_delivery_local_flow_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
 
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")

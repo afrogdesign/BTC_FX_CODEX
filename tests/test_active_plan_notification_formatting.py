@@ -4,6 +4,7 @@ import contextlib
 import csv
 import io
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -1625,6 +1626,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("resolve-latest-manual-delivery-source-files", result.stdout)
         self.assertIn("--intraperiod-outcomes-path", result.stdout)
         self.assertIn("--detail-report-path", result.stdout)
+        self.assertIn("--source-stale-after-hours", result.stdout)
         self.assertIn("--format", result.stdout)
 
     def test_resolve_latest_manual_delivery_source_files_cli_prints_default_key_value_lines(self) -> None:
@@ -1636,13 +1638,20 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(code, 0, msg=stderr)
             self.assertEqual(stderr, "")
             lines = stdout.splitlines()
-            self.assertEqual(lines, [
-                "intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
-                "intraperiod_outcomes_exists=false",
-                "detail_report_path=",
-                "detail_report_exists=false",
-                "safety=report-only_not_FORMAL_GO_no_automatic_order",
-            ])
+            self.assertTrue(any(line.startswith("generated_at_jst=") for line in lines))
+            self.assertIn("intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv", lines)
+            self.assertIn("intraperiod_outcomes_exists=false", lines)
+            self.assertIn("detail_report_path=", lines)
+            self.assertIn("detail_report_exists=false", lines)
+            self.assertIn("source_stale_after_hours=24.0", lines)
+            self.assertIn("intraperiod_outcomes_mtime_jst=", lines)
+            self.assertIn("intraperiod_outcomes_age_minutes=n/a", lines)
+            self.assertIn("intraperiod_outcomes_freshness=missing", lines)
+            self.assertIn("detail_report_mtime_jst=", lines)
+            self.assertIn("detail_report_age_minutes=n/a", lines)
+            self.assertIn("detail_report_freshness=missing", lines)
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", lines)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", lines)
             self.assertTrue(stdout.endswith("\n"))
 
     def test_resolve_latest_manual_delivery_source_files_cli_reports_existing_paths_without_mutating_inputs(self) -> None:
@@ -1669,16 +1678,17 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
 
             self.assertEqual(code, 0, msg=stderr)
             self.assertEqual(stderr, "")
-            self.assertEqual(
-                stdout.splitlines(),
-                [
-                    f"intraperiod_outcomes_path={intraperiod_outcomes_path}",
-                    "intraperiod_outcomes_exists=true",
-                    f"detail_report_path={detail_report_path}",
-                    "detail_report_exists=true",
-                    "safety=report-only_not_FORMAL_GO_no_automatic_order",
-                ],
-            )
+            lines = stdout.splitlines()
+            self.assertIn(f"intraperiod_outcomes_path={intraperiod_outcomes_path}", lines)
+            self.assertIn("intraperiod_outcomes_exists=true", lines)
+            self.assertIn(f"detail_report_path={detail_report_path}", lines)
+            self.assertIn("detail_report_exists=true", lines)
+            self.assertTrue(any(line.startswith("generated_at_jst=") for line in lines))
+            self.assertIn("source_stale_after_hours=24.0", lines)
+            self.assertIn("intraperiod_outcomes_freshness=fresh", lines)
+            self.assertIn("detail_report_freshness=fresh", lines)
+            self.assertIn("source_readiness=ready", lines)
+            self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", lines)
             self.assertEqual(intraperiod_outcomes_path.read_text(encoding="utf-8"), before_intraperiod)
             self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
 
@@ -1913,6 +1923,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("--intraperiod-outcomes-path", result.stdout)
         self.assertIn("--detail-report-path", result.stdout)
         self.assertIn("--recent-row-window", result.stdout)
+        self.assertIn("--source-stale-after-hours", result.stdout)
         self.assertIn("--include-manual-delivery-checklist", result.stdout)
 
     def test_write_latest_manual_delivery_local_flow_cli_creates_expected_output_structure(self) -> None:
@@ -1950,6 +1961,15 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("intraperiod_outcomes_exists=false", source_files)
             self.assertIn("detail_report_path=", source_files)
             self.assertIn("detail_report_exists=false", source_files)
+            self.assertIn("generated_at_jst=", source_files)
+            self.assertIn("source_stale_after_hours=24.0", source_files)
+            self.assertIn("intraperiod_outcomes_mtime_jst=", source_files)
+            self.assertIn("intraperiod_outcomes_age_minutes=n/a", source_files)
+            self.assertIn("intraperiod_outcomes_freshness=missing", source_files)
+            self.assertIn("detail_report_mtime_jst=", source_files)
+            self.assertIn("detail_report_age_minutes=n/a", source_files)
+            self.assertIn("detail_report_freshness=missing", source_files)
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", source_files)
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", source_files)
 
             seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
@@ -2022,6 +2042,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("human must decide manually", inbox)
             self.assertIn("no external notification integration", inbox)
             self.assertIn("do not treat the inbox as trade approval", inbox)
+            self.assertIn("intraperiod_evidence_summary=", inbox)
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", inbox)
             self.assertIn("subject.txt exists=true", inbox)
             self.assertIn("body.txt exists=true", inbox)
             self.assertIn("checklist.txt exists=true", inbox)
@@ -2060,6 +2082,96 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(csv_path.read_text(encoding="utf-8"), before_csv)
             self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
 
+    def test_write_latest_manual_delivery_local_flow_cli_reports_source_freshness_for_fresh_explicit_sources(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260612", "detail report")
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--source-stale-after-hours",
+                    "24",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
+            self.assertIn(f"intraperiod_outcomes_path={csv_path}", source_files)
+            self.assertIn("intraperiod_outcomes_exists=true", source_files)
+            self.assertIn(f"detail_report_path={detail_report_path}", source_files)
+            self.assertIn("detail_report_exists=true", source_files)
+            self.assertIn("intraperiod_outcomes_freshness=fresh", source_files)
+            self.assertIn("detail_report_freshness=fresh", source_files)
+            self.assertIn("source_readiness=ready", source_files)
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            self.assertIn("source_readiness=ready", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_freshness=fresh", seed["intraperiod_evidence_summary"])
+            self.assertIn("detail_report_freshness=fresh", seed["intraperiod_evidence_summary"])
+            inbox = (output_dir / "inbox.md").read_text(encoding="utf-8")
+            self.assertIn("intraperiod_evidence_summary=", inbox)
+            self.assertIn("source_readiness=ready", inbox)
+
+    def test_write_latest_manual_delivery_local_flow_cli_reports_stale_source_readiness(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260612", "detail report")
+            stale_timestamp = (datetime.now(tz=timezone.utc) - timedelta(hours=48)).timestamp()
+            os.utime(csv_path, (stale_timestamp, stale_timestamp))
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--source-stale-after-hours",
+                    "1",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
+            self.assertIn("intraperiod_outcomes_freshness=stale", source_files)
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", source_files)
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", (output_dir / "inbox.md").read_text(encoding="utf-8"))
+
+    def test_manual_delivery_source_freshness_cli_rejects_negative_threshold(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            commands = [
+                (self._run_manual_delivery_source_files_main_with_argv, ["--source-stale-after-hours", "-1"]),
+                (
+                    self._run_manual_delivery_input_json_main_with_argv,
+                    ["--output-json", str(base_dir / "seed.json"), "--source-stale-after-hours", "-1"],
+                ),
+                (
+                    self._run_manual_delivery_local_flow_main_with_argv,
+                    ["--output-dir", str(base_dir / "flow"), "--source-stale-after-hours", "-1"],
+                ),
+            ]
+            for runner, argv in commands:
+                code, stdout, stderr = runner(argv, base_dir=base_dir)
+                self.assertNotEqual(code, 0)
+                self.assertEqual(stdout, "")
+                self.assertIn("must be a non-negative float", stderr)
+
     def test_write_latest_manual_delivery_local_flow_cli_rejects_negative_recent_window(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -2088,6 +2200,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("--intraperiod-outcomes-path", result.stdout)
         self.assertIn("--detail-report-path", result.stdout)
         self.assertIn("--recent-row-window", result.stdout)
+        self.assertIn("--source-stale-after-hours", result.stdout)
 
     def test_write_latest_manual_delivery_input_json_cli_writes_default_seed_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2146,6 +2259,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(seed["timeout_or_wait_limit"], "review_required")
             self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
             self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])
+            self.assertIn("intraperiod_outcomes_freshness=missing", seed["intraperiod_evidence_summary"])
+            self.assertIn("detail_report_freshness=missing", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_stale_after_hours=24.0", seed["intraperiod_evidence_summary"])
             self.assertIn("local source resolver seed", seed["intraperiod_evidence_summary"])
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
             self.assertFalse(seed["include_manual_delivery_checklist"])
@@ -2179,6 +2296,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
             self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
             self.assertIn("intraperiod_outcomes_exists=true", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])
             self.assertTrue(seed["include_manual_delivery_checklist"])
             self.assertEqual(csv_path.read_text(encoding="utf-8"), before_csv)
 
@@ -2204,6 +2322,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("diagnostic=no_intraperiod_evidence", seed["pending_caveat"])
             self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
             self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])
 
     def test_write_latest_manual_delivery_input_json_cli_uses_explicit_detail_report_path(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2252,6 +2371,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(seed["detail_report_path"], str(detail_report_path))
             self.assertIn("detail_report_exists=true", seed["intraperiod_evidence_summary"])
             self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])
             self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
 
     def test_write_latest_manual_delivery_input_json_cli_missing_latest_detail_report_uses_empty_path(self) -> None:
@@ -2269,6 +2389,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             seed = json.loads(output_json.read_text(encoding="utf-8"))
             self.assertEqual(seed["detail_report_path"], "")
             self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
+            self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])
 
     def test_write_latest_manual_delivery_input_json_cli_overrides_fields_and_rejects_negative_recent_window(self) -> None:
         with TemporaryDirectory() as tmpdir:
