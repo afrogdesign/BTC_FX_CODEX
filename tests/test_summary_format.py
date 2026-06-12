@@ -459,19 +459,24 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertIn("【Actionability】", body)
-        self.assertIn("- actionability_label: ACTIONABLE_COPY_READY", body)
-        self.assertIn("- human_action: manual_copy_review", body)
-        self.assertIn("- actionability_reasons: deterministic_checks_passed", body)
+        self.assertIn("【行動判定】", body)
+        self.assertIn("判定: 手動確認すれば行動候補", body)
+        self.assertIn("次の行動: 内容を確認して、手動で判断", body)
+        self.assertIn("理由:", body)
+        self.assertIn("決定的チェックを通過", body)
+        self.assertIn("安全:", body)
+        self.assertIn("これは正式GOではありません", body)
+        self.assertIn("自動発注はしません", body)
+        self.assertIn("最終判断は人間が行います", body)
+        self.assertIn("機械判定:", body)
+        self.assertIn("actionability_label: ACTIONABLE_COPY_READY", body)
+        self.assertIn("human_action: manual_copy_review", body)
+        self.assertIn("actionability_reasons: deterministic_checks_passed", body)
         self.assertIn(
-            "- actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            "actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
             body,
         )
-        self.assertIn("- report-only", body)
-        self.assertIn("- not FORMAL_GO", body)
-        self.assertIn("- no automatic order", body)
-        self.assertIn("- human decides manually", body)
-        self.assertLess(body.index("【Actionability】"), body.index("【実行ゲート】"))
+        self.assertLess(body.index("【行動判定】"), body.index("【実行ゲート】"))
 
     def test_attention_summary_body_surfaces_non_actionable_actionability_section(self) -> None:
         payload = {
@@ -513,16 +518,18 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertIn("【Actionability】", body)
-        self.assertIn("- actionability_label: AUTO_REJECT", body)
-        self.assertIn("- human_action: do_nothing", body)
-        self.assertIn("- actionability_reasons: source_not_ready:review_required_data_quality_not_ok", body)
+        self.assertIn("【行動判定】", body)
+        self.assertIn("判定: 行動候補から除外。今回は見送り", body)
+        self.assertIn("次の行動: 何もしない", body)
+        self.assertIn("データ鮮度または入力状態が不十分", body)
+        self.assertIn("actionability_label: AUTO_REJECT", body)
+        self.assertIn("human_action: do_nothing", body)
+        self.assertIn("actionability_reasons: source_not_ready:review_required_data_quality_not_ok", body)
         self.assertIn(
-            "- actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            "actionability_safety: report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
             body,
         )
-        self.assertIn("- report-only", body)
-        self.assertIn("- not FORMAL_GO", body)
-        self.assertIn("- no automatic order", body)
-        self.assertIn("- human decides manually", body)
-        self.assertLess(body.index("【Actionability】"), body.index("【実行ゲート】"))
+        self.assertIn("これは正式GOではありません", body)
+        self.assertIn("自動発注はしません", body)
+        self.assertIn("最終判断は人間が行います", body)
+        self.assertLess(body.index("【行動判定】"), body.index("【実行ゲート】"))

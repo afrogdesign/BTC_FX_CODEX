@@ -146,21 +146,60 @@ def _actionability_lines(result: dict[str, Any]) -> list[str]:
     reasons = result.get("actionability_reasons", [])
     if not label and not human_action and not safety and not reasons:
         return []
+    label_text = {
+        "ACTIONABLE_COPY_READY": "手動確認すれば行動候補",
+        "REVIEW_REQUIRED": "要確認。すぐ行動せず内容確認",
+        "AUTO_REJECT": "行動候補から除外。今回は見送り",
+        "NO_ACTION": "行動なし",
+    }.get(label, "判定未確定")
+    human_action_text = {
+        "manual_copy_review": "内容を確認して、手動で判断",
+        "review_only": "すぐ行動せず、確認だけ行う",
+        "do_nothing": "何もしない",
+    }.get(human_action, "人間確認")
     if isinstance(reasons, list):
-        reason_text = ", ".join(str(item).strip() for item in reasons if str(item).strip()) or "none"
+        normalized_reasons = [str(item).strip() for item in reasons if str(item).strip()]
     else:
-        reason_text = str(reasons).strip() or "none"
+        normalized_reasons = [str(reasons).strip()] if str(reasons).strip() else []
+    reason_lines = []
+    for reason in normalized_reasons:
+        if reason == "deterministic_checks_passed":
+            reason_lines.append("決定的チェックを通過")
+        elif reason.startswith("source_not_ready:"):
+            reason_lines.append("データ鮮度または入力状態が不十分")
+        elif reason == "no_intraperiod_evidence":
+            reason_lines.append("intraperiod根拠が不足")
+        elif reason == "no_action_review_required":
+            reason_lines.append("見送りだが確認推奨")
+        elif reason == "manual_context_review_required":
+            reason_lines.append("手動確認が必要な文脈あり")
+        elif reason == "pending_coverage_review_required":
+            reason_lines.append("pending比率または未確定要素の確認が必要")
+        elif reason == "active_plan_no_action":
+            reason_lines.append("Active Planは行動なし")
+        elif reason == "unknown_active_plan_label":
+            reason_lines.append("Active Planラベルが未対応")
+        else:
+            reason_lines.append(reason)
+    if not reason_lines:
+        reason_lines = ["理由なし"]
+    reason_text = ", ".join(normalized_reasons) or "none"
     return [
         "",
-        "【Actionability】",
-        f"- actionability_label: {label or 'none'}",
-        f"- human_action: {human_action or 'none'}",
-        f"- actionability_reasons: {reason_text}",
-        f"- actionability_safety: {safety or 'none'}",
-        "- report-only",
-        "- not FORMAL_GO",
-        "- no automatic order",
-        "- human decides manually",
+        "【行動判定】",
+        f"判定: {label_text}",
+        f"次の行動: {human_action_text}",
+        "理由:",
+        *reason_lines,
+        "安全:",
+        "これは正式GOではありません",
+        "自動発注はしません",
+        "最終判断は人間が行います",
+        "機械判定:",
+        f"actionability_label: {label or 'none'}",
+        f"human_action: {human_action or 'none'}",
+        f"actionability_reasons: {reason_text}",
+        f"actionability_safety: {safety or 'none'}",
     ]
 
 
