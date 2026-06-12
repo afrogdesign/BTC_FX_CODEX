@@ -36,7 +36,12 @@ from src.trade.active_plan_intraperiod import (
     build_active_plan_intraperiod_outcome_rows,
     write_active_plan_intraperiod_outcomes,
 )
-from src.trade.actionability_gate import ACTIONABILITY_SAFETY, compute_actionability_gate_v1 as _compute_actionability_gate_v1
+from src.trade.actionability_gate import (
+    ACTIONABILITY_SAFETY,
+    ACTIONABILITY_SHADOW_DECISION_HEADER,
+    build_actionability_shadow_decision_row,
+    compute_actionability_gate_v1 as _compute_actionability_gate_v1,
+)
 from src.trade.observation_gate import (
     determine_phase1_observation_gate,
     is_confidence_watch_learning_candidate,
@@ -1315,6 +1320,17 @@ def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
+    return path
+
+
+def _append_csv_row(path: Path, fieldnames: list[str], row: dict[str, Any]) -> Path:
+    _ensure_parent(path)
+    file_exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({field: row.get(field, "") for field in fieldnames})
     return path
 
 
@@ -10336,6 +10352,36 @@ def _run_write_latest_manual_delivery_input_json_command(
     sys.stdout.write(f"{output_json}\n")
 
 
+def _run_write_actionability_shadow_decision_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_csv = Path(args.output_csv)
+    if output_csv.name == "paper_positions.csv":
+        if parser is None:
+            raise ValueError("output_csv must not be paper_positions.csv")
+        parser.error("output_csv must not be paper_positions.csv")
+    row = build_actionability_shadow_decision_row(
+        generated_at_jst=str(args.generated_at_jst),
+        signal_id=str(args.signal_id),
+        symbol=str(args.symbol),
+        timeframe=str(args.timeframe),
+        active_plan_label=str(args.active_plan_label),
+        side=str(args.side),
+        entry_mode=str(args.entry_mode),
+        actionability_label=str(args.actionability_label),
+        actionability_reasons=[str(reason) for reason in list(getattr(args, "actionability_reason", []))],
+        human_action=str(args.human_action),
+        source_readiness=str(args.source_readiness),
+        pending_caveat=str(args.pending_caveat),
+        detail_report_path=str(args.detail_report_path),
+        final_outcome=str(getattr(args, "final_outcome", "pending")),
+        notes=str(getattr(args, "notes", "")),
+    )
+    _append_csv_row(output_csv, ACTIONABILITY_SHADOW_DECISION_HEADER, row)
+    sys.stdout.write(f"{output_csv}\n")
+
+
 def _load_manual_delivery_input_json_if_exists(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -13321,6 +13367,24 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_flow_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     manual_delivery_local_flow_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
 
+    actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
+    actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
+    actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
+    actionability_shadow_decision_parser.add_argument("--symbol", required=True)
+    actionability_shadow_decision_parser.add_argument("--timeframe", required=True)
+    actionability_shadow_decision_parser.add_argument("--active-plan-label", required=True)
+    actionability_shadow_decision_parser.add_argument("--side", required=True)
+    actionability_shadow_decision_parser.add_argument("--entry-mode", required=True)
+    actionability_shadow_decision_parser.add_argument("--actionability-label", required=True)
+    actionability_shadow_decision_parser.add_argument("--human-action", required=True)
+    actionability_shadow_decision_parser.add_argument("--source-readiness", required=True)
+    actionability_shadow_decision_parser.add_argument("--pending-caveat", required=True)
+    actionability_shadow_decision_parser.add_argument("--detail-report-path", required=True)
+    actionability_shadow_decision_parser.add_argument("--actionability-reason", action="append", default=[])
+    actionability_shadow_decision_parser.add_argument("--final-outcome", default="pending")
+    actionability_shadow_decision_parser.add_argument("--notes", default="")
+    actionability_shadow_decision_parser.add_argument("--output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13770,6 +13834,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-local-flow":
         _run_latest_manual_delivery_local_flow_command(args, parser)
+        return
+
+    if args.command == "write-actionability-shadow-decision":
+        _run_write_actionability_shadow_decision_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

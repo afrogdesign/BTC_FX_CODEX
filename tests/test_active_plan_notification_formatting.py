@@ -21,6 +21,7 @@ if str(BASE_DIR) not in sys.path:
 from tools.log_feedback import format_active_plan_notification_contract
 from tools.log_feedback import format_active_plan_pending_coverage_caveat
 import tools.log_feedback as log_feedback
+from src.trade.actionability_gate import ACTIONABILITY_SAFETY, ACTIONABILITY_SHADOW_DECISION_HEADER, build_actionability_shadow_decision_row
 
 
 class ActivePlanNotificationFormattingTest(unittest.TestCase):
@@ -235,6 +236,202 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertEqual(result["actionability_label"], "ACTIONABLE_COPY_READY")
         self.assertEqual(result["human_action"], "manual_copy_review")
         self.assertEqual(result["actionability_reasons"], ["deterministic_checks_passed"])
+
+    def test_build_actionability_shadow_decision_row_returns_header_compatible_fields(self) -> None:
+        row = build_actionability_shadow_decision_row(
+            generated_at_jst="2026-06-13T10:00:00+09:00",
+            signal_id="sig-001",
+            symbol="BTC_USDT",
+            timeframe="15m",
+            active_plan_label="ACTIVE_LIMIT_RETEST",
+            side="long",
+            entry_mode="limit_zone_mid",
+            actionability_label="ACTIONABLE_COPY_READY",
+            actionability_reasons=["deterministic_checks_passed", "manual_context_review_required"],
+            human_action="manual_copy_review",
+            source_readiness="ready",
+            pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok",
+            detail_report_path="運用資料/reports/analysis/example.md",
+        )
+
+        self.assertEqual(list(row), ACTIONABILITY_SHADOW_DECISION_HEADER)
+        self.assertEqual(row["actionability_reasons"], "deterministic_checks_passed+manual_context_review_required")
+        self.assertEqual(row["final_outcome"], "pending")
+        self.assertEqual(row["notes"], "")
+        self.assertEqual(row["actionability_safety"], ACTIONABILITY_SAFETY)
+
+    def test_write_actionability_shadow_decision_cli_writes_header_and_appends_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260613", "shadow detail report")
+            before_detail = detail_report_path.read_text(encoding="utf-8")
+            input_json_path = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            )
+            before_json = input_json_path.read_text(encoding="utf-8")
+            output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            first_code, first_stdout, first_stderr = self._run_actionability_shadow_decision_main_with_argv(
+                [
+                    "--generated-at-jst",
+                    "2026-06-13T10:00:00+09:00",
+                    "--signal-id",
+                    "sig-001",
+                    "--symbol",
+                    "BTC_USDT",
+                    "--timeframe",
+                    "15m",
+                    "--active-plan-label",
+                    "ACTIVE_LIMIT_RETEST",
+                    "--side",
+                    "long",
+                    "--entry-mode",
+                    "limit_zone_mid",
+                    "--actionability-label",
+                    "ACTIONABLE_COPY_READY",
+                    "--actionability-reason",
+                    "deterministic_checks_passed",
+                    "--actionability-reason",
+                    "manual_context_review_required",
+                    "--human-action",
+                    "manual_copy_review",
+                    "--source-readiness",
+                    "ready",
+                    "--pending-caveat",
+                    "pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--output-csv",
+                    str(output_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(first_code, 0, msg=first_stderr)
+            self.assertEqual(first_stderr, "")
+            self.assertEqual(first_stdout, f"{output_csv}\n")
+            with output_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["signal_id"], "sig-001")
+            self.assertEqual(rows[0]["actionability_reasons"], "deterministic_checks_passed+manual_context_review_required")
+            self.assertEqual(rows[0]["final_outcome"], "pending")
+            self.assertEqual(rows[0]["actionability_safety"], ACTIONABILITY_SAFETY)
+            with output_csv.open("r", encoding="utf-8") as fp:
+                self.assertEqual(fp.read().count("generated_at_jst"), 1)
+
+            second_code, second_stdout, second_stderr = self._run_actionability_shadow_decision_main_with_argv(
+                [
+                    "--generated-at-jst",
+                    "2026-06-13T11:00:00+09:00",
+                    "--signal-id",
+                    "sig-002",
+                    "--symbol",
+                    "BTC_USDT",
+                    "--timeframe",
+                    "15m",
+                    "--active-plan-label",
+                    "NO_ACTION_REVIEW_REQUIRED",
+                    "--side",
+                    "review_required",
+                    "--entry-mode",
+                    "review_required",
+                    "--actionability-label",
+                    "REVIEW_REQUIRED",
+                    "--human-action",
+                    "review_only",
+                    "--source-readiness",
+                    "review_required_missing_or_stale_source",
+                    "--pending-caveat",
+                    "pending_coverage_caveat: diagnostic=no_intraperiod_evidence; action=do_not_use_as_trade_trigger",
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--final-outcome",
+                    "reviewed",
+                    "--notes",
+                    "second row",
+                    "--output-csv",
+                    str(output_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(second_code, 0, msg=second_stderr)
+            self.assertEqual(second_stderr, "")
+            self.assertEqual(second_stdout, f"{output_csv}\n")
+            with output_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[1]["signal_id"], "sig-002")
+            self.assertEqual(rows[1]["actionability_reasons"], "")
+            self.assertEqual(rows[1]["final_outcome"], "reviewed")
+            self.assertEqual(rows[1]["notes"], "second row")
+            with output_csv.open("r", encoding="utf-8") as fp:
+                self.assertEqual(fp.read().count("generated_at_jst"), 1)
+
+            self.assertNotEqual(output_csv.name, "paper_positions.csv")
+            self.assertEqual(detail_report_path.read_text(encoding="utf-8"), before_detail)
+            self.assertEqual(input_json_path.read_text(encoding="utf-8"), before_json)
+
+    def test_write_actionability_shadow_decision_cli_rejects_paper_positions_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_csv = base_dir / "logs" / "csv" / "paper_positions.csv"
+
+            code, stdout, stderr = self._run_actionability_shadow_decision_main_with_argv(
+                [
+                    "--generated-at-jst",
+                    "2026-06-13T10:00:00+09:00",
+                    "--signal-id",
+                    "sig-001",
+                    "--symbol",
+                    "BTC_USDT",
+                    "--timeframe",
+                    "15m",
+                    "--active-plan-label",
+                    "ACTIVE_LIMIT_RETEST",
+                    "--side",
+                    "long",
+                    "--entry-mode",
+                    "limit_zone_mid",
+                    "--actionability-label",
+                    "ACTIONABLE_COPY_READY",
+                    "--human-action",
+                    "manual_copy_review",
+                    "--source-readiness",
+                    "ready",
+                    "--pending-caveat",
+                    "pending_coverage_caveat: diagnostic=coverage_ok",
+                    "--detail-report-path",
+                    "運用資料/reports/analysis/example.md",
+                    "--output-csv",
+                    str(output_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("must not be paper_positions.csv", stderr)
+            self.assertFalse(output_csv.exists())
+
+    def test_write_actionability_shadow_decision_cli_help_includes_output_csv(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BASE_DIR / "tools" / "log_feedback.py"),
+                "write-actionability-shadow-decision",
+                "--help",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("write-actionability-shadow-decision", result.stdout)
+        self.assertIn("--output-csv", result.stdout)
 
     def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
@@ -591,6 +788,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-local-flow", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_actionability_shadow_decision_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-actionability-shadow-decision", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:

@@ -4,6 +4,24 @@ from typing import Any
 
 
 ACTIONABILITY_SAFETY = "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually"
+ACTIONABILITY_SHADOW_DECISION_HEADER = [
+    "generated_at_jst",
+    "signal_id",
+    "symbol",
+    "timeframe",
+    "active_plan_label",
+    "side",
+    "entry_mode",
+    "actionability_label",
+    "actionability_reasons",
+    "human_action",
+    "actionability_safety",
+    "source_readiness",
+    "pending_caveat",
+    "detail_report_path",
+    "final_outcome",
+    "notes",
+]
 
 
 def compute_actionability_gate_v1(
@@ -85,4 +103,42 @@ def compute_actionability_gate_v1(
         "actionability_reasons": ["unknown_active_plan_label"],
         "human_action": "review_only",
         "actionability_safety": ACTIONABILITY_SAFETY,
+    }
+
+
+def build_actionability_shadow_decision_row(
+    *,
+    generated_at_jst: str,
+    signal_id: str,
+    symbol: str,
+    timeframe: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    actionability_label: str,
+    actionability_reasons: list[str],
+    human_action: str,
+    source_readiness: str,
+    pending_caveat: str,
+    detail_report_path: str,
+    final_outcome: str = "pending",
+    notes: str = "",
+) -> dict[str, str]:
+    return {
+        "generated_at_jst": str(generated_at_jst),
+        "signal_id": str(signal_id),
+        "symbol": str(symbol),
+        "timeframe": str(timeframe),
+        "active_plan_label": str(active_plan_label),
+        "side": str(side),
+        "entry_mode": str(entry_mode),
+        "actionability_label": str(actionability_label),
+        "actionability_reasons": "+".join(str(reason) for reason in actionability_reasons),
+        "human_action": str(human_action),
+        "actionability_safety": ACTIONABILITY_SAFETY,
+        "source_readiness": str(source_readiness),
+        "pending_caveat": str(pending_caveat),
+        "detail_report_path": str(detail_report_path),
+        "final_outcome": str(final_outcome or "pending"),
+        "notes": str(notes or ""),
     }
