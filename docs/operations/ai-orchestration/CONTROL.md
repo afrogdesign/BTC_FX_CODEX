@@ -3,7 +3,7 @@
 last_updated: 2026-06-12
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `6d2490fc521bc952bd25835a2d954dacdffd34d9`
+current_commit: `eb57bf811c70dacc89651e597a1cc0f0b0682729`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,13 +11,13 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260612-117-ONE-COMMAND-SOURCE-FRESHNESS-GUARD is accepted at `6d2490fc521bc952bd25835a2d954dacdffd34d9`; this sync records reviewed-baseline metadata for the accepted Ver03-v3 one-command local manual-delivery flow plus source freshness guard through BTCFX-20260612-119.
+BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH is accepted at `eb57bf811c70dacc89651e597a1cc0f0b0682729`; this sync records reviewed-baseline metadata for the accepted Ver03-v3 CLI-only API fallback kill switch on top of the one-command local manual-delivery flow plus source freshness guard.
 
-BTCFX-20260612-119-SOURCE-FRESHNESS-GUARD-E2E-REVIEW passed as REVIEW_ONLY with no commit and confirmed the local source freshness guard checks.
+BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-The reviewed and E2E-verified one-command local manual-delivery flow plus source freshness guard now supports `write-latest-manual-delivery-local-flow`, `--source-stale-after-hours`, `source-files.txt`, `manual-delivery-input.json`, `bundle/subject.txt`, `bundle/body.txt`, `bundle/checklist.txt`, `bundle/package.txt`, `bundle/README.txt`, `inbox.md`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-files`, `write-latest-active-plan-manual-delivery-package`, deterministic pending/coverage caveat generation via `format-active-plan-pending-coverage-caveat`, local file mtimes only freshness checks, `source_readiness=ready`, `source_readiness=review_required_missing_or_stale_source`, copy-ready manual delivery package output, local file bundle output, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
+The reviewed baseline now includes the one-command local manual-delivery flow, source freshness guard, and CLI-only API fallback kill switch. CLI provider mode must not silently fall back to OpenAI API; API usage requires explicit `AI_API_USAGE_ALLOWED`; CLI failure returns `cli_failed`; API disabled returns `api_disabled`; post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`; and the reviewed manual-preview runbook remains at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
 Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration, no clipboard/address-book integration, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
@@ -92,9 +92,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard and its reviewed-baseline metadata sync.
+The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard plus CLI-only API fallback kill switch and their reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step after the reviewed and E2E-verified source freshness guard.
+The next recommended task is STOP: choose the next product step after the reviewed CLI-only API fallback kill switch.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

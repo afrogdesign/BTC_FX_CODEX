@@ -3,12 +3,12 @@
 last_updated: 2026-06-12
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `6d2490fc521bc952bd25835a2d954dacdffd34d9`
-latest_reviewed_baseline: `6d2490fc521bc952bd25835a2d954dacdffd34d9`
+current_commit: `eb57bf811c70dacc89651e597a1cc0f0b0682729`
+latest_reviewed_baseline: `eb57bf811c70dacc89651e597a1cc0f0b0682729`
 
 ## Objective
 
-BTCFX-20260612-117-ONE-COMMAND-SOURCE-FRESHNESS-GUARD is accepted at `6d2490fc521bc952bd25835a2d954dacdffd34d9`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 one-command local manual-delivery flow plus source freshness guard through BTCFX-20260612-119.
+BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH is accepted at `eb57bf811c70dacc89651e597a1cc0f0b0682729`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 CLI-only API fallback kill switch on top of the one-command local manual-delivery flow plus source freshness guard.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -40,12 +40,18 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`.
 - BTCFX-20260612-117-ONE-COMMAND-SOURCE-FRESHNESS-GUARD is accepted at `6d2490fc521bc952bd25835a2d954dacdffd34d9`.
 - BTCFX-20260612-119-SOURCE-FRESHNESS-GUARD-E2E-REVIEW passed as REVIEW_ONLY with no commit and no repo file changes.
+- BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH is accepted at `eb57bf811c70dacc89651e597a1cc0f0b0682729`.
+- BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 - `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
+- CLI provider mode does not silently fall back to OpenAI API.
+- API usage requires explicit `AI_API_USAGE_ALLOWED`.
+- CLI failure returns `cli_failed`, and API disabled returns `api_disabled`.
+- Post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`.
 - No fetch / rebuild / notify / trade / approve behavior is involved.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-manual-delivery-local-flow`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed source freshness guard baseline and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified source freshness guard.
+- `CONTROL.md` now records the reviewed CLI-only API fallback kill switch baseline and defers the next step to STOP: choose the next product step after the reviewed CLI-only API fallback kill switch.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -63,5 +69,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose the next product step after the reviewed and E2E-verified source freshness guard.
+STOP: Choose the next product step after the reviewed CLI-only API fallback kill switch.
 ```
