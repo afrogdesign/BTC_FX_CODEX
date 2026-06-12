@@ -42,7 +42,7 @@
     .meta { color: var(--muted); font-size: 14px; }
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
       margin: 24px 0;
     }
@@ -167,9 +167,9 @@
     <h1>BTC_FX_CODEX Ver03-v1 進捗ボード</h1>
     <div class="meta">
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
-      branch: <code>Ver03-v1</code> /
-      更新日: 2026-06-07 JST /
-      現在地: <code>BTCFX-20260607-060 完了 / repo運用調整前</code>
+      branch: <code>Ver03-v3</code> /
+      更新日: 2026-06-12 JST /
+      現在地: <code>BTCFX-20260612-116-ONE-COMMAND-LOCAL-FLOW-BASELINE-SYNC-FIX 完了</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -187,38 +187,45 @@
   <main>
     <section class="summary-grid">
       <div class="metric">
-        <div class="num">30</div>
-        <div class="label">完了済み作業 031〜060</div>
+        <div class="num">Ver03-v3</div>
+        <div class="label">Current track</div>
+      </div>
+      <div class="metric">
+        <div class="num">37a4bce</div>
+        <div class="label">最新 reviewed product baseline</div>
+      </div>
+      <div class="metric">
+        <div class="num">1bab278</div>
+        <div class="label">最新 repo metadata sync HEAD</div>
+      </div>
+      <div class="metric">
+        <div class="num">114/115</div>
+        <div class="label">accepted local flow / REVIEW_ONLY review</div>
+      </div>
+      <div class="metric">
+        <div class="num">117</div>
+        <div class="label">next candidate / not completed</div>
       </div>
       <div class="metric">
         <div class="num">0</div>
-        <div class="label">現在作業 なし</div>
-      </div>
-      <div class="metric">
-        <div class="num">1</div>
-        <div class="label">一時停止 061</div>
-      </div>
-      <div class="metric">
-        <div class="num">8+</div>
-        <div class="label">予定マイルストーン</div>
-      </div>
-      <div class="metric">
-        <div class="num">279</div>
-        <div class="label">filled rows</div>
-      </div>
-      <div class="metric">
-        <div class="num">0.47</div>
-        <div class="label">filled PF</div>
+        <div class="label">live trading / automatic order</div>
       </div>
     </section>
 
     <div class="notice">
-      <strong>現在の判断:</strong>
-      Active Plan intraperiod outcomes builder までは完了済み。ただし、intraperiod report / daily-sync 接続は一時停止し、P0/P1 の土台修正を優先する。P0-1、P0-2、P1-1 は完了済み。BTCFX-20260607-060 は完了区切り。repo運用調整前のため、061 は保留中。
+      <strong>現在の状況:</strong>
+      <ul>
+        <li>Current track は <code>Ver03-v3</code>。</li>
+        <li>Original board は <code>Ver03-v1</code> 進捗ボードで、歴史的な起点を残したまま現在の状況を追跡している。</li>
+        <li>Current repo branch は <code>Ver03-v3</code>。</li>
+        <li>Latest repo metadata sync HEAD は <code>1bab278eefc19014d516eb2d2f2c3ecd1bf79769</code>。</li>
+        <li>Latest reviewed product baseline は <code>37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3</code>。</li>
+        <li>Current status は reviewed and E2E-verified one-command local manual-delivery flow。</li>
+      </ul>
     </div>
 
     <section>
-      <h2>1. マイルストーン全体像</h2>
+      <h2>原版 Ver03-v1 フェーズ図（履歴）</h2>
 
       <div class="phase">
         <div class="phase-header">
@@ -376,6 +383,114 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Ver03-v1 から Ver03-v3 への変化</h2>
+      <ul>
+        <li>Ver03-v1 は主に redesign / inventory / progress board / orchestration setup の段階だった。</li>
+        <li>Ver03-v2 では implementation と diagnostic/manual-preview の土台を進めた。</li>
+        <li>Ver03-v3 では local/report-only manual-delivery support flow を整備し、人間レビュー前提の local-only 運用に進んだ。</li>
+        <li>現在も live trading や automatic order には進んでいない。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>受け入れ済みフロー</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>作業</th>
+            <th>状態</th>
+            <th>役割</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>resolve-latest-manual-delivery-source-files</code></td><td><span class="badge done">DONE</span></td><td>local source summary を key=value で出力</td></tr>
+          <tr><td><code>write-latest-manual-delivery-input-json</code></td><td><span class="badge done">DONE</span></td><td>安全な manual-delivery JSON seed を生成</td></tr>
+          <tr><td><code>write-latest-active-plan-manual-delivery-files-from-json</code></td><td><span class="badge done">DONE</span></td><td>JSON から bundle files を生成</td></tr>
+          <tr><td><code>write-latest-manual-delivery-local-inbox</code></td><td><span class="badge done">DONE</span></td><td>JSON と bundle を人間レビュー用 Markdown に要約</td></tr>
+          <tr><td><code>write-latest-manual-delivery-local-flow</code></td><td><span class="badge done">DONE</span></td><td>上記を 1 つの output-dir にまとめる one-command flow</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>one-command 出力構造</h2>
+      <ul>
+        <li><code>source-files.txt</code></li>
+        <li><code>manual-delivery-input.json</code></li>
+        <li><code>bundle/subject.txt</code></li>
+        <li><code>bundle/body.txt</code></li>
+        <li><code>bundle/checklist.txt</code></li>
+        <li><code>bundle/package.txt</code></li>
+        <li><code>bundle/README.txt</code></li>
+        <li><code>inbox.md</code></li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>安全境界</h2>
+      <ul>
+        <li>report-only</li>
+        <li>not FORMAL_GO</li>
+        <li>no automatic order</li>
+        <li>ACTIVE_* guidance only</li>
+        <li>human must decide manually</li>
+        <li>no external notification integration</li>
+        <li>no clipboard/address-book integration</li>
+        <li>no paper_positions.csv integration</li>
+        <li>no runtime/deploy/trading/API key/private endpoint changes</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>タスク / マイルストーン</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Work ID</th>
+            <th>状態</th>
+            <th>要点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>BTCFX-20260612-112</td><td><span class="badge done">DONE</span></td><td>local manual-delivery flow E2E REVIEW_ONLY accepted</td></tr>
+          <tr><td>BTCFX-20260612-113</td><td><span class="badge done">DONE</span></td><td>E2E review metadata sync accepted</td></tr>
+          <tr><td>BTCFX-20260612-114</td><td><span class="badge done">DONE</span></td><td>one-command local manual-delivery flow accepted</td></tr>
+          <tr><td>BTCFX-20260612-115</td><td><span class="badge done">DONE</span></td><td>one-command local flow E2E REVIEW_ONLY accepted</td></tr>
+          <tr><td>BTCFX-20260612-116-FIX</td><td><span class="badge done">DONE</span></td><td>one-command local flow metadata sync accepted</td></tr>
+          <tr><td>BTCFX-20260612-117</td><td><span class="badge todo">PROPOSED</span></td><td>source freshness guard, not yet accepted</td></tr>
+          <tr><td>BTCFX-20260612-118</td><td><span class="badge current">PENDING_REVIEW</span></td><td>this progress board update</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Next candidate</h2>
+      <div class="notice">
+        <strong>候補:</strong>
+        <code>BTCFX-20260612-117-ONE-COMMAND-SOURCE-FRESHNESS-GUARD</code>。
+        次候補としては妥当だが、現時点ではまだ完成報告は受理されていない。
+        実装する場合も local file mtimes only に限定し、fetch / rebuild / notify / trade / approve は行わない。
+      </div>
+    </section>
+
+    <section>
+      <h2>How to use now</h2>
+      <ul>
+        <li>人間は <code>write-latest-manual-delivery-local-flow</code> を実行して local files を生成する。</li>
+        <li><code>inbox.md</code> と bundle files は人間が手でレビューする。</li>
+        <li>送信 / 投稿 / 共有は repo automation の外側にある人間操作として扱う。</li>
+        <li>この出力は trade approval ではない。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>ボード注記</h2>
+      <div class="notice">
+        このファイル名は歴史的互換のため <code>Ver03-v1</code> のままだが、内容は現在の <code>Ver03-v3</code> の状況を追跡している。
       </div>
     </section>
 
