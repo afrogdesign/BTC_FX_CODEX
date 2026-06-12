@@ -3,7 +3,7 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: 2a549b139c4acb4ebd84748922de7b077611c510
+current_commit: d7a0bc76a6847e0e477c1f1180829eea9178ee57
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 is ChatGPT-reviewed and accepted at `2a549b139c4acb4ebd84748922de7b077611c510`; this sync records the reviewed Actionability shadow ledger baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, and Actionability Gate baseline.
+BTCFX-20260613-131-ACTIONABILITY-SHADOW-FROM-JSON-V1 is ChatGPT-reviewed and accepted at `d7a0bc76a6847e0e477c1f1180829eea9178ee57`; this sync records the reviewed Actionability shadow JSON writer baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, and the separate Actionability shadow ledger writer.
 
 BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 
@@ -23,9 +23,11 @@ BTCFX-20260612-127-ACTIONABILITY-JA-EMAIL-LABELS added Japanese human-readable A
 
 BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 added a separate Actionability shadow decision ledger writer for evaluation-only logging without touching `paper_positions.csv` or trading behavior.
 
+BTCFX-20260613-131-ACTIONABILITY-SHADOW-FROM-JSON-V1 added a JSON-driven Actionability shadow decision writer that appends one row from `manual-delivery-input.json` without recomputing actionability or touching `paper_positions.csv`.
+
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-The reviewed baseline now includes the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, deterministic Actionability Gate v1, runtime email Actionability fields, Japanese human-readable Actionability labels, and the separate Actionability shadow decision ledger writer. CLI provider mode must not silently fall back to OpenAI API; API usage requires explicit `AI_API_USAGE_ALLOWED`; CLI failure returns `cli_failed`; API disabled returns `api_disabled`; post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`; Actionability output remains report-only triage, not FORMAL_GO, and no automatic order; the shadow ledger remains isolated from `paper_positions.csv` and trading behavior; and the reviewed manual-preview runbook remains at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
+The reviewed baseline now includes the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, deterministic Actionability Gate v1, runtime email Actionability fields, Japanese human-readable Actionability labels, the separate Actionability shadow decision ledger writer, and the JSON-driven shadow decision writer. CLI provider mode must not silently fall back to OpenAI API; API usage requires explicit `AI_API_USAGE_ALLOWED`; CLI failure returns `cli_failed`; API disabled returns `api_disabled`; post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`; Actionability output remains report-only triage, not FORMAL_GO, and no automatic order; both shadow writers remain isolated from `paper_positions.csv` and trading behavior; the JSON-driven writer appends from `manual-delivery-input.json` without recomputing actionability; and the reviewed manual-preview runbook remains at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
 Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration, no clipboard/address-book integration, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
@@ -100,9 +102,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard plus CLI-only API fallback kill switch plus Actionability Gate v1 email/manual-delivery surfacing plus the separate Actionability shadow ledger and their reviewed-baseline metadata sync.
+The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard plus CLI-only API fallback kill switch plus Actionability Gate v1 email/manual-delivery surfacing plus the separate Actionability shadow ledger plus the JSON-driven shadow writer and their reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step after the reviewed Actionability shadow ledger baseline.
+The next recommended task is STOP: choose the next product step after the reviewed Actionability shadow JSON writer baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
