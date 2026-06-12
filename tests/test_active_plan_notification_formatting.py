@@ -433,6 +433,146 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("write-actionability-shadow-decision", result.stdout)
         self.assertIn("--output-csv", result.stdout)
 
+    def test_write_actionability_shadow_decision_from_json_cli_writes_row_from_input_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json_path = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            )
+            before_json = input_json_path.read_text(encoding="utf-8")
+            payload = json.loads(before_json)
+            payload["signal_id"] = "json-sig-001"
+            payload["actionability_label"] = "ACTIONABLE_COPY_READY"
+            payload["actionability_reasons"] = ["deterministic_checks_passed", "manual_context_review_required"]
+            payload["human_action"] = "manual_copy_review"
+            payload["intraperiod_evidence_summary"] = "local source resolver seed; source_readiness=ready; detail_report_exists=true"
+            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            before_json = input_json_path.read_text(encoding="utf-8")
+            output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            code, stdout, stderr = self._run_actionability_shadow_decision_from_json_main_with_argv(
+                [
+                    "--input-json",
+                    str(input_json_path),
+                    "--final-outcome",
+                    "pending",
+                    "--notes",
+                    "json row",
+                    "--output-csv",
+                    str(output_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stderr, "")
+            self.assertEqual(stdout, f"{output_csv}\n")
+            with output_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["signal_id"], "json-sig-001")
+            self.assertEqual(rows[0]["source_readiness"], "ready")
+            self.assertEqual(rows[0]["actionability_reasons"], "deterministic_checks_passed+manual_context_review_required")
+            self.assertEqual(rows[0]["notes"], "json row")
+            self.assertEqual(input_json_path.read_text(encoding="utf-8"), before_json)
+
+    def test_write_actionability_shadow_decision_from_json_cli_accepts_reason_string(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json_path = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok",
+            )
+            payload = json.loads(input_json_path.read_text(encoding="utf-8"))
+            payload["actionability_label"] = "REVIEW_REQUIRED"
+            payload["actionability_reasons"] = "manual_context_review_required"
+            payload["human_action"] = "review_only"
+            payload["intraperiod_evidence_summary"] = "detail_report_exists=true"
+            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            code, stdout, stderr = self._run_actionability_shadow_decision_from_json_main_with_argv(
+                ["--input-json", str(input_json_path), "--output-csv", str(output_csv)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_csv}\n")
+            with output_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(rows[0]["actionability_reasons"], "manual_context_review_required")
+            self.assertEqual(rows[0]["source_readiness"], "unknown")
+
+    def test_write_actionability_shadow_decision_from_json_cli_rejects_missing_required_field(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json_path = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok",
+            )
+            payload = json.loads(input_json_path.read_text(encoding="utf-8"))
+            payload["symbol"] = ""
+            payload["actionability_label"] = "REVIEW_REQUIRED"
+            payload["human_action"] = "review_only"
+            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            code, stdout, stderr = self._run_actionability_shadow_decision_from_json_main_with_argv(
+                ["--input-json", str(input_json_path), "--output-csv", str(output_csv)],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("input_json missing required field: symbol", stderr)
+            self.assertFalse(output_csv.exists())
+
+    def test_write_actionability_shadow_decision_from_json_cli_rejects_paper_positions_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            input_json_path = self._write_manual_delivery_input_json(
+                base_dir,
+                pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok",
+            )
+            payload = json.loads(input_json_path.read_text(encoding="utf-8"))
+            payload["actionability_label"] = "REVIEW_REQUIRED"
+            payload["human_action"] = "review_only"
+            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            output_csv = base_dir / "logs" / "csv" / "paper_positions.csv"
+
+            code, stdout, stderr = self._run_actionability_shadow_decision_from_json_main_with_argv(
+                ["--input-json", str(input_json_path), "--output-csv", str(output_csv)],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("must not be paper_positions.csv", stderr)
+            self.assertFalse(output_csv.exists())
+
+    def test_write_actionability_shadow_decision_from_json_cli_help_includes_arguments(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BASE_DIR / "tools" / "log_feedback.py"),
+                "write-actionability-shadow-decision-from-json",
+                "--help",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("write-actionability-shadow-decision-from-json", result.stdout)
+        self.assertIn("--input-json", result.stdout)
+        self.assertIn("--output-csv", result.stdout)
+
     def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             str(BASE_DIR / "tools" / "log_feedback.py"),
@@ -811,6 +951,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "write-actionability-shadow-decision", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_actionability_shadow_decision_from_json_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-actionability-shadow-decision-from-json", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:

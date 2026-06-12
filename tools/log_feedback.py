@@ -10382,6 +10382,64 @@ def _run_write_actionability_shadow_decision_command(
     sys.stdout.write(f"{output_csv}\n")
 
 
+def _json_required_string_field(
+    json_data: dict[str, Any],
+    field_name: str,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    value = json_data.get(field_name, "")
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized:
+        message = f"input_json missing required field: {field_name}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return normalized
+
+
+def _normalize_actionability_reasons_from_json(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized:
+        return []
+    return [normalized]
+
+
+def _run_write_actionability_shadow_decision_from_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_csv = Path(args.output_csv)
+    if output_csv.name == "paper_positions.csv":
+        if parser is None:
+            raise ValueError("output_csv must not be paper_positions.csv")
+        parser.error("output_csv must not be paper_positions.csv")
+    input_json_path = Path(args.input_json)
+    json_data = _load_json_object(input_json_path, parser)
+    intraperiod_evidence_summary = str(json_data.get("intraperiod_evidence_summary", ""))
+    source_readiness = _manual_delivery_extract_summary_field(intraperiod_evidence_summary, "source_readiness") or "unknown"
+    row = build_actionability_shadow_decision_row(
+        generated_at_jst=_json_required_string_field(json_data, "generated_at_jst", parser),
+        signal_id=str(json_data.get("signal_id", "")).strip(),
+        symbol=_json_required_string_field(json_data, "symbol", parser),
+        timeframe=_json_required_string_field(json_data, "timeframe", parser),
+        active_plan_label=_json_required_string_field(json_data, "active_plan_label", parser),
+        side=_json_required_string_field(json_data, "side", parser),
+        entry_mode=_json_required_string_field(json_data, "entry_mode", parser),
+        actionability_label=_json_required_string_field(json_data, "actionability_label", parser),
+        actionability_reasons=_normalize_actionability_reasons_from_json(json_data.get("actionability_reasons")),
+        human_action=_json_required_string_field(json_data, "human_action", parser),
+        source_readiness=source_readiness,
+        pending_caveat=_json_required_string_field(json_data, "pending_caveat", parser),
+        detail_report_path=_json_required_string_field(json_data, "detail_report_path", parser),
+        final_outcome=str(getattr(args, "final_outcome", "pending")),
+        notes=str(getattr(args, "notes", "")),
+    )
+    _append_csv_row(output_csv, ACTIONABILITY_SHADOW_DECISION_HEADER, row)
+    sys.stdout.write(f"{output_csv}\n")
+
+
 def _load_manual_delivery_input_json_if_exists(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -13385,6 +13443,12 @@ def _build_parser() -> argparse.ArgumentParser:
     actionability_shadow_decision_parser.add_argument("--notes", default="")
     actionability_shadow_decision_parser.add_argument("--output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
 
+    actionability_shadow_from_json_parser = subparsers.add_parser("write-actionability-shadow-decision-from-json")
+    actionability_shadow_from_json_parser.add_argument("--input-json", required=True)
+    actionability_shadow_from_json_parser.add_argument("--output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+    actionability_shadow_from_json_parser.add_argument("--final-outcome", default="pending")
+    actionability_shadow_from_json_parser.add_argument("--notes", default="")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13838,6 +13902,10 @@ def main() -> None:
 
     if args.command == "write-actionability-shadow-decision":
         _run_write_actionability_shadow_decision_command(args, parser)
+        return
+
+    if args.command == "write-actionability-shadow-decision-from-json":
+        _run_write_actionability_shadow_decision_from_json_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":
