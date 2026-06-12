@@ -3,12 +3,12 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `47b3a170e4eb64374e3afab3f50ccdb3550b6ff0`
-latest_reviewed_baseline: `47b3a170e4eb64374e3afab3f50ccdb3550b6ff0`
+current_commit: 2a549b139c4acb4ebd84748922de7b077611c510
+latest_reviewed_baseline: 2a549b139c4acb4ebd84748922de7b077611c510
 
 ## Objective
 
-BTCFX-20260612-124-ACTIONABILITY-GATE-V1, BTCFX-20260612-125-ACTIONABILITY-GATE-RUNTIME-EMAIL-V1, and BTCFX-20260612-127-ACTIONABILITY-JA-EMAIL-LABELS are accepted at `47b3a170e4eb64374e3afab3f50ccdb3550b6ff0`; this handoff records the reviewed Actionability Gate baseline on top of the one-command local manual-delivery flow, source freshness guard, and CLI-only API fallback kill switch.
+BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 is accepted at `2a549b139c4acb4ebd84748922de7b077611c510`; this handoff records the reviewed Actionability shadow ledger baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, and Actionability Gate baseline.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -45,6 +45,7 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260612-124-ACTIONABILITY-GATE-V1 is accepted at `6347b3a52cf21bc72aaf3e4dbc1843e1a28f5fbe`.
 - BTCFX-20260612-125-ACTIONABILITY-GATE-RUNTIME-EMAIL-V1 is accepted at `b8646c98e7ac3dad7c274a3474347862992bac02`.
 - BTCFX-20260612-127-ACTIONABILITY-JA-EMAIL-LABELS is accepted at `47b3a170e4eb64374e3afab3f50ccdb3550b6ff0`.
+- BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 is accepted at `2a549b139c4acb4ebd84748922de7b077611c510`.
 - `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
@@ -55,9 +56,10 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - Actionability Gate v1 fields are present in local manual-delivery JSON and inbox outputs.
 - Runtime summary emails surface Actionability fields without changing notification send conditions or trading behavior.
 - Runtime summary emails also show Japanese human-readable Actionability labels while preserving machine keys.
+- The separate Actionability shadow decision ledger writer is present and remains isolated from `paper_positions.csv` and trading behavior.
 - No fetch / rebuild / notify / trade / approve behavior is involved.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-manual-delivery-local-flow`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed Actionability Gate baseline and defers the next step to STOP: choose the next product step after the reviewed Actionability Gate baseline.
+- `CONTROL.md` now records the reviewed Actionability shadow ledger baseline and defers the next step to STOP: choose the next product step after the reviewed Actionability shadow ledger baseline.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -75,5 +77,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose the next product step after the reviewed Actionability Gate baseline.
+STOP: Choose the next product step after the reviewed Actionability shadow ledger baseline.
 ```
