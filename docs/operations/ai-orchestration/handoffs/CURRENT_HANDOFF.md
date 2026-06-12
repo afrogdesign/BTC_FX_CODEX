@@ -44,13 +44,8 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
 - No fetch / rebuild / notify / trade / approve behavior is involved.
-- BTCFX-20260612-119-SOURCE-FRESHNESS-GUARD-E2E-REVIEW passed as REVIEW_ONLY with no commit and no repo file changes.
-- `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
-- `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
-- Freshness is based only on local filesystem mtimes.
-- No fetch / rebuild / notify / trade / approve behavior is involved.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-manual-delivery-local-flow`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed one-command local manual-delivery flow and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified one-command local manual-delivery flow.
+- `CONTROL.md` now records the reviewed source freshness guard baseline and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified source freshness guard.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
