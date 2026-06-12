@@ -191,16 +191,16 @@
         <div class="label">Current track</div>
       </div>
       <div class="metric">
-        <div class="num">37a4bce</div>
+        <div class="num">6d2490f</div>
         <div class="label">最新 reviewed product baseline</div>
       </div>
       <div class="metric">
-        <div class="num">1bab278</div>
+        <div class="num">6d2490f</div>
         <div class="label">最新 repo metadata sync HEAD</div>
       </div>
       <div class="metric">
-        <div class="num">114/115</div>
-        <div class="label">accepted local flow / REVIEW_ONLY review</div>
+        <div class="num">117/119/120</div>
+        <div class="label">accepted flow / REVIEW_ONLY / pending_review</div>
       </div>
       <div class="metric">
         <div class="num">117</div>
@@ -218,9 +218,10 @@
         <li>Current track は <code>Ver03-v3</code>。</li>
         <li>Original board は <code>Ver03-v1</code> 進捗ボードで、歴史的な起点を残したまま現在の状況を追跡している。</li>
         <li>Current repo branch は <code>Ver03-v3</code>。</li>
-        <li>Latest repo metadata sync HEAD は <code>1bab278eefc19014d516eb2d2f2c3ecd1bf79769</code>。</li>
-        <li>Latest reviewed product baseline は <code>37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3</code>。</li>
-        <li>Current status は reviewed and E2E-verified one-command local manual-delivery flow。</li>
+        <li>Latest repo metadata sync HEAD は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code>。</li>
+        <li>Latest reviewed product baseline は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code>。</li>
+        <li>Current status は reviewed and E2E-verified source freshness guard を含む one-command local manual-delivery flow。</li>
+        <li><code>--source-stale-after-hours</code> により、local file mtimes だけで source freshness を visible にできる。</li>
       </ul>
     </div>
 
@@ -392,6 +393,7 @@
         <li>Ver03-v1 は主に redesign / inventory / progress board / orchestration setup の段階だった。</li>
         <li>Ver03-v2 では implementation と diagnostic/manual-preview の土台を進めた。</li>
         <li>Ver03-v3 では local/report-only manual-delivery support flow を整備し、人間レビュー前提の local-only 運用に進んだ。</li>
+        <li>過去の reviewed baseline は <code>37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3</code> だったが、現在の reviewed baseline は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code> になっている。</li>
         <li>現在も live trading や automatic order には進んでいない。</li>
       </ul>
     </section>
@@ -407,13 +409,14 @@
           </tr>
         </thead>
         <tbody>
-          <tr><td><code>resolve-latest-manual-delivery-source-files</code></td><td><span class="badge done">DONE</span></td><td>local source summary を key=value で出力</td></tr>
-          <tr><td><code>write-latest-manual-delivery-input-json</code></td><td><span class="badge done">DONE</span></td><td>安全な manual-delivery JSON seed を生成</td></tr>
+          <tr><td><code>resolve-latest-manual-delivery-source-files --source-stale-after-hours</code></td><td><span class="badge done">DONE</span></td><td>local source summary を freshness 付き key=value で出力</td></tr>
+          <tr><td><code>write-latest-manual-delivery-input-json --source-stale-after-hours</code></td><td><span class="badge done">DONE</span></td><td>安全な manual-delivery JSON seed を freshness 情報付きで生成</td></tr>
           <tr><td><code>write-latest-active-plan-manual-delivery-files-from-json</code></td><td><span class="badge done">DONE</span></td><td>JSON から bundle files を生成</td></tr>
           <tr><td><code>write-latest-manual-delivery-local-inbox</code></td><td><span class="badge done">DONE</span></td><td>JSON と bundle を人間レビュー用 Markdown に要約</td></tr>
-          <tr><td><code>write-latest-manual-delivery-local-flow</code></td><td><span class="badge done">DONE</span></td><td>上記を 1 つの output-dir にまとめる one-command flow</td></tr>
+          <tr><td><code>write-latest-manual-delivery-local-flow --source-stale-after-hours</code></td><td><span class="badge done">DONE</span></td><td>上記を 1 つの output-dir にまとめる one-command flow</td></tr>
         </tbody>
       </table>
+      <p class="small">source freshness guard は <code>source_readiness=ready</code> または <code>source_readiness=review_required_missing_or_stale_source</code> を明示する。</p>
     </section>
 
     <section>
@@ -461,8 +464,10 @@
           <tr><td>BTCFX-20260612-114</td><td><span class="badge done">DONE</span></td><td>one-command local manual-delivery flow accepted</td></tr>
           <tr><td>BTCFX-20260612-115</td><td><span class="badge done">DONE</span></td><td>one-command local flow E2E REVIEW_ONLY accepted</td></tr>
           <tr><td>BTCFX-20260612-116-FIX</td><td><span class="badge done">DONE</span></td><td>one-command local flow metadata sync accepted</td></tr>
-          <tr><td>BTCFX-20260612-117</td><td><span class="badge todo">PROPOSED</span></td><td>source freshness guard, not yet accepted</td></tr>
-          <tr><td>BTCFX-20260612-118</td><td><span class="badge current">PENDING_REVIEW</span></td><td>this progress board update</td></tr>
+          <tr><td>BTCFX-20260612-117</td><td><span class="badge done">DONE</span></td><td>source freshness guard accepted</td></tr>
+          <tr><td>BTCFX-20260612-118</td><td><span class="badge done">DONE</span></td><td>Ver03-v3 progress board update accepted</td></tr>
+          <tr><td>BTCFX-20260612-119</td><td><span class="badge done">DONE</span></td><td>source freshness guard REVIEW_ONLY accepted</td></tr>
+          <tr><td>BTCFX-20260612-120</td><td><span class="badge current">PENDING_REVIEW</span></td><td>source freshness guard metadata sync</td></tr>
         </tbody>
       </table>
     </section>
@@ -470,9 +475,8 @@
     <section>
       <h2>Next candidate</h2>
       <div class="notice">
-        <strong>候補:</strong>
-        <code>BTCFX-20260612-117-ONE-COMMAND-SOURCE-FRESHNESS-GUARD</code>。
-        次候補としては妥当だが、現時点ではまだ完成報告は受理されていない。
+        <strong>STOP:</strong>
+        reviewed and E2E-verified source freshness guard の次の product step を選ぶ。
         実装する場合も local file mtimes only に限定し、fetch / rebuild / notify / trade / approve は行わない。
       </div>
     </section>
