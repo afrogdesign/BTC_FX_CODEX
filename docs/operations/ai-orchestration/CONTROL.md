@@ -3,7 +3,7 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`
+current_commit: `37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3`
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,13 +11,13 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`; this sync records reviewed-baseline metadata for the accepted Ver03-v3 local manual-delivery flow through BTCFX-20260611-110.
+BTCFX-20260612-114-ONE-COMMAND-LOCAL-MANUAL-DELIVERY-FLOW is accepted at `37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3`; this sync records reviewed-baseline metadata for the accepted Ver03-v3 one-command local manual-delivery flow through BTCFX-20260612-115.
 
-BTCFX-20260612-112-LOCAL-MANUAL-DELIVERY-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and confirmed `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, and `write-latest-manual-delivery-local-inbox`.
+BTCFX-20260612-115-ONE-COMMAND-LOCAL-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and confirmed `write-latest-manual-delivery-local-flow`.
 
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-The reviewed manual-delivery workflow now supports `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-files`, `write-latest-active-plan-manual-delivery-package`, deterministic pending/coverage caveat generation via `format-active-plan-pending-coverage-caveat`, copy-ready manual delivery package output, local file bundle output, `subject.txt`, `body.txt`, `checklist.txt`, `package.txt`, `README.txt`, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
+The reviewed and E2E-verified one-command local manual-delivery flow now supports `write-latest-manual-delivery-local-flow`, `source-files.txt`, `manual-delivery-input.json`, `bundle/subject.txt`, `bundle/body.txt`, `bundle/checklist.txt`, `bundle/package.txt`, `bundle/README.txt`, `inbox.md`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-files`, `write-latest-active-plan-manual-delivery-package`, deterministic pending/coverage caveat generation via `format-active-plan-pending-coverage-caveat`, copy-ready manual delivery package output, local file bundle output, manual copy/paste only handling, and the concise manual-preview runbook at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
 Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration, no clipboard/address-book integration, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
@@ -94,7 +94,7 @@ BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetc
 
 The active deliverable is the reviewed local manual-delivery flow baseline and its reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
+The next recommended task is STOP: choose the next product step after the reviewed and E2E-verified one-command local manual-delivery flow.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 

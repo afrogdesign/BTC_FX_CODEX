@@ -3,12 +3,12 @@
 last_updated: 2026-06-11
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`
-latest_reviewed_baseline: `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`
+current_commit: `37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3`
+latest_reviewed_baseline: `37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3`
 
 ## Objective
 
-BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 local manual-delivery flow through BTCFX-20260611-110.
+BTCFX-20260612-114-ONE-COMMAND-LOCAL-MANUAL-DELIVERY-FLOW is accepted at `37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3`; this handoff records the reviewed-baseline metadata for the accepted Ver03-v3 one-command local manual-delivery flow through BTCFX-20260612-115.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -38,9 +38,9 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260611-108-LATEST-MANUAL-DELIVERY-SOURCE-RESOLVER-FIX is accepted at `c15c6446b344d6388592d6cc05fe89f124f7eb85`.
 - BTCFX-20260611-109-LATEST-MANUAL-DELIVERY-INPUT-JSON-SEED is accepted at `5347f2b49c8f89ebd12ebb15acab8c7c9439fa02`.
 - BTCFX-20260611-110-LOCAL-MANUAL-DELIVERY-INBOX is accepted at `cdf5a78df8a3a353ed2ef3af12a9589bfccce785`.
-- BTCFX-20260612-112-LOCAL-MANUAL-DELIVERY-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and no repo file changes.
-- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed local manual-delivery flow and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
+- BTCFX-20260612-115-ONE-COMMAND-LOCAL-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit and no repo file changes.
+- `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-manual-delivery-local-flow`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
+- `CONTROL.md` now records the reviewed one-command local manual-delivery flow and defers the next step to STOP: choose the next product step after the reviewed and E2E-verified one-command local manual-delivery flow.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -58,5 +58,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose the next product step after the reviewed and E2E-verified local manual-delivery flow.
+STOP: Choose the next product step after the reviewed and E2E-verified one-command local manual-delivery flow.
 ```
