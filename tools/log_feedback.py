@@ -10406,16 +10406,18 @@ def _normalize_actionability_reasons_from_json(value: Any) -> list[str]:
     return [normalized]
 
 
-def _run_write_actionability_shadow_decision_from_json_command(
-    args: argparse.Namespace,
+def _write_actionability_shadow_decision_from_json(
+    *,
+    input_json_path: Path,
+    output_csv: Path,
+    final_outcome: str,
+    notes: str,
     parser: argparse.ArgumentParser | None = None,
-) -> None:
-    output_csv = Path(args.output_csv)
+) -> Path:
     if output_csv.name == "paper_positions.csv":
         if parser is None:
             raise ValueError("output_csv must not be paper_positions.csv")
         parser.error("output_csv must not be paper_positions.csv")
-    input_json_path = Path(args.input_json)
     json_data = _load_json_object(input_json_path, parser)
     intraperiod_evidence_summary = str(json_data.get("intraperiod_evidence_summary", ""))
     source_readiness = _manual_delivery_extract_summary_field(intraperiod_evidence_summary, "source_readiness") or "unknown"
@@ -10433,10 +10435,24 @@ def _run_write_actionability_shadow_decision_from_json_command(
         source_readiness=source_readiness,
         pending_caveat=_json_required_string_field(json_data, "pending_caveat", parser),
         detail_report_path=_json_required_string_field(json_data, "detail_report_path", parser),
-        final_outcome=str(getattr(args, "final_outcome", "pending")),
-        notes=str(getattr(args, "notes", "")),
+        final_outcome=str(final_outcome),
+        notes=str(notes),
     )
     _append_csv_row(output_csv, ACTIONABILITY_SHADOW_DECISION_HEADER, row)
+    return output_csv
+
+
+def _run_write_actionability_shadow_decision_from_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_csv = _write_actionability_shadow_decision_from_json(
+        input_json_path=Path(args.input_json),
+        output_csv=Path(args.output_csv),
+        final_outcome=str(getattr(args, "final_outcome", "pending")),
+        notes=str(getattr(args, "notes", "")),
+        parser=parser,
+    )
     sys.stdout.write(f"{output_csv}\n")
 
 
@@ -10682,6 +10698,15 @@ def _run_latest_manual_delivery_local_flow_command(
     )
     (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
     sys.stdout.write(f"{output_dir}\n")
+    if bool(getattr(args, "write_actionability_shadow_decision", False)):
+        shadow_output_csv = _write_actionability_shadow_decision_from_json(
+            input_json_path=input_json_path,
+            output_csv=Path(getattr(args, "actionability_shadow_output_csv", "logs/csv/active_plan_shadow_decisions.csv")),
+            final_outcome=str(getattr(args, "actionability_shadow_final_outcome", "pending")),
+            notes=str(getattr(args, "actionability_shadow_notes", "")),
+            parser=parser,
+        )
+        sys.stdout.write(f"actionability_shadow_output_csv={shadow_output_csv}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -13424,6 +13449,10 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_flow_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
     manual_delivery_local_flow_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     manual_delivery_local_flow_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_local_flow_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-notes", default="")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)

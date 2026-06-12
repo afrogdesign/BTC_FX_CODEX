@@ -573,6 +573,123 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("--input-json", result.stdout)
         self.assertIn("--output-csv", result.stdout)
 
+    def test_write_latest_manual_delivery_local_flow_cli_without_shadow_flag_does_not_create_shadow_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            shadow_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                ["--output-dir", str(output_dir)],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertFalse(shadow_csv.exists())
+
+    def test_write_latest_manual_delivery_local_flow_cli_with_shadow_flag_appends_row_from_generated_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            csv_path = self._write_intraperiod_outcomes_csv(base_dir, self._pending_coverage_caveat_csv_rows())
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260613", "detail report")
+            shadow_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+
+            first_code, first_stdout, first_stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--source-stale-after-hours",
+                    "24",
+                    "--write-actionability-shadow-decision",
+                    "--actionability-shadow-output-csv",
+                    str(shadow_csv),
+                    "--actionability-shadow-final-outcome",
+                    "pending",
+                    "--actionability-shadow-notes",
+                    "first local flow row",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(first_code, 0, msg=first_stderr)
+            self.assertEqual(
+                first_stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n",
+            )
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            with shadow_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["source_readiness"], "ready")
+            self.assertEqual(rows[0]["actionability_label"], seed["actionability_label"])
+            self.assertEqual(rows[0]["human_action"], seed["human_action"])
+            self.assertEqual(rows[0]["actionability_reasons"], "+".join(seed["actionability_reasons"]))
+            self.assertEqual(rows[0]["notes"], "first local flow row")
+            with shadow_csv.open("r", encoding="utf-8") as fp:
+                self.assertEqual(fp.read().count("generated_at_jst"), 1)
+
+            second_code, second_stdout, second_stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--intraperiod-outcomes-path",
+                    str(csv_path),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--source-stale-after-hours",
+                    "24",
+                    "--write-actionability-shadow-decision",
+                    "--actionability-shadow-output-csv",
+                    str(shadow_csv),
+                    "--actionability-shadow-final-outcome",
+                    "reviewed",
+                    "--actionability-shadow-notes",
+                    "second local flow row",
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertEqual(second_code, 0, msg=second_stderr)
+            self.assertEqual(
+                second_stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n",
+            )
+            with shadow_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[1]["final_outcome"], "reviewed")
+            self.assertEqual(rows[1]["notes"], "second local flow row")
+            with shadow_csv.open("r", encoding="utf-8") as fp:
+                self.assertEqual(fp.read().count("generated_at_jst"), 1)
+
+    def test_write_latest_manual_delivery_local_flow_cli_rejects_paper_positions_shadow_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            output_csv = base_dir / "logs" / "csv" / "paper_positions.csv"
+
+            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                [
+                    "--output-dir",
+                    str(output_dir),
+                    "--write-actionability-shadow-decision",
+                    "--actionability-shadow-output-csv",
+                    str(output_csv),
+                ],
+                base_dir=base_dir,
+            )
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertIn("must not be paper_positions.csv", stderr)
+            self.assertFalse(output_csv.exists())
+
     def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             str(BASE_DIR / "tools" / "log_feedback.py"),
@@ -2402,6 +2519,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("--recent-row-window", result.stdout)
         self.assertIn("--source-stale-after-hours", result.stdout)
         self.assertIn("--include-manual-delivery-checklist", result.stdout)
+        self.assertIn("--write-actionability-shadow-decision", result.stdout)
+        self.assertIn("--actionability-shadow-output-csv", result.stdout)
+        self.assertIn("--actionability-shadow-final-outcome", result.stdout)
+        self.assertIn("--actionability-shadow-notes", result.stdout)
 
     def test_write_latest_manual_delivery_local_flow_cli_creates_expected_output_structure(self) -> None:
         with TemporaryDirectory() as tmpdir:
