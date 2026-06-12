@@ -149,6 +149,93 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             args.extend(extra_args)
         return args
 
+    def test_compute_actionability_gate_v1_returns_auto_reject_for_stale_source(self) -> None:
+        result = log_feedback._compute_actionability_gate_v1(
+            active_plan_label="ACTIVE_LIMIT_RETEST",
+            source_readiness="review_required_missing_or_stale_source",
+            pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            side="long",
+            entry_mode="limit_zone_mid",
+            tp_plan="TP1/TP2 from report context",
+            sl_or_invalidation="SL from report context",
+            timeout_or_wait_limit="timeout after configured window",
+        )
+
+        self.assertEqual(result["actionability_label"], "AUTO_REJECT")
+        self.assertEqual(result["human_action"], "do_nothing")
+        self.assertEqual(result["actionability_reasons"], ["source_not_ready:review_required_missing_or_stale_source"])
+        self.assertEqual(
+            result["actionability_safety"],
+            "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+        )
+
+    def test_compute_actionability_gate_v1_returns_no_action_for_no_action_label(self) -> None:
+        result = log_feedback._compute_actionability_gate_v1(
+            active_plan_label="NO_ACTION",
+            source_readiness="ready",
+            pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            side="long",
+            entry_mode="limit_zone_mid",
+            tp_plan="TP1/TP2 from report context",
+            sl_or_invalidation="SL from report context",
+            timeout_or_wait_limit="timeout after configured window",
+        )
+
+        self.assertEqual(result["actionability_label"], "NO_ACTION")
+        self.assertEqual(result["human_action"], "do_nothing")
+        self.assertEqual(result["actionability_reasons"], ["active_plan_no_action"])
+
+    def test_compute_actionability_gate_v1_returns_auto_reject_for_no_intraperiod_evidence(self) -> None:
+        result = log_feedback._compute_actionability_gate_v1(
+            active_plan_label="ACTIVE_LIMIT_RETEST",
+            source_readiness="ready",
+            pending_caveat=(
+                "pending_coverage_caveat: diagnostic=no_intraperiod_evidence; "
+                "action=do_not_use_as_trade_trigger; safety=report-only_not_FORMAL_GO_no_automatic_order"
+            ),
+            side="long",
+            entry_mode="limit_zone_mid",
+            tp_plan="TP1/TP2 from report context",
+            sl_or_invalidation="SL from report context",
+            timeout_or_wait_limit="timeout after configured window",
+        )
+
+        self.assertEqual(result["actionability_label"], "AUTO_REJECT")
+        self.assertEqual(result["human_action"], "do_nothing")
+        self.assertEqual(result["actionability_reasons"], ["no_intraperiod_evidence"])
+
+    def test_compute_actionability_gate_v1_returns_review_required_for_no_action_review_required(self) -> None:
+        result = log_feedback._compute_actionability_gate_v1(
+            active_plan_label="NO_ACTION_REVIEW_REQUIRED",
+            source_readiness="ready",
+            pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            side="long",
+            entry_mode="limit_zone_mid",
+            tp_plan="TP1/TP2 from report context",
+            sl_or_invalidation="SL from report context",
+            timeout_or_wait_limit="timeout after configured window",
+        )
+
+        self.assertEqual(result["actionability_label"], "REVIEW_REQUIRED")
+        self.assertEqual(result["human_action"], "review_only")
+        self.assertEqual(result["actionability_reasons"], ["no_action_review_required"])
+
+    def test_compute_actionability_gate_v1_returns_actionable_copy_ready_for_active_label(self) -> None:
+        result = log_feedback._compute_actionability_gate_v1(
+            active_plan_label="ACTIVE_LIMIT_RETEST",
+            source_readiness="ready",
+            pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok; action=still_review_detail_report_manually",
+            side="long",
+            entry_mode="limit_zone_mid",
+            tp_plan="TP1/TP2 from report context",
+            sl_or_invalidation="SL from report context",
+            timeout_or_wait_limit="timeout after configured window",
+        )
+
+        self.assertEqual(result["actionability_label"], "ACTIONABLE_COPY_READY")
+        self.assertEqual(result["human_action"], "manual_copy_review")
+        self.assertEqual(result["actionability_reasons"], ["deterministic_checks_passed"])
+
     def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
             str(BASE_DIR / "tools" / "log_feedback.py"),
@@ -1836,6 +1923,13 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("side=review_required", markdown)
             self.assertIn("entry_mode=review_required", markdown)
             self.assertIn("pending_caveat=pending_coverage_caveat:", markdown)
+            self.assertIn("actionability_label=AUTO_REJECT", markdown)
+            self.assertIn("actionability_reasons=['source_not_ready:unknown']", markdown)
+            self.assertIn("human_action=do_nothing", markdown)
+            self.assertIn(
+                "actionability_safety=report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+                markdown,
+            )
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", markdown)
             self.assertIn("subject.txt exists=true", markdown)
             self.assertIn("body.txt exists=true", markdown)
@@ -1990,6 +2084,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 "timeout_or_wait_limit",
                 "intraperiod_evidence_summary",
                 "pending_caveat",
+                "actionability_label",
+                "actionability_reasons",
+                "human_action",
+                "actionability_safety",
                 "include_manual_delivery_checklist",
             })
             self.assertIn("report-only", seed["market_status_summary"])
@@ -1998,6 +2096,13 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(seed["active_plan_label"], "NO_ACTION_REVIEW_REQUIRED")
             self.assertEqual(seed["side"], "review_required")
             self.assertEqual(seed["entry_mode"], "review_required")
+            self.assertEqual(seed["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(seed["actionability_reasons"], ["source_not_ready:review_required_missing_or_stale_source"])
+            self.assertEqual(seed["human_action"], "do_nothing")
+            self.assertEqual(
+                seed["actionability_safety"],
+                "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            )
             self.assertIn("safety=report-only_not_FORMAL_GO_no_automatic_order", seed["pending_caveat"])
 
             bundle_dir = output_dir / "bundle"
@@ -2044,6 +2149,13 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("do not treat the inbox as trade approval", inbox)
             self.assertIn("intraperiod_evidence_summary=", inbox)
             self.assertIn("source_readiness=review_required_missing_or_stale_source", inbox)
+            self.assertIn("actionability_label=AUTO_REJECT", inbox)
+            self.assertIn("actionability_reasons=['source_not_ready:review_required_missing_or_stale_source']", inbox)
+            self.assertIn("human_action=do_nothing", inbox)
+            self.assertIn(
+                "actionability_safety=report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+                inbox,
+            )
             self.assertIn("subject.txt exists=true", inbox)
             self.assertIn("body.txt exists=true", inbox)
             self.assertIn("checklist.txt exists=true", inbox)
@@ -2237,6 +2349,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "timeout_or_wait_limit",
                     "intraperiod_evidence_summary",
                     "pending_caveat",
+                    "actionability_label",
+                    "actionability_reasons",
+                    "human_action",
+                    "actionability_safety",
                     "include_manual_delivery_checklist",
                 },
             )
@@ -2257,6 +2373,13 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(seed["tp_plan"], "review_required")
             self.assertEqual(seed["sl_or_invalidation"], "review_required")
             self.assertEqual(seed["timeout_or_wait_limit"], "review_required")
+            self.assertEqual(seed["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(seed["actionability_reasons"], ["source_not_ready:review_required_missing_or_stale_source"])
+            self.assertEqual(seed["human_action"], "do_nothing")
+            self.assertEqual(
+                seed["actionability_safety"],
+                "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            )
             self.assertIn("detail_report_exists=false", seed["intraperiod_evidence_summary"])
             self.assertIn("intraperiod_outcomes_exists=false", seed["intraperiod_evidence_summary"])
             self.assertIn("source_readiness=review_required_missing_or_stale_source", seed["intraperiod_evidence_summary"])

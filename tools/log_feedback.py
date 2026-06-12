@@ -1103,6 +1103,78 @@ def _manual_delivery_source_readiness_state(
     }
 
 
+ACTIONABILITY_SAFETY = "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually"
+
+
+def _compute_actionability_gate_v1(
+    *,
+    active_plan_label: str,
+    source_readiness: str,
+    pending_caveat: str,
+    side: str,
+    entry_mode: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+) -> dict[str, Any]:
+    normalized_label = str(active_plan_label).strip()
+    normalized_source_readiness = str(source_readiness).strip()
+    normalized_pending_caveat = str(pending_caveat).strip()
+    context_fields = (
+        str(side).strip(),
+        str(entry_mode).strip(),
+        str(tp_plan).strip(),
+        str(sl_or_invalidation).strip(),
+        str(timeout_or_wait_limit).strip(),
+    )
+    reasons: list[str]
+    actionability_label: str
+    human_action: str
+
+    if normalized_label == "NO_ACTION":
+        actionability_label = "NO_ACTION"
+        human_action = "do_nothing"
+        reasons = ["active_plan_no_action"]
+    elif normalized_source_readiness != "ready":
+        actionability_label = "AUTO_REJECT"
+        human_action = "do_nothing"
+        reasons = [f"source_not_ready:{normalized_source_readiness or 'unknown'}"]
+    elif (
+        "diagnostic=no_intraperiod_evidence" in normalized_pending_caveat
+        or "action=do_not_use_as_trade_trigger" in normalized_pending_caveat
+    ):
+        actionability_label = "AUTO_REJECT"
+        human_action = "do_nothing"
+        reasons = ["no_intraperiod_evidence"]
+    elif normalized_label == "NO_ACTION_REVIEW_REQUIRED":
+        actionability_label = "REVIEW_REQUIRED"
+        human_action = "review_only"
+        reasons = ["no_action_review_required"]
+    elif any("review_required" in field for field in context_fields):
+        actionability_label = "REVIEW_REQUIRED"
+        human_action = "review_only"
+        reasons = ["manual_context_review_required"]
+    elif "action=reduce_confidence" in normalized_pending_caveat:
+        actionability_label = "REVIEW_REQUIRED"
+        human_action = "review_only"
+        reasons = ["pending_coverage_review_required"]
+    elif normalized_label.startswith("ACTIVE_"):
+        actionability_label = "ACTIONABLE_COPY_READY"
+        human_action = "manual_copy_review"
+        reasons = ["deterministic_checks_passed"]
+    else:
+        actionability_label = "REVIEW_REQUIRED"
+        human_action = "review_only"
+        reasons = ["unknown_active_plan_label"]
+
+    return {
+        "actionability_label": actionability_label,
+        "actionability_reasons": reasons,
+        "human_action": human_action,
+        "actionability_safety": ACTIONABILITY_SAFETY,
+    }
+
+
 def _latest_manual_delivery_input_json_seed_data(
     *,
     base_dir: Path,
@@ -1157,6 +1229,16 @@ def _latest_manual_delivery_input_json_seed_data(
         f"source_stale_after_hours={source_state['source_stale_after_hours']}; "
         "local source resolver seed"
     )
+    actionability_fields = _compute_actionability_gate_v1(
+        active_plan_label=active_plan_label,
+        source_readiness=source_state["source_readiness"],
+        pending_caveat=pending_caveat,
+        side=side,
+        entry_mode=entry_mode,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+    )
 
     return {
         "generated_at_jst": generated_at_jst,
@@ -1175,6 +1257,10 @@ def _latest_manual_delivery_input_json_seed_data(
         "timeout_or_wait_limit": timeout_or_wait_limit,
         "intraperiod_evidence_summary": intraperiod_evidence_summary,
         "pending_caveat": pending_caveat,
+        "actionability_label": actionability_fields["actionability_label"],
+        "actionability_reasons": actionability_fields["actionability_reasons"],
+        "human_action": actionability_fields["human_action"],
+        "actionability_safety": actionability_fields["actionability_safety"],
         "include_manual_delivery_checklist": bool(include_manual_delivery_checklist),
     }
 
@@ -10333,6 +10419,24 @@ def _manual_delivery_local_inbox_markdown(
     bundle_dir: Path,
     input_json: dict[str, Any],
 ) -> str:
+    display_json = dict(input_json)
+    if any(key not in display_json for key in ("actionability_label", "actionability_reasons", "human_action", "actionability_safety")):
+        display_json.update(
+            _compute_actionability_gate_v1(
+                active_plan_label=str(display_json.get("active_plan_label", "")),
+                source_readiness=_manual_delivery_extract_summary_field(
+                    str(display_json.get("intraperiod_evidence_summary", "")),
+                    "source_readiness",
+                )
+                or "unknown",
+                pending_caveat=str(display_json.get("pending_caveat", "")),
+                side=str(display_json.get("side", "")),
+                entry_mode=str(display_json.get("entry_mode", "")),
+                tp_plan=str(display_json.get("tp_plan", "")),
+                sl_or_invalidation=str(display_json.get("sl_or_invalidation", "")),
+                timeout_or_wait_limit=str(display_json.get("timeout_or_wait_limit", "")),
+            )
+        )
     lines = [
         "# Manual Delivery Local Inbox",
         "",
@@ -10360,9 +10464,13 @@ def _manual_delivery_local_inbox_markdown(
         "entry_mode",
         "intraperiod_evidence_summary",
         "pending_caveat",
+        "actionability_label",
+        "actionability_reasons",
+        "human_action",
+        "actionability_safety",
     ]:
-        if key in input_json:
-            lines.append(f"- {key}={input_json[key]}")
+        if key in display_json:
+            lines.append(f"- {key}={display_json[key]}")
 
     lines.extend(
         [
@@ -10447,6 +10555,15 @@ def _manual_delivery_source_files_lines(
         f"source_readiness={source_state['source_readiness']}",
         "safety=report-only_not_FORMAL_GO_no_automatic_order",
     ]
+
+
+def _manual_delivery_extract_summary_field(summary_text: str, field_name: str) -> str:
+    prefix = f"{field_name}="
+    for part in str(summary_text).split(";"):
+        normalized = part.strip()
+        if normalized.startswith(prefix):
+            return normalized[len(prefix) :].strip()
+    return ""
 
 
 def _run_latest_manual_delivery_local_flow_command(
