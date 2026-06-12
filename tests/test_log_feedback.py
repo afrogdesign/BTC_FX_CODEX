@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -2212,7 +2213,72 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(stats["request_failed"], 2)
             self.assertEqual(stats["stopped_after_failures"], 1)
 
-    def test_sync_ai_post_reviews_uses_api_fallback_when_cli_fails(self) -> None:
+    def test_sync_ai_post_reviews_does_not_use_api_fallback_without_explicit_api_permission(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            (base_dir / "logs" / "signals").mkdir(parents=True, exist_ok=True)
+
+            trades_path = logs_csv / "trades.csv"
+            with trades_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "timestamp_jst", "was_notified", "summary_subject", "prelabel_primary_reason", "notification_kind", "signal_tier"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "signal_id": "sig_api_fallback",
+                        "timestamp_jst": "2026-04-10T03:05:00+09:00",
+                        "was_notified": "true",
+                        "summary_subject": "subject",
+                        "prelabel_primary_reason": "balanced_location",
+                        "notification_kind": "main",
+                        "signal_tier": "normal",
+                    }
+                )
+
+            outcomes_path = logs_csv / "signal_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["signal_id", "evaluation_status", "outcome"])
+                writer.writeheader()
+                writer.writerow({"signal_id": "sig_api_fallback", "evaluation_status": "complete", "outcome": "win"})
+
+            reviews_path = logs_csv / "user_reviews.csv"
+            with reviews_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=USER_REVIEW_HEADER)
+                writer.writeheader()
+
+            with patch("tools.log_feedback.run_cli_json", side_effect=RuntimeError("usage limit")) as mocked_cli, patch(
+                "tools.log_feedback.load_config"
+            ) as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None), patch(
+                "openai.OpenAI"
+            ) as mocked_openai, patch("tools.log_feedback.write_ai_error_log") as _error_log_mock:
+                mocked_cfg.return_value = type(
+                    "Cfg",
+                    (),
+                    {
+                        "AI_POST_REVIEW_DAILY_MAX": 1,
+                        "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES": 3,
+                        "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
+                        "AI_ADVICE_CLI_COMMAND": "dummy-cli",
+                        "AI_POST_REVIEW_API_FALLBACK_ENABLED": True,
+                    },
+                )()
+                _, stats = sync_ai_post_reviews(
+                    base_dir=base_dir,
+                    outcomes_path=outcomes_path,
+                    reviews_path=reviews_path,
+                    trades_path=trades_path,
+                    max_new_reviews=None,
+                )
+
+            mocked_cli.assert_called_once()
+            mocked_openai.assert_not_called()
+            self.assertEqual(stats["created"], 0)
+            self.assertEqual(stats["request_failed"], 1)
+            rows = _load_csv_rows(reviews_path)
+            self.assertEqual(rows, [])
+
+    def test_sync_ai_post_reviews_uses_api_fallback_only_with_explicit_api_permission(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             logs_csv = base_dir / "logs" / "csv"
@@ -2266,9 +2332,15 @@ class LogFeedbackTest(unittest.TestCase):
                 "next_action": "継続観測する",
                 "memo": "API fallback",
             }
+            api_response = SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(api_review, ensure_ascii=False)))]
+            )
             with patch("tools.log_feedback.run_cli_json", side_effect=RuntimeError("usage limit")) as mocked_cli, patch(
-                "tools.log_feedback._request_ai_post_review_via_api", return_value=api_review
-            ) as mocked_api, patch("tools.log_feedback.load_config") as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None):
+                "tools.log_feedback.load_config"
+            ) as mocked_cfg, patch("tools.log_feedback._build_review_chart_svg_path", return_value=None), patch(
+                "openai.OpenAI"
+            ) as mocked_openai, patch("tools.log_feedback.write_ai_error_log") as _error_log_mock:
+                mocked_openai.return_value.chat.completions.create.return_value = api_response
                 mocked_cfg.return_value = type(
                     "Cfg",
                     (),
@@ -2277,6 +2349,9 @@ class LogFeedbackTest(unittest.TestCase):
                         "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES": 3,
                         "AI_POST_REVIEW_PRIORITY_MAIN_ONLY": True,
                         "AI_ADVICE_CLI_COMMAND": "dummy-cli",
+                        "AI_POST_REVIEW_API_FALLBACK_ENABLED": True,
+                        "OPENAI_API_KEY": "sk-test",
+                        "AI_API_USAGE_ALLOWED": True,
                     },
                 )()
                 _, stats = sync_ai_post_reviews(
@@ -2288,9 +2363,10 @@ class LogFeedbackTest(unittest.TestCase):
                 )
 
             mocked_cli.assert_called_once()
-            mocked_api.assert_called_once()
+            mocked_openai.assert_called_once()
             self.assertEqual(stats["created"], 1)
             self.assertEqual(stats["request_failed"], 0)
+            self.assertEqual(stats["resolved_cli_fallback"], 0)
             rows = _load_csv_rows(reviews_path)
             self.assertEqual(rows[0]["review_image_mode"], "api_numeric_fallback")
 

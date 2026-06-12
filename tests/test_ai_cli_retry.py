@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest import TestCase
@@ -85,7 +86,7 @@ class AiCliRetryTest(TestCase):
         )
 
         self.assertIsNone(result)
-        self.assertEqual(provider_used, "cli")
+        self.assertEqual(provider_used, "cli_failed")
         error_log_mock.assert_called_once()
         self.assertIn("retry_count=2", error_log_mock.call_args[0][2])
 
@@ -133,9 +134,84 @@ class AiCliRetryTest(TestCase):
     @patch("src.ai.advice._request_ai_advice_via_api")
     @patch("src.ai.advice.write_ai_error_log")
     @patch("src.ai.advice.run_cli_json", side_effect=RuntimeError("401 Unauthorized"))
-    def test_request_ai_advice_falls_back_to_api_when_cli_fails(
+    def test_request_ai_advice_does_not_fall_back_to_api_when_cli_fails(
         self,
         _run_cli_json_mock: object,
+        error_log_mock: object,
+        api_request_mock: object,
+    ) -> None:
+        with patch.dict(os.environ, {"AI_API_USAGE_ALLOWED": "true"}, clear=False):
+            result, provider_used = request_ai_advice(
+                provider="cli",
+                api_key="sk-test",
+                model="gpt-5.3-codex",
+                cli_command="/tmp/codex_cli_wrapper.py",
+                timeout_sec=30,
+                retry_count=2,
+                base_dir=BASE_DIR,
+                machine_payload={"bias": "long"},
+                qualitative_payload={"note": "sample"},
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(provider_used, "cli_failed")
+        api_request_mock.assert_not_called()
+        error_log_mock.assert_called_once()
+
+    @patch("src.ai.advice._request_ai_advice_via_api")
+    @patch("src.ai.advice.write_ai_error_log")
+    def test_request_ai_advice_does_not_fall_back_to_api_when_cli_command_missing(
+        self,
+        error_log_mock: object,
+        api_request_mock: object,
+    ) -> None:
+        with patch.dict(os.environ, {"AI_API_USAGE_ALLOWED": "true"}, clear=False):
+            result, provider_used = request_ai_advice(
+                provider="cli",
+                api_key="sk-test",
+                model="gpt-5.3-codex",
+                cli_command="",
+                timeout_sec=30,
+                retry_count=2,
+                base_dir=BASE_DIR,
+                machine_payload={"bias": "long"},
+                qualitative_payload={"note": "sample"},
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(provider_used, "cli_failed")
+        api_request_mock.assert_not_called()
+        error_log_mock.assert_called_once()
+
+    @patch("src.ai.advice._request_ai_advice_via_api")
+    @patch("src.ai.advice.write_ai_error_log")
+    def test_request_ai_advice_blocks_api_when_usage_not_allowed(
+        self,
+        error_log_mock: object,
+        api_request_mock: object,
+    ) -> None:
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-env"}, clear=False):
+            result, provider_used = request_ai_advice(
+                provider="api",
+                api_key="sk-test",
+                model="gpt-5.3-codex",
+                cli_command="/tmp/codex_cli_wrapper.py",
+                timeout_sec=30,
+                retry_count=2,
+                base_dir=BASE_DIR,
+                machine_payload={"bias": "long"},
+                qualitative_payload={"note": "sample"},
+            )
+
+        self.assertIsNone(result)
+        self.assertEqual(provider_used, "api_disabled")
+        api_request_mock.assert_not_called()
+        error_log_mock.assert_called_once()
+
+    @patch("src.ai.advice._request_ai_advice_via_api")
+    @patch("src.ai.advice.write_ai_error_log")
+    def test_request_ai_advice_reaches_api_only_when_usage_allowed(
+        self,
         error_log_mock: object,
         api_request_mock: object,
     ) -> None:
@@ -152,22 +228,24 @@ class AiCliRetryTest(TestCase):
             "next_condition": "wait",
         }
 
-        result, provider_used = request_ai_advice(
-            provider="cli",
-            api_key="sk-test",
-            model="gpt-5.3-codex",
-            cli_command="/tmp/codex_cli_wrapper.py",
-            timeout_sec=30,
-            retry_count=2,
-            base_dir=BASE_DIR,
-            machine_payload={"bias": "long"},
-            qualitative_payload={"note": "sample"},
-        )
+        with patch.dict(os.environ, {"AI_API_USAGE_ALLOWED": "true", "OPENAI_API_KEY": "sk-env"}, clear=False):
+            result, provider_used = request_ai_advice(
+                provider="api",
+                api_key="sk-test",
+                model="gpt-5.3-codex",
+                cli_command="/tmp/codex_cli_wrapper.py",
+                timeout_sec=30,
+                retry_count=2,
+                base_dir=BASE_DIR,
+                machine_payload={"bias": "long"},
+                qualitative_payload={"note": "sample"},
+            )
 
         self.assertIsNotNone(result)
         self.assertEqual(result["decision"], "WAIT")
         self.assertEqual(provider_used, "api")
-        error_log_mock.assert_called_once()
+        api_request_mock.assert_called_once()
+        error_log_mock.assert_not_called()
 
     def test_build_summary_body_provider_label_is_preserved(self) -> None:
         result, provider_used = build_summary_body(

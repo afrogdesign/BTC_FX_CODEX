@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,15 @@ from src.presentation.sanitize import (
 )
 
 AI_AUDIT_VARIANT = "notification_audit_v1"
+_TRUE_LIKE = {"1", "true", "yes", "on"}
+
+
+def _is_true_like(value: Any) -> bool:
+    return str(value or "").strip().lower() in _TRUE_LIKE
+
+
+def _api_usage_allowed() -> bool:
+    return _is_true_like(os.environ.get("AI_API_USAGE_ALLOWED", ""))
 
 
 def _load_prompt(base_dir: Path) -> str:
@@ -113,6 +123,8 @@ def _request_ai_advice_via_api(
     machine_payload: dict[str, Any],
     qualitative_payload: dict[str, Any],
 ) -> dict[str, Any] | None:
+    if not _api_usage_allowed():
+        return None
     if not api_key:
         return None
 
@@ -181,16 +193,7 @@ def request_ai_advice(
     if provider_name == "cli":
         if not str(cli_command).strip():
             write_ai_error_log(base_dir, "ai_advice_error", "provider=cli\nreason=AI_ADVICE_CLI_COMMAND is empty")
-            api_result = _request_ai_advice_via_api(
-                api_key=api_key,
-                model=model,
-                timeout_sec=timeout_sec,
-                retry_count=retry_count,
-                base_dir=base_dir,
-                machine_payload=machine_payload,
-                qualitative_payload=qualitative_payload,
-            )
-            return api_result, "api" if api_result is not None else "cli"
+            return None, "cli_failed"
         last_error: str | None = None
         for attempt in range(1, max(1, retry_count) + 1):
             try:
@@ -225,17 +228,11 @@ def request_ai_advice(
                     ]
                 ),
             )
-        api_result = _request_ai_advice_via_api(
-            api_key=api_key,
-            model=model,
-            timeout_sec=timeout_sec,
-            retry_count=retry_count,
-            base_dir=base_dir,
-            machine_payload=machine_payload,
-            qualitative_payload=qualitative_payload,
-        )
-        return api_result, "api" if api_result is not None else "cli"
+        return None, "cli_failed"
 
+    if provider_name == "api" and not _api_usage_allowed():
+        write_ai_error_log(base_dir, "ai_advice_error", "provider=api\nreason=AI_API_USAGE_ALLOWED is not enabled")
+        return None, "api_disabled"
     api_result = _request_ai_advice_via_api(
         api_key=api_key,
         model=model,
@@ -245,4 +242,4 @@ def request_ai_advice(
         machine_payload=machine_payload,
         qualitative_payload=qualitative_payload,
     )
-    return api_result, "api" if api_result is not None else provider_name
+    return api_result, "api" if api_result is not None else "api_failed"

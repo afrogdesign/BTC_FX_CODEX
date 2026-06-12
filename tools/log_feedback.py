@@ -90,6 +90,7 @@ _ENTRY_RECHECK_REASONS = (
     "entry_recheck_required_trend_flip_up",
     "price_distance_missing",
 )
+_TRUE_LIKE = {"1", "true", "yes", "on"}
 
 REPORT_FAMILY_SPECS = [
     {
@@ -2760,7 +2761,9 @@ def _request_ai_post_review_via_api(
     signal_id: str,
     payload: dict[str, Any],
 ) -> dict[str, str] | None:
-    if not bool(getattr(cfg, "AI_POST_REVIEW_API_FALLBACK_ENABLED", True)):
+    if not _is_true_like(getattr(cfg, "AI_POST_REVIEW_API_FALLBACK_ENABLED", False)):
+        return None
+    if not _api_usage_allowed(cfg):
         return None
     api_key = str(getattr(cfg, "OPENAI_API_KEY", "")).strip()
     if not api_key:
@@ -2923,6 +2926,16 @@ def _effective_codex_cli_model(requested_model: str) -> str:
     if "codex" in requested.lower():
         return requested
     return os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip() or "gpt-5.3-codex"
+
+
+def _is_true_like(value: Any) -> bool:
+    return str(value or "").strip().lower() in _TRUE_LIKE
+
+
+def _api_usage_allowed(cfg: Any | None = None) -> bool:
+    if cfg is not None and hasattr(cfg, "AI_API_USAGE_ALLOWED"):
+        return _is_true_like(getattr(cfg, "AI_API_USAGE_ALLOWED"))
+    return _is_true_like(os.environ.get("AI_API_USAGE_ALLOWED", ""))
 
 
 def _resolve_ai_cli_command(base_dir: Path, cfg: Any) -> tuple[str, bool]:
