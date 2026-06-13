@@ -81,6 +81,17 @@ Purpose: report-only human manual trading support preview.
 - It does not fetch, rebuild, send, notify, trade, or approve anything.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
 
+### Actionability Shadow Ledger Opt-in
+
+- The default `write-latest-manual-delivery-local-flow --output-dir <path>` command remains unchanged when no additional Actionability shadow flag is supplied.
+- Add `--write-actionability-shadow-decision` when you want the same local-flow command to append one evaluation-only Actionability shadow ledger row from the generated `manual-delivery-input.json`.
+- The default output path is `logs/csv/active_plan_shadow_decisions.csv`.
+- Optional flags are `--actionability-shadow-output-csv <path>`, `--actionability-shadow-final-outcome <value>`, and `--actionability-shadow-notes <text>`.
+- Example:
+  `./.venv312/bin/python tools/log_feedback.py write-latest-manual-delivery-local-flow --output-dir local/manual_delivery --write-actionability-shadow-decision --actionability-shadow-final-outcome pending`
+- Keep the same boundary: report-only, not FORMAL_GO, no automatic order, no paper_positions.csv integration, and no send/notify/fetch/rebuild/trade/approve behavior.
+- Generated CSV output must not be committed unless explicitly approved.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.
@@ -96,5 +107,6 @@ Purpose: report-only human manual trading support preview.
 ## Operational Notes
 
 - Generated preview files and generated reports must not be committed unless explicitly approved.
+- The Actionability shadow ledger is evaluation-only and must remain separate from `paper_positions.csv`.
 - This workflow does not send email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, or any external notification.
 - This workflow does not run daily-sync, report hub generation, runtime, deploy, trading, API keys, private endpoints, or `paper_positions.csv` changes.
