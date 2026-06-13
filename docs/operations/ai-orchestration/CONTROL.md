@@ -1,6 +1,6 @@
 # AI Orchestration Control
 
-last_updated: 2026-06-13
+last_updated: 2026-06-14
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
 current_commit: b040ddb096076390698925faa50cb7c4f4818acf
@@ -14,6 +14,10 @@ project_key: `BTCFX`
 BTCFX-20260614-139-ACTIONABILITY-SHADOW-SUMMARY-V1 is ChatGPT-reviewed and accepted at `b040ddb096076390698925faa50cb7c4f4818acf`; this sync records the reviewed Actionability shadow summary baseline on top of the report-only `summarize-actionability-shadow-decisions` CLI, the manual-preview runbook documentation, the test coverage, and the corrected `TASK_LEDGER.md` validation metadata.
 
 BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC records the reviewed metadata sync for that accepted baseline.
+
+BTCFX-20260614-141-ACTIONABILITY-SHADOW-SUMMARY-E2E-REVIEW-FIX3 passed as REVIEW_ONLY with no commit, no push, and a final clean working tree after removing the three untracked generated report Markdown files. The tmpdir-only E2E used an explicit tmpdir `detail_report.md`, generated an Actionability shadow CSV, summarized it with `summarize-actionability-shadow-decisions`, verified total row count `1` plus the required summary sections, and confirmed `paper_positions.csv` did not appear in the shadow CSV or summary output.
+
+BTCFX-20260614-142-ACTIONABILITY-SHADOW-SUMMARY-E2E-METADATA-SYNC records the reviewed metadata sync for that passed REVIEW_ONLY E2E review.
 
 BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 
