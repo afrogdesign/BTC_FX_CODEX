@@ -3,7 +3,7 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: d7a0bc76a6847e0e477c1f1180829eea9178ee57
+current_commit: 466f47a3b8af7e3ed59d58f03fd433a619daaf41
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,7 +11,7 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260613-131-ACTIONABILITY-SHADOW-FROM-JSON-V1 is ChatGPT-reviewed and accepted at `d7a0bc76a6847e0e477c1f1180829eea9178ee57`; this sync records the reviewed Actionability shadow JSON writer baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, and the separate Actionability shadow ledger writer.
+BTCFX-20260613-133-ACTIONABILITY-SHADOW-LOCAL-FLOW-OPTIN is ChatGPT-reviewed and accepted at `466f47a3b8af7e3ed59d58f03fd433a619daaf41`; this sync records the reviewed Actionability shadow local-flow opt-in baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, the separate Actionability shadow ledger writer, and the JSON-driven shadow writer.
 
 BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 
@@ -25,9 +25,11 @@ BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 added a separate Actionability
 
 BTCFX-20260613-131-ACTIONABILITY-SHADOW-FROM-JSON-V1 added a JSON-driven Actionability shadow decision writer that appends one row from `manual-delivery-input.json` without recomputing actionability or touching `paper_positions.csv`.
 
+BTCFX-20260613-133-ACTIONABILITY-SHADOW-LOCAL-FLOW-OPTIN added an opt-in shadow ledger append path to the one-command local manual-delivery flow. Default local-flow behavior remains unchanged, and the opt-in path appends one row from the generated `manual-delivery-input.json`.
+
 BTCFX-20260611-RESUME-FINAL-SYNC finalized the reviewed Ver03-v3 resume protocol metadata after BTCFX-20260610-099-SYNC-REVIEW passed.
 
-The reviewed baseline now includes the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, deterministic Actionability Gate v1, runtime email Actionability fields, Japanese human-readable Actionability labels, the separate Actionability shadow decision ledger writer, and the JSON-driven shadow decision writer. CLI provider mode must not silently fall back to OpenAI API; API usage requires explicit `AI_API_USAGE_ALLOWED`; CLI failure returns `cli_failed`; API disabled returns `api_disabled`; post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`; Actionability output remains report-only triage, not FORMAL_GO, and no automatic order; both shadow writers remain isolated from `paper_positions.csv` and trading behavior; the JSON-driven writer appends from `manual-delivery-input.json` without recomputing actionability; and the reviewed manual-preview runbook remains at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
+The reviewed baseline now includes the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, deterministic Actionability Gate v1, runtime email Actionability fields, Japanese human-readable Actionability labels, the separate Actionability shadow decision ledger writer, the JSON-driven shadow decision writer, and the local-flow opt-in shadow append path. CLI provider mode must not silently fall back to OpenAI API; API usage requires explicit `AI_API_USAGE_ALLOWED`; CLI failure returns `cli_failed`; API disabled returns `api_disabled`; post-review API fallback is gated by `AI_POST_REVIEW_API_FALLBACK_ENABLED`; Actionability output remains report-only triage, not FORMAL_GO, and no automatic order; all shadow writers remain isolated from `paper_positions.csv` and trading behavior; the JSON-driven writer appends from `manual-delivery-input.json` without recomputing actionability; the one-command local-flow default behavior remains unchanged unless the opt-in flag is supplied; and the reviewed manual-preview runbook remains at `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`.
 
 Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration, no clipboard/address-book integration, no paper_positions.csv integration, and no runtime/deploy/trading/API key/private endpoint changes.
 
@@ -102,9 +104,9 @@ Report/daily-sync/runtime/deploy/trading were not run.
 
 BTCFX-20260610-087 preserves the approved future boundary: public 15m OHLCV fetch-to-local diagnostic artifact, intraperiod outcome builder I/O, Markdown report generation, report-only daily-sync/report hub integration boundary, and human review gates before any runtime/deploy/trading work.
 
-The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard plus CLI-only API fallback kill switch plus Actionability Gate v1 email/manual-delivery surfacing plus the separate Actionability shadow ledger plus the JSON-driven shadow writer and their reviewed-baseline metadata sync.
+The active deliverable is the reviewed local manual-delivery flow baseline plus source freshness guard plus CLI-only API fallback kill switch plus Actionability Gate v1 email/manual-delivery surfacing plus the separate Actionability shadow ledger plus the JSON-driven shadow writer plus the local-flow opt-in shadow append path and their reviewed-baseline metadata sync.
 
-The next recommended task is STOP: choose the next product step after the reviewed Actionability shadow JSON writer baseline.
+The next recommended task is STOP: choose the next product step after the reviewed Actionability shadow local-flow opt-in baseline.
 
 MBP2020 has a completed frozen ver02.6-v2 comparison runner migration.
 
