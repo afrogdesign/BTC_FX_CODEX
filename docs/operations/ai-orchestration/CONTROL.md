@@ -3,7 +3,7 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: ed5c91038c589576f4ddd359d61b7a6905e0eac5
+current_commit: b040ddb096076390698925faa50cb7c4f4818acf
 note: `current_commit` is the latest ChatGPT-reviewed baseline and may intentionally lag the actual branch HEAD or the latest pushed commit by one or more tasks. That mismatch alone is not a BLOCK condition.
 project_key: `BTCFX`
 
@@ -11,7 +11,9 @@ project_key: `BTCFX`
 
 ## 1. Current objective
 
-BTCFX-20260613-135-ACTIONABILITY-SHADOW-RUNBOOK is ChatGPT-reviewed and accepted at `ed5c91038c589576f4ddd359d61b7a6905e0eac5`; this sync records the reviewed Actionability shadow runbook baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, the separate Actionability shadow ledger writer, the JSON-driven shadow writer, and the local-flow opt-in shadow append path.
+BTCFX-20260614-139-ACTIONABILITY-SHADOW-SUMMARY-V1 is ChatGPT-reviewed and accepted at `b040ddb096076390698925faa50cb7c4f4818acf`; this sync records the reviewed Actionability shadow summary baseline on top of the report-only `summarize-actionability-shadow-decisions` CLI, the manual-preview runbook documentation, the test coverage, and the corrected `TASK_LEDGER.md` validation metadata.
+
+BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC records the reviewed metadata sync for that accepted baseline.
 
 BTCFX-20260612-121-CLI-ONLY-AUTO-API-FALLBACK-KILL-SWITCH-REVIEW-DIRTY-ALLOWED passed as REVIEW_ONLY with no commit and no new dirty files.
 

@@ -3,12 +3,14 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: ed5c91038c589576f4ddd359d61b7a6905e0eac5
-latest_reviewed_baseline: ed5c91038c589576f4ddd359d61b7a6905e0eac5
+current_commit: b040ddb096076390698925faa50cb7c4f4818acf
+latest_reviewed_baseline: b040ddb096076390698925faa50cb7c4f4818acf
 
 ## Objective
 
-BTCFX-20260613-135-ACTIONABILITY-SHADOW-RUNBOOK is accepted at `ed5c91038c589576f4ddd359d61b7a6905e0eac5`; this handoff records the reviewed Actionability shadow runbook baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, the separate Actionability shadow ledger writer, the JSON-driven shadow writer, and the local-flow opt-in shadow append path.
+BTCFX-20260614-139-ACTIONABILITY-SHADOW-SUMMARY-V1 is accepted at `b040ddb096076390698925faa50cb7c4f4818acf`; this handoff records the reviewed Actionability shadow summary baseline on top of the report-only `summarize-actionability-shadow-decisions` CLI, the manual-preview runbook documentation, the test coverage, and the corrected `TASK_LEDGER.md` validation metadata.
+
+BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC records the reviewed metadata sync for that accepted baseline.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -50,6 +52,8 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260613-133-ACTIONABILITY-SHADOW-LOCAL-FLOW-OPTIN is accepted at `466f47a3b8af7e3ed59d58f03fd433a619daaf41`.
 - BTCFX-20260613-135-ACTIONABILITY-SHADOW-RUNBOOK is accepted at `ed5c91038c589576f4ddd359d61b7a6905e0eac5`.
 - BTCFX-20260613-137-ACTIONABILITY-SHADOW-LOCAL-FLOW-E2E-REVIEW passed as REVIEW_ONLY with no commit, no push, and no repo file changes.
+- BTCFX-20260614-139-ACTIONABILITY-SHADOW-SUMMARY-V1 is accepted at `b040ddb096076390698925faa50cb7c4f4818acf`.
+- BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC is the metadata sync for the accepted Actionability shadow summary baseline.
 - `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
