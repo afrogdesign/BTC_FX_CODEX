@@ -3,12 +3,12 @@
 last_updated: 2026-06-13
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: 466f47a3b8af7e3ed59d58f03fd433a619daaf41
-latest_reviewed_baseline: 466f47a3b8af7e3ed59d58f03fd433a619daaf41
+current_commit: ed5c91038c589576f4ddd359d61b7a6905e0eac5
+latest_reviewed_baseline: ed5c91038c589576f4ddd359d61b7a6905e0eac5
 
 ## Objective
 
-BTCFX-20260613-133-ACTIONABILITY-SHADOW-LOCAL-FLOW-OPTIN is accepted at `466f47a3b8af7e3ed59d58f03fd433a619daaf41`; this handoff records the reviewed Actionability shadow local-flow opt-in baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, the separate Actionability shadow ledger writer, and the JSON-driven shadow writer.
+BTCFX-20260613-135-ACTIONABILITY-SHADOW-RUNBOOK is accepted at `ed5c91038c589576f4ddd359d61b7a6905e0eac5`; this handoff records the reviewed Actionability shadow runbook baseline on top of the one-command local manual-delivery flow, source freshness guard, CLI-only API fallback kill switch, Actionability Gate baseline, the separate Actionability shadow ledger writer, the JSON-driven shadow writer, and the local-flow opt-in shadow append path.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -48,6 +48,7 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260613-129-ACTIONABILITY-SHADOW-LEDGER-V1 is accepted at `2a549b139c4acb4ebd84748922de7b077611c510`.
 - BTCFX-20260613-131-ACTIONABILITY-SHADOW-FROM-JSON-V1 is accepted at `d7a0bc76a6847e0e477c1f1180829eea9178ee57`.
 - BTCFX-20260613-133-ACTIONABILITY-SHADOW-LOCAL-FLOW-OPTIN is accepted at `466f47a3b8af7e3ed59d58f03fd433a619daaf41`.
+- BTCFX-20260613-135-ACTIONABILITY-SHADOW-RUNBOOK is accepted at `ed5c91038c589576f4ddd359d61b7a6905e0eac5`.
 - `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
@@ -61,9 +62,10 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - The separate Actionability shadow decision ledger writer is present and remains isolated from `paper_positions.csv` and trading behavior.
 - The JSON-driven Actionability shadow decision writer appends one row from `manual-delivery-input.json`, does not recompute actionability, and remains isolated from `paper_positions.csv` and trading behavior.
 - The one-command local manual-delivery flow has a reviewed opt-in shadow append path; default local-flow stdout and behavior remain unchanged without the flag, and the opt-in path remains isolated from `paper_positions.csv` and trading behavior.
+- The manual-preview runbook now documents the local-flow Actionability shadow opt-in path; generated shadow CSV output must not be committed unless explicitly approved, and the shadow ledger remains evaluation-only and separate from `paper_positions.csv`.
 - No fetch / rebuild / notify / trade / approve behavior is involved.
 - `docs/operations/manual-preview/ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md` captures the concise manual-preview and manual-delivery workflow, including `write-latest-manual-delivery-local-flow`, `resolve-latest-manual-delivery-source-files`, `write-latest-manual-delivery-input-json`, `write-latest-active-plan-manual-delivery-files-from-json`, `write-latest-manual-delivery-local-inbox`, `format-active-plan-pending-coverage-caveat`, `format-active-plan-pending-coverage-caveat-from-csv`, `write-latest-active-plan-manual-delivery-package`, `write-latest-active-plan-manual-delivery-files`, and `write-latest-active-plan-manual-delivery-files-from-json`.
-- `CONTROL.md` now records the reviewed Actionability shadow local-flow opt-in baseline and defers the next step to STOP: choose the next product step after the reviewed Actionability shadow local-flow opt-in baseline.
+- `CONTROL.md` now records the reviewed Actionability shadow runbook baseline and defers the next step to STOP: choose the next product step after the reviewed Actionability shadow runbook baseline.
 - Repo-relative paths such as `AGENTS.md` and `docs/operations/ai-orchestration/RESUME.md` are valid after `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 
 ## Constraints
@@ -81,5 +83,5 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 ## Next task
 
 ```text
-STOP: Choose the next product step after the reviewed Actionability shadow local-flow opt-in baseline.
+STOP: Choose the next product step after the reviewed Actionability shadow runbook baseline.
 ```
