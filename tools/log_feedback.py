@@ -10456,6 +10456,130 @@ def _run_write_actionability_shadow_decision_from_json_command(
     sys.stdout.write(f"{output_csv}\n")
 
 
+def _normalize_actionability_shadow_summary_value(value: Any) -> str:
+    normalized = str(value).strip() if value is not None else ""
+    return normalized if normalized else "UNKNOWN"
+
+
+def _load_actionability_shadow_summary_rows(
+    *,
+    input_csv: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> list[dict[str, str]]:
+    if input_csv.name == "paper_positions.csv":
+        message = "input_csv must not be paper_positions.csv"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not input_csv.exists():
+        message = f"input_csv does not exist: {input_csv}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    rows, fieldnames = _load_csv_rows_with_fieldnames(input_csv)
+    missing_columns = [column for column in ACTIONABILITY_SHADOW_DECISION_HEADER if column not in fieldnames]
+    if missing_columns:
+        message = "input_csv missing required columns: " + ", ".join(missing_columns)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    normalized_rows: list[dict[str, str]] = []
+    for row in rows:
+        normalized_rows.append(
+            {column: str(row.get(column, "")).strip() if row.get(column) is not None else "" for column in ACTIONABILITY_SHADOW_DECISION_HEADER}
+        )
+    return normalized_rows
+
+
+def _actionability_shadow_summary_section_lines(
+    *,
+    section_title: str,
+    rows: list[dict[str, str]],
+    field_name: str,
+) -> list[str]:
+    counts = Counter(_normalize_actionability_shadow_summary_value(row.get(field_name, "")) for row in rows)
+    lines = [f"## {section_title}", ""]
+    if counts:
+        for label in sorted(counts):
+            lines.append(f"- {label}: {counts[label]}件")
+    else:
+        lines.append("- none")
+    lines.append("")
+    return lines
+
+
+def build_actionability_shadow_decision_summary(
+    *,
+    input_csv: Path,
+    output_md: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    rows = _load_actionability_shadow_summary_rows(input_csv=input_csv, parser=parser)
+    lines = [
+        "# Actionability Shadow Decision Summary",
+        "",
+        "- safety boundary: report-only, not FORMAL_GO, no automatic order, human decides manually",
+        f"- total row count: {len(rows)}",
+        "",
+    ]
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by actionability_label",
+            rows=rows,
+            field_name="actionability_label",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by human_action",
+            rows=rows,
+            field_name="human_action",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by active_plan_label",
+            rows=rows,
+            field_name="active_plan_label",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by final_outcome",
+            rows=rows,
+            field_name="final_outcome",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by source_readiness",
+            rows=rows,
+            field_name="source_readiness",
+        )
+    )
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _run_summarize_actionability_shadow_decisions_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    report = build_actionability_shadow_decision_summary(
+        input_csv=Path(args.input_csv),
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        parser=parser,
+    )
+    if output_md_arg:
+        sys.stdout.write(f"actionability_shadow_summary_output_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(report)
+
+
 def _load_manual_delivery_input_json_if_exists(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -13478,6 +13602,10 @@ def _build_parser() -> argparse.ArgumentParser:
     actionability_shadow_from_json_parser.add_argument("--final-outcome", default="pending")
     actionability_shadow_from_json_parser.add_argument("--notes", default="")
 
+    actionability_shadow_summary_parser = subparsers.add_parser("summarize-actionability-shadow-decisions")
+    actionability_shadow_summary_parser.add_argument("--input-csv", required=True)
+    actionability_shadow_summary_parser.add_argument("--output-md")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -13935,6 +14063,10 @@ def main() -> None:
 
     if args.command == "write-actionability-shadow-decision-from-json":
         _run_write_actionability_shadow_decision_from_json_command(args, parser)
+        return
+
+    if args.command == "summarize-actionability-shadow-decisions":
+        _run_summarize_actionability_shadow_decisions_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

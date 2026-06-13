@@ -92,6 +92,14 @@ Purpose: report-only human manual trading support preview.
 - Keep the same boundary: report-only, not FORMAL_GO, no automatic order, no paper_positions.csv integration, and no send/notify/fetch/rebuild/trade/approve behavior.
 - Generated CSV output must not be committed unless explicitly approved.
 
+## Actionability Shadow Decision Summary
+
+- Use `summarize-actionability-shadow-decisions --input-csv <path>` to review a shadow ledger CSV without recomputing actionability.
+- Add `--output-md <path>` when you want the same Markdown written to a file and a compact `actionability_shadow_summary_output_md=<path>` line on stdout.
+- The summary includes the title, safety boundary, total row count, and counts by `actionability_label`, `human_action`, `active_plan_label`, `final_outcome`, and `source_readiness`.
+- Missing or blank values are rendered deterministically as `UNKNOWN`.
+- The command reads only the shadow ledger CSV schema and does not touch `paper_positions.csv`.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.
