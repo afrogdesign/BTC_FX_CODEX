@@ -3,8 +3,8 @@
 last_updated: 2026-06-14
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
-current_commit: b040ddb096076390698925faa50cb7c4f4818acf
-latest_reviewed_baseline: b040ddb096076390698925faa50cb7c4f4818acf
+current_commit: 3ae7ad462a89bda978ab7d774114e67c366e25a6
+latest_reviewed_baseline: 3ae7ad462a89bda978ab7d774114e67c366e25a6
 
 ## Objective
 
@@ -15,6 +15,10 @@ BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC records the review
 BTCFX-20260614-141-ACTIONABILITY-SHADOW-SUMMARY-E2E-REVIEW-FIX3 passed as REVIEW_ONLY with no commit, no push, and a final clean working tree after removing the three untracked generated report Markdown files. The tmpdir-only E2E used an explicit tmpdir `detail_report.md`, generated an Actionability shadow CSV, summarized it with `summarize-actionability-shadow-decisions`, verified total row count `1` plus the required summary sections, and confirmed `paper_positions.csv` did not appear in the shadow CSV or summary output.
 
 BTCFX-20260614-142-ACTIONABILITY-SHADOW-SUMMARY-E2E-METADATA-SYNC records the reviewed metadata sync for that passed REVIEW_ONLY E2E review.
+
+BTCFX-20260614-143-ACTIONABILITY-SHADOW-OPERATOR-REVIEW-PROTOCOL is accepted at `3ae7ad462a89bda978ab7d774114e67c366e25a6`; the reviewed runbook now includes the manual report-only Actionability shadow operator review protocol for reading summary output and recording human review outcomes without touching runtime, trading, notification, or paper position behavior.
+
+BTCFX-20260614-144-ACTIONABILITY-SHADOW-OPERATOR-REVIEW-BASELINE-SYNC records the reviewed metadata sync for that accepted operator review protocol baseline.
 
 This handoff records the reviewed baseline after BTCFX-20260610-098, BTCFX-20260610-098-REVIEW, BTCFX-20260610-099-SYNC, BTCFX-20260610-099-SYNC-REVIEW, BTCFX-20260611-RESUME-FINAL-SYNC, the resume protocol branch checkpoint, and the final metadata sync.
 The stable restart entrypoints are `docs/operations/ai-orchestration/RESUME.md` and `docs/operations/ai-orchestration/INITIAL_PROMPT.md`.
@@ -60,6 +64,8 @@ Safety boundary remains report-only, not FORMAL_GO, no automatic order, ACTIVE_*
 - BTCFX-20260614-140-ACTIONABILITY-SHADOW-SUMMARY-BASELINE-SYNC is the metadata sync for the accepted Actionability shadow summary baseline.
 - BTCFX-20260614-141-ACTIONABILITY-SHADOW-SUMMARY-E2E-REVIEW-FIX3 passed as REVIEW_ONLY with a final clean working tree.
 - BTCFX-20260614-142-ACTIONABILITY-SHADOW-SUMMARY-E2E-METADATA-SYNC records the reviewed metadata sync for that passed E2E review.
+- BTCFX-20260614-143-ACTIONABILITY-SHADOW-OPERATOR-REVIEW-PROTOCOL is accepted at `3ae7ad462a89bda978ab7d774114e67c366e25a6`.
+- BTCFX-20260614-144-ACTIONABILITY-SHADOW-OPERATOR-REVIEW-BASELINE-SYNC records the reviewed metadata sync for that accepted operator review protocol baseline.
 - `write-latest-manual-delivery-local-flow` supports `--source-stale-after-hours`.
 - `resolve-latest-manual-delivery-source-files` and `write-latest-manual-delivery-input-json` also support `--source-stale-after-hours`.
 - Freshness is based only on local filesystem mtimes.
