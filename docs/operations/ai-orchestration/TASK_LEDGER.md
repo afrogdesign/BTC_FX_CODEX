@@ -1,5 +1,13 @@
 # AI Task Ledger
 
+## Lightweight policy
+
+- Existing historical rows are preserved as-is.
+- Future ledger entries should stay lightweight and human-facing.
+- `TASK_LEDGER.md` is not the source of truth for commit history; git/GitHub and compact reports are the commit evidence.
+- ACCEPT-only, status-only, remote-check-only, compact-report regeneration, and commit-hash backfill tasks should not be added as normal ledger entries.
+- Future entries should avoid duplicating long task history already available in git/GitHub.
+
 | Work ID | Date | Status | Summary | Changed files | Validation | Commit | Push |
 |---|---:|---|---|---|---|---|---|
 | BTCFX-20260608-047 | 2026-06-08 | done | Started Ver03-v2 branch | `運用資料/計画/Ver03-v2_開始メモ_20260608.md`, `運用資料/NEXT_TASK.md`, `運用資料/作業ログ/BTCFX-20260608-047_branch_ver03_v2.md` | `git diff --check` pass | `6ec1da1` | yes |
