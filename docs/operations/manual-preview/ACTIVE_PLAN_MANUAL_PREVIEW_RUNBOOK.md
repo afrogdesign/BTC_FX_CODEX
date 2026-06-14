@@ -100,6 +100,16 @@ Purpose: report-only human manual trading support preview.
 - Missing or blank values are rendered deterministically as `UNKNOWN`.
 - The command reads only the shadow ledger CSV schema and does not touch `paper_positions.csv`.
 
+## Actionability shadow operator review protocol
+
+- Use the already documented tmpdir/local-flow path to generate or locate the Actionability shadow CSV.
+- Run `summarize-actionability-shadow-decisions --input-csv <path>` on that shadow CSV.
+- Review the counts by `actionability_label`, `human_action`, `active_plan_label`, `final_outcome`, and `source_readiness`.
+- Treat `ACTIVE_*` as operator guidance only, not FORMAL_GO.
+- Record human observations only in `notes` and `final_outcome` in the shadow/evaluation artifact, not in `paper_positions.csv`.
+- Stop review if `source_readiness` is stale/missing or if the summary implies any automatic order/action.
+- Safety boundary: `report-only, not FORMAL_GO, no automatic order, human decides manually`.
+
 ## Pending Coverage Caveat Diagnostic
 
 - Use `format-active-plan-pending-coverage-caveat --total-outcome-rows <n> --resolved-rows <n> --pending-rows <n>` to generate a deterministic one-line caveat.
