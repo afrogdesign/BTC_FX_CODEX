@@ -47,6 +47,11 @@ Do not rely only on chat history.
 
 ## AI orchestration metadata
 
+- Keep orchestration metadata lightweight: do not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md` after every normal task.
+- `CONTROL.md` should track current state, current objective, safety boundary, validation rules, and next action. It is not a full task history.
+- `CURRENT_HANDOFF.md` is for active handoff conditions only: partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
+- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history. Git/GitHub and the compact report are the commit evidence.
+- Logical separation stays in place without a physical repo split: AI orchestration operations live under `docs/operations/ai-orchestration/`, while project source lives under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 - `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
 - `current_commit` は実際の branch HEAD より意図的に遅れることがある。
 - branch HEAD と `current_commit` の不一致だけでは `BLOCKED` にはしない。

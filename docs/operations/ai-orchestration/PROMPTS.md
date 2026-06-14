@@ -7,6 +7,11 @@
 - `NORMAL_CODEX`: use for fixed-scope edit/test/commit/push work.
 - `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
 - `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
+- Keep orchestration metadata lightweight: normal tasks should not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md`.
+- `CONTROL.md` should describe the current state, current objective, safety boundary, validation rules, and next action; it should not become a full task history.
+- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history; git/GitHub and compact reports remain the commit evidence.
+- `CURRENT_HANDOFF.md` should be updated only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
+- Keep the logical separation intact without physically splitting the repo: orchestration operations stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 
 ## LOW_COST_RESUME
 

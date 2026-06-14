@@ -30,6 +30,8 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 - A `current_commit` / branch HEAD lag alone is not a BLOCK condition.
 - The repo正本 overrides chat history.
 - The current next task must come from `CONTROL.md`, not chat memory.
+- `CONTROL.md` should stay lightweight: current state, current objective, safety boundary, validation rules, and next action only, not a full task history.
+- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history; git/GitHub and the compact report are the commit evidence.
 
 ## Low-Cost Modes
 
@@ -38,6 +40,9 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 - `NORMAL_CODEX`: use for fixed-scope edit/test/commit/push work.
 - `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
 - `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
+- Keep orchestration metadata lightweight: normal tasks should not trigger `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md` updates.
+- Update `CURRENT_HANDOFF.md` only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
+- Keep the logical separation intact without a physical split: orchestration docs stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 
 ## Outbox Reporting
 
