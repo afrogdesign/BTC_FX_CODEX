@@ -10952,18 +10952,59 @@ def _manual_delivery_local_flow_manifest_summary_markdown(manifest: dict[str, An
     return "\n".join(lines) + "\n"
 
 
-def build_manual_delivery_local_flow_manifest_summary(
+def _manual_delivery_local_flow_manifest_review_data(
+    manifest: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    existing_artifacts, total_artifacts = _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    return {
+        "schema_version": "manual_delivery_manifest_review.v1",
+        "manifest_schema_version": manifest["schema_version"],
+        "generated_at_jst": manifest["generated_at_jst"],
+        "output_dir": manifest["output_dir"],
+        "review_status": "valid_report_only_manifest",
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "paper_positions_integration": False,
+        "external_notification_integration": False,
+        "safety_boundary": manifest["safety_boundary"],
+        "source_readiness": manifest["source_readiness"],
+        "actionability_label": manifest["actionability_label"],
+        "human_action": manifest["human_action"],
+        "shadow_decision_enabled": bool(manifest["shadow_decision_enabled"]),
+        "artifact_existing_count": existing_artifacts,
+        "artifact_total_count": total_artifacts,
+        "artifact_readiness": "complete" if existing_artifacts == total_artifacts else "incomplete",
+        "actionability_shadow_output_csv": manifest["actionability_shadow_output_csv"],
+        "actionability_shadow_output_csv_exists": bool(manifest["actionability_shadow_output_csv_exists"]),
+        "actionability_shadow_summary_output_md": manifest["actionability_shadow_summary_output_md"],
+        "actionability_shadow_summary_output_md_exists": bool(manifest["actionability_shadow_summary_output_md_exists"]),
+    }
+
+
+def build_manual_delivery_local_flow_manifest_review(
     *,
     manifest_json: Path,
     output_md: Path | None = None,
+    output_json: Path | None = None,
     parser: argparse.ArgumentParser | None = None,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     manifest = _load_manual_delivery_local_flow_manifest_json(manifest_json, parser)
     report = _manual_delivery_local_flow_manifest_summary_markdown(manifest, parser)
+    review_data = _manual_delivery_local_flow_manifest_review_data(manifest, parser)
     if output_md is not None:
         _ensure_parent(output_md)
         output_md.write_text(report, encoding="utf-8")
-    return report
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(review_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report, review_data
 
 
 def _run_summarize_manual_delivery_local_flow_manifest_command(
@@ -10971,13 +11012,20 @@ def _run_summarize_manual_delivery_local_flow_manifest_command(
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
     output_md_arg = getattr(args, "output_md", None)
-    report = build_manual_delivery_local_flow_manifest_summary(
+    output_json_arg = getattr(args, "output_json", None)
+    report, _review_data = build_manual_delivery_local_flow_manifest_review(
         manifest_json=Path(args.manifest_json),
         output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
         parser=parser,
     )
-    if output_md_arg:
+    if output_md_arg and output_json_arg:
         sys.stdout.write(f"manual_delivery_manifest_summary_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_manifest_review_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_manifest_summary_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(report)
     else:
         sys.stdout.write(report)
 
@@ -13898,6 +13946,7 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_manifest_summary_parser = subparsers.add_parser("summarize-manual-delivery-local-flow-manifest")
     manual_delivery_manifest_summary_parser.add_argument("--manifest-json", required=True)
     manual_delivery_manifest_summary_parser.add_argument("--output-md")
+    manual_delivery_manifest_summary_parser.add_argument("--output-json")
 
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
