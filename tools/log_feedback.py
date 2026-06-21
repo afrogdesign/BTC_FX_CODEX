@@ -11299,11 +11299,12 @@ def _manual_delivery_latest_status_json_data(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
-    if latest_status_data != expected_status_data:
-        message = "latest status JSON does not match validated latest status data"
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
+    for key, expected_value in expected_status_data.items():
+        if latest_status_data.get(key) != expected_value:
+            message = f"latest status JSON {key} does not match validated latest status data"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
     return latest_status_data
 
 
@@ -11512,6 +11513,206 @@ def _write_manual_delivery_human_gate_outputs(
         _ensure_parent(output_json)
         output_json.write_text(json.dumps(gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary_text, gate_data
+
+
+def _manual_delivery_local_handoff_status_markdown(
+    *,
+    handoff_dir: Path,
+    package_dir: Path,
+    human_gate_json: Path,
+    human_gate_json_exists: bool,
+    latest_pointer_json: Path,
+    latest_pointer_json_exists: bool,
+    latest_status_md: Path,
+    latest_status_md_exists: bool,
+    latest_status_json: Path,
+    latest_status_json_exists: bool,
+    package_manifest_json: Path,
+    package_manifest_json_exists: bool,
+    package_manifest_summary_md: Path,
+    package_manifest_summary_md_exists: bool,
+    package_manifest_review_json: Path,
+    package_manifest_review_json_exists: bool,
+    status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Local Handoff Status",
+        "",
+        f"- handoff_dir: {handoff_dir}",
+        f"- handoff_status: ready_for_human_review",
+        f"- allowed_next_action: human_review_only",
+        f"- package_dir: {package_dir}",
+        f"- source_readiness: {status_data['source_readiness']}",
+        f"- actionability_label: {status_data['actionability_label']}",
+        f"- human_action: {status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(status_data['shadow_decision_enabled']).lower()}",
+        f"- human_gate_json: {human_gate_json}",
+        f"- human_gate_json_exists: {str(human_gate_json_exists).lower()}",
+        f"- latest_pointer_json: {latest_pointer_json}",
+        f"- latest_pointer_json_exists: {str(latest_pointer_json_exists).lower()}",
+        f"- latest_status_md: {latest_status_md}",
+        f"- latest_status_md_exists: {str(latest_status_md_exists).lower()}",
+        f"- latest_status_json: {latest_status_json}",
+        f"- latest_status_json_exists: {str(latest_status_json_exists).lower()}",
+        f"- package_manifest_json: {package_manifest_json}",
+        f"- package_manifest_json_exists: {str(package_manifest_json_exists).lower()}",
+        f"- package_manifest_summary_md: {package_manifest_summary_md}",
+        f"- package_manifest_summary_md_exists: {str(package_manifest_summary_md_exists).lower()}",
+        f"- package_manifest_review_json: {package_manifest_review_json}",
+        f"- package_manifest_review_json_exists: {str(package_manifest_review_json_exists).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_local_handoff_status_data(
+    *,
+    handoff_dir: Path,
+    package_dir: Path,
+    human_gate_json_exists: bool,
+    latest_pointer_json_exists: bool,
+    latest_status_md_exists: bool,
+    latest_status_json_exists: bool,
+    package_manifest_json_exists: bool,
+    package_manifest_summary_md_exists: bool,
+    package_manifest_review_json_exists: bool,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_local_handoff_status.v1",
+        "handoff_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "handoff_dir": str(handoff_dir),
+        "package_dir": str(package_dir),
+        "human_gate_json_exists": human_gate_json_exists,
+        "latest_pointer_json_exists": latest_pointer_json_exists,
+        "latest_status_md_exists": latest_status_md_exists,
+        "latest_status_json_exists": latest_status_json_exists,
+        "package_manifest_json_exists": package_manifest_json_exists,
+        "package_manifest_summary_md_exists": package_manifest_summary_md_exists,
+        "package_manifest_review_json_exists": package_manifest_review_json_exists,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "human_review_required": True,
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+    }
+
+
+def _write_manual_delivery_local_handoff_status_outputs(
+    *,
+    handoff_dir: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    human_gate_json_path = handoff_dir / "human-gate.json"
+    latest_pointer_json_path = handoff_dir / "latest-pointer.json"
+    latest_status_md_path = handoff_dir / "latest-status.md"
+    latest_status_json_path = handoff_dir / "latest-status.json"
+    package_dir = handoff_dir / "package"
+    package_manifest_json_path = package_dir / "manifest.json"
+    package_manifest_summary_md_path = package_dir / "review" / "manifest-summary.md"
+    package_manifest_review_json_path = package_dir / "review" / "manifest-review.json"
+    for label, path in [
+        ("human_gate_json", human_gate_json_path),
+        ("latest_pointer_json", latest_pointer_json_path),
+        ("latest_status_md", latest_status_md_path),
+        ("latest_status_json", latest_status_json_path),
+        ("package_manifest_json", package_manifest_json_path),
+        ("package_manifest_summary_md", package_manifest_summary_md_path),
+        ("package_manifest_review_json", package_manifest_review_json_path),
+    ]:
+        if not path.exists():
+            message = f"local handoff {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    gate_data = _load_manual_delivery_human_gate_json(human_gate_json_path, parser)
+    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
+    expected_package_dir = handoff_dir / "package"
+    expected_package_summary_md = expected_package_dir / "review" / "manifest-summary.md"
+    expected_package_review_json = expected_package_dir / "review" / "manifest-review.json"
+    for key, expected_value in [
+        ("output_dir", str(expected_package_dir)),
+        ("manifest_json", str(package_manifest_json_path)),
+        ("manifest_summary_md", str(expected_package_summary_md)),
+        ("manifest_review_json", str(expected_package_review_json)),
+    ]:
+        if pointer_data[key] != expected_value:
+            message = f"latest pointer JSON {key} does not match stable handoff layout"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    summary_text, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        parser=parser,
+    )
+    if latest_status_md_path.read_text(encoding="utf-8") != summary_text:
+        message = "latest status markdown does not match validated latest status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    latest_status_data = _load_json_object(latest_status_json_path, parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=status_data,
+        parser=parser,
+    )
+    expected_gate_data = _manual_delivery_human_gate_data(
+        output_dir=handoff_dir,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_status_json=latest_status_json_path,
+        status_data=status_data,
+    )
+    if gate_data != expected_gate_data:
+        message = "human gate JSON does not match validated human gate data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_markdown = _manual_delivery_local_handoff_status_markdown(
+        handoff_dir=handoff_dir,
+        package_dir=expected_package_dir,
+        human_gate_json=human_gate_json_path,
+        human_gate_json_exists=True,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_pointer_json_exists=True,
+        latest_status_md=latest_status_md_path,
+        latest_status_md_exists=True,
+        latest_status_json=latest_status_json_path,
+        latest_status_json_exists=True,
+        package_manifest_json=package_manifest_json_path,
+        package_manifest_json_exists=True,
+        package_manifest_summary_md=package_manifest_summary_md_path,
+        package_manifest_summary_md_exists=True,
+        package_manifest_review_json=package_manifest_review_json_path,
+        package_manifest_review_json_exists=True,
+        status_data=status_data,
+    )
+    handoff_status_data = _manual_delivery_local_handoff_status_data(
+        handoff_dir=handoff_dir,
+        package_dir=expected_package_dir,
+        human_gate_json_exists=True,
+        latest_pointer_json_exists=True,
+        latest_status_md_exists=True,
+        latest_status_json_exists=True,
+        package_manifest_json_exists=True,
+        package_manifest_summary_md_exists=True,
+        package_manifest_review_json_exists=True,
+        status_data=status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_markdown, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(handoff_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_markdown, handoff_status_data
 
 
 def _resolve_manual_delivery_review_package_handoff_paths(
@@ -11837,6 +12038,30 @@ def _run_summarize_manual_delivery_human_gate_command(
         sys.stdout.write(f"manual_delivery_human_gate_json={output_json_arg}\n")
     elif output_md_arg:
         sys.stdout.write(f"manual_delivery_human_gate_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_summarize_manual_delivery_local_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    handoff_dir = Path(args.handoff_dir)
+    summary_text, handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_local_handoff_status_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_local_handoff_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_local_handoff_status_md={output_md_arg}\n")
     elif output_json_arg:
         sys.stdout.write(summary_text)
     else:
@@ -14636,6 +14861,11 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_human_gate_parser.add_argument("--output-md")
     manual_delivery_human_gate_parser.add_argument("--output-json")
 
+    manual_delivery_local_handoff_status_parser = subparsers.add_parser("summarize-manual-delivery-local-handoff")
+    manual_delivery_local_handoff_status_parser.add_argument("--handoff-dir", required=True)
+    manual_delivery_local_handoff_status_parser.add_argument("--output-md")
+    manual_delivery_local_handoff_status_parser.add_argument("--output-json")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -15135,6 +15365,10 @@ def main() -> None:
 
     if args.command == "summarize-manual-delivery-human-gate":
         _run_summarize_manual_delivery_human_gate_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-local-handoff":
+        _run_summarize_manual_delivery_local_handoff_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":

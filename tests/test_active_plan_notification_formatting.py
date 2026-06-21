@@ -1167,6 +1167,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_manual_delivery_local_handoff_status_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-manual-delivery-local-handoff", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_latest_manual_delivery_pointer_status_main_with_argv(
         self,
         argv: list[str],
@@ -1203,6 +1226,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _read_manual_delivery_human_gate(self, output_json: Path) -> dict[str, Any]:
+        return json.loads(output_json.read_text(encoding="utf-8"))
+
+    def _read_manual_delivery_local_handoff_status(self, output_json: Path) -> dict[str, Any]:
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
@@ -4095,6 +4121,188 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("human gate JSON gate_status must be ready_for_human_review", reader_stderr)
             self.assertFalse(summary_md.exists())
             self.assertFalse(summary_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_manual_delivery_local_handoff_cli_supports_default_shadow_and_output_modes(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            default_handoff_dir = base_dir / "default-handoff"
+            shadow_handoff_dir = base_dir / "shadow-handoff"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                default_code, default_stdout, default_stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    ["--handoff-dir", str(default_handoff_dir)],
+                    base_dir=base_dir,
+                )
+                shadow_code, shadow_stdout, shadow_stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(shadow_handoff_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(default_code, 0, msg=default_stderr)
+            self.assertEqual(shadow_code, 0, msg=shadow_stderr)
+
+            default_json = base_dir / "default-handoff-status.json"
+            default_md = base_dir / "default-handoff-status.md"
+            default_reader_code, default_reader_stdout, default_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                ["--handoff-dir", str(default_handoff_dir)],
+                base_dir=base_dir,
+            )
+            self.assertEqual(default_reader_code, 0, msg=default_reader_stderr)
+            self.assertTrue(default_reader_stdout.startswith("# Manual Delivery Local Handoff Status\n"))
+            self.assertIn(f"- handoff_dir: {default_handoff_dir}", default_reader_stdout)
+            self.assertIn("- handoff_status: ready_for_human_review", default_reader_stdout)
+            self.assertIn("- allowed_next_action: human_review_only", default_reader_stdout)
+            self.assertIn(f"- package_dir: {default_handoff_dir / 'package'}", default_reader_stdout)
+            self.assertIn("- human_gate_json_exists: true", default_reader_stdout)
+            self.assertIn("- latest_pointer_json_exists: true", default_reader_stdout)
+            self.assertIn("- latest_status_md_exists: true", default_reader_stdout)
+            self.assertIn("- latest_status_json_exists: true", default_reader_stdout)
+            self.assertIn("- package_manifest_json_exists: true", default_reader_stdout)
+            self.assertIn("- package_manifest_review_json_exists: true", default_reader_stdout)
+            self.assertIn("- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", default_reader_stdout)
+
+            default_reader_code, default_reader_stdout, default_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                [
+                    "--handoff-dir",
+                    str(default_handoff_dir),
+                    "--output-md",
+                    str(default_md),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(default_reader_code, 0, msg=default_reader_stderr)
+            self.assertEqual(default_reader_stdout, f"manual_delivery_local_handoff_status_md={default_md}\n")
+            self.assertTrue(default_md.exists())
+
+            default_reader_code, default_reader_stdout, default_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                [
+                    "--handoff-dir",
+                    str(default_handoff_dir),
+                    "--output-json",
+                    str(default_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(default_reader_code, 0, msg=default_reader_stderr)
+            self.assertTrue(default_reader_stdout.startswith("# Manual Delivery Local Handoff Status\n"))
+            self.assertTrue(default_json.exists())
+            default_handoff_status = self._read_manual_delivery_local_handoff_status(default_json)
+            self.assertEqual(default_handoff_status["schema_version"], "manual_delivery_local_handoff_status.v1")
+            self.assertEqual(default_handoff_status["handoff_status"], "ready_for_human_review")
+            self.assertEqual(default_handoff_status["allowed_next_action"], "human_review_only")
+            self.assertFalse(default_handoff_status["trade_execution_allowed"])
+            self.assertFalse(default_handoff_status["automatic_order_allowed"])
+            self.assertFalse(default_handoff_status["external_notification_allowed"])
+            self.assertFalse(default_handoff_status["paper_positions_integration"])
+            self.assertTrue(default_handoff_status["human_review_required"])
+
+            shadow_md = base_dir / "shadow-handoff-status.md"
+            shadow_json = base_dir / "shadow-handoff-status.json"
+            shadow_reader_code, shadow_reader_stdout, shadow_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                [
+                    "--handoff-dir",
+                    str(shadow_handoff_dir),
+                    "--output-md",
+                    str(shadow_md),
+                    "--output-json",
+                    str(shadow_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(shadow_reader_code, 0, msg=shadow_reader_stderr)
+            self.assertEqual(
+                shadow_reader_stdout,
+                f"manual_delivery_local_handoff_status_md={shadow_md}\nmanual_delivery_local_handoff_status_json={shadow_json}\n",
+            )
+            self.assertTrue(shadow_md.exists())
+            self.assertTrue(shadow_json.exists())
+            shadow_handoff_status = self._read_manual_delivery_local_handoff_status(shadow_json)
+            self.assertEqual(shadow_handoff_status["schema_version"], "manual_delivery_local_handoff_status.v1")
+            self.assertTrue(shadow_handoff_status["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_manual_delivery_local_handoff_cli_rejects_missing_or_unsafe_fixed_files_and_writes_no_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(handoff_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            missing_review_json = handoff_dir / "package" / "review" / "manifest-review.json"
+            missing_review_json.unlink()
+            missing_reader_code, missing_reader_stdout, missing_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                [
+                    "--handoff-dir",
+                    str(handoff_dir),
+                    "--output-json",
+                    str(base_dir / "missing.json"),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertNotEqual(missing_reader_code, 0)
+            self.assertEqual(missing_reader_stdout, "")
+            self.assertIn("local handoff package_manifest_review_json does not exist", missing_reader_stderr)
+            self.assertFalse((base_dir / "missing.json").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    ["--handoff-dir", str(handoff_dir)],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            human_gate_json = handoff_dir / "human-gate.json"
+            human_gate_data = self._read_manual_delivery_human_gate(human_gate_json)
+            human_gate_data["gate_status"] = "blocked"
+            human_gate_json.write_text(json.dumps(human_gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            unsafe_reader_code, unsafe_reader_stdout, unsafe_reader_stderr = self._run_manual_delivery_local_handoff_status_main_with_argv(
+                [
+                    "--handoff-dir",
+                    str(handoff_dir),
+                    "--output-json",
+                    str(base_dir / "unsafe.json"),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertNotEqual(unsafe_reader_code, 0)
+            self.assertEqual(unsafe_reader_stdout, "")
+            self.assertIn("human gate JSON gate_status must be ready_for_human_review", unsafe_reader_stderr)
+            self.assertFalse((base_dir / "unsafe.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
