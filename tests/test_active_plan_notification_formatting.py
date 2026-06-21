@@ -2680,6 +2680,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("checklist.txt exists=true", inbox)
             self.assertIn("package.txt exists=true", inbox)
             self.assertIn("README.txt exists=true", inbox)
+            self.assertNotIn("Actionability Shadow Output", inbox)
+            self.assertNotIn("actionability_shadow_output_csv=", inbox)
+            self.assertNotIn("actionability_shadow_summary_output_md=", inbox)
 
     def test_write_latest_manual_delivery_local_flow_cli_writes_shadow_csv_and_summary_when_requested(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2743,6 +2746,51 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("not FORMAL_GO", inbox)
             self.assertIn("no automatic order", inbox)
             self.assertIn("human must decide manually", inbox)
+            self.assertIn("Actionability Shadow Output", inbox)
+            self.assertIn(f"actionability_shadow_output_csv={shadow_csv}", inbox)
+            self.assertIn("actionability_shadow_output_csv_exists=true", inbox)
+            self.assertIn("safety=report-only, not FORMAL_GO, no automatic order, human decides manually", inbox)
+            self.assertIn(f"actionability_shadow_summary_output_md={shadow_summary}", inbox)
+            self.assertIn("actionability_shadow_summary_output_md_exists=true", inbox)
+
+    def test_write_latest_manual_delivery_local_flow_cli_writes_shadow_csv_only_inbox_links_when_summary_not_requested(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--actionability-shadow-output-csv",
+                        str(shadow_csv),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n")
+            self.assertTrue(shadow_csv.exists())
+            self.assertFalse((base_dir / "artifacts" / "actionability-shadow-summary.md").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+            inbox = (output_dir / "inbox.md").read_text(encoding="utf-8")
+            self.assertIn("Actionability Shadow Output", inbox)
+            self.assertIn(f"actionability_shadow_output_csv={shadow_csv}", inbox)
+            self.assertIn("actionability_shadow_output_csv_exists=true", inbox)
+            self.assertIn("safety=report-only, not FORMAL_GO, no automatic order, human decides manually", inbox)
+            self.assertNotIn("actionability_shadow_summary_output_md=", inbox)
+            self.assertNotIn("actionability_shadow_summary_output_md_exists=true", inbox)
 
     def test_write_latest_manual_delivery_local_flow_cli_rejects_summary_output_without_shadow_decision(self) -> None:
         with TemporaryDirectory() as tmpdir:

@@ -10591,6 +10591,8 @@ def _manual_delivery_local_inbox_markdown(
     input_json_path: Path,
     bundle_dir: Path,
     input_json: dict[str, Any],
+    actionability_shadow_output_csv: Path | None = None,
+    actionability_shadow_summary_output_md: Path | None = None,
 ) -> str:
     display_json = dict(input_json)
     if any(key not in display_json for key in ("actionability_label", "actionability_reasons", "human_action", "actionability_safety")):
@@ -10654,6 +10656,24 @@ def _manual_delivery_local_inbox_markdown(
     for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]:
         bundle_path = bundle_dir / filename
         lines.append(f"- {filename} exists={str(bundle_path.exists()).lower()} path={bundle_path}")
+
+    if actionability_shadow_output_csv is not None:
+        lines.extend(
+            [
+                "",
+                "## Actionability Shadow Output",
+                f"- actionability_shadow_output_csv={actionability_shadow_output_csv}",
+                f"- actionability_shadow_output_csv_exists={str(actionability_shadow_output_csv.exists()).lower()}",
+                "- safety=report-only, not FORMAL_GO, no automatic order, human decides manually",
+            ]
+        )
+        if actionability_shadow_summary_output_md is not None:
+            lines.extend(
+                [
+                    f"- actionability_shadow_summary_output_md={actionability_shadow_summary_output_md}",
+                    f"- actionability_shadow_summary_output_md_exists={str(actionability_shadow_summary_output_md.exists()).lower()}",
+                ]
+            )
 
     lines.extend(
         [
@@ -10823,13 +10843,9 @@ def _run_latest_manual_delivery_local_flow_command(
     for filename, text in bundle_texts.items():
         (bundle_dir / filename).write_text(text, encoding="utf-8")
 
-    inbox_markdown = _manual_delivery_local_inbox_markdown(
-        input_json_path=input_json_path,
-        bundle_dir=bundle_dir,
-        input_json=seed_data,
-    )
-    (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
     sys.stdout.write(f"{output_dir}\n")
+    shadow_output_csv: Path | None = None
+    shadow_summary_output_md_path: Path | None = None
     if write_actionability_shadow_decision:
         shadow_output_csv = _write_actionability_shadow_decision_from_json(
             input_json_path=input_json_path,
@@ -10840,12 +10856,27 @@ def _run_latest_manual_delivery_local_flow_command(
         )
         sys.stdout.write(f"actionability_shadow_output_csv={shadow_output_csv}\n")
         if actionability_shadow_summary_output_md:
+            shadow_summary_output_md_path = Path(actionability_shadow_summary_output_md)
             build_actionability_shadow_decision_summary(
                 input_csv=shadow_output_csv,
-                output_md=Path(actionability_shadow_summary_output_md),
+                output_md=shadow_summary_output_md_path,
                 parser=parser,
             )
             sys.stdout.write(f"actionability_shadow_summary_output_md={actionability_shadow_summary_output_md}\n")
+        inbox_markdown = _manual_delivery_local_inbox_markdown(
+            input_json_path=input_json_path,
+            bundle_dir=bundle_dir,
+            input_json=seed_data,
+            actionability_shadow_output_csv=shadow_output_csv,
+            actionability_shadow_summary_output_md=shadow_summary_output_md_path,
+        )
+    else:
+        inbox_markdown = _manual_delivery_local_inbox_markdown(
+            input_json_path=input_json_path,
+            bundle_dir=bundle_dir,
+            input_json=seed_data,
+        )
+    (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
