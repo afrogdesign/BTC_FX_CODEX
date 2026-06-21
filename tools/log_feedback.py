@@ -11288,6 +11288,56 @@ def _manual_delivery_latest_status_data(
     }
 
 
+def _write_manual_delivery_latest_status_outputs(
+    *,
+    latest_pointer_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json, parser)
+    manifest_json_path = Path(pointer_data["manifest_json"])
+    manifest_summary_md_path = Path(pointer_data["manifest_summary_md"])
+    manifest_review_json_path = Path(pointer_data["manifest_review_json"])
+    for label, path in [
+        ("manifest_json", manifest_json_path),
+        ("manifest_summary_md", manifest_summary_md_path),
+        ("manifest_review_json", manifest_review_json_path),
+    ]:
+        if not path.exists():
+            message = f"latest pointer {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    review_data = _load_json_object(manifest_review_json_path, parser)
+    _manual_delivery_latest_manifest_review_data(review_data, parser)
+    status_data = _manual_delivery_latest_status_data(
+        pointer_data=pointer_data,
+        review_data=review_data,
+        manifest_json_path=manifest_json_path,
+        manifest_summary_md_path=manifest_summary_md_path,
+        manifest_review_json_path=manifest_review_json_path,
+        parser=parser,
+    )
+    summary_text = _manual_delivery_latest_status_markdown(
+        output_dir=str(status_data["output_dir"]),
+        manifest_json=manifest_json_path,
+        manifest_json_exists=bool(status_data["manifest_json_exists"]),
+        manifest_summary_md=manifest_summary_md_path,
+        manifest_summary_md_exists=bool(status_data["manifest_summary_md_exists"]),
+        manifest_review_json=manifest_review_json_path,
+        manifest_review_json_exists=bool(status_data["manifest_review_json_exists"]),
+        review_data=review_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, status_data
+
+
 def _run_summarize_manual_delivery_local_flow_manifest_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -11454,6 +11504,14 @@ def _run_write_latest_manual_delivery_review_package_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
+    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
+    latest_status_md_arg = getattr(args, "latest_status_md", None)
+    latest_status_json_arg = getattr(args, "latest_status_json", None)
+    if (latest_status_md_arg or latest_status_json_arg) and not latest_pointer_json_arg:
+        message = "--latest-status-md and --latest-status-json require --latest-pointer-json"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
     _run_latest_manual_delivery_local_flow_command(args, parser)
     output_dir = Path(args.output_dir)
     review_dir = output_dir / "review"
@@ -11466,7 +11524,6 @@ def _run_write_latest_manual_delivery_review_package_command(
         parser=parser,
     )
     review_data = _load_json_object(review_json_path, parser)
-    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
     latest_pointer_json_path: Path | None = None
     if latest_pointer_json_arg:
         latest_pointer_json_path = Path(latest_pointer_json_arg)
@@ -11483,6 +11540,22 @@ def _run_write_latest_manual_delivery_review_package_command(
     sys.stdout.write(f"manual_delivery_manifest_review_json={review_json_path}\n")
     if latest_pointer_json_path is not None:
         sys.stdout.write(f"latest_manual_delivery_pointer_json={latest_pointer_json_path}\n")
+        if latest_status_md_arg or latest_status_json_arg:
+            latest_status_md_path = Path(latest_status_md_arg) if latest_status_md_arg else None
+            latest_status_json_path = Path(latest_status_json_arg) if latest_status_json_arg else None
+            _write_manual_delivery_latest_status_outputs(
+                latest_pointer_json=latest_pointer_json_path,
+                output_md=latest_status_md_path,
+                output_json=latest_status_json_path,
+                parser=parser,
+            )
+            if latest_status_md_path is not None and latest_status_json_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_md={latest_status_md_path}\n")
+                sys.stdout.write(f"manual_delivery_latest_status_json={latest_status_json_path}\n")
+            elif latest_status_md_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_md={latest_status_md_path}\n")
+            elif latest_status_json_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_json={latest_status_json_path}\n")
 
 
 def _run_summarize_latest_manual_delivery_pointer_command(
@@ -11492,48 +11565,12 @@ def _run_summarize_latest_manual_delivery_pointer_command(
     output_md_arg = getattr(args, "output_md", None)
     output_json_arg = getattr(args, "output_json", None)
     latest_pointer_json_path = Path(args.latest_pointer_json)
-    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
-    manifest_json_path = Path(pointer_data["manifest_json"])
-    manifest_summary_md_path = Path(pointer_data["manifest_summary_md"])
-    manifest_review_json_path = Path(pointer_data["manifest_review_json"])
-    for label, path in [
-        ("manifest_json", manifest_json_path),
-        ("manifest_summary_md", manifest_summary_md_path),
-        ("manifest_review_json", manifest_review_json_path),
-    ]:
-        if not path.exists():
-            message = f"latest pointer {label} does not exist: {path}"
-            if parser is None:
-                raise FileNotFoundError(message)
-            parser.error(message)
-    review_data = _load_json_object(manifest_review_json_path, parser)
-    _manual_delivery_latest_manifest_review_data(review_data, parser)
-    status_data = _manual_delivery_latest_status_data(
-        pointer_data=pointer_data,
-        review_data=review_data,
-        manifest_json_path=manifest_json_path,
-        manifest_summary_md_path=manifest_summary_md_path,
-        manifest_review_json_path=manifest_review_json_path,
+    summary_text, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
         parser=parser,
     )
-    summary_text = _manual_delivery_latest_status_markdown(
-        output_dir=str(status_data["output_dir"]),
-        manifest_json=manifest_json_path,
-        manifest_json_exists=bool(status_data["manifest_json_exists"]),
-        manifest_summary_md=manifest_summary_md_path,
-        manifest_summary_md_exists=bool(status_data["manifest_summary_md_exists"]),
-        manifest_review_json=manifest_review_json_path,
-        manifest_review_json_exists=bool(status_data["manifest_review_json_exists"]),
-        review_data=review_data,
-    )
-    if output_md_arg:
-        output_md_path = Path(output_md_arg)
-        _ensure_parent(output_md_path)
-        output_md_path.write_text(summary_text, encoding="utf-8")
-    if output_json_arg:
-        output_json_path = Path(output_json_arg)
-        _ensure_parent(output_json_path)
-        output_json_path.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if output_md_arg and output_json_arg:
         sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
         sys.stdout.write(f"manual_delivery_latest_status_json={output_json_arg}\n")
@@ -14310,6 +14347,8 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_review_package_parser.add_argument("--actionability-shadow-notes", default="")
     manual_delivery_review_package_parser.add_argument("--actionability-shadow-summary-output-md")
     manual_delivery_review_package_parser.add_argument("--latest-pointer-json")
+    manual_delivery_review_package_parser.add_argument("--latest-status-md")
+    manual_delivery_review_package_parser.add_argument("--latest-status-json")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
