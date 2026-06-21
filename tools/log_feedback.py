@@ -11576,6 +11576,29 @@ def _run_write_latest_manual_delivery_review_package_command(
                 sys.stdout.write(f"manual_delivery_latest_status_json={latest_status_json_path}\n")
 
 
+def _run_write_latest_manual_delivery_local_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    handoff_dir = Path(args.handoff_dir)
+    review_package_args = argparse.Namespace(**vars(args))
+    review_package_args.output_dir = str(handoff_dir / "package")
+    review_package_args.latest_pointer_json = str(handoff_dir / "latest-pointer.json")
+    review_package_args.latest_status_md = str(handoff_dir / "latest-status.md")
+    review_package_args.latest_status_json = str(handoff_dir / "latest-status.json")
+    review_package_args.write_local_handoff = False
+    sys.stdout.write(f"handoff_dir={handoff_dir}\n")
+    _run_write_latest_manual_delivery_review_package_command(review_package_args, parser)
+
+
 def _run_summarize_latest_manual_delivery_pointer_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -14369,6 +14392,25 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_review_package_parser.add_argument("--latest-status-json")
     manual_delivery_review_package_parser.add_argument("--write-local-handoff", action="store_true")
 
+    manual_delivery_local_handoff_parser = subparsers.add_parser("write-latest-manual-delivery-local-handoff")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-dir", required=True)
+    manual_delivery_local_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_local_handoff_parser.add_argument("--detail-report-path")
+    manual_delivery_local_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_local_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_local_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -14860,6 +14902,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-review-package":
         _run_write_latest_manual_delivery_review_package_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-handoff":
+        _run_write_latest_manual_delivery_local_handoff_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":

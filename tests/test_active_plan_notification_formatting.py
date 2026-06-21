@@ -1121,6 +1121,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_manual_delivery_local_handoff_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-local-handoff", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_latest_manual_delivery_pointer_status_main_with_argv(
         self,
         argv: list[str],
@@ -3858,6 +3881,116 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((output_dir / "review").exists())
             self.assertFalse(shadow_summary.exists())
             self.assertFalse(pointer_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_handoff_cli_creates_default_package_and_top_level_handoff_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    ["--handoff-dir", str(handoff_dir)],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            package_dir = handoff_dir / "package"
+            pointer_json = handoff_dir / "latest-pointer.json"
+            status_md = handoff_dir / "latest-status.md"
+            status_json = handoff_dir / "latest-status.json"
+            self.assertEqual(
+                stdout,
+                f"handoff_dir={handoff_dir}\n{package_dir}\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+            )
+            self.assertTrue(package_dir.exists())
+            self.assertTrue(pointer_json.exists())
+            self.assertTrue(status_md.exists())
+            self.assertTrue(status_json.exists())
+            status_data = self._read_manual_delivery_latest_status(status_json)
+            self.assertEqual(status_data["status"], "ready_for_human_review")
+            self.assertFalse(status_data["trade_execution_allowed"])
+            self.assertTrue(status_data["human_review_required"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_handoff_cli_creates_shadow_package_and_top_level_handoff_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(handoff_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            package_dir = handoff_dir / "package"
+            pointer_json = handoff_dir / "latest-pointer.json"
+            status_md = handoff_dir / "latest-status.md"
+            status_json = handoff_dir / "latest-status.json"
+            shadow_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+            self.assertEqual(
+                stdout,
+                f"handoff_dir={handoff_dir}\n{package_dir}\nactionability_shadow_output_csv=logs/csv/active_plan_shadow_decisions.csv\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+            )
+            self.assertTrue(package_dir.exists())
+            self.assertTrue(pointer_json.exists())
+            self.assertTrue(status_md.exists())
+            self.assertTrue(status_json.exists())
+            self.assertTrue(shadow_csv.exists())
+            status_data = self._read_manual_delivery_latest_status(status_json)
+            self.assertEqual(status_data["status"], "ready_for_human_review")
+            self.assertFalse(status_data["trade_execution_allowed"])
+            self.assertTrue(status_data["human_review_required"])
+            self.assertTrue(status_data["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_handoff_cli_rejects_summary_output_without_shadow_decision(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(handoff_dir),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", stderr)
+            self.assertFalse(handoff_dir.exists())
+            self.assertFalse((handoff_dir / "package").exists())
+            self.assertFalse(shadow_summary.exists())
+            self.assertFalse((handoff_dir / "latest-pointer.json").exists())
+            self.assertFalse((handoff_dir / "latest-status.md").exists())
+            self.assertFalse((handoff_dir / "latest-status.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
