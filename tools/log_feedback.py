@@ -11007,6 +11007,58 @@ def build_manual_delivery_local_flow_manifest_review(
     return report, review_data
 
 
+def _manual_delivery_latest_pointer_data(
+    *,
+    review_data: dict[str, Any],
+    manifest_json: Path,
+    manifest_summary_md: Path,
+    manifest_review_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    required_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    missing_keys = [key for key in required_keys if key not in review_data]
+    if missing_keys:
+        message = "review JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(review_data["schema_version"]).strip() != "manual_delivery_manifest_review.v1":
+        message = f"review JSON schema_version must be manual_delivery_manifest_review.v1: {review_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return {
+        "schema_version": "manual_delivery_latest_pointer.v1",
+        "generated_at_jst": review_data["generated_at_jst"],
+        "output_dir": review_data["output_dir"],
+        "manifest_json": str(manifest_json),
+        "manifest_summary_md": str(manifest_summary_md),
+        "manifest_review_json": str(manifest_review_json),
+        "review_status": review_data["review_status"],
+        "human_review_required": bool(review_data["human_review_required"]),
+        "trade_execution_allowed": bool(review_data["trade_execution_allowed"]),
+        "paper_positions_integration": bool(review_data["paper_positions_integration"]),
+        "external_notification_integration": bool(review_data["external_notification_integration"]),
+        "source_readiness": review_data["source_readiness"],
+        "actionability_label": review_data["actionability_label"],
+        "human_action": review_data["human_action"],
+        "shadow_decision_enabled": bool(review_data["shadow_decision_enabled"]),
+    }
+
+
 def _run_summarize_manual_delivery_local_flow_manifest_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -11184,8 +11236,24 @@ def _run_write_latest_manual_delivery_review_package_command(
         output_json=review_json_path,
         parser=parser,
     )
+    review_data = _load_json_object(review_json_path, parser)
+    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
+    latest_pointer_json_path: Path | None = None
+    if latest_pointer_json_arg:
+        latest_pointer_json_path = Path(latest_pointer_json_arg)
+        pointer_data = _manual_delivery_latest_pointer_data(
+            review_data=review_data,
+            manifest_json=output_dir / "manifest.json",
+            manifest_summary_md=summary_md_path,
+            manifest_review_json=review_json_path,
+            parser=parser,
+        )
+        _ensure_parent(latest_pointer_json_path)
+        latest_pointer_json_path.write_text(json.dumps(pointer_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     sys.stdout.write(f"manual_delivery_manifest_summary_md={summary_md_path}\n")
     sys.stdout.write(f"manual_delivery_manifest_review_json={review_json_path}\n")
+    if latest_pointer_json_path is not None:
+        sys.stdout.write(f"latest_manual_delivery_pointer_json={latest_pointer_json_path}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -13952,6 +14020,7 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_review_package_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
     manual_delivery_review_package_parser.add_argument("--actionability-shadow-notes", default="")
     manual_delivery_review_package_parser.add_argument("--actionability-shadow-summary-output-md")
+    manual_delivery_review_package_parser.add_argument("--latest-pointer-json")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)

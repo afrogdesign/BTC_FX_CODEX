@@ -1127,6 +1127,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
     def _read_manual_delivery_manifest_review(self, output_json: Path) -> dict[str, Any]:
         return json.loads(output_json.read_text(encoding="utf-8"))
 
+    def _read_manual_delivery_latest_pointer(self, output_json: Path) -> dict[str, Any]:
+        return json.loads(output_json.read_text(encoding="utf-8"))
+
     def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
         artifact = manifest["artifacts"][artifact_key]
         self.assertEqual(artifact["path"], str(path))
@@ -3417,6 +3420,134 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse(output_dir.exists())
             self.assertFalse((output_dir / "review").exists())
             self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_writes_latest_pointer_json_for_default_package(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            pointer_json = base_dir / "latest-pointer.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(output_dir, ["--latest-pointer-json", str(pointer_json)]),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\n",
+            )
+            self.assertTrue(pointer_json.exists())
+            pointer_data = self._read_manual_delivery_latest_pointer(pointer_json)
+            self.assertEqual(pointer_data["schema_version"], "manual_delivery_latest_pointer.v1")
+            self.assertEqual(pointer_data["output_dir"], str(output_dir))
+            self.assertEqual(pointer_data["manifest_json"], str(output_dir / "manifest.json"))
+            self.assertEqual(pointer_data["manifest_summary_md"], str(review_dir / "manifest-summary.md"))
+            self.assertEqual(pointer_data["manifest_review_json"], str(review_dir / "manifest-review.json"))
+            self.assertEqual(pointer_data["review_status"], "valid_report_only_manifest")
+            self.assertTrue(pointer_data["human_review_required"])
+            self.assertFalse(pointer_data["trade_execution_allowed"])
+            self.assertFalse(pointer_data["paper_positions_integration"])
+            self.assertFalse(pointer_data["external_notification_integration"])
+            self.assertEqual(pointer_data["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(pointer_data["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(pointer_data["human_action"], "do_nothing")
+            self.assertFalse(pointer_data["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_writes_latest_pointer_json_for_shadow_package(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            pointer_json = base_dir / "shadow-latest-pointer.json"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--actionability-shadow-output-csv",
+                        str(shadow_csv),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                        "--latest-pointer-json",
+                        str(pointer_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nactionability_shadow_summary_output_md={shadow_summary}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\n",
+            )
+            self.assertTrue(pointer_json.exists())
+            pointer_data = self._read_manual_delivery_latest_pointer(pointer_json)
+            self.assertEqual(pointer_data["schema_version"], "manual_delivery_latest_pointer.v1")
+            self.assertEqual(pointer_data["output_dir"], str(output_dir))
+            self.assertEqual(pointer_data["manifest_json"], str(output_dir / "manifest.json"))
+            self.assertEqual(pointer_data["manifest_summary_md"], str(review_dir / "manifest-summary.md"))
+            self.assertEqual(pointer_data["manifest_review_json"], str(review_dir / "manifest-review.json"))
+            self.assertEqual(pointer_data["review_status"], "valid_report_only_manifest")
+            self.assertTrue(pointer_data["human_review_required"])
+            self.assertFalse(pointer_data["trade_execution_allowed"])
+            self.assertFalse(pointer_data["paper_positions_integration"])
+            self.assertFalse(pointer_data["external_notification_integration"])
+            self.assertEqual(pointer_data["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(pointer_data["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(pointer_data["human_action"], "do_nothing")
+            self.assertTrue(pointer_data["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_rejects_summary_output_without_shadow_decision_and_writes_no_pointer(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            pointer_json = base_dir / "latest-pointer.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                        "--latest-pointer-json",
+                        str(pointer_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", stderr)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse((output_dir / "review").exists())
+            self.assertFalse(shadow_summary.exists())
+            self.assertFalse(pointer_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
