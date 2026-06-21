@@ -76,6 +76,12 @@ Purpose: report-only human manual trading support preview.
 - It reduces manual steps, but it still does not send, notify, fetch, rebuild, trade, or approve anything.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
 
+## One-Command Local Manual Delivery Review Package
+
+- Use `write-latest-manual-delivery-review-package --output-dir <path>` when you want the local flow plus `review/manifest-summary.md` and `review/manifest-review.json` in one report-only command.
+- It is the app/operator one-command local review package and keeps the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
+- It does not send, notify, fetch, rebuild, trade, or approve anything.
+
 ### Source Freshness Guard
 
 - Use `--source-stale-after-hours <hours>` with the one-command local manual delivery flow when you want local file freshness checked before manual use.

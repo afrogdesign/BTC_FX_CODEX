@@ -11169,6 +11169,25 @@ def _run_latest_manual_delivery_local_flow_command(
     sys.stdout.write(f"manual_delivery_manifest_json={manifest_path}\n")
 
 
+def _run_write_latest_manual_delivery_review_package_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    _run_latest_manual_delivery_local_flow_command(args, parser)
+    output_dir = Path(args.output_dir)
+    review_dir = output_dir / "review"
+    summary_md_path = review_dir / "manifest-summary.md"
+    review_json_path = review_dir / "manifest-review.json"
+    build_manual_delivery_local_flow_manifest_review(
+        manifest_json=output_dir / "manifest.json",
+        output_md=summary_md_path,
+        output_json=review_json_path,
+        parser=parser,
+    )
+    sys.stdout.write(f"manual_delivery_manifest_summary_md={summary_md_path}\n")
+    sys.stdout.write(f"manual_delivery_manifest_review_json={review_json_path}\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -13915,6 +13934,25 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_flow_parser.add_argument("--actionability-shadow-notes", default="")
     manual_delivery_local_flow_parser.add_argument("--actionability-shadow-summary-output-md")
 
+    manual_delivery_review_package_parser = subparsers.add_parser("write-latest-manual-delivery-review-package")
+    manual_delivery_review_package_parser.add_argument("--output-dir", required=True)
+    manual_delivery_review_package_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_review_package_parser.add_argument("--detail-report-path")
+    manual_delivery_review_package_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_review_package_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_review_package_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_review_package_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_review_package_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-summary-output-md")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -14397,6 +14435,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-local-flow":
         _run_latest_manual_delivery_local_flow_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-review-package":
+        _run_write_latest_manual_delivery_review_package_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":

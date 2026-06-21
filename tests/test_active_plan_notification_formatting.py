@@ -1066,6 +1066,15 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             argv.extend(extra_args)
         return argv
 
+    def _manual_delivery_review_package_argv(self, output_dir: Path, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            "--output-dir",
+            str(output_dir),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
     def _run_manual_delivery_manifest_summary_main_with_argv(
         self,
         argv: list[str],
@@ -1079,6 +1088,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 sys,
                 "argv",
                 [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-manual-delivery-local-flow-manifest", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def _run_manual_delivery_review_package_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-latest-manual-delivery-review-package", *argv],
             ):
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     try:
@@ -3239,6 +3271,152 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     self.assertIn(expected_stderr, stderr)
                     self.assertFalse(review_json.exists())
 
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_creates_flow_and_review_outputs(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(output_dir),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\n",
+            )
+
+            expected_files = {
+                Path("source-files.txt"),
+                Path("manual-delivery-input.json"),
+                Path("bundle") / "subject.txt",
+                Path("bundle") / "body.txt",
+                Path("bundle") / "checklist.txt",
+                Path("bundle") / "package.txt",
+                Path("bundle") / "README.txt",
+                Path("inbox.md"),
+                Path("manifest.json"),
+                Path("review") / "manifest-summary.md",
+                Path("review") / "manifest-review.json",
+            }
+            actual_files = {
+                path.relative_to(output_dir)
+                for path in output_dir.rglob("*")
+                if path.is_file()
+            }
+            self.assertEqual(actual_files, expected_files)
+            self.assertTrue(review_dir.exists())
+
+            review_md = review_dir / "manifest-summary.md"
+            review_json = review_dir / "manifest-review.json"
+            self.assertIn("# Manual Delivery Local Flow Manifest Summary", review_md.read_text(encoding="utf-8"))
+            review_data = self._read_manual_delivery_manifest_review(review_json)
+            self.assertEqual(review_data["schema_version"], "manual_delivery_manifest_review.v1")
+            self.assertEqual(review_data["manifest_schema_version"], "manual_delivery_local_flow.v1")
+            self.assertEqual(review_data["output_dir"], str(output_dir))
+            self.assertEqual(review_data["review_status"], "valid_report_only_manifest")
+            self.assertTrue(review_data["human_review_required"])
+            self.assertFalse(review_data["trade_execution_allowed"])
+            self.assertFalse(review_data["paper_positions_integration"])
+            self.assertFalse(review_data["external_notification_integration"])
+            self.assertEqual(review_data["artifact_existing_count"], 8)
+            self.assertEqual(review_data["artifact_total_count"], 8)
+            self.assertEqual(review_data["artifact_readiness"], "complete")
+            self.assertEqual(review_data["actionability_shadow_output_csv"], "")
+            self.assertFalse(review_data["actionability_shadow_output_csv_exists"])
+            self.assertEqual(review_data["actionability_shadow_summary_output_md"], "")
+            self.assertFalse(review_data["actionability_shadow_summary_output_md_exists"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_writes_shadow_and_review_outputs_when_requested(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--actionability-shadow-output-csv",
+                        str(shadow_csv),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nactionability_shadow_summary_output_md={shadow_summary}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\n",
+            )
+            self.assertTrue(shadow_csv.exists())
+            self.assertTrue(shadow_summary.exists())
+            review_json = review_dir / "manifest-review.json"
+            review_data = self._read_manual_delivery_manifest_review(review_json)
+            self.assertTrue(review_data["shadow_decision_enabled"])
+            self.assertEqual(review_data["actionability_shadow_output_csv"], str(shadow_csv))
+            self.assertTrue(review_data["actionability_shadow_output_csv_exists"])
+            self.assertEqual(review_data["actionability_shadow_summary_output_md"], str(shadow_summary))
+            self.assertTrue(review_data["actionability_shadow_summary_output_md_exists"])
+            self.assertEqual(review_data["review_status"], "valid_report_only_manifest")
+            self.assertTrue(review_data["human_review_required"])
+            self.assertFalse(review_data["trade_execution_allowed"])
+            self.assertFalse(review_data["paper_positions_integration"])
+            self.assertFalse(review_data["external_notification_integration"])
+            self.assertEqual(review_data["artifact_existing_count"], 8)
+            self.assertEqual(review_data["artifact_total_count"], 8)
+            self.assertEqual(review_data["artifact_readiness"], "complete")
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_rejects_summary_output_without_shadow_decision(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", stderr)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse((output_dir / "review").exists())
+            self.assertFalse(shadow_summary.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
