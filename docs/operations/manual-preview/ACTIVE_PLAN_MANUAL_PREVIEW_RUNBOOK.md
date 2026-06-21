@@ -86,9 +86,10 @@ Purpose: report-only human manual trading support preview.
 - The default `write-latest-manual-delivery-local-flow --output-dir <path>` command remains unchanged when no additional Actionability shadow flag is supplied.
 - Add `--write-actionability-shadow-decision` when you want the same local-flow command to append one evaluation-only Actionability shadow ledger row from the generated `manual-delivery-input.json`.
 - The default output path is `logs/csv/active_plan_shadow_decisions.csv`.
-- Optional flags are `--actionability-shadow-output-csv <path>`, `--actionability-shadow-final-outcome <value>`, and `--actionability-shadow-notes <text>`.
+- Optional flags are `--actionability-shadow-output-csv <path>`, `--actionability-shadow-final-outcome <value>`, `--actionability-shadow-notes <text>`, and `--actionability-shadow-summary-output-md <path>`.
+- Use `--actionability-shadow-summary-output-md <path>` together with `--write-actionability-shadow-decision` when you want the same run to append the shadow row and write a local Markdown summary of the resulting shadow CSV.
 - Example:
-  `./.venv312/bin/python tools/log_feedback.py write-latest-manual-delivery-local-flow --output-dir local/manual_delivery --write-actionability-shadow-decision --actionability-shadow-final-outcome pending`
+  `./.venv312/bin/python tools/log_feedback.py write-latest-manual-delivery-local-flow --output-dir local/manual_delivery --write-actionability-shadow-decision --actionability-shadow-final-outcome pending --actionability-shadow-summary-output-md local/manual_delivery/actionability-shadow-summary.md`
 - Keep the same boundary: report-only, not FORMAL_GO, no automatic order, no paper_positions.csv integration, and no send/notify/fetch/rebuild/trade/approve behavior.
 - Generated CSV output must not be committed unless explicitly approved.
 

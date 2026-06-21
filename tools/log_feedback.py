@@ -10743,6 +10743,14 @@ def _run_latest_manual_delivery_local_flow_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -10822,7 +10830,7 @@ def _run_latest_manual_delivery_local_flow_command(
     )
     (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
     sys.stdout.write(f"{output_dir}\n")
-    if bool(getattr(args, "write_actionability_shadow_decision", False)):
+    if write_actionability_shadow_decision:
         shadow_output_csv = _write_actionability_shadow_decision_from_json(
             input_json_path=input_json_path,
             output_csv=Path(getattr(args, "actionability_shadow_output_csv", "logs/csv/active_plan_shadow_decisions.csv")),
@@ -10831,6 +10839,13 @@ def _run_latest_manual_delivery_local_flow_command(
             parser=parser,
         )
         sys.stdout.write(f"actionability_shadow_output_csv={shadow_output_csv}\n")
+        if actionability_shadow_summary_output_md:
+            build_actionability_shadow_decision_summary(
+                input_csv=shadow_output_csv,
+                output_md=Path(actionability_shadow_summary_output_md),
+                parser=parser,
+            )
+            sys.stdout.write(f"actionability_shadow_summary_output_md={actionability_shadow_summary_output_md}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -13577,6 +13592,7 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_flow_parser.add_argument("--actionability-shadow-output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
     manual_delivery_local_flow_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
     manual_delivery_local_flow_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-summary-output-md")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)

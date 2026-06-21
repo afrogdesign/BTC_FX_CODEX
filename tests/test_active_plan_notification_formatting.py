@@ -2523,16 +2523,27 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         self.assertIn("--actionability-shadow-output-csv", result.stdout)
         self.assertIn("--actionability-shadow-final-outcome", result.stdout)
         self.assertIn("--actionability-shadow-notes", result.stdout)
+        self.assertIn("--actionability-shadow-summary-output-md", result.stdout)
 
     def test_write_latest_manual_delivery_local_flow_cli_creates_expected_output_structure(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             output_dir = base_dir / "flow"
-
-            code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
-                ["--output-dir", str(output_dir)],
-                base_dir=base_dir,
-            )
+            shadow_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "shadow-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                with mock.patch.object(log_feedback, "_write_actionability_shadow_decision_from_json") as shadow_writer, mock.patch.object(
+                    log_feedback,
+                    "build_actionability_shadow_decision_summary",
+                ) as shadow_summary_builder:
+                    code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                        ["--output-dir", str(output_dir)],
+                        base_dir=base_dir,
+                    )
+            finally:
+                os.chdir(original_cwd)
 
             expected_files = {
                 Path("source-files.txt"),
@@ -2553,6 +2564,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(code, 0, msg=stderr)
             self.assertEqual(stdout, f"{output_dir}\n")
             self.assertEqual(actual_files, expected_files)
+            self.assertFalse(shadow_csv.exists())
+            self.assertFalse(shadow_summary.exists())
+            shadow_writer.assert_not_called()
+            shadow_summary_builder.assert_not_called()
 
             source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
             self.assertIn("intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv", source_files)
@@ -2665,6 +2680,95 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("checklist.txt exists=true", inbox)
             self.assertIn("package.txt exists=true", inbox)
             self.assertIn("README.txt exists=true", inbox)
+
+    def test_write_latest_manual_delivery_local_flow_cli_writes_shadow_csv_and_summary_when_requested(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--actionability-shadow-output-csv",
+                        str(shadow_csv),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            expected_files = {
+                Path("source-files.txt"),
+                Path("manual-delivery-input.json"),
+                Path("bundle") / "subject.txt",
+                Path("bundle") / "body.txt",
+                Path("bundle") / "checklist.txt",
+                Path("bundle") / "package.txt",
+                Path("bundle") / "README.txt",
+                Path("inbox.md"),
+            }
+            actual_files = {
+                path.relative_to(output_dir)
+                for path in output_dir.rglob("*")
+                if path.is_file()
+            }
+
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nactionability_shadow_summary_output_md={shadow_summary}\n")
+            self.assertEqual(actual_files, expected_files)
+            self.assertTrue(shadow_csv.exists())
+            self.assertTrue(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+            with shadow_csv.open(encoding="utf-8") as shadow_fp:
+                shadow_rows = list(csv.DictReader(shadow_fp))
+            self.assertEqual(len(shadow_rows), 1)
+            expected_summary = log_feedback.build_actionability_shadow_decision_summary(input_csv=shadow_csv)
+            self.assertEqual(shadow_summary.read_text(encoding="utf-8"), expected_summary)
+
+            inbox = (output_dir / "inbox.md").read_text(encoding="utf-8")
+            self.assertIn("report-only", inbox)
+            self.assertIn("not FORMAL_GO", inbox)
+            self.assertIn("no automatic order", inbox)
+            self.assertIn("human must decide manually", inbox)
+
+    def test_write_latest_manual_delivery_local_flow_cli_rejects_summary_output_without_shadow_decision(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", stderr)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse(shadow_summary.exists())
 
     def test_write_latest_manual_delivery_local_flow_cli_uses_explicit_source_paths_and_preserves_inputs(self) -> None:
         with TemporaryDirectory() as tmpdir:
