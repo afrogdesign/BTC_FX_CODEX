@@ -1121,6 +1121,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_latest_manual_delivery_pointer_status_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-latest-manual-delivery-pointer", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _read_manual_delivery_manifest(self, output_dir: Path) -> dict[str, Any]:
         return json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
 
@@ -1128,6 +1151,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _read_manual_delivery_latest_pointer(self, output_json: Path) -> dict[str, Any]:
+        return json.loads(output_json.read_text(encoding="utf-8"))
+
+    def _read_manual_delivery_latest_status(self, output_json: Path) -> dict[str, Any]:
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
@@ -3548,6 +3574,203 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((output_dir / "review").exists())
             self.assertFalse(shadow_summary.exists())
             self.assertFalse(pointer_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_latest_manual_delivery_pointer_cli_supports_default_shadow_and_output_modes(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            default_output_dir = base_dir / "default-package"
+            default_pointer_json = base_dir / "default-pointer.json"
+            default_status_json = base_dir / "default-status.json"
+            shadow_output_dir = base_dir / "shadow-package"
+            shadow_pointer_json = base_dir / "shadow-pointer.json"
+            shadow_status_md = base_dir / "shadow-status.md"
+            shadow_status_both_md = base_dir / "shadow-status-both.md"
+            shadow_status_both_json = base_dir / "shadow-status-both.json"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+
+            def _write_review_package(argv: list[str]) -> tuple[int, str, str]:
+                original_cwd = Path.cwd()
+                try:
+                    os.chdir(base_dir)
+                    return self._run_manual_delivery_review_package_main_with_argv(argv, base_dir=base_dir)
+                finally:
+                    os.chdir(original_cwd)
+
+            default_code, default_stdout, default_stderr = _write_review_package(
+                self._manual_delivery_review_package_argv(
+                    default_output_dir,
+                    ["--latest-pointer-json", str(default_pointer_json)],
+                )
+            )
+            self.assertEqual(default_code, 0, msg=default_stderr)
+
+            shadow_code, shadow_stdout, shadow_stderr = _write_review_package(
+                [
+                    "--output-dir",
+                    str(shadow_output_dir),
+                    "--detail-report-path",
+                    str(detail_report_path),
+                    "--write-actionability-shadow-decision",
+                    "--actionability-shadow-output-csv",
+                    str(shadow_csv),
+                    "--actionability-shadow-summary-output-md",
+                    str(shadow_summary),
+                    "--latest-pointer-json",
+                    str(shadow_pointer_json),
+                ]
+            )
+            self.assertEqual(shadow_code, 0, msg=shadow_stderr)
+
+            code, stdout, stderr = self._run_latest_manual_delivery_pointer_status_main_with_argv(
+                [
+                    "--latest-pointer-json",
+                    str(default_pointer_json),
+                    "--output-json",
+                    str(default_status_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertTrue(stdout.startswith("# Manual Delivery Latest Status\n"))
+            self.assertIn("- manifest_json_exists: true\n", stdout)
+            self.assertIn("- status: ready_for_human_review\n", stdout)
+            self.assertNotIn("manual_delivery_latest_status_md=", stdout)
+            default_status = self._read_manual_delivery_latest_status(default_status_json)
+            self.assertEqual(default_status["schema_version"], "manual_delivery_latest_status.v1")
+            self.assertEqual(default_status["status"], "ready_for_human_review")
+            self.assertEqual(default_status["output_dir"], str(default_output_dir))
+            self.assertTrue(default_status["human_review_required"])
+            self.assertFalse(default_status["trade_execution_allowed"])
+            self.assertFalse(default_status["paper_positions_integration"])
+            self.assertFalse(default_status["external_notification_integration"])
+            self.assertEqual(default_status["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(default_status["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(default_status["human_action"], "do_nothing")
+            self.assertFalse(default_status["shadow_decision_enabled"])
+            self.assertTrue(default_status["manifest_json_exists"])
+            self.assertTrue(default_status["manifest_summary_md_exists"])
+            self.assertTrue(default_status["manifest_review_json_exists"])
+
+            code, stdout, stderr = self._run_latest_manual_delivery_pointer_status_main_with_argv(
+                [
+                    "--latest-pointer-json",
+                    str(shadow_pointer_json),
+                    "--output-md",
+                    str(shadow_status_md),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(stdout, f"manual_delivery_latest_status_md={shadow_status_md}\n")
+            shadow_status_md_text = shadow_status_md.read_text(encoding="utf-8")
+            self.assertIn("# Manual Delivery Latest Status", shadow_status_md_text)
+            self.assertIn("- status: ready_for_human_review", shadow_status_md_text)
+            self.assertIn("- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", shadow_status_md_text)
+
+            code, stdout, stderr = self._run_latest_manual_delivery_pointer_status_main_with_argv(
+                [
+                    "--latest-pointer-json",
+                    str(shadow_pointer_json),
+                    "--output-md",
+                    str(shadow_status_both_md),
+                    "--output-json",
+                    str(shadow_status_both_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertEqual(code, 0, msg=stderr)
+            self.assertEqual(
+                stdout,
+                f"manual_delivery_latest_status_md={shadow_status_both_md}\nmanual_delivery_latest_status_json={shadow_status_both_json}\n",
+            )
+            shadow_status_both = self._read_manual_delivery_latest_status(shadow_status_both_json)
+            self.assertEqual(shadow_status_both["schema_version"], "manual_delivery_latest_status.v1")
+            self.assertEqual(shadow_status_both["output_dir"], str(shadow_output_dir))
+            self.assertTrue(shadow_status_both["human_review_required"])
+            self.assertFalse(shadow_status_both["trade_execution_allowed"])
+            self.assertFalse(shadow_status_both["paper_positions_integration"])
+            self.assertFalse(shadow_status_both["external_notification_integration"])
+            self.assertTrue(shadow_status_both["shadow_decision_enabled"])
+            self.assertTrue(shadow_status_both["manifest_json_exists"])
+            self.assertTrue(shadow_status_both["manifest_summary_md_exists"])
+            self.assertTrue(shadow_status_both["manifest_review_json_exists"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_latest_manual_delivery_pointer_cli_rejects_missing_referenced_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            pointer_json = base_dir / "latest-pointer.json"
+            status_json = base_dir / "latest-status.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(output_dir, ["--latest-pointer-json", str(pointer_json)]),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            (output_dir / "review" / "manifest-summary.md").unlink()
+
+            code, stdout, stderr = self._run_latest_manual_delivery_pointer_status_main_with_argv(
+                [
+                    "--latest-pointer-json",
+                    str(pointer_json),
+                    "--output-json",
+                    str(status_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("latest pointer manifest_summary_md does not exist", stderr)
+            self.assertFalse(status_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_latest_manual_delivery_pointer_cli_rejects_unsafe_review_json_and_writes_no_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            pointer_json = base_dir / "latest-pointer.json"
+            status_json = base_dir / "latest-status.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(output_dir, ["--latest-pointer-json", str(pointer_json)]),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_json = output_dir / "review" / "manifest-review.json"
+            review_data = json.loads(review_json.read_text(encoding="utf-8"))
+            review_data["paper_positions_integration"] = True
+            review_json.write_text(json.dumps(review_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            code, stdout, stderr = self._run_latest_manual_delivery_pointer_status_main_with_argv(
+                [
+                    "--latest-pointer-json",
+                    str(pointer_json),
+                    "--output-json",
+                    str(status_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertNotEqual(code, 0)
+            self.assertEqual(stdout, "")
+            self.assertIn("review JSON paper_positions_integration must be false", stderr)
+            self.assertFalse(status_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

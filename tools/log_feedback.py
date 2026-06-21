@@ -11015,31 +11015,7 @@ def _manual_delivery_latest_pointer_data(
     manifest_review_json: Path,
     parser: argparse.ArgumentParser | None = None,
 ) -> dict[str, Any]:
-    required_keys = [
-        "schema_version",
-        "generated_at_jst",
-        "output_dir",
-        "review_status",
-        "human_review_required",
-        "trade_execution_allowed",
-        "paper_positions_integration",
-        "external_notification_integration",
-        "source_readiness",
-        "actionability_label",
-        "human_action",
-        "shadow_decision_enabled",
-    ]
-    missing_keys = [key for key in required_keys if key not in review_data]
-    if missing_keys:
-        message = "review JSON missing required keys: " + ", ".join(missing_keys)
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
-    if str(review_data["schema_version"]).strip() != "manual_delivery_manifest_review.v1":
-        message = f"review JSON schema_version must be manual_delivery_manifest_review.v1: {review_data['schema_version']}"
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
+    _manual_delivery_latest_manifest_review_data(review_data, parser)
     return {
         "schema_version": "manual_delivery_latest_pointer.v1",
         "generated_at_jst": review_data["generated_at_jst"],
@@ -11056,6 +11032,259 @@ def _manual_delivery_latest_pointer_data(
         "actionability_label": review_data["actionability_label"],
         "human_action": review_data["human_action"],
         "shadow_decision_enabled": bool(review_data["shadow_decision_enabled"]),
+    }
+
+
+def _manual_delivery_latest_manifest_review_data(
+    review_data: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    required_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in review_data]
+    if missing_keys:
+        message = "review JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "safety_boundary",
+    ]
+    for key in string_keys:
+        if not isinstance(review_data[key], str):
+            message = f"review JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(review_data["schema_version"]).strip() != "manual_delivery_manifest_review.v1":
+        message = f"review JSON schema_version must be manual_delivery_manifest_review.v1: {review_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(review_data["review_status"]).strip() != "valid_report_only_manifest":
+        message = f"review JSON review_status must be valid_report_only_manifest: {review_data['review_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["human_review_required"] is not True:
+        message = "review JSON human_review_required must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["trade_execution_allowed"] is not False:
+        message = "review JSON trade_execution_allowed must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["paper_positions_integration"] is not False:
+        message = "review JSON paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["external_notification_integration"] is not False:
+        message = "review JSON external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["shadow_decision_enabled"] not in (True, False):
+        message = "review JSON shadow_decision_enabled must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    safety_boundary = str(review_data["safety_boundary"]).strip()
+    required_safety_terms = ["report-only", "not FORMAL_GO", "no automatic order", "human decides manually"]
+    if not all(term in safety_boundary for term in required_safety_terms):
+        message = f'review JSON safety_boundary must contain: "{" / ".join(required_safety_terms)}"'
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return review_data
+
+
+def _load_manual_delivery_latest_pointer_json(
+    latest_pointer_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if not latest_pointer_json.exists():
+        message = f"latest pointer json does not exist: {latest_pointer_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    pointer_data = _load_json_object(latest_pointer_json, parser)
+    required_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "manifest_json",
+        "manifest_summary_md",
+        "manifest_review_json",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    missing_keys = [key for key in required_keys if key not in pointer_data]
+    if missing_keys:
+        message = "latest pointer JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "manifest_json",
+        "manifest_summary_md",
+        "manifest_review_json",
+        "review_status",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+    ]
+    for key in string_keys:
+        if not isinstance(pointer_data[key], str):
+            message = f"latest pointer JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(pointer_data["schema_version"]).strip() != "manual_delivery_latest_pointer.v1":
+        message = f"latest pointer JSON schema_version must be manual_delivery_latest_pointer.v1: {pointer_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["human_review_required"] is not True:
+        message = "latest pointer JSON human_review_required must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["trade_execution_allowed"] is not False:
+        message = "latest pointer JSON trade_execution_allowed must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["paper_positions_integration"] is not False:
+        message = "latest pointer JSON paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["external_notification_integration"] is not False:
+        message = "latest pointer JSON external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["shadow_decision_enabled"] not in (True, False):
+        message = "latest pointer JSON shadow_decision_enabled must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return pointer_data
+
+
+def _manual_delivery_latest_status_markdown(
+    *,
+    output_dir: str,
+    manifest_json: Path,
+    manifest_json_exists: bool,
+    manifest_summary_md: Path,
+    manifest_summary_md_exists: bool,
+    manifest_review_json: Path,
+    manifest_review_json_exists: bool,
+    review_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Latest Status",
+        "",
+        f"- output_dir: {output_dir}",
+        f"- manifest_json: {manifest_json}",
+        f"- manifest_json_exists: {str(manifest_json_exists).lower()}",
+        f"- manifest_summary_md: {manifest_summary_md}",
+        f"- manifest_summary_md_exists: {str(manifest_summary_md_exists).lower()}",
+        f"- manifest_review_json: {manifest_review_json}",
+        f"- manifest_review_json_exists: {str(manifest_review_json_exists).lower()}",
+        f"- review_status: {review_data['review_status']}",
+        f"- source_readiness: {review_data['source_readiness']}",
+        f"- actionability_label: {review_data['actionability_label']}",
+        f"- human_action: {review_data['human_action']}",
+        f"- shadow_decision_enabled: {str(review_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: {review_data['safety_boundary']}",
+        f"- status: ready_for_human_review",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_latest_status_data(
+    *,
+    pointer_data: dict[str, Any],
+    review_data: dict[str, Any],
+    manifest_json_path: Path,
+    manifest_summary_md_path: Path,
+    manifest_review_json_path: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    comparable_keys = [
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    for key in comparable_keys:
+        if pointer_data[key] != review_data[key]:
+            message = f"latest pointer JSON {key} does not match review JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    manifest_json_exists = manifest_json_path.exists()
+    manifest_summary_md_exists = manifest_summary_md_path.exists()
+    manifest_review_json_exists = manifest_review_json_path.exists()
+    return {
+        "schema_version": "manual_delivery_latest_status.v1",
+        "status": "ready_for_human_review",
+        "output_dir": review_data["output_dir"],
+        "review_status": review_data["review_status"],
+        "human_review_required": review_data["human_review_required"],
+        "trade_execution_allowed": review_data["trade_execution_allowed"],
+        "paper_positions_integration": review_data["paper_positions_integration"],
+        "external_notification_integration": review_data["external_notification_integration"],
+        "source_readiness": review_data["source_readiness"],
+        "actionability_label": review_data["actionability_label"],
+        "human_action": review_data["human_action"],
+        "shadow_decision_enabled": review_data["shadow_decision_enabled"],
+        "manifest_json_exists": manifest_json_exists,
+        "manifest_summary_md_exists": manifest_summary_md_exists,
+        "manifest_review_json_exists": manifest_review_json_exists,
     }
 
 
@@ -11254,6 +11483,66 @@ def _run_write_latest_manual_delivery_review_package_command(
     sys.stdout.write(f"manual_delivery_manifest_review_json={review_json_path}\n")
     if latest_pointer_json_path is not None:
         sys.stdout.write(f"latest_manual_delivery_pointer_json={latest_pointer_json_path}\n")
+
+
+def _run_summarize_latest_manual_delivery_pointer_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    latest_pointer_json_path = Path(args.latest_pointer_json)
+    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
+    manifest_json_path = Path(pointer_data["manifest_json"])
+    manifest_summary_md_path = Path(pointer_data["manifest_summary_md"])
+    manifest_review_json_path = Path(pointer_data["manifest_review_json"])
+    for label, path in [
+        ("manifest_json", manifest_json_path),
+        ("manifest_summary_md", manifest_summary_md_path),
+        ("manifest_review_json", manifest_review_json_path),
+    ]:
+        if not path.exists():
+            message = f"latest pointer {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    review_data = _load_json_object(manifest_review_json_path, parser)
+    _manual_delivery_latest_manifest_review_data(review_data, parser)
+    status_data = _manual_delivery_latest_status_data(
+        pointer_data=pointer_data,
+        review_data=review_data,
+        manifest_json_path=manifest_json_path,
+        manifest_summary_md_path=manifest_summary_md_path,
+        manifest_review_json_path=manifest_review_json_path,
+        parser=parser,
+    )
+    summary_text = _manual_delivery_latest_status_markdown(
+        output_dir=str(status_data["output_dir"]),
+        manifest_json=manifest_json_path,
+        manifest_json_exists=bool(status_data["manifest_json_exists"]),
+        manifest_summary_md=manifest_summary_md_path,
+        manifest_summary_md_exists=bool(status_data["manifest_summary_md_exists"]),
+        manifest_review_json=manifest_review_json_path,
+        manifest_review_json_exists=bool(status_data["manifest_review_json_exists"]),
+        review_data=review_data,
+    )
+    if output_md_arg:
+        output_md_path = Path(output_md_arg)
+        _ensure_parent(output_md_path)
+        output_md_path.write_text(summary_text, encoding="utf-8")
+    if output_json_arg:
+        output_json_path = Path(output_json_arg)
+        _ensure_parent(output_json_path)
+        output_json_path.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_latest_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -14055,6 +14344,11 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_manifest_summary_parser.add_argument("--output-md")
     manual_delivery_manifest_summary_parser.add_argument("--output-json")
 
+    latest_manual_delivery_pointer_summary_parser = subparsers.add_parser("summarize-latest-manual-delivery-pointer")
+    latest_manual_delivery_pointer_summary_parser.add_argument("--latest-pointer-json", required=True)
+    latest_manual_delivery_pointer_summary_parser.add_argument("--output-md")
+    latest_manual_delivery_pointer_summary_parser.add_argument("--output-json")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -14524,6 +14818,10 @@ def main() -> None:
 
     if args.command == "summarize-manual-delivery-local-flow-manifest":
         _run_summarize_manual_delivery_local_flow_manifest_command(args, parser)
+        return
+
+    if args.command == "summarize-latest-manual-delivery-pointer":
+        _run_summarize_latest_manual_delivery_pointer_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":
