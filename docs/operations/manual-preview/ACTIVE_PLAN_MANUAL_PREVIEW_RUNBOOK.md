@@ -80,6 +80,7 @@ Purpose: report-only human manual trading support preview.
 
 - Use `write-latest-manual-delivery-review-package --output-dir <path>` when you want the local flow plus `review/manifest-summary.md` and `review/manifest-review.json` in one report-only command.
 - It is the app/operator one-command local review package and keeps the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
+- Add `--write-local-handoff` when you want that one command to also write `review/latest-pointer.json`, `review/latest-status.md`, and `review/latest-status.json` as the recommended local app/operator handoff mode.
 - Add `--latest-pointer-json <path>` when you want one optional local app/operator handoff file that points to `manifest.json`, `review/manifest-summary.md`, and `review/manifest-review.json`.
 - Add `--latest-status-md <path>` and `--latest-status-json <path>` when you want the same one-command package to also emit validated latest status handoff files for local app/operator use.
 - Validate that pointer with `summarize-latest-manual-delivery-pointer --latest-pointer-json <path>` before handing it off.

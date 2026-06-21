@@ -11338,6 +11338,31 @@ def _write_manual_delivery_latest_status_outputs(
     return summary_text, status_data
 
 
+def _resolve_manual_delivery_review_package_handoff_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    output_dir = Path(args.output_dir)
+    review_dir = output_dir / "review"
+    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
+    latest_status_md_arg = getattr(args, "latest_status_md", None)
+    latest_status_json_arg = getattr(args, "latest_status_json", None)
+    write_local_handoff = bool(getattr(args, "write_local_handoff", False))
+    if write_local_handoff:
+        if latest_pointer_json_arg is None:
+            latest_pointer_json_arg = str(review_dir / "latest-pointer.json")
+        if latest_status_md_arg is None:
+            latest_status_md_arg = str(review_dir / "latest-status.md")
+        if latest_status_json_arg is None:
+            latest_status_json_arg = str(review_dir / "latest-status.json")
+    if (latest_status_md_arg or latest_status_json_arg) and not latest_pointer_json_arg:
+        message = "--latest-status-md and --latest-status-json require --latest-pointer-json"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return latest_pointer_json_arg, latest_status_md_arg, latest_status_json_arg
+
+
 def _run_summarize_manual_delivery_local_flow_manifest_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -11504,14 +11529,7 @@ def _run_write_latest_manual_delivery_review_package_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
-    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
-    latest_status_md_arg = getattr(args, "latest_status_md", None)
-    latest_status_json_arg = getattr(args, "latest_status_json", None)
-    if (latest_status_md_arg or latest_status_json_arg) and not latest_pointer_json_arg:
-        message = "--latest-status-md and --latest-status-json require --latest-pointer-json"
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
+    latest_pointer_json_arg, latest_status_md_arg, latest_status_json_arg = _resolve_manual_delivery_review_package_handoff_paths(args, parser)
     _run_latest_manual_delivery_local_flow_command(args, parser)
     output_dir = Path(args.output_dir)
     review_dir = output_dir / "review"
@@ -14349,6 +14367,7 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_review_package_parser.add_argument("--latest-pointer-json")
     manual_delivery_review_package_parser.add_argument("--latest-status-md")
     manual_delivery_review_package_parser.add_argument("--latest-status-json")
+    manual_delivery_review_package_parser.add_argument("--write-local-handoff", action="store_true")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)

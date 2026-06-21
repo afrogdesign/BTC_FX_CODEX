@@ -3458,6 +3458,123 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse(pointer_json.exists())
             self.assertFalse(status_md.exists())
             self.assertFalse(status_json.exists())
+            self.assertFalse((output_dir / "review" / "latest-pointer.json").exists())
+            self.assertFalse((output_dir / "review" / "latest-status.md").exists())
+            self.assertFalse((output_dir / "review" / "latest-status.json").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_writes_local_handoff_outputs_for_default_package(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(output_dir, ["--write-local-handoff"]),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            pointer_json = review_dir / "latest-pointer.json"
+            status_md = review_dir / "latest-status.md"
+            status_json = review_dir / "latest-status.json"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+            )
+            self.assertTrue(pointer_json.exists())
+            self.assertTrue(status_md.exists())
+            self.assertTrue(status_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_writes_local_handoff_outputs_for_shadow_package(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--write-local-handoff",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            pointer_json = review_dir / "latest-pointer.json"
+            status_md = review_dir / "latest-status.md"
+            status_json = review_dir / "latest-status.json"
+            shadow_csv_stdout = Path("logs") / "csv" / "active_plan_shadow_decisions.csv"
+            shadow_csv = base_dir / shadow_csv_stdout
+            shadow_summary = output_dir / "actionability-shadow-summary.md"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv_stdout}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+            )
+            self.assertTrue(pointer_json.exists())
+            self.assertTrue(status_md.exists())
+            self.assertTrue(status_json.exists())
+            self.assertTrue(shadow_csv.exists())
+            self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_review_package_cli_prefers_explicit_handoff_paths_over_standard_paths(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "package"
+            pointer_json = base_dir / "custom-pointer.json"
+            status_md = base_dir / "custom-status.md"
+            status_json = base_dir / "custom-status.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_review_package_main_with_argv(
+                    self._manual_delivery_review_package_argv(
+                        output_dir,
+                        [
+                            "--write-local-handoff",
+                            "--latest-pointer-json",
+                            str(pointer_json),
+                            "--latest-status-md",
+                            str(status_md),
+                            "--latest-status-json",
+                            str(status_json),
+                        ],
+                    ),
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            review_dir = output_dir / "review"
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={review_dir / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={review_dir / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+            )
+            self.assertTrue(pointer_json.exists())
+            self.assertTrue(status_md.exists())
+            self.assertTrue(status_json.exists())
+            self.assertFalse((review_dir / "latest-pointer.json").exists())
+            self.assertFalse((review_dir / "latest-status.md").exists())
+            self.assertFalse((review_dir / "latest-status.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
