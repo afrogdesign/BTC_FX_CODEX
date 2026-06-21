@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
+from typing import Any
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -585,7 +586,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             )
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(stdout, f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n")
             self.assertFalse(shadow_csv.exists())
 
     def test_write_latest_manual_delivery_local_flow_cli_with_shadow_flag_appends_row_from_generated_json(self) -> None:
@@ -620,7 +621,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(first_code, 0, msg=first_stderr)
             self.assertEqual(
                 first_stdout,
-                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n",
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n",
             )
             seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
             with shadow_csv.open("r", newline="", encoding="utf-8") as fp:
@@ -658,7 +659,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(second_code, 0, msg=second_stderr)
             self.assertEqual(
                 second_stdout,
-                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n",
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n",
             )
             with shadow_csv.open("r", newline="", encoding="utf-8") as fp:
                 rows = list(csv.DictReader(fp))
@@ -689,6 +690,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(stdout, f"{output_dir}\n")
             self.assertIn("must not be paper_positions.csv", stderr)
             self.assertFalse(output_csv.exists())
+            self.assertFalse((output_dir / "manifest.json").exists())
 
     def _latest_manual_delivery_package_argv(self, extra_args: list[str] | None = None) -> list[str]:
         argv = [
@@ -1054,6 +1056,21 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     else:
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
+
+    def _read_manual_delivery_manifest(self, output_dir: Path) -> dict[str, Any]:
+        return json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
+        artifact = manifest["artifacts"][artifact_key]
+        self.assertEqual(artifact["path"], str(path))
+        self.assertEqual(artifact["exists"], exists)
+
+    def _assert_manifest_bundle_artifacts(self, manifest: dict[str, Any], bundle_dir: Path) -> None:
+        for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]:
+            artifact = manifest["artifacts"]["bundle"][filename]
+            expected_path = bundle_dir / filename
+            self.assertEqual(artifact["path"], str(expected_path))
+            self.assertTrue(artifact["exists"])
 
     def _run_actionability_shadow_decision_main_with_argv(
         self,
@@ -2554,6 +2571,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 Path("bundle") / "package.txt",
                 Path("bundle") / "README.txt",
                 Path("inbox.md"),
+                Path("manifest.json"),
             }
             actual_files = {
                 path.relative_to(output_dir)
@@ -2562,12 +2580,41 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             }
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(stdout, f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n")
             self.assertEqual(actual_files, expected_files)
             self.assertFalse(shadow_csv.exists())
             self.assertFalse(shadow_summary.exists())
             shadow_writer.assert_not_called()
             shadow_summary_builder.assert_not_called()
+            self.assertFalse((output_dir / "paper_positions.csv").exists())
+            self.assertFalse((output_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+            manifest = self._read_manual_delivery_manifest(output_dir)
+            self.assertEqual(manifest["schema_version"], "manual_delivery_local_flow.v1")
+            self.assertEqual(
+                manifest["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertEqual(manifest["output_dir"], str(output_dir))
+            self.assertEqual(manifest["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(manifest["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(manifest["actionability_reasons"], ["source_not_ready:review_required_missing_or_stale_source"])
+            self.assertEqual(manifest["human_action"], "do_nothing")
+            self.assertEqual(
+                manifest["actionability_safety"],
+                "report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually",
+            )
+            self.assertFalse(manifest["shadow_decision_enabled"])
+            self.assertEqual(manifest["actionability_shadow_output_csv"], "")
+            self.assertFalse(manifest["actionability_shadow_output_csv_exists"])
+            self.assertEqual(manifest["actionability_shadow_summary_output_md"], "")
+            self.assertFalse(manifest["actionability_shadow_summary_output_md_exists"])
+            self.assertFalse(manifest["paper_positions_integration"])
+            self.assertFalse(manifest["external_notification_integration"])
+            self._assert_manifest_artifact(manifest, "source_files", output_dir / "source-files.txt")
+            self._assert_manifest_artifact(manifest, "input_json", output_dir / "manual-delivery-input.json")
+            self._assert_manifest_artifact(manifest, "inbox", output_dir / "inbox.md")
+            self._assert_manifest_bundle_artifacts(manifest, output_dir / "bundle")
 
             source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
             self.assertIn("intraperiod_outcomes_path=logs/csv/active_plan_candidate_intraperiod_outcomes.csv", source_files)
@@ -2684,6 +2731,13 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertNotIn("actionability_shadow_output_csv=", inbox)
             self.assertNotIn("actionability_shadow_summary_output_md=", inbox)
 
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["generated_at_jst"], seed["generated_at_jst"])
+            self.assertEqual(manifest["actionability_label"], seed["actionability_label"])
+            self.assertEqual(manifest["actionability_reasons"], seed["actionability_reasons"])
+            self.assertEqual(manifest["human_action"], seed["human_action"])
+            self.assertEqual(manifest["actionability_safety"], seed["actionability_safety"])
+
     def test_write_latest_manual_delivery_local_flow_cli_writes_shadow_csv_and_summary_when_requested(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -2720,6 +2774,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 Path("bundle") / "package.txt",
                 Path("bundle") / "README.txt",
                 Path("inbox.md"),
+                Path("manifest.json"),
             }
             actual_files = {
                 path.relative_to(output_dir)
@@ -2728,7 +2783,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             }
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nactionability_shadow_summary_output_md={shadow_summary}\n")
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nactionability_shadow_summary_output_md={shadow_summary}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n",
+            )
             self.assertEqual(actual_files, expected_files)
             self.assertTrue(shadow_csv.exists())
             self.assertTrue(shadow_summary.exists())
@@ -2740,6 +2798,35 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(len(shadow_rows), 1)
             expected_summary = log_feedback.build_actionability_shadow_decision_summary(input_csv=shadow_csv)
             self.assertEqual(shadow_summary.read_text(encoding="utf-8"), expected_summary)
+
+            manifest = self._read_manual_delivery_manifest(output_dir)
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], "manual_delivery_local_flow.v1")
+            self.assertEqual(manifest["generated_at_jst"], seed["generated_at_jst"])
+            self.assertEqual(
+                manifest["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertEqual(manifest["output_dir"], str(output_dir))
+            self.assertEqual(
+                manifest["source_readiness"],
+                "review_required_missing_or_stale_source",
+            )
+            self.assertEqual(manifest["actionability_label"], seed["actionability_label"])
+            self.assertEqual(manifest["actionability_reasons"], seed["actionability_reasons"])
+            self.assertEqual(manifest["human_action"], seed["human_action"])
+            self.assertEqual(manifest["actionability_safety"], seed["actionability_safety"])
+            self.assertTrue(manifest["shadow_decision_enabled"])
+            self.assertEqual(manifest["actionability_shadow_output_csv"], str(shadow_csv))
+            self.assertTrue(manifest["actionability_shadow_output_csv_exists"])
+            self.assertEqual(manifest["actionability_shadow_summary_output_md"], str(shadow_summary))
+            self.assertTrue(manifest["actionability_shadow_summary_output_md_exists"])
+            self.assertFalse(manifest["paper_positions_integration"])
+            self.assertFalse(manifest["external_notification_integration"])
+            self._assert_manifest_artifact(manifest, "source_files", output_dir / "source-files.txt")
+            self._assert_manifest_artifact(manifest, "input_json", output_dir / "manual-delivery-input.json")
+            self._assert_manifest_artifact(manifest, "inbox", output_dir / "inbox.md")
+            self._assert_manifest_bundle_artifacts(manifest, output_dir / "bundle")
 
             inbox = (output_dir / "inbox.md").read_text(encoding="utf-8")
             self.assertIn("report-only", inbox)
@@ -2778,7 +2865,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 os.chdir(original_cwd)
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\n")
+            self.assertEqual(
+                stdout,
+                f"{output_dir}\nactionability_shadow_output_csv={shadow_csv}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n",
+            )
             self.assertTrue(shadow_csv.exists())
             self.assertFalse((base_dir / "artifacts" / "actionability-shadow-summary.md").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
@@ -2791,6 +2881,32 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("safety=report-only, not FORMAL_GO, no automatic order, human decides manually", inbox)
             self.assertNotIn("actionability_shadow_summary_output_md=", inbox)
             self.assertNotIn("actionability_shadow_summary_output_md_exists=true", inbox)
+
+            manifest = self._read_manual_delivery_manifest(output_dir)
+            seed = json.loads((output_dir / "manual-delivery-input.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], "manual_delivery_local_flow.v1")
+            self.assertEqual(manifest["generated_at_jst"], seed["generated_at_jst"])
+            self.assertEqual(
+                manifest["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertEqual(manifest["output_dir"], str(output_dir))
+            self.assertEqual(manifest["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(manifest["actionability_label"], seed["actionability_label"])
+            self.assertEqual(manifest["actionability_reasons"], seed["actionability_reasons"])
+            self.assertEqual(manifest["human_action"], seed["human_action"])
+            self.assertEqual(manifest["actionability_safety"], seed["actionability_safety"])
+            self.assertTrue(manifest["shadow_decision_enabled"])
+            self.assertEqual(manifest["actionability_shadow_output_csv"], str(shadow_csv))
+            self.assertTrue(manifest["actionability_shadow_output_csv_exists"])
+            self.assertEqual(manifest["actionability_shadow_summary_output_md"], "")
+            self.assertFalse(manifest["actionability_shadow_summary_output_md_exists"])
+            self.assertFalse(manifest["paper_positions_integration"])
+            self.assertFalse(manifest["external_notification_integration"])
+            self._assert_manifest_artifact(manifest, "source_files", output_dir / "source-files.txt")
+            self._assert_manifest_artifact(manifest, "input_json", output_dir / "manual-delivery-input.json")
+            self._assert_manifest_artifact(manifest, "inbox", output_dir / "inbox.md")
+            self._assert_manifest_bundle_artifacts(manifest, output_dir / "bundle")
 
     def test_write_latest_manual_delivery_local_flow_cli_rejects_summary_output_without_shadow_decision(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2817,6 +2933,11 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", stderr)
             self.assertFalse(output_dir.exists())
             self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "negative-flow").exists())
+            self.assertFalse((base_dir / "negative-summary.md").exists())
+            self.assertFalse((base_dir / "manifest.json").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
     def test_write_latest_manual_delivery_local_flow_cli_uses_explicit_source_paths_and_preserves_inputs(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2841,7 +2962,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             )
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(stdout, f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n")
             source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
             self.assertIn(f"intraperiod_outcomes_path={csv_path}", source_files)
             self.assertIn("intraperiod_outcomes_exists=true", source_files)
@@ -2872,7 +2993,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             )
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(stdout, f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n")
             source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
             self.assertIn(f"intraperiod_outcomes_path={csv_path}", source_files)
             self.assertIn("intraperiod_outcomes_exists=true", source_files)
@@ -2913,7 +3034,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             )
 
             self.assertEqual(code, 0, msg=stderr)
-            self.assertEqual(stdout, f"{output_dir}\n")
+            self.assertEqual(stdout, f"{output_dir}\nmanual_delivery_manifest_json={output_dir / 'manifest.json'}\n")
             source_files = (output_dir / "source-files.txt").read_text(encoding="utf-8")
             self.assertIn("intraperiod_outcomes_freshness=stale", source_files)
             self.assertIn("source_readiness=review_required_missing_or_stale_source", source_files)

@@ -10759,6 +10759,61 @@ def _manual_delivery_extract_summary_field(summary_text: str, field_name: str) -
     return ""
 
 
+def _manual_delivery_local_flow_manifest_data(
+    *,
+    output_dir: Path,
+    generated_at_jst: str,
+    source_readiness: str,
+    actionability_label: str,
+    actionability_reasons: list[str],
+    human_action: str,
+    actionability_safety: str,
+    source_files_path: Path,
+    input_json_path: Path,
+    bundle_dir: Path,
+    inbox_path: Path,
+    shadow_decision_enabled: bool,
+    actionability_shadow_output_csv: Path | None = None,
+    actionability_shadow_summary_output_md: Path | None = None,
+) -> dict[str, Any]:
+    def _artifact_entry(path: Path) -> dict[str, Any]:
+        return {"path": str(path), "exists": path.exists()}
+
+    bundle_files = {
+        filename: _artifact_entry(bundle_dir / filename)
+        for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]
+    }
+    manifest: dict[str, Any] = {
+        "schema_version": "manual_delivery_local_flow.v1",
+        "generated_at_jst": generated_at_jst,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "output_dir": str(output_dir),
+        "source_readiness": source_readiness,
+        "actionability_label": actionability_label,
+        "actionability_reasons": list(actionability_reasons),
+        "human_action": human_action,
+        "actionability_safety": actionability_safety,
+        "artifacts": {
+            "source_files": _artifact_entry(source_files_path),
+            "input_json": _artifact_entry(input_json_path),
+            "bundle": bundle_files,
+            "inbox": _artifact_entry(inbox_path),
+        },
+        "shadow_decision_enabled": shadow_decision_enabled,
+        "actionability_shadow_output_csv": str(actionability_shadow_output_csv) if actionability_shadow_output_csv is not None else "",
+        "actionability_shadow_output_csv_exists": bool(actionability_shadow_output_csv and actionability_shadow_output_csv.exists()),
+        "actionability_shadow_summary_output_md": (
+            str(actionability_shadow_summary_output_md) if actionability_shadow_summary_output_md is not None else ""
+        ),
+        "actionability_shadow_summary_output_md_exists": bool(
+            actionability_shadow_summary_output_md and actionability_shadow_summary_output_md.exists()
+        ),
+        "paper_positions_integration": False,
+        "external_notification_integration": False,
+    }
+    return manifest
+
+
 def _run_latest_manual_delivery_local_flow_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -10877,6 +10932,25 @@ def _run_latest_manual_delivery_local_flow_command(
             input_json=seed_data,
         )
     (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
+    manifest_path = output_dir / "manifest.json"
+    manifest_data = _manual_delivery_local_flow_manifest_data(
+        output_dir=output_dir,
+        generated_at_jst=str(seed_data["generated_at_jst"]),
+        source_readiness=str(_manual_delivery_extract_summary_field(str(seed_data["intraperiod_evidence_summary"]), "source_readiness") or "unknown"),
+        actionability_label=str(seed_data["actionability_label"]),
+        actionability_reasons=[str(reason) for reason in list(seed_data["actionability_reasons"])],
+        human_action=str(seed_data["human_action"]),
+        actionability_safety=str(seed_data["actionability_safety"]),
+        source_files_path=output_dir / "source-files.txt",
+        input_json_path=input_json_path,
+        bundle_dir=bundle_dir,
+        inbox_path=output_dir / "inbox.md",
+        shadow_decision_enabled=write_actionability_shadow_decision,
+        actionability_shadow_output_csv=shadow_output_csv,
+        actionability_shadow_summary_output_md=shadow_summary_output_md_path,
+    )
+    manifest_path.write_text(json.dumps(manifest_data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    sys.stdout.write(f"manual_delivery_manifest_json={manifest_path}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
