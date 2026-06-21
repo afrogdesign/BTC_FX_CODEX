@@ -1144,6 +1144,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_manual_delivery_human_gate_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-manual-delivery-human-gate", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_latest_manual_delivery_pointer_status_main_with_argv(
         self,
         argv: list[str],
@@ -1177,6 +1200,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _read_manual_delivery_latest_status(self, output_json: Path) -> dict[str, Any]:
+        return json.loads(output_json.read_text(encoding="utf-8"))
+
+    def _read_manual_delivery_human_gate(self, output_json: Path) -> dict[str, Any]:
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
@@ -3903,18 +3929,39 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             pointer_json = handoff_dir / "latest-pointer.json"
             status_md = handoff_dir / "latest-status.md"
             status_json = handoff_dir / "latest-status.json"
+            human_gate_json = handoff_dir / "human-gate.json"
             self.assertEqual(
                 stdout,
-                f"handoff_dir={handoff_dir}\n{package_dir}\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+                f"handoff_dir={handoff_dir}\n{package_dir}\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\nmanual_delivery_human_gate_json={human_gate_json}\n",
             )
             self.assertTrue(package_dir.exists())
             self.assertTrue(pointer_json.exists())
             self.assertTrue(status_md.exists())
             self.assertTrue(status_json.exists())
+            self.assertTrue(human_gate_json.exists())
             status_data = self._read_manual_delivery_latest_status(status_json)
             self.assertEqual(status_data["status"], "ready_for_human_review")
             self.assertFalse(status_data["trade_execution_allowed"])
             self.assertTrue(status_data["human_review_required"])
+            human_gate_data = self._read_manual_delivery_human_gate(human_gate_json)
+            self.assertEqual(human_gate_data["schema_version"], "manual_delivery_human_gate.v1")
+            self.assertEqual(human_gate_data["gate_status"], "ready_for_human_review")
+            self.assertEqual(human_gate_data["allowed_next_action"], "human_review_only")
+            self.assertFalse(human_gate_data["trade_execution_allowed"])
+            self.assertFalse(human_gate_data["automatic_order_allowed"])
+            self.assertFalse(human_gate_data["external_notification_allowed"])
+            self.assertFalse(human_gate_data["paper_positions_integration"])
+            self.assertTrue(human_gate_data["human_review_required"])
+            reader_code, reader_stdout, reader_stderr = self._run_manual_delivery_human_gate_main_with_argv(
+                ["--human-gate-json", str(human_gate_json)],
+                base_dir=base_dir,
+            )
+            self.assertEqual(reader_code, 0, msg=reader_stderr)
+            self.assertIn("# Manual Delivery Human Gate", reader_stdout)
+            self.assertIn("- gate_status: ready_for_human_review", reader_stdout)
+            self.assertIn("- allowed_next_action: human_review_only", reader_stdout)
+            self.assertIn("- latest_pointer_json_exists: true", reader_stdout)
+            self.assertIn("- latest_status_json_exists: true", reader_stdout)
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
@@ -3944,21 +3991,37 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             pointer_json = handoff_dir / "latest-pointer.json"
             status_md = handoff_dir / "latest-status.md"
             status_json = handoff_dir / "latest-status.json"
+            human_gate_json = handoff_dir / "human-gate.json"
             shadow_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
             self.assertEqual(
                 stdout,
-                f"handoff_dir={handoff_dir}\n{package_dir}\nactionability_shadow_output_csv=logs/csv/active_plan_shadow_decisions.csv\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\n",
+                f"handoff_dir={handoff_dir}\n{package_dir}\nactionability_shadow_output_csv=logs/csv/active_plan_shadow_decisions.csv\nmanual_delivery_manifest_json={package_dir / 'manifest.json'}\nmanual_delivery_manifest_summary_md={package_dir / 'review' / 'manifest-summary.md'}\nmanual_delivery_manifest_review_json={package_dir / 'review' / 'manifest-review.json'}\nlatest_manual_delivery_pointer_json={pointer_json}\nmanual_delivery_latest_status_md={status_md}\nmanual_delivery_latest_status_json={status_json}\nmanual_delivery_human_gate_json={human_gate_json}\n",
             )
             self.assertTrue(package_dir.exists())
             self.assertTrue(pointer_json.exists())
             self.assertTrue(status_md.exists())
             self.assertTrue(status_json.exists())
+            self.assertTrue(human_gate_json.exists())
             self.assertTrue(shadow_csv.exists())
             status_data = self._read_manual_delivery_latest_status(status_json)
             self.assertEqual(status_data["status"], "ready_for_human_review")
             self.assertFalse(status_data["trade_execution_allowed"])
             self.assertTrue(status_data["human_review_required"])
             self.assertTrue(status_data["shadow_decision_enabled"])
+            human_gate_data = self._read_manual_delivery_human_gate(human_gate_json)
+            self.assertEqual(human_gate_data["schema_version"], "manual_delivery_human_gate.v1")
+            self.assertEqual(human_gate_data["gate_status"], "ready_for_human_review")
+            self.assertEqual(human_gate_data["allowed_next_action"], "human_review_only")
+            self.assertTrue(human_gate_data["shadow_decision_enabled"])
+            reader_code, reader_stdout, reader_stderr = self._run_manual_delivery_human_gate_main_with_argv(
+                ["--human-gate-json", str(human_gate_json)],
+                base_dir=base_dir,
+            )
+            self.assertEqual(reader_code, 0, msg=reader_stderr)
+            self.assertIn("# Manual Delivery Human Gate", reader_stdout)
+            self.assertIn("- gate_status: ready_for_human_review", reader_stdout)
+            self.assertIn("- allowed_next_action: human_review_only", reader_stdout)
+            self.assertIn("- shadow_decision_enabled: true", reader_stdout)
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
@@ -3991,6 +4054,47 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((handoff_dir / "latest-pointer.json").exists())
             self.assertFalse((handoff_dir / "latest-status.md").exists())
             self.assertFalse((handoff_dir / "latest-status.json").exists())
+            self.assertFalse((handoff_dir / "human-gate.json").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_manual_delivery_human_gate_cli_rejects_unsafe_human_gate_and_writes_no_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = base_dir / "handoff"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_handoff_main_with_argv(
+                    ["--handoff-dir", str(handoff_dir)],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            human_gate_json = handoff_dir / "human-gate.json"
+            gate_data = self._read_manual_delivery_human_gate(human_gate_json)
+            gate_data["gate_status"] = "blocked"
+            human_gate_json.write_text(json.dumps(gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            summary_md = base_dir / "human-gate-summary.md"
+            summary_json = base_dir / "human-gate-summary.json"
+            reader_code, reader_stdout, reader_stderr = self._run_manual_delivery_human_gate_main_with_argv(
+                [
+                    "--human-gate-json",
+                    str(human_gate_json),
+                    "--output-md",
+                    str(summary_md),
+                    "--output-json",
+                    str(summary_json),
+                ],
+                base_dir=base_dir,
+            )
+            self.assertNotEqual(reader_code, 0)
+            self.assertEqual(reader_stdout, "")
+            self.assertIn("human gate JSON gate_status must be ready_for_human_review", reader_stderr)
+            self.assertFalse(summary_md.exists())
+            self.assertFalse(summary_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

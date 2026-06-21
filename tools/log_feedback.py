@@ -11288,6 +11288,25 @@ def _manual_delivery_latest_status_data(
     }
 
 
+def _manual_delivery_latest_status_json_data(
+    *,
+    latest_status_data: dict[str, Any],
+    expected_status_data: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if str(latest_status_data.get("schema_version", "")).strip() != "manual_delivery_latest_status.v1":
+        message = f"latest status JSON schema_version must be manual_delivery_latest_status.v1: {latest_status_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if latest_status_data != expected_status_data:
+        message = "latest status JSON does not match validated latest status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return latest_status_data
+
+
 def _write_manual_delivery_latest_status_outputs(
     *,
     latest_pointer_json: Path,
@@ -11336,6 +11355,163 @@ def _write_manual_delivery_latest_status_outputs(
         _ensure_parent(output_json)
         output_json.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary_text, status_data
+
+
+def _manual_delivery_human_gate_markdown(
+    *,
+    output_dir: str,
+    latest_pointer_json: Path,
+    latest_pointer_json_exists: bool,
+    latest_status_json: Path,
+    latest_status_json_exists: bool,
+    gate_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Human Gate",
+        "",
+        f"- output_dir: {output_dir}",
+        f"- latest_pointer_json: {latest_pointer_json}",
+        f"- latest_pointer_json_exists: {str(latest_pointer_json_exists).lower()}",
+        f"- latest_status_json: {latest_status_json}",
+        f"- latest_status_json_exists: {str(latest_status_json_exists).lower()}",
+        f"- review_status: {gate_data['review_status']}",
+        f"- source_readiness: {gate_data['source_readiness']}",
+        f"- actionability_label: {gate_data['actionability_label']}",
+        f"- human_action: {gate_data['human_action']}",
+        f"- shadow_decision_enabled: {str(gate_data['shadow_decision_enabled']).lower()}",
+        f"- gate_status: {gate_data['gate_status']}",
+        f"- allowed_next_action: {gate_data['allowed_next_action']}",
+        f"- trade_execution_allowed: {str(gate_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(gate_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(gate_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(gate_data['paper_positions_integration']).lower()}",
+        f"- human_review_required: {str(gate_data['human_review_required']).lower()}",
+        f"- safety_boundary: {gate_data['safety_boundary']}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_human_gate_data(
+    *,
+    output_dir: Path,
+    latest_pointer_json: Path,
+    latest_status_json: Path,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_human_gate.v1",
+        "gate_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "human_review_required": True,
+        "output_dir": str(output_dir),
+        "latest_status_json": str(latest_status_json),
+        "latest_pointer_json": str(latest_pointer_json),
+        "review_status": status_data["review_status"],
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _load_manual_delivery_human_gate_json(
+    human_gate_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    gate_data = _load_json_object(human_gate_json, parser)
+    if str(gate_data.get("schema_version", "")).strip() != "manual_delivery_human_gate.v1":
+        message = f"human gate JSON schema_version must be manual_delivery_human_gate.v1: {gate_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(gate_data.get("gate_status", "")).strip() != "ready_for_human_review":
+        message = f"human gate JSON gate_status must be ready_for_human_review: {gate_data.get('gate_status')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("allowed_next_action", "human_review_only"),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("human_review_required", True),
+    ]:
+        if gate_data.get(key) != expected_value:
+            message = f"human gate JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(gate_data.get("safety_boundary", "")).strip() != "report-only / not FORMAL_GO / no automatic order / human decides manually":
+        message = "human gate JSON safety_boundary must be report-only / not FORMAL_GO / no automatic order / human decides manually"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return gate_data
+
+
+def _write_manual_delivery_human_gate_outputs(
+    *,
+    human_gate_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    gate_data = _load_manual_delivery_human_gate_json(human_gate_json, parser)
+    latest_pointer_json_path = Path(gate_data["latest_pointer_json"])
+    latest_status_json_path = Path(gate_data["latest_status_json"])
+    for label, path in [
+        ("latest_pointer_json", latest_pointer_json_path),
+        ("latest_status_json", latest_status_json_path),
+    ]:
+        if not path.exists():
+            message = f"human gate {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
+    _, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        parser=parser,
+    )
+    latest_status_data = _load_json_object(latest_status_json_path, parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=status_data,
+        parser=parser,
+    )
+    expected_gate_data = _manual_delivery_human_gate_data(
+        output_dir=latest_status_json_path.parent,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_status_json=latest_status_json_path,
+        status_data=status_data,
+    )
+    if gate_data != expected_gate_data:
+        message = "human gate JSON does not match validated human gate data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_human_gate_markdown(
+        output_dir=str(gate_data["output_dir"]),
+        latest_pointer_json=latest_pointer_json_path,
+        latest_pointer_json_exists=True,
+        latest_status_json=latest_status_json_path,
+        latest_status_json_exists=True,
+        gate_data=gate_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, gate_data
 
 
 def _resolve_manual_delivery_review_package_handoff_paths(
@@ -11597,6 +11773,26 @@ def _run_write_latest_manual_delivery_local_handoff_command(
     review_package_args.write_local_handoff = False
     sys.stdout.write(f"handoff_dir={handoff_dir}\n")
     _run_write_latest_manual_delivery_review_package_command(review_package_args, parser)
+    human_gate_json_path = handoff_dir / "human-gate.json"
+    _, _status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=handoff_dir / "latest-pointer.json",
+        parser=parser,
+    )
+    latest_status_data = _load_json_object(handoff_dir / "latest-status.json", parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=_status_data,
+        parser=parser,
+    )
+    human_gate_data = _manual_delivery_human_gate_data(
+        output_dir=handoff_dir,
+        latest_pointer_json=handoff_dir / "latest-pointer.json",
+        latest_status_json=handoff_dir / "latest-status.json",
+        status_data=_status_data,
+    )
+    _ensure_parent(human_gate_json_path)
+    human_gate_json_path.write_text(json.dumps(human_gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    sys.stdout.write(f"manual_delivery_human_gate_json={human_gate_json_path}\n")
 
 
 def _run_summarize_latest_manual_delivery_pointer_command(
@@ -11617,6 +11813,30 @@ def _run_summarize_latest_manual_delivery_pointer_command(
         sys.stdout.write(f"manual_delivery_latest_status_json={output_json_arg}\n")
     elif output_md_arg:
         sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_summarize_manual_delivery_human_gate_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    human_gate_json_path = Path(args.human_gate_json)
+    summary_text, gate_data = _write_manual_delivery_human_gate_outputs(
+        human_gate_json=human_gate_json_path,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_human_gate_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_human_gate_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_human_gate_md={output_md_arg}\n")
     elif output_json_arg:
         sys.stdout.write(summary_text)
     else:
@@ -14411,6 +14631,11 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-notes", default="")
     manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
 
+    manual_delivery_human_gate_parser = subparsers.add_parser("summarize-manual-delivery-human-gate")
+    manual_delivery_human_gate_parser.add_argument("--human-gate-json", required=True)
+    manual_delivery_human_gate_parser.add_argument("--output-md")
+    manual_delivery_human_gate_parser.add_argument("--output-json")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -14906,6 +15131,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-local-handoff":
         _run_write_latest_manual_delivery_local_handoff_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-human-gate":
+        _run_summarize_manual_delivery_human_gate_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
