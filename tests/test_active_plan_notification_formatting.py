@@ -1057,6 +1057,38 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _manual_delivery_manifest_summary_argv(self, manifest_json: Path, extra_args: list[str] | None = None) -> list[str]:
+        argv = [
+            "--manifest-json",
+            str(manifest_json),
+        ]
+        if extra_args:
+            argv.extend(extra_args)
+        return argv
+
+    def _run_manual_delivery_manifest_summary_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-manual-delivery-local-flow-manifest", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _read_manual_delivery_manifest(self, output_dir: Path) -> dict[str, Any]:
         return json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
 
@@ -2936,6 +2968,183 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "negative-flow").exists())
             self.assertFalse((base_dir / "negative-summary.md").exists())
             self.assertFalse((base_dir / "manifest.json").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_flow_manifest_summary_cli_summarizes_default_manifest_and_writes_output_md(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            summary_md = base_dir / "manifest-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    ["--output-dir", str(output_dir)],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            manifest_json = output_dir / "manifest.json"
+            summary_code, summary_stdout, summary_stderr = self._run_manual_delivery_manifest_summary_main_with_argv(
+                self._manual_delivery_manifest_summary_argv(manifest_json),
+                base_dir=base_dir,
+            )
+            self.assertEqual(summary_code, 0, msg=summary_stderr)
+            self.assertIn("# Manual Delivery Local Flow Manifest Summary", summary_stdout)
+            self.assertIn("schema_version: manual_delivery_local_flow.v1", summary_stdout)
+            self.assertIn(f"generated_at_jst: {self._read_manual_delivery_manifest(output_dir)['generated_at_jst']}", summary_stdout)
+            self.assertIn(f"output_dir: {output_dir}", summary_stdout)
+            self.assertIn("source_readiness: review_required_missing_or_stale_source", summary_stdout)
+            self.assertIn("actionability_label: AUTO_REJECT", summary_stdout)
+            self.assertIn("human_action: do_nothing", summary_stdout)
+            self.assertIn("shadow_decision_enabled: false", summary_stdout)
+            self.assertIn("actionability_shadow_output_csv: ", summary_stdout)
+            self.assertIn("actionability_shadow_output_csv_exists: false", summary_stdout)
+            self.assertIn("actionability_shadow_summary_output_md: ", summary_stdout)
+            self.assertIn("actionability_shadow_summary_output_md_exists: false", summary_stdout)
+            self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", summary_stdout)
+            self.assertIn("paper_positions_integration: false", summary_stdout)
+            self.assertIn("external_notification_integration: false", summary_stdout)
+            self.assertIn("existing/total: 8/8", summary_stdout)
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+            write_code, write_stdout, write_stderr = self._run_manual_delivery_manifest_summary_main_with_argv(
+                self._manual_delivery_manifest_summary_argv(manifest_json, ["--output-md", str(summary_md)]),
+                base_dir=base_dir,
+            )
+            self.assertEqual(write_code, 0, msg=write_stderr)
+            self.assertEqual(write_stdout, f"manual_delivery_manifest_summary_md={summary_md}\n")
+            self.assertEqual(summary_md.read_text(encoding="utf-8"), summary_stdout)
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_flow_manifest_summary_cli_summarizes_shadow_manifest(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            shadow_csv = base_dir / "artifacts" / "active_plan_shadow_decisions.csv"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    [
+                        "--output-dir",
+                        str(output_dir),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--actionability-shadow-output-csv",
+                        str(shadow_csv),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            manifest_json = output_dir / "manifest.json"
+            summary_code, summary_stdout, summary_stderr = self._run_manual_delivery_manifest_summary_main_with_argv(
+                self._manual_delivery_manifest_summary_argv(manifest_json),
+                base_dir=base_dir,
+            )
+            self.assertEqual(summary_code, 0, msg=summary_stderr)
+            self.assertIn("# Manual Delivery Local Flow Manifest Summary", summary_stdout)
+            self.assertIn("schema_version: manual_delivery_local_flow.v1", summary_stdout)
+            self.assertIn(f"output_dir: {output_dir}", summary_stdout)
+            self.assertIn("source_readiness: review_required_missing_or_stale_source", summary_stdout)
+            self.assertIn("actionability_label: AUTO_REJECT", summary_stdout)
+            self.assertIn("human_action: do_nothing", summary_stdout)
+            self.assertIn("shadow_decision_enabled: true", summary_stdout)
+            self.assertIn(f"actionability_shadow_output_csv: {shadow_csv}", summary_stdout)
+            self.assertIn("actionability_shadow_output_csv_exists: true", summary_stdout)
+            self.assertIn(f"actionability_shadow_summary_output_md: {shadow_summary}", summary_stdout)
+            self.assertIn("actionability_shadow_summary_output_md_exists: true", summary_stdout)
+            self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", summary_stdout)
+            self.assertIn("paper_positions_integration: false", summary_stdout)
+            self.assertIn("external_notification_integration: false", summary_stdout)
+            self.assertIn("existing/total: 8/8", summary_stdout)
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_latest_manual_delivery_local_flow_manifest_summary_cli_rejects_invalid_and_unsafe_manifests(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_dir = base_dir / "flow"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                code, stdout, stderr = self._run_manual_delivery_local_flow_main_with_argv(
+                    ["--output-dir", str(output_dir)],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(code, 0, msg=stderr)
+            manifest_path = output_dir / "manifest.json"
+            manifest = self._read_manual_delivery_manifest(output_dir)
+
+            cases = [
+                (
+                    "missing manifest",
+                    base_dir / "missing-manifest.json",
+                    "manifest_json does not exist:",
+                ),
+                (
+                    "invalid JSON",
+                    base_dir / "invalid-manifest.json",
+                    "invalid JSON in",
+                ),
+                (
+                    "unsupported schema",
+                    base_dir / "unsupported-schema.json",
+                    "unsupported manifest schema_version: manual_delivery_local_flow.v2",
+                ),
+                (
+                    "paper positions integration",
+                    base_dir / "paper-positions-integration.json",
+                    "manifest paper_positions_integration must be false",
+                ),
+                (
+                    "external notification integration",
+                    base_dir / "external-notification-integration.json",
+                    "manifest external_notification_integration must be false",
+                ),
+            ]
+
+            for case_name, case_path, expected_stderr in cases:
+                with self.subTest(case=case_name):
+                    if case_name == "missing manifest":
+                        if case_path.exists():
+                            case_path.unlink()
+                    elif case_name == "invalid JSON":
+                        case_path.write_text("{", encoding="utf-8")
+                    else:
+                        manifest_case = dict(manifest)
+                        if case_name == "unsupported schema":
+                            manifest_case["schema_version"] = "manual_delivery_local_flow.v2"
+                        elif case_name == "paper positions integration":
+                            manifest_case["paper_positions_integration"] = True
+                        elif case_name == "external notification integration":
+                            manifest_case["external_notification_integration"] = True
+                        case_path.write_text(json.dumps(manifest_case, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+                    code, stdout, stderr = self._run_manual_delivery_manifest_summary_main_with_argv(
+                        self._manual_delivery_manifest_summary_argv(case_path),
+                        base_dir=base_dir,
+                    )
+                    self.assertNotEqual(code, 0)
+                    self.assertEqual(stdout, "")
+                    self.assertIn(expected_stderr, stderr)
+
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

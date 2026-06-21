@@ -10814,6 +10814,174 @@ def _manual_delivery_local_flow_manifest_data(
     return manifest
 
 
+def _manual_delivery_local_flow_manifest_artifact_readiness_counts(
+    artifacts: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[int, int]:
+    existing = 0
+    total = 0
+
+    def _visit(node: Any, location: str) -> None:
+        nonlocal existing, total
+        if isinstance(node, dict) and "path" in node and "exists" in node:
+            path_value = node.get("path")
+            exists_value = node.get("exists")
+            if not isinstance(path_value, str):
+                message = f"manifest artifact path must be a string at {location}"
+                if parser is None:
+                    raise ValueError(message)
+                parser.error(message)
+            if not isinstance(exists_value, bool):
+                message = f"manifest artifact exists must be a boolean at {location}"
+                if parser is None:
+                    raise ValueError(message)
+                parser.error(message)
+            total += 1
+            if exists_value:
+                existing += 1
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                child_location = f"{location}.{key}" if location else str(key)
+                _visit(value, child_location)
+            return
+        message = f"manifest artifacts must contain only nested objects or path/exists entries: {location or 'artifacts'}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    _visit(artifacts, "artifacts")
+    return existing, total
+
+
+def _load_manual_delivery_local_flow_manifest_json(
+    manifest_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if not manifest_json.exists():
+        message = f"manifest_json does not exist: {manifest_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    manifest = _load_json_object(manifest_json, parser)
+    schema_version = str(manifest.get("schema_version", "")).strip()
+    if schema_version != "manual_delivery_local_flow.v1":
+        message = f"unsupported manifest schema_version: {schema_version or 'missing'}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    required_top_level_keys = [
+        "generated_at_jst",
+        "safety_boundary",
+        "output_dir",
+        "source_readiness",
+        "actionability_label",
+        "actionability_reasons",
+        "human_action",
+        "actionability_safety",
+        "artifacts",
+        "shadow_decision_enabled",
+        "actionability_shadow_output_csv",
+        "actionability_shadow_output_csv_exists",
+        "actionability_shadow_summary_output_md",
+        "actionability_shadow_summary_output_md_exists",
+    ]
+    missing_keys = [key for key in required_top_level_keys if key not in manifest]
+    if missing_keys:
+        message = "manifest missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    safety_boundary = str(manifest.get("safety_boundary", "")).strip()
+    required_safety_terms = ["report-only", "not FORMAL_GO", "no automatic order", "human decides manually"]
+    if not all(term in safety_boundary for term in required_safety_terms):
+        message = f'manifest safety_boundary must contain: "{" / ".join(required_safety_terms)}"'
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if manifest.get("paper_positions_integration") is not False:
+        message = "manifest paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if manifest.get("external_notification_integration") is not False:
+        message = "manifest external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    return manifest
+
+
+def _manual_delivery_local_flow_manifest_summary_markdown(manifest: dict[str, Any], parser: argparse.ArgumentParser | None = None) -> str:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    existing_artifacts, total_artifacts = _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    lines = [
+        "# Manual Delivery Local Flow Manifest Summary",
+        "",
+        f"- schema_version: {manifest['schema_version']}",
+        f"- generated_at_jst: {manifest['generated_at_jst']}",
+        f"- output_dir: {manifest['output_dir']}",
+        f"- source_readiness: {manifest['source_readiness']}",
+        f"- actionability_label: {manifest['actionability_label']}",
+        f"- human_action: {manifest['human_action']}",
+        f"- shadow_decision_enabled: {str(manifest['shadow_decision_enabled']).lower()}",
+        f"- actionability_shadow_output_csv: {manifest['actionability_shadow_output_csv']}",
+        f"- actionability_shadow_output_csv_exists: {str(manifest['actionability_shadow_output_csv_exists']).lower()}",
+        f"- actionability_shadow_summary_output_md: {manifest['actionability_shadow_summary_output_md']}",
+        f"- actionability_shadow_summary_output_md_exists: {str(manifest['actionability_shadow_summary_output_md_exists']).lower()}",
+        f"- safety_boundary: {manifest['safety_boundary']}",
+        f"- paper_positions_integration: {str(manifest['paper_positions_integration']).lower()}",
+        f"- external_notification_integration: {str(manifest['external_notification_integration']).lower()}",
+        "",
+        "## Artifact Readiness",
+        f"- existing/total: {existing_artifacts}/{total_artifacts}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def build_manual_delivery_local_flow_manifest_summary(
+    *,
+    manifest_json: Path,
+    output_md: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    manifest = _load_manual_delivery_local_flow_manifest_json(manifest_json, parser)
+    report = _manual_delivery_local_flow_manifest_summary_markdown(manifest, parser)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _run_summarize_manual_delivery_local_flow_manifest_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    report = build_manual_delivery_local_flow_manifest_summary(
+        manifest_json=Path(args.manifest_json),
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        parser=parser,
+    )
+    if output_md_arg:
+        sys.stdout.write(f"manual_delivery_manifest_summary_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(report)
+
+
 def _run_latest_manual_delivery_local_flow_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -13727,6 +13895,10 @@ def _build_parser() -> argparse.ArgumentParser:
     actionability_shadow_summary_parser.add_argument("--input-csv", required=True)
     actionability_shadow_summary_parser.add_argument("--output-md")
 
+    manual_delivery_manifest_summary_parser = subparsers.add_parser("summarize-manual-delivery-local-flow-manifest")
+    manual_delivery_manifest_summary_parser.add_argument("--manifest-json", required=True)
+    manual_delivery_manifest_summary_parser.add_argument("--output-md")
+
     pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
     _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
 
@@ -14188,6 +14360,10 @@ def main() -> None:
 
     if args.command == "summarize-actionability-shadow-decisions":
         _run_summarize_actionability_shadow_decisions_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-local-flow-manifest":
+        _run_summarize_manual_delivery_local_flow_manifest_command(args, parser)
         return
 
     if args.command == "format-active-plan-pending-coverage-caveat":

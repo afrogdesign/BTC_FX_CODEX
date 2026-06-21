@@ -71,6 +71,7 @@ Purpose: report-only human manual trading support preview.
 - Use `write-latest-manual-delivery-local-flow --output-dir <path>` as the next product step after the reviewed and E2E-verified local manual-delivery flow.
 - It generates `source-files.txt`, `manual-delivery-input.json`, `bundle/subject.txt`, `bundle/body.txt`, `bundle/checklist.txt`, `bundle/package.txt`, `bundle/README.txt`, and `inbox.md` under one local output directory.
 - It also writes `manifest.json` for local app/operator consumption.
+- Review that `manifest.json` with `summarize-manual-delivery-local-flow-manifest --manifest-json <output-dir>/manifest.json` when you want a deterministic local operator summary.
 - It reduces manual steps, but it still does not send, notify, fetch, rebuild, trade, or approve anything.
 - Keep the same safety boundary: report-only, not FORMAL_GO, no automatic order, ACTIVE_* guidance only, human must decide manually, no external notification integration.
 
