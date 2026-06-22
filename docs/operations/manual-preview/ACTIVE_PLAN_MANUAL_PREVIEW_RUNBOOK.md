@@ -98,6 +98,7 @@ Purpose: report-only human manual trading support preview.
 - Use `refresh-and-check-current-manual-delivery-app-state` as the app-facing readiness builder; it refreshes the current handoff and writes the ready-check outputs in one run.
 - Use `refresh-current-manual-delivery-app-snapshot` as the recommended final app/operator one-command path; it refreshes the current handoff, re-checks readiness, and writes the stable app-snapshot pair in one run.
 - Use `write-current-manual-delivery-app-snapshot` as the single small stable app/operator read file after refresh-and-check or refresh-and-snapshot; it combines the ready-check and app-state into one snapshot pair.
+- Use `summarize-current-manual-delivery-app-snapshot` as the app/operator read-side validator for `app-snapshot.json`.
 - It does not send, notify, fetch, rebuild, trade, or approve anything.
 
 ### Source Freshness Guard
