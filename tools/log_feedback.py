@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import argparse
 import csv
+import io
 import html
 import json
 import os
@@ -12034,6 +12036,21 @@ def _run_write_latest_manual_delivery_local_handoff_command(
             sys.stdout.write(f"manual_delivery_local_handoff_status_json={handoff_status_json_path}\n")
 
 
+def _run_write_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    current_handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    current_args = argparse.Namespace(**vars(args))
+    current_args.handoff_dir = str(current_handoff_dir)
+    current_args.write_handoff_status = True
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        _run_write_latest_manual_delivery_local_handoff_command(current_args, parser)
+    sys.stdout.write(f"current_manual_delivery_handoff_dir={current_handoff_dir}\n")
+    sys.stdout.write(stdout_buffer.getvalue())
+
+
 def _run_summarize_latest_manual_delivery_pointer_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -14897,6 +14914,25 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_handoff_parser.add_argument("--handoff-status-md")
     manual_delivery_local_handoff_parser.add_argument("--handoff-status-json")
 
+    current_manual_delivery_handoff_parser = subparsers.add_parser("write-current-manual-delivery-handoff")
+    current_manual_delivery_handoff_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_handoff_parser.add_argument("--detail-report-path")
+    current_manual_delivery_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+
     manual_delivery_human_gate_parser = subparsers.add_parser("summarize-manual-delivery-human-gate")
     manual_delivery_human_gate_parser.add_argument("--human-gate-json", required=True)
     manual_delivery_human_gate_parser.add_argument("--output-md")
@@ -15402,6 +15438,10 @@ def main() -> None:
 
     if args.command == "write-latest-manual-delivery-local-handoff":
         _run_write_latest_manual_delivery_local_handoff_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-handoff":
+        _run_write_current_manual_delivery_handoff_command(args, parser)
         return
 
     if args.command == "summarize-manual-delivery-human-gate":
