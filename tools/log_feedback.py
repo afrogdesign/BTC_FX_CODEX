@@ -13428,6 +13428,76 @@ def _run_refresh_and_check_current_manual_delivery_app_state_command(
     sys.stdout.write(ready_check_stdout.getvalue())
 
 
+def _run_refresh_current_manual_delivery_app_snapshot_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    if app_state_json_arg is None:
+        app_state_json_arg = str(handoff_dir / "app-state.json")
+
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    if app_state_md_arg is None:
+        app_state_md_arg = str(handoff_dir / "app-state.md")
+
+    app_state_status_md_arg = getattr(args, "app_state_status_md", None)
+    if app_state_status_md_arg is None:
+        app_state_status_md_arg = str(handoff_dir / "app-state-status.md")
+
+    app_state_status_json_arg = getattr(args, "app_state_status_json", None)
+    if app_state_status_json_arg is None:
+        app_state_status_json_arg = str(handoff_dir / "app-state-status.json")
+
+    ready_check_md_arg = getattr(args, "ready_check_md", None)
+    if ready_check_md_arg is None:
+        ready_check_md_arg = str(handoff_dir / "ready-check.md")
+
+    ready_check_json_arg = getattr(args, "ready_check_json", None)
+    if ready_check_json_arg is None:
+        ready_check_json_arg = str(handoff_dir / "ready-check.json")
+
+    app_snapshot_json_arg = getattr(args, "app_snapshot_json", None)
+    if app_snapshot_json_arg is None:
+        app_snapshot_json_arg = str(handoff_dir / "app-snapshot.json")
+
+    app_snapshot_md_arg = getattr(args, "app_snapshot_md", None)
+    if app_snapshot_md_arg is None:
+        app_snapshot_md_arg = str(handoff_dir / "app-snapshot.md")
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.self_check_json = self_check_json_arg
+    refresh_args.app_state_json = app_state_json_arg
+    refresh_args.app_state_md = app_state_md_arg
+    refresh_args.app_state_status_json = app_state_status_json_arg
+    refresh_args.app_state_status_md = app_state_status_md_arg
+    refresh_args.ready_check_md = ready_check_md_arg
+    refresh_args.ready_check_json = ready_check_json_arg
+
+    snapshot_args = argparse.Namespace(**vars(args))
+    snapshot_args.ready_check_json = ready_check_json_arg
+    snapshot_args.app_state_json = app_state_json_arg
+    snapshot_args.app_snapshot_json = app_snapshot_json_arg
+    snapshot_args.app_snapshot_md = app_snapshot_md_arg
+
+    refresh_stdout = io.StringIO()
+    snapshot_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_stdout):
+        _run_refresh_and_check_current_manual_delivery_app_state_command(refresh_args, parser)
+    with contextlib.redirect_stdout(snapshot_stdout):
+        _run_write_current_manual_delivery_app_snapshot_command(snapshot_args, parser)
+
+    sys.stdout.write(f"current_manual_delivery_app_snapshot_refresh_dir={handoff_dir}\n")
+    sys.stdout.write(refresh_stdout.getvalue())
+    sys.stdout.write(snapshot_stdout.getvalue())
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -16379,6 +16449,34 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_state_refresh_ready_parser.add_argument("--actionability-shadow-notes", default="")
     current_manual_delivery_app_state_refresh_ready_parser.add_argument("--actionability-shadow-summary-output-md")
 
+    current_manual_delivery_app_snapshot_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-snapshot")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--self-check-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-status-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-status-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--ready-check-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--ready-check-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-summary-output-md")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -16922,6 +17020,10 @@ def main() -> None:
 
     if args.command == "refresh-and-check-current-manual-delivery-app-state":
         _run_refresh_and_check_current_manual_delivery_app_state_command(args, parser)
+        return
+
+    if args.command == "refresh-current-manual-delivery-app-snapshot":
+        _run_refresh_current_manual_delivery_app_snapshot_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":

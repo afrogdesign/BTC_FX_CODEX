@@ -95,8 +95,9 @@ Purpose: report-only human manual trading support preview.
 - Use `write-current-manual-delivery-app-state` as the smallest app-facing read model after self-check validation, and `summarize-current-manual-delivery-app-state` as the app/operator read-side validator for `app-state.json`.
 - Use `refresh-current-manual-delivery-app-state` as the recommended one-command app-facing refresh; it writes self-check, app-state, and app-state-status outputs in one run.
 - Use `check-current-manual-delivery-app-state-ready` as the smallest final app/operator readiness check after refresh; it validates `app-state-status.json` and prints the minimal ready gate.
-- Use `refresh-and-check-current-manual-delivery-app-state` as the recommended final app-facing one-command path; it refreshes the current handoff and writes the ready-check outputs in one run.
-- Use `write-current-manual-delivery-app-snapshot` as the single small stable app/operator read file after refresh-and-check; it combines the ready-check and app-state into one snapshot pair.
+- Use `refresh-and-check-current-manual-delivery-app-state` as the app-facing readiness builder; it refreshes the current handoff and writes the ready-check outputs in one run.
+- Use `refresh-current-manual-delivery-app-snapshot` as the recommended final app/operator one-command path; it refreshes the current handoff, re-checks readiness, and writes the stable app-snapshot pair in one run.
+- Use `write-current-manual-delivery-app-snapshot` as the single small stable app/operator read file after refresh-and-check or refresh-and-snapshot; it combines the ready-check and app-state into one snapshot pair.
 - It does not send, notify, fetch, rebuild, trade, or approve anything.
 
 ### Source Freshness Guard
