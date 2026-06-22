@@ -93,6 +93,7 @@ Purpose: report-only human manual trading support preview.
 - Add `--latest-status-md <path>` and `--latest-status-json <path>` when you want the same one-command package to also emit validated latest status handoff files for local app/operator use.
 - Validate that pointer with `summarize-latest-manual-delivery-pointer --latest-pointer-json <path>` before handing it off.
 - Use `write-current-manual-delivery-app-state` as the smallest app-facing read model after self-check validation, and `summarize-current-manual-delivery-app-state` as the app/operator read-side validator for `app-state.json`.
+- Use `refresh-current-manual-delivery-app-state` as the recommended one-command app-facing refresh; it writes self-check, app-state, and app-state-status outputs in one run.
 - It does not send, notify, fetch, rebuild, trade, or approve anything.
 
 ### Source Freshness Guard
