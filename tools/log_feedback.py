@@ -13336,6 +13336,131 @@ def _run_check_current_manual_delivery_app_ready_command(
         )
 
 
+def _manual_delivery_current_app_integration_contract_markdown() -> str:
+    lines = [
+        "# Manual Delivery Current App Integration Contract",
+        "",
+        "- schema_version: manual_delivery_app_integration_contract.v1",
+        "- contract_status: stable_for_local_app_integration",
+        "- integration_command: refresh-current-manual-delivery-app --stdout-json",
+        "- read_side_check_command: check-current-manual-delivery-app-ready --stdout-json",
+        "- readiness_schema_version: manual_delivery_app_ready_check.v1",
+        "- stable_read_file: local/manual_delivery_handoff/app-snapshot.json",
+        "- validator_status_file: local/manual_delivery_handoff/app-snapshot-status.json",
+        "- default_handoff_dir: local/manual_delivery_handoff",
+        "- stdout_mode: json_only",
+        "- required_ready_keys: schema_version, current_manual_delivery_app_ready, readiness_status, allowed_next_action, app_snapshot_status_json, app_snapshot_status, snapshot_status, current_manual_delivery_ready, display_mode, primary_action, human_review_required, trade_execution_allowed, automatic_order_allowed, external_notification_allowed, paper_positions_integration, source_readiness, actionability_label, human_action, shadow_decision_enabled, safety_boundary",
+        "- required_safety_values:",
+        "  - readiness_status: ready_for_human_review",
+        "  - allowed_next_action: human_review_only",
+        "  - trade_execution_allowed: false",
+        "  - automatic_order_allowed: false",
+        "  - external_notification_allowed: false",
+        "  - paper_positions_integration: false",
+        "  - human_review_required: true",
+        "  - safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "- prohibited_behavior: send, notify, trade, runtime_restart, API_key, private_account_order_endpoint, paper_positions_integration",
+        "- notes: report-only; app may display/review, human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_integration_contract.v1",
+        "contract_status": "stable_for_local_app_integration",
+        "integration_command": "refresh-current-manual-delivery-app --stdout-json",
+        "read_side_check_command": "check-current-manual-delivery-app-ready --stdout-json",
+        "readiness_schema_version": "manual_delivery_app_ready_check.v1",
+        "stable_read_file": "local/manual_delivery_handoff/app-snapshot.json",
+        "validator_status_file": "local/manual_delivery_handoff/app-snapshot-status.json",
+        "default_handoff_dir": "local/manual_delivery_handoff",
+        "stdout_mode": "json_only",
+        "required_ready_keys": [
+            "schema_version",
+            "current_manual_delivery_app_ready",
+            "readiness_status",
+            "allowed_next_action",
+            "app_snapshot_status_json",
+            "app_snapshot_status",
+            "snapshot_status",
+            "current_manual_delivery_ready",
+            "display_mode",
+            "primary_action",
+            "human_review_required",
+            "trade_execution_allowed",
+            "automatic_order_allowed",
+            "external_notification_allowed",
+            "paper_positions_integration",
+            "source_readiness",
+            "actionability_label",
+            "human_action",
+            "shadow_decision_enabled",
+            "safety_boundary",
+        ],
+        "required_safety_values": {
+            "readiness_status": "ready_for_human_review",
+            "allowed_next_action": "human_review_only",
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
+            "human_review_required": True,
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        },
+        "prohibited_behavior": [
+            "send",
+            "notify",
+            "trade",
+            "runtime_restart",
+            "API_key",
+            "private_account_order_endpoint",
+            "paper_positions_integration",
+        ],
+        "notes": "report-only; app may display/review, human decides manually",
+    }
+
+
+def _write_manual_delivery_current_app_integration_contract_outputs(
+    *,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+) -> tuple[str, dict[str, Any]]:
+    summary_text = _manual_delivery_current_app_integration_contract_markdown()
+    contract_data = _manual_delivery_current_app_integration_contract_data()
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, contract_data
+
+
+def _run_describe_current_manual_delivery_app_contract_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    summary_text, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_contract_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_contract_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_contract_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(summary_text)
+
+
 def _manual_delivery_current_handoff_app_snapshot_markdown(
     *,
     ready_check_json: Path,
@@ -16983,6 +17108,11 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_ready_parser.add_argument("--output-md")
     current_manual_delivery_app_ready_parser.add_argument("--output-json")
 
+    current_manual_delivery_app_contract_parser = subparsers.add_parser("describe-current-manual-delivery-app-contract")
+    current_manual_delivery_app_contract_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_contract_parser.add_argument("--output-json")
+    current_manual_delivery_app_contract_parser.add_argument("--output-md")
+
     current_manual_delivery_app_state_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-state")
     current_manual_delivery_app_state_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_state_refresh_parser.add_argument("--self-check-json")
@@ -17639,6 +17769,10 @@ def main() -> None:
 
     if args.command == "check-current-manual-delivery-app-ready":
         _run_check_current_manual_delivery_app_ready_command(args, parser)
+        return
+
+    if args.command == "describe-current-manual-delivery-app-contract":
+        _run_describe_current_manual_delivery_app_contract_command(args, parser)
         return
 
     if args.command == "refresh-current-manual-delivery-app-state":

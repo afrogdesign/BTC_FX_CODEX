@@ -1374,6 +1374,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_describe_current_manual_delivery_app_contract_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "describe-current-manual-delivery-app-contract", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_refresh_current_manual_delivery_app_state_main_with_argv(
         self,
         argv: list[str],
@@ -7734,6 +7757,185 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("current handoff app-snapshot status JSON current_manual_delivery_ready must be true", unsafe_stderr)
             self.assertFalse(unsafe_output_md.exists())
             self.assertFalse(unsafe_output_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_describe_current_manual_delivery_app_contract_cli_supports_help_and_output_modes(self) -> None:
+        help_code, help_stdout, help_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+            ["--help"],
+        )
+        self.assertEqual(help_code, 0, msg=help_stderr)
+        self.assertIn("describe-current-manual-delivery-app-contract", help_stdout)
+        self.assertIn("--stdout-json", help_stdout)
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            md_output = base_dir / "artifacts" / "app-contract.md"
+            json_output = base_dir / "artifacts" / "app-contract.json"
+            both_md = base_dir / "artifacts" / "app-contract-both.md"
+            both_json = base_dir / "artifacts" / "app-contract-both.json"
+            stdout_json_md = base_dir / "artifacts" / "app-contract-stdout-json.md"
+            stdout_json_json = base_dir / "artifacts" / "app-contract-stdout-json.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                default_code, default_stdout, default_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                output_json_only_code, output_json_only_stdout, output_json_only_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    ["--output-json", str(json_output)],
+                    base_dir=base_dir,
+                )
+                output_md_only_code, output_md_only_stdout, output_md_only_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    ["--output-md", str(md_output)],
+                    base_dir=base_dir,
+                )
+                both_code, both_stdout, both_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--output-md",
+                        str(both_md),
+                        "--output-json",
+                        str(both_json),
+                    ],
+                    base_dir=base_dir,
+                )
+                stdout_json_json_only_code, stdout_json_json_only_stdout, stdout_json_json_only_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--output-json",
+                        str(stdout_json_json),
+                    ],
+                    base_dir=base_dir,
+                )
+                stdout_json_md_only_code, stdout_json_md_only_stdout, stdout_json_md_only_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--output-md",
+                        str(stdout_json_md),
+                    ],
+                    base_dir=base_dir,
+                )
+                stdout_json_both_code, stdout_json_both_stdout, stdout_json_both_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--output-md",
+                        str(both_md),
+                        "--output-json",
+                        str(stdout_json_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(default_code, 0, msg=default_stderr)
+            self.assertTrue(default_stdout.startswith("# Manual Delivery Current App Integration Contract\n"))
+            self.assertIn("schema_version: manual_delivery_app_integration_contract.v1", default_stdout)
+            self.assertIn("integration_command: refresh-current-manual-delivery-app --stdout-json", default_stdout)
+            self.assertIn("read_side_check_command: check-current-manual-delivery-app-ready --stdout-json", default_stdout)
+            self.assertIn("stdout_mode: json_only", default_stdout)
+            self.assertIn("notes: report-only; app may display/review, human decides manually", default_stdout)
+
+            self.assertEqual(output_json_only_code, 0, msg=output_json_only_stderr)
+            self.assertTrue(output_json_only_stdout.startswith("# Manual Delivery Current App Integration Contract\n"))
+            self.assertTrue(json_output.exists())
+            output_json_only_data = json.loads(json_output.read_text(encoding="utf-8"))
+            self.assertEqual(output_json_only_data["schema_version"], "manual_delivery_app_integration_contract.v1")
+            self.assertEqual(output_json_only_data["contract_status"], "stable_for_local_app_integration")
+            self.assertEqual(output_json_only_data["integration_command"], "refresh-current-manual-delivery-app --stdout-json")
+            self.assertEqual(output_json_only_data["read_side_check_command"], "check-current-manual-delivery-app-ready --stdout-json")
+            self.assertEqual(output_json_only_data["readiness_schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertEqual(output_json_only_data["stable_read_file"], "local/manual_delivery_handoff/app-snapshot.json")
+            self.assertEqual(output_json_only_data["validator_status_file"], "local/manual_delivery_handoff/app-snapshot-status.json")
+            self.assertEqual(output_json_only_data["default_handoff_dir"], "local/manual_delivery_handoff")
+            self.assertEqual(output_json_only_data["stdout_mode"], "json_only")
+            self.assertEqual(
+                output_json_only_data["required_ready_keys"],
+                [
+                    "schema_version",
+                    "current_manual_delivery_app_ready",
+                    "readiness_status",
+                    "allowed_next_action",
+                    "app_snapshot_status_json",
+                    "app_snapshot_status",
+                    "snapshot_status",
+                    "current_manual_delivery_ready",
+                    "display_mode",
+                    "primary_action",
+                    "human_review_required",
+                    "trade_execution_allowed",
+                    "automatic_order_allowed",
+                    "external_notification_allowed",
+                    "paper_positions_integration",
+                    "source_readiness",
+                    "actionability_label",
+                    "human_action",
+                    "shadow_decision_enabled",
+                    "safety_boundary",
+                ],
+            )
+            self.assertEqual(
+                output_json_only_data["required_safety_values"],
+                {
+                    "readiness_status": "ready_for_human_review",
+                    "allowed_next_action": "human_review_only",
+                    "trade_execution_allowed": False,
+                    "automatic_order_allowed": False,
+                    "external_notification_allowed": False,
+                    "paper_positions_integration": False,
+                    "human_review_required": True,
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
+                output_json_only_data["prohibited_behavior"],
+                [
+                    "send",
+                    "notify",
+                    "trade",
+                    "runtime_restart",
+                    "API_key",
+                    "private_account_order_endpoint",
+                    "paper_positions_integration",
+                ],
+            )
+            self.assertEqual(output_json_only_data["notes"], "report-only; app may display/review, human decides manually")
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+            self.assertEqual(output_md_only_code, 0, msg=output_md_only_stderr)
+            self.assertEqual(output_md_only_stdout, f"current_manual_delivery_app_contract_md={md_output}\n")
+            self.assertTrue(md_output.exists())
+            self.assertIn("# Manual Delivery Current App Integration Contract", md_output.read_text(encoding="utf-8"))
+
+            self.assertEqual(both_code, 0, msg=both_stderr)
+            self.assertEqual(
+                both_stdout,
+                f"current_manual_delivery_app_contract_md={both_md}\n"
+                f"current_manual_delivery_app_contract_json={both_json}\n",
+            )
+            self.assertTrue(both_md.exists())
+            self.assertTrue(both_json.exists())
+
+            self.assertEqual(stdout_json_json_only_code, 0, msg=stdout_json_json_only_stderr)
+            self.assertTrue(stdout_json_json_only_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_contract_md=", stdout_json_json_only_stdout)
+            self.assertNotIn("# Manual Delivery Current App Integration Contract", stdout_json_json_only_stdout)
+            stdout_json_json_only_data = json.loads(stdout_json_json_only_stdout)
+            self.assertEqual(stdout_json_json_only_data, output_json_only_data)
+            self.assertEqual(json.loads(stdout_json_json.read_text(encoding="utf-8")), stdout_json_json_only_data)
+
+            self.assertEqual(stdout_json_md_only_code, 0, msg=stdout_json_md_only_stderr)
+            self.assertTrue(stdout_json_md_only_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_contract_md=", stdout_json_md_only_stdout)
+            self.assertTrue(stdout_json_md.exists())
+
+            self.assertEqual(stdout_json_both_code, 0, msg=stdout_json_both_stderr)
+            self.assertTrue(stdout_json_both_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_contract_md=", stdout_json_both_stdout)
+            self.assertTrue(both_md.exists())
+            self.assertTrue(both_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
