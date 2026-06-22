@@ -12146,6 +12146,68 @@ def _run_summarize_current_manual_delivery_handoff_command(
         sys.stdout.write(summary_text)
 
 
+def _manual_delivery_current_handoff_self_check_data(
+    *,
+    handoff_dir: Path,
+    handoff_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_current_handoff_self_check.v1",
+        "self_check_status": "pass",
+        "handoff_dir": str(handoff_dir),
+        "write_command_status": "pass",
+        "summarize_command_status": "pass",
+        "handoff_status": handoff_status_data["handoff_status"],
+        "human_review_required": handoff_status_data["human_review_required"],
+        "trade_execution_allowed": handoff_status_data["trade_execution_allowed"],
+        "automatic_order_allowed": handoff_status_data["automatic_order_allowed"],
+        "external_notification_allowed": handoff_status_data["external_notification_allowed"],
+        "paper_positions_integration": handoff_status_data["paper_positions_integration"],
+        "source_readiness": handoff_status_data["source_readiness"],
+        "actionability_label": handoff_status_data["actionability_label"],
+        "human_action": handoff_status_data["human_action"],
+        "shadow_decision_enabled": handoff_status_data["shadow_decision_enabled"],
+    }
+
+
+def _run_self_check_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    current_args = argparse.Namespace(**vars(args))
+    current_args.handoff_dir = str(handoff_dir)
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        _run_write_current_manual_delivery_handoff_command(current_args, parser)
+    _, handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        parser=parser,
+    )
+    self_check_data = _manual_delivery_current_handoff_self_check_data(
+        handoff_dir=handoff_dir,
+        handoff_status_data=handoff_status_data,
+    )
+    self_check_json_path = Path(self_check_json_arg)
+    _ensure_parent(self_check_json_path)
+    self_check_json_path.write_text(json.dumps(self_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    sys.stdout.write(f"current_manual_delivery_self_check_dir={handoff_dir}\n")
+    sys.stdout.write(stdout_buffer.getvalue())
+    sys.stdout.write(f"current_manual_delivery_self_check_json={self_check_json_path}\n")
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -14971,6 +15033,26 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_handoff_status_parser.add_argument("--output-md")
     current_manual_delivery_handoff_status_parser.add_argument("--output-json")
 
+    self_check_current_manual_delivery_handoff_parser = subparsers.add_parser("self-check-current-manual-delivery-handoff")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    self_check_current_manual_delivery_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    self_check_current_manual_delivery_handoff_parser.add_argument("--detail-report-path")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    self_check_current_manual_delivery_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    self_check_current_manual_delivery_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    self_check_current_manual_delivery_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--self-check-json")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -15482,6 +15564,10 @@ def main() -> None:
 
     if args.command == "summarize-current-manual-delivery-handoff":
         _run_summarize_current_manual_delivery_handoff_command(args, parser)
+        return
+
+    if args.command == "self-check-current-manual-delivery-handoff":
+        _run_self_check_current_manual_delivery_handoff_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":

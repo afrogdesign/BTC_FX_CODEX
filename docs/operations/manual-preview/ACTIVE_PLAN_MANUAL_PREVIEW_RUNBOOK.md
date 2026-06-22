@@ -84,6 +84,7 @@ Purpose: report-only human manual trading support preview.
 - Use `write-latest-manual-delivery-local-handoff --handoff-dir <path>` when you want the same stable handoff layout under a custom directory.
 - Treat `human-gate.json` as the smallest report-only, human-review-only gate file for app/operator handoff.
 - Use `summarize-current-manual-delivery-handoff` as the default app/operator read-side status command.
+- Use `self-check-current-manual-delivery-handoff` as the final local E2E confidence command after the write and read commands.
 - Validate the stable handoff with `summarize-manual-delivery-local-handoff --handoff-dir <path>` before handing it to the app/operator side.
 - Add `--write-handoff-status` when you want one command to create and validate `handoff-status.md` and `handoff-status.json` for the same stable handoff.
 - Add `--write-local-handoff` when you want that one command to also write `review/latest-pointer.json`, `review/latest-status.md`, and `review/latest-status.json` as the recommended local app/operator handoff mode.
