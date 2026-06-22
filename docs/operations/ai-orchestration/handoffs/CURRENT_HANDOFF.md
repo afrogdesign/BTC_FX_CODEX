@@ -4,12 +4,12 @@ last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v3`
 canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-current_commit: 3fe19d47f0248053f7952bd20f3cb70bbd57c4a1
-latest_reviewed_baseline: 3fe19d47f0248053f7952bd20f3cb70bbd57c4a1
+current_commit: 8249c386660647ad223f41395948ae7393ad61b4
+latest_reviewed_baseline: 8249c386660647ad223f41395948ae7393ad61b4
 
 ## State
 
-Current handoff reflects the current manual-delivery app refresh path E2E confirmation. There is no active handoff.
+Current handoff reflects the current manual-delivery app stdout-json E2E confirmation. There is no active handoff.
 
 ## Safety Boundary
 
@@ -23,10 +23,10 @@ Current handoff reflects the current manual-delivery app refresh path E2E confir
 
 ## Next Decision
 
-Choose the next product step after the reviewed current manual-delivery app refresh path E2E confirmation.
+Choose the next product step after the reviewed current manual-delivery app stdout-json E2E confirmation.
 
 ## Evidence
 
 Historical accepted task details live in git/GitHub, `docs/operations/ai-orchestration/TASK_LEDGER.md`, and `docs/operations/ai-orchestration/CONTROL.md` when needed.
-Accepted E2E: `BTCFX-20260622-150-CURRENT-MANUAL-DELIVERY-APP-E2E-REVIEW` passed in a tempdir using `refresh-current-manual-delivery-app` and `check-current-manual-delivery-app-ready`.
-Canonical app/operator path: `refresh-current-manual-delivery-app` -> `check-current-manual-delivery-app-ready`; smallest stable read file `local/manual_delivery_handoff/app-snapshot.json`; validator/status file `local/manual_delivery_handoff/app-snapshot-status.json`.
+Accepted E2E: `BTCFX-20260623-153-CURRENT-APP-STDOUT-JSON-E2E-REVIEW` passed in a tempdir using `refresh-current-manual-delivery-app` and `check-current-manual-delivery-app-ready --stdout-json`.
+Canonical app/operator path: `refresh-current-manual-delivery-app` -> `check-current-manual-delivery-app-ready --stdout-json`; smallest stable read file `local/manual_delivery_handoff/app-snapshot.json`; validator/status file `local/manual_delivery_handoff/app-snapshot-status.json`.
