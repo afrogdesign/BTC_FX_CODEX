@@ -1259,6 +1259,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "summarize-current-manual-delivery-handoff-self-check", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_latest_manual_delivery_pointer_status_main_with_argv(
         self,
         argv: list[str],
@@ -1301,6 +1324,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _read_manual_delivery_current_handoff_self_check(self, output_json: Path) -> dict[str, Any]:
+        return json.loads(output_json.read_text(encoding="utf-8"))
+
+    def _read_manual_delivery_current_handoff_self_check_status(self, output_json: Path) -> dict[str, Any]:
         return json.loads(output_json.read_text(encoding="utf-8"))
 
     def _assert_manifest_artifact(self, manifest: dict[str, Any], artifact_key: str, path: Path, *, exists: bool = True) -> None:
@@ -4748,6 +4774,257 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(explicit_self_check["schema_version"], "manual_delivery_current_handoff_self_check.v1")
             self.assertEqual(explicit_self_check["handoff_dir"], str(explicit_handoff_dir))
             self.assertFalse(explicit_self_check["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_current_manual_delivery_handoff_self_check_cli_supports_default_explicit_and_output_modes(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            default_handoff_dir = base_dir / "local" / "manual_delivery_handoff"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                write_code, write_stdout, write_stderr = self._run_current_manual_delivery_handoff_self_check_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(write_code, 0, msg=write_stderr)
+            self.assertTrue(write_stdout.startswith("current_manual_delivery_self_check_dir=local/manual_delivery_handoff\n"))
+            default_self_check_json = default_handoff_dir / "self-check.json"
+            self.assertTrue(default_self_check_json.exists())
+
+            custom_self_check_json = base_dir / "artifacts" / "custom-self-check.json"
+            custom_self_check_json.parent.mkdir(parents=True, exist_ok=True)
+            custom_self_check_json.write_text(default_self_check_json.read_text(encoding="utf-8"), encoding="utf-8")
+
+            original_reader_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                default_reader_code, default_reader_stdout, default_reader_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                explicit_reader_code, explicit_reader_stdout, explicit_reader_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--self-check-json",
+                        str(custom_self_check_json),
+                    ],
+                    base_dir=base_dir,
+                )
+                md_output_path = base_dir / "artifacts" / "current-self-check-status.md"
+                json_output_path = base_dir / "artifacts" / "current-self-check-status.json"
+                md_only_json_probe = base_dir / "artifacts" / "current-self-check-status-md-only.json"
+                json_only_md_probe = base_dir / "artifacts" / "current-self-check-status-json-only.md"
+                md_only_code, md_only_stdout, md_only_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-md",
+                        str(md_output_path),
+                    ],
+                    base_dir=base_dir,
+                )
+                json_only_code, json_only_stdout, json_only_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-json",
+                        str(json_output_path),
+                    ],
+                    base_dir=base_dir,
+                )
+                both_md_output_path = base_dir / "artifacts" / "current-self-check-status-both.md"
+                both_json_output_path = base_dir / "artifacts" / "current-self-check-status-both.json"
+                both_code, both_stdout, both_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-md",
+                        str(both_md_output_path),
+                        "--output-json",
+                        str(both_json_output_path),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_reader_cwd)
+
+            self.assertEqual(default_reader_code, 0, msg=default_reader_stderr)
+            self.assertTrue(default_reader_stdout.startswith("# Manual Delivery Current Handoff Self-Check Status\n"))
+            self.assertIn("- self_check_json: local/manual_delivery_handoff/self-check.json", default_reader_stdout)
+            self.assertIn("- handoff_dir: local/manual_delivery_handoff", default_reader_stdout)
+            self.assertIn("- self_check_status: pass", default_reader_stdout)
+            self.assertIn("- write_command_status: pass", default_reader_stdout)
+            self.assertIn("- summarize_command_status: pass", default_reader_stdout)
+            self.assertIn("- handoff_status: ready_for_human_review", default_reader_stdout)
+            self.assertIn("- allowed_next_action: human_review_only", default_reader_stdout)
+            self.assertIn("- source_readiness: review_required_missing_or_stale_source", default_reader_stdout)
+            self.assertIn("- actionability_label: AUTO_REJECT", default_reader_stdout)
+            self.assertIn("- human_action: do_nothing", default_reader_stdout)
+            self.assertIn("- shadow_decision_enabled: false", default_reader_stdout)
+            self.assertIn("- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", default_reader_stdout)
+
+            self.assertEqual(explicit_reader_code, 0, msg=explicit_reader_stderr)
+            self.assertIn(f"- self_check_json: {custom_self_check_json}", explicit_reader_stdout)
+            self.assertIn("- handoff_dir: local/manual_delivery_handoff", explicit_reader_stdout)
+            self.assertIn("- handoff_status: ready_for_human_review", explicit_reader_stdout)
+
+            self.assertEqual(md_only_code, 0, msg=md_only_stderr)
+            self.assertEqual(md_only_stdout, f"current_manual_delivery_self_check_status_md={md_output_path}\n")
+            self.assertTrue(md_output_path.exists())
+            self.assertFalse(md_only_json_probe.exists())
+
+            self.assertEqual(json_only_code, 0, msg=json_only_stderr)
+            self.assertTrue(json_only_stdout.startswith("# Manual Delivery Current Handoff Self-Check Status\n"))
+            self.assertFalse(json_only_stdout.startswith("current_manual_delivery_self_check_status_md="))
+            self.assertTrue(json_output_path.exists())
+            json_only_data = self._read_manual_delivery_current_handoff_self_check_status(json_output_path)
+            self.assertEqual(json_only_data["schema_version"], "manual_delivery_current_handoff_self_check_status.v1")
+            self.assertEqual(json_only_data["self_check_status"], "pass")
+            self.assertEqual(json_only_data["self_check_json"], "local/manual_delivery_handoff/self-check.json")
+            self.assertTrue(json_only_data["self_check_json_exists"])
+            self.assertEqual(json_only_data["handoff_dir"], "local/manual_delivery_handoff")
+            self.assertTrue(json_only_data["handoff_dir_exists"])
+            self.assertTrue(json_only_data["handoff_status_json_exists"])
+            self.assertEqual(json_only_data["handoff_status"], "ready_for_human_review")
+            self.assertEqual(json_only_data["allowed_next_action"], "human_review_only")
+            self.assertTrue(json_only_data["human_review_required"])
+            self.assertFalse(json_only_data["trade_execution_allowed"])
+            self.assertFalse(json_only_data["automatic_order_allowed"])
+            self.assertFalse(json_only_data["external_notification_allowed"])
+            self.assertFalse(json_only_data["paper_positions_integration"])
+            self.assertEqual(json_only_data["source_readiness"], "review_required_missing_or_stale_source")
+            self.assertEqual(json_only_data["actionability_label"], "AUTO_REJECT")
+            self.assertEqual(json_only_data["human_action"], "do_nothing")
+            self.assertFalse(json_only_data["shadow_decision_enabled"])
+            self.assertFalse(json_only_md_probe.exists())
+            self.assertEqual(md_output_path.read_text(encoding="utf-8").splitlines()[0], "# Manual Delivery Current Handoff Self-Check Status")
+
+            self.assertEqual(both_code, 0, msg=both_stderr)
+            self.assertEqual(
+                both_stdout,
+                f"current_manual_delivery_self_check_status_md={both_md_output_path}\n"
+                f"current_manual_delivery_self_check_status_json={both_json_output_path}\n",
+            )
+            self.assertTrue(both_md_output_path.exists())
+            self.assertTrue(both_json_output_path.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_summarize_current_manual_delivery_handoff_self_check_cli_rejects_missing_unsafe_and_mismatched_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            missing_md = base_dir / "missing" / "self-check-status.md"
+            missing_json = base_dir / "missing" / "self-check-status.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                missing_code, missing_stdout, missing_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-md",
+                        str(missing_md),
+                        "--output-json",
+                        str(missing_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(missing_code, 0)
+            self.assertEqual(missing_stdout, "")
+            self.assertIn("current handoff self-check JSON does not exist", missing_stderr)
+            self.assertFalse(missing_md.exists())
+            self.assertFalse(missing_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                write_code, write_stdout, write_stderr = self._run_current_manual_delivery_handoff_self_check_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(write_code, 0, msg=write_stderr)
+            self_check_json = base_dir / "local" / "manual_delivery_handoff" / "self-check.json"
+            self_check_data = self._read_manual_delivery_current_handoff_self_check(self_check_json)
+            self_check_data["self_check_status"] = "fail"
+            self_check_json.write_text(json.dumps(self_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            unsafe_md = base_dir / "artifacts" / "unsafe-self-check-status.md"
+            unsafe_json = base_dir / "artifacts" / "unsafe-self-check-status.json"
+            original_reader_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                unsafe_code, unsafe_stdout, unsafe_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-md",
+                        str(unsafe_md),
+                        "--output-json",
+                        str(unsafe_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_reader_cwd)
+            self.assertNotEqual(unsafe_code, 0)
+            self.assertEqual(unsafe_stdout, "")
+            self.assertIn("current handoff self-check JSON self_check_status must be pass", unsafe_stderr)
+            self.assertFalse(unsafe_md.exists())
+            self.assertFalse(unsafe_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                write_code, write_stdout, write_stderr = self._run_current_manual_delivery_handoff_self_check_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(write_code, 0, msg=write_stderr)
+            mismatch_handoff_status = base_dir / "local" / "manual_delivery_handoff" / "handoff-status.json"
+            mismatch_data = self._read_manual_delivery_local_handoff_status(mismatch_handoff_status)
+            mismatch_data["trade_execution_allowed"] = True
+            mismatch_handoff_status.write_text(json.dumps(mismatch_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            mismatch_md = base_dir / "artifacts" / "mismatch-self-check-status.md"
+            mismatch_json = base_dir / "artifacts" / "mismatch-self-check-status.json"
+            original_reader_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                mismatch_code, mismatch_stdout, mismatch_stderr = self._run_current_manual_delivery_handoff_self_check_status_main_with_argv(
+                    [
+                        "--output-md",
+                        str(mismatch_md),
+                        "--output-json",
+                        str(mismatch_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_reader_cwd)
+            self.assertNotEqual(mismatch_code, 0)
+            self.assertEqual(mismatch_stdout, "")
+            self.assertIn("current handoff self-check handoff-status JSON trade_execution_allowed does not match self-check JSON", mismatch_stderr)
+            self.assertFalse(mismatch_md.exists())
+            self.assertFalse(mismatch_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
