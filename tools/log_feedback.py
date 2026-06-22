@@ -12123,6 +12123,29 @@ def _run_summarize_manual_delivery_local_handoff_command(
         sys.stdout.write(summary_text)
 
 
+def _run_summarize_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    summary_text, _handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_handoff_status_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_handoff_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_handoff_status_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(f"current_manual_delivery_handoff_dir={handoff_dir}\n")
+        sys.stdout.write(summary_text)
+
+
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
     high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
     low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
@@ -14943,6 +14966,11 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_handoff_status_parser.add_argument("--output-md")
     manual_delivery_local_handoff_status_parser.add_argument("--output-json")
 
+    current_manual_delivery_handoff_status_parser = subparsers.add_parser("summarize-current-manual-delivery-handoff")
+    current_manual_delivery_handoff_status_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_handoff_status_parser.add_argument("--output-md")
+    current_manual_delivery_handoff_status_parser.add_argument("--output-json")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -15450,6 +15478,10 @@ def main() -> None:
 
     if args.command == "summarize-manual-delivery-local-handoff":
         _run_summarize_manual_delivery_local_handoff_command(args, parser)
+        return
+
+    if args.command == "summarize-current-manual-delivery-handoff":
+        _run_summarize_current_manual_delivery_handoff_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
