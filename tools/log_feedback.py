@@ -12379,6 +12379,91 @@ def _write_manual_delivery_current_handoff_self_check_status_outputs(
     return summary_text, self_check_status_data, handoff_dir
 
 
+def _manual_delivery_current_handoff_app_state_markdown(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    self_check_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App State",
+        "",
+        f"- app_state: ready_for_human_review",
+        f"- display_mode: manual_delivery_review",
+        f"- primary_action: human_review_only",
+        f"- allowed_next_action: {self_check_status_data['allowed_next_action']}",
+        f"- self_check_json: {self_check_json}",
+        f"- handoff_dir: {handoff_dir}",
+        f"- handoff_status: {self_check_status_data['handoff_status']}",
+        f"- source_readiness: {self_check_status_data['source_readiness']}",
+        f"- actionability_label: {self_check_status_data['actionability_label']}",
+        f"- human_action: {self_check_status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(self_check_status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_state_data(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    self_check_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_state.v1",
+        "app_state": "ready_for_human_review",
+        "display_mode": "manual_delivery_review",
+        "primary_action": "human_review_only",
+        "allowed_next_action": self_check_status_data["allowed_next_action"],
+        "trade_execution_allowed": self_check_status_data["trade_execution_allowed"],
+        "automatic_order_allowed": self_check_status_data["automatic_order_allowed"],
+        "external_notification_allowed": self_check_status_data["external_notification_allowed"],
+        "paper_positions_integration": self_check_status_data["paper_positions_integration"],
+        "human_review_required": self_check_status_data["human_review_required"],
+        "source_readiness": self_check_status_data["source_readiness"],
+        "actionability_label": self_check_status_data["actionability_label"],
+        "human_action": self_check_status_data["human_action"],
+        "shadow_decision_enabled": self_check_status_data["shadow_decision_enabled"],
+        "self_check_json": str(self_check_json),
+        "handoff_dir": str(handoff_dir),
+        "handoff_status": self_check_status_data["handoff_status"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _write_current_manual_delivery_app_state_outputs(
+    *,
+    self_check_json: Path,
+    app_state_json: Path | None = None,
+    app_state_md: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[dict[str, Any], Path, str]:
+    summary_text, self_check_status_data, handoff_dir = _write_manual_delivery_current_handoff_self_check_status_outputs(
+        self_check_json=self_check_json,
+        parser=parser,
+    )
+    _ = summary_text
+    resolved_app_state_json = app_state_json or (handoff_dir / "app-state.json")
+    resolved_app_state_md = app_state_md or (handoff_dir / "app-state.md")
+    app_state_text = _manual_delivery_current_handoff_app_state_markdown(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        self_check_status_data=self_check_status_data,
+    )
+    app_state_data = _manual_delivery_current_handoff_app_state_data(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        self_check_status_data=self_check_status_data,
+    )
+    _ensure_parent(resolved_app_state_md)
+    _ensure_parent(resolved_app_state_json)
+    resolved_app_state_md.write_text(app_state_text, encoding="utf-8")
+    resolved_app_state_json.write_text(json.dumps(app_state_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return app_state_data, handoff_dir, app_state_text
+
+
 def _manual_delivery_current_handoff_self_check_data(
     *,
     handoff_dir: Path,
@@ -12464,6 +12549,27 @@ def _run_summarize_current_manual_delivery_handoff_self_check_command(
         sys.stdout.write(summary_text)
     else:
         sys.stdout.write(summary_text)
+
+
+def _run_write_current_manual_delivery_app_state_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    self_check_json = Path(getattr(args, "self_check_json", "local/manual_delivery_handoff/self-check.json"))
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    app_state_json_path = Path(app_state_json_arg) if app_state_json_arg else None
+    app_state_md_path = Path(app_state_md_arg) if app_state_md_arg else None
+    app_state_data, _handoff_dir, _app_state_text = _write_current_manual_delivery_app_state_outputs(
+        self_check_json=self_check_json,
+        app_state_json=app_state_json_path,
+        app_state_md=app_state_md_path,
+        parser=parser,
+    )
+    resolved_app_state_json = app_state_json_path or Path(app_state_data["handoff_dir"]) / "app-state.json"
+    resolved_app_state_md = app_state_md_path or Path(app_state_data["handoff_dir"]) / "app-state.md"
+    sys.stdout.write(f"current_manual_delivery_app_state_md={resolved_app_state_md}\n")
+    sys.stdout.write(f"current_manual_delivery_app_state_json={resolved_app_state_json}\n")
 
 
 def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
@@ -15319,6 +15425,20 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_handoff_self_check_status_parser.add_argument("--output-md")
     current_manual_delivery_handoff_self_check_status_parser.add_argument("--output-json")
 
+    current_manual_delivery_app_state_parser = subparsers.add_parser("write-current-manual-delivery-app-state")
+    current_manual_delivery_app_state_parser.add_argument(
+        "--self-check-json",
+        default="local/manual_delivery_handoff/self-check.json",
+    )
+    current_manual_delivery_app_state_parser.add_argument(
+        "--app-state-json",
+        default="local/manual_delivery_handoff/app-state.json",
+    )
+    current_manual_delivery_app_state_parser.add_argument(
+        "--app-state-md",
+        default="local/manual_delivery_handoff/app-state.md",
+    )
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -15838,6 +15958,10 @@ def main() -> None:
 
     if args.command == "summarize-current-manual-delivery-handoff-self-check":
         _run_summarize_current_manual_delivery_handoff_self_check_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-state":
+        _run_write_current_manual_delivery_app_state_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
