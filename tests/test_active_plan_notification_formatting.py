@@ -6662,6 +6662,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue((default_handoff_dir / "ready-check.json").exists())
             self.assertTrue(default_snapshot_json.exists())
             self.assertTrue(default_snapshot_md.exists())
+            self.assertFalse((default_handoff_dir / "app-snapshot-status.md").exists())
+            self.assertFalse((default_handoff_dir / "app-snapshot-status.json").exists())
             default_snapshot_data = json.loads(default_snapshot_json.read_text(encoding="utf-8"))
             self.assertEqual(default_snapshot_data["schema_version"], "manual_delivery_app_snapshot.v1")
             self.assertEqual(default_snapshot_data["snapshot_status"], "ready_for_human_review")
@@ -6743,6 +6745,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue(explicit_ready_check_md.exists())
             self.assertTrue(explicit_snapshot_json.exists())
             self.assertTrue(explicit_snapshot_md.exists())
+            self.assertFalse((override_handoff_dir / "app-snapshot-status.md").exists())
+            self.assertFalse((override_handoff_dir / "app-snapshot-status.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
@@ -6777,6 +6781,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue(shadow_snapshot_data["current_manual_delivery_ready"])
             self.assertTrue(shadow_snapshot_data["shadow_decision_enabled"])
             self.assertIn("# Manual Delivery Current Handoff App Snapshot", shadow_snapshot_md.read_text(encoding="utf-8"))
+            self.assertFalse((base_dir / "local" / "manual_delivery_handoff" / "app-snapshot-status.md").exists())
+            self.assertFalse((base_dir / "local" / "manual_delivery_handoff" / "app-snapshot-status.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
@@ -6804,6 +6810,116 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", negative_stderr)
             self.assertFalse(negative_refresh_dir.exists())
             self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_refresh_current_manual_delivery_app_snapshot_cli_supports_app_snapshot_status_outputs_and_rejects_missing_flag(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                default_code, default_stdout, default_stderr = self._run_refresh_current_manual_delivery_app_snapshot_main_with_argv(
+                    [
+                        "--write-app-snapshot-status",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(default_code, 0, msg=default_stderr)
+            self.assertIn("current_manual_delivery_app_snapshot_status_md=local/manual_delivery_handoff/app-snapshot-status.md", default_stdout)
+            self.assertIn("current_manual_delivery_app_snapshot_status_json=local/manual_delivery_handoff/app-snapshot-status.json", default_stdout)
+            default_status_json = base_dir / "local" / "manual_delivery_handoff" / "app-snapshot-status.json"
+            default_status_md = base_dir / "local" / "manual_delivery_handoff" / "app-snapshot-status.md"
+            self.assertTrue(default_status_json.exists())
+            self.assertTrue(default_status_md.exists())
+            default_status_data = json.loads(default_status_json.read_text(encoding="utf-8"))
+            self.assertEqual(default_status_data["schema_version"], "manual_delivery_app_snapshot_status.v1")
+            self.assertEqual(default_status_data["app_snapshot_status"], "valid_ready_for_human_review")
+            self.assertFalse(default_status_data["shadow_decision_enabled"])
+            self.assertTrue(default_status_data["app_snapshot_json_exists"])
+            self.assertTrue(default_status_data["ready_check_json_exists"])
+            self.assertTrue(default_status_data["app_state_json_exists"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            override_handoff_dir = base_dir / "override-handoff"
+            explicit_snapshot_json = base_dir / "artifacts" / "custom-app-snapshot.json"
+            explicit_snapshot_md = base_dir / "artifacts" / "custom-app-snapshot.md"
+            explicit_status_md = base_dir / "artifacts" / "custom-app-snapshot-status.md"
+            explicit_status_json = base_dir / "artifacts" / "custom-app-snapshot-status.json"
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                explicit_code, explicit_stdout, explicit_stderr = self._run_refresh_current_manual_delivery_app_snapshot_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(override_handoff_dir),
+                        "--app-snapshot-json",
+                        str(explicit_snapshot_json),
+                        "--app-snapshot-md",
+                        str(explicit_snapshot_md),
+                        "--app-snapshot-status-md",
+                        str(explicit_status_md),
+                        "--app-snapshot-status-json",
+                        str(explicit_status_json),
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--write-app-snapshot-status",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(explicit_code, 0, msg=explicit_stderr)
+            self.assertIn(f"current_manual_delivery_app_snapshot_status_md={explicit_status_md}", explicit_stdout)
+            self.assertIn(f"current_manual_delivery_app_snapshot_status_json={explicit_status_json}", explicit_stdout)
+            explicit_status_data = json.loads(explicit_status_json.read_text(encoding="utf-8"))
+            self.assertEqual(explicit_status_data["schema_version"], "manual_delivery_app_snapshot_status.v1")
+            self.assertTrue(explicit_status_data["shadow_decision_enabled"])
+            self.assertEqual(explicit_status_data["app_snapshot_json"], str(explicit_snapshot_json))
+            self.assertEqual(explicit_status_data["ready_check_json"], str(override_handoff_dir / "ready-check.json"))
+            self.assertEqual(explicit_status_data["app_state_json"], str(override_handoff_dir / "app-state.json"))
+            self.assertTrue(explicit_status_md.exists())
+            self.assertTrue(explicit_status_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            negative_handoff_dir = base_dir / "negative-handoff"
+            negative_status_md = base_dir / "artifacts" / "negative-app-snapshot-status.md"
+            negative_status_json = base_dir / "artifacts" / "negative-app-snapshot-status.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                negative_code, negative_stdout, negative_stderr = self._run_refresh_current_manual_delivery_app_snapshot_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(negative_handoff_dir),
+                        "--app-snapshot-status-md",
+                        str(negative_status_md),
+                        "--app-snapshot-status-json",
+                        str(negative_status_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(negative_code, 0)
+            self.assertEqual(negative_stdout, "")
+            self.assertIn("--app-snapshot-status-md and --app-snapshot-status-json require --write-app-snapshot-status", negative_stderr)
+            self.assertFalse(negative_handoff_dir.exists())
+            self.assertFalse(negative_status_md.exists())
+            self.assertFalse(negative_status_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

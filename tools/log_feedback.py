@@ -13428,6 +13428,27 @@ def _run_refresh_and_check_current_manual_delivery_app_state_command(
     sys.stdout.write(ready_check_stdout.getvalue())
 
 
+def _resolve_current_manual_delivery_app_snapshot_status_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None]:
+    handoff_dir = Path(args.handoff_dir)
+    write_app_snapshot_status = bool(getattr(args, "write_app_snapshot_status", False))
+    app_snapshot_status_md_arg = getattr(args, "app_snapshot_status_md", None)
+    app_snapshot_status_json_arg = getattr(args, "app_snapshot_status_json", None)
+    if (app_snapshot_status_md_arg or app_snapshot_status_json_arg) and not write_app_snapshot_status:
+        message = "--app-snapshot-status-md and --app-snapshot-status-json require --write-app-snapshot-status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if write_app_snapshot_status:
+        if app_snapshot_status_md_arg is None:
+            app_snapshot_status_md_arg = str(handoff_dir / "app-snapshot-status.md")
+        if app_snapshot_status_json_arg is None:
+            app_snapshot_status_json_arg = str(handoff_dir / "app-snapshot-status.json")
+    return app_snapshot_status_md_arg, app_snapshot_status_json_arg
+
+
 def _run_refresh_current_manual_delivery_app_snapshot_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -13462,6 +13483,8 @@ def _run_refresh_current_manual_delivery_app_snapshot_command(
     if ready_check_json_arg is None:
         ready_check_json_arg = str(handoff_dir / "ready-check.json")
 
+    app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(args, parser)
+
     app_snapshot_json_arg = getattr(args, "app_snapshot_json", None)
     if app_snapshot_json_arg is None:
         app_snapshot_json_arg = str(handoff_dir / "app-snapshot.json")
@@ -13488,14 +13511,23 @@ def _run_refresh_current_manual_delivery_app_snapshot_command(
 
     refresh_stdout = io.StringIO()
     snapshot_stdout = io.StringIO()
+    app_snapshot_status_stdout = io.StringIO()
     with contextlib.redirect_stdout(refresh_stdout):
         _run_refresh_and_check_current_manual_delivery_app_state_command(refresh_args, parser)
     with contextlib.redirect_stdout(snapshot_stdout):
         _run_write_current_manual_delivery_app_snapshot_command(snapshot_args, parser)
+    if app_snapshot_status_md_arg or app_snapshot_status_json_arg:
+        app_snapshot_status_args = argparse.Namespace(**vars(args))
+        app_snapshot_status_args.app_snapshot_json = app_snapshot_json_arg
+        app_snapshot_status_args.output_md = app_snapshot_status_md_arg
+        app_snapshot_status_args.output_json = app_snapshot_status_json_arg
+        with contextlib.redirect_stdout(app_snapshot_status_stdout):
+            _run_summarize_current_manual_delivery_app_snapshot_command(app_snapshot_status_args, parser)
 
     sys.stdout.write(f"current_manual_delivery_app_snapshot_refresh_dir={handoff_dir}\n")
     sys.stdout.write(refresh_stdout.getvalue())
     sys.stdout.write(snapshot_stdout.getvalue())
+    sys.stdout.write(app_snapshot_status_stdout.getvalue())
 
 
 def _manual_delivery_current_handoff_app_snapshot_status_markdown(
@@ -16707,6 +16739,9 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--ready-check-md")
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-json")
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--write-app-snapshot-status", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-status-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-status-json")
     current_manual_delivery_app_snapshot_refresh_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
