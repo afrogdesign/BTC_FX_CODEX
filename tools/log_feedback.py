@@ -13074,6 +13074,251 @@ def _run_check_current_manual_delivery_app_state_ready_command(
         )
 
 
+def _manual_delivery_current_handoff_app_snapshot_markdown(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    handoff_dir: Path,
+    ready_check_data: dict[str, Any],
+    app_state_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App Snapshot",
+        "",
+        f"- snapshot_status: ready_for_human_review",
+        f"- current_manual_delivery_ready: true",
+        f"- display_mode: {ready_check_data['display_mode']}",
+        f"- primary_action: {ready_check_data['primary_action']}",
+        f"- handoff_dir: {handoff_dir}",
+        f"- source_readiness: {app_state_status_data['source_readiness']}",
+        f"- actionability_label: {app_state_status_data['actionability_label']}",
+        f"- human_action: {app_state_status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(app_state_status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_snapshot_data(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    handoff_dir: Path,
+    ready_check_data: dict[str, Any],
+    app_state_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_snapshot.v1",
+        "snapshot_status": "ready_for_human_review",
+        "current_manual_delivery_ready": True,
+        "display_mode": ready_check_data["display_mode"],
+        "primary_action": ready_check_data["primary_action"],
+        "allowed_next_action": ready_check_data["allowed_next_action"],
+        "human_review_required": ready_check_data["human_review_required"],
+        "trade_execution_allowed": ready_check_data["trade_execution_allowed"],
+        "automatic_order_allowed": ready_check_data["automatic_order_allowed"],
+        "external_notification_allowed": ready_check_data["external_notification_allowed"],
+        "paper_positions_integration": ready_check_data["paper_positions_integration"],
+        "handoff_dir": str(handoff_dir),
+        "ready_check_json": str(ready_check_json),
+        "app_state_json": str(app_state_json),
+        "source_readiness": app_state_status_data["source_readiness"],
+        "actionability_label": app_state_status_data["actionability_label"],
+        "human_action": app_state_status_data["human_action"],
+        "shadow_decision_enabled": app_state_status_data["shadow_decision_enabled"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _write_current_manual_delivery_app_snapshot_outputs(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not ready_check_json.exists():
+        message = f"current handoff app-snapshot ready-check JSON does not exist: {ready_check_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    if not app_state_json.exists():
+        message = f"current handoff app-snapshot app-state JSON does not exist: {app_state_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    ready_check_data = _load_json_object(ready_check_json, parser)
+    if str(ready_check_data.get("schema_version", "")).strip() != "manual_delivery_app_state_ready_check.v1":
+        message = f"current handoff app-snapshot ready-check JSON schema_version must be manual_delivery_app_state_ready_check.v1: {ready_check_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if ready_check_data.get("current_manual_delivery_ready") is not True:
+        message = "current handoff app-snapshot ready-check JSON current_manual_delivery_ready must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(ready_check_data.get("readiness_status", "")).strip() != "ready_for_human_review":
+        message = (
+            "current handoff app-snapshot ready-check JSON readiness_status must be "
+            f"ready_for_human_review: {ready_check_data.get('readiness_status')}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]:
+        if ready_check_data.get(key) != expected_value:
+            message = f"current handoff app-snapshot ready-check JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    app_state_data = _load_json_object(app_state_json, parser)
+    required_keys = [
+        "schema_version",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "human_review_required",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "self_check_json",
+        "handoff_dir",
+        "handoff_status",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in app_state_data]
+    if missing_keys:
+        message = "current handoff app-snapshot app-state JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["schema_version"]).strip() != "manual_delivery_app_state.v1":
+        message = f"current handoff app-snapshot app-state JSON schema_version must be manual_delivery_app_state.v1: {app_state_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["app_state"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-snapshot app-state JSON app_state must be ready_for_human_review: {app_state_data['app_state']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-snapshot app-state JSON display_mode must be manual_delivery_review: {app_state_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot app-state JSON primary_action must be human_review_only: {app_state_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key in [
+        "allowed_next_action",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "human_review_required",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]:
+        if key in ready_check_data and app_state_data.get(key) != ready_check_data[key]:
+            message = f"current handoff app-snapshot app-state JSON {key} does not match ready-check JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    handoff_dir = Path(str(app_state_data["handoff_dir"]))
+    if handoff_dir != app_state_json.parent:
+        message = f"current handoff app-snapshot app-state JSON handoff_dir does not match app-state JSON path: {app_state_data['handoff_dir']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if ready_check_json.parent != handoff_dir:
+        message = f"current handoff app-snapshot ready-check JSON path does not match handoff_dir: {ready_check_json}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    _, app_state_status_data, app_state_status_handoff_dir = _write_manual_delivery_current_handoff_app_state_status_outputs(
+        app_state_json=app_state_json,
+        parser=parser,
+    )
+    if app_state_status_handoff_dir != handoff_dir:
+        message = f"current handoff app-snapshot app-state status handoff_dir does not match handoff_dir: {app_state_status_handoff_dir}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_state_status_data["source_readiness"] != ready_check_data["source_readiness"]:
+        message = "current handoff app-snapshot app-state status source_readiness does not match ready-check JSON"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_snapshot_markdown(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        handoff_dir=handoff_dir,
+        ready_check_data=ready_check_data,
+        app_state_status_data=app_state_status_data,
+    )
+    snapshot_data = _manual_delivery_current_handoff_app_snapshot_data(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        handoff_dir=handoff_dir,
+        ready_check_data=ready_check_data,
+        app_state_status_data=app_state_status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(snapshot_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, snapshot_data
+
+
+def _run_write_current_manual_delivery_app_snapshot_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "app_snapshot_md", None)
+    output_json_arg = getattr(args, "app_snapshot_json", None)
+    ready_check_json = Path(getattr(args, "ready_check_json", "local/manual_delivery_handoff/ready-check.json"))
+    app_state_json = Path(getattr(args, "app_state_json", "local/manual_delivery_handoff/app-state.json"))
+    _summary_text, _snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(_summary_text)
+    else:
+        sys.stdout.write(_summary_text)
+
+
 def _run_refresh_current_manual_delivery_app_state_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -16066,6 +16311,24 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_state_ready_parser.add_argument("--output-md")
     current_manual_delivery_app_state_ready_parser.add_argument("--output-json")
 
+    current_manual_delivery_app_snapshot_parser = subparsers.add_parser("write-current-manual-delivery-app-snapshot")
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--ready-check-json",
+        default="local/manual_delivery_handoff/ready-check.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-state-json",
+        default="local/manual_delivery_handoff/app-state.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-snapshot-json",
+        default="local/manual_delivery_handoff/app-snapshot.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-snapshot-md",
+        default="local/manual_delivery_handoff/app-snapshot.md",
+    )
+
     current_manual_delivery_app_state_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-state")
     current_manual_delivery_app_state_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_state_refresh_parser.add_argument("--self-check-json")
@@ -16647,6 +16910,10 @@ def main() -> None:
 
     if args.command == "check-current-manual-delivery-app-state-ready":
         _run_check_current_manual_delivery_app_state_ready_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-snapshot":
+        _run_write_current_manual_delivery_app_snapshot_command(args, parser)
         return
 
     if args.command == "refresh-current-manual-delivery-app-state":
