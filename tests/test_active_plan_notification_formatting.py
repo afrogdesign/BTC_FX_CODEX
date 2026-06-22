@@ -1328,6 +1328,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_current_manual_delivery_app_state_ready_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "check-current-manual-delivery-app-state-ready", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_refresh_current_manual_delivery_app_state_main_with_argv(
         self,
         argv: list[str],
@@ -5848,6 +5871,264 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", negative_stderr)
             self.assertFalse(negative_refresh_dir.exists())
             self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_check_current_manual_delivery_app_state_ready_cli_supports_default_and_explicit_inputs(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_state_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                    ],
+                    base_dir=base_dir,
+                )
+                default_code, default_stdout, default_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(default_code, 0, msg=default_stderr)
+            self.assertEqual(
+                default_stdout,
+                "current_manual_delivery_ready=true\n"
+                "allowed_next_action=human_review_only\n"
+                "trade_execution_allowed=false\n"
+                "automatic_order_allowed=false\n"
+                "external_notification_allowed=false\n"
+                "paper_positions_integration=false\n"
+                "human_review_required=true\n"
+                "app_state_status_json=local/manual_delivery_handoff/app-state-status.json\n",
+            )
+            default_status_json = base_dir / "local" / "manual_delivery_handoff" / "app-state-status.json"
+            self.assertTrue(default_status_json.exists())
+            default_status_data = self._read_manual_delivery_current_handoff_app_state_status(default_status_json)
+            self.assertFalse(default_status_data["shadow_decision_enabled"])
+
+            explicit_status_json = base_dir / "artifacts" / "custom-app-state-status.json"
+            explicit_status_json.parent.mkdir(parents=True, exist_ok=True)
+            explicit_status_json.write_text(default_status_json.read_text(encoding="utf-8"), encoding="utf-8")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                explicit_code, explicit_stdout, explicit_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--app-state-status-json",
+                        str(explicit_status_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(explicit_code, 0, msg=explicit_stderr)
+            self.assertEqual(
+                explicit_stdout,
+                "current_manual_delivery_ready=true\n"
+                "allowed_next_action=human_review_only\n"
+                "trade_execution_allowed=false\n"
+                "automatic_order_allowed=false\n"
+                "external_notification_allowed=false\n"
+                "paper_positions_integration=false\n"
+                "human_review_required=true\n"
+                f"app_state_status_json={explicit_status_json}\n",
+            )
+            self.assertEqual(explicit_stderr, "")
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_check_current_manual_delivery_app_state_ready_cli_supports_output_modes_and_shadow_state(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_state_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            shadow_status_json = base_dir / "local" / "manual_delivery_handoff" / "app-state-status.json"
+            shadow_status_data = self._read_manual_delivery_current_handoff_app_state_status(shadow_status_json)
+            self.assertTrue(shadow_status_data["shadow_decision_enabled"])
+
+            output_md = base_dir / "artifacts" / "ready-check.md"
+            output_json = base_dir / "artifacts" / "ready-check.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                md_code, md_stdout, md_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--output-md",
+                        str(output_md),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(md_code, 0, msg=md_stderr)
+            self.assertEqual(md_stdout, f"current_manual_delivery_ready_check_md={output_md}\n")
+            self.assertTrue(output_md.exists())
+            md_text = output_md.read_text(encoding="utf-8")
+            self.assertIn("# Manual Delivery Current Handoff App State Ready Check", md_text)
+            self.assertIn("- shadow_decision_enabled: true", md_text)
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                json_code, json_stdout, json_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--output-json",
+                        str(output_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(json_code, 0, msg=json_stderr)
+            self.assertEqual(
+                json_stdout,
+                "current_manual_delivery_ready=true\n"
+                "allowed_next_action=human_review_only\n"
+                "trade_execution_allowed=false\n"
+                "automatic_order_allowed=false\n"
+                "external_notification_allowed=false\n"
+                "paper_positions_integration=false\n"
+                "human_review_required=true\n"
+                "app_state_status_json=local/manual_delivery_handoff/app-state-status.json\n",
+            )
+            self.assertTrue(output_json.exists())
+            json_data = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(json_data["schema_version"], "manual_delivery_app_state_ready_check.v1")
+            self.assertTrue(json_data["current_manual_delivery_ready"])
+            self.assertEqual(json_data["readiness_status"], "ready_for_human_review")
+            self.assertTrue(json_data["shadow_decision_enabled"])
+            self.assertEqual(json_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+
+            both_md = base_dir / "artifacts" / "ready-check-both.md"
+            both_json = base_dir / "artifacts" / "ready-check-both.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                both_code, both_stdout, both_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--output-md",
+                        str(both_md),
+                        "--output-json",
+                        str(both_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(both_code, 0, msg=both_stderr)
+            self.assertEqual(
+                both_stdout,
+                f"current_manual_delivery_ready_check_md={both_md}\ncurrent_manual_delivery_ready_check_json={both_json}\n",
+            )
+            self.assertTrue(both_md.exists())
+            self.assertTrue(both_json.exists())
+            both_json_data = json.loads(both_json.read_text(encoding="utf-8"))
+            self.assertTrue(both_json_data["shadow_decision_enabled"])
+            self.assertEqual(both_json_data["app_state_status"], "valid_ready_for_human_review")
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_check_current_manual_delivery_app_state_ready_cli_rejects_missing_and_unsafe_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            missing_status_json = base_dir / "missing" / "app-state-status.json"
+            missing_output_md = base_dir / "artifacts" / "missing-ready-check.md"
+            missing_output_json = base_dir / "artifacts" / "missing-ready-check.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                missing_code, missing_stdout, missing_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--app-state-status-json",
+                        str(missing_status_json),
+                        "--output-md",
+                        str(missing_output_md),
+                        "--output-json",
+                        str(missing_output_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(missing_code, 0)
+            self.assertEqual(missing_stdout, "")
+            self.assertIn("current handoff app-state status JSON does not exist", missing_stderr)
+            self.assertFalse(missing_output_md.exists())
+            self.assertFalse(missing_output_json.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_state_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            status_json = base_dir / "local" / "manual_delivery_handoff" / "app-state-status.json"
+            status_data = self._read_manual_delivery_current_handoff_app_state_status(status_json)
+            status_data["trade_execution_allowed"] = True
+            status_json.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            unsafe_output_md = base_dir / "artifacts" / "unsafe-ready-check.md"
+            unsafe_output_json = base_dir / "artifacts" / "unsafe-ready-check.json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                unsafe_code, unsafe_stdout, unsafe_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--app-state-status-json",
+                        str(status_json),
+                        "--output-md",
+                        str(unsafe_output_md),
+                        "--output-json",
+                        str(unsafe_output_json),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(unsafe_code, 0)
+            self.assertEqual(unsafe_stdout, "")
+            self.assertIn("current handoff app-state status JSON trade_execution_allowed must be false", unsafe_stderr)
+            self.assertFalse(unsafe_output_md.exists())
+            self.assertFalse(unsafe_output_json.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
