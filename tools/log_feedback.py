@@ -11740,6 +11740,27 @@ def _resolve_manual_delivery_review_package_handoff_paths(
     return latest_pointer_json_arg, latest_status_md_arg, latest_status_json_arg
 
 
+def _resolve_manual_delivery_local_handoff_status_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None]:
+    handoff_dir = Path(args.handoff_dir)
+    write_handoff_status = bool(getattr(args, "write_handoff_status", False))
+    handoff_status_md_arg = getattr(args, "handoff_status_md", None)
+    handoff_status_json_arg = getattr(args, "handoff_status_json", None)
+    if (handoff_status_md_arg or handoff_status_json_arg) and not write_handoff_status:
+        message = "--handoff-status-md and --handoff-status-json require --write-handoff-status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if write_handoff_status:
+        if handoff_status_md_arg is None:
+            handoff_status_md_arg = str(handoff_dir / "handoff-status.md")
+        if handoff_status_json_arg is None:
+            handoff_status_json_arg = str(handoff_dir / "handoff-status.json")
+    return handoff_status_md_arg, handoff_status_json_arg
+
+
 def _run_summarize_manual_delivery_local_flow_manifest_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -11964,6 +11985,7 @@ def _run_write_latest_manual_delivery_local_handoff_command(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
+    handoff_status_md_arg, handoff_status_json_arg = _resolve_manual_delivery_local_handoff_status_paths(args, parser)
 
     handoff_dir = Path(args.handoff_dir)
     review_package_args = argparse.Namespace(**vars(args))
@@ -11994,6 +12016,22 @@ def _run_write_latest_manual_delivery_local_handoff_command(
     _ensure_parent(human_gate_json_path)
     human_gate_json_path.write_text(json.dumps(human_gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     sys.stdout.write(f"manual_delivery_human_gate_json={human_gate_json_path}\n")
+    if handoff_status_md_arg or handoff_status_json_arg:
+        handoff_status_md_path = Path(handoff_status_md_arg) if handoff_status_md_arg else None
+        handoff_status_json_path = Path(handoff_status_json_arg) if handoff_status_json_arg else None
+        _write_manual_delivery_local_handoff_status_outputs(
+            handoff_dir=handoff_dir,
+            output_md=handoff_status_md_path,
+            output_json=handoff_status_json_path,
+            parser=parser,
+        )
+        if handoff_status_md_path is not None and handoff_status_json_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_md={handoff_status_md_path}\n")
+            sys.stdout.write(f"manual_delivery_local_handoff_status_json={handoff_status_json_path}\n")
+        elif handoff_status_md_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_md={handoff_status_md_path}\n")
+        elif handoff_status_json_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_json={handoff_status_json_path}\n")
 
 
 def _run_summarize_latest_manual_delivery_pointer_command(
@@ -14855,6 +14893,9 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
     manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-notes", default="")
     manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+    manual_delivery_local_handoff_parser.add_argument("--write-handoff-status", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-status-md")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-status-json")
 
     manual_delivery_human_gate_parser = subparsers.add_parser("summarize-manual-delivery-human-gate")
     manual_delivery_human_gate_parser.add_argument("--human-gate-json", required=True)
