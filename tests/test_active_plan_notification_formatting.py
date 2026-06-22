@@ -7156,6 +7156,162 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
+    def test_refresh_current_manual_delivery_app_cli_supports_stdout_json_mode_and_rejects_missing_and_unsafe_inputs(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                default_code, default_stdout, default_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(default_code, 0, msg=default_stderr)
+            self.assertTrue(default_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_refresh_dir=", default_stdout)
+            self.assertNotIn("# Manual Delivery Current Handoff App Ready Check", default_stdout)
+            default_stdout_data = json.loads(default_stdout)
+            self.assertEqual(default_stdout_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertTrue(default_stdout_data["current_manual_delivery_app_ready"])
+            self.assertEqual(default_stdout_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(default_stdout_data["allowed_next_action"], "human_review_only")
+            self.assertEqual(default_stdout_data["app_snapshot_status_json"], "local/manual_delivery_handoff/app-snapshot-status.json")
+            self.assertEqual(default_stdout_data["app_snapshot_status"], "valid_ready_for_human_review")
+            self.assertEqual(default_stdout_data["snapshot_status"], "ready_for_human_review")
+            self.assertTrue(default_stdout_data["current_manual_delivery_ready"])
+            self.assertEqual(default_stdout_data["display_mode"], "manual_delivery_review")
+            self.assertEqual(default_stdout_data["primary_action"], "human_review_only")
+            self.assertTrue(default_stdout_data["human_review_required"])
+            self.assertFalse(default_stdout_data["trade_execution_allowed"])
+            self.assertFalse(default_stdout_data["automatic_order_allowed"])
+            self.assertFalse(default_stdout_data["external_notification_allowed"])
+            self.assertFalse(default_stdout_data["paper_positions_integration"])
+            self.assertEqual(default_stdout_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+            self.assertFalse(default_stdout_data["shadow_decision_enabled"])
+            default_handoff_dir = base_dir / "local" / "manual_delivery_handoff"
+            self.assertTrue(default_handoff_dir.exists())
+            self.assertTrue((default_handoff_dir / "self-check.json").exists())
+            self.assertTrue((default_handoff_dir / "app-state.json").exists())
+            self.assertTrue((default_handoff_dir / "app-state-status.json").exists())
+            self.assertTrue((default_handoff_dir / "ready-check.json").exists())
+            self.assertTrue((default_handoff_dir / "app-snapshot.json").exists())
+            self.assertTrue((default_handoff_dir / "app-snapshot.md").exists())
+            self.assertTrue((default_handoff_dir / "app-snapshot-status.json").exists())
+            self.assertTrue((default_handoff_dir / "app-snapshot-status.md").exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            explicit_handoff_dir = base_dir / "handoff"
+            explicit_snapshot_json = base_dir / "artifacts" / "custom-app-snapshot.json"
+            explicit_snapshot_md = base_dir / "artifacts" / "custom-app-snapshot.md"
+            explicit_snapshot_status_json = base_dir / "artifacts" / "custom-app-snapshot-status.json"
+            explicit_snapshot_status_md = base_dir / "artifacts" / "custom-app-snapshot-status.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                explicit_code, explicit_stdout, explicit_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(explicit_handoff_dir),
+                        "--app-snapshot-json",
+                        str(explicit_snapshot_json),
+                        "--app-snapshot-md",
+                        str(explicit_snapshot_md),
+                        "--app-snapshot-status-json",
+                        str(explicit_snapshot_status_json),
+                        "--app-snapshot-status-md",
+                        str(explicit_snapshot_status_md),
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(explicit_code, 0, msg=explicit_stderr)
+            self.assertTrue(explicit_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_refresh_dir=", explicit_stdout)
+            explicit_stdout_data = json.loads(explicit_stdout)
+            self.assertEqual(explicit_stdout_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertEqual(explicit_stdout_data["app_snapshot_status_json"], str(explicit_snapshot_status_json))
+            self.assertTrue(explicit_stdout_data["current_manual_delivery_app_ready"])
+            self.assertEqual(explicit_stdout_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(explicit_stdout_data["allowed_next_action"], "human_review_only")
+            self.assertTrue(explicit_handoff_dir.exists())
+            self.assertTrue(explicit_snapshot_json.exists())
+            self.assertTrue(explicit_snapshot_md.exists())
+            self.assertTrue(explicit_snapshot_status_json.exists())
+            self.assertTrue(explicit_snapshot_status_md.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            detail_report_path = self._write_intraperiod_report(base_dir, "20260622", "detail report")
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                shadow_code, shadow_stdout, shadow_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--detail-report-path",
+                        str(detail_report_path),
+                        "--write-actionability-shadow-decision",
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(shadow_code, 0, msg=shadow_stderr)
+            self.assertTrue(shadow_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_refresh_dir=", shadow_stdout)
+            shadow_stdout_data = json.loads(shadow_stdout)
+            self.assertEqual(shadow_stdout_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertTrue(shadow_stdout_data["shadow_decision_enabled"])
+            self.assertTrue(shadow_stdout_data["current_manual_delivery_app_ready"])
+            self.assertEqual(shadow_stdout_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(shadow_stdout_data["allowed_next_action"], "human_review_only")
+            self.assertEqual(shadow_stdout_data["app_snapshot_status_json"], "local/manual_delivery_handoff/app-snapshot-status.json")
+            self.assertTrue(shadow_stdout_data["shadow_decision_enabled"])
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            negative_refresh_dir = base_dir / "negative-refresh"
+            shadow_summary = base_dir / "artifacts" / "actionability-shadow-summary.md"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                negative_code, negative_stdout, negative_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--handoff-dir",
+                        str(negative_refresh_dir),
+                        "--actionability-shadow-summary-output-md",
+                        str(shadow_summary),
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertNotEqual(negative_code, 0)
+            self.assertEqual(negative_stdout, "")
+            self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", negative_stderr)
+            self.assertFalse(negative_refresh_dir.exists())
+            self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
     def test_check_current_manual_delivery_app_ready_cli_supports_default_explicit_shadow_and_output_modes_and_rejects_missing_and_unsafe_inputs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)

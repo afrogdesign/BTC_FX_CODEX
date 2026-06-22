@@ -13797,10 +13797,26 @@ def _run_refresh_current_manual_delivery_app_command(
     parser: argparse.ArgumentParser | None = None,
 ) -> None:
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    stdout_json = bool(getattr(args, "stdout_json", False))
 
     refresh_snapshot_args = argparse.Namespace(**vars(args))
     refresh_snapshot_args.handoff_dir = str(handoff_dir)
     refresh_snapshot_args.write_app_snapshot_status = True
+
+    if stdout_json:
+        _app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(
+            refresh_snapshot_args,
+            parser,
+        )
+        refresh_snapshot_stdout = io.StringIO()
+        with contextlib.redirect_stdout(refresh_snapshot_stdout):
+            _run_refresh_current_manual_delivery_app_snapshot_command(refresh_snapshot_args, parser)
+        _summary_text, ready_check_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+            app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+            parser=parser,
+        )
+        sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
 
     refresh_snapshot_stdout = io.StringIO()
     with contextlib.redirect_stdout(refresh_snapshot_stdout):
@@ -17062,6 +17078,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_refresh_parser.add_argument("--write-app-snapshot-status", action="store_true")
     current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-md")
     current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_refresh_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
