@@ -13369,6 +13369,89 @@ def _manual_delivery_current_app_dashboard_value(value: Any, default: str = "not
     return text if text else default
 
 
+def _manual_delivery_current_app_operator_triage_summary_data(
+    *,
+    app_contract_data: dict[str, Any] | None = None,
+    status_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    app_contract_data = app_contract_data or {}
+    status_data = status_data or {}
+
+    def _contract_evidence_state(key: str) -> dict[str, Any]:
+        present = isinstance(app_contract_data.get(key), dict)
+        return {
+            "present": present,
+            "ready": present,
+        }
+
+    manual_action_checklist_present = bool(status_data)
+    readiness_value = status_data.get("readiness_status", status_data.get("snapshot_status"))
+    snapshot_status_value = status_data.get("app_snapshot_status", status_data.get("snapshot_status"))
+    manual_action_checklist_ready = (
+        readiness_value == "ready_for_human_review"
+        and snapshot_status_value in {"valid_ready_for_human_review", "ready_for_human_review"}
+        and status_data.get("allowed_next_action") == "human_review_only"
+        and bool(status_data.get("human_review_required")) is True
+        and status_data.get("trade_execution_allowed") is False
+        and status_data.get("automatic_order_allowed") is False
+        and status_data.get("external_notification_allowed") is False
+        and status_data.get("paper_positions_integration") is False
+        and status_data.get("safety_boundary") == "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    )
+
+    evidence = {
+        "operator_status_diagnostic": _contract_evidence_state("operator_status_diagnostic"),
+        "safe_config_schema_audit": _contract_evidence_state("safe_config_schema_audit"),
+        "intraperiod_review_stdout_json": _contract_evidence_state("intraperiod_review_stdout_json"),
+        "manual_action_checklist_surface": {
+            "present": manual_action_checklist_present,
+            "ready": manual_action_checklist_ready,
+        },
+    }
+    all_evidence_present = all(item["present"] for item in evidence.values())
+    all_evidence_ready = all(item["ready"] for item in evidence.values())
+    return {
+        "schema_version": "manual_delivery_app_operator_triage_summary.v1",
+        "summary_status": "ready_for_human_review" if all_evidence_ready else "partial_or_missing",
+        "all_evidence_present": all_evidence_present,
+        "all_evidence_ready": all_evidence_ready,
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "evidence": evidence,
+        "note": "derived from existing app contract data only",
+    }
+
+
+def _manual_delivery_current_app_operator_triage_summary_rows(
+    operator_triage_summary: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    evidence = operator_triage_summary.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    def _evidence_state_text(key: str) -> str:
+        evidence_state = evidence.get(key)
+        if not isinstance(evidence_state, dict):
+            return "present=false / ready=false"
+        return (
+            f"present={_manual_delivery_current_app_dashboard_value(evidence_state.get('present', False))} "
+            f"/ ready={_manual_delivery_current_app_dashboard_value(evidence_state.get('ready', False))}"
+        )
+
+    return [
+        ("Summary status", operator_triage_summary.get("summary_status")),
+        ("operator_status_diagnostic", _evidence_state_text("operator_status_diagnostic")),
+        ("safe_config_schema_audit", _evidence_state_text("safe_config_schema_audit")),
+        ("intraperiod_review_stdout_json", _evidence_state_text("intraperiod_review_stdout_json")),
+        ("manual_action_checklist_surface", _evidence_state_text("manual_action_checklist_surface")),
+        ("Safety", operator_triage_summary.get("safety_boundary")),
+        ("Note", operator_triage_summary.get("note")),
+    ]
+
+
 def _manual_delivery_current_app_dashboard_html(
     *,
     app_snapshot_json: Path,
@@ -13495,6 +13578,11 @@ def _manual_delivery_current_app_dashboard_html(
         ("Safety", safe_config_schema_audit.get("safety_boundary") if isinstance(safe_config_schema_audit, dict) else None),
         ("Note", "This app surface does not execute ./.venv312/bin/python tools/safe_config_schema_audit.py"),
     ]
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    operator_triage_rows = _manual_delivery_current_app_operator_triage_summary_rows(operator_triage_summary)
     manual_action_rows = [
         ("Entry mode", _dashboard_value("entry_mode")),
         ("Entry condition", _dashboard_value("entry_condition")),
@@ -13679,6 +13767,14 @@ def _manual_delivery_current_app_dashboard_html(
         <table>
           {_table_rows(manual_action_rows)}
         </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Operator Triage Summary</h2>
+        <table>
+          {_table_rows(operator_triage_rows)}
+        </table>
+        <p class=\"muted\">derived from existing app contract data only. report-only / not FORMAL_GO / no automatic order / human decides manually.</p>
       </section>
 
       <section class=\"card full-width\">
@@ -13966,7 +14062,7 @@ def _write_current_manual_delivery_app_surface_outputs(
         app_snapshot_status_json=app_snapshot_status_json_path,
         snapshot_data=_snapshot_data,
         status_data=_snapshot_status_data,
-        app_contract_data=contract_data,
+        app_contract_data=_contract_data,
     )
     app_dashboard_html_path.write_text(app_dashboard_html, encoding="utf-8")
 
@@ -14065,6 +14161,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "Readiness / Status",
         "Active Plan Summary",
         "Manual Action Checklist",
+        "Operator Triage Summary",
         "Source Files / Generated At",
         "Safety Boundary",
         "Entry mode",
@@ -14073,6 +14170,12 @@ def _manual_delivery_current_app_surface_validation_data(
         "Invalidation / wait",
         "Timeout / validity",
         "Safety",
+        "Summary status",
+        "operator_status_diagnostic",
+        "safe_config_schema_audit",
+        "intraperiod_review_stdout_json",
+        "manual_action_checklist_surface",
+        "derived from existing app contract data only",
         "report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]:
         if expected_text not in app_dashboard_html_text:
@@ -14204,6 +14307,11 @@ def _manual_delivery_current_app_surface_validation_data(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
+
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=app_snapshot_status_data,
+    )
 
     if str(app_surface_manifest_data.get("schema_version", "")).strip() != "manual_delivery_app_surface_manifest.v1":
         message = f"current manual delivery app surface app-surface-manifest JSON schema_version must be manual_delivery_app_surface_manifest.v1: {app_surface_manifest_data.get('schema_version')}"
@@ -14343,6 +14451,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "safe_config_schema_audit_live_trading_allowed": expected_safe_config_schema_audit["live_trading_allowed"],
         "safe_config_schema_audit_secret_values_exposed": expected_safe_config_schema_audit["secret_values_exposed"],
         "safe_config_schema_audit_safety_boundary": expected_safe_config_schema_audit["safety_boundary"],
+        "operator_triage_summary": operator_triage_summary,
     }
 
 

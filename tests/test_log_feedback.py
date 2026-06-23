@@ -68,6 +68,7 @@ from tools.log_feedback import (
     JST,
     _manual_delivery_current_app_dashboard_html,
     _manual_delivery_current_app_integration_contract_data,
+    _manual_delivery_current_app_operator_triage_summary_data,
     _write_manual_delivery_current_app_integration_contract_outputs,
     _manual_delivery_current_app_surface_validation_data,
 )
@@ -138,7 +139,12 @@ class LogFeedbackTest(unittest.TestCase):
             "actionability_label": "watch",
             "human_action": "manual review",
             "shadow_decision_enabled": True,
-            "safety_boundary": "",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "human_review_required": True,
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
             "active_plan_label": "active plan sample",
             "side": "long",
             "entry_mode": "market",
@@ -180,6 +186,15 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("manual review", html)
         self.assertIn("human_review_only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertIn("Operator Triage Summary", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("operator_status_diagnostic", html)
+        self.assertIn("safe_config_schema_audit", html)
+        self.assertIn("intraperiod_review_stdout_json", html)
+        self.assertIn("manual_action_checklist_surface", html)
+        self.assertIn("present=true / ready=true", html)
+        self.assertIn("derived from existing app contract data only", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("Operator Status Diagnostics", html)
         self.assertIn("./.venv312/bin/python tools/operator_status.py", html)
         self.assertIn("./.venv312/bin/python tools/operator_status.py --check", html)
@@ -212,6 +227,45 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertNotIn("send_email", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_manual_delivery_current_app_operator_triage_summary_data_handles_missing_evidence(self) -> None:
+        status_data = {
+            "snapshot_status": "ready_for_human_review",
+            "app_snapshot_status": "valid_ready_for_human_review",
+            "readiness_status": "ready_for_human_review",
+            "allowed_next_action": "human_review_only",
+            "human_review_required": True,
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "current_manual_delivery_ready": True,
+        }
+        contract_data = _manual_delivery_current_app_integration_contract_data()
+        contract_data.pop("safe_config_schema_audit")
+
+        triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+            app_contract_data=contract_data,
+            status_data=status_data,
+        )
+
+        self.assertEqual(triage_summary["schema_version"], "manual_delivery_app_operator_triage_summary.v1")
+        self.assertEqual(triage_summary["summary_status"], "partial_or_missing")
+        self.assertFalse(triage_summary["all_evidence_present"])
+        self.assertFalse(triage_summary["all_evidence_ready"])
+        self.assertTrue(triage_summary["evidence"]["operator_status_diagnostic"]["present"])
+        self.assertTrue(triage_summary["evidence"]["operator_status_diagnostic"]["ready"])
+        self.assertFalse(triage_summary["evidence"]["safe_config_schema_audit"]["present"])
+        self.assertFalse(triage_summary["evidence"]["safe_config_schema_audit"]["ready"])
+        self.assertTrue(triage_summary["evidence"]["intraperiod_review_stdout_json"]["present"])
+        self.assertTrue(triage_summary["evidence"]["intraperiod_review_stdout_json"]["ready"])
+        self.assertTrue(triage_summary["evidence"]["manual_action_checklist_surface"]["present"])
+        self.assertTrue(triage_summary["evidence"]["manual_action_checklist_surface"]["ready"])
+        self.assertEqual(
+            triage_summary["safety_boundary"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
 
     def test_manual_delivery_current_app_integration_contract_includes_intraperiod_review_stdout_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -397,12 +451,19 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Readiness / Status</section>",
                         "<section>Active Plan Summary</section>",
                         "<section>Manual Action Checklist</section>",
+                        "<section>Operator Triage Summary</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
                         "<section>Invalidation / wait</section>",
                         "<section>Timeout / validity</section>",
                         "<section>Safety</section>",
+                        "<section>Summary status</section>",
+                        "<section>operator_status_diagnostic</section>",
+                        "<section>safe_config_schema_audit</section>",
+                        "<section>intraperiod_review_stdout_json</section>",
+                        "<section>manual_action_checklist_surface</section>",
+                        "<section>derived from existing app contract data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
                         "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
@@ -575,6 +636,29 @@ class LogFeedbackTest(unittest.TestCase):
                 validation_data["safe_config_schema_audit_safety_boundary"],
             )
             self.assertIn("no live trading", validation_data["safe_config_schema_audit_safety_boundary"])
+
+            operator_triage_summary = validation_data["operator_triage_summary"]
+            self.assertEqual(operator_triage_summary["schema_version"], "manual_delivery_app_operator_triage_summary.v1")
+            self.assertEqual(operator_triage_summary["summary_status"], "ready_for_human_review")
+            self.assertTrue(operator_triage_summary["all_evidence_present"])
+            self.assertTrue(operator_triage_summary["all_evidence_ready"])
+            self.assertTrue(operator_triage_summary["report_only"])
+            self.assertFalse(operator_triage_summary["formal_go"])
+            self.assertFalse(operator_triage_summary["automatic_order_allowed"])
+            self.assertTrue(operator_triage_summary["human_decides_manually"])
+            self.assertEqual(
+                operator_triage_summary["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertTrue(operator_triage_summary["evidence"]["operator_status_diagnostic"]["present"])
+            self.assertTrue(operator_triage_summary["evidence"]["operator_status_diagnostic"]["ready"])
+            self.assertTrue(operator_triage_summary["evidence"]["safe_config_schema_audit"]["present"])
+            self.assertTrue(operator_triage_summary["evidence"]["safe_config_schema_audit"]["ready"])
+            self.assertTrue(operator_triage_summary["evidence"]["intraperiod_review_stdout_json"]["present"])
+            self.assertTrue(operator_triage_summary["evidence"]["intraperiod_review_stdout_json"]["ready"])
+            self.assertTrue(operator_triage_summary["evidence"]["manual_action_checklist_surface"]["present"])
+            self.assertTrue(operator_triage_summary["evidence"]["manual_action_checklist_surface"]["ready"])
+            self.assertEqual(operator_triage_summary["note"], "derived from existing app contract data only")
 
             missing_contract_data = _manual_delivery_current_app_integration_contract_data()
             missing_contract_data.pop("intraperiod_review_stdout_json")
@@ -754,12 +838,19 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Readiness / Status</section>",
                         "<section>Active Plan Summary</section>",
                         "<section>Manual Action Checklist</section>",
+                        "<section>Operator Triage Summary</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
                         "<section>Invalidation / wait</section>",
                         "<section>Timeout / validity</section>",
                         "<section>Safety</section>",
+                        "<section>Summary status</section>",
+                        "<section>operator_status_diagnostic</section>",
+                        "<section>safe_config_schema_audit</section>",
+                        "<section>intraperiod_review_stdout_json</section>",
+                        "<section>manual_action_checklist_surface</section>",
+                        "<section>derived from existing app contract data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
                         "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
@@ -784,6 +875,13 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Invalidation / wait</section>",
                         "<section>Timeout / validity</section>",
                         "<section>Safety</section>",
+                        "<section>Operator Triage Summary</section>",
+                        "<section>Summary status</section>",
+                        "<section>operator_status_diagnostic</section>",
+                        "<section>safe_config_schema_audit</section>",
+                        "<section>intraperiod_review_stdout_json</section>",
+                        "<section>manual_action_checklist_surface</section>",
+                        "<section>derived from existing app contract data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
                         "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
