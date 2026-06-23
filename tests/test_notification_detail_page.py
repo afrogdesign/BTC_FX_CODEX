@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -57,81 +58,85 @@ def _sample_df(length: int = 260, *, trend: float = 1.0) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _sample_detail_payload() -> dict[str, object]:
+    return {
+        "signal_id": "20260331_010500",
+        "timestamp_jst": "2026-03-31T01:05:00+09:00",
+        "summary_subject": "下方向バイアス / 上側流動性回収待ち",
+        "system_label": "Ver02.3v3-OBS",
+        "notification_kind": "main",
+        "signal_tier": "normal",
+        "bias": "short",
+        "prelabel": "SWEEP_WAIT",
+        "market_regime": "downtrend",
+        "phase": "pullback",
+        "signals_4h": "short",
+        "signals_1h": "short",
+        "signals_15m": "wait",
+        "long_display_score": 51,
+        "short_display_score": 100,
+        "score_gap": -49,
+        "current_price": 65817.7,
+        "confidence": 66,
+        "rr_estimate": 1.18,
+        "funding_rate_display": "ほぼ中立 (+0.0028%)",
+        "atr_ratio": 1.75,
+        "volume_ratio": 4.53,
+        "support_zones": [{"low": 65629.02, "high": 65736.78, "distance_from_price": 80.92}],
+        "resistance_zones": [{"low": 66418.52, "high": 66587.78, "distance_from_price": 600.82}],
+        "long_setup": {
+            "status": "watch",
+            "entry_zone": {"low": 65629.02, "high": 65736.78},
+            "stop_loss": 65224.9,
+            "tp1": 66418.52,
+            "tp2": 66598.9,
+        },
+        "short_setup": {
+            "status": "watch",
+            "entry_zone": {"low": 66418.52, "high": 66587.78},
+            "stop_loss": 66991.9,
+            "tp1": 66341.98,
+            "tp2": 65525.65,
+            "execution_precision_action": "wait_only",
+            "execution_precision_flags": ["short_at_major_support_wait_only"],
+            "execution_precision_reason": "主要サポートが近く、15分足ショートは追いかけず待機",
+        },
+        "primary_setup_status": "watch",
+        "primary_setup_reason": "near_entry_zone_waiting_trigger",
+        "warning_flags": [],
+        "risk_flags": ["upper_liquidity_close"],
+        "no_trade_flags": ["sweep_incomplete", "rr_below_min"],
+        "confidence_direction_shadow": 100,
+        "confidence_execution_shadow": 7.0,
+        "confidence_wait_shadow": 68.8,
+        "ai_advice": {
+            "primary_reason": "<強い下方向> だが RR_insufficient_short なので待ち",
+            "next_condition": "upper_liquidity_close 解消を確認",
+            "warnings": ["sweep_incomplete"],
+        },
+        "chart_snapshot": {
+            "candles_4h": [
+                {"timestamp": 1_775_746_800_000, "open": 65900, "high": 66120, "low": 65780, "close": 66040},
+                {"timestamp": 1_775_761_200_000, "open": 66040, "high": 66190, "low": 65880, "close": 65960},
+                {"timestamp": 1_775_775_600_000, "open": 65960, "high": 66080, "low": 65790, "close": 65830},
+            ],
+            "candles_1h": [
+                {"timestamp": 1_775_775_600_000, "open": 65920, "high": 66030, "low": 65890, "close": 65980},
+                {"timestamp": 1_775_779_200_000, "open": 65980, "high": 66040, "low": 65830, "close": 65870},
+                {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65790, "close": 65820},
+            ],
+            "candles_15m": [
+                {"timestamp": 1_775_781_000_000, "open": 65840, "high": 65890, "low": 65810, "close": 65870},
+                {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65820, "close": 65835},
+                {"timestamp": 1_775_789_100_000, "open": 65835, "high": 65860, "low": 65795, "close": 65818},
+            ],
+        },
+    }
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
-        payload = {
-            "signal_id": "20260331_010500",
-            "timestamp_jst": "2026-03-31T01:05:00+09:00",
-            "summary_subject": "下方向バイアス / 上側流動性回収待ち",
-            "system_label": "Ver02.3v3-OBS",
-            "notification_kind": "main",
-            "signal_tier": "normal",
-            "bias": "short",
-            "prelabel": "SWEEP_WAIT",
-            "market_regime": "downtrend",
-            "phase": "pullback",
-            "signals_4h": "short",
-            "signals_1h": "short",
-            "signals_15m": "wait",
-            "long_display_score": 51,
-            "short_display_score": 100,
-            "score_gap": -49,
-            "current_price": 65817.7,
-            "confidence": 66,
-            "rr_estimate": 1.18,
-            "funding_rate_display": "ほぼ中立 (+0.0028%)",
-            "atr_ratio": 1.75,
-            "volume_ratio": 4.53,
-            "support_zones": [{"low": 65629.02, "high": 65736.78, "distance_from_price": 80.92}],
-            "resistance_zones": [{"low": 66418.52, "high": 66587.78, "distance_from_price": 600.82}],
-            "long_setup": {
-                "status": "watch",
-                "entry_zone": {"low": 65629.02, "high": 65736.78},
-                "stop_loss": 65224.9,
-                "tp1": 66418.52,
-                "tp2": 66598.9,
-            },
-            "short_setup": {
-                "status": "watch",
-                "entry_zone": {"low": 66418.52, "high": 66587.78},
-                "stop_loss": 66991.9,
-                "tp1": 66341.98,
-                "tp2": 65525.65,
-                "execution_precision_action": "wait_only",
-                "execution_precision_flags": ["short_at_major_support_wait_only"],
-                "execution_precision_reason": "主要サポートが近く、15分足ショートは追いかけず待機",
-            },
-            "primary_setup_status": "watch",
-            "primary_setup_reason": "near_entry_zone_waiting_trigger",
-            "warning_flags": [],
-            "risk_flags": ["upper_liquidity_close"],
-            "no_trade_flags": ["sweep_incomplete", "rr_below_min"],
-            "confidence_direction_shadow": 100,
-            "confidence_execution_shadow": 7.0,
-            "confidence_wait_shadow": 68.8,
-            "ai_advice": {
-                "primary_reason": "<強い下方向> だが RR_insufficient_short なので待ち",
-                "next_condition": "upper_liquidity_close 解消を確認",
-                "warnings": ["sweep_incomplete"],
-            },
-            "chart_snapshot": {
-                "candles_4h": [
-                    {"timestamp": 1_775_746_800_000, "open": 65900, "high": 66120, "low": 65780, "close": 66040},
-                    {"timestamp": 1_775_761_200_000, "open": 66040, "high": 66190, "low": 65880, "close": 65960},
-                    {"timestamp": 1_775_775_600_000, "open": 65960, "high": 66080, "low": 65790, "close": 65830},
-                ],
-                "candles_1h": [
-                    {"timestamp": 1_775_775_600_000, "open": 65920, "high": 66030, "low": 65890, "close": 65980},
-                    {"timestamp": 1_775_779_200_000, "open": 65980, "high": 66040, "low": 65830, "close": 65870},
-                    {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65790, "close": 65820},
-                ],
-                "candles_15m": [
-                    {"timestamp": 1_775_781_000_000, "open": 65840, "high": 65890, "low": 65810, "close": 65870},
-                    {"timestamp": 1_775_782_800_000, "open": 65870, "high": 65910, "low": 65820, "close": 65835},
-                    {"timestamp": 1_775_789_100_000, "open": 65835, "high": 65860, "low": 65795, "close": 65818},
-                ],
-            },
-        }
+        payload = _sample_detail_payload()
 
         html = build_notification_detail_html(payload)
 
@@ -221,6 +226,74 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("send_email", attention_html)
         self.assertNotIn("private/order", attention_html)
         self.assertNotIn("automatic_order_allowed=true", attention_html)
+
+    def test_build_notification_detail_html_shows_runtime_startup_status_section(self) -> None:
+        payload = _sample_detail_payload()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            runtime_dir = base_dir / "logs" / "runtime"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            (runtime_dir / "startup_status.json").write_text(
+                json.dumps(
+                    {
+                        "timestamp_utc": "2026-06-23T10:06:07.884053Z",
+                        "pid": 83981,
+                        "timezone": "Asia/Tokyo",
+                        "report_times": ["00:05", "09:05", "20:05"],
+                        "next_report_time": "2026-06-23T20:05:00+09:00",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            html = build_notification_detail_html(payload, base_dir=base_dir)
+
+        self.assertIn("Runtime startup status", html)
+        self.assertIn("timestamp_utc", html)
+        self.assertIn("2026-06-23T10:06:07.884053Z", html)
+        self.assertIn("pid", html)
+        self.assertIn("83981", html)
+        self.assertIn("timezone", html)
+        self.assertIn("Asia/Tokyo", html)
+        self.assertIn("next_report_time", html)
+        self.assertIn("2026-06-23T20:05:00+09:00", html)
+        self.assertIn("report_times count", html)
+        self.assertIn("3", html)
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_build_notification_detail_html_handles_missing_runtime_startup_status(self) -> None:
+        payload = _sample_detail_payload()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html = build_notification_detail_html(payload, base_dir=Path(tmp_dir))
+
+        self.assertNotIn("Runtime startup status", html)
+        self.assertNotIn("startup_status.json", html)
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_build_notification_detail_html_handles_malformed_runtime_startup_status(self) -> None:
+        payload = _sample_detail_payload()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            runtime_dir = base_dir / "logs" / "runtime"
+            runtime_dir.mkdir(parents=True, exist_ok=True)
+            (runtime_dir / "startup_status.json").write_text("{not json", encoding="utf-8")
+
+            html = build_notification_detail_html(payload, base_dir=base_dir)
+
+        self.assertIn("Runtime startup status", html)
+        self.assertIn("startup_status.json は利用不可です。", html)
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
 
     def test_detail_page_paths_use_slug_and_kind(self) -> None:
         cfg = SimpleNamespace(

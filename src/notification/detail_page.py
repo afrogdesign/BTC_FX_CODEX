@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import html
 import re
 import subprocess
@@ -696,7 +697,70 @@ def _manual_support_reference_items() -> list[tuple[str, str]]:
     ]
 
 
-def build_notification_detail_html(result: dict[str, Any]) -> str:
+def _runtime_startup_status_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "runtime" / "startup_status.json"
+
+
+def _read_runtime_startup_status(base_dir: Path) -> dict[str, Any] | None:
+    path = _runtime_startup_status_path(base_dir)
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {"available": False}
+    if not isinstance(raw, dict):
+        return {"available": False}
+    report_times = raw.get("report_times")
+    report_times_list = [str(item).strip() for item in report_times if str(item).strip()] if isinstance(report_times, list) else []
+    timestamp_utc = str(raw.get("timestamp_utc", "")).strip()
+    pid = raw.get("pid")
+    timezone_name = str(raw.get("timezone", "")).strip()
+    next_report_time = str(raw.get("next_report_time", "")).strip()
+    if not timestamp_utc or pid is None or not timezone_name or not next_report_time or not report_times_list:
+        return {"available": False}
+    return {
+        "available": True,
+        "timestamp_utc": timestamp_utc,
+        "pid": pid,
+        "timezone": timezone_name,
+        "next_report_time": next_report_time,
+        "report_times_count": len(report_times_list),
+    }
+
+
+def _runtime_startup_status_html(base_dir: Path | None) -> str:
+    if base_dir is None:
+        return ""
+    status = _read_runtime_startup_status(base_dir)
+    if status is None:
+        return ""
+    if not status.get("available"):
+        return """
+    <section class="section">
+      <h2>Runtime startup status</h2>
+      <div class="panel">
+        <p>startup_status.json は利用不可です。</p>
+      </div>
+    </section>
+    """
+    return f"""
+    <section class="section">
+      <h2>Runtime startup status</h2>
+      <div class="panel">
+        <ul>
+          <li><strong>timestamp_utc:</strong> {html.escape(str(status.get('timestamp_utc', '未記録')))}</li>
+          <li><strong>pid:</strong> {html.escape(str(status.get('pid', '未記録')))}</li>
+          <li><strong>timezone:</strong> {html.escape(str(status.get('timezone', '未記録')))}</li>
+          <li><strong>next_report_time:</strong> {html.escape(str(status.get('next_report_time', '未記録')))}</li>
+          <li><strong>report_times count:</strong> {html.escape(str(status.get('report_times_count', '未記録')))}</li>
+        </ul>
+      </div>
+    </section>
+    """
+
+
+def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None = None) -> str:
     display_context = build_display_context(result)
     notification_context = build_notification_context(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
@@ -814,6 +878,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
     ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
+    runtime_startup_status_html = _runtime_startup_status_html(base_dir)
     checklist_items = [
         ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
         (
@@ -1465,6 +1530,7 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         <p>app surface / ready gate validation は <code>intraperiod_review_stdout_json</code> の契約露出を確認し、<strong>app contract</strong> と <strong>ready gate</strong> の整合だけを見ます。</p>
         <p>負荷や実行は行わず、<strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong> を維持します。</p>
         <p>negative boundary: no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO</p>
+        {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>
     </section>
@@ -1565,7 +1631,7 @@ def _notification_ssh_args(cfg: Any) -> list[str]:
 def publish_notification_detail(base_dir: Path, cfg: Any, result: dict[str, Any]) -> dict[str, Any]:
     local_path, public_url = detail_page_paths(base_dir, cfg, result)
     local_path.parent.mkdir(parents=True, exist_ok=True)
-    local_path.write_text(build_notification_detail_html(result), encoding="utf-8")
+    local_path.write_text(build_notification_detail_html(result, base_dir=base_dir), encoding="utf-8")
 
     remote_root = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_DIR", "/Volumes/Server_HD2/site/btc-monitor/notifications")).strip()
     system_slug = slugify_label(result.get("system_label"))
