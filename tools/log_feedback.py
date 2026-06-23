@@ -13361,6 +13361,18 @@ def _manual_delivery_current_app_dashboard_html(
     snapshot_data: dict[str, Any],
     status_data: dict[str, Any],
 ) -> str:
+    def _dashboard_value(key: str) -> str:
+        for source_data in (status_data, snapshot_data):
+            if key not in source_data:
+                continue
+            value = source_data.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return _manual_delivery_current_app_dashboard_value(value)
+        return "not available"
+
     readiness_status = status_data.get("snapshot_status", "ready_for_human_review")
     current_ready = status_data.get("current_manual_delivery_ready", True)
     generated_at_value = None
@@ -13400,6 +13412,36 @@ def _manual_delivery_current_app_dashboard_html(
         ("SL", status_data.get("sl_or_invalidation")),
         ("wait/timeout summary", status_data.get("timeout_or_wait_limit")),
         ("evidence summary", status_data.get("intraperiod_evidence_summary")),
+    ]
+    timeout_value = _dashboard_value("timeout_or_wait_limit")
+    safety_value = _dashboard_value("safety_boundary")
+    manual_action_rows = [
+        ("Entry mode", _dashboard_value("entry_mode")),
+        ("Entry condition", _dashboard_value("entry_condition")),
+        (
+            "TP / SL",
+            " / ".join(
+                [
+                    _dashboard_value("tp_plan"),
+                    _dashboard_value("sl_or_invalidation"),
+                ]
+            ),
+        ),
+        (
+            "Invalidation / wait",
+            " / ".join(
+                [
+                    _dashboard_value("sl_or_invalidation"),
+                    _dashboard_value("actionability_label"),
+                    _dashboard_value("human_action"),
+                ]
+            ),
+        ),
+        ("Timeout / validity", timeout_value if timeout_value != "not available" else _dashboard_value("allowed_next_action")),
+        (
+            "Safety",
+            safety_value if safety_value != "not available" else "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        ),
     ]
 
     def _table_rows(rows: list[tuple[str, Any]]) -> str:
@@ -13549,6 +13591,13 @@ def _manual_delivery_current_app_dashboard_html(
         <h2 class=\"section-title\">Active Plan Summary</h2>
         <table>
           {_table_rows(active_plan_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Manual Action Checklist</h2>
+        <table>
+          {_table_rows(manual_action_rows)}
         </table>
       </section>
 

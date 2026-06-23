@@ -65,6 +65,7 @@ from tools.log_feedback import (
     refresh_standard_setup_comparison_reports,
     sync_ai_post_reviews,
     JST,
+    _manual_delivery_current_app_dashboard_html,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS
@@ -117,6 +118,67 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertNotIn("stale: `feedback_weekly`", report)
             self.assertNotIn("stale: `market_map_readiness`", report)
             self.assertTrue((reports_dir / "report_hub_latest.md").exists())
+
+    def test_manual_delivery_current_app_dashboard_html_includes_manual_action_checklist(self) -> None:
+        snapshot_data = {
+            "entry_condition": "snapshot entry condition",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        }
+        status_data = {
+            "snapshot_status": "ready_for_human_review",
+            "current_manual_delivery_ready": True,
+            "allowed_next_action": "human_review_only",
+            "display_mode": "dashboard",
+            "primary_action": "human_review_only",
+            "source_readiness": "ready",
+            "actionability_label": "watch",
+            "human_action": "manual review",
+            "shadow_decision_enabled": True,
+            "safety_boundary": "",
+            "active_plan_label": "active plan sample",
+            "side": "long",
+            "entry_mode": "market",
+            "tp_plan": "TP plan sample",
+            "sl_or_invalidation": "SL or invalidation sample",
+            "timeout_or_wait_limit": "timeout sample",
+            "intraperiod_evidence_summary": "evidence sample",
+            "app_state_json": "app-state.json",
+            "ready_check_json": "ready-check.json",
+            "self_check_json": "self-check.json",
+        }
+
+        html = _manual_delivery_current_app_dashboard_html(
+            app_snapshot_json=Path("app-snapshot.json"),
+            app_snapshot_status_json=Path("app-snapshot-status.json"),
+            snapshot_data=snapshot_data,
+            status_data=status_data,
+        )
+
+        self.assertIn("Readiness / Status", html)
+        self.assertIn("Active Plan Summary", html)
+        self.assertIn("Manual Action Checklist", html)
+        self.assertIn("Source Files / Generated At", html)
+        self.assertIn("Safety Boundary", html)
+        self.assertIn("Entry mode", html)
+        self.assertIn("Entry condition", html)
+        self.assertIn("TP / SL", html)
+        self.assertIn("Invalidation / wait", html)
+        self.assertIn("Timeout / validity", html)
+        self.assertIn("Safety", html)
+        self.assertIn("market", html)
+        self.assertIn("snapshot entry condition", html)
+        self.assertIn("TP plan sample", html)
+        self.assertIn("SL or invalidation sample", html)
+        self.assertIn("timeout sample", html)
+        self.assertIn("watch", html)
+        self.assertIn("manual review", html)
+        self.assertIn("human_review_only", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertNotIn("smtp", html.lower())
+        self.assertNotIn("Gmail", html)
+        self.assertNotIn("send_email", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
 
     def test_daily_sync_wires_active_plan_candidate_intraperiod_diagnostics(self) -> None:
         with TemporaryDirectory() as tmpdir:
