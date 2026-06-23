@@ -151,6 +151,40 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 "note": "derived from existing app contract data only",
             },
+            "integrated_evidence_overview": {
+                "summary_status": "ready_for_human_review",
+                "all_evidence_present": True,
+                "all_evidence_ready": True,
+                "evidence": {
+                    "intraperiod_review_stdout_json": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "operator_status_diagnostic": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "safe_config_schema_audit": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "operator_triage_summary": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "manual_action_checklist_surface": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                },
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "note": "derived from existing app contract/status data only",
+            },
             "safe_config_schema_audit": {
                 "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
                 "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
@@ -215,6 +249,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no FORMAL_GO", html)
         self.assertIn("Safe Config Schema Audit", html)
         self.assertIn("Operator Triage Summary", html)
+        self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("summary_status", html)
         self.assertIn("all_evidence_present", html)
         self.assertIn("all_evidence_ready", html)
@@ -222,6 +257,11 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("safe_config_schema_audit ready", html)
         self.assertIn("intraperiod_review_stdout_json ready", html)
         self.assertIn("manual_action_checklist_surface ready", html)
+        self.assertIn("operator_triage_summary present", html)
+        self.assertIn("intraperiod_review_stdout_json ready_or_valid", html)
+        self.assertIn("operator_status_diagnostic execution_required", html)
+        self.assertIn("safe_config_schema_audit execution_required", html)
+        self.assertIn("manual_action_checklist_surface execution_required", html)
         self.assertIn("note", html)
         self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py", html)
         self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json", html)
@@ -251,6 +291,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("local/manual_delivery_app_surface/app-snapshot.json", html)
         self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", html)
         self.assertIn("report-only", html)
+        self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", html)
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)
@@ -276,11 +317,18 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no FORMAL_GO", attention_html)
         self.assertIn("local/manual_delivery_app_surface/app-dashboard.html", attention_html)
         self.assertIn("Operator Triage Summary", attention_html)
+        self.assertIn("Integrated Evidence Overview", attention_html)
         self.assertIn("summary_status", attention_html)
         self.assertIn("all_evidence_present", attention_html)
         self.assertIn("operator_status_diagnostic ready", attention_html)
         self.assertIn("safe_config_schema_audit ready", attention_html)
         self.assertIn("manual_action_checklist_surface ready", attention_html)
+        self.assertIn("intraperiod_review_stdout_json ready_or_valid", attention_html)
+        self.assertIn("operator_status_diagnostic ready_or_valid", attention_html)
+        self.assertIn("safe_config_schema_audit ready_or_valid", attention_html)
+        self.assertIn("operator_triage_summary ready_or_valid", attention_html)
+        self.assertIn("manual_action_checklist_surface ready_or_valid", attention_html)
+        self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", attention_html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", attention_html)
         self.assertNotIn("smtp", attention_html.lower())
         self.assertNotIn("Gmail", attention_html)
@@ -304,20 +352,61 @@ class NotificationDetailPageTests(unittest.TestCase):
                     },
                     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                     "note": "derived from existing app contract data only",
-                }
+                },
+                "integrated_evidence_overview": {
+                    "summary_status": "ready_for_human_review",
+                    "all_evidence_present": True,
+                    "all_evidence_ready": True,
+                    "evidence": {
+                        "intraperiod_review_stdout_json": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "operator_status_diagnostic": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "safe_config_schema_audit": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "operator_triage_summary": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "manual_action_checklist_surface": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                    },
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "note": "derived from existing app contract/status data only",
+                },
             },
         }
 
         html = build_notification_detail_html(payload)
 
         self.assertIn("Operator Triage Summary", html)
+        self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("summary_status", html)
         self.assertIn("all_evidence_present", html)
         self.assertIn("operator_status_diagnostic present", html)
         self.assertIn("safe_config_schema_audit ready", html)
         self.assertIn("intraperiod_review_stdout_json ready", html)
         self.assertIn("manual_action_checklist_surface ready", html)
+        self.assertIn("intraperiod_review_stdout_json ready_or_valid", html)
+        self.assertIn("operator_status_diagnostic ready_or_valid", html)
+        self.assertIn("safe_config_schema_audit ready_or_valid", html)
+        self.assertIn("operator_triage_summary ready_or_valid", html)
+        self.assertIn("manual_action_checklist_surface ready_or_valid", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", html)
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)
@@ -332,6 +421,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("Operator Triage Summary", html)
         self.assertNotIn("summary_status", html)
         self.assertNotIn("all_evidence_present", html)
+        self.assertNotIn("Integrated Evidence Overview", html)
         self.assertNotIn("operator_status_diagnostic present", html)
         self.assertNotIn("safe_config_schema_audit ready", html)
         self.assertNotIn("manual_action_checklist_surface ready", html)
@@ -347,6 +437,7 @@ class NotificationDetailPageTests(unittest.TestCase):
 
         self.assertNotIn("Safe Config Schema Audit", html)
         self.assertNotIn("safe_config_schema_audit.v1", html)
+        self.assertNotIn("Integrated Evidence Overview", html)
         self.assertIn("Ver03-v4 手動確認サポート", html)
         self.assertNotIn("OPENAI_API_KEY", html)
         self.assertNotIn("SMTP_PASSWORD", html)

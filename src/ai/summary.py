@@ -403,6 +403,103 @@ def _operator_triage_summary_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _integrated_evidence_overview_evidence(result: dict[str, Any]) -> dict[str, Any] | None:
+    direct_evidence = result.get("integrated_evidence_overview")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container_key in (
+        "app_surface_validation",
+        "app_surface_validation_data",
+        "manual_delivery_app_surface_validation",
+        "current_manual_delivery_app_surface_validation",
+    ):
+        container = result.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("integrated_evidence_overview")
+        if isinstance(evidence, dict):
+            return evidence
+    return None
+
+
+def _integrated_evidence_overview_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "not recorded"
+    return "not recorded"
+
+
+def _integrated_evidence_overview_field_value(
+    evidence: dict[str, Any],
+    field: str,
+    subfield: str | None = None,
+) -> Any:
+    direct_key = f"{field}_{subfield}" if subfield else field
+    direct_value = evidence.get(direct_key)
+    if direct_value is not None:
+        return direct_value
+    if subfield is None:
+        return evidence.get(field)
+    nested_value = evidence.get(field)
+    if isinstance(nested_value, dict):
+        direct_nested = nested_value.get(subfield)
+        if direct_nested is not None:
+            return direct_nested
+    nested_container = evidence.get("evidence")
+    if isinstance(nested_container, dict):
+        nested_value = nested_container.get(field)
+        if isinstance(nested_value, dict):
+            return nested_value.get(subfield)
+    return None
+
+
+def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
+    evidence = _integrated_evidence_overview_evidence(result)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Integrated Evidence Overview】",
+        "local/report-only の表示です。既存の契約/検証データだけを使い、実行はしません。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+    for label, key in (
+        ("summary_status", "summary_status"),
+        ("all_evidence_present", "all_evidence_present"),
+        ("all_evidence_ready", "all_evidence_ready"),
+        ("intraperiod_review_stdout_json present", ("intraperiod_review_stdout_json", "present")),
+        ("intraperiod_review_stdout_json ready_or_valid", ("intraperiod_review_stdout_json", "ready_or_valid")),
+        ("intraperiod_review_stdout_json execution_required", ("intraperiod_review_stdout_json", "execution_required")),
+        ("operator_status_diagnostic present", ("operator_status_diagnostic", "present")),
+        ("operator_status_diagnostic ready_or_valid", ("operator_status_diagnostic", "ready_or_valid")),
+        ("operator_status_diagnostic execution_required", ("operator_status_diagnostic", "execution_required")),
+        ("safe_config_schema_audit present", ("safe_config_schema_audit", "present")),
+        ("safe_config_schema_audit ready_or_valid", ("safe_config_schema_audit", "ready_or_valid")),
+        ("safe_config_schema_audit execution_required", ("safe_config_schema_audit", "execution_required")),
+        ("operator_triage_summary present", ("operator_triage_summary", "present")),
+        ("operator_triage_summary ready_or_valid", ("operator_triage_summary", "ready_or_valid")),
+        ("operator_triage_summary execution_required", ("operator_triage_summary", "execution_required")),
+        ("manual_action_checklist_surface present", ("manual_action_checklist_surface", "present")),
+        ("manual_action_checklist_surface ready_or_valid", ("manual_action_checklist_surface", "ready_or_valid")),
+        ("manual_action_checklist_surface execution_required", ("manual_action_checklist_surface", "execution_required")),
+        ("safety_boundary", "safety_boundary"),
+        ("note", "note"),
+    ):
+        if isinstance(key, tuple):
+            value = _integrated_evidence_overview_field_value(evidence, key[0], key[1])
+        else:
+            value = evidence.get(key)
+        lines.append(f"{label}: {_integrated_evidence_overview_value(value)}")
+    return lines
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -450,6 +547,7 @@ def _root_summary_lines(
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_integrated_evidence_overview_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -545,6 +643,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_integrated_evidence_overview_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [

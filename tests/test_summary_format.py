@@ -107,6 +107,40 @@ class SummaryFormatTest(unittest.TestCase):
                     ),
                 },
             },
+            "integrated_evidence_overview": {
+                "summary_status": "ready_for_human_review",
+                "all_evidence_present": True,
+                "all_evidence_ready": True,
+                "evidence": {
+                    "intraperiod_review_stdout_json": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "operator_status_diagnostic": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "safe_config_schema_audit": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "operator_triage_summary": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                    "manual_action_checklist_surface": {
+                        "present": True,
+                        "ready_or_valid": True,
+                        "execution_required": False,
+                    },
+                },
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "note": "derived from existing app contract/status data only",
+            },
         }
 
         subject = build_summary_subject(payload)
@@ -184,6 +218,16 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("manual_action_checklist_surface ready: true", body)
         self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertIn("note: derived from existing app contract data only", body)
+        self.assertIn("【Integrated Evidence Overview】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("all_evidence_present: true", body)
+        self.assertIn("all_evidence_ready: true", body)
+        self.assertIn("intraperiod_review_stdout_json ready_or_valid: true", body)
+        self.assertIn("operator_status_diagnostic ready_or_valid: true", body)
+        self.assertIn("safe_config_schema_audit ready_or_valid: true", body)
+        self.assertIn("operator_triage_summary ready_or_valid: true", body)
+        self.assertIn("manual_action_checklist_surface ready_or_valid: true", body)
+        self.assertIn("note: derived from existing app contract/status data only", body)
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("Gmail", body)
         self.assertNotIn("send_email", body)
@@ -454,7 +498,41 @@ class SummaryFormatTest(unittest.TestCase):
                     },
                     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                     "note": "derived from existing app contract data only",
-                }
+                },
+                "integrated_evidence_overview": {
+                    "summary_status": "ready_for_human_review",
+                    "all_evidence_present": True,
+                    "all_evidence_ready": True,
+                    "evidence": {
+                        "intraperiod_review_stdout_json": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "operator_status_diagnostic": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "safe_config_schema_audit": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "operator_triage_summary": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                        "manual_action_checklist_surface": {
+                            "present": True,
+                            "ready_or_valid": True,
+                            "execution_required": False,
+                        },
+                    },
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "note": "derived from existing app contract/status data only",
+                },
             },
         }
 
@@ -474,6 +552,18 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("operator_status_diagnostic present: true", body)
         self.assertIn("safe_config_schema_audit ready: true", body)
         self.assertIn("manual_action_checklist_surface ready: true", body)
+        self.assertIn("【Integrated Evidence Overview】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("all_evidence_present: true", body)
+        self.assertIn("all_evidence_ready: true", body)
+        self.assertIn("intraperiod_review_stdout_json present: true", body)
+        self.assertIn("intraperiod_review_stdout_json ready_or_valid: true", body)
+        self.assertIn("operator_status_diagnostic ready_or_valid: true", body)
+        self.assertIn("safe_config_schema_audit ready_or_valid: true", body)
+        self.assertIn("operator_triage_summary ready_or_valid: true", body)
+        self.assertIn("manual_action_checklist_surface ready_or_valid: true", body)
+        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+        self.assertIn("note: derived from existing app contract/status data only", body)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("Gmail", body)
@@ -551,6 +641,7 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertNotIn("【Operator Triage Summary】", body)
+        self.assertNotIn("【Integrated Evidence Overview】", body)
         self.assertNotIn("operator_status_diagnostic present:", body)
         self.assertNotIn("safe_config_schema_audit ready:", body)
 

@@ -824,6 +824,85 @@ def _operator_triage_summary_html(
     """
 
 
+def _integrated_evidence_overview_html(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> str:
+    evidence: dict[str, Any] | None = None
+    for container in (
+        result,
+        notification_context or {},
+        display_context or {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict) and isinstance(container.get("integrated_evidence_overview"), dict):
+            evidence = container["integrated_evidence_overview"]
+            break
+    if not isinstance(evidence, dict) or not evidence:
+        return ""
+
+    def _value(key: str, subkey: str | None = None) -> str:
+        direct_key = f"{key}_{subkey}" if subkey else key
+        value = evidence.get(direct_key)
+        if value is None and subkey is not None:
+            nested = evidence.get(key)
+            if isinstance(nested, dict):
+                value = nested.get(subkey)
+            nested_container = evidence.get("evidence")
+            if value is None and isinstance(nested_container, dict):
+                nested = nested_container.get(key)
+                if isinstance(nested, dict):
+                    value = nested.get(subkey)
+        if isinstance(value, bool):
+            return str(value).lower()
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        if value is None:
+            return "not recorded"
+        text = str(value).strip()
+        return text or "not recorded"
+
+    rows = [
+        ("summary_status", _value("summary_status")),
+        ("all_evidence_present", _value("all_evidence_present")),
+        ("all_evidence_ready", _value("all_evidence_ready")),
+        ("intraperiod_review_stdout_json present", _value("intraperiod_review_stdout_json", "present")),
+        ("intraperiod_review_stdout_json ready_or_valid", _value("intraperiod_review_stdout_json", "ready_or_valid")),
+        ("intraperiod_review_stdout_json execution_required", _value("intraperiod_review_stdout_json", "execution_required")),
+        ("operator_status_diagnostic present", _value("operator_status_diagnostic", "present")),
+        ("operator_status_diagnostic ready_or_valid", _value("operator_status_diagnostic", "ready_or_valid")),
+        ("operator_status_diagnostic execution_required", _value("operator_status_diagnostic", "execution_required")),
+        ("safe_config_schema_audit present", _value("safe_config_schema_audit", "present")),
+        ("safe_config_schema_audit ready_or_valid", _value("safe_config_schema_audit", "ready_or_valid")),
+        ("safe_config_schema_audit execution_required", _value("safe_config_schema_audit", "execution_required")),
+        ("operator_triage_summary present", _value("operator_triage_summary", "present")),
+        ("operator_triage_summary ready_or_valid", _value("operator_triage_summary", "ready_or_valid")),
+        ("operator_triage_summary execution_required", _value("operator_triage_summary", "execution_required")),
+        ("manual_action_checklist_surface present", _value("manual_action_checklist_surface", "present")),
+        ("manual_action_checklist_surface ready_or_valid", _value("manual_action_checklist_surface", "ready_or_valid")),
+        ("manual_action_checklist_surface execution_required", _value("manual_action_checklist_surface", "execution_required")),
+        ("safety_boundary", _value("safety_boundary")),
+        ("note", _value("note")),
+    ]
+    rows_html = "".join(
+        f"<li><strong>{html.escape(label)}:</strong> {html.escape(value)}</li>" for label, value in rows
+    )
+    return f"""
+        <h3>Integrated Evidence Overview</h3>
+        <p>local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。</p>
+        <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <ul>{rows_html}</ul>
+    """
+
+
 def _runtime_startup_status_path(base_dir: Path) -> Path:
     return base_dir / "logs" / "runtime" / "startup_status.json"
 
@@ -1008,6 +1087,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     runtime_startup_status_html = _runtime_startup_status_html(base_dir)
     safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
     operator_triage_summary_html = _operator_triage_summary_html(result, notification_context, display_context)
+    integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
     checklist_items = [
         ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
         (
@@ -1661,6 +1741,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <p>negative boundary: no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO</p>
         {safe_config_schema_audit_html}
         {operator_triage_summary_html}
+        {integrated_evidence_overview_html}
         {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>
