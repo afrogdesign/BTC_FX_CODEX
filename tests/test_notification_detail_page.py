@@ -138,6 +138,19 @@ class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
             **_sample_detail_payload(),
+            "operator_triage_summary": {
+                "summary_status": "ready_for_human_review",
+                "all_evidence_present": True,
+                "all_evidence_ready": True,
+                "evidence": {
+                    "operator_status_diagnostic": {"present": True, "ready": True},
+                    "safe_config_schema_audit": {"present": True, "ready": True},
+                    "intraperiod_review_stdout_json": {"present": True, "ready": True},
+                    "manual_action_checklist_surface": {"present": True, "ready": True},
+                },
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "note": "derived from existing app contract data only",
+            },
             "safe_config_schema_audit": {
                 "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
                 "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
@@ -201,6 +214,15 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no automatic order", html)
         self.assertIn("no FORMAL_GO", html)
         self.assertIn("Safe Config Schema Audit", html)
+        self.assertIn("Operator Triage Summary", html)
+        self.assertIn("summary_status", html)
+        self.assertIn("all_evidence_present", html)
+        self.assertIn("all_evidence_ready", html)
+        self.assertIn("operator_status_diagnostic present", html)
+        self.assertIn("safe_config_schema_audit ready", html)
+        self.assertIn("intraperiod_review_stdout_json ready", html)
+        self.assertIn("manual_action_checklist_surface ready", html)
+        self.assertIn("note", html)
         self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py", html)
         self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json", html)
         self.assertIn("safe_config_schema_audit.v1", html)
@@ -253,12 +275,34 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no automatic order", attention_html)
         self.assertIn("no FORMAL_GO", attention_html)
         self.assertIn("local/manual_delivery_app_surface/app-dashboard.html", attention_html)
+        self.assertIn("Operator Triage Summary", attention_html)
+        self.assertIn("summary_status", attention_html)
+        self.assertIn("all_evidence_present", attention_html)
+        self.assertIn("operator_status_diagnostic ready", attention_html)
+        self.assertIn("safe_config_schema_audit ready", attention_html)
+        self.assertIn("manual_action_checklist_surface ready", attention_html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", attention_html)
         self.assertNotIn("smtp", attention_html.lower())
         self.assertNotIn("Gmail", attention_html)
         self.assertNotIn("send_email", attention_html)
         self.assertNotIn("private/order", attention_html)
         self.assertNotIn("automatic_order_allowed=true", attention_html)
+
+    def test_build_notification_detail_html_hides_operator_triage_summary_when_absent(self) -> None:
+        payload = _sample_detail_payload()
+
+        html = build_notification_detail_html(payload)
+
+        self.assertNotIn("Operator Triage Summary", html)
+        self.assertNotIn("summary_status", html)
+        self.assertNotIn("all_evidence_present", html)
+        self.assertNotIn("operator_status_diagnostic present", html)
+        self.assertNotIn("safe_config_schema_audit ready", html)
+        self.assertNotIn("manual_action_checklist_surface ready", html)
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
 
     def test_build_notification_detail_html_hides_safe_config_schema_audit_when_absent(self) -> None:
         payload = _sample_detail_payload()
