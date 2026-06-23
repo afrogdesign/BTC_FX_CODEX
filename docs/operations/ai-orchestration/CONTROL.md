@@ -4,7 +4,7 @@ last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v4`
 project_key: `BTCFX`
-current_commit: 70dc8ce31e91a47371a1111405be7147ee1f38c3
+current_commit: ecc04c3e75e23ea2ae7d02d9ded68cb29d921728
 note: `current_commit` is the latest ChatGPT-accepted baseline and may intentionally lag branch HEAD. That lag alone is not a BLOCK condition.
 
 ---
