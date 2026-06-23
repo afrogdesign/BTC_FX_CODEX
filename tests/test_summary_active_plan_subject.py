@@ -59,6 +59,8 @@ class SummaryActivePlanSubjectTests(unittest.TestCase):
     def test_main_subject_prioritizes_active_plan_action(self) -> None:
         subject = build_summary_subject(self._base_payload())
 
+        self.assertIn("[BTCFX Ver03-v4]", subject)
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("📊 [通常監視・実行不可]", subject)
         self.assertIn("戻り売り待ち・短期反発注意 / 実弾不可・行動計画", subject)
         self.assertIn("下方向優勢。ただし成行ショート不可。戻り売り待ち。現値は短期反発帯。", subject)
@@ -78,6 +80,8 @@ class SummaryActivePlanSubjectTests(unittest.TestCase):
 
         subject = build_summary_subject(payload)
 
+        self.assertIn("[BTCFX Ver03-v4]", subject)
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("見送り / 実弾不可・行動計画", subject)
         self.assertIn("方向は中立。現時点では見送り。", subject)
 
@@ -92,6 +96,8 @@ class SummaryActivePlanSubjectTests(unittest.TestCase):
 
         subject = build_summary_subject(payload)
 
+        self.assertIn("[BTCFX Ver03-v4]", subject)
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("🔥 [執行候補・強]", subject)
         self.assertIn("下方向バイアス |", subject)
         self.assertNotIn("実弾不可・行動計画", subject)
@@ -106,7 +112,8 @@ class SummaryActivePlanSubjectTests(unittest.TestCase):
 
         subject = build_summary_subject(payload)
 
-        self.assertTrue(subject.startswith("[機械判定のみ] 👀 [注意報・売買非推奨] "))
+        self.assertTrue(subject.startswith("[BTCFX Ver03-v4] [機械判定のみ] 👀 [注意報・売買非推奨] "))
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("下方向監視 |", subject)
         self.assertNotIn("実弾不可・行動計画", subject)
         self.assertNotIn("Active plan should not override attention subject.", subject)
@@ -119,6 +126,8 @@ class SummaryActivePlanSubjectTests(unittest.TestCase):
 
         subject = build_summary_subject(payload)
 
+        self.assertIn("[BTCFX Ver03-v4]", subject)
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("下方向監視 |", subject)
         self.assertNotIn("実弾不可・行動計画", subject)
 

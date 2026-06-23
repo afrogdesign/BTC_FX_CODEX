@@ -11,7 +11,7 @@ from src.presentation.sanitize import (
 )
 
 
-VER03_V2_EMAIL_SUBJECT_PREFIX = "[BTCFX Ver03-v2]"
+VER03_V4_EMAIL_SUBJECT_PREFIX = "[BTCFX Ver03-v4]"
 
 
 def _format_price(value: Any) -> str:
@@ -107,13 +107,13 @@ def _active_subject_detail(notification_context: dict[str, Any]) -> str:
     return str(reasons[0])
 
 
-def _apply_ver03_v2_subject_prefix(subject: str) -> str:
+def _apply_ver03_v4_subject_prefix(subject: str) -> str:
     normalized = str(subject or "").strip()
-    if normalized.startswith(VER03_V2_EMAIL_SUBJECT_PREFIX):
+    if normalized.startswith(VER03_V4_EMAIL_SUBJECT_PREFIX):
         return normalized
     if not normalized:
-        return VER03_V2_EMAIL_SUBJECT_PREFIX
-    return f"{VER03_V2_EMAIL_SUBJECT_PREFIX} {normalized}"
+        return VER03_V4_EMAIL_SUBJECT_PREFIX
+    return f"{VER03_V4_EMAIL_SUBJECT_PREFIX} {normalized}"
 
 
 def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
@@ -203,6 +203,21 @@ def _actionability_lines(result: dict[str, Any]) -> list[str]:
     ]
 
 
+def _local_confirmation_lines() -> list[str]:
+    return [
+        "",
+        "【ローカル確認】",
+        "事前生成/検証: scripts/refresh_current_manual_delivery_app_surface.command",
+        "ready gate: refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "確認入口: local/manual_delivery_app_surface/index.html",
+        "Dashboard: local/manual_delivery_app_surface/app-dashboard.html",
+        "Ready JSON: local/manual_delivery_app_surface/app-ready.json",
+        "Snapshot: local/manual_delivery_app_surface/app-snapshot.json",
+        "Manifest: local/manual_delivery_app_surface/app-surface-manifest.json",
+        "自動発注なし / 通知送信追加なし / 最終判断は人間",
+    ]
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -244,8 +259,9 @@ def _root_summary_lines(
                 "これは実行候補ではありません。",
                 "通常監視と再評価のための通知です。",
             ]
-        )
+    )
     lines.extend(_actionability_lines(result))
+    lines.extend(_local_confirmation_lines())
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -337,6 +353,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
         "方向変化や初動を早めに共有する注意通知です。",
     ]
     lines.extend(_actionability_lines(result))
+    lines.extend(_local_confirmation_lines())
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -422,7 +439,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
         ).strip()
     if result.get("ai_advice") is None:
         subject = f"[機械判定のみ] {subject}"
-    return _apply_ver03_v2_subject_prefix(subject)
+    return _apply_ver03_v4_subject_prefix(subject)
 
 
 def build_summary_body(

@@ -10,8 +10,8 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.ai.summary import (
-    VER03_V2_EMAIL_SUBJECT_PREFIX,
-    _apply_ver03_v2_subject_prefix,
+    VER03_V4_EMAIL_SUBJECT_PREFIX,
+    _apply_ver03_v4_subject_prefix,
     build_summary_body,
     build_summary_subject,
 )
@@ -89,7 +89,8 @@ class SummaryFormatTest(unittest.TestCase):
         )
 
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
+        self.assertTrue(subject.startswith(f"{VER03_V4_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("上方向バイアス", subject)
         self.assertIn("【BTC:70,356】 2026-03-11 09:05 [Ver02.3] [API]", subject)
         self.assertNotIn("条件付きで検討 |", subject)
@@ -106,8 +107,17 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("待機圧力: 18.0", body)
         self.assertIn("位置評価: 位置条件は悪くない", body)
         self.assertIn("【ロング/ショートのセットアップ状況】", body)
+        self.assertIn("【ローカル確認】", body)
+        self.assertIn("scripts/refresh_current_manual_delivery_app_surface.command", body)
+        self.assertIn("refresh-and-check-current-manual-delivery-app-surface --stdout-json", body)
+        self.assertIn("local/manual_delivery_app_surface/index.html", body)
+        self.assertIn("local/manual_delivery_app_surface/app-dashboard.html", body)
+        self.assertIn("local/manual_delivery_app_surface/app-ready.json", body)
+        self.assertIn("local/manual_delivery_app_surface/app-snapshot.json", body)
+        self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", body)
+        self.assertIn("自動発注なし / 通知送信追加なし / 最終判断は人間", body)
 
-    def test_active_plan_subject_prefers_ver03_v2_prefix(self) -> None:
+    def test_active_plan_subject_prefers_ver03_v4_prefix(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-11T09:05:00+09:00",
             "system_label": "Ver02.3",
@@ -169,7 +179,7 @@ class SummaryFormatTest(unittest.TestCase):
 
         subject = build_summary_subject(payload)
 
-        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
+        self.assertTrue(subject.startswith(f"{VER03_V4_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
         self.assertIn("押し目買い待ち / 実弾不可・行動計画 | 押し目待ちで監視", subject)
         self.assertIn("【BTC:70,356】 2026-03-11 09:05 [Ver02.3] [API]", subject)
 
@@ -211,7 +221,8 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
         self.assertEqual(provider_used, "api")
-        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} [機械判定のみ] 👀 [注意報・売買非推奨] "))
+        self.assertTrue(subject.startswith(f"{VER03_V4_EMAIL_SUBJECT_PREFIX} [機械判定のみ] 👀 [注意報・売買非推奨] "))
+        self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertIn("下方向バイアス", subject)
         self.assertNotIn("🔥", subject)
         self.assertNotIn("🟠", subject)
@@ -225,6 +236,15 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("実行しやすさ: 28.0", body)
         self.assertIn("待機圧力: 64.0", body)
         self.assertIn("方向判断: 相場は下方向バイアスです", body)
+        self.assertIn("【ローカル確認】", body)
+        self.assertIn("scripts/refresh_current_manual_delivery_app_surface.command", body)
+        self.assertIn("refresh-and-check-current-manual-delivery-app-surface --stdout-json", body)
+        self.assertIn("local/manual_delivery_app_surface/index.html", body)
+        self.assertIn("local/manual_delivery_app_surface/app-dashboard.html", body)
+        self.assertIn("local/manual_delivery_app_surface/app-ready.json", body)
+        self.assertIn("local/manual_delivery_app_surface/app-snapshot.json", body)
+        self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", body)
+        self.assertIn("自動発注なし / 通知送信追加なし / 最終判断は人間", body)
         self.assertNotIn("入る条件がかなりそろっています", body)
 
     def test_machine_only_subject_warns_and_body_hides_internal_codes(self) -> None:
@@ -266,7 +286,7 @@ class SummaryFormatTest(unittest.TestCase):
             result_payload=payload,
         )
 
-        self.assertTrue(subject.startswith(f"{VER03_V2_EMAIL_SUBJECT_PREFIX} [機械判定のみ] "))
+        self.assertTrue(subject.startswith(f"{VER03_V4_EMAIL_SUBJECT_PREFIX} [機械判定のみ] "))
         self.assertIn("🟠 [高優先監視・実行不可]", subject)
         self.assertIn("下方向バイアス", body)
         self.assertIn("方向・構造は強いため、高優先で監視する通知です。", body)
@@ -280,15 +300,15 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertNotIn("bid_wall_close", body)
         self.assertNotIn("upper_liquidity_close", body)
 
-    def test_ver03_v2_subject_prefix_helper_strips_and_does_not_duplicate(self) -> None:
-        already_prefixed = f"  {VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名  "
+    def test_ver03_v4_subject_prefix_helper_strips_and_does_not_duplicate(self) -> None:
+        already_prefixed = f"  {VER03_V4_EMAIL_SUBJECT_PREFIX} 既存件名  "
         self.assertEqual(
-            _apply_ver03_v2_subject_prefix(already_prefixed),
-            f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名",
+            _apply_ver03_v4_subject_prefix(already_prefixed),
+            f"{VER03_V4_EMAIL_SUBJECT_PREFIX} 既存件名",
         )
         self.assertEqual(
-            _apply_ver03_v2_subject_prefix("  既存件名  "),
-            f"{VER03_V2_EMAIL_SUBJECT_PREFIX} 既存件名",
+            _apply_ver03_v4_subject_prefix("  既存件名  "),
+            f"{VER03_V4_EMAIL_SUBJECT_PREFIX} 既存件名",
         )
 
     def test_entry_ok_invalid_is_not_presented_as_strong_entry(self) -> None:
