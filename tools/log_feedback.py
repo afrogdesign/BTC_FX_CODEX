@@ -13482,6 +13482,14 @@ def _manual_delivery_current_app_integrated_evidence_overview_data(
             "ready": False,
         }
 
+    expected_evidence_keys = (
+        "intraperiod_review_stdout_json",
+        "operator_status_diagnostic",
+        "safe_config_schema_audit",
+        "operator_triage_summary",
+        "manual_action_checklist_surface",
+    )
+
     evidence = {
         "intraperiod_review_stdout_json": _contract_evidence_state("intraperiod_review_stdout_json"),
         "operator_status_diagnostic": _contract_evidence_state("operator_status_diagnostic"),
@@ -13497,6 +13505,16 @@ def _manual_delivery_current_app_integrated_evidence_overview_data(
             "execution_required": False,
         },
     }
+    evidence_keys = sorted(key for key in evidence if key in expected_evidence_keys)
+    missing_evidence_keys = sorted(
+        key for key in expected_evidence_keys if not bool(evidence[key].get("present", False))
+    )
+    not_ready_evidence_keys = sorted(
+        key for key in expected_evidence_keys if key not in evidence or not bool(evidence[key].get("ready_or_valid", False))
+    )
+    execution_required_keys = sorted(
+        key for key in expected_evidence_keys if key in evidence and bool(evidence[key].get("execution_required", False))
+    )
     all_evidence_present = all(item["present"] for item in evidence.values())
     all_evidence_ready = all(item["ready_or_valid"] for item in evidence.values())
     return {
@@ -13510,6 +13528,10 @@ def _manual_delivery_current_app_integrated_evidence_overview_data(
         "human_decides_manually": True,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
         "evidence": evidence,
+        "evidence_keys": evidence_keys,
+        "missing_evidence_keys": missing_evidence_keys,
+        "not_ready_evidence_keys": not_ready_evidence_keys,
+        "execution_required_keys": execution_required_keys,
         "note": "derived from existing app contract/status data only",
     }
 
@@ -14574,6 +14596,10 @@ def _manual_delivery_current_app_surface_validation_data(
         "integrated_evidence_overview_formal_go": integrated_evidence_overview["formal_go"],
         "integrated_evidence_overview_automatic_order_allowed": integrated_evidence_overview["automatic_order_allowed"],
         "integrated_evidence_overview_human_decides_manually": integrated_evidence_overview["human_decides_manually"],
+        "integrated_evidence_overview_evidence_keys": integrated_evidence_overview["evidence_keys"],
+        "integrated_evidence_overview_missing_evidence_keys": integrated_evidence_overview["missing_evidence_keys"],
+        "integrated_evidence_overview_not_ready_evidence_keys": integrated_evidence_overview["not_ready_evidence_keys"],
+        "integrated_evidence_overview_execution_required_keys": integrated_evidence_overview["execution_required_keys"],
     }
 
 

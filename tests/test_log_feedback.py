@@ -323,6 +323,24 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertTrue(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["present"])
         self.assertTrue(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["ready_or_valid"])
         self.assertFalse(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["execution_required"])
+        self.assertEqual(
+            integrated_evidence_overview["evidence_keys"],
+            sorted(
+                [
+                    "intraperiod_review_stdout_json",
+                    "manual_action_checklist_surface",
+                    "operator_status_diagnostic",
+                    "operator_triage_summary",
+                    "safe_config_schema_audit",
+                ]
+            ),
+        )
+        self.assertEqual(integrated_evidence_overview["missing_evidence_keys"], ["safe_config_schema_audit"])
+        self.assertEqual(
+            integrated_evidence_overview["not_ready_evidence_keys"],
+            ["operator_triage_summary", "safe_config_schema_audit"],
+        )
+        self.assertEqual(integrated_evidence_overview["execution_required_keys"], [])
         self.assertEqual(integrated_evidence_overview["note"], "derived from existing app contract/status data only")
 
     def test_manual_delivery_current_app_integration_contract_includes_intraperiod_review_stdout_json(self) -> None:
@@ -765,6 +783,19 @@ class LogFeedbackTest(unittest.TestCase):
                 integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["execution_required"]
             )
             self.assertEqual(integrated_evidence_overview["note"], "derived from existing app contract/status data only")
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_evidence_keys"],
+                [
+                    "intraperiod_review_stdout_json",
+                    "manual_action_checklist_surface",
+                    "operator_status_diagnostic",
+                    "operator_triage_summary",
+                    "safe_config_schema_audit",
+                ],
+            )
+            self.assertEqual(validation_data["integrated_evidence_overview_missing_evidence_keys"], [])
+            self.assertEqual(validation_data["integrated_evidence_overview_not_ready_evidence_keys"], [])
+            self.assertEqual(validation_data["integrated_evidence_overview_execution_required_keys"], [])
             self.assertEqual(
                 validation_data["integrated_evidence_overview_schema_version"],
                 integrated_evidence_overview["schema_version"],
