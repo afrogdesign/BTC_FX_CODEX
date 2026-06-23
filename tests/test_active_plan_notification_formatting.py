@@ -7736,6 +7736,11 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue((stdout_json_export_dir / "app-snapshot.json").exists())
             self.assertTrue((stdout_json_export_dir / "app-snapshot-status.json").exists())
 
+            source_handoff_dir = base_dir / "local" / "manual_delivery_handoff"
+            moved_handoff_dir = base_dir / "artifacts" / "moved-manual-delivery-handoff"
+            source_handoff_dir.rename(moved_handoff_dir)
+            self.assertFalse(source_handoff_dir.exists())
+
             self.assertEqual(check_code, 0, msg=check_stderr)
             self.assertEqual(
                 check_stdout,

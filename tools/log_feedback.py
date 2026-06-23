@@ -13877,38 +13877,27 @@ def _manual_delivery_current_app_surface_validation_data(
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
     app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
 
-    ready_check_reference_json = Path(str(app_ready_data["app_snapshot_status_json"]))
-    _, expected_ready_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
-        app_snapshot_status_json=ready_check_reference_json,
-        parser=parser,
-    )
-    if app_ready_data != expected_ready_data:
-        message = "current manual delivery app surface app-ready JSON does not match validated ready-check data"
+    if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
+        message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
         if parser is None:
             raise ValueError(message)
         parser.error(message)
-
-    _, expected_snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
-        ready_check_json=Path(str(app_snapshot_data["ready_check_json"])),
-        app_state_json=Path(str(app_snapshot_data["app_state_json"])),
-        parser=parser,
-    )
-    if app_snapshot_data != expected_snapshot_data:
-        message = "current manual delivery app surface app-snapshot JSON does not match validated snapshot data"
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
-
-    snapshot_reference_json = Path(str(app_snapshot_status_data["app_snapshot_json"]))
-    _, expected_snapshot_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
-        app_snapshot_json=snapshot_reference_json,
-        parser=parser,
-    )
-    if app_snapshot_status_data != expected_snapshot_status_data:
-        message = "current manual delivery app surface app-snapshot-status JSON does not match validated snapshot-status data"
-        if parser is None:
-            raise ValueError(message)
-        parser.error(message)
+    for key, expected_value in [
+        ("current_manual_delivery_app_ready", True),
+        ("readiness_status", "ready_for_human_review"),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_ready_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-ready JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
 
     expected_contract_data = _manual_delivery_current_app_integration_contract_data()
     if app_contract_data != expected_contract_data:
@@ -13916,6 +13905,51 @@ def _manual_delivery_current_app_surface_validation_data(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
+
+    if str(app_snapshot_data.get("schema_version", "")).strip() != "manual_delivery_app_snapshot.v1":
+        message = f"current manual delivery app surface app-snapshot JSON schema_version must be manual_delivery_app_snapshot.v1: {app_snapshot_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("snapshot_status", "ready_for_human_review"),
+        ("current_manual_delivery_ready", True),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_snapshot_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-snapshot JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    if str(app_snapshot_status_data.get("schema_version", "")).strip() != "manual_delivery_app_snapshot_status.v1":
+        message = f"current manual delivery app surface app-snapshot-status JSON schema_version must be manual_delivery_app_snapshot_status.v1: {app_snapshot_status_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("app_snapshot_status", "valid_ready_for_human_review"),
+        ("snapshot_status", "ready_for_human_review"),
+        ("current_manual_delivery_ready", True),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_snapshot_status_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-snapshot-status JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
 
     return {
         "schema_version": "manual_delivery_app_surface_validation.v1",
