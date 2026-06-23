@@ -7652,6 +7652,16 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             app_contract_data = json.loads((export_dir / "app-contract.json").read_text(encoding="utf-8"))
             self.assertEqual(app_contract_data["schema_version"], "manual_delivery_app_integration_contract.v1")
             self.assertEqual(app_contract_data["contract_status"], "stable_for_local_app_integration")
+            self.assertEqual(app_contract_data["default_app_surface_dir"], "local/manual_delivery_app_surface")
+            self.assertEqual(app_contract_data["surface_export_command"], "export-current-manual-delivery-app-surface")
+            self.assertEqual(app_contract_data["refresh_surface_export_command"], "refresh-current-manual-delivery-app --export-app-surface")
+            self.assertEqual(app_contract_data["surface_index_file"], "local/manual_delivery_app_surface/index.html")
+            self.assertEqual(app_contract_data["surface_dashboard_file"], "local/manual_delivery_app_surface/app-dashboard.html")
+            self.assertEqual(app_contract_data["surface_ready_file"], "local/manual_delivery_app_surface/app-ready.json")
+            self.assertEqual(app_contract_data["surface_contract_file"], "local/manual_delivery_app_surface/app-contract.json")
+            self.assertEqual(app_contract_data["surface_snapshot_file"], "local/manual_delivery_app_surface/app-snapshot.json")
+            self.assertEqual(app_contract_data["surface_snapshot_status_file"], "local/manual_delivery_app_surface/app-snapshot-status.json")
+            self.assertEqual(app_contract_data["surface_mode"], "static_html_and_json_only")
 
             self.assertEqual(refresh_export_code, 0, msg=refresh_export_stderr)
             self.assertIn("current_manual_delivery_app_surface_dir=", refresh_export_stdout)
@@ -8176,6 +8186,12 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     ],
                     base_dir=base_dir,
                 )
+                stdout_json_only_code, stdout_json_only_stdout, stdout_json_only_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
             finally:
                 os.chdir(original_cwd)
 
@@ -8184,6 +8200,10 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("schema_version: manual_delivery_app_integration_contract.v1", default_stdout)
             self.assertIn("integration_command: refresh-current-manual-delivery-app --stdout-json", default_stdout)
             self.assertIn("read_side_check_command: check-current-manual-delivery-app-ready --stdout-json", default_stdout)
+            self.assertIn("default_app_surface_dir: local/manual_delivery_app_surface", default_stdout)
+            self.assertIn("surface_export_command: export-current-manual-delivery-app-surface", default_stdout)
+            self.assertIn("refresh_surface_export_command: refresh-current-manual-delivery-app --export-app-surface", default_stdout)
+            self.assertIn("surface_mode: static_html_and_json_only", default_stdout)
             self.assertIn("stdout_mode: json_only", default_stdout)
             self.assertIn("notes: report-only; app may display/review, human decides manually", default_stdout)
 
@@ -8199,6 +8219,16 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(output_json_only_data["stable_read_file"], "local/manual_delivery_handoff/app-snapshot.json")
             self.assertEqual(output_json_only_data["validator_status_file"], "local/manual_delivery_handoff/app-snapshot-status.json")
             self.assertEqual(output_json_only_data["default_handoff_dir"], "local/manual_delivery_handoff")
+            self.assertEqual(output_json_only_data["default_app_surface_dir"], "local/manual_delivery_app_surface")
+            self.assertEqual(output_json_only_data["surface_export_command"], "export-current-manual-delivery-app-surface")
+            self.assertEqual(output_json_only_data["refresh_surface_export_command"], "refresh-current-manual-delivery-app --export-app-surface")
+            self.assertEqual(output_json_only_data["surface_index_file"], "local/manual_delivery_app_surface/index.html")
+            self.assertEqual(output_json_only_data["surface_dashboard_file"], "local/manual_delivery_app_surface/app-dashboard.html")
+            self.assertEqual(output_json_only_data["surface_ready_file"], "local/manual_delivery_app_surface/app-ready.json")
+            self.assertEqual(output_json_only_data["surface_contract_file"], "local/manual_delivery_app_surface/app-contract.json")
+            self.assertEqual(output_json_only_data["surface_snapshot_file"], "local/manual_delivery_app_surface/app-snapshot.json")
+            self.assertEqual(output_json_only_data["surface_snapshot_status_file"], "local/manual_delivery_app_surface/app-snapshot-status.json")
+            self.assertEqual(output_json_only_data["surface_mode"], "static_html_and_json_only")
             self.assertEqual(output_json_only_data["stdout_mode"], "json_only")
             self.assertEqual(
                 output_json_only_data["required_ready_keys"],
@@ -8275,6 +8305,14 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             stdout_json_json_only_data = json.loads(stdout_json_json_only_stdout)
             self.assertEqual(stdout_json_json_only_data, output_json_only_data)
             self.assertEqual(json.loads(stdout_json_json.read_text(encoding="utf-8")), stdout_json_json_only_data)
+            self.assertEqual(stdout_json_json_only_data["default_app_surface_dir"], "local/manual_delivery_app_surface")
+            self.assertEqual(stdout_json_json_only_data["surface_export_command"], "export-current-manual-delivery-app-surface")
+            self.assertEqual(stdout_json_json_only_data["refresh_surface_export_command"], "refresh-current-manual-delivery-app --export-app-surface")
+            self.assertEqual(stdout_json_json_only_data["surface_index_file"], "local/manual_delivery_app_surface/index.html")
+            self.assertEqual(stdout_json_json_only_data["surface_ready_file"], "local/manual_delivery_app_surface/app-ready.json")
+            self.assertEqual(stdout_json_json_only_data["surface_contract_file"], "local/manual_delivery_app_surface/app-contract.json")
+            self.assertEqual(stdout_json_json_only_data["surface_mode"], "static_html_and_json_only")
+            self.assertEqual(stdout_json_json_only_data["contract_status"], "stable_for_local_app_integration")
 
             self.assertEqual(stdout_json_md_only_code, 0, msg=stdout_json_md_only_stderr)
             self.assertTrue(stdout_json_md_only_stdout.startswith("{\n"))
@@ -8286,6 +8324,19 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertNotIn("current_manual_delivery_app_contract_md=", stdout_json_both_stdout)
             self.assertTrue(both_md.exists())
             self.assertTrue(both_json.exists())
+            self.assertEqual(stdout_json_only_code, 0, msg=stdout_json_only_stderr)
+            self.assertTrue(stdout_json_only_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_contract_md=", stdout_json_only_stdout)
+            self.assertNotIn("# Manual Delivery Current App Integration Contract", stdout_json_only_stdout)
+            stdout_json_only_data = json.loads(stdout_json_only_stdout)
+            self.assertEqual(stdout_json_only_data, output_json_only_data)
+            self.assertEqual(stdout_json_only_data["default_app_surface_dir"], "local/manual_delivery_app_surface")
+            self.assertEqual(stdout_json_only_data["surface_export_command"], "export-current-manual-delivery-app-surface")
+            self.assertEqual(stdout_json_only_data["refresh_surface_export_command"], "refresh-current-manual-delivery-app --export-app-surface")
+            self.assertEqual(stdout_json_only_data["surface_index_file"], "local/manual_delivery_app_surface/index.html")
+            self.assertEqual(stdout_json_only_data["surface_ready_file"], "local/manual_delivery_app_surface/app-ready.json")
+            self.assertEqual(stdout_json_only_data["surface_contract_file"], "local/manual_delivery_app_surface/app-contract.json")
+            self.assertEqual(stdout_json_only_data["surface_mode"], "static_html_and_json_only")
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
