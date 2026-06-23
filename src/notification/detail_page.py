@@ -814,6 +814,42 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
     show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
     ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
+    checklist_items = [
+        ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
+        (
+            "Entry condition",
+            " / ".join(
+                [
+                    str(notification_context.get("entry_window_label", "")).strip(),
+                    str(display_context.get("entry_quality_label", "")).strip(),
+                    active_hero_summary,
+                ]
+            ).strip(" /")
+            or "未記録",
+        ),
+        (
+            "TP / SL",
+            "\n".join(
+                [
+                    _setup_line(result, "long"),
+                    _setup_line(result, "short"),
+                ]
+            ),
+        ),
+        (
+            "Invalidation / wait",
+            " / ".join(str(reason).strip() for reason in display_reasons if str(reason).strip()) or "未記録",
+        ),
+        ("Timeout / validity", str(notification_context.get("validity_label", "")).strip() or "未記録"),
+        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]
+    checklist_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">📝 <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in checklist_items
+    )
 
     return f"""<!doctype html>
 <html lang="ja">
@@ -1090,6 +1126,36 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       font-weight: 800;
       line-height: 1.55;
     }}
+    .checklist {{
+      display: grid;
+      gap: 12px;
+      margin-top: 10px;
+    }}
+    .checklist-item {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+    }}
+    .checklist-label {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }}
+    .checklist-value {{
+      color: var(--muted);
+      font-weight: 700;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }}
+    .checklist-note {{
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }}
     .takeaway {{
       margin-top: 18px;
       padding: 16px 18px;
@@ -1321,6 +1387,16 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
           <div class="score-row-head" style="margin-top:16px;"><span>ロング / ショート比較</span><strong>スコア</strong></div>
           {score_compare_html}
         </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>手動アクション確認</h2>
+      <div class="panel">
+        <p><strong>{esc(active_hero_label)}</strong> を前提に、いま手で確かめる要点だけを並べます。</p>
+        <p class="muted">{esc(active_hero_summary)}</p>
+        <div class="checklist">{checklist_html}</div>
+        <div class="checklist-note">この確認は、判断ソースを見やすくまとめるだけで、売買ロジックは変更しません。</div>
       </div>
     </section>
 
