@@ -74,6 +74,26 @@ class SummaryFormatTest(unittest.TestCase):
                 "next_condition": "出来高維持を確認",
                 "warnings": [],
             },
+            "app_contract_data": {
+                "safe_config_schema_audit": {
+                    "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
+                    "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+                    "schema_version": "safe_config_schema_audit.v1",
+                    "contract_only": True,
+                    "command_executed_by_app": False,
+                    "reads_env_values": False,
+                    "reads_dotenv_values": False,
+                    "calls_private_endpoints": False,
+                    "calls_order_endpoints": False,
+                    "live_trading_allowed": False,
+                    "secret_values_exposed": False,
+                    "safety_boundary": (
+                        "local/report-only / no load_config / no .env read / no os.environ value read / "
+                        "no secret/API key exposure / no exchange/private/account/order endpoint access / "
+                        "no FORMAL_GO / no automatic order"
+                    ),
+                },
+            },
         }
 
         subject = build_summary_subject(payload)
@@ -124,6 +144,19 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("local/manual_delivery_app_surface/app-snapshot.json", body)
         self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", body)
         self.assertIn("自動発注なし / 通知送信追加なし / 最終判断は人間", body)
+        self.assertIn("【Safe Config Schema Audit】", body)
+        self.assertIn("local/report-only / no load_config / no .env read / no os.environ value read / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order", body)
+        self.assertIn("command: ./.venv312/bin/python tools/safe_config_schema_audit.py", body)
+        self.assertIn("stdout_json_command: ./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json", body)
+        self.assertIn("schema_version: safe_config_schema_audit.v1", body)
+        self.assertIn("contract_only: true", body)
+        self.assertIn("command_executed_by_app: false", body)
+        self.assertIn("reads_env_values: false", body)
+        self.assertIn("reads_dotenv_values: false", body)
+        self.assertIn("calls_private_endpoints: false", body)
+        self.assertIn("calls_order_endpoints: false", body)
+        self.assertIn("live_trading_allowed: false", body)
+        self.assertIn("secret_values_exposed: false", body)
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("Gmail", body)
         self.assertNotIn("send_email", body)
@@ -220,6 +253,26 @@ class SummaryFormatTest(unittest.TestCase):
             "warning_flags": ["Critical_zone_warning"],
             "risk_flags": ["upper_liquidity_close"],
             "no_trade_flags": ["sweep_incomplete"],
+            "app_contract_data": {
+                "safe_config_schema_audit": {
+                    "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
+                    "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+                    "schema_version": "safe_config_schema_audit.v1",
+                    "contract_only": True,
+                    "command_executed_by_app": False,
+                    "reads_env_values": False,
+                    "reads_dotenv_values": False,
+                    "calls_private_endpoints": False,
+                    "calls_order_endpoints": False,
+                    "live_trading_allowed": False,
+                    "secret_values_exposed": False,
+                    "safety_boundary": (
+                        "local/report-only / no load_config / no .env read / no os.environ value read / "
+                        "no secret/API key exposure / no exchange/private/account/order endpoint access / "
+                        "no FORMAL_GO / no automatic order"
+                    ),
+                },
+            },
         }
 
         subject = build_summary_subject(payload)
@@ -266,6 +319,19 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("local/manual_delivery_app_surface/app-snapshot.json", body)
         self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", body)
         self.assertIn("自動発注なし / 通知送信追加なし / 最終判断は人間", body)
+        self.assertIn("【Safe Config Schema Audit】", body)
+        self.assertIn("command: ./.venv312/bin/python tools/safe_config_schema_audit.py", body)
+        self.assertIn("stdout_json_command: ./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json", body)
+        self.assertIn("schema_version: safe_config_schema_audit.v1", body)
+        self.assertIn("contract_only: true", body)
+        self.assertIn("command_executed_by_app: false", body)
+        self.assertIn("reads_env_values: false", body)
+        self.assertIn("reads_dotenv_values: false", body)
+        self.assertIn("calls_private_endpoints: false", body)
+        self.assertIn("calls_order_endpoints: false", body)
+        self.assertIn("live_trading_allowed: false", body)
+        self.assertIn("secret_values_exposed: false", body)
+        self.assertIn("local/report-only / no load_config / no .env read / no os.environ value read / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order", body)
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("Gmail", body)
         self.assertNotIn("send_email", body)
@@ -325,6 +391,7 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("上側流動性が近く先に振られやすい", body)
         self.assertNotIn("bid_wall_close", body)
         self.assertNotIn("upper_liquidity_close", body)
+        self.assertNotIn("【Safe Config Schema Audit】", body)
 
     def test_ver03_v4_subject_prefix_helper_strips_and_does_not_duplicate(self) -> None:
         already_prefixed = f"  {VER03_V4_EMAIL_SUBJECT_PREFIX} 既存件名  "

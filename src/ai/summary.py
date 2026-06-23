@@ -255,6 +255,62 @@ def _local_confirmation_lines() -> list[str]:
     ]
 
 
+def _safe_config_schema_audit_evidence(result: dict[str, Any]) -> dict[str, Any] | None:
+    direct_evidence = result.get("safe_config_schema_audit")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container_key in ("app_contract_data", "app_contract"):
+        container = result.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("safe_config_schema_audit")
+        if isinstance(evidence, dict):
+            return evidence
+    return None
+
+
+def _safe_config_schema_audit_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "not recorded"
+    return "not recorded"
+
+
+def _safe_config_schema_audit_lines(result: dict[str, Any]) -> list[str]:
+    evidence = _safe_config_schema_audit_evidence(result)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Safe Config Schema Audit】",
+        "local/report-only の静的監査サポートです。tools/safe_config_schema_audit.py は実行しません。",
+        "安全境界: local/report-only / no load_config / no .env read / no os.environ value read / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order",
+    ]
+    for label, key in (
+        ("command", "command"),
+        ("stdout_json_command", "stdout_json_command"),
+        ("schema_version", "schema_version"),
+        ("contract_only", "contract_only"),
+        ("command_executed_by_app", "command_executed_by_app"),
+        ("reads_env_values", "reads_env_values"),
+        ("reads_dotenv_values", "reads_dotenv_values"),
+        ("calls_private_endpoints", "calls_private_endpoints"),
+        ("calls_order_endpoints", "calls_order_endpoints"),
+        ("live_trading_allowed", "live_trading_allowed"),
+        ("secret_values_exposed", "secret_values_exposed"),
+        ("safety_boundary", "safety_boundary"),
+    ):
+        lines.append(f"{label}: {_safe_config_schema_audit_value(evidence.get(key))}")
+    return lines
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -300,6 +356,7 @@ def _root_summary_lines(
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
+    lines.extend(_safe_config_schema_audit_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -393,6 +450,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
+    lines.extend(_safe_config_schema_audit_lines(result))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
