@@ -14149,6 +14149,35 @@ def _run_check_current_manual_delivery_app_surface_command(
     sys.stdout.write(f"current_manual_delivery_app_surface_dir={app_surface_dir}\n")
 
 
+def _run_refresh_and_check_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    stdout_json = bool(getattr(args, "stdout_json", False))
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.export_app_surface = True
+    refresh_args.app_surface_dir = str(app_surface_dir)
+
+    refresh_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_stdout):
+        _run_refresh_current_manual_delivery_app_command(refresh_args, parser)
+
+    validation_data = _manual_delivery_current_app_surface_validation_data(
+        app_surface_dir=app_surface_dir,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(validation_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    sys.stdout.write("current_manual_delivery_app_surface_ready=true\n")
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={app_surface_dir}\n")
+    sys.stdout.write("current_manual_delivery_app_surface_status=valid_ready_for_human_review\n")
+
+
 def _manual_delivery_current_handoff_app_snapshot_markdown(
     *,
     ready_check_json: Path,
@@ -18008,6 +18037,19 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_surface_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
     current_manual_delivery_app_surface_check_parser.add_argument("--stdout-json", action="store_true")
 
+    current_manual_delivery_app_surface_refresh_check_parser = subparsers.add_parser("refresh-and-check-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -18582,6 +18624,10 @@ def main() -> None:
         return
     if args.command == "check-current-manual-delivery-app-surface":
         _run_check_current_manual_delivery_app_surface_command(args, parser)
+        return
+
+    if args.command == "refresh-and-check-current-manual-delivery-app-surface":
+        _run_refresh_and_check_current_manual_delivery_app_surface_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
