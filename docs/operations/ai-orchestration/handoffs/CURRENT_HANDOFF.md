@@ -25,6 +25,17 @@ Current handoff reflects the accepted Ver03-v4 manual action surface/mail milest
 
 Continue with operator-facing diagnostics / report usability or evidence-based trading accuracy using local/report-only workflows. Daily-sync wiring, exchange fetch, trading logic changes, private/order endpoints, runtime behavior, notification sending, and paper_positions.csv remain out of scope.
 
+## Deferred Follow-up / Post-build Check
+
+- CLI/API key configuration may have changed.
+- Verification is intentionally deferred until after current build work.
+- no API key value reading
+- no secret printing
+- no private/account/order endpoint calls
+- no live trading
+- no order placement
+- Verification later should be configuration/dry-run/docs only.
+
 ## Evidence
 
 Historical accepted task details live in git/GitHub, `docs/operations/ai-orchestration/TASK_LEDGER.md`, and `docs/operations/ai-orchestration/CONTROL.md` when needed.

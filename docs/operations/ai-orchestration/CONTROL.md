@@ -39,6 +39,14 @@ Develop the BTC trading system through the three aligned surfaces: public HTML r
 
 Continue with operator-facing diagnostics / report usability or evidence-based trading accuracy using local/report-only workflows, without daily-sync wiring, exchange fetch, trading logic changes, notification sending, runtime changes, or automation safety changes.
 
+## Deferred Follow-up / Post-build Check
+
+- CLI/API key configuration may have changed.
+- Verification is intentionally deferred until after current build work.
+- Future validation must not read or print API key values.
+- Future validation must inspect configuration names, CLI/env var wiring, dry-run/safe error behavior, and documentation consistency only.
+- Future validation must not call private/account/order endpoints, place orders, run live trading, or expose secrets.
+
 ## Evidence Note
 
 Historical accepted task details live in git/GitHub and `docs/operations/ai-orchestration/TASK_LEDGER.md` when needed.
