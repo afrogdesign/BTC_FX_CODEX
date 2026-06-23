@@ -1466,6 +1466,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_write_current_manual_delivery_app_dashboard_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "write-current-manual-delivery-app-dashboard", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_refresh_current_manual_delivery_app_main_with_argv(
         self,
         argv: list[str],
@@ -7412,6 +7435,114 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision", negative_stderr)
             self.assertFalse(negative_refresh_dir.exists())
             self.assertFalse(shadow_summary.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_write_current_manual_delivery_app_dashboard_cli_supports_help_and_writes_static_html(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                help_code, help_stdout, help_stderr = self._run_write_current_manual_delivery_app_dashboard_main_with_argv(
+                    ["--help"],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                dashboard_code, dashboard_stdout, dashboard_stderr = self._run_write_current_manual_delivery_app_dashboard_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(help_code, 0, msg=help_stderr)
+            self.assertIn("write-current-manual-delivery-app-dashboard", help_stdout)
+            self.assertIn("--app-dashboard-html", help_stdout)
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(dashboard_code, 0, msg=dashboard_stderr)
+            self.assertEqual(dashboard_stdout, "local/manual_delivery_handoff/app-dashboard.html\n")
+            dashboard_html = base_dir / "local" / "manual_delivery_handoff" / "app-dashboard.html"
+            self.assertTrue(dashboard_html.exists())
+            dashboard_text = dashboard_html.read_text(encoding="utf-8")
+            self.assertIn("Current App Dashboard", dashboard_text)
+            self.assertIn("Readiness / Status", dashboard_text)
+            self.assertIn("Active Plan Summary", dashboard_text)
+            self.assertIn("readiness/status", dashboard_text)
+            self.assertIn("allowed_next_action", dashboard_text)
+            self.assertIn("active_plan", dashboard_text)
+            self.assertIn("side", dashboard_text)
+            self.assertIn("entry", dashboard_text)
+            self.assertIn("TP", dashboard_text)
+            self.assertIn("SL", dashboard_text)
+            self.assertIn("wait/timeout summary", dashboard_text)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", dashboard_text)
+            self.assertIn("Static UTF-8 HTML only. No JavaScript, no network, no auto-refresh.", dashboard_text)
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_refresh_current_manual_delivery_app_cli_supports_dashboard_output_and_stdout_json_mode(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            dashboard_html = base_dir / "artifacts" / "app-dashboard.html"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                help_code, help_stdout, help_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    ["--help"],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--write-app-dashboard",
+                        "--app-dashboard-html",
+                        str(dashboard_html),
+                    ],
+                    base_dir=base_dir,
+                )
+                stdout_json_code, stdout_json_stdout, stdout_json_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--write-app-dashboard",
+                        "--app-dashboard-html",
+                        str(dashboard_html),
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(help_code, 0, msg=help_stderr)
+            self.assertIn("refresh-current-manual-delivery-app", help_stdout)
+            self.assertIn("--write-app-dashboard", help_stdout)
+            self.assertIn("--app-dashboard-html", help_stdout)
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertIn("current_manual_delivery_app_dashboard_html=", refresh_stdout)
+            self.assertIn(str(dashboard_html), refresh_stdout)
+            self.assertTrue(dashboard_html.exists())
+            dashboard_text = dashboard_html.read_text(encoding="utf-8")
+            self.assertIn("Current App Dashboard", dashboard_text)
+            self.assertIn("Readiness / Status", dashboard_text)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", dashboard_text)
+
+            self.assertEqual(stdout_json_code, 0, msg=stdout_json_stderr)
+            self.assertTrue(stdout_json_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_refresh_dir=", stdout_json_stdout)
+            self.assertNotIn("current_manual_delivery_app_dashboard_html=", stdout_json_stdout)
+            stdout_json_data = json.loads(stdout_json_stdout)
+            self.assertEqual(stdout_json_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertEqual(stdout_json_data["readiness_status"], "ready_for_human_review")
+            self.assertTrue(stdout_json_data["current_manual_delivery_ready"])
+            self.assertFalse(stdout_json_data["trade_execution_allowed"])
+            self.assertFalse(stdout_json_data["automatic_order_allowed"])
+            self.assertFalse(stdout_json_data["external_notification_allowed"])
+            self.assertFalse(stdout_json_data["paper_positions_integration"])
+            self.assertEqual(stdout_json_data["allowed_next_action"], "human_review_only")
+            self.assertEqual(stdout_json_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+            self.assertTrue(dashboard_html.exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

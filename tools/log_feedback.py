@@ -13343,6 +13343,293 @@ def _run_check_current_manual_delivery_app_ready_command(
         )
 
 
+def _manual_delivery_current_app_dashboard_value(value: Any, default: str = "not available") -> str:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value).strip()
+    return text if text else default
+
+
+def _manual_delivery_current_app_dashboard_html(
+    *,
+    app_snapshot_json: Path,
+    app_snapshot_status_json: Path,
+    snapshot_data: dict[str, Any],
+    status_data: dict[str, Any],
+) -> str:
+    readiness_status = status_data.get("snapshot_status", "ready_for_human_review")
+    current_ready = status_data.get("current_manual_delivery_ready", True)
+    generated_at_value = None
+    for source_data in (status_data, snapshot_data):
+        for key in ("generated_at_jst", "generated_at"):
+            if source_data.get(key):
+                generated_at_value = source_data.get(key)
+                break
+        if generated_at_value:
+            break
+
+    source_rows = [
+        ("app_snapshot_json", app_snapshot_json),
+        ("app_snapshot_status_json", app_snapshot_status_json),
+        ("ready_check_json", status_data.get("ready_check_json")),
+        ("app_state_json", status_data.get("app_state_json")),
+        ("self_check_json", status_data.get("self_check_json")),
+        ("generated_at_jst", generated_at_value),
+    ]
+    readiness_rows = [
+        ("readiness/status", f"{readiness_status} / {status_data.get('app_snapshot_status', 'valid_ready_for_human_review')}"),
+        ("current_manual_delivery_ready", current_ready),
+        ("allowed_next_action", status_data.get("allowed_next_action")),
+        ("display_mode", status_data.get("display_mode")),
+        ("primary_action", status_data.get("primary_action")),
+        ("source_readiness", status_data.get("source_readiness")),
+        ("actionability_label", status_data.get("actionability_label")),
+        ("human_action", status_data.get("human_action")),
+        ("shadow_decision_enabled", status_data.get("shadow_decision_enabled")),
+        ("safety boundary", status_data.get("safety_boundary")),
+    ]
+    active_plan_rows = [
+        ("active_plan", status_data.get("active_plan_label")),
+        ("side", status_data.get("side")),
+        ("entry", status_data.get("entry_mode")),
+        ("TP", status_data.get("tp_plan")),
+        ("SL", status_data.get("sl_or_invalidation")),
+        ("wait/timeout summary", status_data.get("timeout_or_wait_limit")),
+        ("evidence summary", status_data.get("intraperiod_evidence_summary")),
+    ]
+
+    def _table_rows(rows: list[tuple[str, Any]]) -> str:
+        return "\n".join(
+            f"          <tr><th>{html.escape(str(label))}</th><td>{html.escape(_manual_delivery_current_app_dashboard_value(value))}</td></tr>"
+            for label, value in rows
+        )
+
+    return f"""<!doctype html>
+<html lang=\"ja\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Manual Delivery Current App Dashboard</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --border: #dbe3ef;
+      --text: #132033;
+      --muted: #5b6b82;
+      --accent: #0f766e;
+      --accent-soft: #e6fffb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      color: var(--text);
+    }}
+    main {{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }}
+    header {{
+      background: linear-gradient(135deg, #0f172a, #1e293b 60%, #334155);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+    }}
+    header .eyebrow {{
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      opacity: 0.72;
+      margin-bottom: 8px;
+    }}
+    header h1 {{
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.1;
+    }}
+    header p {{
+      margin: 14px 0 0;
+      max-width: 920px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+    }}
+    .card h2, .card h3 {{
+      margin: 0 0 14px;
+      font-size: 18px;
+    }}
+    .card p, .card li {{
+      color: var(--text);
+      line-height: 1.6;
+    }}
+    .muted {{ color: var(--muted); }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }}
+    th, td {{
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+      text-align: left;
+    }}
+    th {{
+      width: 30%;
+      color: var(--muted);
+      font-weight: 600;
+    }}
+    td {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-word;
+    }}
+    .status-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }}
+    .section-title {{
+      margin: 0 0 12px;
+      font-size: 20px;
+    }}
+    .full-width {{ grid-column: 1 / -1; }}
+    ul {{ margin: 0; padding-left: 18px; }}
+    code {{
+      background: #eef2f7;
+      padding: 1px 6px;
+      border-radius: 6px;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class=\"eyebrow\">Manual Delivery / Local App Surface</div>
+      <h1>Current App Dashboard</h1>
+      <p>Static UTF-8 HTML only. No JavaScript, no network, no auto-refresh. Report-only, not FORMAL_GO, no automatic order, human decides manually.</p>
+    </header>
+
+    <div class=\"grid\">
+      <section class=\"card\">
+        <div class=\"status-pill\">Readiness / Status</div>
+        <h2 class=\"section-title\">Readiness / Status</h2>
+        <table>
+          {_table_rows(readiness_rows)}
+        </table>
+      </section>
+
+      <section class=\"card\">
+        <h2 class=\"section-title\">Active Plan Summary</h2>
+        <table>
+          {_table_rows(active_plan_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Source Files / Generated At</h2>
+        <table>
+          {_table_rows(source_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Safety Boundary</h2>
+        <p><strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong></p>
+        <p class=\"muted\">This dashboard surfaces the validated local handoff state for human review only.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _write_current_manual_delivery_app_dashboard_outputs(
+    *,
+    app_snapshot_json: Path,
+    app_snapshot_status_json: Path,
+    output_html: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not app_snapshot_json.exists():
+        message = f"current handoff app-snapshot JSON does not exist: {app_snapshot_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    if not app_snapshot_status_json.exists():
+        message = f"current handoff app-snapshot status JSON does not exist: {app_snapshot_status_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+
+    snapshot_data = _load_json_object(app_snapshot_json, parser)
+    _, expected_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json,
+        parser=parser,
+    )
+    status_data = _load_json_object(app_snapshot_status_json, parser)
+    if status_data != expected_status_data:
+        message = "current handoff app-snapshot status JSON does not match validated app-snapshot status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    dashboard_html = _manual_delivery_current_app_dashboard_html(
+        app_snapshot_json=app_snapshot_json,
+        app_snapshot_status_json=app_snapshot_status_json,
+        snapshot_data=snapshot_data,
+        status_data=status_data,
+    )
+    _ensure_parent(output_html)
+    output_html.write_text(dashboard_html, encoding="utf-8")
+    return dashboard_html, status_data
+
+
+def _run_write_current_manual_delivery_app_dashboard_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    app_snapshot_json = Path(getattr(args, "app_snapshot_json", "local/manual_delivery_handoff/app-snapshot.json"))
+    app_snapshot_status_json = Path(getattr(args, "app_snapshot_status_json", "local/manual_delivery_handoff/app-snapshot-status.json"))
+    output_html_arg = getattr(args, "app_dashboard_html", None)
+    if output_html_arg is None:
+        output_html_arg = str(app_snapshot_json.parent / "app-dashboard.html")
+    _dashboard_html, _status_data = _write_current_manual_delivery_app_dashboard_outputs(
+        app_snapshot_json=app_snapshot_json,
+        app_snapshot_status_json=app_snapshot_status_json,
+        output_html=Path(output_html_arg),
+        parser=parser,
+    )
+    sys.stdout.write(f"{output_html_arg}\n")
+
+
 def _manual_delivery_current_app_integration_contract_markdown() -> str:
     lines = [
         "# Manual Delivery Current App Integration Contract",
@@ -13930,16 +14217,27 @@ def _run_refresh_current_manual_delivery_app_command(
 ) -> None:
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
     stdout_json = bool(getattr(args, "stdout_json", False))
+    write_app_dashboard = bool(getattr(args, "write_app_dashboard", False))
+    app_dashboard_html_arg = getattr(args, "app_dashboard_html", None)
+    if app_dashboard_html_arg is not None and not write_app_dashboard:
+        message = "--app-dashboard-html requires --write-app-dashboard"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    app_snapshot_json_arg = getattr(args, "app_snapshot_json", None)
+    if app_snapshot_json_arg is None:
+        app_snapshot_json_arg = str(handoff_dir / "app-snapshot.json")
 
     refresh_snapshot_args = argparse.Namespace(**vars(args))
     refresh_snapshot_args.handoff_dir = str(handoff_dir)
     refresh_snapshot_args.write_app_snapshot_status = True
+    app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(
+        refresh_snapshot_args,
+        parser,
+    )
 
     if stdout_json:
-        _app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(
-            refresh_snapshot_args,
-            parser,
-        )
         refresh_snapshot_stdout = io.StringIO()
         with contextlib.redirect_stdout(refresh_snapshot_stdout):
             _run_refresh_current_manual_delivery_app_snapshot_command(refresh_snapshot_args, parser)
@@ -13947,6 +14245,15 @@ def _run_refresh_current_manual_delivery_app_command(
             app_snapshot_status_json=Path(app_snapshot_status_json_arg),
             parser=parser,
         )
+        if write_app_dashboard:
+            if app_dashboard_html_arg is None:
+                app_dashboard_html_arg = str(handoff_dir / "app-dashboard.html")
+            _dashboard_html, _dashboard_status_data = _write_current_manual_delivery_app_dashboard_outputs(
+                app_snapshot_json=Path(app_snapshot_json_arg),
+                app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+                output_html=Path(app_dashboard_html_arg),
+                parser=parser,
+            )
         sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
         return
 
@@ -13956,6 +14263,16 @@ def _run_refresh_current_manual_delivery_app_command(
 
     sys.stdout.write(f"current_manual_delivery_app_refresh_dir={handoff_dir}\n")
     sys.stdout.write(refresh_snapshot_stdout.getvalue())
+    if write_app_dashboard:
+        if app_dashboard_html_arg is None:
+            app_dashboard_html_arg = str(handoff_dir / "app-dashboard.html")
+        _dashboard_html, _dashboard_status_data = _write_current_manual_delivery_app_dashboard_outputs(
+            app_snapshot_json=Path(app_snapshot_json_arg),
+            app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+            output_html=Path(app_dashboard_html_arg),
+            parser=parser,
+        )
+        sys.stdout.write(f"current_manual_delivery_app_dashboard_html={app_dashboard_html_arg}\n")
 
 
 def _manual_delivery_current_handoff_app_snapshot_status_markdown(
@@ -17223,6 +17540,8 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-md")
     current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-json")
     current_manual_delivery_app_refresh_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--write-app-dashboard", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-dashboard-html")
     current_manual_delivery_app_refresh_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
@@ -17239,6 +17558,20 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
     current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-notes", default="")
     current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    current_manual_delivery_app_dashboard_parser = subparsers.add_parser("write-current-manual-delivery-app-dashboard")
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-snapshot-json",
+        default="local/manual_delivery_handoff/app-snapshot.json",
+    )
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-snapshot-status-json",
+        default="local/manual_delivery_handoff/app-snapshot-status.json",
+    )
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-dashboard-html",
+        default="local/manual_delivery_handoff/app-dashboard.html",
+    )
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
@@ -17803,6 +18136,10 @@ def main() -> None:
 
     if args.command == "refresh-current-manual-delivery-app":
         _run_refresh_current_manual_delivery_app_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-dashboard":
+        _run_write_current_manual_delivery_app_dashboard_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
