@@ -300,15 +300,15 @@ def evaluate_active_plan_intraperiod_candidate(
             exit_reason = "ambiguous"
             outcome = "ambiguous"
             break
-        if tp1_hit:
-            exit_index = index
-            exit_reason = "tp1"
-            outcome = "tp1_first"
-            break
         if tp2_hit:
             exit_index = index
             exit_reason = "tp2"
             outcome = "tp2_first"
+            break
+        if tp1_hit:
+            exit_index = index
+            exit_reason = "tp1"
+            outcome = "tp1_first"
             break
         if stop_hit:
             exit_index = index

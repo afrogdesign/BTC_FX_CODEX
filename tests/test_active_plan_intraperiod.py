@@ -78,6 +78,33 @@ class ActivePlanIntraperiodTests(unittest.TestCase):
         self.assertEqual(result["mfe_r"], "2.2000")
         self.assertEqual(result["mae_r"], "0.3000")
 
+    def test_long_candidate_same_bar_tp1_and_tp2_prefers_tp2(self) -> None:
+        candidate = self._candidate(
+            candidate_id="long-tp2",
+            source_signal_id="sig-long-tp2",
+            entry_price="100",
+            entry_zone_low="",
+            entry_zone_high="",
+            stop_loss="95",
+            tp1="110",
+            tp2="120",
+        )
+        ohlcv = self._ohlcv(
+            [
+                {"timestamp_jst": "2026-06-08T09:15:00+09:00", "open": "100", "high": "101", "low": "99", "close": "100"},
+                {"timestamp_jst": "2026-06-08T09:30:00+09:00", "open": "100", "high": "121", "low": "100", "close": "119"},
+            ]
+        )
+
+        result = evaluate_active_plan_intraperiod_candidate(
+            candidate,
+            ohlcv,
+            now=datetime(2026, 6, 9, 10, 0, tzinfo=JST),
+        )
+
+        self.assertEqual(result["outcome"], "tp2_first")
+        self.assertEqual(result["first_exit_reason"], "tp2")
+
     def test_entry_zone_takes_precedence_over_entry_price(self) -> None:
         candidate = self._candidate(
             candidate_id="zone-priority",
@@ -136,6 +163,31 @@ class ActivePlanIntraperiodTests(unittest.TestCase):
 
         self.assertEqual(result["outcome"], "tp1_first")
         self.assertEqual(result["first_exit_reason"], "tp1")
+
+    def test_short_candidate_same_bar_tp1_and_tp2_prefers_tp2(self) -> None:
+        candidate = self._candidate(
+            candidate_id="short-tp2",
+            source_signal_id="sig-short-tp2",
+            side="short",
+            stop_loss="105",
+            tp1="90",
+            tp2="80",
+        )
+        ohlcv = self._ohlcv(
+            [
+                {"timestamp_jst": "2026-06-08T09:15:00+09:00", "open": "100", "high": "101", "low": "99", "close": "100"},
+                {"timestamp_jst": "2026-06-08T09:30:00+09:00", "open": "100", "high": "104", "low": "79", "close": "85"},
+            ]
+        )
+
+        result = evaluate_active_plan_intraperiod_candidate(
+            candidate,
+            ohlcv,
+            now=datetime(2026, 6, 9, 10, 0, tzinfo=JST),
+        )
+
+        self.assertEqual(result["outcome"], "tp2_first")
+        self.assertEqual(result["first_exit_reason"], "tp2")
 
     def test_short_candidate_reaches_entry_then_sl(self) -> None:
         candidate = self._candidate(
