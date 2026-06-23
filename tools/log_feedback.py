@@ -13831,6 +13831,114 @@ def _write_current_manual_delivery_app_surface_outputs(
     return output_dir
 
 
+def _manual_delivery_current_app_surface_validation_data(
+    *,
+    app_surface_dir: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    index_html_path = app_surface_dir / "index.html"
+    app_dashboard_html_path = app_surface_dir / "app-dashboard.html"
+    app_ready_json_path = app_surface_dir / "app-ready.json"
+    app_contract_json_path = app_surface_dir / "app-contract.json"
+    app_snapshot_json_path = app_surface_dir / "app-snapshot.json"
+    app_snapshot_status_json_path = app_surface_dir / "app-snapshot-status.json"
+    required_paths = [
+        index_html_path,
+        app_dashboard_html_path,
+        app_ready_json_path,
+        app_contract_json_path,
+        app_snapshot_json_path,
+        app_snapshot_status_json_path,
+    ]
+    for required_path in required_paths:
+        if not required_path.exists():
+            message = f"current manual delivery app surface file does not exist: {required_path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+
+    index_html_text = index_html_path.read_text(encoding="utf-8")
+    for expected_text in [
+        "app-dashboard.html",
+        "app-ready.json",
+        "app-contract.json",
+        "app-snapshot.json",
+        "app-snapshot-status.json",
+        "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]:
+        if expected_text not in index_html_text:
+            message = f"current manual delivery app surface index.html missing required text: {expected_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    app_ready_data = _load_json_object(app_ready_json_path, parser)
+    app_contract_data = _load_json_object(app_contract_json_path, parser)
+    app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
+    app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
+
+    ready_check_reference_json = Path(str(app_ready_data["app_snapshot_status_json"]))
+    _, expected_ready_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+        app_snapshot_status_json=ready_check_reference_json,
+        parser=parser,
+    )
+    if app_ready_data != expected_ready_data:
+        message = "current manual delivery app surface app-ready JSON does not match validated ready-check data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    _, expected_snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=Path(str(app_snapshot_data["ready_check_json"])),
+        app_state_json=Path(str(app_snapshot_data["app_state_json"])),
+        parser=parser,
+    )
+    if app_snapshot_data != expected_snapshot_data:
+        message = "current manual delivery app surface app-snapshot JSON does not match validated snapshot data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    snapshot_reference_json = Path(str(app_snapshot_status_data["app_snapshot_json"]))
+    _, expected_snapshot_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=snapshot_reference_json,
+        parser=parser,
+    )
+    if app_snapshot_status_data != expected_snapshot_status_data:
+        message = "current manual delivery app surface app-snapshot-status JSON does not match validated snapshot-status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    expected_contract_data = _manual_delivery_current_app_integration_contract_data()
+    if app_contract_data != expected_contract_data:
+        message = "current manual delivery app surface app-contract JSON does not match validated contract data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    return {
+        "schema_version": "manual_delivery_app_surface_validation.v1",
+        "surface_status": "valid_ready_for_human_review",
+        "app_surface_dir": str(app_surface_dir),
+        "index_html": str(index_html_path),
+        "app_dashboard_html": str(app_dashboard_html_path),
+        "app_ready_json": str(app_ready_json_path),
+        "app_contract_json": str(app_contract_json_path),
+        "app_snapshot_json": str(app_snapshot_json_path),
+        "app_snapshot_status_json": str(app_snapshot_status_json_path),
+        "current_manual_delivery_app_ready": True,
+        "readiness_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 def _manual_delivery_current_app_integration_contract_markdown() -> str:
     lines = [
         "# Manual Delivery Current App Integration Contract",
@@ -13988,6 +14096,23 @@ def _run_export_current_manual_delivery_app_surface_command(
         parser=parser,
     )
     sys.stdout.write(f"current_manual_delivery_app_surface_dir={_surface_dir}\n")
+
+
+def _run_check_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_json_arg = getattr(args, "stdout_json", False)
+    app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    validation_data = _manual_delivery_current_app_surface_validation_data(
+        app_surface_dir=app_surface_dir,
+        parser=parser,
+    )
+    if output_json_arg:
+        sys.stdout.write(json.dumps(validation_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    sys.stdout.write("current_manual_delivery_app_surface_valid=true\n")
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={app_surface_dir}\n")
 
 
 def _manual_delivery_current_handoff_app_snapshot_markdown(
@@ -17845,6 +17970,10 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_surface_export_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_surface_export_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
 
+    current_manual_delivery_app_surface_check_parser = subparsers.add_parser("check-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_check_parser.add_argument("--stdout-json", action="store_true")
+
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
     actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
@@ -18416,6 +18545,9 @@ def main() -> None:
 
     if args.command == "export-current-manual-delivery-app-surface":
         _run_export_current_manual_delivery_app_surface_command(args, parser)
+        return
+    if args.command == "check-current-manual-delivery-app-surface":
+        _run_check_current_manual_delivery_app_surface_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
