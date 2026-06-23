@@ -102,7 +102,7 @@ Purpose: report-only human manual trading support preview.
 - Use `refresh-current-manual-delivery-app-snapshot` as the recommended final app/operator one-command path; it refreshes the current handoff, re-checks readiness, and writes the stable app-snapshot pair in one run.
 - Add `--write-app-snapshot-status` when you want that same one-command refresh to also validate and write `app-snapshot-status.md` and `app-snapshot-status.json`.
 - Use `write-current-manual-delivery-app-snapshot` as the single small stable app/operator read file after refresh-and-check or refresh-and-snapshot; it combines the ready-check and app-state into one snapshot pair.
-- Use `summarize-current-manual-delivery-app-snapshot` as the app/operator read-side validator for `app-snapshot.json`.
+- Use `summarize-current-manual-delivery-app-snapshot --stdout-json` as the app/operator read-side validator for `app-snapshot.json`; it prints deterministic JSON only.
 - It does not send, notify, fetch, rebuild, trade, or approve anything.
 
 ### Source Freshness Guard

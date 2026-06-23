@@ -8069,6 +8069,54 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
+    def test_summarize_current_manual_delivery_app_snapshot_cli_supports_stdout_json_mode_and_help(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                help_code, help_stdout, help_stderr = self._run_summarize_current_manual_delivery_app_snapshot_main_with_argv(
+                    [
+                        "--help",
+                    ],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_snapshot_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                stdout_json_code, stdout_json_stdout, stdout_json_stderr = self._run_summarize_current_manual_delivery_app_snapshot_main_with_argv(
+                    [
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(help_code, 0, msg=help_stderr)
+            self.assertIn("summarize-current-manual-delivery-app-snapshot", help_stdout)
+            self.assertIn("--stdout-json", help_stdout)
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(stdout_json_code, 0, msg=stdout_json_stderr)
+            self.assertTrue(stdout_json_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_snapshot_status_md=", stdout_json_stdout)
+            self.assertNotIn("current_manual_delivery_app_snapshot_status_json=", stdout_json_stdout)
+            self.assertNotIn("# Manual Delivery Current Handoff App Snapshot Status", stdout_json_stdout)
+            stdout_json_data = json.loads(stdout_json_stdout)
+            self.assertEqual(stdout_json_data["schema_version"], "manual_delivery_app_snapshot_status.v1")
+            self.assertEqual(stdout_json_data["app_snapshot_status"], "valid_ready_for_human_review")
+            self.assertEqual(stdout_json_data["snapshot_status"], "ready_for_human_review")
+            self.assertTrue(stdout_json_data["current_manual_delivery_ready"])
+            self.assertEqual(stdout_json_data["allowed_next_action"], "human_review_only")
+            self.assertFalse(stdout_json_data["trade_execution_allowed"])
+            self.assertFalse(stdout_json_data["automatic_order_allowed"])
+            self.assertFalse(stdout_json_data["external_notification_allowed"])
+            self.assertFalse(stdout_json_data["paper_positions_integration"])
+            self.assertEqual(stdout_json_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
     def test_summarize_current_manual_delivery_app_snapshot_cli_rejects_missing_unsafe_and_mismatched_inputs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)

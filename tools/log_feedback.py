@@ -14172,6 +14172,7 @@ def _run_summarize_current_manual_delivery_app_snapshot_command(
 ) -> None:
     output_md_arg = getattr(args, "output_md", None)
     output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
     app_snapshot_json = Path(getattr(args, "app_snapshot_json", "local/manual_delivery_handoff/app-snapshot.json"))
     summary_text, _status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
         app_snapshot_json=app_snapshot_json,
@@ -14179,6 +14180,9 @@ def _run_summarize_current_manual_delivery_app_snapshot_command(
         output_json=Path(output_json_arg) if output_json_arg else None,
         parser=parser,
     )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
     if output_md_arg and output_json_arg:
         sys.stdout.write(f"current_manual_delivery_app_snapshot_status_md={output_md_arg}\n")
         sys.stdout.write(f"current_manual_delivery_app_snapshot_status_json={output_json_arg}\n")
@@ -17096,6 +17100,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-snapshot-json",
         default="local/manual_delivery_handoff/app-snapshot.json",
     )
+    current_manual_delivery_app_snapshot_status_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_snapshot_status_parser.add_argument("--output-md")
     current_manual_delivery_app_snapshot_status_parser.add_argument("--output-json")
 
