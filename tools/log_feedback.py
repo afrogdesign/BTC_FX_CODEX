@@ -13369,6 +13369,14 @@ def _manual_delivery_current_app_dashboard_value(value: Any, default: str = "not
     return text if text else default
 
 
+def _manual_delivery_current_app_dashboard_list_value(value: Any) -> str:
+    if not isinstance(value, list):
+        return _manual_delivery_current_app_dashboard_value(value)
+    if not value:
+        return "none"
+    return ", ".join(_manual_delivery_current_app_dashboard_value(item) for item in value)
+
+
 def _manual_delivery_current_app_operator_triage_summary_data(
     *,
     app_contract_data: dict[str, Any] | None = None,
@@ -13555,6 +13563,10 @@ def _manual_delivery_current_app_integrated_evidence_overview_rows(
 
     return [
         ("Summary status", integrated_evidence_overview.get("summary_status")),
+        ("evidence_keys", integrated_evidence_overview.get("evidence_keys")),
+        ("missing_evidence_keys", integrated_evidence_overview.get("missing_evidence_keys")),
+        ("not_ready_evidence_keys", integrated_evidence_overview.get("not_ready_evidence_keys")),
+        ("execution_required_keys", integrated_evidence_overview.get("execution_required_keys")),
         ("intraperiod_review_stdout_json", _evidence_state_text("intraperiod_review_stdout_json")),
         ("operator_status_diagnostic", _evidence_state_text("operator_status_diagnostic")),
         ("safe_config_schema_audit", _evidence_state_text("safe_config_schema_audit")),
@@ -13734,7 +13746,7 @@ def _manual_delivery_current_app_dashboard_html(
 
     def _table_rows(rows: list[tuple[str, Any]]) -> str:
         return "\n".join(
-            f"          <tr><th>{html.escape(str(label))}</th><td>{html.escape(_manual_delivery_current_app_dashboard_value(value))}</td></tr>"
+            f"          <tr><th>{html.escape(str(label))}</th><td>{html.escape(_manual_delivery_current_app_dashboard_list_value(value))}</td></tr>"
             for label, value in rows
         )
 

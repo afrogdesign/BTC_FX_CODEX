@@ -190,6 +190,10 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("Operator Triage Summary", html)
         self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("Summary status", html)
+        self.assertIn("evidence_keys", html)
+        self.assertIn("missing_evidence_keys", html)
+        self.assertIn("not_ready_evidence_keys", html)
+        self.assertIn("execution_required_keys", html)
         self.assertIn("operator_status_diagnostic", html)
         self.assertIn("safe_config_schema_audit", html)
         self.assertIn("intraperiod_review_stdout_json", html)
@@ -197,6 +201,13 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("manual_action_checklist_surface", html)
         self.assertIn("present=true / ready=true", html)
         self.assertIn("present=true / ready_or_valid=true / execution_required=false", html)
+        self.assertIn(
+            "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
+            html,
+        )
+        self.assertIn("<th>missing_evidence_keys</th><td>none</td>", html)
+        self.assertIn("<th>not_ready_evidence_keys</th><td>none</td>", html)
+        self.assertIn("<th>execution_required_keys</th><td>none</td>", html)
         self.assertIn("derived from existing app contract data only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("Operator Status Diagnostics", html)
@@ -231,6 +242,64 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertNotIn("send_email", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+        self.assertNotIn("execution_required=true", html)
+
+    def test_manual_delivery_current_app_dashboard_html_shows_integrated_evidence_missing_lists(self) -> None:
+        snapshot_data = {
+            "entry_condition": "snapshot entry condition",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        }
+        status_data = {
+            "snapshot_status": "ready_for_human_review",
+            "current_manual_delivery_ready": True,
+            "allowed_next_action": "human_review_only",
+            "display_mode": "dashboard",
+            "primary_action": "human_review_only",
+            "source_readiness": "ready",
+            "actionability_label": "watch",
+            "human_action": "manual review",
+            "shadow_decision_enabled": True,
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "human_review_required": True,
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
+            "active_plan_label": "active plan sample",
+            "side": "long",
+            "entry_mode": "market",
+            "tp_plan": "TP plan sample",
+            "sl_or_invalidation": "SL or invalidation sample",
+            "timeout_or_wait_limit": "timeout sample",
+            "intraperiod_evidence_summary": "evidence sample",
+            "app_state_json": "app-state.json",
+            "ready_check_json": "ready-check.json",
+            "self_check_json": "self-check.json",
+        }
+        contract_data = _manual_delivery_current_app_integration_contract_data()
+        contract_data.pop("safe_config_schema_audit")
+
+        html = _manual_delivery_current_app_dashboard_html(
+            app_snapshot_json=Path("app-snapshot.json"),
+            app_snapshot_status_json=Path("app-snapshot-status.json"),
+            snapshot_data=snapshot_data,
+            status_data=status_data,
+            app_contract_data=contract_data,
+        )
+
+        self.assertIn("Integrated Evidence Overview", html)
+        self.assertIn("evidence_keys", html)
+        self.assertIn("missing_evidence_keys", html)
+        self.assertIn("not_ready_evidence_keys", html)
+        self.assertIn("execution_required_keys", html)
+        self.assertIn("intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit", html)
+        self.assertIn("<th>missing_evidence_keys</th><td>safe_config_schema_audit</td>", html)
+        self.assertIn(
+            "<th>not_ready_evidence_keys</th><td>operator_triage_summary, safe_config_schema_audit</td>",
+            html,
+        )
+        self.assertIn("<th>execution_required_keys</th><td>none</td>", html)
+        self.assertNotIn("execution_required=true", html)
 
     def test_manual_delivery_current_app_operator_triage_summary_data_handles_missing_evidence(self) -> None:
         status_data = {
