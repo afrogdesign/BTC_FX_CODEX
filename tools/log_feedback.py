@@ -14014,6 +14014,8 @@ def _manual_delivery_current_app_surface_validation_data(
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
     app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
     app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
+    expected_contract_data = _manual_delivery_current_app_integration_contract_data()
+    expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
 
     if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
         message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
@@ -14037,7 +14039,30 @@ def _manual_delivery_current_app_surface_validation_data(
                 raise ValueError(message)
             parser.error(message)
 
-    expected_contract_data = _manual_delivery_current_app_integration_contract_data()
+    actual_intraperiod_review_stdout_json = app_contract_data.get("intraperiod_review_stdout_json")
+    if not isinstance(actual_intraperiod_review_stdout_json, dict):
+        message = "current manual delivery app surface app-contract JSON missing_intraperiod_review_stdout_json_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("entrypoint_command", expected_intraperiod_review_stdout_json["entrypoint_command"]),
+        ("schema_version", expected_intraperiod_review_stdout_json["schema_version"]),
+        ("safety_boundary", expected_intraperiod_review_stdout_json["safety_boundary"]),
+        ("allowed_behavior", expected_intraperiod_review_stdout_json["allowed_behavior"]),
+        ("output_fields", expected_intraperiod_review_stdout_json["output_fields"]),
+    ]:
+        if actual_intraperiod_review_stdout_json.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_intraperiod_review_stdout_json_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if actual_intraperiod_review_stdout_json.get("required_safety_flags") != expected_intraperiod_review_stdout_json["required_safety_flags"]:
+        message = "current manual delivery app surface app-contract JSON invalid_intraperiod_review_stdout_json_safety_flags"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
     if app_contract_data != expected_contract_data:
         message = "current manual delivery app surface app-contract JSON does not match validated contract data"
         if parser is None:
