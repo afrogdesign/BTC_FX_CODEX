@@ -7965,6 +7965,28 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
+    def test_refresh_current_manual_delivery_app_surface_launcher_script_exists_and_is_shell_safe(self) -> None:
+        script_path = BASE_DIR / "scripts" / "refresh_current_manual_delivery_app_surface.command"
+        self.assertTrue(script_path.exists())
+        script_text = script_path.read_text(encoding="utf-8")
+        self.assertIn("refresh-and-check-current-manual-delivery-app-surface --stdout-json", script_text)
+        self.assertIn("local/manual_delivery_app_surface/index.html", script_text)
+        self.assertNotIn("open ", script_text)
+        self.assertNotIn("osascript", script_text)
+        self.assertNotIn("curl", script_text)
+        self.assertNotIn("mail", script_text)
+        self.assertNotIn("send", script_text)
+        self.assertNotIn("notify", script_text)
+        syntax_result = subprocess.run(
+            ["/bin/sh", "-n", str(script_path)],
+            cwd=BASE_DIR,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(syntax_result.returncode, 0, msg=syntax_result.stderr)
+        self.assertEqual(syntax_result.stdout, "")
+
     def test_check_current_manual_delivery_app_ready_cli_supports_default_explicit_shadow_and_output_modes_and_rejects_missing_and_unsafe_inputs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
