@@ -203,6 +203,13 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("no daily-sync wiring", markdown)
             self.assertIn("no secret/API key reading", markdown)
             self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
+            self.assertIn("./.venv312/bin/python tools/operator_status.py", markdown)
+            self.assertIn("./.venv312/bin/python tools/operator_status.py --check", markdown)
+            self.assertIn("json_required: false", markdown)
+            self.assertIn("0=ok, 2=waiting_for_html_cycle, 3=startup_status_unavailable", markdown)
+            self.assertIn("report/local diagnostics only", markdown)
+            self.assertIn("no exchange/private/order endpoints", markdown)
+            self.assertIn("no secrets", markdown)
 
             contract_text = output_json.read_text(encoding="utf-8")
             parsed = json.loads(contract_text)
@@ -217,6 +224,14 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("secret_reading_allowed", contract_text)
             self.assertIn("human_decides_manually", contract_text)
             self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", contract_text)
+            self.assertIn("operator_status_diagnostic", contract_text)
+            self.assertIn("./.venv312/bin/python tools/operator_status.py", contract_text)
+            self.assertIn("./.venv312/bin/python tools/operator_status.py --check", contract_text)
+            self.assertIn("json_required", contract_text)
+            self.assertIn("check_exit_codes", contract_text)
+            self.assertIn("report/local diagnostics only", contract_text)
+            self.assertIn("no exchange/private/order endpoints", contract_text)
+            self.assertIn("no secrets", contract_text)
 
             intraperiod = parsed["intraperiod_review_stdout_json"]
             self.assertEqual(intraperiod["entrypoint_command"], "build-active-plan-intraperiod-review --stdout-json")
@@ -251,6 +266,30 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertFalse(intraperiod["required_safety_flags"]["daily_sync_wiring"])
             self.assertFalse(intraperiod["required_safety_flags"]["secret_reading_allowed"])
             self.assertTrue(intraperiod["required_safety_flags"]["human_decides_manually"])
+            operator_status_diag = parsed["operator_status_diagnostic"]
+            self.assertEqual(operator_status_diag["wrapper_command"], "./.venv312/bin/python tools/operator_status.py")
+            self.assertEqual(operator_status_diag["wrapper_check_command"], "./.venv312/bin/python tools/operator_status.py --check")
+            self.assertFalse(operator_status_diag["json_required"])
+            self.assertEqual(
+                operator_status_diag["check_exit_codes"],
+                {
+                    "ok": 0,
+                    "waiting_for_html_cycle": 2,
+                    "startup_status_unavailable": 3,
+                },
+            )
+            self.assertEqual(
+                operator_status_diag["safety_boundary"],
+                "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+            )
+            self.assertIn("read-only", operator_status_diag["allowed_behavior"])
+            self.assertIn("local diagnostics", operator_status_diag["allowed_behavior"])
+            self.assertIn("no notifications", operator_status_diag["allowed_behavior"])
+            self.assertIn("no runtime restart", operator_status_diag["allowed_behavior"])
+            self.assertIn("no exchange fetch", operator_status_diag["allowed_behavior"])
+            self.assertIn("no secrets", operator_status_diag["allowed_behavior"])
+            self.assertIn("no private/account/order endpoints", operator_status_diag["allowed_behavior"])
+            self.assertIn("no FORMAL_GO", operator_status_diag["allowed_behavior"])
 
     def test_manual_delivery_current_app_surface_validation_data_requires_intraperiod_review_stdout_json_contract(self) -> None:
         def write_surface_files(surface_dir: Path, contract_data: dict[str, Any]) -> None:

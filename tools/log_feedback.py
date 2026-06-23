@@ -14248,6 +14248,15 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
         "--output-md <local_intraperiod_report_md>",
         "```",
         "",
+        "## Operator Status Diagnostics",
+        "",
+        "- wrapper_command: ./.venv312/bin/python tools/operator_status.py",
+        "- wrapper_check_command: ./.venv312/bin/python tools/operator_status.py --check",
+        "- json_required: false",
+        "- check_exit_codes: 0=ok, 2=waiting_for_html_cycle, 3=startup_status_unavailable",
+        "- safety_boundary: report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+        "- prohibited_behavior: send, notify, restart_runtime, fetch_exchange_data, read_secrets, private_account_order_endpoint, place_orders, imply_FORMAL_GO",
+        "",
     ]
     return "\n".join(lines) + "\n"
 
@@ -14365,6 +14374,27 @@ def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
                 "secret_reading_allowed": False,
                 "human_decides_manually": True,
             },
+        },
+        "operator_status_diagnostic": {
+            "wrapper_command": "./.venv312/bin/python tools/operator_status.py",
+            "wrapper_check_command": "./.venv312/bin/python tools/operator_status.py --check",
+            "json_required": False,
+            "check_exit_codes": {
+                "ok": 0,
+                "waiting_for_html_cycle": 2,
+                "startup_status_unavailable": 3,
+            },
+            "safety_boundary": "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+            "allowed_behavior": [
+                "read-only",
+                "local diagnostics",
+                "no notifications",
+                "no runtime restart",
+                "no exchange fetch",
+                "no secrets",
+                "no private/account/order endpoints",
+                "no FORMAL_GO",
+            ],
         },
     }
 
