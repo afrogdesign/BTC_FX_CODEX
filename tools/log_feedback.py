@@ -13525,7 +13525,7 @@ def _manual_delivery_current_app_integrated_evidence_overview_data(
     )
     all_evidence_present = all(item["present"] for item in evidence.values())
     all_evidence_ready = all(item["ready_or_valid"] for item in evidence.values())
-    return {
+    integrated_evidence_overview = {
         "schema_version": "manual_delivery_app_integrated_evidence_overview.v1",
         "summary_status": "ready_for_human_review" if all_evidence_ready else "partial_or_missing",
         "all_evidence_present": all_evidence_present,
@@ -13541,6 +13541,42 @@ def _manual_delivery_current_app_integrated_evidence_overview_data(
         "not_ready_evidence_keys": not_ready_evidence_keys,
         "execution_required_keys": execution_required_keys,
         "note": "derived from existing app contract/status data only",
+    }
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
+    )
+    return integrated_evidence_overview
+
+
+def _manual_delivery_current_app_integrated_evidence_overview_hint_data(
+    integrated_evidence_overview: dict[str, Any],
+) -> dict[str, Any]:
+    missing_evidence_keys = integrated_evidence_overview.get("missing_evidence_keys")
+    if not isinstance(missing_evidence_keys, list):
+        missing_evidence_keys = []
+    not_ready_evidence_keys = integrated_evidence_overview.get("not_ready_evidence_keys")
+    if not isinstance(not_ready_evidence_keys, list):
+        not_ready_evidence_keys = []
+    execution_required_keys = integrated_evidence_overview.get("execution_required_keys")
+    if not isinstance(execution_required_keys, list):
+        execution_required_keys = []
+
+    if execution_required_keys:
+        return {
+            "operator_hint_status": "blocked_by_execution_required",
+            "operator_hint_reason": "integrated evidence unexpectedly requires execution",
+            "operator_hint_next_action": "stop and review safety boundary manually",
+        }
+    if missing_evidence_keys or not_ready_evidence_keys:
+        return {
+            "operator_hint_status": "evidence_attention_required",
+            "operator_hint_reason": "missing_or_not_ready_integrated_evidence",
+            "operator_hint_next_action": "inspect listed evidence keys manually; do not execute diagnostics from app surface",
+        }
+    return {
+        "operator_hint_status": "ready_for_human_review",
+        "operator_hint_reason": "all integrated evidence is present and ready",
+        "operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
     }
 
 
@@ -13563,6 +13599,9 @@ def _manual_delivery_current_app_integrated_evidence_overview_rows(
 
     return [
         ("Summary status", integrated_evidence_overview.get("summary_status")),
+        ("Operator hint status", integrated_evidence_overview.get("operator_hint_status")),
+        ("Operator hint reason", integrated_evidence_overview.get("operator_hint_reason")),
+        ("Operator hint next action", integrated_evidence_overview.get("operator_hint_next_action")),
         ("evidence_keys", integrated_evidence_overview.get("evidence_keys")),
         ("missing_evidence_keys", integrated_evidence_overview.get("missing_evidence_keys")),
         ("not_ready_evidence_keys", integrated_evidence_overview.get("not_ready_evidence_keys")),
@@ -13711,6 +13750,9 @@ def _manual_delivery_current_app_dashboard_html(
     integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
         app_contract_data=app_contract_data,
         status_data=status_data,
+    )
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
     )
     integrated_evidence_rows = _manual_delivery_current_app_integrated_evidence_overview_rows(
         integrated_evidence_overview
@@ -14459,6 +14501,9 @@ def _manual_delivery_current_app_surface_validation_data(
         app_contract_data=app_contract_data,
         status_data=app_snapshot_status_data,
     )
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
+    )
 
     if str(app_surface_manifest_data.get("schema_version", "")).strip() != "manual_delivery_app_surface_manifest.v1":
         message = f"current manual delivery app surface app-surface-manifest JSON schema_version must be manual_delivery_app_surface_manifest.v1: {app_surface_manifest_data.get('schema_version')}"
@@ -14612,6 +14657,11 @@ def _manual_delivery_current_app_surface_validation_data(
         "integrated_evidence_overview_missing_evidence_keys": integrated_evidence_overview["missing_evidence_keys"],
         "integrated_evidence_overview_not_ready_evidence_keys": integrated_evidence_overview["not_ready_evidence_keys"],
         "integrated_evidence_overview_execution_required_keys": integrated_evidence_overview["execution_required_keys"],
+        "integrated_evidence_overview_operator_hint_status": integrated_evidence_overview["operator_hint_status"],
+        "integrated_evidence_overview_operator_hint_reason": integrated_evidence_overview["operator_hint_reason"],
+        "integrated_evidence_overview_operator_hint_next_action": integrated_evidence_overview[
+            "operator_hint_next_action"
+        ],
     }
 
 
