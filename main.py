@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -100,6 +101,62 @@ def update_heartbeat(base_dir: Path, heartbeat_file: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     now_iso = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
     path.write_text(now_iso, encoding="utf-8")
+
+
+def _runtime_startup_status_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "runtime" / "startup_status.json"
+
+
+def _runtime_startup_next_report_time(
+    *,
+    now_utc: datetime,
+    timezone_name: str,
+    report_times: list[str],
+) -> str | None:
+    if not report_times:
+        return None
+    local_now = now_utc.astimezone(ZoneInfo(timezone_name))
+    candidates: list[datetime] = []
+    for report_time in report_times:
+        try:
+            hour_str, minute_str = report_time.split(":", 1)
+            hour = int(hour_str)
+            minute = int(minute_str)
+        except (ValueError, AttributeError):
+            continue
+        candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= local_now:
+            candidate += timedelta(days=1)
+        candidates.append(candidate)
+    if not candidates:
+        return None
+    return min(candidates).isoformat()
+
+
+def _write_runtime_startup_status(
+    base_dir: Path,
+    cfg: Any,
+    *,
+    pid: int,
+    now_utc: datetime | None = None,
+) -> Path:
+    now_utc = now_utc or datetime.now(tz=timezone.utc)
+    report_times = [str(report_time) for report_time in getattr(cfg, "REPORT_TIMES", [])]
+    payload = {
+        "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
+        "pid": int(pid),
+        "timezone": str(getattr(cfg, "TIMEZONE", "UTC")),
+        "report_times": report_times,
+        "next_report_time": _runtime_startup_next_report_time(
+            now_utc=now_utc,
+            timezone_name=str(getattr(cfg, "TIMEZONE", "UTC")),
+            report_times=report_times,
+        ),
+    }
+    path = _runtime_startup_status_path(base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def _error_log(base_dir: Path, title: str, details: str) -> None:
@@ -1258,6 +1315,8 @@ def main() -> None:
     cfg = load_config(base_dir)
     for report_time in cfg.REPORT_TIMES:
         schedule.every().day.at(report_time).do(_run_cycle_safe, cfg, base_dir)
+    startup_status_path = _write_runtime_startup_status(base_dir, cfg, pid=os.getpid())
+    print(f"runtime_startup_status_json={startup_status_path}", flush=True)
     while True:
         schedule.run_pending()
         time.sleep(1)
