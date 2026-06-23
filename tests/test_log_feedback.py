@@ -474,9 +474,12 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(rows[0]["outcome"], "no_ohlcv")
 
             report_text = intraperiod_report_path.read_text(encoding="utf-8")
-            self.assertIn("BTCFX Ver03-v2", report_text)
+            self.assertIn("BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価", report_text)
             self.assertIn("no_ohlcv", report_text)
-            self.assertIn("daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。", report_text)
+            self.assertIn("local CSV only", report_text)
+            self.assertIn("no exchange fetch", report_text)
+            self.assertIn("no daily-sync wiring", report_text)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", report_text)
 
     def test_build_paper_positions_upserts_without_destroying_existing_state(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -5466,6 +5469,25 @@ class LogFeedbackTest(unittest.TestCase):
                     "mfe_price": "",
                     "mae_price": "",
                 },
+                {
+                    "timestamp_jst": "2026-06-01T11:30:00+09:00",
+                    "candidate_id": "cand-8",
+                    "signal_id": "sig-8",
+                    "candidate_type": "active_intraperiod_tp2_sample",
+                    "active_primary_action": "ACTIVE_INTRAPERIOD_TP2_SAMPLE",
+                    "side": "short",
+                    "entry_mode": "limit",
+                    "entry_price": "107",
+                    "stop_price": "112",
+                    "tp1_price": "102",
+                    "tp2_price": "100",
+                    "outcome": "tp2_first",
+                    "entry_reached_time": "2026-06-01T11:45:00+09:00",
+                    "first_exit_time": "2026-06-01T12:00:00+09:00",
+                    "first_exit_reason": "tp2",
+                    "mfe_price": "7.0",
+                    "mae_price": "0.5",
+                },
             ]
             with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
                 writer = csv.DictWriter(fp, fieldnames=fieldnames)
@@ -5488,13 +5510,22 @@ class LogFeedbackTest(unittest.TestCase):
                 / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
             )
             self.assertTrue(expected_path.exists())
-            self.assertIn("BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価", report)
+            self.assertIn("BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価", report)
+            self.assertNotIn("BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価", report)
             self.assertIn("実弾売買判断ではない", report)
             self.assertIn("Active Plan は正式GOではない", report)
             self.assertIn("自動発注候補ではない", report)
-            self.assertIn("daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。", report)
+            self.assertIn("local CSV only", report)
+            self.assertIn("no exchange fetch", report)
+            self.assertIn("no daily-sync wiring", report)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", report)
+            self.assertIn("build-active-plan-intraperiod-outcomes", report)
+            self.assertIn("--candidates-csv logs/csv/active_plan_candidates.csv", report)
+            self.assertIn("--ohlcv-csv <local_15m_ohlcv_csv>", report)
+            self.assertIn("--output-csv logs/csv/active_plan_candidate_intraperiod_outcomes.csv", report)
             self.assertIn("outcome別集計", report)
             self.assertIn("`tp1_first`: 1件", report)
+            self.assertIn("`tp2_first`: 1件", report)
             self.assertIn("`sl_first`: 1件", report)
             self.assertIn("`timeout`: 1件", report)
             self.assertIn("`no_ohlcv`: 1件", report)
@@ -5505,7 +5536,7 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("`ACTIVE_LIMIT_RETEST`: 3件", report)
             self.assertIn("## 6. side別集計", report)
             self.assertIn("`long`: 4件", report)
-            self.assertIn("`short`: 3件", report)
+            self.assertIn("`short`: 4件", report)
             self.assertIn("## 9. 代表例", report)
             self.assertIn("cand-1", report)
             self.assertIn("cand-2", report)
@@ -5532,7 +5563,8 @@ class LogFeedbackTest(unittest.TestCase):
             )
             self.assertTrue(expected_path.exists())
             self.assertIn("入力CSVが見つかりません", report)
-            self.assertIn("build-active-plan-candidate-intraperiod-outcomes", report)
+            self.assertIn("build-active-plan-intraperiod-outcomes", report)
+            self.assertIn("no daily-sync wiring", report)
 
     def test_build_active_plan_candidate_intraperiod_outcomes_report_filters_date_range(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -5698,7 +5730,7 @@ class LogFeedbackTest(unittest.TestCase):
 
             self.assertIn(str(output_md), buffer.getvalue())
             self.assertTrue(output_md.exists())
-            self.assertIn("BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価", output_md.read_text(encoding="utf-8"))
+            self.assertIn("BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価", output_md.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

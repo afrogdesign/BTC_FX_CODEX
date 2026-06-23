@@ -8913,20 +8913,23 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
     entry_mae_price = _active_plan_intraperiod_mean_metric(entry_rows, "mae_price")
 
     lines = [
-        "# BTCFX Ver03-v2 Active Plan 候補別 intraperiod 評価",
+        "# BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価",
         "",
         "## 1. まず結論",
         "- 実弾売買判断ではない。",
         "- Active Plan は正式GOではない。",
         "- 自動発注候補ではない。",
-        "- daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。",
+        "- local CSV only",
+        "- no exchange fetch",
+        "- no daily-sync wiring",
+        "- report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]
 
     if not input_exists:
         lines.extend(
             [
                 "- 入力CSVが見つかりません。",
-                "- 先に `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成してください。",
+                "- 先に `build-active-plan-intraperiod-outcomes` で CSV を生成してください。",
                 "",
             ]
         )
@@ -8934,7 +8937,7 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
         lines.extend(
             [
                 "- intraperiod outcome rows はまだありません。",
-                "- `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成した後に再実行してください。",
+                "- `build-active-plan-intraperiod-outcomes` で CSV を生成した後に再実行してください。",
                 "",
             ]
         )
@@ -8959,6 +8962,18 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
             f"- date_to: `{date_to_filter or 'all'}`",
             f"- limit: `{limit}`",
             f"- rows: {len(rows)}",
+            "",
+            "## 2.5. ローカルCSV生成ガイド",
+            "- local CSV only",
+            "- no exchange fetch",
+            "- no daily-sync wiring",
+            "- report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "```text",
+            "build-active-plan-intraperiod-outcomes",
+            "--candidates-csv logs/csv/active_plan_candidates.csv",
+            "--ohlcv-csv <local_15m_ohlcv_csv>",
+            "--output-csv logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+            "```",
             "",
             "## 3. outcome別集計",
         ]
@@ -9088,15 +9103,15 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
         unresolved_items.append(f"no_ohlcv={no_ohlcv_count}件")
 
     if not input_exists:
-        lines.append("- 入力CSVが見つからないため、まず `build-active-plan-candidate-intraperiod-outcomes` で CSV を生成してください。")
+        lines.append("- 入力CSVが見つからないため、まず `build-active-plan-intraperiod-outcomes` で CSV を生成してください。")
     elif not rows:
-        lines.append("- intraperiod outcome rows が空なので、まず CSV を生成してください。")
+        lines.append("- intraperiod outcome rows が空なので、まず `build-active-plan-intraperiod-outcomes` で CSV を生成してください。")
     elif unresolved_items:
         for item in unresolved_items:
             lines.append(f"- {item}")
-        lines.append("- daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。")
+        lines.append("- report-only / not FORMAL_GO / no automatic order / human decides manually")
     else:
-        lines.append("- 現時点で大きな未解決事項はありません。daily-sync連携時もreport-only診断であり、実弾売買や自動発注には使わない。")
+        lines.append("- 現時点で大きな未解決事項はありません。report-only / not FORMAL_GO / no automatic order / human decides manually")
 
     report = "\n".join(lines)
     _ensure_parent(resolved_output_md)
