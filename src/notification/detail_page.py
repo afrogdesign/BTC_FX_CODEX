@@ -1460,6 +1460,11 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         <p>local dashboard / app surface は確認と将来の承認・自動化の土台。</p>
         <p>3つは同じ判断ソースから出します。別判断系にしません。</p>
         <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <h3>Intraperiod JSON 契約</h3>
+        <p>local/report-only の手動確認向けに、<code>build-active-plan-intraperiod-review --stdout-json</code> と <code>active_plan_intraperiod_review.v1</code> の app contract exposure を案内します。</p>
+        <p>app surface / ready gate validation は <code>intraperiod_review_stdout_json</code> の契約露出を確認し、<strong>app contract</strong> と <strong>ready gate</strong> の整合だけを見ます。</p>
+        <p>負荷や実行は行わず、<strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong> を維持します。</p>
+        <p>negative boundary: no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO</p>
         <ul>{manual_support_reference_list_html}</ul>
       </div>
     </section>
