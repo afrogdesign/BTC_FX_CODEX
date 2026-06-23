@@ -1489,6 +1489,29 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         code = 0
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def _run_export_current_manual_delivery_app_surface_main_with_argv(
+        self,
+        argv: list[str],
+        base_dir: Path | None = None,
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        resolved_base_dir = base_dir or BASE_DIR
+        with mock.patch.object(log_feedback, "BASE_DIR", resolved_base_dir):
+            with mock.patch.object(
+                sys,
+                "argv",
+                [str(BASE_DIR / "tools" / "log_feedback.py"), "export-current-manual-delivery-app-surface", *argv],
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    try:
+                        log_feedback.main()
+                    except SystemExit as exc:
+                        code = int(exc.code) if isinstance(exc.code, int) else 1
+                    else:
+                        code = 0
+        return code, stdout.getvalue(), stderr.getvalue()
+
     def _run_refresh_current_manual_delivery_app_main_with_argv(
         self,
         argv: list[str],
@@ -7519,6 +7542,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("refresh-current-manual-delivery-app", help_stdout)
             self.assertIn("--write-app-dashboard", help_stdout)
             self.assertIn("--app-dashboard-html", help_stdout)
+            self.assertIn("--export-app-surface", help_stdout)
+            self.assertIn("--app-surface-dir", help_stdout)
             self.assertEqual(refresh_code, 0, msg=refresh_stderr)
             self.assertIn("current_manual_delivery_app_dashboard_html=", refresh_stdout)
             self.assertIn(str(dashboard_html), refresh_stdout)
@@ -7543,6 +7568,120 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(stdout_json_data["allowed_next_action"], "human_review_only")
             self.assertEqual(stdout_json_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
             self.assertTrue(dashboard_html.exists())
+            self.assertFalse((base_dir / "paper_positions.csv").exists())
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_export_current_manual_delivery_app_surface_cli_supports_help_and_writes_bundle_and_refresh_export_mode(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            export_dir = base_dir / "local" / "manual_delivery_app_surface"
+            refresh_export_dir = base_dir / "artifacts" / "refresh-app-surface"
+            stdout_json_export_dir = base_dir / "artifacts" / "refresh-app-surface-stdout-json"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                help_code, help_stdout, help_stderr = self._run_export_current_manual_delivery_app_surface_main_with_argv(
+                    ["--help"],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                export_code, export_stdout, export_stderr = self._run_export_current_manual_delivery_app_surface_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                refresh_export_code, refresh_export_stdout, refresh_export_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--export-app-surface",
+                        "--app-surface-dir",
+                        str(refresh_export_dir),
+                    ],
+                    base_dir=base_dir,
+                )
+                stdout_json_export_code, stdout_json_export_stdout, stdout_json_export_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--export-app-surface",
+                        "--app-surface-dir",
+                        str(stdout_json_export_dir),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(help_code, 0, msg=help_stderr)
+            self.assertIn("export-current-manual-delivery-app-surface", help_stdout)
+            self.assertIn("--handoff-dir", help_stdout)
+            self.assertIn("--app-surface-dir", help_stdout)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(export_code, 0, msg=export_stderr)
+            self.assertEqual(
+                export_stdout,
+                "current_manual_delivery_app_surface_dir=local/manual_delivery_app_surface\n",
+            )
+            self.assertTrue((export_dir / "index.html").exists())
+            self.assertTrue((export_dir / "app-dashboard.html").exists())
+            self.assertTrue((export_dir / "app-ready.json").exists())
+            self.assertTrue((export_dir / "app-contract.json").exists())
+            self.assertTrue((export_dir / "app-snapshot.json").exists())
+            self.assertTrue((export_dir / "app-snapshot-status.json").exists())
+
+            index_text = (export_dir / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Current App Surface Bundle", index_text)
+            self.assertIn('href="app-dashboard.html"', index_text)
+            self.assertIn('href="app-ready.json"', index_text)
+            self.assertIn('href="app-contract.json"', index_text)
+            self.assertIn('href="app-snapshot.json"', index_text)
+            self.assertIn('href="app-snapshot-status.json"', index_text)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", index_text)
+
+            app_ready_data = json.loads((export_dir / "app-ready.json").read_text(encoding="utf-8"))
+            self.assertEqual(app_ready_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertTrue(app_ready_data["current_manual_delivery_app_ready"])
+            self.assertEqual(app_ready_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(app_ready_data["allowed_next_action"], "human_review_only")
+            self.assertFalse(app_ready_data["trade_execution_allowed"])
+            self.assertFalse(app_ready_data["automatic_order_allowed"])
+            self.assertFalse(app_ready_data["external_notification_allowed"])
+            self.assertFalse(app_ready_data["paper_positions_integration"])
+
+            app_contract_data = json.loads((export_dir / "app-contract.json").read_text(encoding="utf-8"))
+            self.assertEqual(app_contract_data["schema_version"], "manual_delivery_app_integration_contract.v1")
+            self.assertEqual(app_contract_data["contract_status"], "stable_for_local_app_integration")
+
+            self.assertEqual(refresh_export_code, 0, msg=refresh_export_stderr)
+            self.assertIn("current_manual_delivery_app_surface_dir=", refresh_export_stdout)
+            self.assertIn(str(refresh_export_dir), refresh_export_stdout)
+            self.assertTrue((refresh_export_dir / "index.html").exists())
+            self.assertTrue((refresh_export_dir / "app-dashboard.html").exists())
+            self.assertTrue((refresh_export_dir / "app-ready.json").exists())
+            self.assertTrue((refresh_export_dir / "app-contract.json").exists())
+            self.assertTrue((refresh_export_dir / "app-snapshot.json").exists())
+            self.assertTrue((refresh_export_dir / "app-snapshot-status.json").exists())
+
+            self.assertEqual(stdout_json_export_code, 0, msg=stdout_json_export_stderr)
+            self.assertTrue(stdout_json_export_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_refresh_dir=", stdout_json_export_stdout)
+            self.assertNotIn("current_manual_delivery_app_surface_dir=", stdout_json_export_stdout)
+            stdout_json_export_data = json.loads(stdout_json_export_stdout)
+            self.assertEqual(stdout_json_export_data["schema_version"], "manual_delivery_app_ready_check.v1")
+            self.assertTrue(stdout_json_export_data["current_manual_delivery_app_ready"])
+            self.assertEqual(stdout_json_export_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(stdout_json_export_data["allowed_next_action"], "human_review_only")
+            self.assertFalse(stdout_json_export_data["trade_execution_allowed"])
+            self.assertFalse(stdout_json_export_data["automatic_order_allowed"])
+            self.assertFalse(stdout_json_export_data["external_notification_allowed"])
+            self.assertFalse(stdout_json_export_data["paper_positions_integration"])
+            self.assertTrue((stdout_json_export_dir / "index.html").exists())
+            self.assertTrue((stdout_json_export_dir / "app-dashboard.html").exists())
+            self.assertTrue((stdout_json_export_dir / "app-ready.json").exists())
+            self.assertTrue((stdout_json_export_dir / "app-contract.json").exists())
+            self.assertTrue((stdout_json_export_dir / "app-snapshot.json").exists())
+            self.assertTrue((stdout_json_export_dir / "app-snapshot-status.json").exists())
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 

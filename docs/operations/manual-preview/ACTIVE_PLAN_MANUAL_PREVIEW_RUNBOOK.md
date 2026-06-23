@@ -98,6 +98,8 @@ Purpose: report-only human manual trading support preview.
 - Use `describe-current-manual-delivery-app-contract --stdout-json` as the app integration contract introspection command; it prints the stable contract for the current app path as deterministic JSON.
 - Use `write-current-manual-delivery-app-dashboard` as the local app/operator visual surface; it renders the current validated snapshot/status as static HTML with no JS or network.
 - Add `--write-app-dashboard` to `refresh-current-manual-delivery-app` when you want that same refresh to also write `app-dashboard.html` alongside the snapshot/status outputs.
+- Use `export-current-manual-delivery-app-surface` as the recommended local app/operator surface export; it writes `index.html`, `app-dashboard.html`, `app-ready.json`, `app-contract.json`, `app-snapshot.json`, and `app-snapshot-status.json` under `local/manual_delivery_app_surface`.
+- Add `--export-app-surface --app-surface-dir <path>` to `refresh-current-manual-delivery-app` when you want that same refresh to also write the bundle in one run.
 - Use `refresh-current-manual-delivery-app-state` as the recommended one-command app-facing refresh; it writes self-check, app-state, and app-state-status outputs in one run.
 - Use `check-current-manual-delivery-app-state-ready --stdout-json` as the smallest final app/operator readiness check after refresh; it validates `app-state-status.json` and prints the minimal ready gate as deterministic JSON.
 - Use `refresh-and-check-current-manual-delivery-app-state` as the app-facing readiness builder; it refreshes the current handoff and writes the ready-check outputs in one run.

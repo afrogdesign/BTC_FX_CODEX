@@ -13630,6 +13630,207 @@ def _run_write_current_manual_delivery_app_dashboard_command(
     sys.stdout.write(f"{output_html_arg}\n")
 
 
+def _manual_delivery_current_app_surface_index_html(
+    *,
+    output_dir: Path,
+    handoff_dir: Path,
+) -> str:
+    file_links = [
+        ("app-dashboard.html", "Current App Dashboard"),
+        ("app-ready.json", "Current App Ready JSON"),
+        ("app-contract.json", "Current App Contract JSON"),
+        ("app-snapshot.json", "Current App Snapshot JSON"),
+        ("app-snapshot-status.json", "Current App Snapshot Status JSON"),
+    ]
+    list_items = "\n".join(
+        f"        <li><a href=\"{html.escape(filename)}\">{html.escape(label)}</a></li>"
+        for filename, label in file_links
+    )
+    return f"""<!doctype html>
+<html lang=\"ja\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Manual Delivery Current App Surface</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --border: #dbe3ef;
+      --text: #132033;
+      --muted: #5b6b82;
+      --accent: #0f766e;
+      --accent-soft: #e6fffb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      color: var(--text);
+    }}
+    main {{
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }}
+    header {{
+      background: linear-gradient(135deg, #0f172a, #1e293b 60%, #334155);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+    }}
+    header .eyebrow {{
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      opacity: 0.72;
+      margin-bottom: 8px;
+    }}
+    header h1 {{
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.1;
+    }}
+    header p {{
+      margin: 14px 0 0;
+      max-width: 900px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+    }}
+    .card h2 {{
+      margin: 0 0 14px;
+      font-size: 18px;
+    }}
+    .muted {{ color: var(--muted); }}
+    ul {{ margin: 0; padding-left: 18px; }}
+    li {{ line-height: 1.8; }}
+    a {{ color: var(--accent); text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    code {{
+      background: #eef2f7;
+      padding: 1px 6px;
+      border-radius: 6px;
+    }}
+    .status-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class=\"eyebrow\">Manual Delivery / Local App Surface</div>
+      <h1>Current App Surface Bundle</h1>
+      <p>Static UTF-8 HTML only. No JavaScript, no network, no auto-refresh. Report-only, not FORMAL_GO, no automatic order, human decides manually.</p>
+    </header>
+
+    <div class=\"grid\">
+      <section class=\"card\">
+        <div class=\"status-pill\">Generated Files</div>
+        <h2>Generated Files</h2>
+        <ul>
+{list_items}
+        </ul>
+      </section>
+
+      <section class=\"card\">
+        <h2>Context</h2>
+        <p class=\"muted\">Handoff directory: <code>{html.escape(str(handoff_dir))}</code></p>
+        <p class=\"muted\">App surface directory: <code>{html.escape(str(output_dir))}</code></p>
+        <p class=\"muted\">Use this bundle for human review only.</p>
+      </section>
+
+      <section class=\"card\">
+        <h2>Safety Boundary</h2>
+        <p><strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong></p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _write_current_manual_delivery_app_surface_outputs(
+    *,
+    handoff_dir: Path,
+    output_dir: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    app_contract_json_path = output_dir / "app-contract.json"
+    _contract_markdown, _contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+        output_json=app_contract_json_path,
+    )
+
+    app_snapshot_json_path = output_dir / "app-snapshot.json"
+    ready_check_json_path = handoff_dir / "ready-check.json"
+    app_state_json_path = handoff_dir / "app-state.json"
+    _snapshot_markdown, _snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=ready_check_json_path,
+        app_state_json=app_state_json_path,
+        output_json=app_snapshot_json_path,
+        parser=parser,
+    )
+
+    app_snapshot_status_json_path = output_dir / "app-snapshot-status.json"
+    _snapshot_status_markdown, _snapshot_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json_path,
+        output_json=app_snapshot_status_json_path,
+        parser=parser,
+    )
+
+    app_ready_json_path = output_dir / "app-ready.json"
+    _ready_check_markdown, _ready_check_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+        app_snapshot_status_json=app_snapshot_status_json_path,
+        output_json=app_ready_json_path,
+        parser=parser,
+    )
+
+    app_dashboard_html_path = output_dir / "app-dashboard.html"
+    app_dashboard_html = _manual_delivery_current_app_dashboard_html(
+        app_snapshot_json=app_snapshot_json_path,
+        app_snapshot_status_json=app_snapshot_status_json_path,
+        snapshot_data=_snapshot_data,
+        status_data=_snapshot_status_data,
+    )
+    app_dashboard_html_path.write_text(app_dashboard_html, encoding="utf-8")
+
+    index_html_path = output_dir / "index.html"
+    index_html = _manual_delivery_current_app_surface_index_html(
+        output_dir=output_dir,
+        handoff_dir=handoff_dir,
+    )
+    index_html_path.write_text(index_html, encoding="utf-8")
+
+    return output_dir
+
+
 def _manual_delivery_current_app_integration_contract_markdown() -> str:
     lines = [
         "# Manual Delivery Current App Integration Contract",
@@ -13753,6 +13954,20 @@ def _run_describe_current_manual_delivery_app_contract_command(
         sys.stdout.write(f"current_manual_delivery_app_contract_md={output_md_arg}\n")
     else:
         sys.stdout.write(summary_text)
+
+
+def _run_export_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    output_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+        handoff_dir=handoff_dir,
+        output_dir=output_dir,
+        parser=parser,
+    )
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={_surface_dir}\n")
 
 
 def _manual_delivery_current_handoff_app_snapshot_markdown(
@@ -14218,9 +14433,16 @@ def _run_refresh_current_manual_delivery_app_command(
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
     stdout_json = bool(getattr(args, "stdout_json", False))
     write_app_dashboard = bool(getattr(args, "write_app_dashboard", False))
+    export_app_surface = bool(getattr(args, "export_app_surface", False))
     app_dashboard_html_arg = getattr(args, "app_dashboard_html", None)
     if app_dashboard_html_arg is not None and not write_app_dashboard:
         message = "--app-dashboard-html requires --write-app-dashboard"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    app_surface_dir_arg = getattr(args, "app_surface_dir", None)
+    if app_surface_dir_arg is not None and not export_app_surface:
+        message = "--app-surface-dir requires --export-app-surface"
         if parser is None:
             raise ValueError(message)
         parser.error(message)
@@ -14254,6 +14476,14 @@ def _run_refresh_current_manual_delivery_app_command(
                 output_html=Path(app_dashboard_html_arg),
                 parser=parser,
             )
+        if export_app_surface:
+            if app_surface_dir_arg is None:
+                app_surface_dir_arg = "local/manual_delivery_app_surface"
+            _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+                handoff_dir=handoff_dir,
+                output_dir=Path(app_surface_dir_arg),
+                parser=parser,
+            )
         sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
         return
 
@@ -14261,8 +14491,7 @@ def _run_refresh_current_manual_delivery_app_command(
     with contextlib.redirect_stdout(refresh_snapshot_stdout):
         _run_refresh_current_manual_delivery_app_snapshot_command(refresh_snapshot_args, parser)
 
-    sys.stdout.write(f"current_manual_delivery_app_refresh_dir={handoff_dir}\n")
-    sys.stdout.write(refresh_snapshot_stdout.getvalue())
+    dashboard_output_line = None
     if write_app_dashboard:
         if app_dashboard_html_arg is None:
             app_dashboard_html_arg = str(handoff_dir / "app-dashboard.html")
@@ -14272,7 +14501,24 @@ def _run_refresh_current_manual_delivery_app_command(
             output_html=Path(app_dashboard_html_arg),
             parser=parser,
         )
-        sys.stdout.write(f"current_manual_delivery_app_dashboard_html={app_dashboard_html_arg}\n")
+        dashboard_output_line = f"current_manual_delivery_app_dashboard_html={app_dashboard_html_arg}\n"
+    if export_app_surface:
+        if app_surface_dir_arg is None:
+            app_surface_dir_arg = "local/manual_delivery_app_surface"
+        _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+            handoff_dir=handoff_dir,
+            output_dir=Path(app_surface_dir_arg),
+            parser=parser,
+        )
+        surface_output_line = f"current_manual_delivery_app_surface_dir={_surface_dir}\n"
+    else:
+        surface_output_line = None
+    sys.stdout.write(f"current_manual_delivery_app_refresh_dir={handoff_dir}\n")
+    sys.stdout.write(refresh_snapshot_stdout.getvalue())
+    if dashboard_output_line is not None:
+        sys.stdout.write(dashboard_output_line)
+    if surface_output_line is not None:
+        sys.stdout.write(surface_output_line)
 
 
 def _manual_delivery_current_handoff_app_snapshot_status_markdown(
@@ -17542,6 +17788,8 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_refresh_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_refresh_parser.add_argument("--write-app-dashboard", action="store_true")
     current_manual_delivery_app_refresh_parser.add_argument("--app-dashboard-html")
+    current_manual_delivery_app_refresh_parser.add_argument("--export-app-surface", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-surface-dir")
     current_manual_delivery_app_refresh_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
@@ -17572,6 +17820,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-dashboard-html",
         default="local/manual_delivery_handoff/app-dashboard.html",
     )
+
+    current_manual_delivery_app_surface_export_parser = subparsers.add_parser("export-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_export_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_surface_export_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
 
     actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
     actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
@@ -18140,6 +18392,10 @@ def main() -> None:
 
     if args.command == "write-current-manual-delivery-app-dashboard":
         _run_write_current_manual_delivery_app_dashboard_command(args, parser)
+        return
+
+    if args.command == "export-current-manual-delivery-app-surface":
+        _run_export_current_manual_delivery_app_surface_command(args, parser)
         return
 
     if args.command == "write-actionability-shadow-decision":
