@@ -169,7 +169,7 @@
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
       branch: <code>Ver03-v3</code> /
       更新日: 2026-06-23 JST /
-      現在地: <code>BTCFX-20260623-158-CURRENT-APP-INTEGRATION-CONTRACT 完了</code>
+      現在地: <code>BTCFX-20260623-161-PROGRESS-BOARD-HUMAN-READABILITY 完了</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -191,24 +191,20 @@
         <div class="label">Current track</div>
       </div>
       <div class="metric">
-        <div class="num">91dfda6114da890c62f9248fc6dab2e9d9413bbd</div>
-        <div class="label">latest accepted implementation commit</div>
+        <div class="num">160 / 22a35fb</div>
+        <div class="label">current checkpoint</div>
       </div>
       <div class="metric">
-        <div class="num">9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</div>
-        <div class="label">latest reviewed metadata sync commit</div>
+        <div class="num">158 / 91dfda6</div>
+        <div class="label">app feature milestone</div>
       </div>
       <div class="metric">
-        <div class="num">stdout-json / contract</div>
-        <div class="label">current milestone</div>
+        <div class="num">159 / dba0a45</div>
+        <div class="label">progress board reflected</div>
       </div>
       <div class="metric">
-        <div class="num">refresh / check / describe</div>
-        <div class="label">canonical app/operator commands</div>
-      </div>
-      <div class="metric">
-        <div class="num">app-snapshot + status</div>
-        <div class="label">stable files</div>
+        <div class="num">161</div>
+        <div class="label">this readability update</div>
       </div>
       <div class="metric">
         <div class="num">report-only</div>
@@ -216,20 +212,101 @@
       </div>
     </section>
 
-    <div class="notice">
-      <strong>現在の状況:</strong>
-      <ul>
-        <li>Current track は <code>Ver03-v3</code>。</li>
-        <li>Original board は <code>Ver03-v1</code> 進捗ボードで、歴史的な起点を残したまま現在の状況を追跡している。</li>
-        <li>Current repo branch は <code>Ver03-v3</code>。</li>
-        <li>Latest accepted implementation commit は <code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code>。</li>
-        <li>Latest reviewed metadata sync commit は <code>9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</code>。</li>
-        <li>Current milestone は <code>single-command current manual-delivery app stdout-json path plus integration contract CLI</code>。</li>
-        <li>Canonical app/operator commands は <code>refresh-current-manual-delivery-app --stdout-json</code> / <code>check-current-manual-delivery-app-ready --stdout-json</code> / <code>describe-current-manual-delivery-app-contract --stdout-json</code>。</li>
-        <li>Stable files は <code>local/manual_delivery_handoff/app-snapshot.json</code> と <code>local/manual_delivery_handoff/app-snapshot-status.json</code>。</li>
-        <li>Safety boundary は report-only / not FORMAL_GO / no automatic order / human decides manually / no send-notify-trade-runtime-API-private-account-order behavior / no paper_positions integration。</li>
-      </ul>
-    </div>
+    <section>
+      <h2>現在地を一言で</h2>
+      <div class="notice">
+        <ul>
+          <li>今の current state は、<code>refresh-current-manual-delivery-app --stdout-json</code> で current manual-delivery app state を JSON-only で更新できる状態。</li>
+          <li>read-side の readiness check は <code>check-current-manual-delivery-app-ready --stdout-json</code> で再実行できる。</li>
+          <li>contract introspection は <code>describe-current-manual-delivery-app-contract --stdout-json</code> で確認できる。</li>
+          <li>この system は引き続き report-only で、live trading には進んでいない。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>番号の見方 / ボード番号の整合性</h2>
+      <div class="notice">
+        <ul>
+          <li><code>158</code> = app integration contract CLI accepted。</li>
+          <li><code>159</code> = この progress board が app integration state を見える化した。</li>
+          <li><code>160</code> = orchestration metadata が sync され、clean checkpoint になった。</li>
+          <li><code>161</code> = 今回の readability 改善。</li>
+          <li>つまり、product/app feature milestone は <code>158</code>、progress board reflection は <code>159</code>、latest checkpoint は <code>160</code>、readability update は <code>161</code>。</li>
+        </ul>
+        <table>
+          <thead>
+            <tr>
+              <th>番号</th>
+              <th>意味</th>
+              <th>commit / 詳細</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>158</td>
+              <td>app integration contract CLI accepted</td>
+              <td><code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code></td>
+            </tr>
+            <tr>
+              <td>159</td>
+              <td>progress board reflected</td>
+              <td><code>dba0a45bf57c72081bc84c854818bde97ef0a8e2</code></td>
+            </tr>
+            <tr>
+              <td>160</td>
+              <td>metadata checkpoint synced</td>
+              <td><code>22a35fb08410d260bca3cc92d00622aaf622cb01</code></td>
+            </tr>
+            <tr>
+              <td>161</td>
+              <td>progress board readability improvement</td>
+              <td>this update</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>できるようになったこと</h2>
+      <div class="notice">
+        <ul>
+          <li>1 つのコマンドで current manual-delivery app state を refresh できる。</li>
+          <li>stdout は deterministic JSON として machine-readable に扱える。</li>
+          <li><code>app-snapshot-status.json</code> から readiness check を再実行できる。</li>
+          <li>app は contract / schema / safety invariants を introspect できる。</li>
+          <li>operator は progress board を開くだけで current app status を把握できる。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>まだやっていないこと</h2>
+      <div class="notice">
+        <ul>
+          <li>no live trading</li>
+          <li>no automatic order</li>
+          <li>no send/notify integration</li>
+          <li>no runtime restart/deploy path</li>
+          <li>no private/account/order API endpoint</li>
+          <li>no paper_positions integration</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>参照コマンドと安定ファイル</h2>
+      <div class="notice">
+        <ul>
+          <li>refresh / integration: <code>refresh-current-manual-delivery-app --stdout-json</code></li>
+          <li>read-side check: <code>check-current-manual-delivery-app-ready --stdout-json</code></li>
+          <li>contract introspection: <code>describe-current-manual-delivery-app-contract --stdout-json</code></li>
+          <li>stable read file: <code>local/manual_delivery_handoff/app-snapshot.json</code></li>
+          <li>validator/status file: <code>local/manual_delivery_handoff/app-snapshot-status.json</code></li>
+        </ul>
+      </div>
+    </section>
 
     <section>
       <h2>原版 Ver03-v1 フェーズ図（履歴）</h2>
