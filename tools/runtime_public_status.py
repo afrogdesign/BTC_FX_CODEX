@@ -153,6 +153,7 @@ def _format_pretty_status(payload: dict[str, Any]) -> str:
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Summarize runtime startup and public HTML status")
     parser.add_argument("--pretty", action="store_true", help="print a human-readable summary instead of JSON")
+    parser.add_argument("--check", action="store_true", help="print the pretty summary and exit with a status code")
     return parser
 
 
@@ -160,8 +161,18 @@ def main() -> int:
     parser = _build_arg_parser()
     args = parser.parse_args()
     payload = build_runtime_public_status()
-    if args.pretty:
+    if args.pretty or args.check:
         print(_format_pretty_status(payload))
+        if args.check:
+            status = str(payload.get("operator_status"))
+            if status == "ok":
+                return 0
+            if status == "waiting_for_html_cycle":
+                return 2
+            if status == "startup_status_unavailable":
+                return 3
+            return 3
+        return 0
     else:
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0

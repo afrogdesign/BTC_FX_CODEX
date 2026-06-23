@@ -160,6 +160,37 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertNotIn("private/order", completed.stdout)
         self.assertNotIn("automatic_order_allowed=true", completed.stdout)
 
+    def test_cli_check_mode_exit_codes(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            _write_startup_status(base_dir)
+            _write_html(base_dir, "ver03-v4/main/20260623_101500.html", mtime=datetime(2026, 6, 23, 10, 16, tzinfo=timezone.utc).timestamp())
+
+            ok_completed = _run_cli(base_dir, "--check")
+
+        self.assertEqual(ok_completed.returncode, 0, ok_completed.stdout + ok_completed.stderr)
+        self.assertIn("operator_status: ok", ok_completed.stdout)
+        self.assertIn("operator_message: post-startup public HTML found", ok_completed.stdout)
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            _write_startup_status(base_dir)
+
+            waiting_completed = _run_cli(base_dir, "--check")
+
+        self.assertEqual(waiting_completed.returncode, 2, waiting_completed.stdout + waiting_completed.stderr)
+        self.assertIn("operator_status: waiting_for_html_cycle", waiting_completed.stdout)
+        self.assertIn("operator_message: waiting for the next HTML cycle", waiting_completed.stdout)
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+
+            unavailable_completed = _run_cli(base_dir, "--check")
+
+        self.assertEqual(unavailable_completed.returncode, 3, unavailable_completed.stdout + unavailable_completed.stderr)
+        self.assertIn("operator_status: startup_status_unavailable", unavailable_completed.stdout)
+        self.assertIn("operator_message: startup status unavailable", unavailable_completed.stdout)
+
     def test_html_after_startup_handles_disappearing_html_path(self) -> None:
         from tools.runtime_public_status import _html_after_startup
 
