@@ -14016,6 +14016,7 @@ def _manual_delivery_current_app_surface_validation_data(
     app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
     expected_contract_data = _manual_delivery_current_app_integration_contract_data()
     expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
+    expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
 
     if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
         message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
@@ -14059,6 +14060,30 @@ def _manual_delivery_current_app_surface_validation_data(
             parser.error(message)
     if actual_intraperiod_review_stdout_json.get("required_safety_flags") != expected_intraperiod_review_stdout_json["required_safety_flags"]:
         message = "current manual delivery app surface app-contract JSON invalid_intraperiod_review_stdout_json_safety_flags"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    actual_operator_status_diagnostic = app_contract_data.get("operator_status_diagnostic")
+    if not isinstance(actual_operator_status_diagnostic, dict):
+        message = "current manual delivery app surface app-contract JSON missing_operator_status_diagnostic_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("wrapper_command", expected_operator_status_diagnostic["wrapper_command"]),
+        ("wrapper_check_command", expected_operator_status_diagnostic["wrapper_check_command"]),
+        ("json_required", expected_operator_status_diagnostic["json_required"]),
+        ("safety_boundary", expected_operator_status_diagnostic["safety_boundary"]),
+        ("allowed_behavior", expected_operator_status_diagnostic["allowed_behavior"]),
+    ]:
+        if actual_operator_status_diagnostic.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_operator_status_diagnostic_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if actual_operator_status_diagnostic.get("check_exit_codes") != expected_operator_status_diagnostic["check_exit_codes"]:
+        message = "current manual delivery app surface app-contract JSON invalid_operator_status_diagnostic_check_exit_codes"
         if parser is None:
             raise ValueError(message)
         parser.error(message)

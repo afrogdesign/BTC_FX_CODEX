@@ -290,6 +290,16 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("no secrets", operator_status_diag["allowed_behavior"])
             self.assertIn("no private/account/order endpoints", operator_status_diag["allowed_behavior"])
             self.assertIn("no FORMAL_GO", operator_status_diag["allowed_behavior"])
+            self.assertEqual(operator_status_diag["json_required"], False)
+            self.assertEqual(
+                operator_status_diag["check_exit_codes"],
+                {
+                    "ok": 0,
+                    "waiting_for_html_cycle": 2,
+                    "startup_status_unavailable": 3,
+                },
+            )
+            self.assertIn("report/local diagnostics only", operator_status_diag["safety_boundary"])
 
     def test_manual_delivery_current_app_surface_validation_data_requires_intraperiod_review_stdout_json_contract(self) -> None:
         def write_surface_files(surface_dir: Path, contract_data: dict[str, Any]) -> None:
@@ -458,6 +468,20 @@ class LogFeedbackTest(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
             self.assertIn("invalid_intraperiod_review_stdout_json_safety_flags", str(cm.exception))
+
+            missing_operator_status_data = _manual_delivery_current_app_integration_contract_data()
+            missing_operator_status_data.pop("operator_status_diagnostic")
+            write_surface_files(surface_dir, missing_operator_status_data)
+            with self.assertRaises(ValueError) as cm:
+                _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
+            self.assertIn("missing_operator_status_diagnostic_contract", str(cm.exception))
+
+            unsafe_operator_status_data = _manual_delivery_current_app_integration_contract_data()
+            unsafe_operator_status_data["operator_status_diagnostic"]["json_required"] = True
+            write_surface_files(surface_dir, unsafe_operator_status_data)
+            with self.assertRaises(ValueError) as cm:
+                _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
+            self.assertIn("invalid_operator_status_diagnostic_contract", str(cm.exception))
 
     def test_manual_delivery_current_app_surface_validation_data_requires_manual_action_checklist(self) -> None:
         def write_surface_files(surface_dir: Path, dashboard_html: str) -> None:
