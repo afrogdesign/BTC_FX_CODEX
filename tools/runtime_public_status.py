@@ -54,6 +54,16 @@ def _format_mtime_utc(path: Path | None) -> str | None:
     return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _html_after_startup(latest_html_path: Path | None, startup_dt: datetime | None) -> bool:
+    if latest_html_path is None or startup_dt is None:
+        return False
+    try:
+        latest_mtime = latest_html_path.stat().st_mtime
+    except OSError:
+        return False
+    return datetime.fromtimestamp(latest_mtime, tz=timezone.utc) > startup_dt
+
+
 def build_runtime_public_status(base_dir: Path | None = None) -> dict[str, Any]:
     base_dir = base_dir or _base_dir()
     startup_status = _read_startup_status(base_dir)
@@ -88,13 +98,16 @@ def build_runtime_public_status(base_dir: Path | None = None) -> dict[str, Any]:
 
     latest_html_path = _latest_public_html_path(base_dir)
     latest_html_mtime = _format_mtime_utc(latest_html_path)
-    html_after_startup = bool(
-        startup_status_available
-        and startup_dt is not None
-        and latest_html_path is not None
-        and latest_html_mtime is not None
-        and datetime.fromtimestamp(latest_html_path.stat().st_mtime, tz=timezone.utc) > startup_dt
-    )
+    html_after_startup = bool(startup_status_available and _html_after_startup(latest_html_path, startup_dt))
+    if not startup_status_available:
+        operator_status = "startup_status_unavailable"
+        operator_message = "startup status unavailable"
+    elif html_after_startup:
+        operator_status = "ok"
+        operator_message = "post-startup public HTML found"
+    else:
+        operator_status = "waiting_for_html_cycle"
+        operator_message = "waiting for the next HTML cycle"
 
     return {
         "startup_status_available": startup_status_available,
@@ -106,6 +119,8 @@ def build_runtime_public_status(base_dir: Path | None = None) -> dict[str, Any]:
         "latest_html_path": str(latest_html_path.relative_to(base_dir)) if latest_html_path is not None else None,
         "latest_html_mtime": latest_html_mtime,
         "html_after_startup": html_after_startup,
+        "operator_status": operator_status,
+        "operator_message": operator_message,
     }
 
 

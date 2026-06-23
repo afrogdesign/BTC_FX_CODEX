@@ -72,6 +72,8 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertEqual(payload["latest_html_path"], "logs/notifications_html/ver03-v4/main/20260623_101500.html")
         self.assertEqual(payload["latest_html_mtime"], "2026-06-23T10:16:00Z")
         self.assertTrue(payload["html_after_startup"])
+        self.assertEqual(payload["operator_status"], "ok")
+        self.assertEqual(payload["operator_message"], "post-startup public HTML found")
         self.assertEqual(older.name, "20260623_101000.html")
         self.assertEqual(latest.name, "20260623_101500.html")
 
@@ -88,6 +90,8 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertIsNone(payload["latest_html_path"])
         self.assertIsNone(payload["latest_html_mtime"])
         self.assertFalse(payload["html_after_startup"])
+        self.assertEqual(payload["operator_status"], "waiting_for_html_cycle")
+        self.assertEqual(payload["operator_message"], "waiting for the next HTML cycle")
 
     def test_cli_handles_missing_startup_status_safely(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -107,6 +111,8 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertEqual(payload["latest_html_path"], "logs/notifications_html/ver03-v4/attention/20260623_101500.html")
         self.assertEqual(payload["latest_html_mtime"], "2026-06-23T10:16:00Z")
         self.assertFalse(payload["html_after_startup"])
+        self.assertEqual(payload["operator_status"], "startup_status_unavailable")
+        self.assertEqual(payload["operator_message"], "startup status unavailable")
 
     def test_cli_handles_malformed_startup_status_safely(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -129,6 +135,16 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertEqual(payload["latest_html_path"], "logs/notifications_html/ver03-v4/main/20260623_102000.html")
         self.assertEqual(payload["latest_html_mtime"], "2026-06-23T10:21:00Z")
         self.assertFalse(payload["html_after_startup"])
+        self.assertEqual(payload["operator_status"], "startup_status_unavailable")
+        self.assertEqual(payload["operator_message"], "startup status unavailable")
+
+    def test_html_after_startup_handles_disappearing_html_path(self) -> None:
+        from tools.runtime_public_status import _html_after_startup
+
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "missing.html"
+
+        self.assertFalse(_html_after_startup(path, datetime(2026, 6, 23, 10, 14, tzinfo=timezone.utc)))
 
 
 if __name__ == "__main__":
