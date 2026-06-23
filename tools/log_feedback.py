@@ -14319,6 +14319,21 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
         "- safety_boundary: report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
         "- prohibited_behavior: send, notify, restart_runtime, fetch_exchange_data, read_secrets, private_account_order_endpoint, place_orders, imply_FORMAL_GO",
         "",
+        "## Safe Config Schema Audit",
+        "",
+        "- command: ./.venv312/bin/python tools/safe_config_schema_audit.py",
+        "- stdout_json_command: ./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+        "- schema_version: safe_config_schema_audit.v1",
+        "- contract_only: true",
+        "- command_executed_by_app: false",
+        "- reads_env_values: false",
+        "- reads_dotenv_values: false",
+        "- calls_private_endpoints: false",
+        "- calls_order_endpoints: false",
+        "- live_trading_allowed: false",
+        "- secret_values_exposed: false",
+        "- safety_boundary: static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading",
+        "",
     ]
     return "\n".join(lines) + "\n"
 
@@ -14457,6 +14472,20 @@ def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
                 "no private/account/order endpoints",
                 "no FORMAL_GO",
             ],
+        },
+        "safe_config_schema_audit": {
+            "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
+            "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+            "schema_version": "safe_config_schema_audit.v1",
+            "contract_only": True,
+            "command_executed_by_app": False,
+            "reads_env_values": False,
+            "reads_dotenv_values": False,
+            "calls_private_endpoints": False,
+            "calls_order_endpoints": False,
+            "live_trading_allowed": False,
+            "secret_values_exposed": False,
+            "safety_boundary": "static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading",
         },
     }
 
