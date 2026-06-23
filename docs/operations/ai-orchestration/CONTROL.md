@@ -4,14 +4,14 @@ last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v4`
 project_key: `BTCFX`
-current_commit: ecc04c3e75e23ea2ae7d02d9ded68cb29d921728
+current_commit: fc730ea1c425abfd9e7aa0f3e9d27ddafde88208
 note: `current_commit` is the latest ChatGPT-accepted baseline and may intentionally lag branch HEAD. That lag alone is not a BLOCK condition.
 
 ---
 
 ## Current State
 
-Current reviewed baseline is the accepted Ver03-v4 manual action surface/mail milestone sequence `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`, `BTCFX-20260623-183-V4-LOCAL-DASHBOARD-ACTION-SURFACE-ALIGNMENT`, `BTCFX-20260623-184-V4-LOCAL-DASHBOARD-CHECKLIST-READY-GATE`, `BTCFX-20260623-186-V4-MAIL-MANUAL-ACTION-CHECKLIST`, and the accepted intraperiod milestone sequence `BTCFX-20260623-188-V4-INTRAPERIOD-TP2-DEEPER-TARGET-CLASSIFICATION`, `BTCFX-20260623-189-V4-INTRAPERIOD-OUTCOME-CSV-CLI`, `BTCFX-20260623-191-V4-INTRAPERIOD-REPORT-OPERATOR-WIRING`, `BTCFX-20260623-192-V4-INTRAPERIOD-LOCAL-REVIEW-CLI`, `BTCFX-20260623-195-V4-INTRAPERIOD-REVIEW-STDOUT-JSON`, with the public HTML report, notification mail body, local dashboard HTML, app surface validation, and intraperiod outcome tooling sharing the manual action checklist boundary and same-bar TP2 classification boundary. Intraperiod tooling now has same-bar TP1+TP2 without SL classified as `tp2_first`, the local-file-only outcome CSV builder `build-active-plan-intraperiod-outcomes`, Ver03-v4 operator report guidance wired to that local CSV CLI, and the one-shot local review CLI `build-active-plan-intraperiod-review` with machine-readable `--stdout-json` support. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+Current reviewed baseline is the accepted Ver03-v4 manual action surface/mail milestone sequence `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`, `BTCFX-20260623-183-V4-LOCAL-DASHBOARD-ACTION-SURFACE-ALIGNMENT`, `BTCFX-20260623-184-V4-LOCAL-DASHBOARD-CHECKLIST-READY-GATE`, `BTCFX-20260623-186-V4-MAIL-MANUAL-ACTION-CHECKLIST`, and the accepted intraperiod milestone sequence `BTCFX-20260623-188-V4-INTRAPERIOD-TP2-DEEPER-TARGET-CLASSIFICATION`, `BTCFX-20260623-189-V4-INTRAPERIOD-OUTCOME-CSV-CLI`, `BTCFX-20260623-191-V4-INTRAPERIOD-REPORT-OPERATOR-WIRING`, `BTCFX-20260623-192-V4-INTRAPERIOD-LOCAL-REVIEW-CLI`, `BTCFX-20260623-195-V4-INTRAPERIOD-REVIEW-STDOUT-JSON`, and `BTCFX-20260623-197-V4-APP-CONTRACT-INTRAPERIOD-REVIEW-JSON`, with the public HTML report, notification mail body, local dashboard HTML, app surface validation, intraperiod outcome tooling, and manual-delivery app contract sharing the manual action checklist boundary and same-bar TP2 classification boundary. Intraperiod tooling now has same-bar TP1+TP2 without SL classified as `tp2_first`, the local-file-only outcome CSV builder `build-active-plan-intraperiod-outcomes`, Ver03-v4 operator report guidance wired to that local CSV CLI, the one-shot local review CLI `build-active-plan-intraperiod-review` with machine-readable `--stdout-json` support, and the app contract exposure for `build-active-plan-intraperiod-review --stdout-json` with `active_plan_intraperiod_review.v1` safety flags. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
 ## Current Objective
 
@@ -37,7 +37,7 @@ Develop the BTC trading system through the three aligned surfaces: public HTML r
 
 ## Next Decision
 
-Continue with local/report-only operator tooling, diagnostics, and evidence-based accuracy using the intraperiod review workflow, without daily-sync wiring, exchange fetch, trading logic changes, notification sending, runtime changes, or automation safety changes.
+Continue with local/report-only operator tooling, diagnostics, and evidence-based accuracy using the intraperiod review workflow and app contract exposure, without daily-sync wiring, exchange fetch, trading logic changes, notification sending, runtime changes, or automation safety changes.
 
 ## Deferred Follow-up / Post-build Check
 
@@ -50,9 +50,9 @@ Continue with local/report-only operator tooling, diagnostics, and evidence-base
 ## Evidence Note
 
 Historical accepted task details live in git/GitHub and `docs/operations/ai-orchestration/TASK_LEDGER.md` when needed.
-Accepted Ver03-v4 surface sequence: `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`; `BTCFX-20260623-183-V4-LOCAL-DASHBOARD-ACTION-SURFACE-ALIGNMENT`; `BTCFX-20260623-184-V4-LOCAL-DASHBOARD-CHECKLIST-READY-GATE`; `BTCFX-20260623-186-V4-MAIL-MANUAL-ACTION-CHECKLIST`.
+Accepted Ver03-v4 surface sequence: `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`; `BTCFX-20260623-183-V4-LOCAL-DASHBOARD-ACTION-SURFACE-ALIGNMENT`; `BTCFX-20260623-184-V4-LOCAL-DASHBOARD-CHECKLIST-READY-GATE`; `BTCFX-20260623-186-V4-MAIL-MANUAL-ACTION-CHECKLIST`; `BTCFX-20260623-197-V4-APP-CONTRACT-INTRAPERIOD-REVIEW-JSON`.
 Accepted intraperiod sequence: `BTCFX-20260623-188-V4-INTRAPERIOD-TP2-DEEPER-TARGET-CLASSIFICATION`; `BTCFX-20260623-189-V4-INTRAPERIOD-OUTCOME-CSV-CLI`; `BTCFX-20260623-191-V4-INTRAPERIOD-REPORT-OPERATOR-WIRING`; `BTCFX-20260623-192-V4-INTRAPERIOD-LOCAL-REVIEW-CLI`; `BTCFX-20260623-195-V4-INTRAPERIOD-REVIEW-STDOUT-JSON`.
-Visible local/report-only intraperiod path: `build-active-plan-intraperiod-outcomes`; `build-active-plan-intraperiod-review`; `build-active-plan-intraperiod-review --stdout-json`; Ver03-v4 intraperiod report guidance.
+Visible local/report-only intraperiod path: `build-active-plan-intraperiod-outcomes`; `build-active-plan-intraperiod-review`; `build-active-plan-intraperiod-review --stdout-json`; Ver03-v4 intraperiod report guidance; app contract exposure for `active_plan_intraperiod_review.v1`.
 Accepted E2E: `BTCFX-20260623-156-CURRENT-APP-REFRESH-STDOUT-JSON-E2E-REVIEW` passed in a tempdir using `refresh-current-manual-delivery-app --stdout-json` and `check-current-manual-delivery-app-ready --stdout-json`.
 Accepted work: `BTCFX-20260623-158-CURRENT-APP-INTEGRATION-CONTRACT` added `describe-current-manual-delivery-app-contract --stdout-json`; `BTCFX-20260623-159-PROGRESS-BOARD-CURRENT-APP-INTEGRATION` updated the progress board for the accepted app integration state; `BTCFX-20260623-161-PROGRESS-BOARD-HUMAN-READABILITY` made the board easier for humans to read and aligned the numbering.
 Clean checkpoint: `22a35fb08410d260bca3cc92d00622aaf622cb01` preceded the readability update; current reviewed baseline for this roadmap is `6d263631cc08461d168824fc80410d9d54fbfd32`.

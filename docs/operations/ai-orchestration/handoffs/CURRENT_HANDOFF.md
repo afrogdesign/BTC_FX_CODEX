@@ -4,12 +4,12 @@ last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v4`
 canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-current_commit: ecc04c3e75e23ea2ae7d02d9ded68cb29d921728
-latest_reviewed_baseline: ecc04c3e75e23ea2ae7d02d9ded68cb29d921728
+current_commit: fc730ea1c425abfd9e7aa0f3e9d27ddafde88208
+latest_reviewed_baseline: fc730ea1c425abfd9e7aa0f3e9d27ddafde88208
 
 ## State
 
-Current handoff reflects the accepted Ver03-v4 manual action surface/mail milestone sequence and the accepted intraperiod milestone sequence 188/189/191/192/195 plus the human-readable current manual-delivery progress board update. There is no active handoff. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+Current handoff reflects the accepted Ver03-v4 manual action surface/mail milestone sequence and the accepted intraperiod milestone sequence 188/189/191/192/195/197 plus the human-readable current manual-delivery progress board update. There is no active handoff. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
 ## Safety Boundary
 
@@ -42,7 +42,7 @@ Historical accepted task details live in git/GitHub, `docs/operations/ai-orchest
 Integrated roadmap: `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`.
 Accepted Ver03-v4 surface sequence: `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`; `BTCFX-20260623-183-V4-LOCAL-DASHBOARD-ACTION-SURFACE-ALIGNMENT`; `BTCFX-20260623-184-V4-LOCAL-DASHBOARD-CHECKLIST-READY-GATE`; `BTCFX-20260623-186-V4-MAIL-MANUAL-ACTION-CHECKLIST`.
 Accepted intraperiod sequence: `BTCFX-20260623-188-V4-INTRAPERIOD-TP2-DEEPER-TARGET-CLASSIFICATION`; `BTCFX-20260623-189-V4-INTRAPERIOD-OUTCOME-CSV-CLI`; `BTCFX-20260623-191-V4-INTRAPERIOD-REPORT-OPERATOR-WIRING`; `BTCFX-20260623-192-V4-INTRAPERIOD-LOCAL-REVIEW-CLI`; `BTCFX-20260623-195-V4-INTRAPERIOD-REVIEW-STDOUT-JSON`.
-Local/report-only intraperiod operator review now has `build-active-plan-intraperiod-outcomes`, `build-active-plan-intraperiod-review`, `build-active-plan-intraperiod-review --stdout-json`, and Ver03-v4 intraperiod report guidance. Stdout JSON exposes report-only safety flags and does not allow exchange fetch, daily-sync wiring, secret reading, automatic orders, or FORMAL_GO.
+Local/report-only intraperiod operator review now has `build-active-plan-intraperiod-outcomes`, `build-active-plan-intraperiod-review`, `build-active-plan-intraperiod-review --stdout-json`, app contract exposure for `active_plan_intraperiod_review.v1`, and Ver03-v4 intraperiod report guidance. Stdout JSON exposes report-only safety flags and does not allow exchange fetch, daily-sync wiring, secret reading, automatic orders, or FORMAL_GO.
 Accepted E2E: `BTCFX-20260623-156-CURRENT-APP-REFRESH-STDOUT-JSON-E2E-REVIEW` passed in a tempdir using `refresh-current-manual-delivery-app --stdout-json` and `check-current-manual-delivery-app-ready --stdout-json`.
 Accepted work: `BTCFX-20260623-158-CURRENT-APP-INTEGRATION-CONTRACT` added `describe-current-manual-delivery-app-contract --stdout-json`; `BTCFX-20260623-159-PROGRESS-BOARD-CURRENT-APP-INTEGRATION` updated the progress board for the accepted app integration state; `BTCFX-20260623-161-PROGRESS-BOARD-HUMAN-READABILITY` made the board easier for humans to read and aligned the numbering.
 Clean checkpoint: `22a35fb08410d260bca3cc92d00622aaf622cb01` preceded the readability update; current reviewed baseline for this roadmap is `6d263631cc08461d168824fc80410d9d54fbfd32`.
