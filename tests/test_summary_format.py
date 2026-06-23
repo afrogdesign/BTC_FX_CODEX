@@ -141,6 +141,16 @@ class SummaryFormatTest(unittest.TestCase):
                 "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 "note": "derived from existing app contract/status data only",
             },
+            "integrated_evidence_overview_evidence_keys": [
+                "intraperiod_review_stdout_json",
+                "manual_action_checklist_surface",
+                "operator_status_diagnostic",
+                "operator_triage_summary",
+                "safe_config_schema_audit",
+            ],
+            "integrated_evidence_overview_missing_evidence_keys": [],
+            "integrated_evidence_overview_not_ready_evidence_keys": [],
+            "integrated_evidence_overview_execution_required_keys": [],
         }
 
         subject = build_summary_subject(payload)
@@ -208,6 +218,13 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("all_evidence_present: true", body)
         self.assertIn("all_evidence_ready: true", body)
+        self.assertIn(
+            "evidence_keys: intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
+            body,
+        )
+        self.assertIn("missing_evidence_keys: none", body)
+        self.assertIn("not_ready_evidence_keys: none", body)
+        self.assertIn("execution_required_keys: none", body)
         self.assertIn("operator_status_diagnostic present: true", body)
         self.assertIn("operator_status_diagnostic ready: true", body)
         self.assertIn("safe_config_schema_audit present: true", body)
@@ -534,6 +551,16 @@ class SummaryFormatTest(unittest.TestCase):
                     "note": "derived from existing app contract/status data only",
                 },
             },
+            "integrated_evidence_overview_evidence_keys": [
+                "intraperiod_review_stdout_json",
+                "manual_action_checklist_surface",
+                "operator_status_diagnostic",
+                "operator_triage_summary",
+                "safe_config_schema_audit",
+            ],
+            "integrated_evidence_overview_missing_evidence_keys": [],
+            "integrated_evidence_overview_not_ready_evidence_keys": [],
+            "integrated_evidence_overview_execution_required_keys": [],
         }
 
         body, _provider_used = build_summary_body(
@@ -556,6 +583,13 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("all_evidence_present: true", body)
         self.assertIn("all_evidence_ready: true", body)
+        self.assertIn(
+            "evidence_keys: intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
+            body,
+        )
+        self.assertIn("missing_evidence_keys: none", body)
+        self.assertIn("not_ready_evidence_keys: none", body)
+        self.assertIn("execution_required_keys: none", body)
         self.assertIn("intraperiod_review_stdout_json present: true", body)
         self.assertIn("intraperiod_review_stdout_json ready_or_valid: true", body)
         self.assertIn("operator_status_diagnostic ready_or_valid: true", body)

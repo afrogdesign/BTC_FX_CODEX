@@ -864,16 +864,32 @@ def _integrated_evidence_overview_html(
         if isinstance(value, bool):
             return str(value).lower()
         if isinstance(value, list):
-            return ", ".join(str(item) for item in value)
+            return "none" if not value else ", ".join(str(item) for item in value)
         if value is None:
             return "not recorded"
         text = str(value).strip()
         return text or "not recorded"
 
+    def _list_value(key: str) -> str:
+        for candidate in (
+            evidence.get(key),
+            result.get(f"integrated_evidence_overview_{key}"),
+            result.get(key),
+        ):
+            if isinstance(candidate, list):
+                return "none" if not candidate else ", ".join(str(item) for item in candidate)
+            if isinstance(candidate, tuple):
+                return "none" if not candidate else ", ".join(str(item) for item in candidate)
+        return "not recorded"
+
     rows = [
         ("summary_status", _value("summary_status")),
         ("all_evidence_present", _value("all_evidence_present")),
         ("all_evidence_ready", _value("all_evidence_ready")),
+        ("evidence_keys", _list_value("evidence_keys")),
+        ("missing_evidence_keys", _list_value("missing_evidence_keys")),
+        ("not_ready_evidence_keys", _list_value("not_ready_evidence_keys")),
+        ("execution_required_keys", _list_value("execution_required_keys")),
         ("intraperiod_review_stdout_json present", _value("intraperiod_review_stdout_json", "present")),
         ("intraperiod_review_stdout_json ready_or_valid", _value("intraperiod_review_stdout_json", "ready_or_valid")),
         ("intraperiod_review_stdout_json execution_required", _value("intraperiod_review_stdout_json", "execution_required")),

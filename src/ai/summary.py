@@ -429,6 +429,10 @@ def _integrated_evidence_overview_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none"
+        return ", ".join(str(item) for item in value)
     if isinstance(value, str):
         text = value.strip()
         return text or "not recorded"
@@ -459,6 +463,23 @@ def _integrated_evidence_overview_field_value(
     return None
 
 
+def _integrated_evidence_overview_list_field_value(
+    result: dict[str, Any],
+    evidence: dict[str, Any],
+    field: str,
+) -> Any:
+    for candidate in (
+        evidence.get(field),
+        result.get(f"integrated_evidence_overview_{field}"),
+        result.get(field),
+    ):
+        if isinstance(candidate, list):
+            return candidate
+        if isinstance(candidate, tuple):
+            return list(candidate)
+    return None
+
+
 def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
     evidence = _integrated_evidence_overview_evidence(result)
     if not isinstance(evidence, dict):
@@ -470,10 +491,29 @@ def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
         "local/report-only の表示です。既存の契約/検証データだけを使い、実行はしません。",
         "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]
+    list_labels = {
+        "evidence_keys",
+        "missing_evidence_keys",
+        "not_ready_evidence_keys",
+        "execution_required_keys",
+    }
     for label, key in (
         ("summary_status", "summary_status"),
         ("all_evidence_present", "all_evidence_present"),
         ("all_evidence_ready", "all_evidence_ready"),
+        ("evidence_keys", _integrated_evidence_overview_list_field_value(result, evidence, "evidence_keys")),
+        (
+            "missing_evidence_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "missing_evidence_keys"),
+        ),
+        (
+            "not_ready_evidence_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "not_ready_evidence_keys"),
+        ),
+        (
+            "execution_required_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "execution_required_keys"),
+        ),
         ("intraperiod_review_stdout_json present", ("intraperiod_review_stdout_json", "present")),
         ("intraperiod_review_stdout_json ready_or_valid", ("intraperiod_review_stdout_json", "ready_or_valid")),
         ("intraperiod_review_stdout_json execution_required", ("intraperiod_review_stdout_json", "execution_required")),
@@ -494,6 +534,8 @@ def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
     ):
         if isinstance(key, tuple):
             value = _integrated_evidence_overview_field_value(evidence, key[0], key[1])
+        elif label in list_labels:
+            value = key
         else:
             value = evidence.get(key)
         lines.append(f"{label}: {_integrated_evidence_overview_value(value)}")

@@ -203,6 +203,16 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "no FORMAL_GO / no automatic order"
                 ),
             },
+            "integrated_evidence_overview_evidence_keys": [
+                "intraperiod_review_stdout_json",
+                "manual_action_checklist_surface",
+                "operator_status_diagnostic",
+                "operator_triage_summary",
+                "safe_config_schema_audit",
+            ],
+            "integrated_evidence_overview_missing_evidence_keys": [],
+            "integrated_evidence_overview_not_ready_evidence_keys": [],
+            "integrated_evidence_overview_execution_required_keys": [],
         }
 
         html = build_notification_detail_html(payload)
@@ -253,6 +263,14 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("summary_status", html)
         self.assertIn("all_evidence_present", html)
         self.assertIn("all_evidence_ready", html)
+        self.assertIn("<strong>evidence_keys:</strong>", html)
+        self.assertIn(
+            "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
+            html,
+        )
+        self.assertIn("<strong>missing_evidence_keys:</strong> none", html)
+        self.assertIn("<strong>not_ready_evidence_keys:</strong> none", html)
+        self.assertIn("<strong>execution_required_keys:</strong> none", html)
         self.assertIn("operator_status_diagnostic present", html)
         self.assertIn("safe_config_schema_audit ready", html)
         self.assertIn("intraperiod_review_stdout_json ready", html)
@@ -320,6 +338,14 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("Integrated Evidence Overview", attention_html)
         self.assertIn("summary_status", attention_html)
         self.assertIn("all_evidence_present", attention_html)
+        self.assertIn("<strong>evidence_keys:</strong>", attention_html)
+        self.assertIn(
+            "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
+            attention_html,
+        )
+        self.assertIn("<strong>missing_evidence_keys:</strong> none", attention_html)
+        self.assertIn("<strong>not_ready_evidence_keys:</strong> none", attention_html)
+        self.assertIn("<strong>execution_required_keys:</strong> none", attention_html)
         self.assertIn("operator_status_diagnostic ready", attention_html)
         self.assertIn("safe_config_schema_audit ready", attention_html)
         self.assertIn("manual_action_checklist_surface ready", attention_html)
