@@ -66,6 +66,8 @@ from tools.log_feedback import (
     sync_ai_post_reviews,
     JST,
     _manual_delivery_current_app_dashboard_html,
+    _manual_delivery_current_app_integration_contract_data,
+    _manual_delivery_current_app_surface_validation_data,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS
@@ -179,6 +181,181 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertNotIn("send_email", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_manual_delivery_current_app_surface_validation_data_requires_manual_action_checklist(self) -> None:
+        def write_surface_files(surface_dir: Path, dashboard_html: str) -> None:
+            surface_dir.mkdir(parents=True, exist_ok=True)
+            (surface_dir / "index.html").write_text(
+                "\n".join(
+                    [
+                        "app-dashboard.html",
+                        "app-ready.json",
+                        "app-contract.json",
+                        "app-snapshot.json",
+                        "app-snapshot-status.json",
+                        "app-surface-manifest.json",
+                        "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (surface_dir / "app-dashboard.html").write_text(dashboard_html, encoding="utf-8")
+            (surface_dir / "app-ready.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "manual_delivery_app_ready_check.v1",
+                        "current_manual_delivery_app_ready": True,
+                        "readiness_status": "ready_for_human_review",
+                        "allowed_next_action": "human_review_only",
+                        "human_review_required": True,
+                        "trade_execution_allowed": False,
+                        "automatic_order_allowed": False,
+                        "external_notification_allowed": False,
+                        "paper_positions_integration": False,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (surface_dir / "app-contract.json").write_text(
+                json.dumps(
+                    _manual_delivery_current_app_integration_contract_data(),
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (surface_dir / "app-snapshot.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "manual_delivery_app_snapshot.v1",
+                        "snapshot_status": "ready_for_human_review",
+                        "current_manual_delivery_ready": True,
+                        "allowed_next_action": "human_review_only",
+                        "human_review_required": True,
+                        "trade_execution_allowed": False,
+                        "automatic_order_allowed": False,
+                        "external_notification_allowed": False,
+                        "paper_positions_integration": False,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (surface_dir / "app-snapshot-status.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "manual_delivery_app_snapshot_status.v1",
+                        "app_snapshot_status": "valid_ready_for_human_review",
+                        "snapshot_status": "ready_for_human_review",
+                        "current_manual_delivery_ready": True,
+                        "allowed_next_action": "human_review_only",
+                        "human_review_required": True,
+                        "trade_execution_allowed": False,
+                        "automatic_order_allowed": False,
+                        "external_notification_allowed": False,
+                        "paper_positions_integration": False,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (surface_dir / "app-surface-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "manual_delivery_app_surface_manifest.v1",
+                        "surface_status": "ready_for_human_review",
+                        "entrypoint": "index.html",
+                        "files": {
+                            "index_html": "index.html",
+                            "app_dashboard_html": "app-dashboard.html",
+                            "app_ready_json": "app-ready.json",
+                            "app_contract_json": "app-contract.json",
+                            "app_snapshot_json": "app-snapshot.json",
+                            "app_snapshot_status_json": "app-snapshot-status.json",
+                            "app_surface_manifest_json": "app-surface-manifest.json",
+                        },
+                        "commands": {
+                            "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+                            "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+                            "surface_export": "export-current-manual-delivery-app-surface",
+                        },
+                        "human_review_required": True,
+                        "trade_execution_allowed": False,
+                        "automatic_order_allowed": False,
+                        "external_notification_allowed": False,
+                        "paper_positions_integration": False,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+        with TemporaryDirectory() as tmpdir:
+            surface_dir = Path(tmpdir)
+            write_surface_files(
+                surface_dir,
+                "\n".join(
+                    [
+                        "<section>Readiness / Status</section>",
+                        "<section>Active Plan Summary</section>",
+                        "<section>Manual Action Checklist</section>",
+                        "<section>Entry mode</section>",
+                        "<section>Entry condition</section>",
+                        "<section>TP / SL</section>",
+                        "<section>Invalidation / wait</section>",
+                        "<section>Timeout / validity</section>",
+                        "<section>Safety</section>",
+                        "<section>Source Files / Generated At</section>",
+                        "<section>Safety Boundary</section>",
+                        "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
+                    ]
+                ),
+            )
+
+            validation_data = _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
+            self.assertEqual(validation_data["surface_status"], "valid_ready_for_human_review")
+            self.assertTrue(validation_data["current_manual_delivery_app_ready"])
+            self.assertFalse(validation_data["automatic_order_allowed"])
+
+            write_surface_files(
+                surface_dir,
+                "\n".join(
+                    [
+                        "<section>Readiness / Status</section>",
+                        "<section>Active Plan Summary</section>",
+                        "<section>Entry mode</section>",
+                        "<section>Entry condition</section>",
+                        "<section>TP / SL</section>",
+                        "<section>Invalidation / wait</section>",
+                        "<section>Timeout / validity</section>",
+                        "<section>Safety</section>",
+                        "<section>Source Files / Generated At</section>",
+                        "<section>Safety Boundary</section>",
+                        "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
+                    ]
+                ),
+            )
+            with self.assertRaises(ValueError):
+                _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
 
     def test_daily_sync_wires_active_plan_candidate_intraperiod_diagnostics(self) -> None:
         with TemporaryDirectory() as tmpdir:

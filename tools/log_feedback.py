@@ -13961,6 +13961,39 @@ def _manual_delivery_current_app_surface_validation_data(
                 raise ValueError(message)
             parser.error(message)
 
+    app_dashboard_html_text = app_dashboard_html_path.read_text(encoding="utf-8")
+    for expected_text in [
+        "Readiness / Status",
+        "Active Plan Summary",
+        "Manual Action Checklist",
+        "Source Files / Generated At",
+        "Safety Boundary",
+        "Entry mode",
+        "Entry condition",
+        "TP / SL",
+        "Invalidation / wait",
+        "Timeout / validity",
+        "Safety",
+        "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]:
+        if expected_text not in app_dashboard_html_text:
+            message = f"current manual delivery app surface app-dashboard.html missing required text: {expected_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    for prohibited_text, haystack in [
+        ("smtp", app_dashboard_html_text.lower()),
+        ("Gmail", app_dashboard_html_text),
+        ("send_email", app_dashboard_html_text),
+        ("private/order", app_dashboard_html_text),
+        ("automatic_order_allowed=true", app_dashboard_html_text),
+    ]:
+        if prohibited_text in haystack:
+            message = f"current manual delivery app surface app-dashboard.html contains prohibited text: {prohibited_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
     app_ready_data = _load_json_object(app_ready_json_path, parser)
     app_contract_data = _load_json_object(app_contract_json_path, parser)
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
