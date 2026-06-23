@@ -561,6 +561,20 @@ class LogFeedbackTest(unittest.TestCase):
                 _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
             self.assertIn("invalid_operator_status_diagnostic_contract", str(cm.exception))
 
+            missing_safe_config_data = _manual_delivery_current_app_integration_contract_data()
+            missing_safe_config_data.pop("safe_config_schema_audit")
+            write_surface_files(surface_dir, missing_safe_config_data)
+            with self.assertRaises(ValueError) as cm:
+                _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
+            self.assertIn("missing_safe_config_schema_audit_contract", str(cm.exception))
+
+            unsafe_safe_config_data = _manual_delivery_current_app_integration_contract_data()
+            unsafe_safe_config_data["safe_config_schema_audit"]["command_executed_by_app"] = True
+            write_surface_files(surface_dir, unsafe_safe_config_data)
+            with self.assertRaises(ValueError) as cm:
+                _manual_delivery_current_app_surface_validation_data(app_surface_dir=surface_dir)
+            self.assertIn("invalid_safe_config_schema_audit_contract", str(cm.exception))
+
     def test_manual_delivery_current_app_surface_validation_data_requires_manual_action_checklist(self) -> None:
         def write_surface_files(surface_dir: Path, dashboard_html: str) -> None:
             surface_dir.mkdir(parents=True, exist_ok=True)

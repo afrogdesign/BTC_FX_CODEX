@@ -14046,6 +14046,7 @@ def _manual_delivery_current_app_surface_validation_data(
     expected_contract_data = _manual_delivery_current_app_integration_contract_data()
     expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
     expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
+    expected_safe_config_schema_audit = expected_contract_data["safe_config_schema_audit"]
 
     if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
         message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
@@ -14116,6 +14117,32 @@ def _manual_delivery_current_app_surface_validation_data(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
+
+    actual_safe_config_schema_audit = app_contract_data.get("safe_config_schema_audit")
+    if not isinstance(actual_safe_config_schema_audit, dict):
+        message = "current manual delivery app surface app-contract JSON missing_safe_config_schema_audit_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("command", expected_safe_config_schema_audit["command"]),
+        ("stdout_json_command", expected_safe_config_schema_audit["stdout_json_command"]),
+        ("schema_version", expected_safe_config_schema_audit["schema_version"]),
+        ("contract_only", expected_safe_config_schema_audit["contract_only"]),
+        ("command_executed_by_app", expected_safe_config_schema_audit["command_executed_by_app"]),
+        ("reads_env_values", expected_safe_config_schema_audit["reads_env_values"]),
+        ("reads_dotenv_values", expected_safe_config_schema_audit["reads_dotenv_values"]),
+        ("calls_private_endpoints", expected_safe_config_schema_audit["calls_private_endpoints"]),
+        ("calls_order_endpoints", expected_safe_config_schema_audit["calls_order_endpoints"]),
+        ("live_trading_allowed", expected_safe_config_schema_audit["live_trading_allowed"]),
+        ("secret_values_exposed", expected_safe_config_schema_audit["secret_values_exposed"]),
+        ("safety_boundary", expected_safe_config_schema_audit["safety_boundary"]),
+    ]:
+        if actual_safe_config_schema_audit.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_safe_config_schema_audit_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
 
     if app_contract_data != expected_contract_data:
         message = "current manual delivery app surface app-contract JSON does not match validated contract data"
