@@ -13452,6 +13452,97 @@ def _manual_delivery_current_app_operator_triage_summary_rows(
     ]
 
 
+def _manual_delivery_current_app_integrated_evidence_overview_data(
+    *,
+    app_contract_data: dict[str, Any] | None = None,
+    status_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    app_contract_data = app_contract_data or {}
+    status_data = status_data or {}
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    operator_triage_evidence = operator_triage_summary.get("evidence")
+    if not isinstance(operator_triage_evidence, dict):
+        operator_triage_evidence = {}
+
+    def _contract_evidence_state(key: str) -> dict[str, Any]:
+        present = isinstance(app_contract_data.get(key), dict)
+        return {
+            "present": present,
+            "ready_or_valid": present,
+            "execution_required": False,
+        }
+
+    manual_action_checklist_state = operator_triage_evidence.get("manual_action_checklist_surface")
+    if not isinstance(manual_action_checklist_state, dict):
+        manual_action_checklist_state = {
+            "present": bool(status_data),
+            "ready": False,
+        }
+
+    evidence = {
+        "intraperiod_review_stdout_json": _contract_evidence_state("intraperiod_review_stdout_json"),
+        "operator_status_diagnostic": _contract_evidence_state("operator_status_diagnostic"),
+        "safe_config_schema_audit": _contract_evidence_state("safe_config_schema_audit"),
+        "operator_triage_summary": {
+            "present": bool(operator_triage_summary),
+            "ready_or_valid": operator_triage_summary.get("summary_status") == "ready_for_human_review",
+            "execution_required": False,
+        },
+        "manual_action_checklist_surface": {
+            "present": bool(manual_action_checklist_state.get("present", False)),
+            "ready_or_valid": bool(manual_action_checklist_state.get("ready", False)),
+            "execution_required": False,
+        },
+    }
+    all_evidence_present = all(item["present"] for item in evidence.values())
+    all_evidence_ready = all(item["ready_or_valid"] for item in evidence.values())
+    return {
+        "schema_version": "manual_delivery_app_integrated_evidence_overview.v1",
+        "summary_status": "ready_for_human_review" if all_evidence_ready else "partial_or_missing",
+        "all_evidence_present": all_evidence_present,
+        "all_evidence_ready": all_evidence_ready,
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "evidence": evidence,
+        "note": "derived from existing app contract/status data only",
+    }
+
+
+def _manual_delivery_current_app_integrated_evidence_overview_rows(
+    integrated_evidence_overview: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    evidence = integrated_evidence_overview.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    def _evidence_state_text(key: str) -> str:
+        evidence_state = evidence.get(key)
+        if not isinstance(evidence_state, dict):
+            return "present=false / ready_or_valid=false / execution_required=false"
+        return (
+            f"present={_manual_delivery_current_app_dashboard_value(evidence_state.get('present', False))} "
+            f"/ ready_or_valid={_manual_delivery_current_app_dashboard_value(evidence_state.get('ready_or_valid', False))} "
+            f"/ execution_required={_manual_delivery_current_app_dashboard_value(evidence_state.get('execution_required', False))}"
+        )
+
+    return [
+        ("Summary status", integrated_evidence_overview.get("summary_status")),
+        ("intraperiod_review_stdout_json", _evidence_state_text("intraperiod_review_stdout_json")),
+        ("operator_status_diagnostic", _evidence_state_text("operator_status_diagnostic")),
+        ("safe_config_schema_audit", _evidence_state_text("safe_config_schema_audit")),
+        ("operator_triage_summary", _evidence_state_text("operator_triage_summary")),
+        ("manual_action_checklist_surface", _evidence_state_text("manual_action_checklist_surface")),
+        ("Safety", integrated_evidence_overview.get("safety_boundary")),
+        ("Note", integrated_evidence_overview.get("note")),
+    ]
+
+
 def _manual_delivery_current_app_dashboard_html(
     *,
     app_snapshot_json: Path,
@@ -13583,6 +13674,13 @@ def _manual_delivery_current_app_dashboard_html(
         status_data=status_data,
     )
     operator_triage_rows = _manual_delivery_current_app_operator_triage_summary_rows(operator_triage_summary)
+    integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    integrated_evidence_rows = _manual_delivery_current_app_integrated_evidence_overview_rows(
+        integrated_evidence_overview
+    )
     manual_action_rows = [
         ("Entry mode", _dashboard_value("entry_mode")),
         ("Entry condition", _dashboard_value("entry_condition")),
@@ -13775,6 +13873,14 @@ def _manual_delivery_current_app_dashboard_html(
           {_table_rows(operator_triage_rows)}
         </table>
         <p class=\"muted\">derived from existing app contract data only. report-only / not FORMAL_GO / no automatic order / human decides manually.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Integrated Evidence Overview</h2>
+        <table>
+          {_table_rows(integrated_evidence_rows)}
+        </table>
+        <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / human decides manually. derived from existing app contract/status data only.</p>
       </section>
 
       <section class=\"card full-width\">
@@ -14162,6 +14268,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "Active Plan Summary",
         "Manual Action Checklist",
         "Operator Triage Summary",
+        "Integrated Evidence Overview",
         "Source Files / Generated At",
         "Safety Boundary",
         "Entry mode",
@@ -14174,7 +14281,9 @@ def _manual_delivery_current_app_surface_validation_data(
         "operator_status_diagnostic",
         "safe_config_schema_audit",
         "intraperiod_review_stdout_json",
+        "operator_triage_summary",
         "manual_action_checklist_surface",
+        "present=true / ready_or_valid=true / execution_required=false",
         "derived from existing app contract data only",
         "report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]:
@@ -14309,6 +14418,10 @@ def _manual_delivery_current_app_surface_validation_data(
         parser.error(message)
 
     operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=app_snapshot_status_data,
+    )
+    integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
         app_contract_data=app_contract_data,
         status_data=app_snapshot_status_data,
     )
@@ -14452,6 +14565,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "safe_config_schema_audit_secret_values_exposed": expected_safe_config_schema_audit["secret_values_exposed"],
         "safe_config_schema_audit_safety_boundary": expected_safe_config_schema_audit["safety_boundary"],
         "operator_triage_summary": operator_triage_summary,
+        "integrated_evidence_overview": integrated_evidence_overview,
     }
 
 

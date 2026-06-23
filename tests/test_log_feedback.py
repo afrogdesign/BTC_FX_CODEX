@@ -67,6 +67,7 @@ from tools.log_feedback import (
     sync_ai_post_reviews,
     JST,
     _manual_delivery_current_app_dashboard_html,
+    _manual_delivery_current_app_integrated_evidence_overview_data,
     _manual_delivery_current_app_integration_contract_data,
     _manual_delivery_current_app_operator_triage_summary_data,
     _write_manual_delivery_current_app_integration_contract_outputs,
@@ -187,12 +188,15 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("human_review_only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("Operator Triage Summary", html)
+        self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("Summary status", html)
         self.assertIn("operator_status_diagnostic", html)
         self.assertIn("safe_config_schema_audit", html)
         self.assertIn("intraperiod_review_stdout_json", html)
+        self.assertIn("operator_triage_summary", html)
         self.assertIn("manual_action_checklist_surface", html)
         self.assertIn("present=true / ready=true", html)
+        self.assertIn("present=true / ready_or_valid=true / execution_required=false", html)
         self.assertIn("derived from existing app contract data only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("Operator Status Diagnostics", html)
@@ -266,6 +270,60 @@ class LogFeedbackTest(unittest.TestCase):
             triage_summary["safety_boundary"],
             "report-only / not FORMAL_GO / no automatic order / human decides manually",
         )
+
+    def test_manual_delivery_current_app_integrated_evidence_overview_data_handles_missing_evidence(self) -> None:
+        status_data = {
+            "snapshot_status": "ready_for_human_review",
+            "app_snapshot_status": "valid_ready_for_human_review",
+            "readiness_status": "ready_for_human_review",
+            "allowed_next_action": "human_review_only",
+            "human_review_required": True,
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "current_manual_delivery_ready": True,
+        }
+        contract_data = _manual_delivery_current_app_integration_contract_data()
+        contract_data.pop("safe_config_schema_audit")
+
+        integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
+            app_contract_data=contract_data,
+            status_data=status_data,
+        )
+
+        self.assertEqual(
+            integrated_evidence_overview["schema_version"],
+            "manual_delivery_app_integrated_evidence_overview.v1",
+        )
+        self.assertEqual(integrated_evidence_overview["summary_status"], "partial_or_missing")
+        self.assertFalse(integrated_evidence_overview["all_evidence_present"])
+        self.assertFalse(integrated_evidence_overview["all_evidence_ready"])
+        self.assertTrue(integrated_evidence_overview["report_only"])
+        self.assertFalse(integrated_evidence_overview["formal_go"])
+        self.assertFalse(integrated_evidence_overview["automatic_order_allowed"])
+        self.assertTrue(integrated_evidence_overview["human_decides_manually"])
+        self.assertEqual(
+            integrated_evidence_overview["safety_boundary"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+        self.assertTrue(integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["present"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["ready_or_valid"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["execution_required"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["present"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["ready_or_valid"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["execution_required"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["present"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["ready_or_valid"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["execution_required"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["operator_triage_summary"]["present"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["operator_triage_summary"]["ready_or_valid"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["operator_triage_summary"]["execution_required"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["present"])
+        self.assertTrue(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["ready_or_valid"])
+        self.assertFalse(integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["execution_required"])
+        self.assertEqual(integrated_evidence_overview["note"], "derived from existing app contract/status data only")
 
     def test_manual_delivery_current_app_integration_contract_includes_intraperiod_review_stdout_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -452,6 +510,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Active Plan Summary</section>",
                         "<section>Manual Action Checklist</section>",
                         "<section>Operator Triage Summary</section>",
+                        "<section>Integrated Evidence Overview</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
@@ -462,7 +521,9 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>operator_status_diagnostic</section>",
                         "<section>safe_config_schema_audit</section>",
                         "<section>intraperiod_review_stdout_json</section>",
+                        "<section>operator_triage_summary</section>",
                         "<section>manual_action_checklist_surface</section>",
+                        "<section>present=true / ready_or_valid=true / execution_required=false</section>",
                         "<section>derived from existing app contract data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
@@ -660,6 +721,51 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertTrue(operator_triage_summary["evidence"]["manual_action_checklist_surface"]["ready"])
             self.assertEqual(operator_triage_summary["note"], "derived from existing app contract data only")
 
+            integrated_evidence_overview = validation_data["integrated_evidence_overview"]
+            self.assertEqual(
+                integrated_evidence_overview["schema_version"],
+                "manual_delivery_app_integrated_evidence_overview.v1",
+            )
+            self.assertEqual(integrated_evidence_overview["summary_status"], "ready_for_human_review")
+            self.assertTrue(integrated_evidence_overview["all_evidence_present"])
+            self.assertTrue(integrated_evidence_overview["all_evidence_ready"])
+            self.assertTrue(integrated_evidence_overview["report_only"])
+            self.assertFalse(integrated_evidence_overview["formal_go"])
+            self.assertFalse(integrated_evidence_overview["automatic_order_allowed"])
+            self.assertTrue(integrated_evidence_overview["human_decides_manually"])
+            self.assertEqual(
+                integrated_evidence_overview["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertTrue(integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["present"])
+            self.assertTrue(
+                integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["ready_or_valid"]
+            )
+            self.assertFalse(
+                integrated_evidence_overview["evidence"]["intraperiod_review_stdout_json"]["execution_required"]
+            )
+            self.assertTrue(integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["present"])
+            self.assertTrue(integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["ready_or_valid"])
+            self.assertFalse(
+                integrated_evidence_overview["evidence"]["operator_status_diagnostic"]["execution_required"]
+            )
+            self.assertTrue(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["present"])
+            self.assertTrue(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["ready_or_valid"])
+            self.assertFalse(integrated_evidence_overview["evidence"]["safe_config_schema_audit"]["execution_required"])
+            self.assertTrue(integrated_evidence_overview["evidence"]["operator_triage_summary"]["present"])
+            self.assertTrue(integrated_evidence_overview["evidence"]["operator_triage_summary"]["ready_or_valid"])
+            self.assertFalse(integrated_evidence_overview["evidence"]["operator_triage_summary"]["execution_required"])
+            self.assertTrue(
+                integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["present"]
+            )
+            self.assertTrue(
+                integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["ready_or_valid"]
+            )
+            self.assertFalse(
+                integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["execution_required"]
+            )
+            self.assertEqual(integrated_evidence_overview["note"], "derived from existing app contract/status data only")
+
             missing_contract_data = _manual_delivery_current_app_integration_contract_data()
             missing_contract_data.pop("intraperiod_review_stdout_json")
             write_surface_files(surface_dir, missing_contract_data)
@@ -839,6 +945,7 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Active Plan Summary</section>",
                         "<section>Manual Action Checklist</section>",
                         "<section>Operator Triage Summary</section>",
+                        "<section>Integrated Evidence Overview</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
@@ -849,7 +956,9 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>operator_status_diagnostic</section>",
                         "<section>safe_config_schema_audit</section>",
                         "<section>intraperiod_review_stdout_json</section>",
+                        "<section>operator_triage_summary</section>",
                         "<section>manual_action_checklist_surface</section>",
+                        "<section>present=true / ready_or_valid=true / execution_required=false</section>",
                         "<section>derived from existing app contract data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
