@@ -14566,6 +14566,14 @@ def _manual_delivery_current_app_surface_validation_data(
         "safe_config_schema_audit_safety_boundary": expected_safe_config_schema_audit["safety_boundary"],
         "operator_triage_summary": operator_triage_summary,
         "integrated_evidence_overview": integrated_evidence_overview,
+        "integrated_evidence_overview_schema_version": integrated_evidence_overview["schema_version"],
+        "integrated_evidence_overview_summary_status": integrated_evidence_overview["summary_status"],
+        "integrated_evidence_overview_all_evidence_present": integrated_evidence_overview["all_evidence_present"],
+        "integrated_evidence_overview_all_evidence_ready": integrated_evidence_overview["all_evidence_ready"],
+        "integrated_evidence_overview_report_only": integrated_evidence_overview["report_only"],
+        "integrated_evidence_overview_formal_go": integrated_evidence_overview["formal_go"],
+        "integrated_evidence_overview_automatic_order_allowed": integrated_evidence_overview["automatic_order_allowed"],
+        "integrated_evidence_overview_human_decides_manually": integrated_evidence_overview["human_decides_manually"],
     }
 
 

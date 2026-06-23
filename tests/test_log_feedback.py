@@ -765,6 +765,43 @@ class LogFeedbackTest(unittest.TestCase):
                 integrated_evidence_overview["evidence"]["manual_action_checklist_surface"]["execution_required"]
             )
             self.assertEqual(integrated_evidence_overview["note"], "derived from existing app contract/status data only")
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_schema_version"],
+                integrated_evidence_overview["schema_version"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_summary_status"],
+                integrated_evidence_overview["summary_status"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_all_evidence_present"],
+                integrated_evidence_overview["all_evidence_present"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_all_evidence_ready"],
+                integrated_evidence_overview["all_evidence_ready"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_report_only"],
+                integrated_evidence_overview["report_only"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_formal_go"],
+                integrated_evidence_overview["formal_go"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_automatic_order_allowed"],
+                integrated_evidence_overview["automatic_order_allowed"],
+            )
+            self.assertEqual(
+                validation_data["integrated_evidence_overview_human_decides_manually"],
+                integrated_evidence_overview["human_decides_manually"],
+            )
+            self.assertTrue(validation_data["integrated_evidence_overview_report_only"])
+            self.assertFalse(validation_data["integrated_evidence_overview_formal_go"])
+            self.assertFalse(validation_data["integrated_evidence_overview_automatic_order_allowed"])
+            self.assertTrue(validation_data["integrated_evidence_overview_human_decides_manually"])
+            self.assertNotIn("execution_required", validation_data["integrated_evidence_overview"])
 
             missing_contract_data = _manual_delivery_current_app_integration_contract_data()
             missing_contract_data.pop("intraperiod_review_stdout_json")
