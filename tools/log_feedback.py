@@ -14240,6 +14240,14 @@ def _manual_delivery_current_app_surface_validation_data(
         "paper_positions_integration": False,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
         "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
+        "operator_status_diagnostic_contract": True,
+        "operator_status_wrapper_command": expected_operator_status_diagnostic["wrapper_command"],
+        "operator_status_check_command": expected_operator_status_diagnostic["wrapper_check_command"],
+        "operator_status_json_required": expected_operator_status_diagnostic["json_required"],
+        "operator_status_check_exit_codes": expected_operator_status_diagnostic["check_exit_codes"],
+        "operator_status_contract_only": True,
+        "operator_status_command_executed": False,
+        "operator_status_safety_boundary": expected_operator_status_diagnostic["safety_boundary"],
     }
 
 

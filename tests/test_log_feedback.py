@@ -470,6 +470,26 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertEqual(validation_data["surface_status"], "valid_ready_for_human_review")
             self.assertTrue(validation_data["current_manual_delivery_app_ready"])
             self.assertFalse(validation_data["automatic_order_allowed"])
+            self.assertTrue(validation_data["operator_status_diagnostic_contract"])
+            self.assertEqual(validation_data["operator_status_wrapper_command"], "./.venv312/bin/python tools/operator_status.py")
+            self.assertEqual(validation_data["operator_status_check_command"], "./.venv312/bin/python tools/operator_status.py --check")
+            self.assertFalse(validation_data["operator_status_json_required"])
+            self.assertEqual(
+                validation_data["operator_status_check_exit_codes"],
+                {
+                    "ok": 0,
+                    "waiting_for_html_cycle": 2,
+                    "startup_status_unavailable": 3,
+                },
+            )
+            self.assertTrue(validation_data["operator_status_contract_only"])
+            self.assertFalse(validation_data["operator_status_command_executed"])
+            self.assertIn("report/local diagnostics only", validation_data["operator_status_safety_boundary"])
+            self.assertIn("no FORMAL_GO", validation_data["operator_status_safety_boundary"])
+            self.assertIn("no automatic order", validation_data["operator_status_safety_boundary"])
+            self.assertIn("no exchange fetch", validation_data["operator_status_safety_boundary"])
+            self.assertIn("no private/account/order endpoints", validation_data["operator_status_safety_boundary"])
+            self.assertIn("no secrets", validation_data["operator_status_safety_boundary"])
 
             missing_contract_data = _manual_delivery_current_app_integration_contract_data()
             missing_contract_data.pop("intraperiod_review_stdout_json")
