@@ -684,6 +684,18 @@ def _raw_mail_text(result: dict[str, Any], display_context: dict[str, Any]) -> s
     return "\n".join(lines)
 
 
+def _manual_support_reference_items() -> list[tuple[str, str]]:
+    return [
+        ("事前生成/検証", "scripts/refresh_current_manual_delivery_app_surface.command"),
+        ("ready gate", "refresh-and-check-current-manual-delivery-app-surface --stdout-json"),
+        ("確認入口", "local/manual_delivery_app_surface/index.html"),
+        ("Dashboard", "local/manual_delivery_app_surface/app-dashboard.html"),
+        ("Ready JSON", "local/manual_delivery_app_surface/app-ready.json"),
+        ("Snapshot", "local/manual_delivery_app_surface/app-snapshot.json"),
+        ("Manifest", "local/manual_delivery_app_surface/app-surface-manifest.json"),
+    ]
+
+
 def build_notification_detail_html(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
     notification_context = build_notification_context(result)
@@ -726,6 +738,14 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
         f'<strong>{esc(label)}:</strong> {esc(value)}'
         '</div></li>'
         for label, value in active_status_rows
+    )
+    manual_support_reference_items = _manual_support_reference_items()
+    manual_support_reference_list_html = "".join(
+        '<li><strong>{label}:</strong> <code>{value}</code></li>'.format(
+            label=esc(label),
+            value=esc(value),
+        )
+        for label, value in manual_support_reference_items
     )
 
     metric_points = [
@@ -1354,6 +1374,18 @@ def build_notification_detail_html(result: dict[str, Any]) -> str:
       <h2>待機理由または注意点</h2>
       <div class="reason-grid">{reason_cards_html}</div>
       <ul>{wait_reason_html}</ul>
+    </section>
+
+    <section class="section">
+      <h2>Ver03-v4 手動確認サポート</h2>
+      <div class="panel">
+        <p>この公開HTMLレポートは現在の手動取引判断のmain UI。</p>
+        <p>通知メールは入口。</p>
+        <p>local dashboard / app surface は確認と将来の承認・自動化の土台。</p>
+        <p>3つは同じ判断ソースから出します。別判断系にしません。</p>
+        <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <ul>{manual_support_reference_list_html}</ul>
+      </div>
     </section>
 
     {(

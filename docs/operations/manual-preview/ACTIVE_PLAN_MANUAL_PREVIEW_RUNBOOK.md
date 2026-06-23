@@ -17,6 +17,7 @@ Purpose: report-only human manual trading support preview.
 - Notification mail remains the triage / entry point.
 - Local app surface remains the confirmation / future automation surface.
 - All of these surfaces must stay report-only and human-decided.
+- `src/notification/detail_page.py` now includes the Ver03-v4手動確認サポート section so the public HTML report also points to the local app surface ready-gate and dashboard.
 
 ## Workflow
 
