@@ -7968,6 +7968,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
     def test_refresh_current_manual_delivery_app_surface_launcher_script_exists_and_is_shell_safe(self) -> None:
         script_path = BASE_DIR / "scripts" / "refresh_current_manual_delivery_app_surface.command"
         self.assertTrue(script_path.exists())
+        self.assertTrue(os.access(script_path, os.X_OK))
         script_text = script_path.read_text(encoding="utf-8")
         self.assertIn("refresh-and-check-current-manual-delivery-app-surface --stdout-json", script_text)
         self.assertIn("local/manual_delivery_app_surface/index.html", script_text)
