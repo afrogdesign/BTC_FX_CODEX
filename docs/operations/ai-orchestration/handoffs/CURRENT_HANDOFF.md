@@ -4,12 +4,12 @@ last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v4`
 canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-current_commit: 6f3a5c3104cb9141535e5081360be2e05cede763
-latest_reviewed_baseline: 6f3a5c3104cb9141535e5081360be2e05cede763
+current_commit: ea41bb3ba2afec6a35a31aaee98157250e7a49f5
+latest_reviewed_baseline: ea41bb3ba2afec6a35a31aaee98157250e7a49f5
 
 ## State
 
-Current handoff reflects the accepted Ver03-v4 manual action surface/mail milestone sequence, the accepted runtime/operator status milestone 216, the accepted operator status app contract / ready gate milestone 218, the accepted operator status diagnostics display milestone 221, the accepted operator status stdout JSON evidence milestone 223, the accepted safe config schema audit CLI and app surface integration milestone, the accepted operator triage summary integrated-surface milestone, and the accepted intraperiod milestone sequence 188/189/191/192/195/197/199/201 plus the human-readable current manual-delivery progress board update. There is no active handoff. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually. The safe_config_schema_audit integrated-surface milestone is aligned across app/app-surface evidence, public HTML, and notification mail. The operator_triage_summary integrated-surface milestone is aligned across current manual-delivery app surface validation stdout JSON, public HTML, and notification mail, and alias lookup includes `app_surface_validation`, `app_surface_validation_data`, `manual_delivery_app_surface_validation`, and `current_manual_delivery_app_surface_validation`. The integrated_evidence_overview milestone is aligned across current manual-delivery app dashboard, current manual-delivery app surface validation stdout JSON, public HTML report, and notification mail main and attention bodies, and rendering is evidence-present only without executing diagnostics.
+Current handoff reflects the accepted Ver03-v4 manual action surface/mail milestone sequence, the accepted runtime/operator status milestone 216, the accepted operator status app contract / ready gate milestone 218, the accepted operator status diagnostics display milestone 221, the accepted operator status stdout JSON evidence milestone 223, the accepted safe config schema audit CLI and app surface integration milestone, the accepted operator triage summary integrated-surface milestone, and the accepted integrated_evidence_overview app/public/mail milestone plus the compact ready-gate field and evidence-list reflection updates. There is no active handoff. The safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually. The safe_config_schema_audit integrated-surface milestone is aligned across app/app-surface evidence, public HTML, and notification mail. The operator_triage_summary integrated-surface milestone is aligned across current manual-delivery app surface validation stdout JSON, public HTML, and notification mail, and alias lookup includes `app_surface_validation`, `app_surface_validation_data`, `manual_delivery_app_surface_validation`, and `current_manual_delivery_app_surface_validation`. The integrated_evidence_overview milestone is aligned across current manual-delivery app dashboard, current manual-delivery app surface validation stdout JSON, public HTML report, and notification mail main and attention bodies; it exposes compact ready-gate fields, machine-readable evidence lists, and rendering is evidence-present only without executing diagnostics.
 
 ## Safety Boundary
 
@@ -23,7 +23,7 @@ Current handoff reflects the accepted Ver03-v4 manual action surface/mail milest
 
 ## Next Decision
 
-Continue with local/report-only operator tooling, diagnostics, and evidence-based accuracy using the intraperiod review workflow and runtime/operator status diagnostics. Daily-sync wiring, exchange fetch, trading logic changes, private/order endpoints, runtime behavior, notification sending, and paper_positions.csv remain out of scope.
+Continue with local/report-only operator tooling, diagnostics, and evidence-based accuracy using the intraperiod review workflow, app contract exposure, public HTML report surface, runtime/operator status diagnostics, and integrated_evidence_overview evidence/list reflection. Daily-sync wiring, exchange fetch, trading logic changes, private/order endpoints, runtime behavior, notification sending, and paper_positions.csv remain out of scope.
 
 ## Deferred Follow-up / Post-build Check
 
