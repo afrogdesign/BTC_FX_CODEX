@@ -41,9 +41,9 @@ def _write_html(base_dir: Path, relative_path: str, *, mtime: float) -> Path:
     return path
 
 
-def _run_cli(base_dir: Path) -> subprocess.CompletedProcess[str]:
+def _run_cli(base_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH)],
+        [sys.executable, str(SCRIPT_PATH), *args],
         cwd=base_dir,
         capture_output=True,
         text=True,
@@ -137,6 +137,28 @@ class RuntimePublicStatusCliTest(unittest.TestCase):
         self.assertFalse(payload["html_after_startup"])
         self.assertEqual(payload["operator_status"], "startup_status_unavailable")
         self.assertEqual(payload["operator_message"], "startup status unavailable")
+
+    def test_cli_pretty_mode_is_human_readable_and_safe(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            _write_startup_status(base_dir)
+            _write_html(base_dir, "ver03-v4/main/20260623_101500.html", mtime=datetime(2026, 6, 23, 10, 16, tzinfo=timezone.utc).timestamp())
+
+            completed = _run_cli(base_dir, "--pretty")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertNotIn("{", completed.stdout)
+        self.assertIn("operator_status: ok", completed.stdout)
+        self.assertIn("operator_message: post-startup public HTML found", completed.stdout)
+        self.assertIn("next_report_time: 2026-06-23T20:05:00+09:00", completed.stdout)
+        self.assertIn("latest_html_path: logs/notifications_html/ver03-v4/main/20260623_101500.html", completed.stdout)
+        self.assertIn("latest_html_mtime: 2026-06-23T10:16:00Z", completed.stdout)
+        self.assertIn("html_after_startup: true", completed.stdout)
+        self.assertNotIn("/Users/", completed.stdout)
+        self.assertNotIn("OPENAI_API_KEY", completed.stdout)
+        self.assertNotIn("SMTP_PASSWORD", completed.stdout)
+        self.assertNotIn("private/order", completed.stdout)
+        self.assertNotIn("automatic_order_allowed=true", completed.stdout)
 
     def test_html_after_startup_handles_disappearing_html_path(self) -> None:
         from tools.runtime_public_status import _html_after_startup

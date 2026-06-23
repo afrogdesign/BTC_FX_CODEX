@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -124,9 +125,45 @@ def build_runtime_public_status(base_dir: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _format_pretty_status(payload: dict[str, Any]) -> str:
+    lines = [
+        "runtime_public_status",
+        f"operator_status: {payload['operator_status']}",
+        f"operator_message: {payload['operator_message']}",
+        f"startup_status_available: {str(bool(payload['startup_status_available'])).lower()}",
+        f"html_after_startup: {str(bool(payload['html_after_startup'])).lower()}",
+    ]
+    if payload.get("timestamp_utc"):
+        lines.append(f"timestamp_utc: {payload['timestamp_utc']}")
+    if payload.get("pid") is not None:
+        lines.append(f"pid: {payload['pid']}")
+    if payload.get("timezone"):
+        lines.append(f"timezone: {payload['timezone']}")
+    if payload.get("next_report_time"):
+        lines.append(f"next_report_time: {payload['next_report_time']}")
+    if payload.get("report_times_count") is not None:
+        lines.append(f"report_times_count: {payload['report_times_count']}")
+    if payload.get("latest_html_path"):
+        lines.append(f"latest_html_path: {payload['latest_html_path']}")
+    if payload.get("latest_html_mtime"):
+        lines.append(f"latest_html_mtime: {payload['latest_html_mtime']}")
+    return "\n".join(lines)
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Summarize runtime startup and public HTML status")
+    parser.add_argument("--pretty", action="store_true", help="print a human-readable summary instead of JSON")
+    return parser
+
+
 def main() -> int:
+    parser = _build_arg_parser()
+    args = parser.parse_args()
     payload = build_runtime_public_status()
-    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    if args.pretty:
+        print(_format_pretty_status(payload))
+    else:
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 
 
