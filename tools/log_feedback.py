@@ -13641,6 +13641,7 @@ def _manual_delivery_current_app_surface_index_html(
         ("app-contract.json", "Current App Contract JSON"),
         ("app-snapshot.json", "Current App Snapshot JSON"),
         ("app-snapshot-status.json", "Current App Snapshot Status JSON"),
+        ("app-surface-manifest.json", "Current App Surface Manifest JSON"),
     ]
     list_items = "\n".join(
         f"        <li><a href=\"{html.escape(filename)}\">{html.escape(label)}</a></li>"
@@ -13828,7 +13829,43 @@ def _write_current_manual_delivery_app_surface_outputs(
     )
     index_html_path.write_text(index_html, encoding="utf-8")
 
+    app_surface_manifest_json_path = output_dir / "app-surface-manifest.json"
+    app_surface_manifest_data = _manual_delivery_current_app_surface_manifest_data(output_dir=output_dir)
+    app_surface_manifest_json_path.write_text(
+        json.dumps(app_surface_manifest_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
     return output_dir
+
+
+def _manual_delivery_current_app_surface_manifest_data(*, output_dir: Path) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_surface_manifest.v1",
+        "surface_status": "ready_for_human_review",
+        "app_surface_dir": str(output_dir),
+        "entrypoint": "index.html",
+        "files": {
+            "index_html": "index.html",
+            "app_dashboard_html": "app-dashboard.html",
+            "app_ready_json": "app-ready.json",
+            "app_contract_json": "app-contract.json",
+            "app_snapshot_json": "app-snapshot.json",
+            "app_snapshot_status_json": "app-snapshot-status.json",
+            "app_surface_manifest_json": "app-surface-manifest.json",
+        },
+        "commands": {
+            "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+            "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+            "surface_export": "export-current-manual-delivery-app-surface",
+        },
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
 
 
 def _manual_delivery_current_app_surface_validation_data(
@@ -13842,6 +13879,7 @@ def _manual_delivery_current_app_surface_validation_data(
     app_contract_json_path = app_surface_dir / "app-contract.json"
     app_snapshot_json_path = app_surface_dir / "app-snapshot.json"
     app_snapshot_status_json_path = app_surface_dir / "app-snapshot-status.json"
+    app_surface_manifest_json_path = app_surface_dir / "app-surface-manifest.json"
     required_paths = [
         index_html_path,
         app_dashboard_html_path,
@@ -13849,6 +13887,7 @@ def _manual_delivery_current_app_surface_validation_data(
         app_contract_json_path,
         app_snapshot_json_path,
         app_snapshot_status_json_path,
+        app_surface_manifest_json_path,
     ]
     for required_path in required_paths:
         if not required_path.exists():
@@ -13864,6 +13903,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "app-contract.json",
         "app-snapshot.json",
         "app-snapshot-status.json",
+        "app-surface-manifest.json",
         "report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]:
         if expected_text not in index_html_text:
@@ -13876,6 +13916,7 @@ def _manual_delivery_current_app_surface_validation_data(
     app_contract_data = _load_json_object(app_contract_json_path, parser)
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
     app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
+    app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
 
     if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
         message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
@@ -13905,6 +13946,57 @@ def _manual_delivery_current_app_surface_validation_data(
         if parser is None:
             raise ValueError(message)
         parser.error(message)
+
+    if str(app_surface_manifest_data.get("schema_version", "")).strip() != "manual_delivery_app_surface_manifest.v1":
+        message = f"current manual delivery app surface app-surface-manifest JSON schema_version must be manual_delivery_app_surface_manifest.v1: {app_surface_manifest_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("surface_status") != "ready_for_human_review":
+        message = "current manual delivery app surface app-surface-manifest JSON surface_status must be ready_for_human_review"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("entrypoint") != "index.html":
+        message = "current manual delivery app surface app-surface-manifest JSON entrypoint must be index.html"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("files") != {
+        "index_html": "index.html",
+        "app_dashboard_html": "app-dashboard.html",
+        "app_ready_json": "app-ready.json",
+        "app_contract_json": "app-contract.json",
+        "app_snapshot_json": "app-snapshot.json",
+        "app_snapshot_status_json": "app-snapshot-status.json",
+        "app_surface_manifest_json": "app-surface-manifest.json",
+    }:
+        message = "current manual delivery app surface app-surface-manifest JSON files must match exported surface files"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("commands") != {
+        "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+        "surface_export": "export-current-manual-delivery-app-surface",
+    }:
+        message = "current manual delivery app surface app-surface-manifest JSON commands must match exported surface commands"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_surface_manifest_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-surface-manifest JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
 
     if str(app_snapshot_data.get("schema_version", "")).strip() != "manual_delivery_app_snapshot.v1":
         message = f"current manual delivery app surface app-snapshot JSON schema_version must be manual_delivery_app_snapshot.v1: {app_snapshot_data.get('schema_version')}"
@@ -13961,6 +14053,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "app_contract_json": str(app_contract_json_path),
         "app_snapshot_json": str(app_snapshot_json_path),
         "app_snapshot_status_json": str(app_snapshot_status_json_path),
+        "app_surface_manifest_json": str(app_surface_manifest_json_path),
         "current_manual_delivery_app_ready": True,
         "readiness_status": "ready_for_human_review",
         "allowed_next_action": "human_review_only",
@@ -13970,6 +14063,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "external_notification_allowed": False,
         "paper_positions_integration": False,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
     }
 
 
@@ -13998,6 +14092,8 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
         "- surface_contract_file: local/manual_delivery_app_surface/app-contract.json",
         "- surface_snapshot_file: local/manual_delivery_app_surface/app-snapshot.json",
         "- surface_snapshot_status_file: local/manual_delivery_app_surface/app-snapshot-status.json",
+        "- surface_manifest_file: local/manual_delivery_app_surface/app-surface-manifest.json",
+        "- surface_manifest_schema_version: manual_delivery_app_surface_manifest.v1",
         "- surface_mode: static_html_and_json_only",
         "- stdout_mode: json_only",
         "- required_ready_keys: schema_version, current_manual_delivery_app_ready, readiness_status, allowed_next_action, app_snapshot_status_json, app_snapshot_status, snapshot_status, current_manual_delivery_ready, display_mode, primary_action, human_review_required, trade_execution_allowed, automatic_order_allowed, external_notification_allowed, paper_positions_integration, source_readiness, actionability_label, human_action, shadow_decision_enabled, safety_boundary",
@@ -14040,6 +14136,8 @@ def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
         "surface_contract_file": "local/manual_delivery_app_surface/app-contract.json",
         "surface_snapshot_file": "local/manual_delivery_app_surface/app-snapshot.json",
         "surface_snapshot_status_file": "local/manual_delivery_app_surface/app-snapshot-status.json",
+        "surface_manifest_file": "local/manual_delivery_app_surface/app-surface-manifest.json",
+        "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
         "surface_mode": "static_html_and_json_only",
         "stdout_mode": "json_only",
         "required_ready_keys": [

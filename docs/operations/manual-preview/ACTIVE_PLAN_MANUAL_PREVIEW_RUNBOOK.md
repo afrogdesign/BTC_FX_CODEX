@@ -99,6 +99,7 @@ Purpose: report-only human manual trading support preview.
 - Use `write-current-manual-delivery-app-dashboard` as the local app/operator visual surface; it renders the current validated snapshot/status as static HTML with no JS or network.
 - Add `--write-app-dashboard` to `refresh-current-manual-delivery-app` when you want that same refresh to also write `app-dashboard.html` alongside the snapshot/status outputs.
 - Use `export-current-manual-delivery-app-surface` as the recommended local app/operator surface export; it writes `index.html`, `app-dashboard.html`, `app-ready.json`, `app-contract.json`, `app-snapshot.json`, and `app-snapshot-status.json` under `local/manual_delivery_app_surface`.
+- `app-surface-manifest.json` is the app-facing file list and command manifest for the exported local app surface.
 - Use `check-current-manual-delivery-app-surface --stdout-json` to validate the exported app surface bundle before local app/operator use.
 - `refresh-and-check-current-manual-delivery-app-surface --stdout-json` is the app startup/preflight gate: refresh, export, and self-contained validate in one run.
 - Use `describe-current-manual-delivery-app-contract --stdout-json` when you want the current app integration contract to include the local app surface bundle paths and commands for app integration.
