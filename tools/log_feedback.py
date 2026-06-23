@@ -17795,6 +17795,16 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_intraperiod_parser.add_argument("--date-to", default="")
     active_plan_intraperiod_parser.add_argument("--evaluation-window-hours", type=float, default=24.0)
 
+    active_plan_intraperiod_cli_parser = subparsers.add_parser("build-active-plan-intraperiod-outcomes")
+    active_plan_intraperiod_cli_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
+    active_plan_intraperiod_cli_parser.add_argument("--ohlcv-csv", required=True)
+    active_plan_intraperiod_cli_parser.add_argument(
+        "--output-csv",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    active_plan_intraperiod_cli_parser.add_argument("--timeout-hours", type=float, default=24.0)
+    active_plan_intraperiod_cli_parser.add_argument("--now", default="")
+
     active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
     active_plan_candidate_outcomes_report_parser.add_argument("--candidates-path")
     active_plan_candidate_outcomes_report_parser.add_argument("--trades-path")
@@ -18570,6 +18580,29 @@ def main() -> None:
             evaluation_window_hours=float(args.evaluation_window_hours),
         )
         print(path)
+        return
+
+    if args.command == "build-active-plan-intraperiod-outcomes":
+        candidates_csv = Path(args.candidates_csv)
+        ohlcv_csv = Path(args.ohlcv_csv)
+        output_csv = Path(args.output_csv)
+        now_text = str(args.now or "").strip()
+        now = None
+        if now_text:
+            now = _parse_dt(now_text)
+            if now is None:
+                parser.error(f"invalid --now datetime: {now_text}")
+        ohlcv_df = pd.read_csv(ohlcv_csv)
+        _ensure_parent(output_csv)
+        output_df = write_active_plan_intraperiod_outcomes(
+            candidates_csv_path=candidates_csv,
+            ohlcv_df=ohlcv_df,
+            output_csv_path=output_csv,
+            now=now,
+            timeout_hours=float(args.timeout_hours),
+        )
+        sys.stdout.write(f"active_plan_intraperiod_outcomes_csv={output_csv}\n")
+        sys.stdout.write(f"row_count={len(output_df)}\n")
         return
 
     if args.command == "build-active-plan-candidate-outcomes-report":
