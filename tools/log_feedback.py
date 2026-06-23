@@ -17692,6 +17692,16 @@ def _default_report_path(base_dir: Path, period: str) -> Path:
     return base_dir / "運用資料" / "reports" / f"feedback_monthly_{now.strftime('%Y-%m')}.md"
 
 
+def _default_active_plan_intraperiod_report_path(base_dir: Path) -> Path:
+    return (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="BTC monitor のログ活用基盤ツール")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -17819,6 +17829,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     active_plan_intraperiod_cli_parser.add_argument("--timeout-hours", type=float, default=24.0)
     active_plan_intraperiod_cli_parser.add_argument("--now", default="")
+
+    active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
+    active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
+    active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
+    active_plan_intraperiod_review_parser.add_argument(
+        "--outcomes-csv",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    active_plan_intraperiod_review_parser.add_argument("--output-md")
+    active_plan_intraperiod_review_parser.add_argument("--timeout-hours", type=float, default=24.0)
+    active_plan_intraperiod_review_parser.add_argument("--now", default="")
+    active_plan_intraperiod_review_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_review_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_review_parser.add_argument("--limit", type=int, default=10)
 
     active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
     active_plan_candidate_outcomes_report_parser.add_argument("--candidates-path")
@@ -18620,6 +18644,39 @@ def main() -> None:
         sys.stdout.write(f"row_count={len(output_df)}\n")
         return
 
+    if args.command == "build-active-plan-intraperiod-review":
+        candidates_csv = Path(args.candidates_csv)
+        ohlcv_csv = Path(args.ohlcv_csv)
+        outcomes_csv = Path(args.outcomes_csv)
+        output_md = Path(args.output_md) if args.output_md else _default_active_plan_intraperiod_report_path(base_dir)
+        now_text = str(args.now or "").strip()
+        now = None
+        if now_text:
+            now = _parse_dt(now_text)
+            if now is None:
+                parser.error(f"invalid --now datetime: {now_text}")
+        ohlcv_df = pd.read_csv(ohlcv_csv)
+        _ensure_parent(outcomes_csv)
+        output_df = write_active_plan_intraperiod_outcomes(
+            candidates_csv_path=candidates_csv,
+            ohlcv_df=ohlcv_df,
+            output_csv_path=outcomes_csv,
+            now=now,
+            timeout_hours=float(args.timeout_hours),
+        )
+        build_active_plan_candidate_intraperiod_outcomes_report(
+            base_dir=base_dir,
+            intraperiod_outcomes_path=outcomes_csv,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        sys.stdout.write(f"active_plan_intraperiod_outcomes_csv={outcomes_csv}\n")
+        sys.stdout.write(f"active_plan_intraperiod_report_md={output_md}\n")
+        sys.stdout.write(f"row_count={len(output_df)}\n")
+        return
+
     if args.command == "build-active-plan-candidate-outcomes-report":
         report_date = str(args.active_plan_report_date or "").strip()
         output_md = Path(args.output_md) if args.output_md else None
@@ -18654,13 +18711,7 @@ def main() -> None:
             date_to=str(args.date_to),
             limit=int(args.limit),
         )
-        resolved_output_md = output_md or (
-            base_dir
-            / "運用資料"
-            / "reports"
-            / "analysis"
-            / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
-        )
+        resolved_output_md = output_md or _default_active_plan_intraperiod_report_path(base_dir)
         print(resolved_output_md)
         return
 

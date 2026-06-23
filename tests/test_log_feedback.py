@@ -5313,6 +5313,157 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((base_dir / "active_plan_candidate_intraperiod_outcomes.csv").exists())
 
+    def test_build_active_plan_intraperiod_review_cli_builds_csv_and_report_from_local_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            candidates_csv = base_dir / "active_plan_candidates.csv"
+            ohlcv_csv = base_dir / "active_plan_intraperiod_ohlcv.csv"
+            outcomes_csv = base_dir / "active_plan_candidate_intraperiod_outcomes.csv"
+            report_md = base_dir / "active_plan_candidate_intraperiod_outcomes_report.md"
+
+            with candidates_csv.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-review",
+                        "source_signal_id": "sig-review",
+                        "timestamp_jst": "2026-06-09T09:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "stop_loss": "95",
+                        "tp1": "110",
+                        "tp2": "120",
+                    }
+                )
+
+            with ohlcv_csv.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-09T09:00:00+09:00",
+                        "open": "99.5",
+                        "high": "100.5",
+                        "low": "99.0",
+                        "close": "100.0",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-09T09:15:00+09:00",
+                        "open": "100.0",
+                        "high": "121.0",
+                        "low": "100.0",
+                        "close": "119.0",
+                    }
+                )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BASE_DIR / "tools" / "log_feedback.py"),
+                    "build-active-plan-intraperiod-review",
+                    "--candidates-csv",
+                    str(candidates_csv),
+                    "--ohlcv-csv",
+                    str(ohlcv_csv),
+                    "--outcomes-csv",
+                    str(outcomes_csv),
+                    "--output-md",
+                    str(report_md),
+                    "--now",
+                    "2026-06-09T10:00:00+09:00",
+                ],
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertIn("active_plan_intraperiod_outcomes_csv=", result.stdout)
+            self.assertIn("active_plan_intraperiod_report_md=", result.stdout)
+            self.assertIn("row_count=1", result.stdout)
+            self.assertTrue(outcomes_csv.exists())
+            self.assertTrue(report_md.exists())
+
+            with outcomes_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["candidate_id"], "cand-review")
+            self.assertEqual(row["signal_id"], "sig-review")
+            self.assertEqual(row["outcome"], "tp2_first")
+            self.assertEqual(row["first_exit_reason"], "tp2")
+            self.assertIn("mfe_r", row)
+            self.assertIn("mae_r", row)
+
+            report = report_md.read_text(encoding="utf-8")
+            self.assertIn("BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価", report)
+            self.assertIn("`tp2_first`: 1件", report)
+            self.assertIn("local CSV only", report)
+            self.assertIn("no exchange fetch", report)
+            self.assertIn("no daily-sync wiring", report)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", report)
+
+    def test_build_active_plan_intraperiod_review_cli_fails_when_ohlcv_missing(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            candidates_csv = base_dir / "active_plan_candidates.csv"
+            candidates_csv.write_text(
+                "\n".join(
+                    [
+                        "candidate_id,source_signal_id,timestamp_jst,candidate_type,active_primary_action,side,entry_mode,entry_price,stop_loss,tp1,tp2",
+                        "cand-review,sig-review,2026-06-09T09:00:00+09:00,active_plan,enter_long,long,limit,100,95,110,120",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BASE_DIR / "tools" / "log_feedback.py"),
+                    "build-active-plan-intraperiod-review",
+                    "--candidates-csv",
+                    str(candidates_csv),
+                    "--ohlcv-csv",
+                    str(base_dir / "missing_ohlcv.csv"),
+                    "--outcomes-csv",
+                    str(base_dir / "active_plan_candidate_intraperiod_outcomes.csv"),
+                    "--output-md",
+                    str(base_dir / "active_plan_candidate_intraperiod_outcomes_report.md"),
+                ],
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((base_dir / "active_plan_candidate_intraperiod_outcomes.csv").exists())
+            self.assertFalse((base_dir / "active_plan_candidate_intraperiod_outcomes_report.md").exists())
+
     def test_build_active_plan_candidate_intraperiod_outcomes_report_writes_default_markdown_and_summarizes_counts(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
