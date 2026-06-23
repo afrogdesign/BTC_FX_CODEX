@@ -168,8 +168,8 @@
     <div class="meta">
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
       branch: <code>Ver03-v3</code> /
-      更新日: 2026-06-12 JST /
-      現在地: <code>BTCFX-20260612-116-ONE-COMMAND-LOCAL-FLOW-BASELINE-SYNC-FIX 完了</code>
+      更新日: 2026-06-23 JST /
+      現在地: <code>BTCFX-20260623-158-CURRENT-APP-INTEGRATION-CONTRACT 完了</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -191,24 +191,28 @@
         <div class="label">Current track</div>
       </div>
       <div class="metric">
-        <div class="num">6d2490f</div>
-        <div class="label">最新 reviewed product baseline</div>
+        <div class="num">91dfda6114da890c62f9248fc6dab2e9d9413bbd</div>
+        <div class="label">latest accepted implementation commit</div>
       </div>
       <div class="metric">
-        <div class="num">6d2490f</div>
-        <div class="label">最新 repo metadata sync HEAD</div>
+        <div class="num">9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</div>
+        <div class="label">latest reviewed metadata sync commit</div>
       </div>
       <div class="metric">
-        <div class="num">117/119/120</div>
-        <div class="label">accepted flow / REVIEW_ONLY / pending_review</div>
+        <div class="num">stdout-json / contract</div>
+        <div class="label">current milestone</div>
       </div>
       <div class="metric">
-        <div class="num">117</div>
-        <div class="label">next candidate / not completed</div>
+        <div class="num">refresh / check / describe</div>
+        <div class="label">canonical app/operator commands</div>
       </div>
       <div class="metric">
-        <div class="num">0</div>
-        <div class="label">live trading / automatic order</div>
+        <div class="num">app-snapshot + status</div>
+        <div class="label">stable files</div>
+      </div>
+      <div class="metric">
+        <div class="num">report-only</div>
+        <div class="label">safety boundary</div>
       </div>
     </section>
 
@@ -218,10 +222,12 @@
         <li>Current track は <code>Ver03-v3</code>。</li>
         <li>Original board は <code>Ver03-v1</code> 進捗ボードで、歴史的な起点を残したまま現在の状況を追跡している。</li>
         <li>Current repo branch は <code>Ver03-v3</code>。</li>
-        <li>Latest repo metadata sync HEAD は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code>。</li>
-        <li>Latest reviewed product baseline は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code>。</li>
-        <li>Current status は reviewed and E2E-verified source freshness guard を含む one-command local manual-delivery flow。</li>
-        <li><code>--source-stale-after-hours</code> により、local file mtimes だけで source freshness を visible にできる。</li>
+        <li>Latest accepted implementation commit は <code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code>。</li>
+        <li>Latest reviewed metadata sync commit は <code>9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</code>。</li>
+        <li>Current milestone は <code>single-command current manual-delivery app stdout-json path plus integration contract CLI</code>。</li>
+        <li>Canonical app/operator commands は <code>refresh-current-manual-delivery-app --stdout-json</code> / <code>check-current-manual-delivery-app-ready --stdout-json</code> / <code>describe-current-manual-delivery-app-contract --stdout-json</code>。</li>
+        <li>Stable files は <code>local/manual_delivery_handoff/app-snapshot.json</code> と <code>local/manual_delivery_handoff/app-snapshot-status.json</code>。</li>
+        <li>Safety boundary は report-only / not FORMAL_GO / no automatic order / human decides manually / no send-notify-trade-runtime-API-private-account-order behavior / no paper_positions integration。</li>
       </ul>
     </div>
 
@@ -393,7 +399,8 @@
         <li>Ver03-v1 は主に redesign / inventory / progress board / orchestration setup の段階だった。</li>
         <li>Ver03-v2 では implementation と diagnostic/manual-preview の土台を進めた。</li>
         <li>Ver03-v3 では local/report-only manual-delivery support flow を整備し、人間レビュー前提の local-only 運用に進んだ。</li>
-        <li>過去の reviewed baseline は <code>37a4bceaa2f4edaa9f7afc3f0b1ae87810dea4c3</code> だったが、現在の reviewed baseline は <code>6d2490fc521bc952bd25835a2d954dacdffd34d9</code> になっている。</li>
+        <li>その後の current manual-delivery app path では <code>refresh-current-manual-delivery-app --stdout-json</code> と <code>check-current-manual-delivery-app-ready --stdout-json</code> と <code>describe-current-manual-delivery-app-contract --stdout-json</code> が accepted になった。</li>
+        <li>現在の reviewed baseline は <code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code> と <code>9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</code> で表現される current accepted state になっている。</li>
         <li>現在も live trading や automatic order には進んでいない。</li>
       </ul>
     </section>
@@ -414,6 +421,9 @@
           <tr><td><code>write-latest-active-plan-manual-delivery-files-from-json</code></td><td><span class="badge done">DONE</span></td><td>JSON から bundle files を生成</td></tr>
           <tr><td><code>write-latest-manual-delivery-local-inbox</code></td><td><span class="badge done">DONE</span></td><td>JSON と bundle を人間レビュー用 Markdown に要約</td></tr>
           <tr><td><code>write-latest-manual-delivery-local-flow --source-stale-after-hours</code></td><td><span class="badge done">DONE</span></td><td>上記を 1 つの output-dir にまとめる one-command flow</td></tr>
+          <tr><td><code>refresh-current-manual-delivery-app --stdout-json</code></td><td><span class="badge done">DONE</span></td><td>current app/operator refresh を JSON-only stdout で出力</td></tr>
+          <tr><td><code>check-current-manual-delivery-app-ready --stdout-json</code></td><td><span class="badge done">DONE</span></td><td>app-snapshot-status を validated ready gate として読む</td></tr>
+          <tr><td><code>describe-current-manual-delivery-app-contract --stdout-json</code></td><td><span class="badge done">DONE</span></td><td>current app integration contract を introspect する</td></tr>
         </tbody>
       </table>
       <p class="small">source freshness guard は <code>source_readiness=ready</code> または <code>source_readiness=review_required_missing_or_stale_source</code> を明示する。</p>
@@ -430,6 +440,8 @@
         <li><code>bundle/package.txt</code></li>
         <li><code>bundle/README.txt</code></li>
         <li><code>inbox.md</code></li>
+        <li><code>app-snapshot.json</code></li>
+        <li><code>app-snapshot-status.json</code></li>
       </ul>
     </section>
 
@@ -439,12 +451,9 @@
         <li>report-only</li>
         <li>not FORMAL_GO</li>
         <li>no automatic order</li>
-        <li>ACTIVE_* guidance only</li>
-        <li>human must decide manually</li>
-        <li>no external notification integration</li>
-        <li>no clipboard/address-book integration</li>
+        <li>human decides manually</li>
+        <li>no send/notify/trade/runtime/API/private/account/order behavior</li>
         <li>no paper_positions.csv integration</li>
-        <li>no runtime/deploy/trading/API key/private endpoint changes</li>
       </ul>
     </section>
 
