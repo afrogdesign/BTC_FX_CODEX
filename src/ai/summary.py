@@ -315,7 +315,16 @@ def _operator_triage_summary_evidence(result: dict[str, Any]) -> dict[str, Any] 
     direct_evidence = result.get("operator_triage_summary")
     if isinstance(direct_evidence, dict):
         return direct_evidence
-    for container_key in ("app_contract_data", "app_contract", "notification_context", "display_context"):
+    for container_key in (
+        "app_contract_data",
+        "app_contract",
+        "notification_context",
+        "display_context",
+        "app_surface_validation",
+        "app_surface_validation_data",
+        "manual_delivery_app_surface_validation",
+        "current_manual_delivery_app_surface_validation",
+    ):
         container = result.get(container_key)
         if not isinstance(container, dict):
             continue

@@ -417,6 +417,70 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertNotIn("automatic_order_allowed=true", body)
         self.assertNotIn("入る条件がかなりそろっています", body)
 
+    def test_attention_summary_body_renders_operator_triage_summary_from_app_surface_validation_data(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-15T06:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "bias": "short",
+            "current_price": 70765.2,
+            "long_display_score": 38,
+            "short_display_score": 59,
+            "score_gap": -21,
+            "signals_4h": "wait",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "prelabel": "SWEEP_WAIT",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence": 41,
+            "confidence_direction_shadow": 62.0,
+            "confidence_execution_shadow": 28.0,
+            "confidence_wait_shadow": 64.0,
+            "warning_flags": ["Critical_zone_warning"],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
+            "app_surface_validation_data": {
+                "operator_triage_summary": {
+                    "summary_status": "ready_for_human_review",
+                    "all_evidence_present": True,
+                    "all_evidence_ready": True,
+                    "evidence": {
+                        "operator_status_diagnostic": {"present": True, "ready": True},
+                        "safe_config_schema_audit": {"present": True, "ready": True},
+                        "intraperiod_review_stdout_json": {"present": True, "ready": True},
+                        "manual_action_checklist_surface": {"present": True, "ready": True},
+                    },
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "note": "derived from existing app contract data only",
+                }
+            },
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Operator Triage Summary】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("operator_status_diagnostic present: true", body)
+        self.assertIn("safe_config_schema_audit ready: true", body)
+        self.assertIn("manual_action_checklist_surface ready: true", body)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+        self.assertNotIn("smtp", body.lower())
+        self.assertNotIn("Gmail", body)
+        self.assertNotIn("send_email", body)
+        self.assertNotIn("private/order", body)
+        self.assertNotIn("automatic_order_allowed=true", body)
+
     def test_operator_triage_summary_is_hidden_when_absent(self) -> None:
         payload = {
             "timestamp_jst": "2026-03-11T09:05:00+09:00",
@@ -489,6 +553,100 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertNotIn("【Operator Triage Summary】", body)
         self.assertNotIn("operator_status_diagnostic present:", body)
         self.assertNotIn("safe_config_schema_audit ready:", body)
+
+    def test_operator_triage_summary_is_rendered_from_app_surface_validation_data(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-11T09:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "API",
+            "prelabel": "ENTRY_OK",
+            "signal_tier": "strong_machine",
+            "bias": "long",
+            "current_price": 70356.3,
+            "confidence": 79,
+            "rr_estimate": 1.85,
+            "confidence_direction_shadow": 88.0,
+            "confidence_execution_shadow": 72.0,
+            "confidence_wait_shadow": 18.0,
+            "phase": "pullback",
+            "long_display_score": 72,
+            "short_display_score": 55,
+            "score_gap": 17,
+            "market_regime": "uptrend",
+            "signals_4h": "long",
+            "signals_1h": "long",
+            "signals_15m": "long",
+            "funding_rate_display": "ほぼ中立 (+0.0037%)",
+            "atr_ratio": 0.85,
+            "volume_ratio": 1.21,
+            "support_zones": [{"low": 69900.0, "high": 70010.0, "distance_from_price": 346.3}],
+            "resistance_zones": [{"low": 70450.0, "high": 70600.0, "distance_from_price": 93.7}],
+            "long_setup": {
+                "status": "ready",
+                "entry_zone": {"low": 70000.0, "high": 70100.0},
+                "stop_loss": 69700.0,
+                "tp1": 70800.0,
+                "tp2": 71200.0,
+            },
+            "short_setup": {
+                "status": "watch",
+                "entry_zone": {"low": 70600.0, "high": 70700.0},
+                "stop_loss": 70900.0,
+                "tp1": 70000.0,
+                "tp2": 69500.0,
+            },
+            "primary_setup_status": "ready",
+            "primary_setup_reason": "inside_entry_zone_with_trigger",
+            "trade_execution_gate": "pass",
+            "paper_order_status": "draft",
+            "warning_flags": [],
+            "risk_flags": [],
+            "no_trade_flags": [],
+            "ai_advice": {
+                "decision": "LONG",
+                "quality": "A",
+                "confidence": 0.82,
+                "primary_reason": "上方向は維持だが断定ではなく条件付きで見る局面。",
+                "next_condition": "出来高維持を確認",
+                "warnings": [],
+            },
+            "app_surface_validation_data": {
+                "operator_triage_summary": {
+                    "summary_status": "ready_for_human_review",
+                    "all_evidence_present": True,
+                    "all_evidence_ready": True,
+                    "evidence": {
+                        "operator_status_diagnostic": {"present": True, "ready": True},
+                        "safe_config_schema_audit": {"present": True, "ready": True},
+                        "intraperiod_review_stdout_json": {"present": True, "ready": True},
+                        "manual_action_checklist_surface": {"present": True, "ready": True},
+                    },
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "note": "derived from existing app contract data only",
+                }
+            },
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Operator Triage Summary】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("operator_status_diagnostic present: true", body)
+        self.assertIn("safe_config_schema_audit ready: true", body)
+        self.assertIn("manual_action_checklist_surface ready: true", body)
+        self.assertNotIn("smtp", body.lower())
+        self.assertNotIn("send_email", body)
+        self.assertNotIn("private/order", body)
+        self.assertNotIn("automatic_order_allowed=true", body)
 
     def test_machine_only_subject_warns_and_body_hides_internal_codes(self) -> None:
         payload = {

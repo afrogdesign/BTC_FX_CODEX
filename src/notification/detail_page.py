@@ -762,6 +762,14 @@ def _operator_triage_summary_html(
         display_context or {},
         result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
         result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
     ):
         if isinstance(container, dict) and isinstance(container.get("operator_triage_summary"), dict):
             evidence = container["operator_triage_summary"]

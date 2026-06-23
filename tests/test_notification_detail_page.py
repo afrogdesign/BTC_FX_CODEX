@@ -288,6 +288,42 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("private/order", attention_html)
         self.assertNotIn("automatic_order_allowed=true", attention_html)
 
+    def test_build_notification_detail_html_renders_operator_triage_summary_from_app_surface_validation_data(self) -> None:
+        payload = {
+            **_sample_detail_payload(),
+            "app_surface_validation_data": {
+                "operator_triage_summary": {
+                    "summary_status": "ready_for_human_review",
+                    "all_evidence_present": True,
+                    "all_evidence_ready": True,
+                    "evidence": {
+                        "operator_status_diagnostic": {"present": True, "ready": True},
+                        "safe_config_schema_audit": {"present": True, "ready": True},
+                        "intraperiod_review_stdout_json": {"present": True, "ready": True},
+                        "manual_action_checklist_surface": {"present": True, "ready": True},
+                    },
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "note": "derived from existing app contract data only",
+                }
+            },
+        }
+
+        html = build_notification_detail_html(payload)
+
+        self.assertIn("Operator Triage Summary", html)
+        self.assertIn("summary_status", html)
+        self.assertIn("all_evidence_present", html)
+        self.assertIn("operator_status_diagnostic present", html)
+        self.assertIn("safe_config_schema_audit ready", html)
+        self.assertIn("intraperiod_review_stdout_json ready", html)
+        self.assertIn("manual_action_checklist_surface ready", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertNotIn("smtp", html.lower())
+        self.assertNotIn("Gmail", html)
+        self.assertNotIn("send_email", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
+
     def test_build_notification_detail_html_hides_operator_triage_summary_when_absent(self) -> None:
         payload = _sample_detail_payload()
 
