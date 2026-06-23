@@ -547,6 +547,34 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("no exchange fetch", validation_data["operator_status_safety_boundary"])
             self.assertIn("no private/account/order endpoints", validation_data["operator_status_safety_boundary"])
             self.assertIn("no secrets", validation_data["operator_status_safety_boundary"])
+            self.assertTrue(validation_data["safe_config_schema_audit_contract"])
+            self.assertEqual(
+                validation_data["safe_config_schema_audit_command"],
+                "./.venv312/bin/python tools/safe_config_schema_audit.py",
+            )
+            self.assertEqual(
+                validation_data["safe_config_schema_audit_stdout_json_command"],
+                "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+            )
+            self.assertEqual(validation_data["safe_config_schema_audit_schema_version"], "safe_config_schema_audit.v1")
+            self.assertTrue(validation_data["safe_config_schema_audit_contract_only"])
+            self.assertFalse(validation_data["safe_config_schema_audit_command_executed_by_app"])
+            self.assertFalse(validation_data["safe_config_schema_audit_reads_env_values"])
+            self.assertFalse(validation_data["safe_config_schema_audit_reads_dotenv_values"])
+            self.assertFalse(validation_data["safe_config_schema_audit_calls_private_endpoints"])
+            self.assertFalse(validation_data["safe_config_schema_audit_calls_order_endpoints"])
+            self.assertFalse(validation_data["safe_config_schema_audit_live_trading_allowed"])
+            self.assertFalse(validation_data["safe_config_schema_audit_secret_values_exposed"])
+            self.assertIn("static config schema audit only", validation_data["safe_config_schema_audit_safety_boundary"])
+            self.assertIn("no load_config", validation_data["safe_config_schema_audit_safety_boundary"])
+            self.assertIn("no .env", validation_data["safe_config_schema_audit_safety_boundary"])
+            self.assertIn("no os.environ", validation_data["safe_config_schema_audit_safety_boundary"])
+            self.assertIn("no secrets", validation_data["safe_config_schema_audit_safety_boundary"])
+            self.assertIn(
+                "no private/account/order endpoints",
+                validation_data["safe_config_schema_audit_safety_boundary"],
+            )
+            self.assertIn("no live trading", validation_data["safe_config_schema_audit_safety_boundary"])
 
             missing_contract_data = _manual_delivery_current_app_integration_contract_data()
             missing_contract_data.pop("intraperiod_review_stdout_json")

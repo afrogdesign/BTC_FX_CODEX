@@ -14330,6 +14330,19 @@ def _manual_delivery_current_app_surface_validation_data(
         "operator_status_contract_only": True,
         "operator_status_command_executed": False,
         "operator_status_safety_boundary": expected_operator_status_diagnostic["safety_boundary"],
+        "safe_config_schema_audit_contract": True,
+        "safe_config_schema_audit_command": expected_safe_config_schema_audit["command"],
+        "safe_config_schema_audit_stdout_json_command": expected_safe_config_schema_audit["stdout_json_command"],
+        "safe_config_schema_audit_schema_version": expected_safe_config_schema_audit["schema_version"],
+        "safe_config_schema_audit_contract_only": expected_safe_config_schema_audit["contract_only"],
+        "safe_config_schema_audit_command_executed_by_app": expected_safe_config_schema_audit["command_executed_by_app"],
+        "safe_config_schema_audit_reads_env_values": expected_safe_config_schema_audit["reads_env_values"],
+        "safe_config_schema_audit_reads_dotenv_values": expected_safe_config_schema_audit["reads_dotenv_values"],
+        "safe_config_schema_audit_calls_private_endpoints": expected_safe_config_schema_audit["calls_private_endpoints"],
+        "safe_config_schema_audit_calls_order_endpoints": expected_safe_config_schema_audit["calls_order_endpoints"],
+        "safe_config_schema_audit_live_trading_allowed": expected_safe_config_schema_audit["live_trading_allowed"],
+        "safe_config_schema_audit_secret_values_exposed": expected_safe_config_schema_audit["secret_values_exposed"],
+        "safe_config_schema_audit_safety_boundary": expected_safe_config_schema_audit["safety_boundary"],
     }
 
 
