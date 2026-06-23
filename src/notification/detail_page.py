@@ -697,6 +697,59 @@ def _manual_support_reference_items() -> list[tuple[str, str]]:
     ]
 
 
+def _safe_config_schema_audit_html(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> str:
+    evidence: dict[str, Any] | None = None
+    for container in (
+        result,
+        notification_context or {},
+        display_context or {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+    ):
+        if isinstance(container, dict) and isinstance(container.get("safe_config_schema_audit"), dict):
+            evidence = container["safe_config_schema_audit"]
+            break
+    if not isinstance(evidence, dict) or not evidence:
+        return ""
+
+    def _value(key: str) -> str:
+        value = evidence.get(key)
+        if isinstance(value, bool):
+            return str(value).lower()
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        return str(value)
+
+    rows = [
+        ("command", _value("command")),
+        ("stdout JSON command", _value("stdout_json_command")),
+        ("schema_version", _value("schema_version")),
+        ("contract_only", _value("contract_only")),
+        ("command_executed_by_app", _value("command_executed_by_app")),
+        ("reads_env_values", _value("reads_env_values")),
+        ("reads_dotenv_values", _value("reads_dotenv_values")),
+        ("calls_private_endpoints", _value("calls_private_endpoints")),
+        ("calls_order_endpoints", _value("calls_order_endpoints")),
+        ("live_trading_allowed", _value("live_trading_allowed")),
+        ("secret_values_exposed", _value("secret_values_exposed")),
+        ("safety boundary", _value("safety_boundary")),
+    ]
+    rows_html = "".join(
+        f"<li><strong>{html.escape(label)}:</strong> {html.escape(value)}</li>" for label, value in rows
+    )
+    return f"""
+        <h3>Safe Config Schema Audit</h3>
+        <p>local/report-only の静的監査サポートです。<code>tools/safe_config_schema_audit.py</code> は実行しません。</p>
+        <p><strong>安全境界:</strong> local/report-only / no load_config / no .env / no os.environ / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order</p>
+        <p>app surface は契約にある安全な診断情報だけを表示し、結果を推測しません。</p>
+        <ul>{rows_html}</ul>
+    """
+
+
 def _runtime_startup_status_path(base_dir: Path) -> Path:
     return base_dir / "logs" / "runtime" / "startup_status.json"
 
@@ -879,6 +932,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
     ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
     runtime_startup_status_html = _runtime_startup_status_html(base_dir)
+    safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
     checklist_items = [
         ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
         (
@@ -1530,6 +1584,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <p>app surface / ready gate validation は <code>intraperiod_review_stdout_json</code> の契約露出を確認し、<strong>app contract</strong> と <strong>ready gate</strong> の整合だけを見ます。</p>
         <p>負荷や実行は行わず、<strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong> を維持します。</p>
         <p>negative boundary: no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO</p>
+        {safe_config_schema_audit_html}
         {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>

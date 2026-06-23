@@ -136,7 +136,27 @@ def _sample_detail_payload() -> dict[str, object]:
 
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
-        payload = _sample_detail_payload()
+        payload = {
+            **_sample_detail_payload(),
+            "safe_config_schema_audit": {
+                "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
+                "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+                "schema_version": "safe_config_schema_audit.v1",
+                "contract_only": True,
+                "command_executed_by_app": False,
+                "reads_env_values": False,
+                "reads_dotenv_values": False,
+                "calls_private_endpoints": False,
+                "calls_order_endpoints": False,
+                "live_trading_allowed": False,
+                "secret_values_exposed": False,
+                "safety_boundary": (
+                    "local/report-only / no load_config / no .env / no os.environ / "
+                    "no secret/API key exposure / no exchange/private/account/order endpoint access / "
+                    "no FORMAL_GO / no automatic order"
+                ),
+            },
+        }
 
         html = build_notification_detail_html(payload)
 
@@ -180,6 +200,19 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no secret/API key reading", html)
         self.assertIn("no automatic order", html)
         self.assertIn("no FORMAL_GO", html)
+        self.assertIn("Safe Config Schema Audit", html)
+        self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py", html)
+        self.assertIn("./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json", html)
+        self.assertIn("safe_config_schema_audit.v1", html)
+        self.assertIn("contract_only", html)
+        self.assertIn("command_executed_by_app", html)
+        self.assertIn("reads_env_values", html)
+        self.assertIn("reads_dotenv_values", html)
+        self.assertIn("calls_private_endpoints", html)
+        self.assertIn("calls_order_endpoints", html)
+        self.assertIn("live_trading_allowed", html)
+        self.assertIn("secret_values_exposed", html)
+        self.assertIn("local/report-only / no load_config / no .env / no os.environ / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order", html)
         self.assertIn("Entry mode", html)
         self.assertIn("Entry condition", html)
         self.assertIn("TP / SL", html)
@@ -226,6 +259,19 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("send_email", attention_html)
         self.assertNotIn("private/order", attention_html)
         self.assertNotIn("automatic_order_allowed=true", attention_html)
+
+    def test_build_notification_detail_html_hides_safe_config_schema_audit_when_absent(self) -> None:
+        payload = _sample_detail_payload()
+
+        html = build_notification_detail_html(payload)
+
+        self.assertNotIn("Safe Config Schema Audit", html)
+        self.assertNotIn("safe_config_schema_audit.v1", html)
+        self.assertIn("Ver03-v4 手動確認サポート", html)
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
 
     def test_build_notification_detail_html_shows_runtime_startup_status_section(self) -> None:
         payload = _sample_detail_payload()
