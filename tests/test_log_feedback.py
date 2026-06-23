@@ -68,6 +68,7 @@ from tools.log_feedback import (
     JST,
     _manual_delivery_current_app_dashboard_html,
     _manual_delivery_current_app_integration_contract_data,
+    _write_manual_delivery_current_app_integration_contract_outputs,
     _manual_delivery_current_app_surface_validation_data,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
@@ -182,6 +183,74 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertNotIn("send_email", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_manual_delivery_current_app_integration_contract_includes_intraperiod_review_stdout_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            output_md = base_dir / "app-contract.md"
+            output_json = base_dir / "app-contract.json"
+
+            markdown, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+                output_md=output_md,
+                output_json=output_json,
+            )
+
+            self.assertTrue(output_md.exists())
+            self.assertTrue(output_json.exists())
+            self.assertIn("build-active-plan-intraperiod-review --stdout-json", markdown)
+            self.assertIn("active_plan_intraperiod_review.v1", markdown)
+            self.assertIn("no exchange fetch", markdown)
+            self.assertIn("no daily-sync wiring", markdown)
+            self.assertIn("no secret/API key reading", markdown)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
+
+            contract_text = output_json.read_text(encoding="utf-8")
+            parsed = json.loads(contract_text)
+            self.assertEqual(contract_data, parsed)
+            self.assertIn("build-active-plan-intraperiod-review --stdout-json", contract_text)
+            self.assertIn("active_plan_intraperiod_review.v1", contract_text)
+            self.assertIn("report_only", contract_text)
+            self.assertIn("formal_go", contract_text)
+            self.assertIn("automatic_order_allowed", contract_text)
+            self.assertIn("exchange_fetch_allowed", contract_text)
+            self.assertIn("daily_sync_wiring", contract_text)
+            self.assertIn("secret_reading_allowed", contract_text)
+            self.assertIn("human_decides_manually", contract_text)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", contract_text)
+
+            intraperiod = parsed["intraperiod_review_stdout_json"]
+            self.assertEqual(intraperiod["entrypoint_command"], "build-active-plan-intraperiod-review --stdout-json")
+            self.assertEqual(intraperiod["schema_version"], "active_plan_intraperiod_review.v1")
+            self.assertEqual(
+                intraperiod["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertIn("local/report-only", intraperiod["allowed_behavior"])
+            self.assertIn("no exchange fetch", intraperiod["allowed_behavior"])
+            self.assertIn("no daily-sync wiring", intraperiod["allowed_behavior"])
+            self.assertIn("no secret/API key reading", intraperiod["allowed_behavior"])
+            self.assertIn("schema_version", intraperiod["output_fields"])
+            self.assertIn("command", intraperiod["output_fields"])
+            self.assertIn("candidates_csv", intraperiod["output_fields"])
+            self.assertIn("ohlcv_csv", intraperiod["output_fields"])
+            self.assertIn("outcomes_csv", intraperiod["output_fields"])
+            self.assertIn("report_md", intraperiod["output_fields"])
+            self.assertIn("row_count", intraperiod["output_fields"])
+            self.assertIn("report_only", intraperiod["output_fields"])
+            self.assertIn("formal_go", intraperiod["output_fields"])
+            self.assertIn("automatic_order_allowed", intraperiod["output_fields"])
+            self.assertIn("exchange_fetch_allowed", intraperiod["output_fields"])
+            self.assertIn("daily_sync_wiring", intraperiod["output_fields"])
+            self.assertIn("secret_reading_allowed", intraperiod["output_fields"])
+            self.assertIn("human_decides_manually", intraperiod["output_fields"])
+            self.assertIn("safety_boundary", intraperiod["output_fields"])
+            self.assertTrue(intraperiod["required_safety_flags"]["report_only"])
+            self.assertFalse(intraperiod["required_safety_flags"]["formal_go"])
+            self.assertFalse(intraperiod["required_safety_flags"]["automatic_order_allowed"])
+            self.assertFalse(intraperiod["required_safety_flags"]["exchange_fetch_allowed"])
+            self.assertFalse(intraperiod["required_safety_flags"]["daily_sync_wiring"])
+            self.assertFalse(intraperiod["required_safety_flags"]["secret_reading_allowed"])
+            self.assertTrue(intraperiod["required_safety_flags"]["human_decides_manually"])
 
     def test_manual_delivery_current_app_surface_validation_data_requires_manual_action_checklist(self) -> None:
         def write_surface_files(surface_dir: Path, dashboard_html: str) -> None:
