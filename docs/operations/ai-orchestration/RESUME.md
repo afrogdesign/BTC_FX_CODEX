@@ -1,8 +1,8 @@
 # Resume Protocol
 
-last_updated: 2026-06-11
+last_updated: 2026-06-23
 repo: `afrogdesign/BTC_FX_CODEX`
-branch: `Ver03-v3`
+branch: `Ver03-v4`
 canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 
 ## Purpose
@@ -17,9 +17,10 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 1. `AGENTS.md`
 2. `docs/operations/ai-orchestration/RESUME.md`
 3. `docs/operations/ai-orchestration/CONTROL.md`
-4. `docs/operations/ai-orchestration/PROMPTS.md`
-5. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
-6. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, preferably the latest rows
+4. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`
+5. `docs/operations/ai-orchestration/PROMPTS.md`
+6. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
+7. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, preferably the latest rows
 
 `docs/operations/ai-orchestration/INITIAL_PROMPT.md` is the stable paste-in prompt for a brand-new thread.
 
@@ -32,6 +33,14 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 - The current next task must come from `CONTROL.md`, not chat memory.
 - `CONTROL.md` should stay lightweight: current state, current objective, safety boundary, validation rules, and next action only, not a full task history.
 - `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history; git/GitHub and the compact report are the commit evidence.
+
+## Ver03-v4 Strategy Guard
+
+- public HTML is the current main manual-trading UI.
+- notification mail is the triage / entry point.
+- local dashboard / app surface is the confirmation and future automation surface.
+- all three surfaces share one source of truth and must stay aligned.
+- when in doubt about direction, read `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` after `CONTROL.md`.
 
 ## Low-Cost Modes
 

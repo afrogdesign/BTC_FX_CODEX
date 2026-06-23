@@ -167,9 +167,9 @@
     <h1>BTC_FX_CODEX Ver03-v1 進捗ボード</h1>
     <div class="meta">
       repo: <code>afrogdesign/BTC_FX_CODEX</code> /
-      branch: <code>Ver03-v3</code> /
+      branch: <code>Ver03-v4</code> /
       更新日: 2026-06-23 JST /
-      現在地: <code>BTCFX-20260623-161-PROGRESS-BOARD-HUMAN-READABILITY 完了</code>
+      現在地: <code>BTCFX-20260623-178-VER03-V4-INTEGRATED-ROADMAP 完了</code>
     </div>
     <div class="progress-bar" aria-label="overall progress">
       <div class="progress-fill"></div>
@@ -187,7 +187,7 @@
   <main>
     <section class="summary-grid">
       <div class="metric">
-        <div class="num">Ver03-v3</div>
+        <div class="num">Ver03-v4</div>
         <div class="label">Current track</div>
       </div>
       <div class="metric">
@@ -216,6 +216,7 @@
       <h2>現在地を一言で</h2>
       <div class="notice">
         <ul>
+          <li>統合ロードマップの正本は <code>docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md</code>。public HTML が main UI、notification mail が entry、local dashboard が future automation foundation で、全て report-only / no automatic order のまま。</li>
           <li>今の current state は、<code>refresh-current-manual-delivery-app --stdout-json</code> で current manual-delivery app state を JSON-only で更新できる状態。</li>
           <li>read-side の readiness check は <code>check-current-manual-delivery-app-ready --stdout-json</code> で再実行できる。</li>
           <li>contract introspection は <code>describe-current-manual-delivery-app-contract --stdout-json</code> で確認できる。</li>
@@ -471,13 +472,14 @@
     </section>
 
     <section>
-      <h2>Ver03-v1 から Ver03-v3 への変化</h2>
+      <h2>Ver03-v1 から Ver03-v4 への変化</h2>
       <ul>
         <li>Ver03-v1 は主に redesign / inventory / progress board / orchestration setup の段階だった。</li>
         <li>Ver03-v2 では implementation と diagnostic/manual-preview の土台を進めた。</li>
         <li>Ver03-v3 では local/report-only manual-delivery support flow を整備し、人間レビュー前提の local-only 運用に進んだ。</li>
+        <li>Ver03-v4 では public HTML / notification mail / local dashboard を one-source-of-truth で揃える integrated roadmap に進み、manual-trading から future automation までの surface alignment を明示した。</li>
         <li>その後の current manual-delivery app path では <code>refresh-current-manual-delivery-app --stdout-json</code> と <code>check-current-manual-delivery-app-ready --stdout-json</code> と <code>describe-current-manual-delivery-app-contract --stdout-json</code> が accepted になった。</li>
-        <li>現在の reviewed baseline は <code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code> と <code>9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</code> で表現される current accepted state になっている。</li>
+        <li>現在の reviewed baseline は <code>91dfda6114da890c62f9248fc6dab2e9d9413bbd</code> と <code>9415a698bb045e2aaf668b9c1eaf9a8d4aee5f70</code> で表現される current accepted state で、その上に Ver03-v4 の integrated roadmap を重ねている。</li>
         <li>現在も live trading や automatic order には進んでいない。</li>
       </ul>
     </section>

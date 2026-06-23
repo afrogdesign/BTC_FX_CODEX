@@ -51,6 +51,7 @@ Do not rely only on chat history.
 - `CONTROL.md` should track current state, current objective, safety boundary, validation rules, and next action. It is not a full task history.
 - `CURRENT_HANDOFF.md` is for active handoff conditions only: partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
 - `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history. Git/GitHub and the compact report are the commit evidence.
+- `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` is the authoritative roadmap when a task touches overall product direction, public HTML / mail / dashboard alignment, or longer-horizon sequencing.
 - Logical separation stays in place without a physical repo split: AI orchestration operations live under `docs/operations/ai-orchestration/`, while project source lives under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 - `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
 - `current_commit` は実際の branch HEAD より意図的に遅れることがある。
@@ -63,7 +64,7 @@ Do not rely only on chat history.
 - ChatGPT は Codex の報告後に GitHub を確認し、後続の `SYNC` task で reviewed metadata をまとめて更新する。
 - `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
 - `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
-- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v2` を使う。
+- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v4` を使う。新しい reviewed roadmap が出るまでこれを既定とする。
 - Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
 ## Standard workflow

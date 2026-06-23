@@ -10,6 +10,14 @@ Purpose: report-only human manual trading support preview.
 - ACTIVE_* guidance only
 - human must decide manually
 
+## Ver03-v4 Integrated Surface Roadmap
+
+- `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` is the authoritative roadmap for the current Ver03-v4 surface alignment.
+- Public HTML notification report remains the current manual-trading main UI.
+- Notification mail remains the triage / entry point.
+- Local app surface remains the confirmation / future automation surface.
+- All of these surfaces must stay report-only and human-decided.
+
 ## Workflow
 
 1. Generate an editable JSON template.

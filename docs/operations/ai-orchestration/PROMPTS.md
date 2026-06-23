@@ -13,6 +13,13 @@
 - `CURRENT_HANDOFF.md` should be updated only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
 - Keep the logical separation intact without physically splitting the repo: orchestration operations stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 
+## Ver03-v4 Integrated Surface Guard
+
+- For future `NEXT` / `FIX` prompts, check whether the task affects the public HTML report, notification mail, or local dashboard / app surface.
+- Keep those three surfaces aligned to one source of truth; do not create a separate decision path for any one of them.
+- If a task changes trading meaning, safety wording, or actionability, verify the impact on all three surfaces together.
+- Prefer the authoritative roadmap at `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` when product direction needs to be explained.
+
 ## LOW_COST_RESUME
 
 ```text
@@ -120,7 +127,7 @@ Also write the final compact report to:
 - Do not verify whether the file still exists after writing.
 - For implementation tasks, report the actual commit hash in the final report, but leave the current task's CONTROL/TASK_LEDGER commit fields as `pending_review` unless ChatGPT explicitly supplied a prior reviewed hash to record.
 - ChatGPT ACCEPT can accept `pending_review` metadata when the commit is verified on GitHub; later `SYNC` tasks can batch-update reviewed commit metadata.
-- Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch should use `BTCFX Ver03-v2`.
+- Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch should use `BTCFX Ver03-v4` unless superseded by a newer reviewed roadmap.
 
 ## Context migration rule
 
