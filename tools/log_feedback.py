@@ -13449,6 +13449,52 @@ def _manual_delivery_current_app_dashboard_html(
         ),
         ("Note", "app surface does not execute this command"),
     ]
+    safe_config_schema_audit = (app_contract_data or {}).get("safe_config_schema_audit")
+    safe_config_rows = [
+        ("Command", safe_config_schema_audit.get("command") if isinstance(safe_config_schema_audit, dict) else None),
+        (
+            "stdout JSON command",
+            safe_config_schema_audit.get("stdout_json_command") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "schema_version",
+            safe_config_schema_audit.get("schema_version") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "contract_only",
+            safe_config_schema_audit.get("contract_only") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "command_executed_by_app",
+            safe_config_schema_audit.get("command_executed_by_app") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "reads_env_values",
+            safe_config_schema_audit.get("reads_env_values") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "reads_dotenv_values",
+            safe_config_schema_audit.get("reads_dotenv_values") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "calls_private_endpoints",
+            safe_config_schema_audit.get("calls_private_endpoints") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "calls_order_endpoints",
+            safe_config_schema_audit.get("calls_order_endpoints") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "live_trading_allowed",
+            safe_config_schema_audit.get("live_trading_allowed") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "secret_values_exposed",
+            safe_config_schema_audit.get("secret_values_exposed") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        ("Safety", safe_config_schema_audit.get("safety_boundary") if isinstance(safe_config_schema_audit, dict) else None),
+        ("Note", "This app surface does not execute ./.venv312/bin/python tools/safe_config_schema_audit.py"),
+    ]
     manual_action_rows = [
         ("Entry mode", _dashboard_value("entry_mode")),
         ("Entry condition", _dashboard_value("entry_condition")),
@@ -13642,6 +13688,15 @@ def _manual_delivery_current_app_dashboard_html(
         </table>
         <p class=\"muted\">report/local diagnostics only. no FORMAL_GO, no automatic order, no exchange fetch, no private/account/order endpoints, no secrets.</p>
         <p class=\"muted\">This app surface does not execute <code>./.venv312/bin/python tools/operator_status.py</code>.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Safe Config Schema Audit</h2>
+        <table>
+          {_table_rows(safe_config_rows)}
+        </table>
+        <p class=\"muted\">static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading.</p>
+        <p class=\"muted\">This app surface does not execute <code>./.venv312/bin/python tools/safe_config_schema_audit.py</code>.</p>
       </section>
 
       <section class=\"card full-width\">
