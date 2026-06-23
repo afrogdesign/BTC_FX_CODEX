@@ -6214,6 +6214,86 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
+    def test_summarize_and_check_current_manual_delivery_app_state_cli_support_stdout_json_mode_and_help(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                summarize_help_code, summarize_help_stdout, summarize_help_stderr = self._run_current_manual_delivery_app_state_status_main_with_argv(
+                    [
+                        "--help",
+                    ],
+                    base_dir=base_dir,
+                )
+                ready_help_code, ready_help_stdout, ready_help_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--help",
+                    ],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_state_main_with_argv(
+                    [],
+                    base_dir=base_dir,
+                )
+                summarize_stdout_json_code, summarize_stdout_json_stdout, summarize_stdout_json_stderr = self._run_current_manual_delivery_app_state_status_main_with_argv(
+                    [
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+                ready_stdout_json_code, ready_stdout_json_stdout, ready_stdout_json_stderr = self._run_current_manual_delivery_app_state_ready_main_with_argv(
+                    [
+                        "--stdout-json",
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(summarize_help_code, 0, msg=summarize_help_stderr)
+            self.assertIn("summarize-current-manual-delivery-app-state", summarize_help_stdout)
+            self.assertIn("--stdout-json", summarize_help_stdout)
+            self.assertEqual(ready_help_code, 0, msg=ready_help_stderr)
+            self.assertIn("check-current-manual-delivery-app-state-ready", ready_help_stdout)
+            self.assertIn("--stdout-json", ready_help_stdout)
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+
+            self.assertEqual(summarize_stdout_json_code, 0, msg=summarize_stdout_json_stderr)
+            self.assertTrue(summarize_stdout_json_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_app_state_status_md=", summarize_stdout_json_stdout)
+            self.assertNotIn("current_manual_delivery_app_state_status_json=", summarize_stdout_json_stdout)
+            self.assertNotIn("# Manual Delivery Current Handoff App State Status", summarize_stdout_json_stdout)
+            summarize_stdout_json_data = json.loads(summarize_stdout_json_stdout)
+            self.assertEqual(summarize_stdout_json_data["schema_version"], "manual_delivery_app_state_status.v1")
+            self.assertEqual(summarize_stdout_json_data["app_state"], "ready_for_human_review")
+            self.assertEqual(summarize_stdout_json_data["allowed_next_action"], "human_review_only")
+            self.assertFalse(summarize_stdout_json_data["trade_execution_allowed"])
+            self.assertFalse(summarize_stdout_json_data["automatic_order_allowed"])
+            self.assertFalse(summarize_stdout_json_data["external_notification_allowed"])
+            self.assertFalse(summarize_stdout_json_data["paper_positions_integration"])
+            self.assertTrue(summarize_stdout_json_data["human_review_required"])
+
+            self.assertEqual(ready_stdout_json_code, 0, msg=ready_stdout_json_stderr)
+            self.assertTrue(ready_stdout_json_stdout.startswith("{\n"))
+            self.assertNotIn("current_manual_delivery_ready=true", ready_stdout_json_stdout)
+            self.assertNotIn("# Manual Delivery Current Handoff App State Ready Check", ready_stdout_json_stdout)
+            ready_stdout_json_data = json.loads(ready_stdout_json_stdout)
+            self.assertEqual(ready_stdout_json_data["schema_version"], "manual_delivery_app_state_ready_check.v1")
+            self.assertTrue(ready_stdout_json_data["current_manual_delivery_ready"])
+            self.assertEqual(ready_stdout_json_data["readiness_status"], "ready_for_human_review")
+            self.assertEqual(ready_stdout_json_data["allowed_next_action"], "human_review_only")
+            self.assertEqual(ready_stdout_json_data["app_state_status"], "valid_ready_for_human_review")
+            self.assertEqual(ready_stdout_json_data["app_state"], "ready_for_human_review")
+            self.assertEqual(ready_stdout_json_data["display_mode"], "manual_delivery_review")
+            self.assertEqual(ready_stdout_json_data["primary_action"], "human_review_only")
+            self.assertTrue(ready_stdout_json_data["human_review_required"])
+            self.assertFalse(ready_stdout_json_data["trade_execution_allowed"])
+            self.assertFalse(ready_stdout_json_data["automatic_order_allowed"])
+            self.assertFalse(ready_stdout_json_data["external_notification_allowed"])
+            self.assertFalse(ready_stdout_json_data["paper_positions_integration"])
+            self.assertEqual(ready_stdout_json_data["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+
     def test_check_current_manual_delivery_app_state_ready_cli_rejects_missing_and_unsafe_files(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)

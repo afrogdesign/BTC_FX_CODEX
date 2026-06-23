@@ -92,12 +92,12 @@ Purpose: report-only human manual trading support preview.
 - Add `--latest-pointer-json <path>` when you want one optional local app/operator handoff file that points to `manifest.json`, `review/manifest-summary.md`, and `review/manifest-review.json`.
 - Add `--latest-status-md <path>` and `--latest-status-json <path>` when you want the same one-command package to also emit validated latest status handoff files for local app/operator use.
 - Validate that pointer with `summarize-latest-manual-delivery-pointer --latest-pointer-json <path>` before handing it off.
-- Use `write-current-manual-delivery-app-state` as the smallest app-facing read model after self-check validation, and `summarize-current-manual-delivery-app-state` as the app/operator read-side validator for `app-state.json`.
+- Use `write-current-manual-delivery-app-state` as the smallest app-facing read model after self-check validation, and `summarize-current-manual-delivery-app-state --stdout-json` as the app/operator read-side validator for `app-state.json`.
 - Use `refresh-current-manual-delivery-app --stdout-json` as the single-command app integration mode; it refreshes the current handoff, re-checks readiness, writes the stable app-snapshot plus app-snapshot-status outputs, and prints the ready gate as deterministic JSON without compact lines.
 - Use `check-current-manual-delivery-app-ready --stdout-json` as the read-side check after `refresh-current-manual-delivery-app`; it reads `app-snapshot-status.json` and prints the ready gate as deterministic JSON without compact lines.
 - Use `describe-current-manual-delivery-app-contract --stdout-json` as the app integration contract introspection command; it prints the stable contract for the current app path as deterministic JSON.
 - Use `refresh-current-manual-delivery-app-state` as the recommended one-command app-facing refresh; it writes self-check, app-state, and app-state-status outputs in one run.
-- Use `check-current-manual-delivery-app-state-ready` as the smallest final app/operator readiness check after refresh; it validates `app-state-status.json` and prints the minimal ready gate.
+- Use `check-current-manual-delivery-app-state-ready --stdout-json` as the smallest final app/operator readiness check after refresh; it validates `app-state-status.json` and prints the minimal ready gate as deterministic JSON.
 - Use `refresh-and-check-current-manual-delivery-app-state` as the app-facing readiness builder; it refreshes the current handoff and writes the ready-check outputs in one run.
 - Use `refresh-current-manual-delivery-app-snapshot` as the recommended final app/operator one-command path; it refreshes the current handoff, re-checks readiness, and writes the stable app-snapshot pair in one run.
 - Add `--write-app-snapshot-status` when you want that same one-command refresh to also validate and write `app-snapshot-status.md` and `app-snapshot-status.json`.

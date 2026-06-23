@@ -12815,6 +12815,7 @@ def _run_summarize_current_manual_delivery_app_state_command(
 ) -> None:
     output_md_arg = getattr(args, "output_md", None)
     output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
     app_state_json = Path(getattr(args, "app_state_json", "local/manual_delivery_handoff/app-state.json"))
     summary_text, _app_state_status_data, _handoff_dir = _write_manual_delivery_current_handoff_app_state_status_outputs(
         app_state_json=app_state_json,
@@ -12822,6 +12823,9 @@ def _run_summarize_current_manual_delivery_app_state_command(
         output_json=Path(output_json_arg) if output_json_arg else None,
         parser=parser,
     )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_app_state_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
     if output_md_arg and output_json_arg:
         sys.stdout.write(f"current_manual_delivery_app_state_status_md={output_md_arg}\n")
         sys.stdout.write(f"current_manual_delivery_app_state_status_json={output_json_arg}\n")
@@ -13049,6 +13053,7 @@ def _run_check_current_manual_delivery_app_state_ready_command(
 ) -> None:
     output_md_arg = getattr(args, "output_md", None)
     output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
     app_state_status_json = Path(getattr(args, "app_state_status_json", "local/manual_delivery_handoff/app-state-status.json"))
     _summary_text, _ready_check_data = _write_manual_delivery_current_handoff_app_state_ready_check_outputs(
         app_state_status_json=app_state_status_json,
@@ -13056,7 +13061,9 @@ def _run_check_current_manual_delivery_app_state_ready_command(
         output_json=Path(output_json_arg) if output_json_arg else None,
         parser=parser,
     )
-    if output_md_arg and output_json_arg:
+    if stdout_json:
+        sys.stdout.write(json.dumps(_ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    elif output_md_arg and output_json_arg:
         sys.stdout.write(f"current_manual_delivery_ready_check_md={output_md_arg}\n")
         sys.stdout.write(f"current_manual_delivery_ready_check_json={output_json_arg}\n")
     elif output_md_arg:
@@ -17066,6 +17073,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-state-json",
         default="local/manual_delivery_handoff/app-state.json",
     )
+    current_manual_delivery_app_state_status_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_state_status_parser.add_argument("--output-md")
     current_manual_delivery_app_state_status_parser.add_argument("--output-json")
 
@@ -17074,6 +17082,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-state-status-json",
         default="local/manual_delivery_handoff/app-state-status.json",
     )
+    current_manual_delivery_app_state_ready_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_state_ready_parser.add_argument("--output-md")
     current_manual_delivery_app_state_ready_parser.add_argument("--output-json")
 
