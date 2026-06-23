@@ -203,6 +203,43 @@ def _actionability_lines(result: dict[str, Any]) -> list[str]:
     ]
 
 
+def _manual_action_checklist_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    entry_mode = str(notification_context.get("execution_label", "見送り")).strip() or "見送り"
+    entry_window = str(notification_context.get("entry_window_label", "不可")).strip() or "不可"
+    entry_quality = str(display_context.get("entry_quality_label", "位置評価なし")).strip() or "位置評価なし"
+    active_headline = str(notification_context.get("active_headline", "")).strip()
+    entry_condition_parts = [entry_window, entry_quality]
+    if active_headline:
+        entry_condition_parts.append(active_headline)
+    invalidation = str(notification_context.get("invalidation_label", "主要価格帯の反応崩れで無効寄り")).strip() or "主要価格帯の反応崩れで無効寄り"
+    next_condition = str(notification_context.get("next_condition_label", "次回更新で再評価")).strip() or "次回更新で再評価"
+    wait_reason_labels = display_context.get("wait_reason_labels", [])
+    normalized_wait_reasons = []
+    if isinstance(wait_reason_labels, list):
+        normalized_wait_reasons = [str(reason).strip() for reason in wait_reason_labels if str(reason).strip()]
+    elif str(wait_reason_labels).strip():
+        normalized_wait_reasons = [str(wait_reason_labels).strip()]
+    invalidation_parts = [invalidation, next_condition, *normalized_wait_reasons]
+    validity = str(notification_context.get("validity_label", "次回更新までを目安")).strip() or "次回更新までを目安"
+    safety = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    return [
+        "",
+        "【手動アクション確認】",
+        f"Entry mode: {entry_mode}",
+        f"Entry condition: {' / '.join(entry_condition_parts)}",
+        "TP / SL",
+        f"- {_format_setup_levels(result.get('long_setup', {}), 'long')}",
+        f"- {_format_setup_levels(result.get('short_setup', {}), 'short')}",
+        f"Invalidation / wait: {' / '.join(invalidation_parts)}",
+        f"Timeout / validity: {validity}",
+        f"Safety: {safety}",
+    ]
+
+
 def _local_confirmation_lines() -> list[str]:
     return [
         "",
@@ -261,6 +298,7 @@ def _root_summary_lines(
             ]
     )
     lines.extend(_actionability_lines(result))
+    lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
     _extend_gate_lines(lines, result)
     lines.extend(
@@ -353,6 +391,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
         "方向変化や初動を早めに共有する注意通知です。",
     ]
     lines.extend(_actionability_lines(result))
+    lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
     _extend_gate_lines(lines, result)
     lines.extend(
