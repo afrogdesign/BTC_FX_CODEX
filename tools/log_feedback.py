@@ -13375,6 +13375,7 @@ def _manual_delivery_current_app_dashboard_html(
     app_snapshot_status_json: Path,
     snapshot_data: dict[str, Any],
     status_data: dict[str, Any],
+    app_contract_data: dict[str, Any] | None = None,
 ) -> str:
     def _dashboard_value(key: str) -> str:
         for source_data in (status_data, snapshot_data):
@@ -13430,6 +13431,24 @@ def _manual_delivery_current_app_dashboard_html(
     ]
     timeout_value = _dashboard_value("timeout_or_wait_limit")
     safety_value = _dashboard_value("safety_boundary")
+    operator_status_diagnostic = (app_contract_data or {}).get("operator_status_diagnostic")
+    operator_status_rows = [
+        ("Wrapper command", operator_status_diagnostic.get("wrapper_command") if isinstance(operator_status_diagnostic, dict) else None),
+        ("Check command", operator_status_diagnostic.get("wrapper_check_command") if isinstance(operator_status_diagnostic, dict) else None),
+        (
+            "Exit codes",
+            "0 ok, 2 waiting_for_html_cycle, 3 startup_status_unavailable"
+            if isinstance(operator_status_diagnostic, dict)
+            else None,
+        ),
+        ("json_required", operator_status_diagnostic.get("json_required") if isinstance(operator_status_diagnostic, dict) else None),
+        ("Safety", operator_status_diagnostic.get("safety_boundary") if isinstance(operator_status_diagnostic, dict) else None),
+        (
+            "Allowed behavior",
+            operator_status_diagnostic.get("allowed_behavior") if isinstance(operator_status_diagnostic, dict) else None,
+        ),
+        ("Note", "app surface does not execute this command"),
+    ]
     manual_action_rows = [
         ("Entry mode", _dashboard_value("entry_mode")),
         ("Entry condition", _dashboard_value("entry_condition")),
@@ -13614,6 +13633,15 @@ def _manual_delivery_current_app_dashboard_html(
         <table>
           {_table_rows(manual_action_rows)}
         </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Operator Status Diagnostics</h2>
+        <table>
+          {_table_rows(operator_status_rows)}
+        </table>
+        <p class=\"muted\">report/local diagnostics only. no FORMAL_GO, no automatic order, no exchange fetch, no private/account/order endpoints, no secrets.</p>
+        <p class=\"muted\">This app surface does not execute <code>./.venv312/bin/python tools/operator_status.py</code>.</p>
       </section>
 
       <section class=\"card full-width\">
@@ -13883,6 +13911,7 @@ def _write_current_manual_delivery_app_surface_outputs(
         app_snapshot_status_json=app_snapshot_status_json_path,
         snapshot_data=_snapshot_data,
         status_data=_snapshot_status_data,
+        app_contract_data=contract_data,
     )
     app_dashboard_html_path.write_text(app_dashboard_html, encoding="utf-8")
 
@@ -14279,7 +14308,7 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
         "- wrapper_check_command: ./.venv312/bin/python tools/operator_status.py --check",
         "- json_required: false",
         "- check_exit_codes: 0=ok, 2=waiting_for_html_cycle, 3=startup_status_unavailable",
-        "- safety_boundary: report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+        "- safety_boundary: report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
         "- prohibited_behavior: send, notify, restart_runtime, fetch_exchange_data, read_secrets, private_account_order_endpoint, place_orders, imply_FORMAL_GO",
         "",
     ]
@@ -14409,7 +14438,7 @@ def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
                 "waiting_for_html_cycle": 2,
                 "startup_status_unavailable": 3,
             },
-            "safety_boundary": "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+            "safety_boundary": "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
             "allowed_behavior": [
                 "read-only",
                 "local diagnostics",

@@ -150,12 +150,14 @@ class LogFeedbackTest(unittest.TestCase):
             "ready_check_json": "ready-check.json",
             "self_check_json": "self-check.json",
         }
+        contract_data = _manual_delivery_current_app_integration_contract_data()
 
         html = _manual_delivery_current_app_dashboard_html(
             app_snapshot_json=Path("app-snapshot.json"),
             app_snapshot_status_json=Path("app-snapshot-status.json"),
             snapshot_data=snapshot_data,
             status_data=status_data,
+            app_contract_data=contract_data,
         )
 
         self.assertIn("Readiness / Status", html)
@@ -178,6 +180,18 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("manual review", html)
         self.assertIn("human_review_only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertIn("Operator Status Diagnostics", html)
+        self.assertIn("./.venv312/bin/python tools/operator_status.py", html)
+        self.assertIn("./.venv312/bin/python tools/operator_status.py --check", html)
+        self.assertIn("0 ok, 2 waiting_for_html_cycle, 3 startup_status_unavailable", html)
+        self.assertIn("json_required", html)
+        self.assertIn("report/local diagnostics only", html)
+        self.assertIn("no FORMAL_GO", html)
+        self.assertIn("no automatic order", html)
+        self.assertIn("no exchange fetch", html)
+        self.assertIn("no private/account/order endpoints", html)
+        self.assertIn("no secrets", html)
+        self.assertIn("app surface does not execute this command", html)
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)
@@ -208,7 +222,8 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("json_required: false", markdown)
             self.assertIn("0=ok, 2=waiting_for_html_cycle, 3=startup_status_unavailable", markdown)
             self.assertIn("report/local diagnostics only", markdown)
-            self.assertIn("no exchange/private/order endpoints", markdown)
+            self.assertIn("no exchange fetch", markdown)
+            self.assertIn("no private/account/order endpoints", markdown)
             self.assertIn("no secrets", markdown)
 
             contract_text = output_json.read_text(encoding="utf-8")
@@ -230,7 +245,8 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("json_required", contract_text)
             self.assertIn("check_exit_codes", contract_text)
             self.assertIn("report/local diagnostics only", contract_text)
-            self.assertIn("no exchange/private/order endpoints", contract_text)
+            self.assertIn("no exchange fetch", contract_text)
+            self.assertIn("no private/account/order endpoints", contract_text)
             self.assertIn("no secrets", contract_text)
 
             intraperiod = parsed["intraperiod_review_stdout_json"]
@@ -280,7 +296,7 @@ class LogFeedbackTest(unittest.TestCase):
             )
             self.assertEqual(
                 operator_status_diag["safety_boundary"],
-                "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange/private/order endpoints / no secrets",
+                "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
             )
             self.assertIn("read-only", operator_status_diag["allowed_behavior"])
             self.assertIn("local diagnostics", operator_status_diag["allowed_behavior"])
