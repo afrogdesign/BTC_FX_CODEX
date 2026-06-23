@@ -17843,6 +17843,7 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_intraperiod_review_parser.add_argument("--date-from", default="")
     active_plan_intraperiod_review_parser.add_argument("--date-to", default="")
     active_plan_intraperiod_review_parser.add_argument("--limit", type=int, default=10)
+    active_plan_intraperiod_review_parser.add_argument("--stdout-json", action="store_true")
 
     active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
     active_plan_candidate_outcomes_report_parser.add_argument("--candidates-path")
@@ -18649,6 +18650,7 @@ def main() -> None:
         ohlcv_csv = Path(args.ohlcv_csv)
         outcomes_csv = Path(args.outcomes_csv)
         output_md = Path(args.output_md) if args.output_md else _default_active_plan_intraperiod_report_path(base_dir)
+        stdout_json = bool(getattr(args, "stdout_json", False))
         now_text = str(args.now or "").strip()
         now = None
         if now_text:
@@ -18672,6 +18674,33 @@ def main() -> None:
             date_to=str(args.date_to),
             limit=int(args.limit),
         )
+        if stdout_json:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "schema_version": "active_plan_intraperiod_review.v1",
+                        "command": "build-active-plan-intraperiod-review",
+                        "candidates_csv": str(candidates_csv),
+                        "ohlcv_csv": str(ohlcv_csv),
+                        "outcomes_csv": str(outcomes_csv),
+                        "report_md": str(output_md),
+                        "row_count": len(output_df),
+                        "report_only": True,
+                        "formal_go": False,
+                        "automatic_order_allowed": False,
+                        "exchange_fetch_allowed": False,
+                        "daily_sync_wiring": False,
+                        "secret_reading_allowed": False,
+                        "human_decides_manually": True,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            return
         sys.stdout.write(f"active_plan_intraperiod_outcomes_csv={outcomes_csv}\n")
         sys.stdout.write(f"active_plan_intraperiod_report_md={output_md}\n")
         sys.stdout.write(f"row_count={len(output_df)}\n")

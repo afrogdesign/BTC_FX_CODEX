@@ -5425,6 +5425,127 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("no daily-sync wiring", report)
             self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", report)
 
+    def test_build_active_plan_intraperiod_review_cli_stdout_json_is_machine_readable(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            candidates_csv = base_dir / "active_plan_candidates.csv"
+            ohlcv_csv = base_dir / "active_plan_intraperiod_ohlcv.csv"
+            outcomes_csv = base_dir / "active_plan_candidate_intraperiod_outcomes.csv"
+            report_md = base_dir / "active_plan_candidate_intraperiod_outcomes_report.md"
+
+            with candidates_csv.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "candidate_id",
+                        "source_signal_id",
+                        "timestamp_jst",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "stop_loss",
+                        "tp1",
+                        "tp2",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "candidate_id": "cand-review-json",
+                        "source_signal_id": "sig-review-json",
+                        "timestamp_jst": "2026-06-09T09:00:00+09:00",
+                        "candidate_type": "active_plan",
+                        "active_primary_action": "enter_long",
+                        "side": "long",
+                        "entry_mode": "limit",
+                        "entry_price": "100",
+                        "stop_loss": "95",
+                        "tp1": "110",
+                        "tp2": "120",
+                    }
+                )
+
+            with ohlcv_csv.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-09T09:00:00+09:00",
+                        "open": "99.5",
+                        "high": "100.5",
+                        "low": "99.0",
+                        "close": "100.0",
+                    }
+                )
+                writer.writerow(
+                    {
+                        "timestamp_jst": "2026-06-09T09:15:00+09:00",
+                        "open": "100.0",
+                        "high": "121.0",
+                        "low": "100.0",
+                        "close": "119.0",
+                    }
+                )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BASE_DIR / "tools" / "log_feedback.py"),
+                    "build-active-plan-intraperiod-review",
+                    "--candidates-csv",
+                    str(candidates_csv),
+                    "--ohlcv-csv",
+                    str(ohlcv_csv),
+                    "--outcomes-csv",
+                    str(outcomes_csv),
+                    "--output-md",
+                    str(report_md),
+                    "--now",
+                    "2026-06-09T10:00:00+09:00",
+                    "--stdout-json",
+                ],
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(
+                result.stdout,
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            )
+            self.assertEqual(payload["schema_version"], "active_plan_intraperiod_review.v1")
+            self.assertEqual(payload["command"], "build-active-plan-intraperiod-review")
+            self.assertEqual(payload["row_count"], 1)
+            self.assertEqual(payload["candidates_csv"], str(candidates_csv))
+            self.assertEqual(payload["ohlcv_csv"], str(ohlcv_csv))
+            self.assertEqual(payload["outcomes_csv"], str(outcomes_csv))
+            self.assertEqual(payload["report_md"], str(report_md))
+            self.assertTrue(payload["report_only"])
+            self.assertFalse(payload["formal_go"])
+            self.assertFalse(payload["automatic_order_allowed"])
+            self.assertFalse(payload["exchange_fetch_allowed"])
+            self.assertFalse(payload["daily_sync_wiring"])
+            self.assertFalse(payload["secret_reading_allowed"])
+            self.assertTrue(payload["human_decides_manually"])
+            self.assertEqual(
+                payload["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertTrue(outcomes_csv.exists())
+            self.assertTrue(report_md.exists())
+
+            with outcomes_csv.open("r", newline="", encoding="utf-8") as fp:
+                rows = list(csv.DictReader(fp))
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
+            self.assertEqual(row["outcome"], "tp2_first")
+            self.assertEqual(row["first_exit_reason"], "tp2")
+
     def test_build_active_plan_intraperiod_review_cli_fails_when_ohlcv_missing(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
