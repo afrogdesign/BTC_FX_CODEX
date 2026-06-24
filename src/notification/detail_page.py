@@ -697,6 +697,74 @@ def _manual_support_reference_items() -> list[tuple[str, str]]:
     ]
 
 
+def _major_turning_point_opportunity_items(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+    active_hero_summary: str,
+    display_reasons: list[str],
+) -> list[tuple[str, str]]:
+    wait_reasons = [str(reason).strip() for reason in display_reasons if str(reason).strip()]
+    return [
+        ("Market regime", _label_regime(result.get("market_regime"))),
+        ("Phase", _label_phase(result.get("phase"))),
+        (
+            "4h / 1h / 15m",
+            " / ".join(
+                [
+                    f"4時間足 {_label_signal(result.get('signals_4h'))}",
+                    f"1時間足 {_label_signal(result.get('signals_1h'))}",
+                    f"15分足 {_label_signal(result.get('signals_15m'))}",
+                ]
+            ),
+        ),
+        (
+            "Score balance",
+            f"ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / スコア差 {result.get('score_gap')}",
+        ),
+        (
+            "Entry / execution context",
+            " / ".join(
+                [
+                    str(notification_context.get("execution_label", "")).strip() or "未記録",
+                    str(notification_context.get("entry_window_label", "")).strip() or "未記録",
+                    str(display_context.get("entry_quality_label", "")).strip() or "未記録",
+                    active_hero_summary or "未記録",
+                ]
+            ),
+        ),
+        (
+            "Reversal / invalidation context",
+            " / ".join(
+                [
+                    str(notification_context.get("invalidation_label", "")).strip() or "未記録",
+                    str(notification_context.get("next_condition_label", "")).strip() or "未記録",
+                    ", ".join(wait_reasons) or "未記録",
+                ]
+            ),
+        ),
+        (
+            "Price context",
+            " / ".join(
+                [
+                    f"現在価格 {_format_price(result.get('current_price'))}",
+                    _zone_summary("近いサポート帯", result.get("support_zones", [])),
+                    _zone_summary("近いレジスタンス帯", result.get("resistance_zones", [])),
+                    _setup_line(result, "long"),
+                    _setup_line(result, "short"),
+                ]
+            ),
+        ),
+        (
+            "Operator note",
+            "大転換は方向だけではなく、4h→1h→15m の順に根拠を確認する / 15分足だけの反応で大転換と決めない / "
+            "スコア差が小さいときは大転換候補とダマシ注意を取り違えやすい / 主要サポート・レジスタンス付近では反転・ブレイク・失敗の3択を確認する / "
+            "entry condition / invalidation / next condition を満たすまでは、決め打ち禁止",
+        ),
+        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]
+
+
 def _safe_config_schema_audit_html(
     result: dict[str, Any],
     notification_context: dict[str, Any] | None = None,
@@ -1160,6 +1228,20 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         f'<div class="checklist-value">{esc(value)}</div>'
         "</div>"
         for label, value in checklist_items
+    )
+    major_turning_point_items = _major_turning_point_opportunity_items(
+        result,
+        display_context,
+        notification_context,
+        active_hero_summary,
+        display_reasons,
+    )
+    major_turning_point_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">🔁 <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in major_turning_point_items
     )
 
     return f"""<!doctype html>
@@ -1708,6 +1790,16 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <p class="muted">{esc(active_hero_summary)}</p>
         <div class="checklist">{checklist_html}</div>
         <div class="checklist-note">この確認は、判断ソースを見やすくまとめるだけで、売買ロジックは変更しません。</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>大転換チャンス確認</h2>
+      <div class="panel">
+        <p><strong>{esc(active_hero_label)}</strong> を見ながら、大転換候補とダマシ注意を取り違えないための確認を先に置きます。</p>
+        <p class="muted">大転換は「方向」だけで決めず、4h → 1h → 15m の順で根拠を見ます。15分足だけで決め打ちしません。</p>
+        <div class="checklist">{major_turning_point_html}</div>
+        <div class="checklist-note">これは転換の決め打ちではなく、条件成立まで人間確認を続けるための表示です。</div>
       </div>
     </section>
 

@@ -240,6 +240,37 @@ def _manual_action_checklist_lines(
     ]
 
 
+def _major_turning_point_opportunity_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    wait_reasons = [str(reason).strip() for reason in display_context.get("wait_reason_labels", []) if str(reason).strip()]
+    return [
+        "",
+        "【大転換チャンス確認】",
+        "大転換は「方向」だけではなく、4h→1h→15m の順に根拠を確認します。15分足だけの反応で大転換と決めません。",
+        "スコア差が小さいときは大転換候補とダマシを取り違えやすいので、決め打ちしません。",
+        "主要サポート / レジスタンス付近では、反転・ブレイク・失敗の3択を確認します。",
+        "entry condition / invalidation / next condition を満たすまでは、転換を決め打ちしません。",
+        "大転換候補 / 転換確認 / ダマシ注意 / 決め打ち禁止 / 条件成立まで人間確認",
+        f"market_regime: {_label_regime(result.get('market_regime'))}",
+        f"phase: {_label_phase(result.get('phase'))}",
+        f"4時間足: {_label_signal(result.get('signals_4h'))}",
+        f"1時間足: {_label_signal(result.get('signals_1h'))}",
+        f"15分足: {_label_signal(result.get('signals_15m'))}",
+        f"スコア差: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
+        f"Entry condition: {notification_context.get('entry_window_label', '未記録')} / {display_context.get('entry_quality_label', '未記録')} / {str(notification_context.get('execution_label', '')).strip() or '未記録'}",
+        f"Invalidation / wait: {notification_context.get('invalidation_label', '未記録')} / {notification_context.get('next_condition_label', '未記録')} / {', '.join(wait_reasons) or '未記録'}",
+        f"Price context: 現在価格 {_format_price(result.get('current_price'))}",
+        f"Price context: {_format_zone_summary('近いサポート帯', result.get('support_zones', []))}",
+        f"Price context: {_format_zone_summary('近いレジスタンス帯', result.get('resistance_zones', []))}",
+        f"Price context: {_format_setup_levels(result.get('long_setup', {}), 'long')}",
+        f"Price context: {_format_setup_levels(result.get('short_setup', {}), 'short')}",
+        "Safety: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+
+
 def _local_confirmation_lines() -> list[str]:
     return [
         "",
@@ -620,6 +651,7 @@ def _root_summary_lines(
     )
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
@@ -716,6 +748,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     ]
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
