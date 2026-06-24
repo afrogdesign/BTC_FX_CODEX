@@ -13676,6 +13676,121 @@ def _manual_delivery_current_app_integrated_evidence_overview_rows(
     ]
 
 
+def _manual_delivery_current_app_major_turning_point_diagnostic_data(
+    *,
+    intraperiod_outcomes_path: Path | None = None,
+    limit: int = 5,
+) -> dict[str, Any]:
+    intraperiod_outcomes_path = intraperiod_outcomes_path or BASE_DIR / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    diagnostic_counts = Counter(_active_plan_intraperiod_major_turning_point_diagnostic_label(row) for row in rows)
+    representative_rows: list[dict[str, Any]] = []
+    if rows:
+        resolved_limit = max(0, int(limit))
+        sorted_rows = sorted(
+            rows,
+            key=lambda row: (
+                str(row.get("timestamp_jst", "")).strip(),
+                str(row.get("candidate_id", "")).strip(),
+                str(row.get("signal_id", "")).strip(),
+            ),
+            reverse=True,
+        )
+        for row in sorted_rows[:resolved_limit]:
+            representative_rows.append(
+                {
+                    "diagnostic_label": _active_plan_intraperiod_major_turning_point_diagnostic_label(row),
+                    "candidate_id": str(row.get("candidate_id", "")).strip(),
+                    "signal_id": str(row.get("signal_id", "")).strip(),
+                    "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                    "candidate_type": str(row.get("candidate_type", "")).strip(),
+                    "active_primary_action": str(row.get("active_primary_action", "")).strip(),
+                    "side": str(row.get("side", "")).strip(),
+                    "entry_mode": str(row.get("entry_mode", "")).strip(),
+                    "outcome": str(row.get("outcome", "")).strip(),
+                    "first_exit_reason": str(row.get("first_exit_reason", "")).strip(),
+                    "entry_reached_time": str(row.get("entry_reached_time", "")).strip(),
+                    "mfe_r": str(row.get("mfe_r", "")).strip(),
+                    "mae_r": str(row.get("mae_r", "")).strip(),
+                }
+            )
+
+    total_rows = len(rows)
+    return {
+        "schema_version": "manual_delivery_app_major_turning_point_diagnostic.v1",
+        "summary_status": "ready_for_human_review" if total_rows else "no_intraperiod_outcome_rows",
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "source": "active_plan_candidate_intraperiod_outcomes_csv",
+        "source_exists": intraperiod_outcomes_path.exists(),
+        "total_rows": total_rows,
+        "counts": {
+            "potential_missed_turn": int(diagnostic_counts.get("potential_missed_turn", 0)),
+            "potential_fakeout": int(diagnostic_counts.get("potential_fakeout", 0)),
+            "bad_entry_timing": int(diagnostic_counts.get("bad_entry_timing", 0)),
+            "inconclusive": int(diagnostic_counts.get("inconclusive", 0)),
+        },
+        "representative_rows": representative_rows,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "note": (
+            "local/report-only; derived from local active_plan_candidate_intraperiod_outcomes.csv only; "
+            "post-hoc diagnostic support; does not confirm a major turn; "
+            "does not authorize manual or automatic entry"
+        ),
+    }
+
+
+def _manual_delivery_current_app_major_turning_point_diagnostic_rows(
+    major_turning_point_diagnostic: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    counts = major_turning_point_diagnostic.get("counts")
+    if not isinstance(counts, dict):
+        counts = {}
+
+    representative_rows = major_turning_point_diagnostic.get("representative_rows")
+    if not isinstance(representative_rows, list):
+        representative_rows = []
+
+    representative_row_texts: list[str] = []
+    for row in representative_rows:
+        if not isinstance(row, dict):
+            representative_row_texts.append(_manual_delivery_current_app_dashboard_value(row))
+            continue
+        representative_row_texts.append(
+            " / ".join(
+                [
+                    _manual_delivery_current_app_dashboard_value(row.get("diagnostic_label")),
+                    _manual_delivery_current_app_dashboard_value(row.get("candidate_id")),
+                    _manual_delivery_current_app_dashboard_value(row.get("signal_id")),
+                    _manual_delivery_current_app_dashboard_value(row.get("timestamp_jst")),
+                    _manual_delivery_current_app_dashboard_value(row.get("candidate_type")),
+                    _manual_delivery_current_app_dashboard_value(row.get("active_primary_action")),
+                    _manual_delivery_current_app_dashboard_value(row.get("side")),
+                    _manual_delivery_current_app_dashboard_value(row.get("entry_mode")),
+                    _manual_delivery_current_app_dashboard_value(row.get("outcome")),
+                    _manual_delivery_current_app_dashboard_value(row.get("first_exit_reason")),
+                    _manual_delivery_current_app_dashboard_value(row.get("entry_reached_time")),
+                    _manual_delivery_current_app_dashboard_value(row.get("mfe_r")),
+                    _manual_delivery_current_app_dashboard_value(row.get("mae_r")),
+                ]
+            )
+        )
+
+    return [
+        ("Summary status", major_turning_point_diagnostic.get("summary_status")),
+        ("Total rows", major_turning_point_diagnostic.get("total_rows")),
+        ("potential_missed_turn", counts.get("potential_missed_turn", 0)),
+        ("potential_fakeout", counts.get("potential_fakeout", 0)),
+        ("bad_entry_timing", counts.get("bad_entry_timing", 0)),
+        ("inconclusive", counts.get("inconclusive", 0)),
+        ("Representative rows", representative_row_texts),
+        ("Safety boundary", major_turning_point_diagnostic.get("safety_boundary")),
+        ("Note", major_turning_point_diagnostic.get("note")),
+    ]
+
+
 def _manual_delivery_current_app_dashboard_html(
     *,
     app_snapshot_json: Path,
@@ -13683,6 +13798,7 @@ def _manual_delivery_current_app_dashboard_html(
     snapshot_data: dict[str, Any],
     status_data: dict[str, Any],
     app_contract_data: dict[str, Any] | None = None,
+    intraperiod_outcomes_path: Path | None = None,
 ) -> str:
     def _dashboard_value(key: str) -> str:
         for source_data in (status_data, snapshot_data):
@@ -13816,6 +13932,12 @@ def _manual_delivery_current_app_dashboard_html(
     )
     integrated_evidence_rows = _manual_delivery_current_app_integrated_evidence_overview_rows(
         integrated_evidence_overview
+    )
+    major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
+    major_turning_point_diagnostic_rows = _manual_delivery_current_app_major_turning_point_diagnostic_rows(
+        major_turning_point_diagnostic
     )
     manual_action_rows = [
         ("Entry mode", _dashboard_value("entry_mode")),
@@ -14030,6 +14152,13 @@ def _manual_delivery_current_app_dashboard_html(
           {_table_rows(major_turning_point_rows)}
         </table>
         <p class=\"muted\">major turning point candidate / false-break / fakeout caution / do not decide from a single short-timeframe reaction / check entry condition / invalidation / next condition before deciding / human review only</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Major Turning Point Diagnostic</h2>
+        <table>
+          {_table_rows(major_turning_point_diagnostic_rows)}
+        </table>
       </section>
 
       <section class=\"card full-width\">
@@ -14386,6 +14515,7 @@ def _manual_delivery_current_app_surface_manifest_data(*, output_dir: Path) -> d
 def _manual_delivery_current_app_surface_validation_data(
     *,
     app_surface_dir: Path,
+    intraperiod_outcomes_path: Path | None = None,
     parser: argparse.ArgumentParser | None = None,
 ) -> dict[str, Any]:
     index_html_path = app_surface_dir / "index.html"
@@ -14434,6 +14564,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "Manual Action Checklist",
         "Operator Triage Summary",
         "Integrated Evidence Overview",
+        "Major Turning Point Diagnostic",
         "Source Files / Generated At",
         "Safety Boundary",
         "Entry mode",
@@ -14448,6 +14579,16 @@ def _manual_delivery_current_app_surface_validation_data(
         "intraperiod_review_stdout_json",
         "operator_triage_summary",
         "manual_action_checklist_surface",
+        "potential_missed_turn",
+        "potential_fakeout",
+        "bad_entry_timing",
+        "inconclusive",
+        "Representative rows",
+        "Safety boundary",
+        "Note",
+        "post-hoc diagnostic support",
+        "does not confirm a major turn",
+        "does not authorize manual or automatic entry",
         "present=true / ready_or_valid=true / execution_required=false",
         "derived from existing app contract data only",
         "report-only / not FORMAL_GO / no automatic order / human decides manually",
@@ -14479,6 +14620,9 @@ def _manual_delivery_current_app_surface_validation_data(
     expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
     expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
     expected_safe_config_schema_audit = expected_contract_data["safe_config_schema_audit"]
+    major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
 
     if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
         message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
@@ -14751,6 +14895,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "integrated_evidence_overview_operator_hint_next_action": integrated_evidence_overview[
             "operator_hint_next_action"
         ],
+        "major_turning_point_diagnostic": major_turning_point_diagnostic,
     }
 
 

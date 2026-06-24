@@ -18,6 +18,132 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+
+def _write_current_manual_delivery_app_surface_fixture(
+    surface_dir: Path,
+    dashboard_html: str,
+    contract_data: dict[str, Any],
+) -> None:
+    surface_dir.mkdir(parents=True, exist_ok=True)
+    (surface_dir / "index.html").write_text(
+        "\n".join(
+            [
+                "app-dashboard.html",
+                "app-ready.json",
+                "app-contract.json",
+                "app-snapshot.json",
+                "app-snapshot-status.json",
+                "app-surface-manifest.json",
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (surface_dir / "app-dashboard.html").write_text(dashboard_html, encoding="utf-8")
+    (surface_dir / "app-ready.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "manual_delivery_app_ready_check.v1",
+                "current_manual_delivery_app_ready": True,
+                "readiness_status": "ready_for_human_review",
+                "allowed_next_action": "human_review_only",
+                "human_review_required": True,
+                "trade_execution_allowed": False,
+                "automatic_order_allowed": False,
+                "external_notification_allowed": False,
+                "paper_positions_integration": False,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (surface_dir / "app-contract.json").write_text(
+        json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (surface_dir / "app-snapshot.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "manual_delivery_app_snapshot.v1",
+                "snapshot_status": "ready_for_human_review",
+                "current_manual_delivery_ready": True,
+                "allowed_next_action": "human_review_only",
+                "human_review_required": True,
+                "trade_execution_allowed": False,
+                "automatic_order_allowed": False,
+                "external_notification_allowed": False,
+                "paper_positions_integration": False,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (surface_dir / "app-snapshot-status.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "manual_delivery_app_snapshot_status.v1",
+                "app_snapshot_status": "valid_ready_for_human_review",
+                "snapshot_status": "ready_for_human_review",
+                "current_manual_delivery_ready": True,
+                "allowed_next_action": "human_review_only",
+                "human_review_required": True,
+                "trade_execution_allowed": False,
+                "automatic_order_allowed": False,
+                "external_notification_allowed": False,
+                "paper_positions_integration": False,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (surface_dir / "app-surface-manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "manual_delivery_app_surface_manifest.v1",
+                "surface_status": "ready_for_human_review",
+                "entrypoint": "index.html",
+                "files": {
+                    "index_html": "index.html",
+                    "app_dashboard_html": "app-dashboard.html",
+                    "app_ready_json": "app-ready.json",
+                    "app_contract_json": "app-contract.json",
+                    "app_snapshot_json": "app-snapshot.json",
+                    "app_snapshot_status_json": "app-snapshot-status.json",
+                    "app_surface_manifest_json": "app-surface-manifest.json",
+                },
+                "commands": {
+                    "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+                    "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+                    "surface_export": "export-current-manual-delivery-app-surface",
+                },
+                "human_review_required": True,
+                "trade_execution_allowed": False,
+                "automatic_order_allowed": False,
+                "external_notification_allowed": False,
+                "paper_positions_integration": False,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 from tools.log_feedback import (
     DEFAULT_REVIEW_FORM,
     DEFAULT_REVIEW_NOTE,
@@ -193,6 +319,17 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("do not decide from a single short-timeframe reaction", html)
         self.assertIn("check entry condition / invalidation / next condition before deciding", html)
         self.assertIn("human review only", html)
+        self.assertIn("Major Turning Point Diagnostic", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("potential_missed_turn", html)
+        self.assertIn("potential_fakeout", html)
+        self.assertIn("bad_entry_timing", html)
+        self.assertIn("inconclusive", html)
+        self.assertIn("Representative rows", html)
+        self.assertIn("local/report-only", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
         self.assertIn("Operator Triage Summary", html)
         self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("Summary status", html)
@@ -325,6 +462,17 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("do not decide from a single short-timeframe reaction", html)
         self.assertIn("check entry condition / invalidation / next condition before deciding", html)
         self.assertIn("human review only", html)
+        self.assertIn("Major Turning Point Diagnostic", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("potential_missed_turn", html)
+        self.assertIn("potential_fakeout", html)
+        self.assertIn("bad_entry_timing", html)
+        self.assertIn("inconclusive", html)
+        self.assertIn("Representative rows", html)
+        self.assertIn("local/report-only", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
 
     def test_manual_delivery_current_app_dashboard_html_shows_integrated_evidence_hints_for_missing_evidence(self) -> None:
@@ -400,6 +548,391 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("do not decide from a single short-timeframe reaction", html)
         self.assertIn("check entry condition / invalidation / next condition before deciding", html)
         self.assertIn("human review only", html)
+        self.assertIn("Major Turning Point Diagnostic", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("potential_missed_turn", html)
+        self.assertIn("potential_fakeout", html)
+        self.assertIn("bad_entry_timing", html)
+        self.assertIn("inconclusive", html)
+        self.assertIn("Representative rows", html)
+        self.assertIn("local/report-only", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
+
+    def test_manual_delivery_current_app_major_turning_point_diagnostic_data_and_dashboard_html(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            surface_dir = base_dir / "manual_delivery_app_surface"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            fieldnames = [
+                "timestamp_jst",
+                "candidate_id",
+                "signal_id",
+                "candidate_type",
+                "active_primary_action",
+                "side",
+                "entry_mode",
+                "entry_price",
+                "stop_price",
+                "tp1_price",
+                "tp2_price",
+                "outcome",
+                "entry_reached_time",
+                "first_exit_time",
+                "first_exit_reason",
+                "mfe_price",
+                "mae_price",
+                "mfe_r",
+                "mae_r",
+            ]
+            outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {
+                            "timestamp_jst": "2026-06-07T12:00:00+09:00",
+                            "candidate_id": "cand-missed-turn",
+                            "signal_id": "sig-missed-turn",
+                            "candidate_type": "active_limit_retest",
+                            "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                            "side": "long",
+                            "entry_mode": "limit",
+                            "entry_price": "100",
+                            "stop_price": "95",
+                            "tp1_price": "105",
+                            "tp2_price": "110",
+                            "outcome": "tp2_first",
+                            "entry_reached_time": "2026-06-07T12:15:00+09:00",
+                            "first_exit_time": "2026-06-07T13:00:00+09:00",
+                            "first_exit_reason": "tp2",
+                            "mfe_price": "10.0",
+                            "mae_price": "1.0",
+                            "mfe_r": "2.2",
+                            "mae_r": "0.2",
+                        },
+                        {
+                            "timestamp_jst": "2026-06-06T12:00:00+09:00",
+                            "candidate_id": "cand-fakeout",
+                            "signal_id": "sig-fakeout",
+                            "candidate_type": "active_market_small",
+                            "active_primary_action": "ACTIVE_MARKET_SMALL",
+                            "side": "short",
+                            "entry_mode": "market",
+                            "entry_price": "101",
+                            "stop_price": "106",
+                            "tp1_price": "96",
+                            "tp2_price": "94",
+                            "outcome": "sl_first",
+                            "entry_reached_time": "2026-06-06T12:10:00+09:00",
+                            "first_exit_time": "2026-06-06T12:40:00+09:00",
+                            "first_exit_reason": "sl",
+                            "mfe_price": "0.4",
+                            "mae_price": "1.4",
+                            "mfe_r": "0.4",
+                            "mae_r": "1.4",
+                        },
+                        {
+                            "timestamp_jst": "2026-06-05T12:00:00+09:00",
+                            "candidate_id": "cand-bad-entry",
+                            "signal_id": "sig-bad-entry",
+                            "candidate_type": "active_limit_retest",
+                            "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                            "side": "long",
+                            "entry_mode": "limit",
+                            "entry_price": "99",
+                            "stop_price": "94",
+                            "tp1_price": "104",
+                            "tp2_price": "109",
+                            "outcome": "timeout",
+                            "entry_reached_time": "2026-06-05T12:15:00+09:00",
+                            "first_exit_time": "2026-06-05T13:00:00+09:00",
+                            "first_exit_reason": "timeout",
+                            "mfe_price": "0.3",
+                            "mae_price": "0.1",
+                            "mfe_r": "0.3",
+                            "mae_r": "0.1",
+                        },
+                        {
+                            "timestamp_jst": "2026-06-04T12:00:00+09:00",
+                            "candidate_id": "cand-inconclusive",
+                            "signal_id": "sig-inconclusive",
+                            "candidate_type": "active_limit_retest",
+                            "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                            "side": "long",
+                            "entry_mode": "limit",
+                            "entry_price": "98",
+                            "stop_price": "93",
+                            "tp1_price": "103",
+                            "tp2_price": "108",
+                            "outcome": "pending",
+                            "entry_reached_time": "",
+                            "first_exit_time": "",
+                            "first_exit_reason": "",
+                            "mfe_price": "",
+                            "mae_price": "",
+                            "mfe_r": "",
+                            "mae_r": "",
+                        },
+                    ]
+                )
+
+            snapshot_data = {
+                "entry_condition": "snapshot entry condition",
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            }
+            status_data = {
+                "snapshot_status": "ready_for_human_review",
+                "current_manual_delivery_ready": True,
+                "allowed_next_action": "human_review_only",
+                "display_mode": "dashboard",
+                "primary_action": "human_review_only",
+                "source_readiness": "ready",
+                "actionability_label": "watch",
+                "human_action": "manual review",
+                "shadow_decision_enabled": True,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "human_review_required": True,
+                "trade_execution_allowed": False,
+                "automatic_order_allowed": False,
+                "external_notification_allowed": False,
+                "paper_positions_integration": False,
+                "active_plan_label": "active plan sample",
+                "side": "long",
+                "entry_mode": "market",
+                "entry_condition": "entry condition sample",
+                "tp_plan": "TP plan sample",
+                "sl_or_invalidation": "SL or invalidation sample",
+                "timeout_or_wait_limit": "timeout sample",
+                "intraperiod_evidence_summary": "evidence sample",
+                "app_state_json": "app-state.json",
+                "ready_check_json": "ready-check.json",
+                "self_check_json": "self-check.json",
+            }
+            contract_data = _manual_delivery_current_app_integration_contract_data()
+            dashboard_html = _manual_delivery_current_app_dashboard_html(
+                app_snapshot_json=Path("app-snapshot.json"),
+                app_snapshot_status_json=Path("app-snapshot-status.json"),
+                snapshot_data=snapshot_data,
+                status_data=status_data,
+                app_contract_data=contract_data,
+                intraperiod_outcomes_path=outcomes_path,
+            )
+
+            _write_current_manual_delivery_app_surface_fixture(surface_dir, dashboard_html, contract_data)
+            validation_data = _manual_delivery_current_app_surface_validation_data(
+                app_surface_dir=surface_dir,
+                intraperiod_outcomes_path=outcomes_path,
+            )
+            diagnostic = validation_data["major_turning_point_diagnostic"]
+            self.assertEqual(diagnostic["schema_version"], "manual_delivery_app_major_turning_point_diagnostic.v1")
+            self.assertEqual(diagnostic["summary_status"], "ready_for_human_review")
+            self.assertTrue(diagnostic["report_only"])
+            self.assertFalse(diagnostic["formal_go"])
+            self.assertFalse(diagnostic["automatic_order_allowed"])
+            self.assertTrue(diagnostic["human_decides_manually"])
+            self.assertEqual(diagnostic["source"], "active_plan_candidate_intraperiod_outcomes_csv")
+            self.assertTrue(diagnostic["source_exists"])
+            self.assertEqual(diagnostic["total_rows"], 4)
+            self.assertEqual(
+                diagnostic["counts"],
+                {
+                    "potential_missed_turn": 1,
+                    "potential_fakeout": 1,
+                    "bad_entry_timing": 1,
+                    "inconclusive": 1,
+                },
+            )
+            self.assertEqual(
+                [row["diagnostic_label"] for row in diagnostic["representative_rows"]],
+                [
+                    "potential_missed_turn",
+                    "potential_fakeout",
+                    "bad_entry_timing",
+                    "inconclusive",
+                ],
+            )
+            self.assertEqual(
+                [row["candidate_id"] for row in diagnostic["representative_rows"]],
+                [
+                    "cand-missed-turn",
+                    "cand-fakeout",
+                    "cand-bad-entry",
+                    "cand-inconclusive",
+                ],
+            )
+            self.assertEqual(
+                diagnostic["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+            self.assertIn("local/report-only", diagnostic["note"])
+            self.assertIn("post-hoc diagnostic support", diagnostic["note"])
+            self.assertIn("does not confirm a major turn", diagnostic["note"])
+            self.assertIn("does not authorize manual or automatic entry", diagnostic["note"])
+
+            self.assertIn("Major Turning Point Diagnostic", dashboard_html)
+            self.assertIn("<th>Summary status</th><td>ready_for_human_review</td>", dashboard_html)
+            self.assertIn("<th>Total rows</th><td>4</td>", dashboard_html)
+            self.assertIn("<th>potential_missed_turn</th><td>1</td>", dashboard_html)
+            self.assertIn("<th>potential_fakeout</th><td>1</td>", dashboard_html)
+            self.assertIn("<th>bad_entry_timing</th><td>1</td>", dashboard_html)
+            self.assertIn("<th>inconclusive</th><td>1</td>", dashboard_html)
+            self.assertIn("cand-missed-turn", dashboard_html)
+            self.assertIn("cand-fakeout", dashboard_html)
+            self.assertIn("cand-bad-entry", dashboard_html)
+            self.assertIn("cand-inconclusive", dashboard_html)
+            self.assertIn("<th>Representative rows</th>", dashboard_html)
+            self.assertIn("<th>Safety boundary</th><td>report-only / not FORMAL_GO / no automatic order / human decides manually</td>", dashboard_html)
+            self.assertIn(
+                "<th>Note</th><td>local/report-only; derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry</td>",
+                dashboard_html,
+            )
+            self.assertIn("local/report-only", dashboard_html)
+            self.assertIn("not FORMAL_GO", dashboard_html)
+            self.assertIn("no automatic order", dashboard_html)
+            self.assertIn("human decides manually", dashboard_html)
+            self.assertIn("post-hoc diagnostic support", dashboard_html)
+            self.assertIn("does not confirm a major turn", dashboard_html)
+            self.assertIn("does not authorize manual or automatic entry", dashboard_html)
+            self.assertNotIn("FORMAL_GO as approval", dashboard_html)
+            self.assertNotIn("automatic_order_allowed=true", dashboard_html)
+            self.assertNotIn("send_email", dashboard_html)
+            self.assertNotIn("private/order", dashboard_html)
+            self.assertNotIn("Gmail", dashboard_html)
+            self.assertNotIn("smtp", dashboard_html.lower())
+
+    def test_manual_delivery_current_app_major_turning_point_diagnostic_data_handles_missing_and_empty_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+            contract_data = _manual_delivery_current_app_integration_contract_data()
+
+            def run_case(*, case_name: str, outcomes_path: Path) -> None:
+                surface_dir = base_dir / case_name
+                snapshot_data = {
+                    "entry_condition": "snapshot entry condition",
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                }
+                status_data = {
+                    "snapshot_status": "ready_for_human_review",
+                    "current_manual_delivery_ready": True,
+                    "allowed_next_action": "human_review_only",
+                    "display_mode": "dashboard",
+                    "primary_action": "human_review_only",
+                    "source_readiness": "ready",
+                    "actionability_label": "watch",
+                    "human_action": "manual review",
+                    "shadow_decision_enabled": True,
+                    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    "human_review_required": True,
+                    "trade_execution_allowed": False,
+                    "automatic_order_allowed": False,
+                    "external_notification_allowed": False,
+                    "paper_positions_integration": False,
+                    "active_plan_label": "active plan sample",
+                    "side": "long",
+                    "entry_mode": "market",
+                    "entry_condition": "entry condition sample",
+                    "tp_plan": "TP plan sample",
+                    "sl_or_invalidation": "SL or invalidation sample",
+                    "timeout_or_wait_limit": "timeout sample",
+                    "intraperiod_evidence_summary": "evidence sample",
+                    "app_state_json": "app-state.json",
+                    "ready_check_json": "ready-check.json",
+                    "self_check_json": "self-check.json",
+                }
+                dashboard_html = _manual_delivery_current_app_dashboard_html(
+                    app_snapshot_json=Path("app-snapshot.json"),
+                    app_snapshot_status_json=Path("app-snapshot-status.json"),
+                    snapshot_data=snapshot_data,
+                    status_data=status_data,
+                    app_contract_data=contract_data,
+                    intraperiod_outcomes_path=outcomes_path,
+                )
+                _write_current_manual_delivery_app_surface_fixture(surface_dir, dashboard_html, contract_data)
+                validation_data = _manual_delivery_current_app_surface_validation_data(
+                    app_surface_dir=surface_dir,
+                    intraperiod_outcomes_path=outcomes_path,
+                )
+                diagnostic = validation_data["major_turning_point_diagnostic"]
+                self.assertEqual(diagnostic["schema_version"], "manual_delivery_app_major_turning_point_diagnostic.v1")
+                self.assertEqual(diagnostic["summary_status"], "no_intraperiod_outcome_rows")
+                self.assertTrue(diagnostic["report_only"])
+                self.assertFalse(diagnostic["formal_go"])
+                self.assertFalse(diagnostic["automatic_order_allowed"])
+                self.assertTrue(diagnostic["human_decides_manually"])
+                self.assertEqual(diagnostic["source"], "active_plan_candidate_intraperiod_outcomes_csv")
+                self.assertEqual(diagnostic["total_rows"], 0)
+                self.assertEqual(diagnostic["counts"], {
+                    "potential_missed_turn": 0,
+                    "potential_fakeout": 0,
+                    "bad_entry_timing": 0,
+                    "inconclusive": 0,
+                })
+                self.assertEqual(diagnostic["representative_rows"], [])
+                self.assertEqual(
+                    diagnostic["safety_boundary"],
+                    "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                )
+                self.assertIn("local/report-only", diagnostic["note"])
+                self.assertIn("post-hoc diagnostic support", diagnostic["note"])
+                self.assertIn("does not confirm a major turn", diagnostic["note"])
+                self.assertIn("does not authorize manual or automatic entry", diagnostic["note"])
+                self.assertIn("Major Turning Point Diagnostic", dashboard_html)
+                self.assertIn("<th>Summary status</th><td>no_intraperiod_outcome_rows</td>", dashboard_html)
+                self.assertIn("<th>Total rows</th><td>0</td>", dashboard_html)
+                self.assertIn("<th>Representative rows</th><td>none</td>", dashboard_html)
+                self.assertIn("<th>Safety boundary</th><td>report-only / not FORMAL_GO / no automatic order / human decides manually</td>", dashboard_html)
+                self.assertIn(
+                    "<th>Note</th><td>local/report-only; derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry</td>",
+                    dashboard_html,
+                )
+                self.assertIn("potential_missed_turn", dashboard_html)
+                self.assertIn("potential_fakeout", dashboard_html)
+                self.assertIn("bad_entry_timing", dashboard_html)
+                self.assertIn("inconclusive", dashboard_html)
+                self.assertNotIn("FORMAL_GO as approval", dashboard_html)
+                self.assertNotIn("automatic_order_allowed=true", dashboard_html)
+                self.assertNotIn("send_email", dashboard_html)
+                self.assertNotIn("private/order", dashboard_html)
+                self.assertNotIn("Gmail", dashboard_html)
+                self.assertNotIn("smtp", dashboard_html.lower())
+
+            run_case(case_name="missing_case", outcomes_path=logs_csv / "missing.csv")
+
+            empty_outcomes_path = logs_csv / "empty.csv"
+            with empty_outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=[
+                        "timestamp_jst",
+                        "candidate_id",
+                        "signal_id",
+                        "candidate_type",
+                        "active_primary_action",
+                        "side",
+                        "entry_mode",
+                        "entry_price",
+                        "stop_price",
+                        "tp1_price",
+                        "tp2_price",
+                        "outcome",
+                        "entry_reached_time",
+                        "first_exit_time",
+                        "first_exit_reason",
+                        "mfe_price",
+                        "mae_price",
+                        "mfe_r",
+                        "mae_r",
+                    ],
+                )
+                writer.writeheader()
+            run_case(case_name="empty_case", outcomes_path=empty_outcomes_path)
 
     def test_manual_delivery_current_app_operator_triage_summary_data_handles_missing_evidence(self) -> None:
         status_data = {
@@ -710,6 +1243,20 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Manual Action Checklist</section>",
                         "<section>Operator Triage Summary</section>",
                         "<section>Integrated Evidence Overview</section>",
+                        "<section>Major Turning Point Diagnostic</section>",
+                        "<section>Summary status</section>",
+                        "<section>Total rows</section>",
+                        "<section>potential_missed_turn</section>",
+                        "<section>potential_fakeout</section>",
+                        "<section>bad_entry_timing</section>",
+                        "<section>inconclusive</section>",
+                        "<section>Representative rows</section>",
+                        "<section>Safety boundary</section>",
+                        "<section>Note</section>",
+                        "<section>local/report-only</section>",
+                        "<section>post-hoc diagnostic support</section>",
+                        "<section>does not confirm a major turn</section>",
+                        "<section>does not authorize manual or automatic entry</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
@@ -1207,6 +1754,20 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Manual Action Checklist</section>",
                         "<section>Operator Triage Summary</section>",
                         "<section>Integrated Evidence Overview</section>",
+                        "<section>Major Turning Point Diagnostic</section>",
+                        "<section>Summary status</section>",
+                        "<section>Total rows</section>",
+                        "<section>potential_missed_turn</section>",
+                        "<section>potential_fakeout</section>",
+                        "<section>bad_entry_timing</section>",
+                        "<section>inconclusive</section>",
+                        "<section>Representative rows</section>",
+                        "<section>Safety boundary</section>",
+                        "<section>Note</section>",
+                        "<section>local/report-only</section>",
+                        "<section>post-hoc diagnostic support</section>",
+                        "<section>does not confirm a major turn</section>",
+                        "<section>does not authorize manual or automatic entry</section>",
                         "<section>Entry mode</section>",
                         "<section>Entry condition</section>",
                         "<section>TP / SL</section>",
@@ -1245,6 +1806,18 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>Invalidation / wait</section>",
                         "<section>Timeout / validity</section>",
                         "<section>Safety</section>",
+                        "<section>Major Turning Point Diagnostic</section>",
+                        "<section>Summary status</section>",
+                        "<section>Total rows</section>",
+                        "<section>potential_missed_turn</section>",
+                        "<section>potential_fakeout</section>",
+                        "<section>bad_entry_timing</section>",
+                        "<section>inconclusive</section>",
+                        "<section>Representative rows</section>",
+                        "<section>local/report-only</section>",
+                        "<section>post-hoc diagnostic support</section>",
+                        "<section>does not confirm a major turn</section>",
+                        "<section>does not authorize manual or automatic entry</section>",
                         "<section>Operator Triage Summary</section>",
                         "<section>Summary status</section>",
                         "<section>operator_status_diagnostic</section>",
