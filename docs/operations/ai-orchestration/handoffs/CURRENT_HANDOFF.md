@@ -4,8 +4,8 @@ last_updated: 2026-06-24
 repo: `afrogdesign/BTC_FX_CODEX`
 branch: `Ver03-v4`
 canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-current_commit: 126cd0e5801bcf75fbf02f5924d58d8fd71e2f97
-latest_reviewed_baseline: 126cd0e5801bcf75fbf02f5924d58d8fd71e2f97
+current_commit: 9a2b4fb2c6864ebea7c57013b5b32461cef4496b
+latest_reviewed_baseline: 9a2b4fb2c6864ebea7c57013b5b32461cef4496b
 
 ## State
 
