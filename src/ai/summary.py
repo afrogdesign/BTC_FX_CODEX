@@ -271,6 +271,110 @@ def _major_turning_point_opportunity_lines(
     ]
 
 
+def _major_turning_point_diagnostic_evidence(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    direct_evidence = result.get("major_turning_point_diagnostic")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container in (
+        notification_context or {},
+        display_context or {},
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict):
+            evidence = container.get("major_turning_point_diagnostic")
+            if isinstance(evidence, dict):
+                return evidence
+    return None
+
+
+def _major_turning_point_diagnostic_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none"
+        return ", ".join(str(item) for item in value)
+    text = str(value).strip()
+    return text or "not recorded"
+
+
+def _major_turning_point_diagnostic_row_text(row: dict[str, Any]) -> str:
+    fields = (
+        ("diagnostic_label", "diagnostic_label"),
+        ("candidate_id", "candidate_id"),
+        ("signal_id", "signal_id"),
+        ("timestamp_jst", "timestamp_jst"),
+        ("candidate_type", "candidate_type"),
+        ("active_primary_action", "active_primary_action"),
+        ("side", "side"),
+        ("entry_mode", "entry_mode"),
+        ("outcome", "outcome"),
+        ("first_exit_reason", "first_exit_reason"),
+        ("entry_reached_time", "entry_reached_time"),
+        ("mfe_r", "mfe_r"),
+        ("mae_r", "mae_r"),
+    )
+    return " / ".join(f"{label}: {_major_turning_point_diagnostic_value(row.get(key))}" for label, key in fields)
+
+
+def _major_turning_point_diagnostic_lines(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> list[str]:
+    evidence = _major_turning_point_diagnostic_evidence(result, notification_context, display_context)
+    if not isinstance(evidence, dict) or not evidence:
+        return []
+    counts = evidence.get("counts") if isinstance(evidence.get("counts"), dict) else {}
+    representative_rows = evidence.get("representative_rows")
+    rows: list[dict[str, Any]] = [row for row in representative_rows if isinstance(row, dict)] if isinstance(
+        representative_rows, list
+    ) else []
+    lines = [
+        "",
+        "【大転換チャンス診断】",
+        "local/report-only の表示です。post-hoc diagnostic support であり、実行はしません。",
+        "does not confirm a major turn / does not authorize manual or automatic entry です。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        f"summary_status: {_major_turning_point_diagnostic_value(evidence.get('summary_status'))}",
+        f"total_rows: {_major_turning_point_diagnostic_value(evidence.get('total_rows'))}",
+        f"potential_missed_turn: {_major_turning_point_diagnostic_value(counts.get('potential_missed_turn'))}",
+        f"potential_fakeout: {_major_turning_point_diagnostic_value(counts.get('potential_fakeout'))}",
+        f"bad_entry_timing: {_major_turning_point_diagnostic_value(counts.get('bad_entry_timing'))}",
+        f"inconclusive: {_major_turning_point_diagnostic_value(counts.get('inconclusive'))}",
+    ]
+    if rows:
+        lines.append("Representative rows:")
+        for idx, row in enumerate(rows[:5], 1):
+            lines.append(f"- {idx}: {_major_turning_point_diagnostic_row_text(row)}")
+    else:
+        lines.append("Representative rows: none")
+    lines.extend(
+        [
+            f"safety_boundary: {_major_turning_point_diagnostic_value(evidence.get('safety_boundary'))}",
+            f"note: {_major_turning_point_diagnostic_value(evidence.get('note'))}",
+        ]
+    )
+    return lines
+
+
 def _local_confirmation_lines() -> list[str]:
     return [
         "",
@@ -652,6 +756,7 @@ def _root_summary_lines(
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_diagnostic_lines(result, notification_context, display_context))
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
@@ -749,6 +854,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_actionability_lines(result))
     lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
     lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_diagnostic_lines(result, notification_context, display_context))
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))

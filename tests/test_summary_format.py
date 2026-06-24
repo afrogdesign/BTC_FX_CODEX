@@ -17,6 +17,86 @@ from src.ai.summary import (
 )
 
 
+def _major_turning_point_diagnostic_payload() -> dict[str, object]:
+    return {
+        "summary_status": "ready_for_human_review",
+        "total_rows": 4,
+        "counts": {
+            "potential_missed_turn": 1,
+            "potential_fakeout": 1,
+            "bad_entry_timing": 1,
+            "inconclusive": 1,
+        },
+        "representative_rows": [
+            {
+                "diagnostic_label": "potential_missed_turn",
+                "candidate_id": "cand-missed-turn-1",
+                "signal_id": "sig-missed-turn-1",
+                "timestamp_jst": "2026-06-24T09:00:00+09:00",
+                "candidate_type": "reversal_candidate",
+                "active_primary_action": "manual_review",
+                "side": "long",
+                "entry_mode": "watch_only",
+                "outcome": "tp2_first",
+                "first_exit_reason": "tp2",
+                "entry_reached_time": "2026-06-24T08:55:00+09:00",
+                "mfe_r": 2.4,
+                "mae_r": 0.3,
+            },
+            {
+                "diagnostic_label": "potential_fakeout",
+                "candidate_id": "cand-fakeout-1",
+                "signal_id": "sig-fakeout-1",
+                "timestamp_jst": "2026-06-24T09:15:00+09:00",
+                "candidate_type": "turn_candidate",
+                "active_primary_action": "manual_review",
+                "side": "short",
+                "entry_mode": "watch_only",
+                "outcome": "sl_first",
+                "first_exit_reason": "sl",
+                "entry_reached_time": "2026-06-24T09:10:00+09:00",
+                "mfe_r": 0.8,
+                "mae_r": 1.2,
+            },
+            {
+                "diagnostic_label": "bad_entry_timing",
+                "candidate_id": "cand-bad-entry-1",
+                "signal_id": "sig-bad-entry-1",
+                "timestamp_jst": "2026-06-24T09:30:00+09:00",
+                "candidate_type": "entry_timing_candidate",
+                "active_primary_action": "manual_review",
+                "side": "long",
+                "entry_mode": "watch_only",
+                "outcome": "timeout",
+                "first_exit_reason": "",
+                "entry_reached_time": "2026-06-24T09:25:00+09:00",
+                "mfe_r": 0.5,
+                "mae_r": 0.2,
+            },
+            {
+                "diagnostic_label": "inconclusive",
+                "candidate_id": "cand-inconclusive-1",
+                "signal_id": "sig-inconclusive-1",
+                "timestamp_jst": "2026-06-24T09:45:00+09:00",
+                "candidate_type": "watch_only",
+                "active_primary_action": "manual_review",
+                "side": "wait",
+                "entry_mode": "watch_only",
+                "outcome": "pending",
+                "first_exit_reason": "",
+                "entry_reached_time": "",
+                "mfe_r": "",
+                "mae_r": "",
+            },
+        ],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "note": (
+            "derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; "
+            "does not confirm a major turn; does not authorize manual or automatic entry"
+        ),
+    }
+
+
 class SummaryFormatTest(unittest.TestCase):
     def test_ready_case_separates_direction_and_execution(self) -> None:
         payload = {
@@ -154,6 +234,7 @@ class SummaryFormatTest(unittest.TestCase):
             "integrated_evidence_overview_missing_evidence_keys": [],
             "integrated_evidence_overview_not_ready_evidence_keys": [],
             "integrated_evidence_overview_execution_required_keys": [],
+            "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
         }
 
         subject = build_summary_subject(payload)
@@ -202,6 +283,25 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("大転換候補", body)
         self.assertIn("ダマシ注意", body)
         self.assertIn("決め打ち禁止", body)
+        self.assertIn("【大転換チャンス診断】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("total_rows: 4", body)
+        self.assertIn("potential_missed_turn: 1", body)
+        self.assertIn("potential_fakeout: 1", body)
+        self.assertIn("bad_entry_timing: 1", body)
+        self.assertIn("inconclusive: 1", body)
+        self.assertIn("cand-missed-turn-1", body)
+        self.assertIn("cand-fakeout-1", body)
+        self.assertIn("cand-bad-entry-1", body)
+        self.assertIn("cand-inconclusive-1", body)
+        self.assertIn("post-hoc diagnostic support", body)
+        self.assertIn("does not confirm a major turn", body)
+        self.assertIn("does not authorize manual or automatic entry", body)
+        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+        self.assertIn(
+            "note: derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
+            body,
+        )
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertIn("【ローカル確認】", body)
         self.assertIn("scripts/refresh_current_manual_delivery_app_surface.command", body)
@@ -547,6 +647,7 @@ class SummaryFormatTest(unittest.TestCase):
                     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                     "note": "derived from existing app contract data only",
                 },
+                "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
                 "integrated_evidence_overview": {
                     "summary_status": "ready_for_human_review",
                     "all_evidence_present": True,
@@ -636,6 +737,25 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("safe_config_schema_audit ready_or_valid: true", body)
         self.assertIn("operator_triage_summary ready_or_valid: true", body)
         self.assertIn("manual_action_checklist_surface ready_or_valid: true", body)
+        self.assertIn("【大転換チャンス診断】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("total_rows: 4", body)
+        self.assertIn("potential_missed_turn: 1", body)
+        self.assertIn("potential_fakeout: 1", body)
+        self.assertIn("bad_entry_timing: 1", body)
+        self.assertIn("inconclusive: 1", body)
+        self.assertIn("cand-missed-turn-1", body)
+        self.assertIn("cand-fakeout-1", body)
+        self.assertIn("cand-bad-entry-1", body)
+        self.assertIn("cand-inconclusive-1", body)
+        self.assertIn("post-hoc diagnostic support", body)
+        self.assertIn("does not confirm a major turn", body)
+        self.assertIn("does not authorize manual or automatic entry", body)
+        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+        self.assertIn(
+            "note: derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
+            body,
+        )
         self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertIn("note: derived from existing app contract/status data only", body)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
@@ -716,6 +836,7 @@ class SummaryFormatTest(unittest.TestCase):
 
         self.assertNotIn("【Operator Triage Summary】", body)
         self.assertNotIn("【Integrated Evidence Overview】", body)
+        self.assertNotIn("【大転換チャンス診断】", body)
         self.assertNotIn("operator_hint_status", body)
         self.assertNotIn("operator_status_diagnostic present:", body)
         self.assertNotIn("safe_config_schema_audit ready:", body)
@@ -789,7 +910,8 @@ class SummaryFormatTest(unittest.TestCase):
                     },
                     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                     "note": "derived from existing app contract data only",
-                }
+                },
+                "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
             },
         }
 
@@ -809,6 +931,25 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("operator_status_diagnostic present: true", body)
         self.assertIn("safe_config_schema_audit ready: true", body)
         self.assertIn("manual_action_checklist_surface ready: true", body)
+        self.assertIn("【大転換チャンス診断】", body)
+        self.assertIn("summary_status: ready_for_human_review", body)
+        self.assertIn("total_rows: 4", body)
+        self.assertIn("potential_missed_turn: 1", body)
+        self.assertIn("potential_fakeout: 1", body)
+        self.assertIn("bad_entry_timing: 1", body)
+        self.assertIn("inconclusive: 1", body)
+        self.assertIn("cand-missed-turn-1", body)
+        self.assertIn("cand-fakeout-1", body)
+        self.assertIn("cand-bad-entry-1", body)
+        self.assertIn("cand-inconclusive-1", body)
+        self.assertIn("post-hoc diagnostic support", body)
+        self.assertIn("does not confirm a major turn", body)
+        self.assertIn("does not authorize manual or automatic entry", body)
+        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+        self.assertIn(
+            "note: derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
+            body,
+        )
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("send_email", body)
         self.assertNotIn("private/order", body)

@@ -134,6 +134,86 @@ def _sample_detail_payload() -> dict[str, object]:
     }
 
 
+def _major_turning_point_diagnostic_payload() -> dict[str, object]:
+    return {
+        "summary_status": "ready_for_human_review",
+        "total_rows": 4,
+        "counts": {
+            "potential_missed_turn": 1,
+            "potential_fakeout": 1,
+            "bad_entry_timing": 1,
+            "inconclusive": 1,
+        },
+        "representative_rows": [
+            {
+                "diagnostic_label": "potential_missed_turn",
+                "candidate_id": "cand-missed-turn-1",
+                "signal_id": "sig-missed-turn-1",
+                "timestamp_jst": "2026-06-24T09:00:00+09:00",
+                "candidate_type": "reversal_candidate",
+                "active_primary_action": "manual_review",
+                "side": "long",
+                "entry_mode": "watch_only",
+                "outcome": "tp2_first",
+                "first_exit_reason": "tp2",
+                "entry_reached_time": "2026-06-24T08:55:00+09:00",
+                "mfe_r": 2.4,
+                "mae_r": 0.3,
+            },
+            {
+                "diagnostic_label": "potential_fakeout",
+                "candidate_id": "cand-fakeout-1",
+                "signal_id": "sig-fakeout-1",
+                "timestamp_jst": "2026-06-24T09:15:00+09:00",
+                "candidate_type": "turn_candidate",
+                "active_primary_action": "manual_review",
+                "side": "short",
+                "entry_mode": "watch_only",
+                "outcome": "sl_first",
+                "first_exit_reason": "sl",
+                "entry_reached_time": "2026-06-24T09:10:00+09:00",
+                "mfe_r": 0.8,
+                "mae_r": 1.2,
+            },
+            {
+                "diagnostic_label": "bad_entry_timing",
+                "candidate_id": "cand-bad-entry-1",
+                "signal_id": "sig-bad-entry-1",
+                "timestamp_jst": "2026-06-24T09:30:00+09:00",
+                "candidate_type": "entry_timing_candidate",
+                "active_primary_action": "manual_review",
+                "side": "long",
+                "entry_mode": "watch_only",
+                "outcome": "timeout",
+                "first_exit_reason": "",
+                "entry_reached_time": "2026-06-24T09:25:00+09:00",
+                "mfe_r": 0.5,
+                "mae_r": 0.2,
+            },
+            {
+                "diagnostic_label": "inconclusive",
+                "candidate_id": "cand-inconclusive-1",
+                "signal_id": "sig-inconclusive-1",
+                "timestamp_jst": "2026-06-24T09:45:00+09:00",
+                "candidate_type": "watch_only",
+                "active_primary_action": "manual_review",
+                "side": "wait",
+                "entry_mode": "watch_only",
+                "outcome": "pending",
+                "first_exit_reason": "",
+                "entry_reached_time": "",
+                "mfe_r": "",
+                "mae_r": "",
+            },
+        ],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "note": (
+            "derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; "
+            "does not confirm a major turn; does not authorize manual or automatic entry"
+        ),
+    }
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
@@ -216,6 +296,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             "integrated_evidence_overview_missing_evidence_keys": [],
             "integrated_evidence_overview_not_ready_evidence_keys": [],
             "integrated_evidence_overview_execution_required_keys": [],
+            "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
         }
 
         html = build_notification_detail_html(payload)
@@ -260,6 +341,9 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no secret/API key reading", html)
         self.assertIn("no automatic order", html)
         self.assertIn("no FORMAL_GO", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
         self.assertIn("大転換チャンス確認", html)
         self.assertIn("4時間足", html)
         self.assertIn("1時間足", html)
@@ -268,6 +352,31 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("大転換候補", html)
         self.assertIn("ダマシ注意", html)
         self.assertIn("決め打ち禁止", html)
+        self.assertIn("大転換チャンス診断", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("ready_for_human_review", html)
+        self.assertIn("Total rows", html)
+        self.assertIn("<div class=\"checklist-value\">4</div>", html)
+        self.assertIn("potential_missed_turn", html)
+        self.assertIn("<div class=\"checklist-value\">1</div>", html)
+        self.assertIn("potential_fakeout", html)
+        self.assertIn("bad_entry_timing", html)
+        self.assertIn("inconclusive", html)
+        self.assertIn("Representative rows", html)
+        self.assertIn("cand-missed-turn-1", html)
+        self.assertIn("cand-fakeout-1", html)
+        self.assertIn("cand-bad-entry-1", html)
+        self.assertIn("cand-inconclusive-1", html)
+        self.assertIn("Safety", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertIn("Note", html)
+        self.assertIn(
+            "derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
+            html,
+        )
         self.assertIn("Safe Config Schema Audit", html)
         self.assertIn("Operator Triage Summary", html)
         self.assertIn("Integrated Evidence Overview", html)
@@ -350,6 +459,9 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("no secret/API key reading", attention_html)
         self.assertIn("no automatic order", attention_html)
         self.assertIn("no FORMAL_GO", attention_html)
+        self.assertIn("post-hoc diagnostic support", attention_html)
+        self.assertIn("does not confirm a major turn", attention_html)
+        self.assertIn("does not authorize manual or automatic entry", attention_html)
         self.assertIn("local/manual_delivery_app_surface/app-dashboard.html", attention_html)
         self.assertIn("Operator Triage Summary", attention_html)
         self.assertIn("Integrated Evidence Overview", attention_html)
@@ -361,6 +473,30 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("all integrated evidence is present and ready", attention_html)
         self.assertIn("operator_hint_next_action", attention_html)
         self.assertIn("continue manual review; do not execute diagnostics from app surface", attention_html)
+        self.assertIn("大転換チャンス診断", attention_html)
+        self.assertIn("Summary status", attention_html)
+        self.assertIn("ready_for_human_review", attention_html)
+        self.assertIn("Total rows", attention_html)
+        self.assertIn("<div class=\"checklist-value\">4</div>", attention_html)
+        self.assertIn("potential_missed_turn", attention_html)
+        self.assertIn("<div class=\"checklist-value\">1</div>", attention_html)
+        self.assertIn("potential_fakeout", attention_html)
+        self.assertIn("bad_entry_timing", attention_html)
+        self.assertIn("inconclusive", attention_html)
+        self.assertIn("cand-missed-turn-1", attention_html)
+        self.assertIn("cand-fakeout-1", attention_html)
+        self.assertIn("cand-bad-entry-1", attention_html)
+        self.assertIn("cand-inconclusive-1", attention_html)
+        self.assertIn("post-hoc diagnostic support", attention_html)
+        self.assertIn("does not confirm a major turn", attention_html)
+        self.assertIn("does not authorize manual or automatic entry", attention_html)
+        self.assertIn("Safety", attention_html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", attention_html)
+        self.assertIn("Note", attention_html)
+        self.assertIn(
+            "derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
+            attention_html,
+        )
         self.assertIn("<strong>evidence_keys:</strong>", attention_html)
         self.assertIn(
             "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
@@ -444,6 +580,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                     "note": "derived from existing app contract/status data only",
                 },
+                "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
             },
             "integrated_evidence_overview_operator_hint_status": "ready_for_human_review",
             "integrated_evidence_overview_operator_hint_reason": "all integrated evidence is present and ready",
@@ -471,6 +608,18 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("safe_config_schema_audit ready_or_valid", html)
         self.assertIn("operator_triage_summary ready_or_valid", html)
         self.assertIn("manual_action_checklist_surface ready_or_valid", html)
+        self.assertIn("大転換チャンス診断", html)
+        self.assertIn("Summary status", html)
+        self.assertIn("ready_for_human_review", html)
+        self.assertIn("Total rows", html)
+        self.assertIn("<div class=\"checklist-value\">4</div>", html)
+        self.assertIn("cand-missed-turn-1", html)
+        self.assertIn("cand-fakeout-1", html)
+        self.assertIn("cand-bad-entry-1", html)
+        self.assertIn("cand-inconclusive-1", html)
+        self.assertIn("post-hoc diagnostic support", html)
+        self.assertIn("does not confirm a major turn", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", html)
         self.assertNotIn("smtp", html.lower())
@@ -489,6 +638,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("all_evidence_present", html)
         self.assertNotIn("Integrated Evidence Overview", html)
         self.assertNotIn("operator_hint_status", html)
+        self.assertNotIn("大転換チャンス診断", html)
         self.assertNotIn("operator_status_diagnostic present", html)
         self.assertNotIn("safe_config_schema_audit ready", html)
         self.assertNotIn("manual_action_checklist_surface ready", html)

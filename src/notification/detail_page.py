@@ -765,6 +765,102 @@ def _major_turning_point_opportunity_items(
     ]
 
 
+def _major_turning_point_diagnostic_evidence(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    direct_evidence = result.get("major_turning_point_diagnostic")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container in (
+        notification_context or {},
+        display_context or {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict):
+            evidence = container.get("major_turning_point_diagnostic")
+            if isinstance(evidence, dict):
+                return evidence
+    return None
+
+
+def _major_turning_point_diagnostic_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none"
+        return ", ".join(str(item) for item in value)
+    text = str(value).strip()
+    return text or "not recorded"
+
+
+def _major_turning_point_diagnostic_row_text(row: dict[str, Any]) -> str:
+    fields = (
+        ("diagnostic_label", "diagnostic_label"),
+        ("candidate_id", "candidate_id"),
+        ("signal_id", "signal_id"),
+        ("timestamp_jst", "timestamp_jst"),
+        ("candidate_type", "candidate_type"),
+        ("active_primary_action", "active_primary_action"),
+        ("side", "side"),
+        ("entry_mode", "entry_mode"),
+        ("outcome", "outcome"),
+        ("first_exit_reason", "first_exit_reason"),
+        ("entry_reached_time", "entry_reached_time"),
+        ("mfe_r", "mfe_r"),
+        ("mae_r", "mae_r"),
+    )
+    return " / ".join(f"{label}: {_major_turning_point_diagnostic_value(row.get(key))}" for label, key in fields)
+
+
+def _major_turning_point_diagnostic_items(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> tuple[list[tuple[str, str]], list[dict[str, Any]], str]:
+    evidence = _major_turning_point_diagnostic_evidence(result, notification_context, display_context)
+    if not isinstance(evidence, dict) or not evidence:
+        return [], [], ""
+    counts = evidence.get("counts") if isinstance(evidence.get("counts"), dict) else {}
+    representative_rows = evidence.get("representative_rows")
+    rows: list[dict[str, Any]] = [row for row in representative_rows if isinstance(row, dict)] if isinstance(
+        representative_rows, list
+    ) else []
+    items = [
+        ("Summary status", _major_turning_point_diagnostic_value(evidence.get("summary_status"))),
+        ("Total rows", _major_turning_point_diagnostic_value(evidence.get("total_rows"))),
+        ("potential_missed_turn", _major_turning_point_diagnostic_value(counts.get("potential_missed_turn"))),
+        ("potential_fakeout", _major_turning_point_diagnostic_value(counts.get("potential_fakeout"))),
+        ("bad_entry_timing", _major_turning_point_diagnostic_value(counts.get("bad_entry_timing"))),
+        ("inconclusive", _major_turning_point_diagnostic_value(counts.get("inconclusive"))),
+        ("Safety boundary", _major_turning_point_diagnostic_value(evidence.get("safety_boundary"))),
+        ("Note", _major_turning_point_diagnostic_value(evidence.get("note"))),
+    ]
+    rows_html = "".join(
+        "<div class=\"checklist-item\">"
+        f"<div class=\"checklist-label\">🧾 <span>Representative row {idx}</span></div>"
+        f"<div class=\"checklist-value\">{html.escape(_major_turning_point_diagnostic_row_text(row))}</div>"
+        "</div>"
+        for idx, row in enumerate(rows[:5], 1)
+    )
+    return items, rows, rows_html
+
+
 def _safe_config_schema_audit_html(
     result: dict[str, Any],
     notification_context: dict[str, Any] | None = None,
@@ -1193,6 +1289,11 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
     operator_triage_summary_html = _operator_triage_summary_html(result, notification_context, display_context)
     integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
+    major_turning_point_diagnostic_items, major_turning_point_diagnostic_rows, major_turning_point_diagnostic_rows_html = _major_turning_point_diagnostic_items(
+        result,
+        notification_context,
+        display_context,
+    )
     checklist_items = [
         ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
         (
@@ -1243,6 +1344,18 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         "</div>"
         for label, value in major_turning_point_items
     )
+    major_turning_point_diagnostic_html = (
+        '<div class="checklist">'
+        + "".join(
+            '<div class="checklist-item">'
+            f'<div class="checklist-label">📈 <span>{esc(label)}</span></div>'
+            f'<div class="checklist-value">{esc(value)}</div>'
+            "</div>"
+            for label, value in major_turning_point_diagnostic_items
+        )
+        + (f'<div class="checklist-item"><div class="checklist-label">🧾 <span>Representative rows</span></div><div class="checklist-value">{"none" if not major_turning_point_diagnostic_rows_html else major_turning_point_diagnostic_rows_html}</div></div>' if major_turning_point_diagnostic_items else "")
+        + "</div>"
+    ) if major_turning_point_diagnostic_items else ""
 
     return f"""<!doctype html>
 <html lang="ja">
@@ -1802,6 +1915,19 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <div class="checklist-note">これは転換の決め打ちではなく、条件成立まで人間確認を続けるための表示です。</div>
       </div>
     </section>
+
+    {f'''
+    <section class="section">
+      <h2>大転換チャンス診断</h2>
+      <div class="panel">
+        <p>local/report-only の表示です。post-hoc diagnostic support であり、実行はしません。</p>
+        <p>does not confirm a major turn / does not authorize manual or automatic entry です。</p>
+        <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <div class="checklist">{major_turning_point_diagnostic_html}</div>
+        <div class="checklist-note">これは候補の見直し用です。大転換の確定ではなく、失敗・ダマシ・タイミングの見直し候補を人間が確認します。</div>
+      </div>
+    </section>
+    ''' if major_turning_point_diagnostic_items else ''}
 
     <section class="section">
       <h2>3つの数字を丁寧に読む</h2>
