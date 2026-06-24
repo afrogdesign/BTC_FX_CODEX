@@ -13785,6 +13785,27 @@ def _manual_delivery_current_app_dashboard_html(
             safety_value if safety_value != "not available" else "report-only / not FORMAL_GO / no automatic order / human decides manually",
         ),
     ]
+    major_turning_point_rows = [
+        ("Active plan", _dashboard_value("active_plan_label")),
+        ("Side", _dashboard_value("side")),
+        ("Entry mode", _dashboard_value("entry_mode")),
+        ("Entry condition", _dashboard_value("entry_condition")),
+        ("TP plan", _dashboard_value("tp_plan")),
+        ("SL / invalidation", _dashboard_value("sl_or_invalidation")),
+        ("Timeout / wait limit", _dashboard_value("timeout_or_wait_limit")),
+        ("Actionability", _dashboard_value("actionability_label")),
+        ("Human action", _dashboard_value("human_action")),
+        ("Intraperiod evidence summary", _dashboard_value("intraperiod_evidence_summary")),
+        ("Allowed next action", _dashboard_value("allowed_next_action")),
+        ("Primary action", _dashboard_value("primary_action")),
+        ("Source readiness", _dashboard_value("source_readiness")),
+        (
+            "Turning point guidance",
+            "major turning point candidate / false-break / fakeout caution / do not decide from a single short-timeframe reaction / "
+            "check entry condition / invalidation / next condition before deciding / human review only",
+        ),
+        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]
 
     def _table_rows(rows: list[tuple[str, Any]]) -> str:
         return "\n".join(
@@ -13941,6 +13962,14 @@ def _manual_delivery_current_app_dashboard_html(
         <table>
           {_table_rows(manual_action_rows)}
         </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Major Turning Point Opportunity</h2>
+        <table>
+          {_table_rows(major_turning_point_rows)}
+        </table>
+        <p class=\"muted\">major turning point candidate / false-break / fakeout caution / do not decide from a single short-timeframe reaction / check entry condition / invalidation / next condition before deciding / human review only</p>
       </section>
 
       <section class=\"card full-width\">

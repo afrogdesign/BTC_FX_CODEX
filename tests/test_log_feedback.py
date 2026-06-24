@@ -170,6 +170,7 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("Readiness / Status", html)
         self.assertIn("Active Plan Summary", html)
         self.assertIn("Manual Action Checklist", html)
+        self.assertIn("Major Turning Point Opportunity", html)
         self.assertIn("Source Files / Generated At", html)
         self.assertIn("Safety Boundary", html)
         self.assertIn("Entry mode", html)
@@ -187,6 +188,11 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertIn("manual review", html)
         self.assertIn("human_review_only", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertIn("major turning point candidate", html)
+        self.assertIn("fakeout caution", html)
+        self.assertIn("do not decide from a single short-timeframe reaction", html)
+        self.assertIn("check entry condition / invalidation / next condition before deciding", html)
+        self.assertIn("human review only", html)
         self.assertIn("Operator Triage Summary", html)
         self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("Summary status", html)
@@ -313,6 +319,13 @@ class LogFeedbackTest(unittest.TestCase):
         )
         self.assertIn("<th>execution_required_keys</th><td>none</td>", html)
         self.assertNotIn("execution_required=true", html)
+        self.assertIn("Major Turning Point Opportunity", html)
+        self.assertIn("major turning point candidate", html)
+        self.assertIn("fakeout caution", html)
+        self.assertIn("do not decide from a single short-timeframe reaction", html)
+        self.assertIn("check entry condition / invalidation / next condition before deciding", html)
+        self.assertIn("human review only", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
 
     def test_manual_delivery_current_app_dashboard_html_shows_integrated_evidence_hints_for_missing_evidence(self) -> None:
         snapshot_data = {
@@ -381,6 +394,12 @@ class LogFeedbackTest(unittest.TestCase):
         self.assertNotIn("send_email", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+        self.assertIn("Major Turning Point Opportunity", html)
+        self.assertIn("major turning point candidate", html)
+        self.assertIn("fakeout caution", html)
+        self.assertIn("do not decide from a single short-timeframe reaction", html)
+        self.assertIn("check entry condition / invalidation / next condition before deciding", html)
+        self.assertIn("human review only", html)
 
     def test_manual_delivery_current_app_operator_triage_summary_data_handles_missing_evidence(self) -> None:
         status_data = {
