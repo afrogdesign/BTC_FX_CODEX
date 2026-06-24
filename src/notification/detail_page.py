@@ -882,10 +882,31 @@ def _integrated_evidence_overview_html(
                 return "none" if not candidate else ", ".join(str(item) for item in candidate)
         return "not recorded"
 
+    def _hint_value(field: str) -> str:
+        for candidate in (
+            evidence.get(field),
+            result.get(f"integrated_evidence_overview_{field}"),
+            result.get(field),
+        ):
+            if candidate is None:
+                continue
+            if isinstance(candidate, bool):
+                return str(candidate).lower()
+            if isinstance(candidate, list):
+                return "none" if not candidate else ", ".join(str(item) for item in candidate)
+            if isinstance(candidate, tuple):
+                return "none" if not candidate else ", ".join(str(item) for item in candidate)
+            text = str(candidate).strip()
+            return text or "not recorded"
+        return "not recorded"
+
     rows = [
         ("summary_status", _value("summary_status")),
         ("all_evidence_present", _value("all_evidence_present")),
         ("all_evidence_ready", _value("all_evidence_ready")),
+        ("operator_hint_status", _hint_value("operator_hint_status")),
+        ("operator_hint_reason", _hint_value("operator_hint_reason")),
+        ("operator_hint_next_action", _hint_value("operator_hint_next_action")),
         ("evidence_keys", _list_value("evidence_keys")),
         ("missing_evidence_keys", _list_value("missing_evidence_keys")),
         ("not_ready_evidence_keys", _list_value("not_ready_evidence_keys")),

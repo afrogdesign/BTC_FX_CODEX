@@ -138,6 +138,9 @@ class SummaryFormatTest(unittest.TestCase):
                         "execution_required": False,
                     },
                 },
+                "operator_hint_status": "ready_for_human_review",
+                "operator_hint_reason": "all integrated evidence is present and ready",
+                "operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
                 "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 "note": "derived from existing app contract/status data only",
             },
@@ -218,6 +221,12 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("all_evidence_present: true", body)
         self.assertIn("all_evidence_ready: true", body)
+        self.assertIn("operator_hint_status: ready_for_human_review", body)
+        self.assertIn("operator_hint_reason: all integrated evidence is present and ready", body)
+        self.assertIn(
+            "operator_hint_next_action: continue manual review; do not execute diagnostics from app surface",
+            body,
+        )
         self.assertIn(
             "evidence_keys: intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
             body,
@@ -239,6 +248,12 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("all_evidence_present: true", body)
         self.assertIn("all_evidence_ready: true", body)
+        self.assertIn("operator_hint_status: ready_for_human_review", body)
+        self.assertIn("operator_hint_reason: all integrated evidence is present and ready", body)
+        self.assertIn(
+            "operator_hint_next_action: continue manual review; do not execute diagnostics from app surface",
+            body,
+        )
         self.assertIn("intraperiod_review_stdout_json ready_or_valid: true", body)
         self.assertIn("operator_status_diagnostic ready_or_valid: true", body)
         self.assertIn("safe_config_schema_audit ready_or_valid: true", body)
@@ -551,6 +566,9 @@ class SummaryFormatTest(unittest.TestCase):
                     "note": "derived from existing app contract/status data only",
                 },
             },
+            "integrated_evidence_overview_operator_hint_status": "ready_for_human_review",
+            "integrated_evidence_overview_operator_hint_reason": "all integrated evidence is present and ready",
+            "integrated_evidence_overview_operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
             "integrated_evidence_overview_evidence_keys": [
                 "intraperiod_review_stdout_json",
                 "manual_action_checklist_surface",
@@ -583,6 +601,12 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("all_evidence_present: true", body)
         self.assertIn("all_evidence_ready: true", body)
+        self.assertIn("operator_hint_status: ready_for_human_review", body)
+        self.assertIn("operator_hint_reason: all integrated evidence is present and ready", body)
+        self.assertIn(
+            "operator_hint_next_action: continue manual review; do not execute diagnostics from app surface",
+            body,
+        )
         self.assertIn(
             "evidence_keys: intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
             body,
@@ -676,6 +700,7 @@ class SummaryFormatTest(unittest.TestCase):
 
         self.assertNotIn("【Operator Triage Summary】", body)
         self.assertNotIn("【Integrated Evidence Overview】", body)
+        self.assertNotIn("operator_hint_status", body)
         self.assertNotIn("operator_status_diagnostic present:", body)
         self.assertNotIn("safe_config_schema_audit ready:", body)
 

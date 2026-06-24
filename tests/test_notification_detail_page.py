@@ -182,6 +182,9 @@ class NotificationDetailPageTests(unittest.TestCase):
                         "execution_required": False,
                     },
                 },
+                "operator_hint_status": "ready_for_human_review",
+                "operator_hint_reason": "all integrated evidence is present and ready",
+                "operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
                 "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 "note": "derived from existing app contract/status data only",
             },
@@ -263,6 +266,12 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("summary_status", html)
         self.assertIn("all_evidence_present", html)
         self.assertIn("all_evidence_ready", html)
+        self.assertIn("operator_hint_status", html)
+        self.assertIn("ready_for_human_review", html)
+        self.assertIn("operator_hint_reason", html)
+        self.assertIn("all integrated evidence is present and ready", html)
+        self.assertIn("operator_hint_next_action", html)
+        self.assertIn("continue manual review; do not execute diagnostics from app surface", html)
         self.assertIn("<strong>evidence_keys:</strong>", html)
         self.assertIn(
             "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
@@ -338,6 +347,12 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("Integrated Evidence Overview", attention_html)
         self.assertIn("summary_status", attention_html)
         self.assertIn("all_evidence_present", attention_html)
+        self.assertIn("operator_hint_status", attention_html)
+        self.assertIn("ready_for_human_review", attention_html)
+        self.assertIn("operator_hint_reason", attention_html)
+        self.assertIn("all integrated evidence is present and ready", attention_html)
+        self.assertIn("operator_hint_next_action", attention_html)
+        self.assertIn("continue manual review; do not execute diagnostics from app surface", attention_html)
         self.assertIn("<strong>evidence_keys:</strong>", attention_html)
         self.assertIn(
             "intraperiod_review_stdout_json, manual_action_checklist_surface, operator_status_diagnostic, operator_triage_summary, safe_config_schema_audit",
@@ -414,6 +429,9 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "note": "derived from existing app contract/status data only",
                 },
             },
+            "integrated_evidence_overview_operator_hint_status": "ready_for_human_review",
+            "integrated_evidence_overview_operator_hint_reason": "all integrated evidence is present and ready",
+            "integrated_evidence_overview_operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
         }
 
         html = build_notification_detail_html(payload)
@@ -422,6 +440,12 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("Integrated Evidence Overview", html)
         self.assertIn("summary_status", html)
         self.assertIn("all_evidence_present", html)
+        self.assertIn("operator_hint_status", html)
+        self.assertIn("ready_for_human_review", html)
+        self.assertIn("operator_hint_reason", html)
+        self.assertIn("all integrated evidence is present and ready", html)
+        self.assertIn("operator_hint_next_action", html)
+        self.assertIn("continue manual review; do not execute diagnostics from app surface", html)
         self.assertIn("operator_status_diagnostic present", html)
         self.assertIn("safe_config_schema_audit ready", html)
         self.assertIn("intraperiod_review_stdout_json ready", html)
@@ -448,6 +472,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("summary_status", html)
         self.assertNotIn("all_evidence_present", html)
         self.assertNotIn("Integrated Evidence Overview", html)
+        self.assertNotIn("operator_hint_status", html)
         self.assertNotIn("operator_status_diagnostic present", html)
         self.assertNotIn("safe_config_schema_audit ready", html)
         self.assertNotIn("manual_action_checklist_surface ready", html)
@@ -464,6 +489,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("Safe Config Schema Audit", html)
         self.assertNotIn("safe_config_schema_audit.v1", html)
         self.assertNotIn("Integrated Evidence Overview", html)
+        self.assertNotIn("operator_hint_status", html)
         self.assertIn("Ver03-v4 手動確認サポート", html)
         self.assertNotIn("OPENAI_API_KEY", html)
         self.assertNotIn("SMTP_PASSWORD", html)

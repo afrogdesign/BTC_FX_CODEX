@@ -480,6 +480,21 @@ def _integrated_evidence_overview_list_field_value(
     return None
 
 
+def _integrated_evidence_overview_hint_field_value(
+    result: dict[str, Any],
+    evidence: dict[str, Any],
+    field: str,
+) -> Any:
+    for candidate in (
+        evidence.get(field),
+        result.get(f"integrated_evidence_overview_{field}"),
+        result.get(field),
+    ):
+        if candidate is not None:
+            return candidate
+    return None
+
+
 def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
     evidence = _integrated_evidence_overview_evidence(result)
     if not isinstance(evidence, dict):
@@ -497,10 +512,27 @@ def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
         "not_ready_evidence_keys",
         "execution_required_keys",
     }
+    hint_labels = {
+        "operator_hint_status",
+        "operator_hint_reason",
+        "operator_hint_next_action",
+    }
     for label, key in (
         ("summary_status", "summary_status"),
         ("all_evidence_present", "all_evidence_present"),
         ("all_evidence_ready", "all_evidence_ready"),
+        (
+            "operator_hint_status",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_status"),
+        ),
+        (
+            "operator_hint_reason",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_reason"),
+        ),
+        (
+            "operator_hint_next_action",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_next_action"),
+        ),
         ("evidence_keys", _integrated_evidence_overview_list_field_value(result, evidence, "evidence_keys")),
         (
             "missing_evidence_keys",
@@ -535,6 +567,8 @@ def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
         if isinstance(key, tuple):
             value = _integrated_evidence_overview_field_value(evidence, key[0], key[1])
         elif label in list_labels:
+            value = key
+        elif label in hint_labels:
             value = key
         else:
             value = evidence.get(key)
