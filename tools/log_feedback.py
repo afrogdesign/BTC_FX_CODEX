@@ -9088,6 +9088,66 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
     else:
         lines.append("- なし")
 
+    diagnostic_counts = Counter(_active_plan_intraperiod_major_turning_point_diagnostic_label(row) for row in rows)
+
+    lines.extend(
+        [
+            "",
+            "## 9.5. 大転換チャンス診断",
+            "- local/report-only",
+            "- not FORMAL_GO",
+            "- no automatic order",
+            "- human decides manually",
+            "- post-hoc diagnostic support",
+            "- this is post-hoc diagnostic support",
+            "- ここでの分類は大転換の確定ではない。",
+            "- it does not confirm a major turn",
+            "- 手動/自動エントリーの許可でもない。",
+            "- it does not authorize manual or automatic entry",
+            "- missed turn / fakeout / bad entry timing の再確認候補を見つけるための補助情報です。",
+            "- identify review candidates where missed turn, fakeout, or bad entry timing may need human review",
+            f"- 対象行数: {len(rows)}",
+            f"- potential_missed_turn: {diagnostic_counts.get('potential_missed_turn', 0)}件",
+            f"- potential_fakeout: {diagnostic_counts.get('potential_fakeout', 0)}件",
+            f"- bad_entry_timing: {diagnostic_counts.get('bad_entry_timing', 0)}件",
+            f"- inconclusive: {diagnostic_counts.get('inconclusive', 0)}件",
+            "",
+            "### 分類の考え方",
+            "- `potential_missed_turn`: TP2先行や十分な MFE が出ている候補を、大転換候補として再確認する分類です。",
+            "- `potential_fakeout`: SL先行・ambiguous・MAE優勢の候補を、ダマシ/フェイクアウト候補として見直す分類です。",
+            "- `bad_entry_timing`: timeout / entry_reached など、入るタイミングの見直し候補を示す分類です。",
+            "- `inconclusive`: 判断材料不足または保留で、現時点では判定しない分類です。",
+            "",
+            "### 代表例",
+        ]
+    )
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_rows[: max(0, int(limit))]:
+            diagnostic_label = _active_plan_intraperiod_major_turning_point_diagnostic_label(row)
+            lines.append(
+                "- "
+                + " / ".join(
+                    [
+                        diagnostic_label,
+                        str(row.get("candidate_id", "")).strip(),
+                        str(row.get("signal_id", "")).strip(),
+                        str(row.get("timestamp_jst", "")).strip(),
+                        str(row.get("candidate_type", "")).strip(),
+                        str(row.get("active_primary_action", "")).strip(),
+                        str(row.get("side", "")).strip(),
+                        str(row.get("entry_mode", "")).strip(),
+                        str(row.get("outcome", "")).strip(),
+                        str(row.get("first_exit_reason", "")).strip(),
+                        str(row.get("entry_reached_time", "")).strip(),
+                        str(row.get("mfe_r", "")).strip(),
+                        str(row.get("mae_r", "")).strip(),
+                    ]
+                )
+            )
+    else:
+        lines.append("- なし")
+
     lines.extend(
         [
             "",
@@ -16175,6 +16235,41 @@ def _active_plan_intraperiod_mean_metric(
         if (value := _active_plan_intraperiod_metric_value(row, primary_key, fallback_key)) is not None
     ]
     return mean(values) if values else 0.0
+
+
+def _active_plan_intraperiod_major_turning_point_diagnostic_label(row: dict[str, Any]) -> str:
+    outcome = str(row.get("outcome", "")).strip()
+    if outcome in {"", "pending", "no_ohlcv", "not_entered"}:
+        return "inconclusive"
+
+    entry_reached_time = str(row.get("entry_reached_time", "")).strip()
+    first_exit_reason = str(row.get("first_exit_reason", "")).strip()
+    mfe_r = _active_plan_intraperiod_metric_value(row, "mfe_r", "mfe_price")
+    mae_r = _active_plan_intraperiod_metric_value(row, "mae_r", "mae_price")
+
+    if (
+        outcome not in {"tp2_first", "tp1_first", "sl_first", "timeout", "entry_reached", "ambiguous"}
+        and not entry_reached_time
+        and not first_exit_reason
+        and mfe_r is None
+        and mae_r is None
+    ):
+        return "inconclusive"
+
+    if outcome in {"sl_first", "ambiguous"} or first_exit_reason in {"sl", "ambiguous"} or (
+        mae_r is not None and mae_r >= 1.0 and (mfe_r is None or mfe_r < 1.0)
+    ):
+        return "potential_fakeout"
+
+    if outcome == "tp2_first" or (mfe_r is not None and mfe_r >= 2.0) or (outcome == "tp1_first" and mfe_r is not None and mfe_r >= 1.0):
+        return "potential_missed_turn"
+
+    if outcome in {"timeout", "entry_reached"} or (
+        entry_reached_time and not first_exit_reason and mfe_r is not None and mfe_r > 0
+    ):
+        return "bad_entry_timing"
+
+    return "inconclusive"
 
 
 def _active_plan_representatives(rows: list[dict[str, Any]], *, limit: int = 5) -> list[str]:

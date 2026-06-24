@@ -6721,6 +6721,162 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("ambiguous=1件", report)
             self.assertIn("no_ohlcv=1件", report)
 
+    def test_build_active_plan_candidate_intraperiod_outcomes_report_adds_major_turning_point_diagnostic_summary(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            logs_csv = base_dir / "logs" / "csv"
+            logs_csv.mkdir(parents=True, exist_ok=True)
+
+            outcomes_path = logs_csv / "active_plan_candidate_intraperiod_outcomes.csv"
+            fieldnames = [
+                "timestamp_jst",
+                "candidate_id",
+                "signal_id",
+                "candidate_type",
+                "active_primary_action",
+                "side",
+                "entry_mode",
+                "entry_price",
+                "stop_price",
+                "tp1_price",
+                "tp2_price",
+                "outcome",
+                "entry_reached_time",
+                "first_exit_time",
+                "first_exit_reason",
+                "mfe_price",
+                "mae_price",
+                "mfe_r",
+                "mae_r",
+            ]
+            rows = [
+                {
+                    "timestamp_jst": "2026-06-07T12:00:00+09:00",
+                    "candidate_id": "cand-missed-turn",
+                    "signal_id": "sig-missed-turn",
+                    "candidate_type": "active_limit_retest",
+                    "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                    "side": "long",
+                    "entry_mode": "limit",
+                    "entry_price": "100",
+                    "stop_price": "95",
+                    "tp1_price": "105",
+                    "tp2_price": "110",
+                    "outcome": "tp2_first",
+                    "entry_reached_time": "2026-06-07T12:15:00+09:00",
+                    "first_exit_time": "2026-06-07T13:00:00+09:00",
+                    "first_exit_reason": "tp2",
+                    "mfe_price": "10.0",
+                    "mae_price": "1.0",
+                    "mfe_r": "2.0",
+                    "mae_r": "0.2",
+                },
+                {
+                    "timestamp_jst": "2026-06-06T12:00:00+09:00",
+                    "candidate_id": "cand-fakeout",
+                    "signal_id": "sig-fakeout",
+                    "candidate_type": "active_market_small",
+                    "active_primary_action": "ACTIVE_MARKET_SMALL",
+                    "side": "short",
+                    "entry_mode": "market",
+                    "entry_price": "101",
+                    "stop_price": "106",
+                    "tp1_price": "96",
+                    "tp2_price": "94",
+                    "outcome": "sl_first",
+                    "entry_reached_time": "2026-06-06T12:10:00+09:00",
+                    "first_exit_time": "2026-06-06T12:20:00+09:00",
+                    "first_exit_reason": "sl",
+                    "mfe_price": "0.8",
+                    "mae_price": "1.2",
+                    "mfe_r": "0.8",
+                    "mae_r": "1.2",
+                },
+                {
+                    "timestamp_jst": "2026-06-05T12:00:00+09:00",
+                    "candidate_id": "cand-bad-timing",
+                    "signal_id": "sig-bad-timing",
+                    "candidate_type": "active_counter_scalp",
+                    "active_primary_action": "ACTIVE_COUNTER_SCALP",
+                    "side": "long",
+                    "entry_mode": "limit",
+                    "entry_price": "102",
+                    "stop_price": "97",
+                    "tp1_price": "107",
+                    "tp2_price": "110",
+                    "outcome": "timeout",
+                    "entry_reached_time": "2026-06-05T12:05:00+09:00",
+                    "first_exit_time": "2026-06-05T15:00:00+09:00",
+                    "first_exit_reason": "timeout",
+                    "mfe_price": "1.5",
+                    "mae_price": "0.4",
+                    "mfe_r": "0.9",
+                    "mae_r": "0.2",
+                },
+                {
+                    "timestamp_jst": "2026-06-04T12:00:00+09:00",
+                    "candidate_id": "cand-inconclusive",
+                    "signal_id": "sig-inconclusive",
+                    "candidate_type": "active_counter_scalp",
+                    "active_primary_action": "ACTIVE_COUNTER_SCALP",
+                    "side": "short",
+                    "entry_mode": "limit",
+                    "entry_price": "103",
+                    "stop_price": "108",
+                    "tp1_price": "98",
+                    "tp2_price": "96",
+                    "outcome": "pending",
+                    "entry_reached_time": "",
+                    "first_exit_time": "",
+                    "first_exit_reason": "",
+                    "mfe_price": "",
+                    "mae_price": "",
+                    "mfe_r": "",
+                    "mae_r": "",
+                },
+            ]
+            with outcomes_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            output_md = base_dir / "custom_diagnostic_report.md"
+            report = build_active_plan_candidate_intraperiod_outcomes_report(
+                base_dir=base_dir,
+                intraperiod_outcomes_path=outcomes_path,
+                output_md=output_md,
+                date_from="2026-06-04",
+                date_to="2026-06-07",
+                limit=10,
+            )
+
+            self.assertTrue(output_md.exists())
+            output_text = output_md.read_text(encoding="utf-8")
+            self.assertIn("## 9.5. 大転換チャンス診断", report)
+            self.assertIn("## 9.5. 大転換チャンス診断", output_text)
+            self.assertIn("local/report-only", report)
+            self.assertIn("not FORMAL_GO", report)
+            self.assertIn("no automatic order", report)
+            self.assertIn("human decides manually", report)
+            self.assertIn("potential_missed_turn: 1件", report)
+            self.assertIn("potential_fakeout: 1件", report)
+            self.assertIn("bad_entry_timing: 1件", report)
+            self.assertIn("inconclusive: 1件", report)
+            self.assertIn("cand-missed-turn", report)
+            self.assertIn("cand-fakeout", report)
+            self.assertIn("cand-bad-timing", report)
+            self.assertIn("cand-inconclusive", report)
+            self.assertIn("post-hoc diagnostic support", report)
+            self.assertIn("does not confirm a major turn", report)
+            self.assertIn("does not authorize manual or automatic entry", report)
+            self.assertIn("identify review candidates", report)
+            self.assertNotIn("automatic_order_allowed=true", report)
+            self.assertNotIn("send_email", report)
+            self.assertNotIn("private/order", report)
+            self.assertNotIn("Gmail", report)
+            self.assertNotIn("smtp", report)
+            self.assertNotIn("FORMAL_GO as approval", report)
+
     def test_build_active_plan_candidate_intraperiod_outcomes_report_handles_missing_input_csv(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
