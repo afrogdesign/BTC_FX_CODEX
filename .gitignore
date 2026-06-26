@@ -9,6 +9,9 @@ tmp/
 data/historical/
 .vscode/
 .viewer_server.log
+last_result.json
+heartbeat.txt
+monitor.pid
 
 # Ver03-v4 local generated/manual-delivery artifacts
 local/manual_delivery_app_surface/
