@@ -265,7 +265,7 @@ Current checks:
 
 - Install Python dependencies
 - Compile Python files
-- Run `pytest` if a `tests/` directory exists
+- Run `unittest discover` if a `tests/` directory exists
 
 The CI is intentionally small at this stage. The next step is to add focused tests for pure analysis functions and log-safe output formatting.
 
