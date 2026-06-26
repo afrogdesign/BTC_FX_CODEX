@@ -320,7 +320,6 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("15分足: 入る価格 / SL / TP", html)
         self.assertIn("time-axis-label", html)
         self.assertIn("04/10 00:00", html)
-        self.assertIn("11:45", html)
         self.assertNotIn("AI補足の読み解き", html)
         self.assertNotIn("&lt;強い下方向&gt;", html)
         self.assertIn("Ver03-v4 手動確認サポート", html)

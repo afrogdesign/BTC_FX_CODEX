@@ -1754,6 +1754,11 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return path
 
     def _write_manual_delivery_input_json(self, base_dir: Path, *, pending_caveat: str, include_manual_delivery_checklist: bool = False) -> Path:
+        detail_report_path = self._write_intraperiod_report(
+            base_dir,
+            "20260610",
+            "detail report for manual delivery bundle tests",
+        )
         path = base_dir / "manual-delivery-input.json"
         path.write_text(
             json.dumps(
@@ -1773,6 +1778,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "timeout_or_wait_limit": "timeout after JSON window",
                     "intraperiod_evidence_summary": "JSON provided evidence summary",
                     "pending_caveat": pending_caveat,
+                    "detail_report_path": str(detail_report_path),
                     "include_manual_delivery_checklist": include_manual_delivery_checklist,
                 },
                 ensure_ascii=False,
