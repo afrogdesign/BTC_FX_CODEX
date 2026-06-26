@@ -141,6 +141,10 @@ def _top_flags(rows: list[Row], limit: int = 10) -> list[tuple[str, int]]:
     return c.most_common(limit)
 
 
+def _variant_distribution(rows: list[Row], key: str) -> list[tuple[str, int]]:
+    return _distribution(rows, key).most_common()
+
+
 def _build_actions(total: int, invalid_rate: float, ai_error_rate: float, top_flags: list[tuple[str, int]]) -> list[str]:
     actions: list[str] = []
     if total < 50:
@@ -193,6 +197,12 @@ def _render_markdown(rows: list[Row], csv_path: Path, filters: dict[str, str]) -
     monthly = _bucket_summary(rows, "month")
     hourly = _hourly_summary(rows)
     flags = _top_flags(rows, limit=10)
+    summary_variants = _variant_distribution(rows, "summary_variant")
+    advice_variants = _variant_distribution(rows, "advice_variant")
+    trace_versions = _variant_distribution(rows, "evaluation_trace_version")
+    direction_shadows = [_to_float(r.raw.get("confidence_direction_shadow")) for r in rows if (r.raw.get("confidence_direction_shadow") or "").strip()]
+    execution_shadows = [_to_float(r.raw.get("confidence_execution_shadow")) for r in rows if (r.raw.get("confidence_execution_shadow") or "").strip()]
+    wait_shadows = [_to_float(r.raw.get("confidence_wait_shadow")) for r in rows if (r.raw.get("confidence_wait_shadow") or "").strip()]
 
     actions = _build_actions(
         total=total,
@@ -216,6 +226,12 @@ def _render_markdown(rows: list[Row], csv_path: Path, filters: dict[str, str]) -
     lines.append(f"- high confidence (>=80): `{high_conf}` 件 ({_fmt_pct(_ratio(high_conf, total))})")
     lines.append(f"- primary_setup_status=invalid: `{invalid_count}` 件 ({_fmt_pct(_ratio(invalid_count, total))})")
     lines.append(f"- ai_error 発生: `{ai_error_count}` 件 ({_fmt_pct(_ratio(ai_error_count, total))})")
+    if direction_shadows:
+        lines.append(f"- 平均 confidence_direction_shadow: `{mean(direction_shadows):.2f}`")
+    if execution_shadows:
+        lines.append(f"- 平均 confidence_execution_shadow: `{mean(execution_shadows):.2f}`")
+    if wait_shadows:
+        lines.append(f"- 平均 confidence_wait_shadow: `{mean(wait_shadows):.2f}`")
     lines.append("")
 
     lines.append("## 3. 分布")
@@ -241,21 +257,36 @@ def _render_markdown(rows: list[Row], csv_path: Path, filters: dict[str, str]) -
         lines.append("- no_trade_flags は記録なし")
     lines.append("")
 
-    lines.append("## 5. 年次集計")
+    lines.append("## 5. variant / trace")
+    if summary_variants:
+        lines.append("### summary_variant")
+        for name, cnt in summary_variants:
+            lines.append(f"- {name}: {cnt}")
+    if advice_variants:
+        lines.append("### advice_variant")
+        for name, cnt in advice_variants:
+            lines.append(f"- {name}: {cnt}")
+    if trace_versions:
+        lines.append("### evaluation_trace_version")
+        for name, cnt in trace_versions:
+            lines.append(f"- {name}: {cnt}")
+    lines.append("")
+
+    lines.append("## 6. 年次集計")
     lines.append("| year | count | avg_conf | invalid_rate | ai_error_rate |")
     lines.append("|---|---:|---:|---:|---:|")
     for y, c, conf, inv_r, ai_r in yearly:
         lines.append(f"| {y} | {c} | {conf:.2f} | {_fmt_pct(inv_r)} | {_fmt_pct(ai_r)} |")
     lines.append("")
 
-    lines.append("## 6. 月次集計")
+    lines.append("## 7. 月次集計")
     lines.append("| month | count | avg_conf | invalid_rate | ai_error_rate |")
     lines.append("|---|---:|---:|---:|---:|")
     for m, c, conf, inv_r, ai_r in monthly:
         lines.append(f"| {m} | {c} | {conf:.2f} | {_fmt_pct(inv_r)} | {_fmt_pct(ai_r)} |")
     lines.append("")
 
-    lines.append("## 7. 時間帯別（JST）")
+    lines.append("## 8. 時間帯別（JST）")
     lines.append("| hour | count | avg_conf | invalid_rate |")
     lines.append("|---|---:|---:|---:|")
     for hour, c, conf, inv_r in hourly:

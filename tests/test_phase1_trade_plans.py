@@ -1,12 +1,148 @@
 from __future__ import annotations
 
+import csv
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from src.trade.exit_manager import build_exit_plan
+import pandas as pd
+
+from src.storage.csv_logger import (
+    append_observation_paper_order,
+    append_paper_order,
+    append_paper_position,
+    append_phase1b_lite_paper_order,
+)
+from src.trade.execution_gate import determine_trade_execution_gate
+from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
+from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.opportunity_gate import determine_opportunity_gate
+from src.trade.paper_position import evaluate_paper_position
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.position_sizing import build_position_size_plan
 
 
 class Phase1TradePlanTests(unittest.TestCase):
+    def _paper_row(self, **overrides: object) -> dict[str, object]:
+        row: dict[str, object] = {
+            "signal_id": "paper_1",
+            "timestamp_jst": "2026-05-18T10:00:00+09:00",
+            "position_status": "pending",
+            "side": "long",
+            "reference_price": 100,
+            "entry_price": 99,
+            "stop_loss_price": 97,
+            "tp1_price": 103,
+            "tp2_price": 105,
+            "breakeven_after_tp1": "false",
+            "timeout_hours": 12,
+            "atr_15m_value": 2,
+        }
+        row.update(overrides)
+        return row
+
+    def _candles(self, items: list[tuple[str, float, float, float]]) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "timestamp": int(pd.Timestamp(ts).timestamp() * 1000),
+                    "open": close,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": 1,
+                }
+                for ts, high, low, close in items
+            ]
+        )
+
+    def _read_csv_rows(self, path: Path) -> list[dict[str, str]]:
+        with path.open("r", newline="", encoding="utf-8") as fp:
+            return list(csv.DictReader(fp))
+
+    def test_ready_paper_position_opens_immediately(self) -> None:
+        row = self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00")
+        updated = evaluate_paper_position(row, self._candles([]))
+
+        self.assertEqual(updated["position_status"], "opened")
+        self.assertEqual(updated["opened_at_jst"], "2026-05-18T10:00:00+09:00")
+
+    def test_pending_paper_position_opens_on_entry_touch(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-18T01:15:00Z", 101, 98.5, 100)]),
+        )
+
+        self.assertEqual(updated["position_status"], "opened")
+        self.assertEqual(updated["opened_at_jst"], "2026-05-18T10:15:00+09:00")
+
+    def test_opened_paper_position_closes_on_tp2(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 106, 100, 105)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "tp2_hit")
+        self.assertEqual(updated["close_price"], 105)
+        self.assertEqual(updated["realized_r"], 3.0)
+
+    def test_opened_paper_position_closes_on_sl(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 100, 96.5, 97)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "sl_hit")
+        self.assertEqual(updated["realized_r"], -1.0)
+
+    def test_tp_and_sl_same_candle_prefers_sl(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(position_status="opened", opened_at_jst="2026-05-18T10:00:00+09:00"),
+            self._candles([("2026-05-18T01:15:00Z", 106, 96.5, 100)]),
+        )
+
+        self.assertEqual(updated["exit_status"], "sl_hit")
+
+    def test_breakeven_stop_after_tp1(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(
+                position_status="opened",
+                opened_at_jst="2026-05-18T10:00:00+09:00",
+                breakeven_after_tp1="true",
+            ),
+            self._candles(
+                [
+                    ("2026-05-18T01:15:00Z", 103.5, 100, 102),
+                    ("2026-05-18T01:30:00Z", 102, 98.5, 99),
+                ]
+            ),
+        )
+
+        self.assertEqual(updated["exit_status"], "sl_hit")
+        self.assertEqual(updated["close_price"], 99)
+        self.assertEqual(updated["realized_r"], 0.0)
+
+    def test_pending_position_marks_missed_when_tp_direction_runs_before_entry(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-18T01:15:00Z", 103.5, 100, 102)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "missed_opportunity")
+        self.assertEqual(updated["missed_opportunity"], "true")
+
+    def test_pending_position_closes_when_entry_not_reached_for_24h(self) -> None:
+        updated = evaluate_paper_position(
+            self._paper_row(),
+            self._candles([("2026-05-19T01:15:00Z", 101, 100, 100.5)]),
+        )
+
+        self.assertEqual(updated["position_status"], "closed")
+        self.assertEqual(updated["exit_status"], "entry_not_reached")
+
     def test_position_sizing_applies_loss_streak_reduction_and_cap_for_strong_machine(self) -> None:
         plan = build_position_size_plan(
             account_balance=10000,
@@ -27,7 +163,7 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
         self.assertIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
 
-    def test_position_sizing_treats_strong_ai_confirmed_as_strong_tier(self) -> None:
+    def test_position_sizing_does_not_treat_removed_ai_tier_as_strong(self) -> None:
         plan = build_position_size_plan(
             account_balance=10000,
             entry_price=70000,
@@ -40,7 +176,7 @@ class Phase1TradePlanTests(unittest.TestCase):
             max_position_size_usd=3000,
         )
 
-        self.assertIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
+        self.assertNotIn("strong_tier_kept_flat", plan["size_reduction_reasons"])
         self.assertNotIn("loss_streak_risk_reduced", plan["size_reduction_reasons"])
 
     def test_exit_plan_builds_prices_from_r_multiple(self) -> None:
@@ -61,6 +197,1026 @@ class Phase1TradePlanTests(unittest.TestCase):
         self.assertTrue(plan["breakeven_after_tp1"])
         self.assertEqual(plan["trail_atr_multiplier"], 1.5)
         self.assertEqual(plan["timeout_hours"], 12)
+
+    def test_shadow_exit_plan_uses_wider_phase1_v1_targets(self) -> None:
+        long_plan = build_shadow_exit_plan(
+            side="long",
+            entry_price=70000,
+            stop_loss_price=69500,
+            atr=180,
+            trail_atr_multiplier=1.5,
+            timeout_hours=12,
+        )
+        short_plan = build_shadow_exit_plan(
+            side="short",
+            entry_price=70000,
+            stop_loss_price=70500,
+            atr=180,
+            trail_atr_multiplier=1.5,
+            timeout_hours=12,
+        )
+
+        self.assertEqual(long_plan["shadow_tp1_price"], 70650.0)
+        self.assertEqual(long_plan["shadow_tp2_price"], 71200.0)
+        self.assertEqual(short_plan["shadow_tp1_price"], 69350.0)
+        self.assertEqual(short_plan["shadow_tp2_price"], 68800.0)
+        self.assertEqual(long_plan["shadow_exit_rule_version"], "phase1_v1_shadow")
+
+    def test_execution_gate_blocks_rr_and_weak_execution(self) -> None:
+        result = determine_trade_execution_gate(
+            phase1_active=True,
+            primary_setup_status="ready",
+            primary_setup_reason="rr_below_min",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_execution_shadow=20,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["trade_execution_gate"], "blocked")
+        self.assertIn("rr_below_min", result["trade_execution_blockers"])
+        self.assertIn("execution_shadow_too_low", result["trade_execution_blockers"])
+        self.assertIn("wait_pressure_too_high", result["trade_execution_blockers"])
+
+    def test_execution_gate_passes_clean_ready_setup(self) -> None:
+        result = determine_trade_execution_gate(
+            phase1_active=True,
+            primary_setup_status="ready",
+            primary_setup_reason="inside_entry_zone_with_trigger",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            confidence_execution_shadow=45,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["trade_execution_gate"], "pass")
+        self.assertEqual(result["trade_execution_blockers"], [])
+
+    def test_observation_gate_passes_rr_learning_with_direction_value(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="invalid",
+            primary_setup_reason="rr_below_min",
+            prelabel="ENTRY_OK",
+            data_quality_flag="ok",
+            no_trade_flags=["RR_insufficient"],
+            risk_flags=[],
+            confidence_direction_shadow=35,
+            confidence_execution_shadow=5,
+            confidence_wait_shadow=95,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "direction_rr_learning")
+        self.assertEqual(result["phase1_observation_reasons"], ["direction_rr_learning"])
+
+    def test_observation_gate_blocks_confidence_below_min(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "orderbook_ask_heavy"],
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=40,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "blocked")
+        self.assertIn("confidence_below_min", result["phase1_observation_reasons"])
+
+    def test_observation_gate_passes_watch_learning(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=[],
+            confidence_direction_shadow=55,
+            confidence_execution_shadow=20,
+            confidence_wait_shadow=75,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "setup_watch_learning")
+
+    def test_observation_gate_blocks_fatal_no_trade_candidates(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="NO_TRADE_CANDIDATE",
+            data_quality_flag="ok",
+            no_trade_flags=["ATR_extreme"],
+            risk_flags=[],
+            confidence_direction_shadow=80,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "blocked")
+        self.assertIn("no_trade_candidate", result["phase1_observation_reasons"])
+        self.assertIn("ATR_extreme", result["phase1_observation_reasons"])
+
+    def test_observation_gate_passes_confidence_watch_learning_candidate(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=80,
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "confidence_watch_learning")
+
+    def test_phase1b_lite_gate_passes_limited_confidence_watch_sweep_candidate(self) -> None:
+        result = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+
+        self.assertEqual(result["phase1b_lite_gate"], "pass")
+        self.assertEqual(result["phase1b_lite_type"], "confidence_watch_sweep_lite")
+        self.assertEqual(result["phase1b_lite_reasons"], ["confidence_watch_sweep_lite"])
+
+    def test_phase1b_lite_gate_blocks_risky_entry_and_standalone_trend_flip_up(self) -> None:
+        risky_entry = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="RISKY_ENTRY",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+        standalone_trend_up = determine_phase1b_lite_gate(
+            phase1_observation_type="confidence_watch_learning",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            prelabel="SWEEP_WAIT",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "trend_flip_confirmed_up"],
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=76.8,
+        )
+
+        self.assertEqual(risky_entry["phase1b_lite_gate"], "blocked")
+        self.assertIn("prelabel_not_sweep_wait", risky_entry["phase1b_lite_reasons"])
+        self.assertEqual(standalone_trend_up["phase1b_lite_gate"], "blocked")
+        self.assertIn("standalone_trend_flip_confirmed_up", standalone_trend_up["phase1b_lite_reasons"])
+
+    def test_opportunity_gate_passes_observation_and_market_map_without_formal_gate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="counter_long_short_watch",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=55,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "counter_long_short_watch")
+        self.assertIn("phase1_observation_gate_pass", result["opportunity_reasons"])
+        self.assertIn("market_map:support_to_resistance_flip", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_fatal_no_trade_flags(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=["Funding_prohibited_long"],
+            risk_flags=[],
+            market_map_flags=["resistance_to_support_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=80,
+            confidence_execution_shadow=40,
+            confidence_wait_shadow=20,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("fatal_no_trade_flag:Funding_prohibited_long", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_invalid_setup_status(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="invalid",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=18,
+            confidence_wait_shadow=55,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("setup_status_not_watch_or_ready", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_high_wait_low_execution_quality_candidate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=[],
+            market_map_flags=["resistance_to_support_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=60,
+            execution_precision_action="wait_only",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
+        self.assertIn("require_execution_for_high_wait", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_a_plus_b_quality_candidate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="confidence_below_min",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=60,
+            execution_precision_action="wait_only",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
+        self.assertIn(
+            "require_execution_for_high_wait+suppress_long_high_wait",
+            result["opportunity_reasons"],
+        )
+        self.assertNotIn("entry_recheck_required_high_wait", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_low_execution_when_short_conditions_are_weak(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=65,
+            confidence_execution_shadow=23,
+            confidence_wait_shadow=55,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_short_low_execution_recheck_for_market_map_opportunity(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=72,
+            confidence_execution_shadow=19,
+            confidence_wait_shadow=50,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_short_low_execution", result["opportunity_reasons"])
+        self.assertNotIn("entry_recheck_required_low_execution", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_long_weakness_when_long_confirmation_is_insufficient(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=[],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=72,
+            confidence_execution_shadow=25,
+            confidence_wait_shadow=58,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_long_weakness", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_trend_flip_up_when_confirmation_is_insufficient(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=["resistance_to_support_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=78,
+            confidence_execution_shadow=29,
+            confidence_wait_shadow=54,
+            execution_precision_action="keep",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertIn("entry_recheck_required_trend_flip_up", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_short_support_candidate_without_over_suppression(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=62,
+            confidence_execution_shadow=24,
+            confidence_wait_shadow=58,
+            execution_precision_action="wait_only",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "market_map_opportunity")
+
+    def test_opportunity_gate_adds_price_distance_missing_reason_without_forcing_block(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=63,
+            confidence_execution_shadow=25,
+            confidence_wait_shadow=52,
+            execution_precision_action="keep",
+            nearest_support_distance="",
+            nearest_resistance_distance="",
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("price_distance_missing", result["opportunity_reasons"])
+
+    def test_opportunity_gate_a_plus_c_conditions_collapse_into_a_plus_b_plus_c(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(
+            result["opportunity_reasons"],
+            ["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"],
+        )
+
+    def test_opportunity_gate_blocks_a_plus_b_plus_c_quality_candidate(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(
+            result["opportunity_reasons"],
+            ["require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong"],
+        )
+
+    def test_opportunity_gate_keeps_b_only_as_soft_risk(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="pass",
+            phase1b_lite_type="confidence_watch_sweep_lite",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=58,
+            confidence_execution_shadow=30,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("soft_risk:suppress_long_high_wait", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_c_only_as_soft_risk(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=28,
+            confidence_wait_shadow=45,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn("soft_risk:suppress_trend_flip_up_strong", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_b_plus_c_as_soft_risk(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=28,
+            confidence_wait_shadow=60,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertIn(
+            "soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
+
+    def test_opportunity_gate_keeps_market_map_candidate_without_quality_blockers(self) -> None:
+        result = determine_opportunity_gate(
+            bias="short",
+            primary_setup_side="short",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["failed_breakout_down_reversal"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="blocked",
+            phase1_observation_type="blocked",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="blocked",
+            confidence_direction_shadow=60,
+            confidence_execution_shadow=24,
+            confidence_wait_shadow=59,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "market_map_opportunity")
+        self.assertIn("market_map:support_to_resistance_flip", result["opportunity_reasons"])
+
+    def test_opportunity_gate_blocks_formal_candidate_with_hard_quality_conflict(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=["support_to_resistance_flip"],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="pass",
+            phase1b_lite_type="confidence_watch_sweep_lite",
+            trade_execution_gate="pass",
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=22,
+            confidence_wait_shadow=70,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "blocked")
+        self.assertEqual(result["opportunity_type"], "blocked")
+        self.assertIn(
+            "require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
+        self.assertNotIn("trade_execution_gate_pass", result["opportunity_reasons"])
+
+    def test_opportunity_gate_keeps_formal_candidate_and_adds_soft_risk_conflicts(self) -> None:
+        result = determine_opportunity_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["trend_flip_confirmed_up"],
+            market_map_flags=[],
+            phase1_observation_gate="pass",
+            phase1_observation_type="setup_watch_learning",
+            phase1b_lite_gate="blocked",
+            phase1b_lite_type="blocked",
+            trade_execution_gate="pass",
+            confidence_direction_shadow=70,
+            confidence_execution_shadow=28,
+            confidence_wait_shadow=45,
+        )
+
+        self.assertEqual(result["opportunity_gate"], "pass")
+        self.assertEqual(result["opportunity_type"], "formal_execution_candidate")
+        self.assertIn(
+            "formal_candidate_quality_conflict:soft_risk:suppress_trend_flip_up_strong",
+            result["opportunity_reasons"],
+        )
+
+    def test_observation_gate_passes_counter_long_short_watch_candidate(self) -> None:
+        result = determine_phase1_observation_gate(
+            bias="long",
+            primary_setup_side="long",
+            primary_setup_status="watch",
+            primary_setup_reason="entry_zone_not_reached",
+            prelabel="ENTRY_OK",
+            data_quality_flag="ok",
+            no_trade_flags=[],
+            risk_flags=["sweep_incomplete", "lower_liquidity_close", "long_reversal_risk"],
+            confidence_direction_shadow=92,
+            confidence_execution_shadow=24,
+            confidence_wait_shadow=78,
+            secondary_setup_status="watch",
+        )
+
+        self.assertEqual(result["phase1_observation_gate"], "pass")
+        self.assertEqual(result["phase1_observation_type"], "counter_long_short_watch")
+
+    def test_append_paper_order_is_idempotent_by_signal_id(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "paper_1",
+                "timestamp_jst": "2026-04-17T10:00:00+09:00",
+                "primary_setup_side": "long",
+                "primary_entry_mid": 70000,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70650,
+                "shadow_tp2_price": 71200,
+                "risk_percent_applied": 0.5,
+                "planned_risk_usd": 50,
+                "position_size_usd": 3000,
+                "shadow_exit_rule_version": "phase1_v1_shadow",
+                "trade_execution_gate": "pass",
+                "trade_execution_blockers": [],
+                "paper_order_status": "planned",
+            }
+
+            path = append_paper_order(base_dir, payload)
+            append_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("paper_1", rows[1])
+
+    def test_append_observation_paper_order_is_separate_from_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "obs_1",
+                "timestamp_jst": "2026-04-22T10:00:00+09:00",
+                "current_price": 70000,
+                "primary_setup_side": "long",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70420,
+                "shadow_tp2_price": 70860,
+                "rr_estimate": 1.3,
+                "prelabel": "RISKY_ENTRY",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "phase1_observation_gate": "pass",
+                "phase1_observation_type": "setup_watch_learning",
+                "phase1_observation_reasons": ["setup_watch_learning"],
+                "confidence_direction_shadow": 60,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 70,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_observation_paper_order(base_dir, payload)
+            append_observation_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("phase1A", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_append_phase1b_lite_paper_order_is_separate_from_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "lite_1",
+                "timestamp_jst": "2026-05-17T10:00:00+09:00",
+                "current_price": 70000,
+                "primary_setup_side": "long",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 69500,
+                "shadow_tp1_price": 70420,
+                "shadow_tp2_price": 70860,
+                "rr_estimate": 1.3,
+                "prelabel": "SWEEP_WAIT",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "confidence_below_min",
+                "phase1b_lite_gate": "pass",
+                "phase1b_lite_type": "confidence_watch_sweep_lite",
+                "phase1b_lite_reasons": ["confidence_watch_sweep_lite"],
+                "confidence_direction_shadow": 60,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 76.8,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_phase1b_lite_paper_order(base_dir, payload)
+            append_phase1b_lite_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("phase1B-lite", rows[1])
+            self.assertIn("confidence_watch_sweep_lite", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_append_paper_position_is_separate_from_formal_execution_orders(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "opp_1",
+                "timestamp_jst": "2026-05-18T10:00:00+09:00",
+                "current_price": 70000,
+                "opportunity_gate": "pass",
+                "opportunity_type": "counter_long_short_watch",
+                "opportunity_reasons": ["phase1_observation_gate_pass"],
+                "primary_setup_side": "short",
+                "primary_entry_mid": 69900,
+                "primary_stop_loss": 70400,
+                "shadow_tp1_price": 69250,
+                "shadow_tp2_price": 68700,
+                "shadow_timeout_hours": 12,
+                "shadow_exit_rule_version": "phase1_v1_shadow",
+                "rr_estimate": 1.3,
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "market_map_flags": ["support_to_resistance_flip"],
+                "confidence_direction_shadow": 70,
+                "confidence_execution_shadow": 22,
+                "confidence_wait_shadow": 65,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_paper_position(base_dir, payload)
+            append_paper_position(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn("pre_auto_paper", rows[1])
+            self.assertIn("pending", rows[1])
+            self.assertFalse((base_dir / "logs" / "csv" / "paper_orders.csv").exists())
+
+    def test_counter_watch_paper_position_uses_short_setup_when_bias_long(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_long_bias",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                    "long_setup": {
+                        "entry_mid": 101,
+                        "stop_loss": 96,
+                        "tp1": 108,
+                        "tp2": 114,
+                        "rr_estimate": 1.4,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "counter_long_short_watch")
+        self.assertEqual(row["side"], "short")
+        self.assertEqual(row["entry_price"], "99")
+        self.assertEqual(row["stop_loss_price"], "104")
+        self.assertEqual(row["tp1_price"], "92")
+        self.assertEqual(row["tp2_price"], "88")
+        self.assertEqual(row["rr_estimate"], "1.8")
+
+    def test_counter_watch_paper_position_uses_long_setup_when_bias_short(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_short_bias",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "short",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "short",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 99,
+                    "primary_stop_loss": 104,
+                    "shadow_tp1_price": 92,
+                    "shadow_tp2_price": 88,
+                    "rr_estimate": 1.8,
+                    "long_setup": {
+                        "entry_mid": 101,
+                        "stop_loss": 96,
+                        "tp1": 108,
+                        "tp2": 114,
+                        "rr_estimate": 1.4,
+                    },
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "counter_long_short_watch")
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
+
+    def test_paper_position_keeps_primary_setup_for_non_counter_opportunity(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "normal_opportunity",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "market_map_opportunity",
+                    "opportunity_reasons": ["market_map:resistance_to_support_flip"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                    "short_setup": {
+                        "entry_mid": 99,
+                        "stop_loss": 104,
+                        "tp1": 92,
+                        "tp2": 88,
+                        "rr_estimate": 1.8,
+                    },
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["opportunity_type"], "market_map_opportunity")
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
+
+    def test_counter_watch_paper_position_falls_back_to_primary_when_opposite_setup_missing(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            append_paper_position(
+                base_dir,
+                {
+                    "signal_id": "counter_missing_opposite",
+                    "timestamp_jst": "2026-06-07T10:00:00+09:00",
+                    "bias": "long",
+                    "opportunity_type": "counter_long_short_watch",
+                    "opportunity_reasons": ["phase1_observation_gate_pass"],
+                    "current_price": 100,
+                    "primary_setup_side": "long",
+                    "primary_setup_status": "watch",
+                    "primary_setup_reason": "entry_zone_not_reached",
+                    "primary_entry_mid": 101,
+                    "primary_stop_loss": 96,
+                    "shadow_tp1_price": 108,
+                    "shadow_tp2_price": 114,
+                    "rr_estimate": 1.4,
+                },
+            )
+
+            rows = self._read_csv_rows(base_dir / "logs" / "csv" / "paper_positions.csv")
+
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["side"], "long")
+        self.assertEqual(row["entry_price"], "101")
+        self.assertEqual(row["stop_loss_price"], "96")
+        self.assertEqual(row["tp1_price"], "108")
+        self.assertEqual(row["tp2_price"], "114")
+        self.assertEqual(row["rr_estimate"], "1.4")
+
+    def test_append_observation_paper_order_uses_short_side_for_counter_long_short_watch(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            payload = {
+                "signal_id": "obs_counter_1",
+                "timestamp_jst": "2026-04-29T19:05:00+09:00",
+                "current_price": 77605.5,
+                "bias": "long",
+                "primary_setup_side": "long",
+                "primary_entry_mid": 77300,
+                "primary_stop_loss": 76800,
+                "shadow_tp1_price": 77100,
+                "shadow_tp2_price": 76700,
+                "rr_estimate": 1.1,
+                "prelabel": "ENTRY_OK",
+                "primary_setup_status": "watch",
+                "primary_setup_reason": "entry_zone_not_reached",
+                "phase1_observation_gate": "pass",
+                "phase1_observation_type": "counter_long_short_watch",
+                "phase1_observation_reasons": ["counter_long_short_watch"],
+                "confidence_direction_shadow": 92,
+                "confidence_execution_shadow": 24,
+                "confidence_wait_shadow": 78,
+                "trade_execution_gate": "blocked",
+            }
+
+            path = append_observation_paper_order(base_dir, payload)
+
+            rows = path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(rows), 2)
+            self.assertIn(",short,", rows[1])
 
 
 if __name__ == "__main__":

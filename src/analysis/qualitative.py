@@ -60,7 +60,7 @@ def build_qualitative_context(
     df_15m: pd.DataFrame,
     market_regime: str,
     bias: str,
-    no_trade_flags: list[str],
+    blocking_flags: list[str],
     price: float,
     ema50: float,
     atr: float,
@@ -80,9 +80,9 @@ def build_qualitative_context(
         range_state = "trend"
 
     rule_conflicts = []
-    if "ATR_extreme" in no_trade_flags:
+    if "ATR_extreme" in blocking_flags:
         rule_conflicts.append("atr_extreme")
-    if any(flag.startswith("Funding") for flag in no_trade_flags):
+    if any(flag.startswith("Funding") for flag in blocking_flags):
         rule_conflicts.append("funding_risk")
     if late_entry_risk:
         rule_conflicts.append("late_entry")

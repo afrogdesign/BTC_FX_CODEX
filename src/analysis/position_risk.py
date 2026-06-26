@@ -2,14 +2,32 @@ from __future__ import annotations
 
 from typing import Any
 
+_NO_TRADE_HARD_FLAGS = {
+    "orderbook_ask_heavy",
+    "orderbook_bid_heavy",
+    "liquidation_cluster_above",
+    "liquidation_cluster_below",
+    "long_flush_exhaustion",
+    "short_cover_risk",
+    "cvd_bearish_divergence",
+    "cvd_bullish_divergence",
+}
 
-def _score_from_distance(distance_atr: float | None, close_threshold: float, warning_threshold: float) -> float:
+
+def _score_from_distance(
+    distance_atr: float | None,
+    close_threshold: float,
+    warning_threshold: float,
+    *,
+    close_score: float = 30.0,
+    warning_score: float = 15.0,
+) -> float:
     if distance_atr is None:
         return 0.0
     if distance_atr <= close_threshold:
-        return 30.0
+        return close_score
     if distance_atr <= warning_threshold:
-        return 15.0
+        return warning_score
     return 0.0
 
 
@@ -17,6 +35,16 @@ def _price_distance_atr(price: float, level: float | None, atr: float) -> float 
     if level is None or atr <= 0:
         return None
     return abs(level - price) / atr
+
+
+def _directional_liquidation_multiplier(bias: str, price: float, cluster_price: float | None) -> float:
+    if cluster_price is None:
+        return 1.0
+    if bias == "long":
+        return 1.0 if cluster_price < price else 0.3
+    if bias == "short":
+        return 1.0 if cluster_price > price else 0.3
+    return 1.0
 
 
 def _push_risk(
@@ -66,42 +94,46 @@ def evaluate_position_risk(
     divergence = oi_cvd_info.get("cvd_price_divergence")
 
     if bias == "short":
-        delta = _score_from_distance(above_liq, 0.8, 1.8)
+        delta = _score_from_distance(above_liq, 0.8, 1.8, close_score=45.0)
         risk_score += delta
         if delta:
             breakdown["upper_liquidity_distance"] = round(delta, 4)
         if above_liq is not None and above_liq <= 0.8:
             flags.append("upper_liquidity_close")
         bid_wall_atr = _price_distance_atr(price, bid_wall_price, atr)
-        delta = _score_from_distance(bid_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(bid_wall_atr, 0.45, 0.9)
         risk_score += delta
         if delta:
             breakdown["bid_wall_distance"] = round(delta, 4)
-        if bid_wall_atr is not None and bid_wall_atr <= 0.6:
+        if bid_wall_atr is not None and bid_wall_atr <= 0.45:
             flags.append("bid_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6) * _directional_liquidation_multiplier(
+            bias, price, largest_liq_price
+        )
         risk_score += delta
         if delta:
             breakdown["liquidation_cluster_distance"] = round(delta, 4)
         if largest_liq_atr is not None and largest_liq_atr <= 0.9 and largest_liq_price > price:
             flags.append("liquidation_cluster_above")
     elif bias == "long":
-        delta = _score_from_distance(below_liq, 0.8, 1.8)
+        delta = _score_from_distance(below_liq, 0.8, 1.8, close_score=45.0)
         risk_score += delta
         if delta:
             breakdown["lower_liquidity_distance"] = round(delta, 4)
         if below_liq is not None and below_liq <= 0.8:
             flags.append("lower_liquidity_close")
         ask_wall_atr = _price_distance_atr(price, ask_wall_price, atr)
-        delta = _score_from_distance(ask_wall_atr, 0.6, 1.2)
+        delta = _score_from_distance(ask_wall_atr, 0.45, 0.9)
         risk_score += delta
         if delta:
             breakdown["ask_wall_distance"] = round(delta, 4)
-        if ask_wall_atr is not None and ask_wall_atr <= 0.6:
+        if ask_wall_atr is not None and ask_wall_atr <= 0.45:
             flags.append("ask_wall_close")
         largest_liq_atr = _price_distance_atr(price, largest_liq_price, atr)
-        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6)
+        delta = _score_from_distance(largest_liq_atr, 0.9, 1.6) * _directional_liquidation_multiplier(
+            bias, price, largest_liq_price
+        )
         risk_score += delta
         if delta:
             breakdown["liquidation_cluster_distance"] = round(delta, 4)
@@ -109,10 +141,10 @@ def evaluate_position_risk(
             flags.append("liquidation_cluster_below")
 
     if liquidity_info.get("liquidity_swept_recently"):
-        breakdown["sweep_recent_bonus"] = -8.0
-        risk_score -= 8.0
+        breakdown["sweep_recent_bonus"] = -12.0
+        risk_score -= 12.0
     else:
-        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 4.0, flag="sweep_incomplete")
+        risk_score += _push_risk(breakdown, flags, "sweep_incomplete", 6.0, flag="sweep_incomplete")
 
     if oi_state in {"short_cover_risk", "long_flush_exhaustion"}:
         risk_score += _push_risk(breakdown, flags, oi_state, 12.0, flag=oi_state)
@@ -127,13 +159,17 @@ def evaluate_position_risk(
         risk_score += _push_risk(breakdown, flags, "orderbook_bid_heavy", 10.0, flag="orderbook_bid_heavy")
 
     risk_score = max(0.0, min(risk_score, 100.0))
+    risky_threshold = 33.0 if medium_threshold >= 55.0 else round(medium_threshold * 0.55, 2)
+    flag_set = set(flags)
     if bias not in {"long", "short"}:
         prelabel = "RISKY_ENTRY"
-    elif risk_score >= high_threshold:
+    elif risk_score >= high_threshold and flag_set & _NO_TRADE_HARD_FLAGS:
         prelabel = "NO_TRADE_CANDIDATE"
+    elif risk_score >= high_threshold:
+        prelabel = "SWEEP_WAIT"
     elif risk_score >= medium_threshold:
         prelabel = "SWEEP_WAIT"
-    elif risk_score >= medium_threshold * 0.55:
+    elif risk_score >= risky_threshold:
         prelabel = "RISKY_ENTRY"
     else:
         prelabel = "ENTRY_OK"
@@ -166,3 +202,11 @@ def apply_prelabel_to_setup(setup: dict[str, Any], prelabel: str, side: str, bia
         updated["status"] = "invalid"
         updated["invalid_reason"] = "位置が悪い" if not reason else f"{reason} / 位置が悪い"
     return updated
+
+
+def reconcile_prelabel_with_setup(prelabel: str, primary_setup_status: str) -> str:
+    normalized_prelabel = str(prelabel or "").upper()
+    normalized_status = str(primary_setup_status or "").lower()
+    if normalized_prelabel == "ENTRY_OK" and normalized_status == "invalid":
+        return "RISKY_ENTRY"
+    return normalized_prelabel

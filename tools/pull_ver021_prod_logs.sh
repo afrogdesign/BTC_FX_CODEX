@@ -83,11 +83,12 @@ echo "pull_source:$PROD_HOST:$PROD_DIR"
 echo "snapshot_dir:$LOCAL_SNAPSHOT_DIR"
 echo "light_mode:$LIGHT_MODE"
 
-rsync -av -e "$RSYNC_SSH_CMD" \
-  --delete \
-  "$PROD_HOST":"$PROD_DIR/logs/heartbeat.txt" \
-  "$PROD_HOST":"$PROD_DIR/logs/last_result.json" \
-  "$LOCAL_SNAPSHOT_DIR"/
+for filename in heartbeat.txt last_result.json; do
+  rsync -av -e "$RSYNC_SSH_CMD" \
+    --delete \
+    "$PROD_HOST":"$PROD_DIR/logs/$filename" \
+    "$LOCAL_SNAPSHOT_DIR"/
+done
 
 mkdir -p "$LOCAL_SNAPSHOT_DIR/runtime"
 rsync -av -e "$RSYNC_SSH_CMD" --delete "$PROD_HOST":"$PROD_DIR/logs/runtime/monitor.pid" "$LOCAL_SNAPSHOT_DIR/runtime/" || true

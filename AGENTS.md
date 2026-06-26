@@ -1,183 +1,126 @@
-## Global_BOX 共通参照
+# AGENTS.md
 
-更新日: 2026-03-13 17:29 JST
+## Role
 
-- 共通参照ルートは `/Users/marupro/CODEX/Global_BOX`
-- 開発環境の共通仕様は `/Users/marupro/CODEX/Global_BOX/10_共通仕様/開発環境仕様書.md`
-- 秘密情報の実値参照先は `/Users/marupro/CODEX/Global_BOX/10_共通仕様/秘密情報管理.md`
-- `Global_BOX` は非公開前提です。GitHub や外部公開場所へアップしないでください。
-- GitHub 接続の実務情報は、`開発環境仕様書.md` の `Git / GitHub 共通情報` を参照してください。
+You are Codex acting as the implementation worker for this repository.
 
-このファイルは、別プロジェクトへ流用するためのエージェント運用テンプレートです。
-必要に応じて、プロジェクト固有ルールを追記して使ってください。
+ChatGPT is the commander, planner, and reviewer.
+Do not take over planning unless explicitly asked.
 
-## 1. 基本方針
+## Machine roles and paths
 
-- 返答、説明、作業メモは日本語で行う。
-- ユーザーは非エンジニアまたは初学者の可能性がある前提で進める。
-- 専門用語を使う場合は、短い補足説明を添える。
-- 曖昧な表現を避け、何をしたか・何をしていないかを明確に書く。
-- 可能な限り、ユーザーが次に迷わない形で結果を残す。
+- Canonical working directory: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- All file reading and editing must use the local iMac repository path.
+- All tests, git commands, commit, push, and deployment/runtime operations must run on this iMac local repository.
+- Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
+- Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
+- Do not use `imac` or `imac.afrog.jp` as SSH targets.
+- Do not use `ssh marupro@192.168.50.51` for normal repo work unless a task explicitly requires confirming the current machine state.
+- Do not run runtime processes unless explicitly instructed.
 
-## 2. 実行環境の原則
+## Cost policy
 
-- スクリプトやコマンドの実行は、可能な限りローカル環境を優先する。
-- デプロイ先や本番機のデータが必要なときは、まず Python / shell などの軽量スクリプトで Mac 側へ必要最小限だけ取得し、そのローカルコピーを読んで判断する。
-- AI が SSH 先の重いログや大量ファイルを直接何度も読みに行く運用は避ける。
-- まず軽量同期、必要時だけフル取得、最後に AI が読む、の順を原則にする。
-- 検証分離や安全確認のために別環境を使ってよい。
-- ただし、重い遠隔実行や不要な隔離実行は常用せず、軽い方法で足りるならそちらを優先する。
-- 本番影響、破壊的変更、大きな時間コスト、追加料金リスクがある場合だけ共有対象にする。
-- 実行環境の制約でローカル実行が難しい場合は、その理由を明記する。
-- 実行場所の選択は、速度だけでなく、安全性、再現性、保守性を優先して判断する。
-- 実行後は、結果だけでなく、どこで何を実行したかも分かるように残す。
+- Prefer narrow file reads over broad repository exploration.
+- Do not summarize the whole repository unless explicitly requested.
+- Do not repeat stable project context in reports.
+- Use the shortest sufficient report format.
+- If the task is unclear, stop and return `BLOCKED` with one specific question.
 
-## 3. ファイル管理と変更方針
+## Source of truth
 
-- いきなり変更せず、まず対象ファイル、関連ファイル、実行フローを確認する。
-- 変更は必要最小限にとどめ、関係ない箇所は触らない。
-- 不要なコピー、重複ファイル、無目的な一時ファイルは増やさない。
-- 既存の命名規則、フォルダ構成、文体、コメント方針があれば合わせる。
-- 不明点があっても、安全に進められる範囲は自律的に進める。
-- 破壊的な操作、大量削除、全面置換は慎重に扱い、必要性を明確にする。
+Before doing non-trivial work, check:
 
-## 4. 作業フロー
+- `docs/operations/ai-orchestration/RESUME.md`
+- `docs/operations/ai-orchestration/CONTROL.md`
+- `docs/operations/ai-orchestration/TASK_LEDGER.md` when updating task status
 
-1. 必要なファイルや実行対象を確認する。
-2. スクリプトや設定変更を作成・更新する。
-3. 適切な環境で実行する。
-4. 結果を確認し、必要なら修正して再実行する。
-5. 完了内容と未解決事項を記録する。
+After starting in the repo root, read `docs/operations/ai-orchestration/RESUME.md` first as the low-cost fixed entrypoint, then rely on `CONTROL.md`, `PROMPTS.md`, and `CURRENT_HANDOFF.md` instead of chat history.
 
-## 4.1 Git 運用ルール
+Use these files as the current operating context.
+Do not rely only on chat history.
 
-- Git の運用は、原則として AI が自動で管理する。
-- 作業中は `git status` をこまめに見てよいが、コミットと Push は毎回行わない。
-- 作業がひと区切りついたら、以下を自律的に確認する。
-  - `git status`
-  - 差分内容
-  - コミット要否
-  - Push 要否
-- コミットは、あとで履歴を見返したときに意味が分かる単位で分ける。
-- コミットは、1テーマが完了したときだけ行う。細かい文言修正や小さい文書修正は、複数件をまとめてよい。
-- Push は、次の AI やユーザーがそのまま使って問題ない完成状態になったときだけ行う。
-- コミットメッセージは、原則として日本語で書く。
-- `force push`、履歴破壊、不要な `amend` はしない。
-- 関係ない変更や、ユーザーが作った未整理変更は巻き込まない。
-- タグ付けや本番反映の節目は影響が大きいため、必要に応じてユーザーへ共有してから進める。
+## Context migration and overload
 
-## 5. 説明のルール
+- If the local orchestration context appears overloaded, unstable, contradictory, or likely to cause task confusion, stop and report `BLOCKED` rather than guessing or continuing.
+- If contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or other confused context appears, trust the repo正本 first, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`.
+- This rule applies before future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
 
-- コードや設定を変えた場合は、影響範囲を短く添える。
-- 難しい内容は、先に結論、その後に短い補足を書く。
+## AI orchestration metadata
 
-## 6. 記録ファイル運用
+- Keep orchestration metadata lightweight: do not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md` after every normal task.
+- `CONTROL.md` should track current state, current objective, safety boundary, validation rules, and next action. It is not a full task history.
+- `CURRENT_HANDOFF.md` is for active handoff conditions only: partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
+- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history. Git/GitHub and the compact report are the commit evidence.
+- `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` is the authoritative roadmap when a task touches overall product direction, public HTML / mail / dashboard alignment, or longer-horizon sequencing.
+- Logical separation stays in place without a physical repo split: AI orchestration operations live under `docs/operations/ai-orchestration/`, while project source lives under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
+- `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
+- `current_commit` は実際の branch HEAD より意図的に遅れることがある。
+- branch HEAD と `current_commit` の不一致だけでは `BLOCKED` にはしない。
+- `BLOCKED` にするのは、その不一致が個別 task、repo正本、または依頼された編集範囲と矛盾するときだけにする。
+- `git status` で branch/head 状態を確認し、push 後は実際の commit を報告する。
+- implementation task は、自分自身の最終 commit hash を `CONTROL.md` や `TASK_LEDGER.md` に書き込まない。
+- 進行中の implementation task の `TASK_LEDGER.md` の `Commit` は `pending_review` を使う。
+- `TASK_LEDGER.md` の `Push` は、push 後に `reported` を使ってよい。
+- ChatGPT は Codex の報告後に GitHub を確認し、後続の `SYNC` task で reviewed metadata をまとめて更新する。
+- `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
+- `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
+- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v4` を使う。新しい reviewed roadmap が出るまでこれを既定とする。
+- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
-- 新しく作る Markdown ファイルや更新する Markdown ファイルの `更新日:` 表記には、日付だけでなく時刻まで入れる。
-- 形式は `YYYY-MM-DD HH:MM JST` にそろえる。
+## Standard workflow
 
-### ドキュメントの役割分担
+For each task:
 
-- `運用資料/` は、現在の監視システム本体に対する作業・運用記録だけに使う。
-- Obsidian 側ノートは、人が読む入口、判断メモ、中長期メモに使う。
-- 将来構想や大きな報告を `運用資料/` に混ぜすぎない。
-- `👩‍⚖️秘書.md`、`📒打ち合わせノート.md`、`運用資料/NEXT_TASK.md`、`運用資料/progress.md`、`運用資料/スレッド引き継ぎファイル.md` の相関は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
-- AI の日常入口は、原則として次に固定する。
-  1. `運用資料/NEXT_TASK.md`
-  2. `運用資料/開発ロードマップ.md`
-- `AGENTS.md` は運用ルールの正本だが、毎回の実務入口ではない。ルール変更時、迷ったとき、資料役割を見直すときに確認する。
-- `👩‍⚖️秘書.md` は人向け入口として維持し、AI は通常読まない。
-- `運用資料/スレッド引き継ぎファイル.md` は、節目完了時、運用前提変更時、ブロッカー停止時、次の AI が迷いそうなときだけ使う。
-- `📒打ち合わせノート.md` は人向けの作業要点記録、`運用資料/progress.md` は履歴確認が必要なときだけ使う。
-- 本番状態の通常確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` を見る。`logs/last_result.json`、`logs/errors/`、CSV、`signals/*.json` は必要時だけ開く。
+1. Run `git status --short --branch`.
+2. Read only the files named in the task, plus necessary nearby files.
+3. Modify only the files required by the task.
+4. Run the specified validation command first.
+5. Run broader validation only when requested or clearly necessary.
+6. Check `git diff --check` before commit.
+7. Commit and push only when validation passes and the diff is intentional.
+8. Return the compact report format.
 
-### 開発ロードマップ
+## Stop conditions
 
-- `運用資料/開発ロードマップ.md` は、AI が `NEXT_TASK.md` の次に読む 2 枚目の入口として使う。
-- ここには、現在版、現在フェーズ、次の大型節目、参照先リンク、現在の判断だけを書く。
-- 日々の細かい作業ログや長い経緯は書かない。
-- フェーズ本文や昇格条件の詳細は `運用資料/計画/` 配下へ分ける。
+Stop without commit/push if:
 
-### 計画ファイル
+- tests fail and the fix is not obvious within the task scope
+- secrets or credentials appear in the diff
+- unrelated files changed
+- the requested change conflicts with existing design
+- more than 5 files need modification but the task did not authorize that
+- a product/design decision is required
+- runtime process restart is needed but not explicitly requested
 
-- `運用資料/計画/` 配下は、中期の正式計画書置き場として使う。
-- `マイルストーン定義.md` は `Ver02` 以降の昇格条件の正本とする。
-- `フェーズ別計画_*.md` は、フェーズごとの到達条件、未実装項目、着手条件を整理する。
-- 大きな判断基準はここへ集約し、`NEXT_TASK.md` に重複して長文を書きすぎない。
+Report as:
 
-### 打ち合わせノート
+```text
+BLOCKED <WORK_ID>: <one specific question>
+Evidence: <file/path or command>
+```
 
-- Obsidian 側の打ち合わせ・検討メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/📒打ち合わせノート.md` を使う。
-- 役割と更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
-- ユーザーが「打ち合わせシートをみて」と言った場合は、まずこの Obsidian ノートを確認して文脈として使う。
-- ユーザーが「打ち合わせシートにメモして」と言った場合は、この Obsidian ノートへ追記する。
-- 打ち合わせシートは Obsidian で読みやすい Markdown 形式で保ち、見出し、箇条書き、日時、決定事項、保留事項が追いやすい形にする。
+## Compact report format
 
-### 秘書ノート
+```text
+WORK_ID: <id>
+STATUS: done | partial | blocked | failed
+CHANGED:
+- <file>
+TESTS:
+- <command> => pass | fail | not run (<reason>)
+COMMIT: <hash or none>
+PUSH: origin/<branch> | none
+NOTES: <one line only if needed>
+```
 
-- Obsidian 側の入口メモは `/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/👩‍⚖️秘書.md` を使う。
-- `👩‍⚖️秘書.md` は人向け入口であり、AI の日常入口には含めない。
-- 役割、構成、更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
+- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome when Codex has local filesystem access, including resume checks and no-commit review work.
+- The filename must be exactly `response.txt`.
+- Do not verify whether the file still exists after writing.
 
-### スレッド引き継ぎファイル
+## Project-specific prohibitions
 
-- `運用資料/スレッド引き継ぎファイル.md` は、次スレッドで実務を再開するための圧縮引き継ぎに使う。
-- 役割と更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
-- AI は通常 `運用資料/NEXT_TASK.md` → `運用資料/開発ロードマップ.md` までを見れば足りる構成を優先し、足りない場合だけ `運用資料/スレッド引き継ぎファイル.md` を開く。
-
-### progress.md
-
-- 役割と更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
-- `progress.md` は軽い入口として保ち、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避する。
-
-### NEXT_TASK.md
-
-- 次の判断やブロッカーが変わったときだけ更新する。
-- AI の日常入口として扱う。
-- 役割、構成、更新判断は `運用資料/運用/ルール/記録ファイル運用ルール.md` を正本にする。
-
-## 7. 作業終了時の必須出力
-
-- 未解決事項
-
-## 8. コード変更時のルール
-
-- 変更理由を説明できない修正はしない。
-- 一時しのぎの値の直書きは避け、設定ファイルや定数化を優先する。
-- 既存処理を壊す可能性がある場合は、そのリスクを明記する。
-- テストや確認方法がある場合は、実施したか未実施かを報告する。
-
-## 9. 例外的な環境を使う場合
-
-以下のような場合は、例外的な実行環境の利用を検討し、事前に報告する。
-
-- 実験的または破壊的な処理で、ローカル環境に影響を与える可能性がある場合
-- ローカルに必要な実行環境や依存関係が不足している場合
-- ローカルでは再現しにくい隔離検証が必要な場合
-- 大量処理や検証分離のために、安全な別環境が適している場合
-
-## 10. API と外部サービス
-
-- ChatGPT API を使う作業をするときは、実行前に必ずユーザーの許可を取る。
-- API キー、秘密情報、個人情報は出力しない。
-- 外部サービス連携を変更する場合は、設定ファイルと影響範囲を確認してから進める。
-
-## 11. このファイルの扱い
-
-- このテンプレートをコピーして使う場合は、プロジェクト固有ルールを必要に応じて追記する。
-- 実際の運用時は、各プロジェクトの `AGENTS.md` を優先ルールとして扱う。
-- テンプレート更新後は、必要に応じて各プロジェクト側へ反映する。
-
-## 12. このPROJECT専用ルール
-
-- Ver01 は比較対象として残すが、今後の設計・計画・改善の主対象は Ver02 とする。
-- `運用資料/開発ロードマップ.md` を、このプロジェクトの全体計画入口として扱う。
-- `運用資料/計画/マイルストーン定義.md` を、`Ver03` 以降の昇格条件の正本として扱う。
-- `Ver03` 以降は大型節目で昇格し、条件達成時に対応するブランチとタグを切る。
-- `運用資料/NEXT_TASK.md` には、今すぐ着手する実務だけを残し、将来構想や長い背景説明は持ち込まない。
-- 秘書メモが長くなりそうな場合は、まず `開発ロードマップ.md` か `📒打ち合わせノート.md` に逃がし、`👩‍⚖️秘書.md` は軽く保つ。
-- 本番ログ確認は、まず `tools/sync_ver021_prod_status.sh` のような軽量同期で `heartbeat.txt`、`last_result.json`、`monitor.pid` などの最小情報だけをローカルへ寄せる。
-- 本番状態の定期確認は、Mac 側の `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに回す運用を標準にする。
-- `tools/pull_ver021_prod_logs_auto.sh` のようなフル取得は、詳細調査や通知発生後の確認など、本当に必要なときだけ使う。
-- SSH パスワードを秘密情報ファイルから読む fallback は、通常運用では使わない。必要なときだけ明示的な別コマンドを使う。
-- AI は、まずローカルに落とした要約ファイルや snapshot を見て判断し、重い SSH 取得や大量ログ読取を習慣化しない。
+- Do not add live order APIs.
+- Do not access exchange API keys or secrets.
+- Do not send real orders.
+- Do not treat `ACTIVE_*` as `FORMAL_GO`.
+- Do not mix Active Plan candidates into `paper_positions.csv` unless explicitly requested.

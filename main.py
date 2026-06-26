@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -11,18 +12,23 @@ from zoneinfo import ZoneInfo
 from config import load_config
 from src.ai.advice import request_ai_advice
 from src.ai.summary import build_summary_body, build_summary_subject
+from src.analysis.chart_pattern_shadow import build_chart_pattern_shadow
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
+from src.analysis.breakout import previous_breakout_levels
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
+from src.analysis.market_map import build_market_map
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
-from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk
+from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk, reconcile_prelabel_with_setup
+from src.analysis.result_flags import assemble_result_flags, derive_additional_risk_flags
 from src.analysis.signal_tier import compute_signal_tier, signal_tier_badge
-from src.analysis.confidence import compute_confidence, compute_machine_agreement
+from src.analysis.confidence import compute_confidence_details, compute_machine_agreement
+from src.analysis.evaluation_trace import build_evaluation_trace
 from src.analysis.phase import determine_phase
 from src.analysis.qualitative import build_qualitative_context
 from src.analysis.regime import classify_market_regime
-from src.analysis.rr import build_setup, choose_primary_setup
+from src.analysis.rr import build_setup, choose_primary_setup, refine_execution_precision
 from src.analysis.scoring import compute_scores
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
 from src.analysis.support_resistance import (
@@ -34,6 +40,7 @@ from src.analysis.support_resistance import (
     sort_zones_by_distance,
     zone_gap_to_opposite,
 )
+from src.analysis.volume_structure import analyze_volume_structure
 from src.data.fetcher import DataFetchError, FetchConfig, fetch_funding_rate, fetch_klines, get_server_time_ms
 from src.data.exchange_fetcher import fetch_market_structure
 from src.data.validator import validate_klines
@@ -42,9 +49,21 @@ from src.indicators.ema import calculate_ema, get_ema20_slope, get_ema_alignment
 from src.indicators.rsi import calculate_rsi
 from src.indicators.volume import calculate_volume_ratio
 from src.notification.email_sender import resend_pending_email, save_pending_email, send_email
+from src.notification.detail_page import (
+    append_detail_page_url,
+    detail_page_enabled,
+    publish_notification_detail,
+)
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
-from src.storage.csv_logger import append_trade_log
+from src.storage.csv_logger import (
+    append_active_plan_candidates,
+    append_observation_paper_order,
+    append_paper_order,
+    append_paper_position,
+    append_phase1b_lite_paper_order,
+    append_trade_log,
+)
 from src.storage.json_store import (
     get_last_attention_notified_path,
     get_last_notified_path,
@@ -53,10 +72,24 @@ from src.storage.json_store import (
     save_json,
     save_signal_snapshot,
 )
+from src.trade.active_plan import build_active_trade_plan
+from src.trade.actionability_gate import compute_actionability_gate_v1
 from src.trade.activation import determine_phase1_activation
-from src.trade.exit_manager import build_exit_plan
+from src.trade.execution_gate import determine_trade_execution_gate
+from src.trade.exit_manager import build_exit_plan, build_shadow_exit_plan
+from src.trade.observation_gate import determine_phase1_observation_gate
+from src.trade.opportunity_gate import determine_opportunity_gate
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.trade.performance_state import load_loss_streak
 from src.trade.position_sizing import build_position_size_plan
+from src.presentation.sanitize import (
+    ADVICE_VARIANT,
+    EVALUATION_TRACE_VERSION,
+    PROMPT_VARIANT,
+    SUMMARY_VARIANT,
+    build_display_context,
+    build_notification_context,
+)
 
 
 def _base_dir() -> Path:
@@ -68,6 +101,62 @@ def update_heartbeat(base_dir: Path, heartbeat_file: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     now_iso = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
     path.write_text(now_iso, encoding="utf-8")
+
+
+def _runtime_startup_status_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "runtime" / "startup_status.json"
+
+
+def _runtime_startup_next_report_time(
+    *,
+    now_utc: datetime,
+    timezone_name: str,
+    report_times: list[str],
+) -> str | None:
+    if not report_times:
+        return None
+    local_now = now_utc.astimezone(ZoneInfo(timezone_name))
+    candidates: list[datetime] = []
+    for report_time in report_times:
+        try:
+            hour_str, minute_str = report_time.split(":", 1)
+            hour = int(hour_str)
+            minute = int(minute_str)
+        except (ValueError, AttributeError):
+            continue
+        candidate = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if candidate <= local_now:
+            candidate += timedelta(days=1)
+        candidates.append(candidate)
+    if not candidates:
+        return None
+    return min(candidates).isoformat()
+
+
+def _write_runtime_startup_status(
+    base_dir: Path,
+    cfg: Any,
+    *,
+    pid: int,
+    now_utc: datetime | None = None,
+) -> Path:
+    now_utc = now_utc or datetime.now(tz=timezone.utc)
+    report_times = [str(report_time) for report_time in getattr(cfg, "REPORT_TIMES", [])]
+    payload = {
+        "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
+        "pid": int(pid),
+        "timezone": str(getattr(cfg, "TIMEZONE", "UTC")),
+        "report_times": report_times,
+        "next_report_time": _runtime_startup_next_report_time(
+            now_utc=now_utc,
+            timezone_name=str(getattr(cfg, "TIMEZONE", "UTC")),
+            report_times=report_times,
+        ),
+    }
+    path = _runtime_startup_status_path(base_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def _error_log(base_dir: Path, title: str, details: str) -> None:
@@ -85,6 +174,140 @@ def _round_optional(value: float | None, digits: int = 2) -> float | None:
     if value is None:
         return None
     return round(float(value), digits)
+
+
+def _runtime_actionability_fields(
+    *,
+    core_result: dict[str, Any],
+    active_trade_plan: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_bias = str(core_result.get("bias", "")).strip().lower()
+    primary_action = str(active_trade_plan.get("primary_action", "NO_ACTION")).strip()
+    side_plans = active_trade_plan.get("side_plans", {})
+    if not isinstance(side_plans, dict):
+        side_plans = {}
+
+    if primary_action == "ACTIVE_COUNTER_SCALP":
+        if normalized_bias == "long":
+            derived_side = "short"
+        elif normalized_bias == "short":
+            derived_side = "long"
+        else:
+            derived_side = "review_required"
+    elif primary_action.startswith("ACTIVE_") or primary_action == "NO_ACTION":
+        derived_side = normalized_bias if normalized_bias in {"long", "short"} else "review_required"
+    else:
+        derived_side = "review_required"
+
+    selected_plan = side_plans.get(derived_side) if derived_side in {"long", "short"} and isinstance(side_plans.get(derived_side), dict) else {}
+
+    if primary_action == "ACTIVE_MARKET_SMALL":
+        entry_mode = "market"
+    elif primary_action == "ACTIVE_LIMIT_RETEST":
+        entry_mode = "limit_zone_mid"
+    elif primary_action == "ACTIVE_BREAKOUT_FOLLOW":
+        entry_mode = "breakout_follow"
+    elif primary_action == "ACTIVE_COUNTER_SCALP":
+        entry_mode = "counter_scalp"
+    else:
+        entry_mode = "review_required"
+
+    tp1 = selected_plan.get("tp1")
+    tp2 = selected_plan.get("tp2")
+    stop_loss = selected_plan.get("stop_loss")
+    tp_plan = "review_required"
+    if tp1 and tp2:
+        tp_plan = f"TP1 {tp1}, TP2 {tp2}"
+    elif tp1:
+        tp_plan = f"TP1 {tp1}"
+    sl_or_invalidation = f"SL {stop_loss}" if stop_loss else "review_required"
+
+    timeout_or_wait_limit = "review_required"
+    try:
+        timeout_value = float(core_result.get("timeout_hours"))
+        if timeout_value > 0:
+            timeout_or_wait_limit = f"timeout after {int(timeout_value) if timeout_value.is_integer() else timeout_value}h"
+    except (TypeError, ValueError):
+        timeout_or_wait_limit = "review_required"
+
+    source_readiness = (
+        "ready"
+        if str(core_result.get("data_quality_flag", "")).strip() == "ok"
+        else "review_required_data_quality_not_ok"
+    )
+    pending_caveat = str(core_result.get("pending_caveat", "") or "").strip()
+
+    return compute_actionability_gate_v1(
+        active_plan_label=primary_action,
+        source_readiness=source_readiness,
+        pending_caveat=pending_caveat,
+        side=derived_side,
+        entry_mode=entry_mode,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+    )
+
+
+_DIRECTIONAL_VOLUME_LONG_FLAGS = {
+    "failed_breakout_up_reversal",
+    "resistance_to_support_flip",
+    "resistance_to_support_retest_confirmed",
+}
+
+_DIRECTIONAL_VOLUME_SHORT_FLAGS = {
+    "failed_breakout_down_reversal",
+    "support_to_resistance_flip",
+    "support_to_resistance_retest_confirmed",
+}
+
+
+def _directional_volume_triggers(
+    *,
+    volume_ratio: float,
+    volume_threshold: float,
+    candle_open: float,
+    candle_high: float,
+    candle_low: float,
+    candle_close: float,
+    range_high: float,
+    range_low: float,
+    breakout_up: bool,
+    breakout_down: bool,
+    market_map: dict[str, Any] | None,
+) -> dict[str, bool]:
+    flags = set((market_map or {}).get("flags") or [])
+    trigger_up = bool(breakout_up)
+    trigger_down = bool(breakout_down)
+
+    if flags & _DIRECTIONAL_VOLUME_LONG_FLAGS:
+        trigger_up = True
+    if flags & _DIRECTIONAL_VOLUME_SHORT_FLAGS:
+        trigger_down = True
+
+    if float(volume_ratio) < float(volume_threshold):
+        return {"trigger_up": trigger_up, "trigger_down": trigger_down}
+
+    candle_range = max(float(candle_high) - float(candle_low), 1e-9)
+    body = abs(float(candle_close) - float(candle_open))
+    body_ratio = body / candle_range
+    close_position = (float(candle_close) - float(candle_low)) / candle_range
+
+    if body_ratio < 0.20:
+        return {"trigger_up": trigger_up, "trigger_down": trigger_down}
+
+    bullish = float(candle_close) > float(candle_open)
+    bearish = float(candle_close) < float(candle_open)
+
+    range_span = max(float(range_high) - float(range_low), 1e-9)
+    range_close_position = (float(candle_close) - float(range_low)) / range_span
+
+    if bullish and (close_position >= 0.60 or range_close_position >= 0.60):
+        trigger_up = True
+    if bearish and (close_position <= 0.40 or range_close_position <= 0.40):
+        trigger_down = True
+
+    return {"trigger_up": trigger_up, "trigger_down": trigger_down}
 
 
 def _dedupe_preserve(values: list[str]) -> list[str]:
@@ -108,9 +331,52 @@ def _normalize_provider_label(value: Any) -> str:
     return label.upper() or "API"
 
 
+def _build_chart_candles(df: Any, *, limit: int) -> list[dict[str, Any]]:
+    if df is None or len(df) <= 0:
+        return []
+    subset = df.tail(limit)
+    candles: list[dict[str, Any]] = []
+    for row in subset.itertuples(index=False):
+        timestamp = getattr(row, "timestamp", None)
+        if timestamp is None:
+            continue
+        try:
+            ts_ms = int(timestamp)
+        except (TypeError, ValueError):
+            continue
+        candles.append(
+            {
+                "timestamp": ts_ms,
+                "open": _round_optional(getattr(row, "open", None), 2),
+                "high": _round_optional(getattr(row, "high", None), 2),
+                "low": _round_optional(getattr(row, "low", None), 2),
+                "close": _round_optional(getattr(row, "close", None), 2),
+                "volume": _round_optional(getattr(row, "volume", None), 4),
+            }
+        )
+    return candles
+
+
+def _build_chart_snapshot(df_4h: Any, df_1h: Any, df_15m: Any) -> dict[str, Any]:
+    return {
+        "intervals": ["4h", "1h", "15m"],
+        "candles_4h": _build_chart_candles(df_4h, limit=80),
+        "candles_1h": _build_chart_candles(df_1h, limit=96),
+        "candles_15m": _build_chart_candles(df_15m, limit=96),
+    }
+
+
 def _build_system_mode_label(cfg: Any) -> str:
     advice = _normalize_provider_label(getattr(cfg, "AI_ADVICE_PROVIDER", "api"))
     summary = _normalize_provider_label(getattr(cfg, "AI_SUMMARY_PROVIDER", "api"))
+    if advice == summary:
+        return advice
+    return f"{advice}/{summary}"
+
+
+def _build_system_mode_label_from_values(advice_provider: Any, summary_provider: Any) -> str:
+    advice = _normalize_provider_label(advice_provider)
+    summary = _normalize_provider_label(summary_provider)
     if advice == summary:
         return advice
     return f"{advice}/{summary}"
@@ -203,6 +469,24 @@ def _phase1_defaults() -> dict[str, Any]:
         "trail_atr_multiplier": "",
         "timeout_hours": "",
         "exit_rule_version": "",
+        "shadow_tp1_price": "",
+        "shadow_tp2_price": "",
+        "shadow_breakeven_after_tp1": "",
+        "shadow_trail_atr_multiplier": "",
+        "shadow_timeout_hours": "",
+        "shadow_exit_rule_version": "",
+        "trade_execution_gate": "blocked",
+        "trade_execution_blockers": ["phase1_inactive"],
+        "phase1_observation_gate": "blocked",
+        "phase1_observation_type": "blocked",
+        "phase1_observation_reasons": ["no_directional_setup"],
+        "phase1b_lite_gate": "blocked",
+        "phase1b_lite_type": "blocked",
+        "phase1b_lite_reasons": ["not_evaluated"],
+        "opportunity_gate": "blocked",
+        "opportunity_type": "blocked",
+        "opportunity_reasons": ["not_evaluated"],
+        "paper_order_status": "",
     }
 
 
@@ -261,9 +545,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
     per_tf_inputs = {
-        "4h": {"df": df_4h, "swings": tf_4h["swings"]},
-        "1h": {"df": df_1h, "swings": tf_1h["swings"]},
-        "15m": {"df": df_15m, "swings": tf_15m["swings"]},
+        "4h": {"df": df_4h, "swings": tf_4h["swings"], "structure": tf_4h["structure"]},
+        "1h": {"df": df_1h, "swings": tf_1h["swings"], "structure": tf_1h["structure"]},
+        "15m": {"df": df_15m, "swings": tf_15m["swings"], "structure": tf_15m["structure"]},
     }
     all_support_zones, all_resistance_zones = build_all_support_resistance(per_tf_inputs, atr_15m)
     support_zones, resistance_zones = build_support_resistance(per_tf_inputs, atr_15m)
@@ -288,12 +572,23 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     near_support = nearest_zone_distance(price, all_support_zones) <= atr_15m * 0.5
     near_resistance = nearest_zone_distance(price, all_resistance_zones) <= atr_15m * 0.5
-    recent_high = float(df_15m["high"].tail(20).max())
-    recent_low = float(df_15m["low"].tail(20).min())
-    breakout_up = price > recent_high
-    breakout_down = price < recent_low
-    range_mid = (recent_high + recent_low) / 2
+    recent_high, recent_low = previous_breakout_levels(df_15m, int(cfg.BREAKOUT_LOOKBACK_BARS))
+    breakout_up = recent_high is not None and price > recent_high
+    breakout_down = recent_low is not None and price < recent_low
+    range_high = recent_high if recent_high is not None else price
+    range_low = recent_low if recent_low is not None else price
+    range_mid = (range_high + range_low) / 2
     in_range_center = abs(price - range_mid) <= atr_15m * 0.5
+    volume_structure = analyze_volume_structure(df_15m, cfg)
+    market_map = build_market_map(
+        price=price,
+        atr=atr_15m,
+        per_tf_inputs=per_tf_inputs,
+        volume_info=volume_structure,
+        breakout_up=breakout_up,
+        breakout_down=breakout_down,
+        cfg=cfg,
+    )
 
     pre_long_setup, _ = build_setup(
         side="long",
@@ -354,6 +649,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             "breakout_up": breakout_up,
             "breakout_down": breakout_down,
             "in_range_center": in_range_center,
+            "transition_direction": transition_direction,
+            "signals_15m": tf_15m["signal"],
+            "market_map": market_map,
         },
         cfg,
     )
@@ -405,7 +703,8 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         bias=bias,
         market_regime=market_regime,
         pullback_depth_atr=pullback_depth_atr,
-        breakout_confirmed=(breakout_up or breakout_down) and float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2,
+        breakout_confirmed=(breakout_up or breakout_down)
+        and float(tf_15m["volume_ratio"].iloc[-1]) >= cfg.TRIGGER_VOLUME_RATIO,
         reversal_risk_flag=reversal_risk_flag,
         price=price,
         ema50=float(tf_4h["ema_mid"].iloc[-1]),
@@ -427,74 +726,136 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     )
     opposite_gap_atr = opposite_gap / atr_15m if atr_15m > 0 and opposite_gap != float("inf") else 10.0
 
-    confidence = compute_confidence(
-        {
-            "bias": bias,
-            "long_display_score": score_info["long_display_score"],
-            "short_display_score": score_info["short_display_score"],
-            "signals_4h": tf_4h["signal"],
-            "signals_1h": tf_1h["signal"],
-            "signals_15m": tf_15m["signal"],
-            "market_regime": market_regime,
-            "phase": phase,
-            "rr_estimate": rr_for_conf,
-            "opposite_gap_atr": opposite_gap_atr,
-            "critical_zone": critical_zone,
-            "warning_flags": score_info["warning_flags"] + position_risk["risk_flags"],
-        },
-        cfg,
+    directional_triggers = _directional_volume_triggers(
+        volume_ratio=float(tf_15m["volume_ratio"].iloc[-1]),
+        volume_threshold=float(cfg.TRIGGER_VOLUME_RATIO),
+        candle_open=float(df_15m["open"].iloc[-1]),
+        candle_high=float(df_15m["high"].iloc[-1]),
+        candle_low=float(df_15m["low"].iloc[-1]),
+        candle_close=float(df_15m["close"].iloc[-1]),
+        range_high=float(range_high),
+        range_low=float(range_low),
+        breakout_up=bool(breakout_up),
+        breakout_down=bool(breakout_down),
+        market_map=market_map,
     )
+    trigger_up = bool(directional_triggers["trigger_up"])
+    trigger_down = bool(directional_triggers["trigger_down"])
+    confidence_inputs = {
+        "bias": bias,
+        "long_display_score": score_info["long_display_score"],
+        "short_display_score": score_info["short_display_score"],
+        "signals_4h": tf_4h["signal"],
+        "signals_1h": tf_1h["signal"],
+        "signals_15m": tf_15m["signal"],
+        "market_regime": market_regime,
+        "phase": phase,
+        "rr_estimate": rr_for_conf,
+        "opposite_gap_atr": opposite_gap_atr,
+        "critical_zone": critical_zone,
+        "score_warning_flags": score_info["warning_flags"] + (["Critical_zone_warning"] if critical_zone else []),
+        "position_risk_flags": position_risk["risk_flags"],
+        "prelabel": position_risk["prelabel"],
+        "primary_setup_status": "none",
+    }
+    confidence_details = compute_confidence_details(confidence_inputs, cfg)
+    preliminary_confidence = int(confidence_details["confidence"])
 
-    trigger_up = breakout_up or float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2
-    trigger_down = breakout_down or float(tf_15m["volume_ratio"].iloc[-1]) >= 1.2
-    long_setup, long_flags = build_setup(
-        side="long",
-        price=price,
-        atr=atr_15m,
-        support_zones=all_support_zones,
-        resistance_zones=all_resistance_zones,
-        sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
-        min_rr_ratio=cfg.MIN_RR_RATIO,
-        confidence=confidence,
-        confidence_min=cfg.CONFIDENCE_LONG_MIN,
-        atr_ratio=atr_ratio,
-        atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
-        atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate_pct,
-        funding_warning=cfg.FUNDING_LONG_WARNING,
-        funding_prohibited=cfg.FUNDING_LONG_PROHIBITED,
-        trigger_ready=trigger_up,
-        warning_count=len(score_info["warning_flags"]),
-    )
-    short_setup, short_flags = build_setup(
-        side="short",
-        price=price,
-        atr=atr_15m,
-        support_zones=all_support_zones,
-        resistance_zones=all_resistance_zones,
-        sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
-        min_rr_ratio=cfg.MIN_RR_RATIO,
-        confidence=confidence,
-        confidence_min=cfg.CONFIDENCE_SHORT_MIN,
-        atr_ratio=atr_ratio,
-        atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
-        atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
-        funding_rate=funding_rate_pct,
-        funding_warning=cfg.FUNDING_SHORT_WARNING,
-        funding_prohibited=cfg.FUNDING_SHORT_PROHIBITED,
-        trigger_ready=trigger_down,
-        warning_count=len(score_info["warning_flags"]),
-    )
-    long_setup = apply_prelabel_to_setup(long_setup, position_risk["prelabel"], "long", bias)
-    short_setup = apply_prelabel_to_setup(short_setup, position_risk["prelabel"], "short", bias)
+    def _build_directional_setups(selected_confidence: int) -> tuple[dict[str, Any], list[str], dict[str, Any], list[str]]:
+        long_setup_local, long_flags_local = build_setup(
+            side="long",
+            price=price,
+            atr=atr_15m,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
+            sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
+            min_rr_ratio=cfg.MIN_RR_RATIO,
+            confidence=selected_confidence,
+            confidence_min=cfg.CONFIDENCE_LONG_MIN,
+            atr_ratio=atr_ratio,
+            atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
+            atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
+            funding_rate=funding_rate_pct,
+            funding_warning=cfg.FUNDING_LONG_WARNING,
+            funding_prohibited=cfg.FUNDING_LONG_PROHIBITED,
+            trigger_ready=trigger_up,
+            warning_count=len(score_info["warning_flags"]),
+        )
+        short_setup_local, short_flags_local = build_setup(
+            side="short",
+            price=price,
+            atr=atr_15m,
+            support_zones=all_support_zones,
+            resistance_zones=all_resistance_zones,
+            sl_atr_multiplier=cfg.SL_ATR_MULTIPLIER,
+            min_rr_ratio=cfg.MIN_RR_RATIO,
+            confidence=selected_confidence,
+            confidence_min=cfg.CONFIDENCE_SHORT_MIN,
+            atr_ratio=atr_ratio,
+            atr_ratio_min=cfg.MIN_ACCEPTABLE_ATR_RATIO,
+            atr_ratio_max=cfg.MAX_ACCEPTABLE_ATR_RATIO,
+            funding_rate=funding_rate_pct,
+            funding_warning=cfg.FUNDING_SHORT_WARNING,
+            funding_prohibited=cfg.FUNDING_SHORT_PROHIBITED,
+            trigger_ready=trigger_down,
+            warning_count=len(score_info["warning_flags"]),
+        )
+        long_setup_local = apply_prelabel_to_setup(long_setup_local, position_risk["prelabel"], "long", bias)
+        short_setup_local = apply_prelabel_to_setup(short_setup_local, position_risk["prelabel"], "short", bias)
+        long_setup_local, long_precision_flags = refine_execution_precision(
+            long_setup_local,
+            side="long",
+            market_map=market_map,
+            signal_15m=tf_15m["signal"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+        )
+        short_setup_local, short_precision_flags = refine_execution_precision(
+            short_setup_local,
+            side="short",
+            market_map=market_map,
+            signal_15m=tf_15m["signal"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+        )
+        return (
+            long_setup_local,
+            sorted(set(long_flags_local + long_precision_flags)),
+            short_setup_local,
+            sorted(set(short_flags_local + short_precision_flags)),
+        )
+
+    long_setup, long_flags, short_setup, short_flags = _build_directional_setups(preliminary_confidence)
+    primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
+    confidence_inputs["primary_setup_status"] = primary_setup_status
+    confidence_details = compute_confidence_details(confidence_inputs, cfg)
+    confidence = int(confidence_details["confidence"])
+
+    long_setup, long_flags, short_setup, short_flags = _build_directional_setups(confidence)
     primary_setup_side, primary_setup_status = choose_primary_setup(bias, long_setup, short_setup)
     primary_setup = (
         long_setup if primary_setup_side == "long" else short_setup if primary_setup_side == "short" else {}
     )
-    all_flags = sorted(set(score_info["no_trade_flags"] + long_flags + short_flags + position_risk["risk_flags"]))
-    if critical_zone:
-        all_flags.append("Critical_zone_warning")
-        all_flags = sorted(set(all_flags))
+    effective_prelabel = reconcile_prelabel_with_setup(position_risk["prelabel"], primary_setup_status)
+    result_flags = assemble_result_flags(
+        bias=bias,
+        score_no_trade_flags=score_info["no_trade_flags"],
+        score_warning_flags=score_info["warning_flags"],
+        long_setup_flags=long_flags,
+        short_setup_flags=short_flags,
+        position_risk_flags=position_risk["risk_flags"],
+        critical_zone=critical_zone,
+    )
+    result_flags["risk_flags"] = derive_additional_risk_flags(
+        bias=bias,
+        market_regime=market_regime,
+        transition_direction=transition_direction,
+        primary_setup_status=primary_setup_status,
+        primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+        risk_flags=result_flags["risk_flags"],
+        long_factor_breakdown=score_info["long_factor_breakdown"],
+        market_map_flags=market_map["flags"],
+    )
 
     qualitative_context = build_qualitative_context(
         now_ms=now_ms,
@@ -502,7 +863,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         df_15m=df_15m,
         market_regime=market_regime,
         bias=bias,
-        no_trade_flags=all_flags,
+        blocking_flags=result_flags["no_trade_flags"],
         price=price,
         ema50=float(tf_15m["ema_mid"].iloc[-1]),
         atr=atr_15m,
@@ -519,7 +880,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         funding_rate=funding_rate_pct,
     )
 
-    result: dict[str, Any] = {
+    core_result: dict[str, Any] = {
         "signal_id": signal_id,
         "timestamp_utc": now_utc.isoformat().replace("+00:00", "Z"),
         "timestamp_jst": now_jst.isoformat(),
@@ -549,7 +910,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "top_negative_factors": score_info["top_negative_factors"],
         "confidence": confidence,
         "agreement_with_machine": agreement_with_machine,
-        "prelabel": position_risk["prelabel"],
+        "prelabel": effective_prelabel,
         "prelabel_primary_reason": position_risk["primary_reason"],
         "location_risk": position_risk["location_risk"],
         "critical_zone": critical_zone,
@@ -559,11 +920,24 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "resistance_zones_by_strength": resistance_zones,
         "support_zones_all": all_support_zones,
         "resistance_zones_all": all_resistance_zones,
+        "market_map": market_map,
+        "market_map_primary_state": market_map["market_map_primary_state"],
+        "market_map_flags": market_map["flags"],
+        "nearest_major_support": market_map["nearest_major_support"],
+        "nearest_major_resistance": market_map["nearest_major_resistance"],
+        "active_level_role": market_map["active_level_role"],
+        "level_flip_state": market_map["level_flip_state"],
+        "failed_breakout_state": market_map["failed_breakout_state"],
+        "trend_flip_state": market_map["trend_flip_state"],
+        "chart_snapshot": _build_chart_snapshot(df_4h, df_1h, df_15m),
         "long_setup": long_setup,
         "short_setup": short_setup,
         "primary_setup_side": primary_setup_side,
         "primary_setup_status": primary_setup_status,
         "primary_setup_reason": primary_setup.get("status_reason_code", ""),
+        "execution_precision_action": primary_setup.get("execution_precision_action", ""),
+        "execution_precision_flags": primary_setup.get("execution_precision_flags", []),
+        "execution_precision_reason": primary_setup.get("execution_precision_reason", ""),
         "invalid_reason": primary_setup.get("invalid_reason", ""),
         "primary_entry_mid": primary_setup.get("entry_mid", ""),
         "primary_stop_loss": primary_setup.get("stop_loss", ""),
@@ -599,15 +973,34 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "orderbook_bid_wall_size": _round_optional(orderbook_info.get("orderbook_bid_wall_size"), 4),
         "orderbook_ask_wall_size": _round_optional(orderbook_info.get("orderbook_ask_wall_size"), 4),
         "orderbook_bias": orderbook_info.get("orderbook_bias"),
+        "breakout_up": breakout_up,
+        "breakout_down": breakout_down,
+        "trigger_volume_ratio_threshold": _round_optional(cfg.TRIGGER_VOLUME_RATIO, 4),
         "rr_estimate": _round2(
             long_setup["rr_estimate"] if bias == "long" else short_setup["rr_estimate"] if bias == "short" else max(long_setup["rr_estimate"], short_setup["rr_estimate"])
         ),
         "ai_advice": None,
+        "ai_audit": None,
+        "ai_audit_status": "skipped_non_notify",
         "ai_decision": "",
         "ai_confidence": "",
-        "warning_flags": score_info["warning_flags"],
-        "no_trade_flags": all_flags,
-        "risk_flags": position_risk["risk_flags"],
+        "ai_audit_verdict": "",
+        "ai_audit_agreement": "",
+        "ai_audit_reason": "",
+        "ai_audit_unique_risks": [],
+        "ai_audit_next_review_focus": "",
+        "raw_confidence": confidence_details["raw_confidence"],
+        "confidence_direction_shadow": confidence_details["confidence_direction_shadow"],
+        "confidence_execution_shadow": confidence_details["confidence_execution_shadow"],
+        "confidence_wait_shadow": confidence_details["confidence_wait_shadow"],
+        "confidence_components": confidence_details["confidence_components"],
+        "warning_flags": result_flags["warning_flags"],
+        "no_trade_flags": result_flags["no_trade_flags"],
+        "risk_flags": result_flags["risk_flags"],
+        "summary_variant": SUMMARY_VARIANT,
+        "advice_variant": ADVICE_VARIANT,
+        "prompt_variant": PROMPT_VARIANT,
+        "evaluation_trace_version": EVALUATION_TRACE_VERSION,
         "signal_tier": "normal",
         "signal_badge": "",
         "signal_tier_reason_codes": [],
@@ -618,43 +1011,34 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "suppress_reason_codes": [],
         "reason_for_notification": [],
         "notification_kind": "none",
+        "notification_context": {},
+        "detail_page_enabled": False,
+        "detail_page_status": "disabled",
+        "detail_page_url": "",
+        "detail_page_local_path": "",
+        "detail_page_published_at_utc": "",
     }
-
-    ai_advice = request_ai_advice(
-        provider=cfg.AI_ADVICE_PROVIDER,
-        api_key=cfg.OPENAI_API_KEY,
-        model=cfg.OPENAI_ADVICE_MODEL,
-        cli_command=cfg.AI_ADVICE_CLI_COMMAND,
-        timeout_sec=cfg.AI_TIMEOUT_SEC,
-        retry_count=cfg.AI_RETRY_COUNT,
-        base_dir=base_dir,
-        machine_payload=result,
-        qualitative_payload=qualitative_context,
-    )
-    result["ai_advice"] = ai_advice
-    if isinstance(ai_advice, dict):
-        result["ai_decision"] = ai_advice.get("decision", "")
-        result["ai_confidence"] = ai_advice.get("confidence", "")
+    core_result["display_context"] = build_display_context(core_result)
 
     data_missing_fields = _normalize_missing_data_fields(
         market_structure.missing_fields or [],
-        ai_missing=bool(getattr(cfg, "OPENAI_API_KEY", "")) and ai_advice is None,
+        ai_missing=False,
         funding_missing=funding_missing,
     )
-    result["data_missing_fields"] = data_missing_fields
-    result["data_quality_flag"] = _data_quality_flag(data_missing_fields)
+    core_result["data_missing_fields"] = data_missing_fields
+    core_result["data_quality_flag"] = _data_quality_flag(data_missing_fields)
 
-    signal_tier_info = compute_signal_tier(result, cfg)
-    result["signal_tier"] = signal_tier_info["tier"]
-    result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
-    result["signal_badge"] = signal_tier_badge(result["signal_tier"])
+    signal_tier_info = compute_signal_tier(core_result, cfg)
+    core_result["signal_tier"] = signal_tier_info["tier"]
+    core_result["signal_tier_reason_codes"] = signal_tier_info["reason_codes"]
+    core_result["signal_badge"] = signal_tier_badge(core_result["signal_tier"])
 
     if primary_setup_side in {"long", "short"}:
         phase1_activation = determine_phase1_activation(
             bias=bias,
             primary_setup_side=primary_setup_side,
             primary_setup_status=primary_setup_status,
-            data_quality_flag=result["data_quality_flag"],
+            data_quality_flag=core_result["data_quality_flag"],
             entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
             stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
         )
@@ -666,7 +1050,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             account_balance=float(cfg.PHASE1_ACCOUNT_BALANCE_USD),
             entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
             stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
-            signal_tier=result["signal_tier"],
+            signal_tier=core_result["signal_tier"],
             loss_streak=loss_streak,
             base_risk_pct=float(cfg.PHASE1_BASE_RISK_PCT),
             loss_streak_step_pct=float(cfg.PHASE1_LOSS_STREAK_STEP_PCT),
@@ -684,23 +1068,143 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
             timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
             exit_rule_version="phase1_v0",
         )
-        result["loss_streak_at_entry"] = loss_streak
-        result.update(phase1_activation)
-        result.update(position_size_plan)
-        result.update(exit_plan)
+        shadow_exit_plan = build_shadow_exit_plan(
+            side=primary_setup_side,
+            entry_price=float(primary_setup.get("entry_mid", 0.0) or 0.0),
+            stop_loss_price=float(primary_setup.get("stop_loss", 0.0) or 0.0),
+            atr=atr_15m,
+            trail_atr_multiplier=float(cfg.PHASE1_TRAIL_ATR_MULTIPLIER),
+            timeout_hours=int(cfg.PHASE1_TIMEOUT_HOURS),
+        )
+        execution_gate = determine_trade_execution_gate(
+            phase1_active=bool(phase1_activation["phase1_active"]),
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
+        observation_gate = determine_phase1_observation_gate(
+            bias=bias,
+            primary_setup_side=primary_setup_side,
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            risk_flags=result_flags["risk_flags"],
+            confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+            secondary_setup_status=str(short_setup.get("status", "")) if bias == "long" else str(long_setup.get("status", "")),
+        )
+        phase1b_lite_gate = determine_phase1b_lite_gate(
+            phase1_observation_type=observation_gate["phase1_observation_type"],
+            primary_setup_status=primary_setup_status,
+            primary_setup_reason=str(primary_setup.get("status_reason_code", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            risk_flags=result_flags["risk_flags"],
+            confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
+        opportunity_gate = determine_opportunity_gate(
+            bias=bias,
+            primary_setup_side=primary_setup_side,
+            primary_setup_status=primary_setup_status,
+            data_quality_flag=core_result["data_quality_flag"],
+            no_trade_flags=result_flags["no_trade_flags"],
+            risk_flags=result_flags["risk_flags"],
+            market_map_flags=market_map["flags"],
+            phase1_observation_gate=observation_gate["phase1_observation_gate"],
+            phase1_observation_type=observation_gate["phase1_observation_type"],
+            phase1b_lite_gate=phase1b_lite_gate["phase1b_lite_gate"],
+            phase1b_lite_type=phase1b_lite_gate["phase1b_lite_type"],
+            trade_execution_gate=execution_gate["trade_execution_gate"],
+            confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+            confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+            confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        )
+        core_result["loss_streak_at_entry"] = loss_streak
+        core_result.update(phase1_activation)
+        core_result.update(position_size_plan)
+        core_result.update(exit_plan)
+        core_result.update(shadow_exit_plan)
+        core_result.update(execution_gate)
+        core_result.update(observation_gate)
+        core_result.update(phase1b_lite_gate)
+        core_result.update(opportunity_gate)
+        if core_result["trade_execution_gate"] == "pass":
+            core_result["paper_order_status"] = "planned"
+
+    active_trade_plan = build_active_trade_plan(
+        current_price=float(core_result.get("current_price", 0.0) or 0.0),
+        bias=bias,
+        market_regime=market_regime,
+        long_setup=long_setup,
+        short_setup=short_setup,
+        confidence_direction_shadow=confidence_details["confidence_direction_shadow"],
+        confidence_execution_shadow=confidence_details["confidence_execution_shadow"],
+        confidence_wait_shadow=confidence_details["confidence_wait_shadow"],
+        risk_flags=result_flags["risk_flags"],
+        market_map_flags=market_map["flags"],
+        no_trade_flags=result_flags["no_trade_flags"],
+        data_quality_flag=core_result["data_quality_flag"],
+        breakout_up=breakout_up,
+        breakout_down=breakout_down,
+        volume_ratio=float(tf_15m["volume_ratio"].iloc[-1]),
+        trigger_volume_ratio_threshold=float(cfg.TRIGGER_VOLUME_RATIO),
+    )
+    core_result["active_trade_plan"] = active_trade_plan
+    core_result["active_primary_action"] = active_trade_plan.get("primary_action", "NO_ACTION")
+    core_result["active_headline"] = active_trade_plan.get("headline", "")
+    core_result.update(_runtime_actionability_fields(core_result=core_result, active_trade_plan=active_trade_plan))
 
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
-    notify_info = should_notify(result, last_result, last_notified, last_attention_notified, cfg)
+    notify_info = should_notify(core_result, last_result, last_notified, last_attention_notified, cfg)
     notify = bool(notify_info["notify"])
-    result["notify_reason_codes"] = notify_info["notify_reason_codes"]
-    result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
-    result["reason_for_notification"] = notify_info["notify_reason_codes"]
-    result["notification_kind"] = notify_info["notification_kind"]
+    core_result["notify_reason_codes"] = notify_info["notify_reason_codes"]
+    core_result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
+    core_result["reason_for_notification"] = notify_info["notify_reason_codes"]
+    core_result["notification_kind"] = notify_info["notification_kind"]
+    core_result["notification_context"] = build_notification_context(core_result)
+    advice_provider_used = getattr(cfg, "AI_ADVICE_PROVIDER", "api")
+    if notify:
+        ai_advice, advice_provider_used = request_ai_advice(
+            provider=cfg.AI_ADVICE_PROVIDER,
+            api_key=cfg.OPENAI_API_KEY,
+            model=cfg.OPENAI_ADVICE_MODEL,
+            cli_command=cfg.AI_ADVICE_CLI_COMMAND,
+            timeout_sec=cfg.AI_TIMEOUT_SEC,
+            retry_count=cfg.AI_RETRY_COUNT,
+            base_dir=base_dir,
+            machine_payload=core_result,
+            qualitative_payload=qualitative_context,
+        )
+        core_result["ai_advice"] = ai_advice
+        core_result["ai_audit"] = ai_advice
+        core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
+        if isinstance(ai_advice, dict):
+            core_result["ai_audit_status"] = "completed"
+            core_result["ai_decision"] = ai_advice.get("decision", "")
+            core_result["ai_confidence"] = ai_advice.get("confidence", "")
+            core_result["advice_variant"] = ai_advice.get("advice_variant", ADVICE_VARIANT)
+            core_result["ai_audit_verdict"] = ai_advice.get("verdict", "")
+            core_result["ai_audit_agreement"] = ai_advice.get("agreement", "")
+            core_result["ai_audit_reason"] = ai_advice.get("reason", "")
+            core_result["ai_audit_unique_risks"] = list(ai_advice.get("unique_risks", []) or [])
+            core_result["ai_audit_next_review_focus"] = ai_advice.get("next_review_focus", "")
+        else:
+            core_result["ai_audit_status"] = "unavailable"
+    else:
+        core_result["ai_advice_provider_used"] = _normalize_provider_label(advice_provider_used)
 
-    result["summary_subject"] = build_summary_subject(result)
-    result["summary_body"] = build_summary_body(
+    summary_body, summary_provider_used = build_summary_body(
         provider=cfg.AI_SUMMARY_PROVIDER,
         api_key=cfg.OPENAI_API_KEY,
         model=cfg.OPENAI_SUMMARY_MODEL,
@@ -708,19 +1212,44 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         timeout_sec=cfg.AI_SUMMARY_TIMEOUT_SEC,
         retry_count=cfg.AI_RETRY_COUNT,
         base_dir=base_dir,
-        result_payload=result,
+        result_payload=core_result,
+    )
+    core_result["ai_summary_provider_used"] = _normalize_provider_label(summary_provider_used)
+    core_result["system_mode_label"] = _build_system_mode_label(cfg)
+    core_result["display_context"] = build_display_context(core_result)
+    core_result["notification_context"] = build_notification_context(core_result)
+    core_result["summary_subject"] = build_summary_subject(core_result)
+    core_result["summary_body"] = summary_body
+    core_result["evaluation_trace"] = build_evaluation_trace(
+        result=core_result,
+        score_info=score_info,
+        position_risk=position_risk,
+        confidence_details=confidence_details,
+        display_context=core_result["display_context"],
     )
 
     if notify:
+        if detail_page_enabled(cfg, core_result):
+            try:
+                detail_page_info = publish_notification_detail(base_dir, cfg, core_result)
+                core_result["summary_body"] = append_detail_page_url(
+                    core_result["summary_body"],
+                    detail_page_info.get("detail_page_url", ""),
+                )
+                core_result.update(detail_page_info)
+            except Exception as exc:  # noqa: BLE001
+                core_result["detail_page_enabled"] = True
+                core_result["detail_page_status"] = "failed"
+                _error_log(base_dir, "notification_detail_page_error", f"{exc}\n{traceback.format_exc()}")
         notify_path = (
             get_last_attention_notified_path(base_dir)
-            if result["notification_kind"] == "attention"
+            if core_result["notification_kind"] == "attention"
             else get_last_notified_path(base_dir)
         )
         if cfg.DRYRUN_MODE:
-            result["was_notified"] = True
-            result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-            save_json(notify_path, result)
+            core_result["was_notified"] = True
+            core_result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+            save_json(notify_path, core_result)
         else:
             try:
                 send_email(
@@ -730,21 +1259,46 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                     smtp_password=cfg.SMTP_PASSWORD,
                     mail_from=cfg.MAIL_FROM,
                     mail_to=cfg.MAIL_TO,
-                    subject=result["summary_subject"],
-                    body=result["summary_body"],
+                    subject=core_result["summary_subject"],
+                    body=core_result["summary_body"],
                 )
-                result["was_notified"] = True
-                result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
-                save_json(notify_path, result)
+                core_result["was_notified"] = True
+                core_result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+                save_json(notify_path, core_result)
             except Exception as exc:  # noqa: BLE001
-                save_pending_email(base_dir, result["summary_subject"], result["summary_body"])
+                save_pending_email(base_dir, core_result["summary_subject"], core_result["summary_body"])
                 _error_log(base_dir, "smtp_error", f"{exc}\n{traceback.format_exc()}")
 
-    save_signal_snapshot(base_dir, result)
-    append_trade_log(base_dir, result)
-    save_json(get_last_result_path(base_dir), result)
+    persisted_result = dict(core_result)
+    persisted_result.update(
+        build_chart_pattern_shadow(
+            price=price,
+            atr=atr_15m,
+            df_15m=df_15m,
+            swings_15m=tf_15m["swings"],
+            breakout_up=breakout_up,
+            breakout_down=breakout_down,
+            support_zones_all=sort_zones_by_distance(price, all_support_zones),
+            resistance_zones_all=sort_zones_by_distance(price, all_resistance_zones),
+            raw_missing_fields=market_structure.missing_fields or [],
+            cfg=cfg,
+        )
+    )
 
-    return result
+    save_signal_snapshot(base_dir, persisted_result)
+    append_trade_log(base_dir, persisted_result)
+    append_active_plan_candidates(base_dir, persisted_result)
+    if persisted_result.get("phase1_observation_gate") == "pass":
+        append_observation_paper_order(base_dir, persisted_result)
+    if persisted_result.get("phase1b_lite_gate") == "pass":
+        append_phase1b_lite_paper_order(base_dir, persisted_result)
+    if persisted_result.get("opportunity_gate") == "pass":
+        append_paper_position(base_dir, persisted_result)
+    if persisted_result.get("paper_order_status") == "planned":
+        append_paper_order(base_dir, persisted_result)
+    save_json(get_last_result_path(base_dir), persisted_result)
+
+    return persisted_result
 
 
 def _run_cycle_safe(cfg: Any, base_dir: Path) -> None:
@@ -761,6 +1315,8 @@ def main() -> None:
     cfg = load_config(base_dir)
     for report_time in cfg.REPORT_TIMES:
         schedule.every().day.at(report_time).do(_run_cycle_safe, cfg, base_dir)
+    startup_status_path = _write_runtime_startup_status(base_dir, cfg, pid=os.getpid())
+    print(f"runtime_startup_status_json={startup_status_path}", flush=True)
     while True:
         schedule.run_pending()
         time.sleep(1)

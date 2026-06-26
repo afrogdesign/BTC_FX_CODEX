@@ -1,48 +1,69 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
-from src.ai.cli_provider import run_cli_text, write_ai_error_log
+from src.presentation.sanitize import (
+    CONFIDENCE_METRIC_LABELS,
+    build_display_context,
+    build_notification_context,
+    sanitize_flag_list,
+    sanitize_user_text,
+)
 
 
-def _load_prompt(base_dir: Path) -> str:
-    prompt_path = base_dir / "prompts" / "summary_prompt.md"
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8")
-    return "日本語で簡潔な相場サマリーを作成してください。"
+VER03_V4_EMAIL_SUBJECT_PREFIX = "[BTCFX Ver03-v4]"
+
+
+def _format_price(value: Any) -> str:
+    try:
+        return f"{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_subject_price(value: Any) -> str:
+    try:
+        return f"{round(float(value)):,.0f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_pct(value: Any) -> str:
+    try:
+        return f"{float(value):+.4f}%"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _subject_status_emoji(status_code: str) -> str:
+    mapping = {
+        "attention": "👀",
+        "actionable": "✅",
+        "monitor": "👀",
+        "invalid": "⛔️",
+        "neutral": "🧭",
+    }
+    return mapping.get(str(status_code or "").lower(), "🧭")
 
 
 def _label_bias(value: Any) -> str:
-    mapping = {
-        "long": "ロング寄り",
-        "short": "ショート寄り",
-        "wait": "様子見",
-        "no_trade": "見送り",
-    }
+    mapping = {"long": "ロング寄り", "short": "ショート寄り", "wait": "様子見", "no_trade": "見送り"}
     return mapping.get(str(value).lower(), str(value))
 
 
 def _label_phase(value: Any) -> str:
     mapping = {
-        "trend_follow": "トレンド継続を狙う場面",
-        "pullback": "押し目・戻り待ちの場面",
-        "breakout": "ブレイク狙いの場面",
-        "range": "レンジ気味の場面",
-        "reversal_risk": "反転に注意したい場面",
-        "wait": "様子見の場面",
+        "trend_following": "トレンド継続",
+        "pullback": "押し目・戻り待ち",
+        "breakout": "ブレイク局面",
+        "range": "レンジ局面",
+        "reversal_risk": "反転注意",
     }
     return mapping.get(str(value).lower(), str(value))
 
 
 def _label_signal(value: Any) -> str:
-    mapping = {
-        "long": "ロング優勢",
-        "short": "ショート優勢",
-        "wait": "様子見",
-    }
+    mapping = {"long": "ロング優勢", "short": "ショート優勢", "wait": "様子見"}
     return mapping.get(str(value).lower(), str(value))
 
 
@@ -57,289 +78,873 @@ def _label_regime(value: Any) -> str:
     return mapping.get(str(value).lower(), str(value))
 
 
-def _label_setup(value: Any) -> str:
-    mapping = {
-        "ready": "提案候補",
-        "watch": "監視継続",
-        "invalid": "現状は見送り",
-    }
-    return mapping.get(str(value).lower(), str(value))
-
-
-def _label_prelabel(value: Any) -> str:
-    mapping = {
-        "ENTRY_OK": "入る条件がかなりそろっています",
-        "RISKY_ENTRY": "方向は合っていても新規は慎重です",
-        "SWEEP_WAIT": "一度下を試してからの反発待ちです",
-        "NO_TRADE_CANDIDATE": "今は見送りが妥当です",
-    }
-    return mapping.get(str(value).upper(), str(value))
-
-
-def _label_ai_decision(value: Any) -> str:
-    mapping = {
-        "LONG": "ロング寄り",
-        "SHORT": "ショート寄り",
-        "WAIT": "様子見",
-        "NO_TRADE": "見送り",
-        "WAIT_FOR_SWEEP": "いったん振ってからの反発待ち",
-        "WAIT_FOR_BREAK_RETEST": "ブレイク後の押し戻り待ち",
-    }
-    return mapping.get(str(value).upper(), str(value))
-
-
-def _label_ai_quality(value: Any) -> str:
-    mapping = {
-        "A": "強め",
-        "B": "中くらい",
-        "C": "控えめ",
-    }
-    return mapping.get(str(value).upper(), str(value))
-
-
-def _format_flags(flags: list[Any]) -> str:
-    if not flags:
-        return "大きな注意フラグはありません。"
-    mapping = {
-        "RR_insufficient": "利益幅に対して損切り幅のバランスが弱めです。",
-        "RR_insufficient_long": "ロング側は利益幅が不足気味です。",
-        "RR_insufficient_short": "ショート側は利益幅が不足気味です。",
-        "Critical_zone_warning": "重要な価格帯の近くで値動きが不安定になりやすいです。",
-        "sweep_incomplete": "まだ一度振って流動性を回収する動きが終わっていません。",
-    }
-    parts = [mapping.get(str(flag), str(flag)) for flag in flags]
-    return " ".join(parts)
-
-
-def _format_price(value: Any) -> str:
-    try:
-        price = float(value)
-    except Exception:  # noqa: BLE001
-        return str(value)
-    return f"{price:,.2f}"
-
-
-def _format_pct(value: Any) -> str:
-    try:
-        pct = float(value)
-    except Exception:  # noqa: BLE001
-        return str(value)
-    return f"{pct:+.4f}%"
-
-
-def _format_subject_price(value: Any) -> str:
-    try:
-        price = round(float(value))
-    except Exception:  # noqa: BLE001
-        return str(value)
-    return f"{price:,.0f}"
-
-
-def _attention_direction(result: dict[str, Any]) -> str:
-    return "ロング寄り" if str(result.get("bias", "")).lower() == "long" else "ショート寄り"
-
-
-def _attention_emoji() -> str:
-    return "👀"
-
-
-def _subject_market_phrase(result: dict[str, Any]) -> str:
-    prelabel = str(result.get("prelabel", "")).upper()
-    bias = str(result.get("bias", "")).lower()
-
-    if bias == "long":
-        mapping = {
-            "ENTRY_OK": "買い候補がそろい始め",
-            "SWEEP_WAIT": "上向きだが今は待機",
-            "RISKY_ENTRY": "上向きだが慎重",
-            "NO_TRADE_CANDIDATE": "上向きだが今は見送り",
-        }
-        return mapping.get(prelabel, "上向きだが今は様子見")
-    if bias == "short":
-        mapping = {
-            "ENTRY_OK": "売り候補がそろい始め",
-            "SWEEP_WAIT": "下向きだが今は待機",
-            "RISKY_ENTRY": "下向きだが慎重",
-            "NO_TRADE_CANDIDATE": "下向きだが今は見送り",
-        }
-        return mapping.get(prelabel, "下向きだが今は様子見")
-    return "方向感は様子見"
-
-
-def _subject_attention_phrase(result: dict[str, Any]) -> str:
-    bias = str(result.get("bias", "")).lower()
-    if bias == "long":
-        return "ロング寄りに傾き始め"
-    if bias == "short":
-        return "ショート寄りに傾き始め"
-    return "方向感を観測中"
-
-
-def _signal_intro(result: dict[str, Any]) -> str:
-    tier = str(result.get("signal_tier", "normal"))
-    badge = str(result.get("signal_badge", "")).strip()
-    if not badge:
-        return ""
-    if tier == "strong_ai_confirmed":
-        return f"{badge} 機械判定とAI審査が同方向でそろった強い候補です。"
-    return f"{badge} 条件がそろい始めた場面です。崩れないかを確認しながら追跡します。"
-
-
 def _format_zone_summary(name: str, zones: list[dict[str, Any]]) -> str:
     if not zones:
-        return f"{name}は特に抽出できていません。"
-    parts = []
+        return f"{name}: 目立つ価格帯は抽出なし"
+    parts: list[str] = []
     for zone in zones[:2]:
         low = _format_price(zone.get("low"))
         high = _format_price(zone.get("high"))
         distance = _format_price(zone.get("distance_from_price"))
         parts.append(f"{low} - {high}（現在値から {distance} ドル）")
-    return f"{name}は " + " / ".join(parts) + " です。"
+    return f"{name}: " + " / ".join(parts)
 
 
-def _setup_status_reason(status: str, side: str) -> str:
-    if status == "ready":
-        return "条件がそろえば候補にできます。"
-    if status == "watch":
-        return "今は条件の改善待ちです。"
-    if side == "long":
-        return "利益に対して損切り幅のバランスが悪く、今は買いを急がない方が安全です。"
-    return "利益に対して損切り幅のバランスが悪く、今は売りを急がない方が安全です。"
+def _normalize_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [part.strip() for part in text.split(",") if part.strip()]
 
 
-def _format_setup_levels(name: str, setup: dict[str, Any], side: str) -> str:
-    if not isinstance(setup, dict):
-        return f"{name}は情報不足です。"
-    raw_status = str(setup.get("status", "")).lower()
-    status = _label_setup(raw_status)
-    entry_low = _format_price((setup.get("entry_zone") or {}).get("low"))
-    entry_high = _format_price((setup.get("entry_zone") or {}).get("high"))
-    stop_loss = _format_price(setup.get("stop_loss"))
-    tp1 = _format_price(setup.get("tp1"))
-    tp2 = _format_price(setup.get("tp2"))
-    if side == "long":
-        label = "ロング"
+def _active_subject_detail(notification_context: dict[str, Any]) -> str:
+    headline = str(notification_context.get("active_headline", "")).strip()
+    if headline:
+        return headline
+    reasons = notification_context.get("reason_labels") or ["理由未整理"]
+    return str(reasons[0])
+
+
+def _apply_ver03_v4_subject_prefix(subject: str) -> str:
+    normalized = str(subject or "").strip()
+    if normalized.startswith(VER03_V4_EMAIL_SUBJECT_PREFIX):
+        return normalized
+    if not normalized:
+        return VER03_V4_EMAIL_SUBJECT_PREFIX
+    return f"{VER03_V4_EMAIL_SUBJECT_PREFIX} {normalized}"
+
+
+def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).strip()
+    observation_gate = str(result.get("phase1_observation_gate", "blocked")).strip() or "blocked"
+    observation_type = str(result.get("phase1_observation_type", "")).strip()
+    trade_blockers = _normalize_text_list(result.get("trade_execution_blockers", []))
+    observation_reasons = _normalize_text_list(result.get("phase1_observation_reasons", []))
+
+    lines.extend(["", "【実行ゲート】", f"判定: {trade_gate}"])
+    if paper_order_status:
+        lines.append(f"paper_order_status: {paper_order_status}")
+    if trade_blockers:
+        lines.append("理由:")
+        lines.extend(f"- {blocker}" for blocker in trade_blockers)
+
+    lines.extend(["", "【観測ゲート】", f"判定: {observation_gate}"])
+    if observation_type:
+        lines.append(f"観測タイプ: {observation_type}")
+    if observation_reasons:
+        lines.append("理由:")
+        lines.extend(f"- {reason}" for reason in observation_reasons)
+
+
+def _actionability_lines(result: dict[str, Any]) -> list[str]:
+    label = str(result.get("actionability_label", "")).strip()
+    human_action = str(result.get("human_action", "")).strip()
+    safety = str(result.get("actionability_safety", "")).strip()
+    reasons = result.get("actionability_reasons", [])
+    if not label and not human_action and not safety and not reasons:
+        return []
+    label_text = {
+        "ACTIONABLE_COPY_READY": "手動確認すれば行動候補",
+        "REVIEW_REQUIRED": "要確認。すぐ行動せず内容確認",
+        "AUTO_REJECT": "行動候補から除外。今回は見送り",
+        "NO_ACTION": "行動なし",
+    }.get(label, "判定未確定")
+    human_action_text = {
+        "manual_copy_review": "内容を確認して、手動で判断",
+        "review_only": "すぐ行動せず、確認だけ行う",
+        "do_nothing": "何もしない",
+    }.get(human_action, "人間確認")
+    if isinstance(reasons, list):
+        normalized_reasons = [str(item).strip() for item in reasons if str(item).strip()]
     else:
-        label = "ショート"
-    return (
-        f"・{label}: {status}。再検討帯は {entry_low} - {entry_high}、"
-        f"損切り目安は {stop_loss}、利確目安は TP1 {tp1} / TP2 {tp2}。"
-        f"{_setup_status_reason(raw_status, side)}"
+        normalized_reasons = [str(reasons).strip()] if str(reasons).strip() else []
+    reason_lines = []
+    for reason in normalized_reasons:
+        if reason == "deterministic_checks_passed":
+            reason_lines.append("決定的チェックを通過")
+        elif reason.startswith("source_not_ready:"):
+            reason_lines.append("データ鮮度または入力状態が不十分")
+        elif reason == "no_intraperiod_evidence":
+            reason_lines.append("intraperiod根拠が不足")
+        elif reason == "no_action_review_required":
+            reason_lines.append("見送りだが確認推奨")
+        elif reason == "manual_context_review_required":
+            reason_lines.append("手動確認が必要な文脈あり")
+        elif reason == "pending_coverage_review_required":
+            reason_lines.append("pending比率または未確定要素の確認が必要")
+        elif reason == "active_plan_no_action":
+            reason_lines.append("Active Planは行動なし")
+        elif reason == "unknown_active_plan_label":
+            reason_lines.append("Active Planラベルが未対応")
+        else:
+            reason_lines.append(reason)
+    if not reason_lines:
+        reason_lines = ["理由なし"]
+    reason_text = ", ".join(normalized_reasons) or "none"
+    return [
+        "",
+        "【行動判定】",
+        f"判定: {label_text}",
+        f"次の行動: {human_action_text}",
+        "理由:",
+        *reason_lines,
+        "安全:",
+        "これは正式GOではありません",
+        "自動発注はしません",
+        "最終判断は人間が行います",
+        "機械判定:",
+        f"actionability_label: {label or 'none'}",
+        f"human_action: {human_action or 'none'}",
+        f"actionability_reasons: {reason_text}",
+        f"actionability_safety: {safety or 'none'}",
+    ]
+
+
+def _manual_action_checklist_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    entry_mode = str(notification_context.get("execution_label", "見送り")).strip() or "見送り"
+    entry_window = str(notification_context.get("entry_window_label", "不可")).strip() or "不可"
+    entry_quality = str(display_context.get("entry_quality_label", "位置評価なし")).strip() or "位置評価なし"
+    active_headline = str(notification_context.get("active_headline", "")).strip()
+    entry_condition_parts = [entry_window, entry_quality]
+    if active_headline:
+        entry_condition_parts.append(active_headline)
+    invalidation = str(notification_context.get("invalidation_label", "主要価格帯の反応崩れで無効寄り")).strip() or "主要価格帯の反応崩れで無効寄り"
+    next_condition = str(notification_context.get("next_condition_label", "次回更新で再評価")).strip() or "次回更新で再評価"
+    wait_reason_labels = display_context.get("wait_reason_labels", [])
+    normalized_wait_reasons = []
+    if isinstance(wait_reason_labels, list):
+        normalized_wait_reasons = [str(reason).strip() for reason in wait_reason_labels if str(reason).strip()]
+    elif str(wait_reason_labels).strip():
+        normalized_wait_reasons = [str(wait_reason_labels).strip()]
+    invalidation_parts = [invalidation, next_condition, *normalized_wait_reasons]
+    validity = str(notification_context.get("validity_label", "次回更新までを目安")).strip() or "次回更新までを目安"
+    safety = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    return [
+        "",
+        "【手動アクション確認】",
+        f"Entry mode: {entry_mode}",
+        f"Entry condition: {' / '.join(entry_condition_parts)}",
+        "TP / SL",
+        f"- {_format_setup_levels(result.get('long_setup', {}), 'long')}",
+        f"- {_format_setup_levels(result.get('short_setup', {}), 'short')}",
+        f"Invalidation / wait: {' / '.join(invalidation_parts)}",
+        f"Timeout / validity: {validity}",
+        f"Safety: {safety}",
+    ]
+
+
+def _major_turning_point_opportunity_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    wait_reasons = [str(reason).strip() for reason in display_context.get("wait_reason_labels", []) if str(reason).strip()]
+    return [
+        "",
+        "【大転換チャンス確認】",
+        "大転換は「方向」だけではなく、4h→1h→15m の順に根拠を確認します。15分足だけの反応で大転換と決めません。",
+        "スコア差が小さいときは大転換候補とダマシを取り違えやすいので、決め打ちしません。",
+        "主要サポート / レジスタンス付近では、反転・ブレイク・失敗の3択を確認します。",
+        "entry condition / invalidation / next condition を満たすまでは、転換を決め打ちしません。",
+        "大転換候補 / 転換確認 / ダマシ注意 / 決め打ち禁止 / 条件成立まで人間確認",
+        f"market_regime: {_label_regime(result.get('market_regime'))}",
+        f"phase: {_label_phase(result.get('phase'))}",
+        f"4時間足: {_label_signal(result.get('signals_4h'))}",
+        f"1時間足: {_label_signal(result.get('signals_1h'))}",
+        f"15分足: {_label_signal(result.get('signals_15m'))}",
+        f"スコア差: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
+        f"Entry condition: {notification_context.get('entry_window_label', '未記録')} / {display_context.get('entry_quality_label', '未記録')} / {str(notification_context.get('execution_label', '')).strip() or '未記録'}",
+        f"Invalidation / wait: {notification_context.get('invalidation_label', '未記録')} / {notification_context.get('next_condition_label', '未記録')} / {', '.join(wait_reasons) or '未記録'}",
+        f"Price context: 現在価格 {_format_price(result.get('current_price'))}",
+        f"Price context: {_format_zone_summary('近いサポート帯', result.get('support_zones', []))}",
+        f"Price context: {_format_zone_summary('近いレジスタンス帯', result.get('resistance_zones', []))}",
+        f"Price context: {_format_setup_levels(result.get('long_setup', {}), 'long')}",
+        f"Price context: {_format_setup_levels(result.get('short_setup', {}), 'short')}",
+        "Safety: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+
+
+def _major_turning_point_diagnostic_evidence(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    direct_evidence = result.get("major_turning_point_diagnostic")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container in (
+        notification_context or {},
+        display_context or {},
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict):
+            evidence = container.get("major_turning_point_diagnostic")
+            if isinstance(evidence, dict):
+                return evidence
+    return None
+
+
+def _major_turning_point_diagnostic_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none"
+        return ", ".join(str(item) for item in value)
+    text = str(value).strip()
+    return text or "not recorded"
+
+
+def _major_turning_point_diagnostic_row_text(row: dict[str, Any]) -> str:
+    fields = (
+        ("diagnostic_label", "diagnostic_label"),
+        ("candidate_id", "candidate_id"),
+        ("signal_id", "signal_id"),
+        ("timestamp_jst", "timestamp_jst"),
+        ("candidate_type", "candidate_type"),
+        ("active_primary_action", "active_primary_action"),
+        ("side", "side"),
+        ("entry_mode", "entry_mode"),
+        ("outcome", "outcome"),
+        ("first_exit_reason", "first_exit_reason"),
+        ("entry_reached_time", "entry_reached_time"),
+        ("mfe_r", "mfe_r"),
+        ("mae_r", "mae_r"),
     )
+    return " / ".join(f"{label}: {_major_turning_point_diagnostic_value(row.get(key))}" for label, key in fields)
 
 
-def _format_risk_flags(flags: list[Any]) -> str:
-    if not flags:
-        return "大きな位置リスクは目立ちません。"
-    mapping = {
-        "lower_liquidity_close": "下側流動性が近く、いったん下を試しやすい位置です。",
-        "upper_liquidity_close": "上側流動性が近く、上振れ後の揺り戻しに注意です。",
-        "sweep_incomplete": "まだ一度振って流動性を回収する動きが終わっていません。",
-        "cvd_bullish_divergence": "買い圧は残っていますが、位置の悪さは解消していません。",
-        "cvd_bearish_divergence": "売り圧は残っていますが、位置の悪さは解消していません。",
+def _major_turning_point_diagnostic_lines(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> list[str]:
+    evidence = _major_turning_point_diagnostic_evidence(result, notification_context, display_context)
+    if not isinstance(evidence, dict) or not evidence:
+        return []
+    counts = evidence.get("counts") if isinstance(evidence.get("counts"), dict) else {}
+    representative_rows = evidence.get("representative_rows")
+    rows: list[dict[str, Any]] = [row for row in representative_rows if isinstance(row, dict)] if isinstance(
+        representative_rows, list
+    ) else []
+    lines = [
+        "",
+        "【大転換チャンス診断】",
+        "local/report-only の表示です。post-hoc diagnostic support であり、実行はしません。",
+        "does not confirm a major turn / does not authorize manual or automatic entry です。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        f"summary_status: {_major_turning_point_diagnostic_value(evidence.get('summary_status'))}",
+        f"total_rows: {_major_turning_point_diagnostic_value(evidence.get('total_rows'))}",
+        f"potential_missed_turn: {_major_turning_point_diagnostic_value(counts.get('potential_missed_turn'))}",
+        f"potential_fakeout: {_major_turning_point_diagnostic_value(counts.get('potential_fakeout'))}",
+        f"bad_entry_timing: {_major_turning_point_diagnostic_value(counts.get('bad_entry_timing'))}",
+        f"inconclusive: {_major_turning_point_diagnostic_value(counts.get('inconclusive'))}",
+    ]
+    if rows:
+        lines.append("Representative rows:")
+        for idx, row in enumerate(rows[:5], 1):
+            lines.append(f"- {idx}: {_major_turning_point_diagnostic_row_text(row)}")
+    else:
+        lines.append("Representative rows: none")
+    lines.extend(
+        [
+            f"safety_boundary: {_major_turning_point_diagnostic_value(evidence.get('safety_boundary'))}",
+            f"note: {_major_turning_point_diagnostic_value(evidence.get('note'))}",
+        ]
+    )
+    return lines
+
+
+def _local_confirmation_lines() -> list[str]:
+    return [
+        "",
+        "【ローカル確認】",
+        "事前生成/検証: scripts/refresh_current_manual_delivery_app_surface.command",
+        "ready gate: refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "確認入口: local/manual_delivery_app_surface/index.html",
+        "Dashboard: local/manual_delivery_app_surface/app-dashboard.html",
+        "Ready JSON: local/manual_delivery_app_surface/app-ready.json",
+        "Snapshot: local/manual_delivery_app_surface/app-snapshot.json",
+        "Manifest: local/manual_delivery_app_surface/app-surface-manifest.json",
+        "自動発注なし / 通知送信追加なし / 最終判断は人間",
+    ]
+
+
+def _safe_config_schema_audit_evidence(result: dict[str, Any]) -> dict[str, Any] | None:
+    direct_evidence = result.get("safe_config_schema_audit")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container_key in ("app_contract_data", "app_contract"):
+        container = result.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("safe_config_schema_audit")
+        if isinstance(evidence, dict):
+            return evidence
+    return None
+
+
+def _safe_config_schema_audit_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "not recorded"
+    return "not recorded"
+
+
+def _safe_config_schema_audit_lines(result: dict[str, Any]) -> list[str]:
+    evidence = _safe_config_schema_audit_evidence(result)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Safe Config Schema Audit】",
+        "local/report-only の静的監査サポートです。tools/safe_config_schema_audit.py は実行しません。",
+        "安全境界: local/report-only / no load_config / no .env read / no os.environ value read / no secret/API key exposure / no exchange/private/account/order endpoint access / no FORMAL_GO / no automatic order",
+    ]
+    for label, key in (
+        ("command", "command"),
+        ("stdout_json_command", "stdout_json_command"),
+        ("schema_version", "schema_version"),
+        ("contract_only", "contract_only"),
+        ("command_executed_by_app", "command_executed_by_app"),
+        ("reads_env_values", "reads_env_values"),
+        ("reads_dotenv_values", "reads_dotenv_values"),
+        ("calls_private_endpoints", "calls_private_endpoints"),
+        ("calls_order_endpoints", "calls_order_endpoints"),
+        ("live_trading_allowed", "live_trading_allowed"),
+        ("secret_values_exposed", "secret_values_exposed"),
+        ("safety_boundary", "safety_boundary"),
+    ):
+        lines.append(f"{label}: {_safe_config_schema_audit_value(evidence.get(key))}")
+    return lines
+
+
+def _operator_triage_summary_evidence(result: dict[str, Any]) -> dict[str, Any] | None:
+    direct_evidence = result.get("operator_triage_summary")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container_key in (
+        "app_contract_data",
+        "app_contract",
+        "notification_context",
+        "display_context",
+        "app_surface_validation",
+        "app_surface_validation_data",
+        "manual_delivery_app_surface_validation",
+        "current_manual_delivery_app_surface_validation",
+    ):
+        container = result.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("operator_triage_summary")
+        if isinstance(evidence, dict):
+            return evidence
+    return None
+
+
+def _operator_triage_summary_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "not recorded"
+    return "not recorded"
+
+
+def _operator_triage_summary_field_value(
+    evidence: dict[str, Any],
+    field: str,
+    subfield: str | None = None,
+) -> Any:
+    direct_key = f"{field}_{subfield}" if subfield else field
+    direct_value = evidence.get(direct_key)
+    if direct_value is not None:
+        return direct_value
+    if subfield is None:
+        return evidence.get(field)
+    nested_value = evidence.get(field)
+    if isinstance(nested_value, dict):
+        return nested_value.get(subfield)
+    nested_container = evidence.get("evidence")
+    if isinstance(nested_container, dict):
+        nested_value = nested_container.get(field)
+        if isinstance(nested_value, dict):
+            return nested_value.get(subfield)
+    return None
+
+
+def _operator_triage_summary_lines(result: dict[str, Any]) -> list[str]:
+    evidence = _operator_triage_summary_evidence(result)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Operator Triage Summary】",
+        "local/report-only の表示です。tools/log_feedback.py の既存契約データだけを使います。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+    for label, key in (
+        ("summary_status", "summary_status"),
+        ("all_evidence_present", "all_evidence_present"),
+        ("all_evidence_ready", "all_evidence_ready"),
+        ("operator_status_diagnostic present", ("operator_status_diagnostic", "present")),
+        ("operator_status_diagnostic ready", ("operator_status_diagnostic", "ready")),
+        ("safe_config_schema_audit present", ("safe_config_schema_audit", "present")),
+        ("safe_config_schema_audit ready", ("safe_config_schema_audit", "ready")),
+        ("intraperiod_review_stdout_json present", ("intraperiod_review_stdout_json", "present")),
+        ("intraperiod_review_stdout_json ready", ("intraperiod_review_stdout_json", "ready")),
+        ("manual_action_checklist_surface present", ("manual_action_checklist_surface", "present")),
+        ("manual_action_checklist_surface ready", ("manual_action_checklist_surface", "ready")),
+        ("safety_boundary", "safety_boundary"),
+        ("note", "note"),
+    ):
+        if isinstance(key, tuple):
+            value = _operator_triage_summary_field_value(evidence, key[0], key[1])
+        else:
+            value = evidence.get(key)
+        lines.append(f"{label}: {_operator_triage_summary_value(value)}")
+    return lines
+
+
+def _integrated_evidence_overview_evidence(result: dict[str, Any]) -> dict[str, Any] | None:
+    direct_evidence = result.get("integrated_evidence_overview")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container_key in (
+        "app_surface_validation",
+        "app_surface_validation_data",
+        "manual_delivery_app_surface_validation",
+        "current_manual_delivery_app_surface_validation",
+    ):
+        container = result.get(container_key)
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("integrated_evidence_overview")
+        if isinstance(evidence, dict):
+            return evidence
+    return None
+
+
+def _integrated_evidence_overview_value(value: Any) -> str:
+    if value is None:
+        return "not recorded"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none"
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "not recorded"
+    return "not recorded"
+
+
+def _integrated_evidence_overview_field_value(
+    evidence: dict[str, Any],
+    field: str,
+    subfield: str | None = None,
+) -> Any:
+    direct_key = f"{field}_{subfield}" if subfield else field
+    direct_value = evidence.get(direct_key)
+    if direct_value is not None:
+        return direct_value
+    if subfield is None:
+        return evidence.get(field)
+    nested_value = evidence.get(field)
+    if isinstance(nested_value, dict):
+        direct_nested = nested_value.get(subfield)
+        if direct_nested is not None:
+            return direct_nested
+    nested_container = evidence.get("evidence")
+    if isinstance(nested_container, dict):
+        nested_value = nested_container.get(field)
+        if isinstance(nested_value, dict):
+            return nested_value.get(subfield)
+    return None
+
+
+def _integrated_evidence_overview_list_field_value(
+    result: dict[str, Any],
+    evidence: dict[str, Any],
+    field: str,
+) -> Any:
+    for candidate in (
+        evidence.get(field),
+        result.get(f"integrated_evidence_overview_{field}"),
+        result.get(field),
+    ):
+        if isinstance(candidate, list):
+            return candidate
+        if isinstance(candidate, tuple):
+            return list(candidate)
+    return None
+
+
+def _integrated_evidence_overview_hint_field_value(
+    result: dict[str, Any],
+    evidence: dict[str, Any],
+    field: str,
+) -> Any:
+    for candidate in (
+        evidence.get(field),
+        result.get(f"integrated_evidence_overview_{field}"),
+        result.get(field),
+    ):
+        if candidate is not None:
+            return candidate
+    return None
+
+
+def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
+    evidence = _integrated_evidence_overview_evidence(result)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Integrated Evidence Overview】",
+        "local/report-only の表示です。既存の契約/検証データだけを使い、実行はしません。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+    list_labels = {
+        "evidence_keys",
+        "missing_evidence_keys",
+        "not_ready_evidence_keys",
+        "execution_required_keys",
     }
-    return " ".join(mapping.get(str(flag), str(flag)) for flag in flags)
+    hint_labels = {
+        "operator_hint_status",
+        "operator_hint_reason",
+        "operator_hint_next_action",
+    }
+    for label, key in (
+        ("summary_status", "summary_status"),
+        ("all_evidence_present", "all_evidence_present"),
+        ("all_evidence_ready", "all_evidence_ready"),
+        (
+            "operator_hint_status",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_status"),
+        ),
+        (
+            "operator_hint_reason",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_reason"),
+        ),
+        (
+            "operator_hint_next_action",
+            _integrated_evidence_overview_hint_field_value(result, evidence, "operator_hint_next_action"),
+        ),
+        ("evidence_keys", _integrated_evidence_overview_list_field_value(result, evidence, "evidence_keys")),
+        (
+            "missing_evidence_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "missing_evidence_keys"),
+        ),
+        (
+            "not_ready_evidence_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "not_ready_evidence_keys"),
+        ),
+        (
+            "execution_required_keys",
+            _integrated_evidence_overview_list_field_value(result, evidence, "execution_required_keys"),
+        ),
+        ("intraperiod_review_stdout_json present", ("intraperiod_review_stdout_json", "present")),
+        ("intraperiod_review_stdout_json ready_or_valid", ("intraperiod_review_stdout_json", "ready_or_valid")),
+        ("intraperiod_review_stdout_json execution_required", ("intraperiod_review_stdout_json", "execution_required")),
+        ("operator_status_diagnostic present", ("operator_status_diagnostic", "present")),
+        ("operator_status_diagnostic ready_or_valid", ("operator_status_diagnostic", "ready_or_valid")),
+        ("operator_status_diagnostic execution_required", ("operator_status_diagnostic", "execution_required")),
+        ("safe_config_schema_audit present", ("safe_config_schema_audit", "present")),
+        ("safe_config_schema_audit ready_or_valid", ("safe_config_schema_audit", "ready_or_valid")),
+        ("safe_config_schema_audit execution_required", ("safe_config_schema_audit", "execution_required")),
+        ("operator_triage_summary present", ("operator_triage_summary", "present")),
+        ("operator_triage_summary ready_or_valid", ("operator_triage_summary", "ready_or_valid")),
+        ("operator_triage_summary execution_required", ("operator_triage_summary", "execution_required")),
+        ("manual_action_checklist_surface present", ("manual_action_checklist_surface", "present")),
+        ("manual_action_checklist_surface ready_or_valid", ("manual_action_checklist_surface", "ready_or_valid")),
+        ("manual_action_checklist_surface execution_required", ("manual_action_checklist_surface", "execution_required")),
+        ("safety_boundary", "safety_boundary"),
+        ("note", "note"),
+    ):
+        if isinstance(key, tuple):
+            value = _integrated_evidence_overview_field_value(evidence, key[0], key[1])
+        elif label in list_labels:
+            value = key
+        elif label in hint_labels:
+            value = key
+        else:
+            value = evidence.get(key)
+        lines.append(f"{label}: {_integrated_evidence_overview_value(value)}")
+    return lines
 
 
-def _fallback_summary(result: dict[str, Any]) -> str:
-    ai_advice = result.get("ai_advice")
-    ai_line = "AI審査は今回は使わず、機械判定を中心に整理しています。"
-    if isinstance(ai_advice, dict):
-        ai_line = (
-            f"AI判断は「{_label_ai_decision(ai_advice.get('decision'))}」で、"
-            f"強さは {_label_ai_quality(ai_advice.get('quality'))}、"
-            f"AI信頼度は {ai_advice.get('confidence')} です。"
-        )
-        notes = str(ai_advice.get("notes", "")).strip()
-        if notes:
-            ai_line += f" 補足: {notes}"
-
-    prelabel = result.get("prelabel", "RISKY_ENTRY")
-    long_score = result.get("long_display_score")
-    short_score = result.get("short_display_score")
-    gap = result.get("score_gap")
-    confidence = result.get("confidence")
-    current_price = _format_price(result.get("current_price"))
-    funding_display = str(result.get("funding_rate_display", "")).strip()
-    if not funding_display:
-        funding_label = str(result.get("funding_rate_label", "ほぼ中立"))
-        funding_pct = _format_pct(result.get("funding_rate_pct", 0.0))
-        funding_display = f"{funding_label} ({funding_pct})"
-    atr_ratio = result.get("atr_ratio")
-    volume_ratio = result.get("volume_ratio")
-    long_setup = result.get("long_setup", {})
-    short_setup = result.get("short_setup", {})
-    support_text = _format_zone_summary("近いサポート帯", result.get("support_zones", []))
-    resistance_text = _format_zone_summary("近いレジスタンス帯", result.get("resistance_zones", []))
-    signal_intro = _signal_intro(result)
-    direction = "相場は上向きです。" if str(result.get("bias", "")).lower() == "long" else "相場は下向きです。"
-    action = f"ただし今は入る位置としては良くないため、{_label_prelabel(prelabel)}"
-
-    body = (
-        f"【結論】{direction}{action} 信頼度は {confidence} です。\n"
-        f"【機械判定サマリー】総合は {_label_bias(result.get('bias'))} で、ロング {long_score} / ショート {short_score}、差は {gap} です。"
-        f"相場環境は「{_label_regime(result.get('market_regime'))}」で、局面は「{_label_phase(result.get('phase'))}」です。"
-        f"時間軸は 4時間足が {_label_signal(result.get('signals_4h'))}、1時間足が {_label_signal(result.get('signals_1h'))}、15分足が {_label_signal(result.get('signals_15m'))} です。\n"
-        f"【指標・環境】現在価格は {current_price}、Funding は {funding_display}、ATR比は {atr_ratio}、出来高比は {volume_ratio} です。"
-        f"{support_text} {resistance_text}\n"
-        f"【セットアップ】\n{_format_setup_levels('ロング側', long_setup, 'long')}\n{_format_setup_levels('ショート側', short_setup, 'short')}\n"
-        f"【AI審査】{ai_line}\n"
-        f"【リスク】{_format_flags(result.get('no_trade_flags', []))} {_format_risk_flags(result.get('risk_flags', []))}"
-    )
-    if signal_intro:
-        return f"{signal_intro}\n{body}"
-    return body
-
-
-def _attention_summary(result: dict[str, Any]) -> str:
-    direction = _attention_direction(result)
-    current_price = _format_price(result.get("current_price"))
-    long_score = result.get("long_display_score")
-    short_score = result.get("short_display_score")
-    gap = abs(int(result.get("score_gap", 0) or 0))
-    prelabel = result.get("prelabel", "")
-    timestamp = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
+def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
+    status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
+    raw_status = str(setup.get("status", "none")).lower()
+    status = status_mapping.get(raw_status, "未形成")
+    label = "ロング" if side == "long" else "ショート"
     return (
-        "これは売買推奨メールではなく、相場が傾き始めたことを知らせる注意報です。"
-        " 現時点ではエントリー推奨ではありません。\n"
-        f"時刻: {timestamp}\n"
-        f"現在価格: {current_price}\n"
-        f"方向感: {direction}\n"
-        f"スコア: long {long_score} / short {short_score} / gap {gap}\n"
-        f"時間足: 4h={result.get('signals_4h')}, 1h={result.get('signals_1h')}, 15m={result.get('signals_15m')}\n"
-        f"prelabel: {prelabel}\n"
-        f"confidence: {result.get('confidence')}\n"
-        f"補足: 本命通知条件は未達です。直近の注意点は {', '.join(result.get('no_trade_flags', [])) or '特になし'} です。"
+        f"・{label}: {status}。再検討帯は {_format_price((setup.get('entry_zone') or {}).get('low'))} - "
+        f"{_format_price((setup.get('entry_zone') or {}).get('high'))}、損切り目安は {_format_price(setup.get('stop_loss'))}、"
+        f"利確目安は TP1 {_format_price(setup.get('tp1'))} / TP2 {_format_price(setup.get('tp2'))}"
     )
+
+
+def _root_summary_lines(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
+    lines = ["【結論】"]
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    observation_gate = str(result.get("phase1_observation_gate", "blocked")).lower().strip() or "blocked"
+    if trade_gate == "pass":
+        lines.extend(
+            [
+                "これは執行候補です。",
+                "ただし自動売買ではなく、Phase 1 の紙トレード記録対象です。",
+            ]
+        )
+    elif observation_gate == "pass":
+        lines.extend(
+            [
+                "これは実行候補ではありません。",
+                "方向・構造は強いため、高優先で監視する通知です。",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "これは実行候補ではありません。",
+                "通常監視と再評価のための通知です。",
+            ]
+    )
+    lines.extend(_actionability_lines(result))
+    lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_diagnostic_lines(result, notification_context, display_context))
+    lines.extend(_local_confirmation_lines())
+    lines.extend(_safe_config_schema_audit_lines(result))
+    lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_integrated_evidence_overview_lines(result))
+    _extend_gate_lines(lines, result)
+    lines.extend(
+        [
+            "",
+            f"最終ランク: {notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}（{notification_context.get('final_rank_explanation', 'メール送信条件は未成立')}）",
+            f"補足状態: {notification_context.get('status_label', '中立')}（{notification_context.get('status_explanation', '方向優位なし')}）",
+            f"方向判断: {display_context['direction_label']}",
+            f"執行判断: {notification_context.get('execution_label', '見送り')}",
+            f"現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
+            f"有効目安: {notification_context.get('validity_label', '次回更新までを目安')}",
+            "",
+            "【いま重視する理由】",
+        ]
+    )
+    for reason in notification_context.get("reason_labels", []):
+        lines.append(f"- {reason}")
+    lines.extend(
+        [
+        f"- 次に見る条件: {notification_context.get('next_condition_label', '次回更新で再評価')}",
+        f"- 無効化目安: {notification_context.get('invalidation_label', '主要価格帯の反応崩れで無効寄り')}",
+        f"- {notification_context.get('price_map', {}).get('support_label', 'サポート: 抽出なし')}",
+        f"- {notification_context.get('price_map', {}).get('resistance_label', 'レジスタンス: 抽出なし')}",
+        f"- RR評価: {notification_context.get('rr_summary_label', 'RR評価は未計算')}",
+        "",
+        "【3つの判断指標】",
+        f"{metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
+        f"{metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
+        f"{metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
+        f"位置評価: {display_context['entry_quality_label']}",
+        "",
+        "【根拠要約】",
+        f"- 総合判断: {_label_bias(result.get('bias'))}",
+        f"- スコア: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
+        f"- 相場環境: {_label_regime(result.get('market_regime'))}",
+        f"- 局面: {_label_phase(result.get('phase'))}",
+        (
+            f"- 時間軸: 4時間足 {_label_signal(result.get('signals_4h'))} / "
+            f"1時間足 {_label_signal(result.get('signals_1h'))} / 15分足 {_label_signal(result.get('signals_15m'))}"
+        ),
+        "",
+        "【近い価格帯】",
+        f"- 現在価格: {_format_price(result.get('current_price'))}",
+        f"- Funding: {str(result.get('funding_rate_display') or '').strip() or f'{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})'}",
+        f"- ATR比 / 出来高比: {result.get('atr_ratio')} / {result.get('volume_ratio')}",
+        f"- {_format_zone_summary('近いサポート帯', result.get('support_zones', []))}",
+        f"- {_format_zone_summary('近いレジスタンス帯', result.get('resistance_zones', []))}",
+        "",
+        "【ロング/ショートのセットアップ状況】",
+        _format_setup_levels(result.get("long_setup", {}), "long"),
+        _format_setup_levels(result.get("short_setup", {}), "short"),
+        "",
+        "【待機理由または注意点】",
+        ]
+    )
+    for reason in display_context["wait_reason_labels"]:
+        lines.append(f"- {reason}")
+    return lines
+
+
+def _ai_audit_lines(result: dict[str, Any]) -> list[str]:
+    ai_audit = result.get("ai_audit")
+    if not isinstance(ai_audit, dict):
+        return []
+    agreement = str(ai_audit.get("agreement", "")).strip().lower()
+    unique_risks = sanitize_flag_list(ai_audit.get("unique_risks", []))
+    if agreement in {"", "agree"} and not unique_risks:
+        return []
+    reason = sanitize_user_text(ai_audit.get("reason", ""))
+    next_review_focus = sanitize_user_text(ai_audit.get("next_review_focus", ""))
+    headline = {
+        "disagree": "【AI監査メモ】 通知判断の再確認を推奨",
+        "caution": "【AI監査メモ】 通知は妥当だが注意点あり",
+    }.get(agreement, "【AI監査メモ】")
+    lines = ["", headline]
+    if reason:
+        lines.append(f"- 監査理由: {reason}")
+    for risk in unique_risks:
+        lines.append(f"- 追加リスク: {risk}")
+    if next_review_focus:
+        lines.append(f"- 次の確認観点: {next_review_focus}")
+    return lines
+
+
+def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
+    lines = [
+        "【注意報】",
+        "これは売買推奨メールではありません。",
+        "方向変化や初動を早めに共有する注意通知です。",
+    ]
+    lines.extend(_actionability_lines(result))
+    lines.extend(_manual_action_checklist_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_opportunity_lines(result, display_context, notification_context))
+    lines.extend(_major_turning_point_diagnostic_lines(result, notification_context, display_context))
+    lines.extend(_local_confirmation_lines())
+    lines.extend(_safe_config_schema_audit_lines(result))
+    lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_integrated_evidence_overview_lines(result))
+    _extend_gate_lines(lines, result)
+    lines.extend(
+        [
+        "",
+        "【今の見立て】",
+        f"- 最終ランク: {notification_context.get('final_rank_emoji', '👀')} {notification_context.get('final_rank_label', '注意報')}（{notification_context.get('final_rank_explanation', '方向変化の早期共有')}）",
+        f"- 補足状態: {notification_context.get('status_label', '注意報')}（{notification_context.get('status_explanation', '方向変化の早期共有')}）",
+        f"- 方向判断: {display_context['direction_label']}",
+        f"- 執行判断: {notification_context.get('execution_label', '見送り')}",
+        f"- 現値帯の扱い: {notification_context.get('entry_window_label', '不可')}",
+        f"- 有効目安: {notification_context.get('validity_label', '次の1時間足確定までを目安')}",
+        f"- {metric_labels['direction']}: {result.get('confidence_direction_shadow')}",
+        f"- {metric_labels['execution']}: {result.get('confidence_execution_shadow')}",
+        f"- {metric_labels['wait']}: {result.get('confidence_wait_shadow')}",
+        f"- 現在価格: {_format_price(result.get('current_price'))}",
+        "",
+        "【まだ本命通知でない理由】",
+        ]
+    )
+    for reason in notification_context.get("reason_labels", []):
+        lines.append(f"- {reason}")
+    lines.extend(
+        [
+            "",
+            "【次に見る条件】",
+            f"- {notification_context.get('next_condition_label', '次回更新で再評価')}",
+            f"- 無効化目安: {notification_context.get('invalidation_label', '主要価格帯の反応崩れで無効寄り')}",
+            f"- {notification_context.get('price_map', {}).get('support_label', 'サポート: 抽出なし')}",
+            f"- {notification_context.get('price_map', {}).get('resistance_label', 'レジスタンス: 抽出なし')}",
+            f"- RR評価: {notification_context.get('rr_summary_label', 'RR評価は未計算')}",
+            "",
+            "【観測要点】",
+            f"- スコア: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {abs(int(result.get('score_gap', 0) or 0))}",
+            (
+                f"- 時間軸: 4時間足 {_label_signal(result.get('signals_4h'))} / "
+                f"1時間足 {_label_signal(result.get('signals_1h'))} / 15分足 {_label_signal(result.get('signals_15m'))}"
+            ),
+        ]
+    )
+    return "\n".join(lines)
+
 
 def build_summary_subject(result: dict[str, Any]) -> str:
+    display_context = build_display_context(result)
+    notification_context = build_notification_context(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     label = str(result.get("system_label", "")).strip()
     mode_label = str(result.get("system_mode_label", "")).strip()
-    subject_labels: list[str] = []
+    labels: list[str] = []
     if label:
-        subject_labels.append(f"[{label}]")
+        labels.append(f"[{label}]")
     if mode_label:
-        subject_labels.append(f"[{mode_label}]")
-    label_prefix = f"{' '.join(subject_labels)} " if subject_labels else ""
-    notification_kind = str(result.get("notification_kind", "main")).lower()
+        labels.append(f"[{mode_label}]")
+    suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
-    confidence_text = f"信頼度{result.get('confidence')}"
-    if notification_kind == "attention":
-        return (
-            f"{_attention_emoji()} [注意報] {_subject_attention_phrase(result)} "
-            f"【BTC:{price_text}】 {confidence_text} {jst_ts} {label_prefix}".rstrip()
-        )
-    badge = str(result.get("signal_badge", "")).strip()
-    badge_prefix = f"{badge} " if badge else ""
-    subject = (
-        f"{badge_prefix}{_subject_market_phrase(result)} "
-        f"【BTC:{price_text}】 {confidence_text} {jst_ts} {label_prefix}".rstrip()
+    headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
+    rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
+    rank_label = str(notification_context.get("final_rank_label", "送信なし")).strip()
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+    use_existing_subject = (
+        notification_kind == "attention"
+        or (trade_gate == "pass" and paper_order_status == "planned")
     )
-    ai_advice = result.get("ai_advice")
-    if ai_advice is None:
-        subject = f"⚠️ 機械判定のみ {subject}"
-    return subject
+    active_plan_present = any(
+        key in result for key in ("active_primary_action", "active_headline", "active_trade_plan")
+    )
+    legacy_subject = (
+        f"{rank_emoji} [{rank_label}] "
+        f"{display_context['direction_compact_label']} | {headline_reason} "
+        f"【BTC:{price_text}】 {jst_ts}{suffix}"
+    ).strip()
+    active_label = str(notification_context.get("active_subject_label", "")).strip()
+    active_detail = _active_subject_detail(notification_context)
+    if use_existing_subject or not active_plan_present or not active_label:
+        subject = legacy_subject
+    else:
+        subject = (
+            f"{rank_emoji} [{rank_label}] "
+            f"{active_label} / 実弾不可・行動計画 | {active_detail} "
+            f"【BTC:{price_text}】 {jst_ts}{suffix}"
+        ).strip()
+    if result.get("ai_advice") is None:
+        subject = f"[機械判定のみ] {subject}"
+    return _apply_ver03_v4_subject_prefix(subject)
 
 
 def build_summary_body(
@@ -350,92 +955,15 @@ def build_summary_body(
     cli_command: str,
     timeout_sec: int,
     retry_count: int,
-    base_dir: Path,
+    base_dir: Any,
     result_payload: dict[str, Any],
-) -> str:
-    if str(result_payload.get("notification_kind", "main")).lower() == "attention":
-        return _attention_summary(result_payload)
+) -> tuple[str, str]:
+    del api_key, model, cli_command, timeout_sec, retry_count, base_dir
     provider_name = str(provider or "api").strip().lower()
-
-    if provider_name == "cli":
-        if not str(cli_command).strip():
-            return _fallback_summary(result_payload)
-        last_error: str | None = None
-        for attempt in range(1, max(1, retry_count) + 1):
-            try:
-                content = run_cli_text(
-                    command=cli_command,
-                    timeout_sec=timeout_sec,
-                    payload={
-                        "task": "summary",
-                        "model": model,
-                        "system_prompt": _load_prompt(base_dir),
-                        "result_payload": result_payload,
-                    },
-                )
-                return content or _fallback_summary(result_payload)
-            except Exception as exc:  # noqa: BLE001
-                last_error = f"{type(exc).__name__}: {exc}"
-                continue
-        if last_error:
-            write_ai_error_log(
-                base_dir,
-                "ai_summary_error",
-                "\n".join(
-                    [
-                        "provider=cli",
-                        f"model={model}",
-                        f"timeout_sec={timeout_sec}",
-                        f"retry_count={retry_count}",
-                        f"last_attempt={attempt}",
-                        f"details={last_error}",
-                    ]
-                ),
-            )
-        return _fallback_summary(result_payload)
-
-    if not api_key:
-        return _fallback_summary(result_payload)
-
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key, timeout=timeout_sec)
-    prompt = _load_prompt(base_dir)
-    last_error: str | None = None
-    for attempt in range(1, max(1, retry_count) + 1):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                temperature=0.2,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": json.dumps(result_payload, ensure_ascii=False)},
-                ],
-            )
-            content = response.choices[0].message.content
-            if content and content.strip():
-                body = content.strip()
-                signal_intro = _signal_intro(result_payload)
-                if signal_intro:
-                    return f"{signal_intro}\n{body}"
-                return body
-            last_error = "response content was empty"
-        except Exception as exc:  # noqa: BLE001
-            last_error = f"{type(exc).__name__}: {exc}"
-            continue
-    if last_error:
-        write_ai_error_log(
-            base_dir,
-            "ai_summary_error",
-            "\n".join(
-                [
-                    f"provider={provider_name}",
-                    f"model={model}",
-                    f"timeout_sec={timeout_sec}",
-                    f"retry_count={retry_count}",
-                    f"last_attempt={attempt}",
-                    f"details={last_error}",
-                ]
-            ),
-        )
-    return _fallback_summary(result_payload)
+    display_context = build_display_context(result_payload)
+    notification_context = build_notification_context(result_payload)
+    if str(result_payload.get("notification_kind", "main")).lower() == "attention":
+        return _attention_summary(result_payload, display_context, notification_context), provider_name
+    lines = _root_summary_lines(result_payload, display_context, notification_context)
+    lines.extend(_ai_audit_lines(result_payload))
+    return "\n".join(lines), provider_name

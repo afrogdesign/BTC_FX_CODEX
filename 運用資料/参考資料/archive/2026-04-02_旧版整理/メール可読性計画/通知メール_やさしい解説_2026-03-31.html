@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>通知メールのやさしい解説（2026-03-31）</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #d1d5db;
+      --accent: #0f766e;
+      --warn: #b45309;
+      --danger: #b91c1c;
+      --ok: #166534;
+      --chip: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: radial-gradient(circle at 20% 0%, #eef6ff 0%, var(--bg) 45%);
+      color: var(--text);
+      font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+      line-height: 1.75;
+    }
+    .wrap { max-width: 1000px; margin: 0 auto; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    }
+    h1, h2, h3 { margin: 0 0 10px; line-height: 1.4; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 20px; margin-top: 4px; }
+    h3 { font-size: 17px; }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--chip);
+      border: 1px solid #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+    .kv {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+    .kv th, .kv td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      vertical-align: top;
+    }
+    .kv th {
+      width: 220px;
+      background: #f8fafc;
+      text-align: left;
+    }
+    .meter {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin: 10px 0;
+      background: #fbfdff;
+    }
+    .meter-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .bar {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #0ea5e9 0%, #0284c7 40%, #0369a1 100%);
+    }
+    .bar.warn > span {
+      background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    }
+    .bar.danger > span {
+      background: linear-gradient(90deg, #ef4444 0%, #b91c1c 100%);
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 8px 12px;
+      background: #f0fdfa;
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+    .danger { color: var(--danger); font-weight: 700; }
+    .ok { color: var(--ok); font-weight: 700; }
+    ul { margin: 8px 0 0; padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    .small { font-size: 13px; }
+    @media (max-width: 760px) {
+      body { padding: 14px; }
+      .grid { grid-template-columns: 1fr; }
+      .kv th { width: 42%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>通知メールの内容を、かなり丁寧に解説</h1>
+      <p class="muted">対象データ: 2026-03-31 作成版 / 非エンジニア向け</p>
+      <p>
+        この通知はひとことで言うと、
+        <strong>「下目線は強いが、今は飛びついてショートする位置ではない。先に上に振られるリスクがあるので待つ」</strong>
+        という意味です。
+      </p>
+      <div>
+        <span class="chip">方向: 下</span>
+        <span class="chip">結論: 待機</span>
+        <span class="chip">主因: RR不足 + 流動性回収待ち</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>1. 「結論」ブロックの意味</h2>
+      <table class="kv">
+        <tr>
+          <th>方向判断: 下方向バイアス</th>
+          <td>
+            全体として「下に行きやすい」と判定しています。<br>
+            ただし、これは <strong>方向の話</strong> であって、<strong>今すぐエントリーして良い</strong> とは別です。
+          </td>
+        </tr>
+        <tr>
+          <th>いまの扱い: 上側流動性回収待ち</th>
+          <td>
+            いったん上に振ってから落ちる可能性を警戒して、今は待つという指示です。<br>
+            「方向は下」でも「タイミングはまだ」が同時に成立している状態です。
+          </td>
+        </tr>
+        <tr>
+          <th>位置評価: 流動性回収待ち</th>
+          <td>
+            現在地が「仕掛けるには不利な場所」です。<br>
+            よくある失敗は、方向だけ見て早入りすることです。この通知はそれを避ける意図です。
+          </td>
+        </tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>2. 数字の意味（ここが重要）</h2>
+      <p>
+        ここで使う数字は、基本的に <strong>相対的な強弱の目安</strong> です。
+        特に「方向の強さ」「実行しやすさ」「待機圧力」は、
+        <strong>方向・タイミング・待機必要性</strong> を分けて読むための数値です。
+      </p>
+
+      <div class="meter">
+        <div class="meter-head"><span>方向の強さ</span><span>100 / 100</span></div>
+        <div class="bar"><span style="width:100%"></span></div>
+        <p><strong>意味:</strong> 下方向の地合い判定が非常に強い。</p>
+        <p class="ok">読むポイント: 「下目線そのもの」には迷いが少ない。</p>
+      </div>
+
+      <div class="meter">
+        <div class="meter-head"><span>実行しやすさ</span><span>7.0 / 100 目安</span></div>
+        <div class="bar danger"><span style="width:7%"></span></div>
+        <p><strong>意味:</strong> 今この価格で注文を出す条件がかなり悪い。</p>
+        <p class="danger">読むポイント: 方向が合っていても、入る場所としては不利。</p>
+      </div>
+
+      <div class="meter">
+        <div class="meter-head"><span>待機圧力</span><span>68.8 / 100</span></div>
+        <div class="bar warn"><span style="width:68.8%"></span></div>
+        <p><strong>意味:</strong> 「今は待て」という圧力が中〜高レベル。</p>
+        <p><strong>補足:</strong> 70前後は、無理に触ると精度が落ちやすい帯です。</p>
+      </div>
+
+      <div class="note">
+        <strong>要するに:</strong> 
+        「方向の正しさ（100）」と「今の入りやすさ（7.0）」は別物です。<br>
+        今回は <strong>方向は強いのに、タイミングは悪い</strong> という判定です。
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. 根拠要約の読み方</h2>
+      <table class="kv">
+        <tr>
+          <th>総合判断: ショート寄り</th>
+          <td>方向はショート側優勢という整理です。</td>
+        </tr>
+        <tr>
+          <th>スコア: ロング 51 / ショート 100 / 差 -49</th>
+          <td>
+            ショート側の優勢度が大きい状態です。<br>
+            差 -49 は、<strong>（ロング - ショート）</strong> で見た場合にショートが大幅優位という意味です。
+          </td>
+        </tr>
+        <tr>
+          <th>相場環境: 下降基調</th>
+          <td>上位の流れが下向きです。逆張りロングは慎重に扱うべき地合いです。</td>
+        </tr>
+        <tr>
+          <th>局面: 押し目・戻り待ち</th>
+          <td>「流れはあるが、打つ位置を選ぶ局面」です。追いかけるより、条件待ちが基本です。</td>
+        </tr>
+        <tr>
+          <th>時間軸: 4h/1h ショート優勢・15m 様子見</th>
+          <td>
+            大きな時間軸は下、短期はまだ整理中。<br>
+            この組み合わせは「方向は下、直近タイミングは待ち」になりやすいです。
+          </td>
+        </tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>4. 近い価格帯（価格情報）の意味</h2>
+      <div class="grid">
+        <div>
+          <h3>現在価格と環境値</h3>
+          <ul>
+            <li><strong>現在価格 65,817.70</strong>: いまの基準点。</li>
+            <li><strong>Funding +0.0028%</strong>: ほぼ中立。極端な偏りは小さい。</li>
+            <li><strong>ATR比 1.75</strong>: 直近の値動きが通常よりやや大きめ。</li>
+            <li><strong>出来高比 4.53</strong>: 取引量が平常よりかなり多い。だましも加速も起きやすい。</li>
+          </ul>
+        </div>
+        <div>
+          <h3>サポート/レジスタンスの読み方</h3>
+          <ul>
+            <li>サポート帯: 価格が下げ止まりやすい帯。</li>
+            <li>レジスタンス帯: 価格が上で止まりやすい帯。</li>
+            <li>「現在値から 80.92ドル」のような数字は、到達しやすさの目安。</li>
+            <li>近い帯ほど先に試されやすい。遠い帯は到達まで条件が必要。</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">
+        今回は上側レジスタンスが比較的近く、
+        「いったん上に振ってから本命方向へ戻る」シナリオを警戒しているため、
+        「上側流動性回収待ち」という結論につながっています。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>5. ロング/ショートセットアップの意味</h2>
+      <table class="kv">
+        <tr>
+          <th>ロング: 監視継続</th>
+          <td>
+            すぐ買うではなく、再検討帯に来たときに再評価する方針です。<br>
+            損切り目安・利確目安は「もし入るなら」の管理線です。
+          </td>
+        </tr>
+        <tr>
+          <th>ショート: 監視継続</th>
+          <td>
+            下目線でも「今は待ち」。
+            再検討帯まで引きつける前提のため、現在地での新規ショートを急がない設計です。
+          </td>
+        </tr>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>6. 待機理由・注意点を1行ずつやさしく</h2>
+      <ul>
+        <li><strong>ロング投げの一巡後で反発に注意</strong>: 売りが一度出尽くすと、短期反発が入りやすい。</li>
+        <li><strong>買い板が厚く下値が固い</strong>: すぐ下に買い支えがあり、下落が伸びにくい。</li>
+        <li><strong>流動性回収が未完了</strong>: まだ取りに行きそうな価格が残っている。</li>
+        <li><strong>上側流動性が近く先に振られやすい</strong>: 先に上ヒゲ的な動きが出やすい。</li>
+        <li><strong>ショート側の利益幅が不足気味</strong>: 利確までの距離が小さい。</li>
+        <li><strong>利益幅に対して損切り幅のバランスが弱い</strong>: リスクリワードが悪い。</li>
+        <li><strong>RR条件が基準未満</strong>: 期待値ルールに達していない。</li>
+        <li><strong>内部要因のため詳細省略</strong>: モデル内部情報で、通知本文には簡略表示。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>7. AI補足の日本語訳（実務向け）</h2>
+      <p>
+        <strong>「下方向は強い。でも今ショートすると損得バランスが悪い。上に振って条件が整ってから再判定しよう」</strong>
+        という意味です。
+      </p>
+      <p>
+        次に見るべき条件は、
+        <strong>上側sweep完了 → 戻り失速確認 → RR改善確認</strong>
+        の3点です。
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>8. 最後に（誤読しやすい点）</h2>
+      <ul>
+        <li>「方向の強さが高い」=「今すぐ入るべき」ではありません。</li>
+        <li>実行しやすさが低いときは、正しい方向でも負けやすくなります。</li>
+        <li>待機圧力が高い通知は、様子見が戦略として正解のケースです。</li>
+      </ul>
+      <p class="small muted">この資料は通知文の読み解き支援です。売買の最終判断は運用ルールに従ってください。</p>
+    </section>
+  </div>
+</body>
+</html>

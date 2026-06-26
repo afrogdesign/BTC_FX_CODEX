@@ -11,10 +11,15 @@ ERROR_FILE="$ERROR_DIR/prod_status_sync_last_error.txt"
 PULL_LOG="$ERROR_DIR/prod_status_sync_pull.log"
 SUMMARY_LOG="$ERROR_DIR/prod_status_sync_summary.log"
 OUTPUT_JSON="$STATUS_DIR/prod_status_summary.json"
+SUMMARY_PYTHON="$BASE_DIR/.venv312/bin/python"
 
 mkdir -p "$STATUS_DIR" "$ERROR_DIR" "$TMP_DIR/snapshots"
 
 cd "$BASE_DIR"
+
+if [[ ! -x "$SUMMARY_PYTHON" ]]; then
+  SUMMARY_PYTHON="${PYTHON_BIN:-python3}"
+fi
 
 if ! zsh tools/pull_ver021_prod_logs_auto.sh --light >"$PULL_LOG" 2>&1; then
   printf '%s\n' "$(date '+%Y-%m-%d %H:%M JST') pull_failed" >"$ERROR_FILE"
@@ -23,7 +28,7 @@ if ! zsh tools/pull_ver021_prod_logs_auto.sh --light >"$PULL_LOG" 2>&1; then
   exit 1
 fi
 
-if ! .venv312/bin/python tools/build_prod_status_summary.py >"$SUMMARY_LOG" 2>&1; then
+if ! "$SUMMARY_PYTHON" tools/build_prod_status_summary.py >"$SUMMARY_LOG" 2>&1; then
   printf '%s\n' "$(date '+%Y-%m-%d %H:%M JST') summary_failed" >"$ERROR_FILE"
   cp "$SUMMARY_LOG" "$ERROR_DIR/prod_status_sync_last_error.log"
   echo "status_summary_failed:$SUMMARY_LOG"

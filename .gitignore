@@ -7,3 +7,15 @@ __pycache__/
 logs/
 tmp/
 data/historical/
+.vscode/
+.viewer_server.log
+
+# Ver03-v4 local generated/manual-delivery artifacts
+local/manual_delivery_app_surface/
+local/manual_delivery_handoff/
+運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_*.md
+運用資料/reports/analysis/active_plan_candidate_outcomes_*.md
+運用資料/reports/feedback_daily_sync_*.md
+
+# Ver03-v4 local branch helper commands
+Branch_Command/

@@ -49,3 +49,33 @@ def build_exit_plan(
         "timeout_hours": int(timeout_hours),
         "exit_rule_version": exit_rule_version,
     }
+
+
+def build_shadow_exit_plan(
+    *,
+    side: str,
+    entry_price: float,
+    stop_loss_price: float,
+    atr: float,
+    trail_atr_multiplier: float,
+    timeout_hours: int,
+) -> dict[str, Any]:
+    plan = build_exit_plan(
+        side=side,
+        entry_price=entry_price,
+        stop_loss_price=stop_loss_price,
+        atr=atr,
+        tp1_rr_multiple=1.3,
+        tp2_rr_multiple=2.4,
+        trail_atr_multiplier=trail_atr_multiplier,
+        timeout_hours=timeout_hours,
+        exit_rule_version="phase1_v1_shadow",
+    )
+    return {
+        "shadow_tp1_price": plan["tp1_price"],
+        "shadow_tp2_price": plan["tp2_price"],
+        "shadow_breakeven_after_tp1": plan["breakeven_after_tp1"],
+        "shadow_trail_atr_multiplier": plan["trail_atr_multiplier"],
+        "shadow_timeout_hours": plan["timeout_hours"],
+        "shadow_exit_rule_version": plan["exit_rule_version"],
+    }

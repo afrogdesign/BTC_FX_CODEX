@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import contextlib
 import argparse
 import csv
+import io
 import html
 import json
+import os
+import re
+import shutil
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from statistics import mean
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -18,14 +26,291 @@ if str(Path(__file__).resolve().parents[1]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from config import load_config
+from src.ai.cli_provider import run_cli_json, write_ai_error_log
+from src.analysis.position_risk import reconcile_prelabel_with_setup
+from src.analysis.rr import build_setup
 from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
+from src.notification.detail_page import build_notification_detail_html
+from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
+from src.storage.json_store import load_json
+from src.trade.active_plan_intraperiod import (
+    MIN_OUTCOME_COLUMNS,
+    build_active_plan_intraperiod_outcome_rows,
+    write_active_plan_intraperiod_outcomes,
+)
+from src.trade.actionability_gate import (
+    ACTIONABILITY_SAFETY,
+    ACTIONABILITY_SHADOW_DECISION_HEADER,
+    build_actionability_shadow_decision_row,
+    compute_actionability_gate_v1 as _compute_actionability_gate_v1,
+)
+from src.trade.observation_gate import (
+    determine_phase1_observation_gate,
+    is_confidence_watch_learning_candidate,
+    is_counter_long_short_watch_candidate,
+)
+from src.trade.opportunity_gate import (
+    _entry_wait_price_recheck_reasons as _opportunity_gate_entry_wait_price_recheck_reasons,
+    determine_opportunity_gate,
+)
+from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
+from src.trade.phase1b_lite import determine_phase1b_lite_gate
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_REVIEW_NOTE = Path(
     "/Users/marupro/Library/Mobile Documents/iCloud~md~obsidian/Documents/AFROG電脳/10_💻️デジタルスキル/00_🗃️PROJECT/📁FX/トレード支援システム/通知評価シート.md"
 )
+DEFAULT_REVIEW_FORM = DEFAULT_REVIEW_NOTE.with_name("評価シート入力フォーム.html")
 JST = ZoneInfo("Asia/Tokyo")
+REVIEW_START_CUTOFF_JST = "2026-03-30T05:05:00+09:00"
+REVIEW_SERVER_HOST = "127.0.0.1"
+REVIEW_SERVER_PORT = 8765
+REVIEW_STATE_VERSION = 1
+AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
+AI_POST_REVIEW_TASK = "ai_post_review"
+REPORT_STALE_DAYS = 7
+_HARD_QUALITY_GUARD_REASONS = (
+    "require_execution_for_high_wait",
+    "require_execution_for_high_wait+suppress_long_high_wait",
+    "require_execution_for_high_wait+suppress_trend_flip_up_strong",
+    "require_execution_for_high_wait+suppress_long_high_wait+suppress_trend_flip_up_strong",
+)
+_SOFT_QUALITY_GUARD_REASONS = (
+    "soft_risk:suppress_long_high_wait",
+    "soft_risk:suppress_trend_flip_up_strong",
+    "soft_risk:suppress_long_high_wait+suppress_trend_flip_up_strong",
+)
+_QUALITY_GUARD_REASONS = (
+    *_HARD_QUALITY_GUARD_REASONS,
+    *_SOFT_QUALITY_GUARD_REASONS,
+)
+_QUALITY_GUARD_LEAF_REASONS = (
+    "require_execution_for_high_wait",
+    "suppress_long_high_wait",
+    "suppress_trend_flip_up_strong",
+)
+_ENTRY_RECHECK_REASONS = (
+    "entry_recheck_required_high_wait",
+    "entry_recheck_required_low_execution",
+    "entry_recheck_required_short_low_execution",
+    "entry_recheck_required_long_weakness",
+    "entry_recheck_required_trend_flip_up",
+    "price_distance_missing",
+)
+_TRUE_LIKE = {"1", "true", "yes", "on"}
+
+REPORT_FAMILY_SPECS = [
+    {
+        "name": "feedback_daily_sync",
+        "label": "daily-sync 日次",
+        "pattern": "feedback_daily_sync_*.md",
+        "date_pattern": r"feedback_daily_sync_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "daily"),
+        ],
+        "purpose": "日次の全体成績、AI事後評価、Phase1 状況の入口。",
+        "section": "current",
+    },
+    {
+        "name": "feedback_weekly",
+        "label": "weekly 集計",
+        "pattern": "feedback_weekly_*.md",
+        "date_pattern": r"feedback_weekly_(\d{8})\.md$",
+        "search_roots": [
+            ("archive", Path("運用資料") / "reports" / "archive" / "weekly"),
+            ("active", Path("運用資料") / "reports"),
+        ],
+        "purpose": "週次の長め集計。現行運用では常用せず、必要時だけ履歴参照する。",
+        "section": "archived",
+        "warn_if_stale": False,
+    },
+    {
+        "name": "market_map_effectiveness",
+        "label": "market_map 有効性",
+        "pattern": "market_map_effectiveness_*.md",
+        "date_pattern": r"market_map_effectiveness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "market_map flag 別の有効性確認。",
+        "section": "current",
+    },
+    {
+        "name": "market_map_readiness",
+        "label": "market_map readiness",
+        "pattern": "market_map_readiness_*.md",
+        "date_pattern": r"market_map_readiness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "market_map 記録の値入り確認。market_map ロジック刷新時だけ再生成する補助診断。",
+        "section": "dormant",
+        "warn_if_stale": False,
+    },
+    {
+        "name": "operational_focus",
+        "label": "運用フォーカス",
+        "pattern": "operational_focus_*.md",
+        "date_pattern": r"operational_focus_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "blocked 理由、AI backlog、Phase1 観測の詰まりどころを見る。",
+        "section": "current",
+    },
+    {
+        "name": "relaxation_candidates",
+        "label": "緩和候補",
+        "pattern": "relaxation_candidates_*.md",
+        "date_pattern": r"relaxation_candidates_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "gate 緩和候補の抽出。設計判断用。",
+        "section": "ondemand",
+    },
+    {
+        "name": "phase1b_promotion_candidates",
+        "label": "Phase 1B 昇格候補",
+        "pattern": "phase1b_promotion_candidates_*.md",
+        "date_pattern": r"phase1b_promotion_candidates_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Phase 1B-lite からの昇格候補確認。",
+        "section": "ondemand",
+    },
+    {
+        "name": "paper_opportunity_diagnostics",
+        "label": "紙候補診断",
+        "pattern": "paper_opportunity_diagnostics_*.md",
+        "date_pattern": r"paper_opportunity_diagnostics_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "紙候補の entry / wait / flag 別診断。",
+        "section": "current",
+    },
+    {
+        "name": "active_trade_plan_diagnostics",
+        "label": "Active Trade Plan 診断",
+        "pattern": "active_trade_plan_diagnostics_*.md",
+        "date_pattern": r"active_trade_plan_diagnostics_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan の action 別件数、成行/指値/逆方向短期の偏り、NO_ACTION 比率を確認する。",
+        "section": "current",
+    },
+    {
+        "name": "active_trade_plan_effectiveness",
+        "label": "Active Trade Plan 有効性検証",
+        "pattern": "active_trade_plan_effectiveness_*.md",
+        "date_pattern": r"active_trade_plan_effectiveness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan の action 別に MFE / MAE / TP1先行 / direction outcome を確認する。",
+        "section": "current",
+    },
+    {
+        "name": "active_plan_candidate_outcomes",
+        "label": "Active Plan 候補別暫定評価",
+        "pattern": "active_plan_candidate_outcomes_*.md",
+        "date_pattern": r"active_plan_candidate_outcomes_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan 候補別に forward close ベースの暫定結果、TP/SL close 到達、候補タイプ別の偏りを確認する。",
+        "section": "current",
+    },
+    {
+        "name": "active_plan_candidate_intraperiod_outcomes",
+        "label": "Active Plan 候補別 intraperiod 評価",
+        "pattern": "active_plan_candidate_intraperiod_outcomes_*.md",
+        "date_pattern": r"active_plan_candidate_intraperiod_outcomes_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "Active Plan 候補別に entry到達、TP/SL先行、timeout、MFE/MAE を intraperiod で確認する。",
+        "section": "current",
+    },
+    {
+        "name": "paper_entry_sl_wait_redesign",
+        "label": "SL/entry 再設計診断",
+        "pattern": "paper_entry_sl_wait_redesign_*.md",
+        "date_pattern": r"paper_entry_sl_wait_redesign_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "sl_hit 偏重、高 wait、低 execution の切り分け。",
+        "section": "ondemand",
+    },
+    {
+        "name": "quality_guard_effectiveness",
+        "label": "quality guard 有効性",
+        "pattern": "quality_guard_effectiveness_*.md",
+        "date_pattern": r"quality_guard_effectiveness_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "paper opportunity quality guard の初回反映評価と counterfactual 論点整理。",
+        "section": "ondemand",
+    },
+    {
+        "name": "soft_risk_collateral_damage",
+        "label": "soft risk collateral damage",
+        "pattern": "soft_risk_collateral_damage_*.md",
+        "date_pattern": r"soft_risk_collateral_damage_(\d{8})\.md$",
+        "search_roots": [
+            ("active", Path("運用資料") / "reports" / "analysis"),
+            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+        ],
+        "purpose": "B/C 単独 soft risk の hard blocker 化による巻き込み被害を評価する。",
+        "section": "ondemand",
+    },
+    {
+        "name": "notified_rr_to_entry",
+        "label": "標準比較 notified_rr_to_entry",
+        "pattern": "notified_rr_to_entry.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+    {
+        "name": "notified_rr_to_entry_orderbook_ask_heavy",
+        "label": "標準比較 ask-heavy",
+        "pattern": "notified_rr_to_entry_orderbook_ask_heavy.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+    {
+        "name": "rr_to_confidence",
+        "label": "標準比較 rr_to_confidence",
+        "pattern": "rr_to_confidence.md",
+        "date_pattern": None,
+        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "purpose": "標準比較の evergreen レポート。",
+        "section": "evergreen",
+    },
+]
 
 FORM_VERDICT_OPTIONS = [
     {"value": "", "label": "未選択"},
@@ -44,12 +329,32 @@ FORM_WOULD_TRADE_OPTIONS = [
     {"value": "conditional", "label": "条件つきなら入る"},
 ]
 
+FORM_MISLEADING_ENTRY_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "no", "label": "誤読しにくかった"},
+    {"value": "yes", "label": "エントリー寄りに誤読した"},
+]
+
 FORM_MOVE_DRIVER_OPTIONS = [
     {"value": "", "label": "未選択"},
     {"value": "technical", "label": "テクニカル要因"},
     {"value": "news", "label": "ニュース要因"},
     {"value": "macro", "label": "マクロ要因"},
     {"value": "unknown", "label": "よく分からない"},
+]
+
+FORM_SL_EVAL_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "good", "label": "妥当"},
+    {"value": "too_tight", "label": "狭すぎた"},
+    {"value": "too_loose", "label": "広すぎた"},
+]
+
+FORM_TP_EVAL_OPTIONS = [
+    {"value": "", "label": "未選択"},
+    {"value": "good", "label": "妥当"},
+    {"value": "too_close", "label": "近すぎた"},
+    {"value": "too_far", "label": "遠すぎた"},
 ]
 
 FORM_REVIEW_STATUS_OPTIONS = [
@@ -63,15 +368,15 @@ FORM_USEFULNESS_OPTIONS = [{"value": "", "label": "未選択"}] + [
 
 FORM_MEMO_PRESET_OPTIONS = [
     {"value": "", "label": "未選択"},
-    {"value": "位置は悪いが、注意喚起としては良かった。", "label": "位置は悪いが、注意喚起としては良かった"},
-    {"value": "方向は合っていたが、通知が少し早い。", "label": "方向は合っていたが、通知が少し早い"},
-    {"value": "方向は合っていたが、通知が少し遅い。", "label": "方向は合っていたが、通知が少し遅い"},
-    {"value": "待機判断として有効で、無理なエントリー回避に役立った。", "label": "待機判断として有効だった"},
-    {"value": "見送り判断として有効で、無駄なエントリー回避に役立った。", "label": "見送り判断として有効だった"},
+    {"value": "入る判断に使えた。", "label": "入る判断に使えた"},
+    {"value": "待つ判断に使えた。", "label": "待つ判断に使えた"},
+    {"value": "見送り判断に使えた。", "label": "見送り判断に使えた"},
+    {"value": "方向は悪くないが少し早い。", "label": "少し早い"},
+    {"value": "方向は悪くないが少し遅い。", "label": "少し遅い"},
+    {"value": "判断材料としては弱い。", "label": "判断材料としては弱い"},
+    {"value": "件名がやや強く見えた。", "label": "件名がやや強い"},
     {"value": "本文は分かりやすく、実務判断に使いやすかった。", "label": "本文は分かりやすかった"},
     {"value": "本文が読みにくく、実務判断に使いにくかった。", "label": "本文が読みにくかった"},
-    {"value": "下側の流動性回収後なら、より使いやすい通知だった。", "label": "流動性回収後なら使いやすかった"},
-    {"value": "件名がやや強く見え、印象と実態に少しズレがあった。", "label": "件名がやや強すぎた"},
     {"value": "特になし", "label": "特になし"},
 ]
 
@@ -102,6 +407,7 @@ OUTCOME_HEADER = [
     "direction_outcome",
     "entry_outcome",
     "wait_outcome",
+    "misleading_entry_like_wording",
     "skip_outcome",
     "tp1_hit_first",
     "outcome",
@@ -122,7 +428,20 @@ USER_REVIEW_HEADER = [
     "usefulness_1to5",
     "would_trade",
     "actual_move_driver",
+    "misleading_entry_like_wording",
     "logic_validated",
+    "sl_eval",
+    "tp_eval",
+    "tf_4h_eval",
+    "tf_1h_eval",
+    "tf_15m_eval",
+    "review_source",
+    "review_model",
+    "review_image_mode",
+    "review_variant",
+    "review_action_class",
+    "review_priority",
+    "next_action",
     "memo",
     "review_status",
     "reviewed_at_utc",
@@ -137,7 +456,6 @@ REVIEW_NOTE_COLUMNS = [
     "usefulness_1to5",
     "would_trade",
     "actual_move_driver",
-    "logic_validated",
     "memo",
     "review_status",
 ]
@@ -148,21 +466,40 @@ SHADOW_HEADER = [
     "price",
     "bias",
     "regime",
+    "market_map_primary_state",
+    "market_map_flags",
+    "nearest_major_support",
+    "nearest_major_resistance",
+    "active_level_role",
+    "level_flip_state",
+    "failed_breakout_state",
+    "trend_flip_state",
     "phase",
     "long_score",
     "short_score",
     "score_gap",
     "confidence",
+    "raw_confidence",
+    "confidence_direction_shadow",
+    "confidence_execution_shadow",
+    "confidence_wait_shadow",
     "top_positive_factors",
     "top_negative_factors",
     "prelabel",
     "prelabel_primary_reason",
     "location_risk",
+    "primary_setup_side",
     "primary_setup_status",
+    "primary_setup_reason",
     "invalid_reason",
+    "primary_entry_mid",
+    "primary_stop_loss",
     "signal_tier",
     "ai_decision",
     "ai_confidence",
+    "ai_audit_status",
+    "ai_audit_verdict",
+    "ai_audit_agreement",
     "was_notified",
     "notify_reason",
     "suppress_reason",
@@ -192,12 +529,24 @@ SHADOW_HEADER = [
     "warning_flags",
     "no_trade_flags",
     "summary_subject",
+    "summary_variant",
+    "advice_variant",
+    "evaluation_trace_version",
     "actual_move_driver",
+    "sl_eval",
+    "tp_eval",
+    "tf_4h_eval",
+    "tf_1h_eval",
+    "tf_15m_eval",
     "logic_validated",
+    "review_source",
     "review_status",
     "user_verdict",
     "usefulness_1to5",
     "would_trade",
+    "review_action_class",
+    "review_priority",
+    "next_action",
     "memo",
     "evaluation_status",
     "risk_percent_applied",
@@ -214,6 +563,133 @@ SHADOW_HEADER = [
     "trail_atr_multiplier",
     "timeout_hours",
     "exit_rule_version",
+    "shadow_tp1_price",
+    "shadow_tp2_price",
+    "shadow_breakeven_after_tp1",
+    "shadow_trail_atr_multiplier",
+    "shadow_timeout_hours",
+    "shadow_exit_rule_version",
+    "trade_execution_gate",
+    "trade_execution_blockers",
+    "phase1_observation_gate",
+    "phase1_observation_type",
+    "phase1_observation_reasons",
+    "phase1b_lite_gate",
+    "phase1b_lite_type",
+    "phase1b_lite_reasons",
+    "opportunity_gate",
+    "opportunity_type",
+    "opportunity_reasons",
+    "paper_order_status",
+]
+
+ACTIVE_PLAN_PAPER_CANDIDATE_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "rr_current_tp1",
+    "rr_current_tp2",
+    "rr_zone_mid_tp1",
+    "rr_zone_mid_tp2",
+    "market_entry_status",
+    "limit_entry_status",
+    "counter_scalp_status",
+    "breakout_status",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+]
+
+ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "rr_current_tp1",
+    "rr_current_tp2",
+    "rr_zone_mid_tp1",
+    "rr_zone_mid_tp2",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+    "outcome_evaluation_status",
+    "outcome_forward_price_12h",
+    "outcome_forward_price_24h",
+    "candidate_delta_12h",
+    "candidate_delta_24h",
+    "candidate_result_12h",
+    "candidate_result_24h",
+    "tp1_close_reached_24h",
+    "tp2_close_reached_24h",
+    "sl_close_reached_24h",
+    "outcome_direction_outcome",
+    "outcome_tp1_hit_first",
+    "outcome_outcome",
+]
+
+ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER = [
+    "candidate_id",
+    "source_signal_id",
+    "timestamp_jst",
+    "active_primary_action",
+    "candidate_type",
+    "candidate_status",
+    "side",
+    "entry_mode",
+    "entry_price",
+    "entry_zone_low",
+    "entry_zone_high",
+    "stop_loss",
+    "tp1",
+    "tp2",
+    "active_subject_label",
+    "active_headline",
+    "next_condition",
+    "evaluation_status",
+    "entry_reached",
+    "entry_reached_at_jst",
+    "entry_reached_price",
+    "first_exit",
+    "first_exit_at_jst",
+    "first_exit_price",
+    "tp1_reached",
+    "tp1_reached_at_jst",
+    "tp2_reached",
+    "tp2_reached_at_jst",
+    "sl_reached",
+    "sl_reached_at_jst",
+    "timeout_reached",
+    "timeout_at_jst",
+    "mfe",
+    "mae",
+    "mfe_price",
+    "mae_price",
+    "max_favorable_at_jst",
+    "max_adverse_at_jst",
+    "bars_evaluated",
+    "evaluation_window_hours",
+    "notes",
 ]
 
 VALID_USER_VERDICTS = {
@@ -228,6 +704,106 @@ VALID_USER_VERDICTS = {
 VALID_WOULD_TRADE = {"", "yes", "no", "conditional"}
 VALID_REVIEW_STATUS = {"pending", "done"}
 VALID_MOVE_DRIVERS = {"", "technical", "news", "macro", "unknown"}
+VALID_MISLEADING_ENTRY = {"", "yes", "no"}
+VALID_SL_EVAL = {"", "good", "too_tight", "too_loose"}
+VALID_TP_EVAL = {"", "good", "too_close", "too_far"}
+VALID_TF_EVAL = {"", "good", "mixed", "poor"}
+VALID_REVIEW_SOURCE = {"", "ai", "human_override"}
+VALID_REVIEW_ACTION_CLASS = {"", "none", "watch", "tune_exit", "tune_entry", "tune_text", "tune_risk"}
+VALID_REVIEW_PRIORITY = {"", "high", "medium", "low"}
+
+REVIEW_ACTION_CLASS_LABELS = {
+    "none": "対応なし",
+    "watch": "観測継続",
+    "tune_exit": "出口設計を調整",
+    "tune_entry": "入口条件を調整",
+    "tune_text": "通知文面を調整",
+    "tune_risk": "リスク設計を調整",
+}
+
+REVIEW_PRIORITY_LABELS = {
+    "high": "高",
+    "medium": "中",
+    "low": "低",
+}
+
+USER_VERDICT_LABELS = {
+    "useful_entry": "入る判断に使えた",
+    "useful_wait": "待つ判断に使えた",
+    "useful_skip": "見送り判断に使えた",
+    "too_early": "通知が早すぎた",
+    "too_late": "通知が遅すぎた",
+    "low_value": "価値が低かった",
+}
+SL_EVAL_LABELS = {
+    "good": "SL は妥当",
+    "too_tight": "SL が狭すぎた",
+    "too_loose": "SL が広すぎた",
+}
+TP_EVAL_LABELS = {
+    "good": "TP は妥当",
+    "too_close": "TP が近すぎた",
+    "too_far": "TP が遠すぎた",
+}
+TF_EVAL_LABELS = {
+    "good": "妥当",
+    "mixed": "一部弱い",
+    "poor": "弱い",
+}
+
+BIAS_LABELS = {
+    "long": "long / ロング寄り",
+    "short": "short / ショート寄り",
+    "wait": "wait / 様子見",
+}
+PRELABEL_LABELS = {
+    "ENTRY_OK": "ENTRY_OK / 位置条件は悪くない",
+    "RISKY_ENTRY": "RISKY_ENTRY / 位置はやや注意",
+    "SWEEP_WAIT": "SWEEP_WAIT / 流動性回収待ち",
+    "NO_TRADE_CANDIDATE": "NO_TRADE_CANDIDATE / 現状は見送り",
+}
+EVALUATION_LABELS = {
+    "complete": "complete / 24時間後評価まで完了",
+    "pending": "pending / 24時間後評価待ち",
+}
+SETUP_LABELS = {
+    "ready": "ready / エントリー条件がそろった状態",
+    "watch": "watch / 方向はあるが待ちたい状態",
+    "invalid": "invalid / 今は見送りが妥当な状態",
+    "none": "none / セットアップ未形成",
+}
+TIER_LABELS = {
+    "normal": "normal / 通常通知",
+    "strong_machine": "strong_machine / 機械的にかなり好条件",
+    "strong_ai_confirmed": "strong_ai_confirmed / AI確認込みの強条件",
+}
+QUALITY_LABELS = {
+    "ok": "ok / データ欠損なし",
+    "partial_missing": "partial_missing / 一部データ欠損あり",
+    "degraded": "degraded / 品質低下あり",
+    "unknown": "unknown / 品質未判定",
+}
+NOTIFY_REASON_LABELS = {
+    "status_upgraded": "status_upgraded / setup が昇格した",
+    "bias_changed": "bias_changed / 方向感が wait から long または short に変わった",
+    "prelabel_improved": "prelabel_improved / 位置評価が改善した",
+    "confidence_jump": "confidence_jump / 信頼度が大きく変化した",
+    "agreement_changed": "agreement_changed / AI と機械の一致状況が変わった",
+    "signal_tier_upgraded": "signal_tier_upgraded / signal_tier が昇格した",
+    "attention_bias_changed": "attention_bias_changed / 注意報の方向が切り替わった",
+    "attention_score_crossed": "attention_score_crossed / 注意報スコア条件を超えた",
+    "attention_gap_crossed": "attention_gap_crossed / ロングショート差が閾値を超えた",
+    "attention_first_detection": "attention_first_detection / 初回の注意報検知",
+}
+
+VERDICT_DEFAULTS = {
+    "useful_entry": {"would_trade": "yes", "usefulness_1to5": "5"},
+    "useful_wait": {"would_trade": "no", "usefulness_1to5": "4"},
+    "useful_skip": {"would_trade": "no", "usefulness_1to5": "4"},
+    "too_early": {"would_trade": "conditional", "usefulness_1to5": "2"},
+    "too_late": {"would_trade": "no", "usefulness_1to5": "2"},
+    "low_value": {"would_trade": "no", "usefulness_1to5": "1"},
+}
 
 TECHNICAL_REASON_CODES = {
     "balanced_location",
@@ -285,8 +861,415 @@ def _split_values(value: str) -> list[str]:
     return [part.strip() for part in stripped.split(",") if part.strip()]
 
 
+def _quality_guard_reason_hits(row: dict[str, Any], allowed_reasons: tuple[str, ...]) -> set[str]:
+    hits: set[str] = set()
+    reasons = set(_split_values(str(row.get("opportunity_reasons", ""))))
+    for raw_reason in reasons:
+        for allowed_reason in allowed_reasons:
+            if raw_reason == allowed_reason or raw_reason.endswith(f":{allowed_reason}"):
+                hits.add(allowed_reason)
+    return hits
+
+
+def _quality_guard_counts(rows: list[dict[str, Any]], allowed_reasons: tuple[str, ...]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        for reason in _quality_guard_reason_hits(row, allowed_reasons):
+            counts[reason] += 1
+    return counts
+
+
+def _pre_guard_market_map_count(rows: list[dict[str, Any]]) -> int:
+    count = 0
+    for row in rows:
+        market_flags = set(_split_values(str(row.get("market_map_flags", ""))))
+        if not (market_flags & {"support_to_resistance_flip", "failed_breakout_down_reversal", "resistance_to_support_flip"}):
+            continue
+        if _parse_float(row.get("confidence_direction_shadow"), 0.0) < 50.0:
+            continue
+        if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 12.0:
+            continue
+        count += 1
+    return count
+
+
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _parse_report_date_from_name(name: str, date_pattern: str | None) -> datetime | None:
+    if not date_pattern:
+        return None
+    match = re.search(date_pattern, name)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d")
+    except ValueError:
+        return None
+
+
+def _report_freshness_label(report_date: datetime | None, now_jst: datetime) -> str:
+    if report_date is None:
+        return "evergreen"
+    age_days = (now_jst.date() - report_date.date()).days
+    if age_days > REPORT_STALE_DAYS:
+        return f"stale({age_days}d)"
+    return f"fresh({age_days}d)"
+
+
+def _gather_report_family_entries(base_dir: Path, spec: dict[str, Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for bucket, relative_root in spec["search_roots"]:
+        root = base_dir / relative_root
+        if not root.exists():
+            continue
+        paths = sorted(root.rglob(spec["pattern"]))
+        for path in paths:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            report_date = _parse_report_date_from_name(path.name, spec.get("date_pattern"))
+            entries.append(
+                {
+                    "path": path,
+                    "bucket": bucket,
+                    "date": report_date,
+                    "name": path.name,
+                }
+            )
+    entries.sort(key=lambda item: ((item["date"] or datetime.min), item["name"]), reverse=True)
+    return entries
+
+
+def _format_report_link(base_dir: Path, path: Path | None) -> str:
+    if path is None:
+        return "`missing`"
+    relative = path.relative_to(base_dir)
+    return f"[{relative.as_posix()}]({relative.as_posix()})"
+
+
+def _report_hub_section_lines(base_dir: Path, specs: list[dict[str, Any]], section: str, now_jst: datetime) -> list[str]:
+    lines: list[str] = []
+    for spec in specs:
+        if spec["section"] != section:
+            continue
+        entries = _gather_report_family_entries(base_dir, spec)
+        latest = entries[0] if entries else None
+        previous = entries[1] if len(entries) > 1 else None
+        freshness = _report_freshness_label(latest["date"], now_jst) if latest else "missing"
+        storage = latest["bucket"] if latest else "missing"
+        last_date = latest["date"].strftime("%Y-%m-%d") if latest and latest["date"] else "n/a"
+        lines.append(f"### {spec['label']}")
+        lines.append(f"- latest: {_format_report_link(base_dir, latest['path'] if latest else None)}")
+        lines.append(f"- previous: {_format_report_link(base_dir, previous['path'] if previous else None)}")
+        lines.append(f"- storage: `{storage}`")
+        lines.append(f"- purpose: {spec['purpose']}")
+        lines.append(f"- last_date: `{last_date}` / freshness: `{freshness}`")
+        lines.append("")
+    return lines
+
+
+def _resolve_latest_report_family_relative_path(base_dir: Path, family_name: str) -> str:
+    spec = next((item for item in REPORT_FAMILY_SPECS if item["name"] == family_name), None)
+    if spec is None:
+        raise ValueError(f"unknown report family: {family_name}")
+    entries = _gather_report_family_entries(base_dir, spec)
+    if not entries:
+        raise FileNotFoundError(f"no report found for family: {family_name}")
+    return entries[0]["path"].relative_to(base_dir).as_posix()
+
+
+def _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir: Path) -> str:
+    return _resolve_latest_report_family_relative_path(base_dir, "active_plan_candidate_intraperiod_outcomes")
+
+
+def _manual_delivery_source_display_path(path_text: str) -> str:
+    resolved_path = str(path_text).strip()
+    if not resolved_path:
+        return ""
+    return resolved_path
+
+
+def _manual_delivery_source_path_exists(base_dir: Path, path_text: str) -> bool:
+    resolved_path = _manual_delivery_source_display_path(path_text)
+    if not resolved_path:
+        return False
+    path = Path(resolved_path)
+    if path.is_absolute():
+        return path.exists()
+    return (base_dir / path).exists()
+
+
+def _manual_delivery_format_jst_timestamp(dt: datetime | None) -> str:
+    return "" if dt is None else dt.astimezone(JST).isoformat(timespec="seconds")
+
+
+def _manual_delivery_source_freshness_fields(
+    *,
+    base_dir: Path,
+    path_text: str,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
+) -> dict[str, str]:
+    resolved_path_text = _manual_delivery_source_display_path(path_text)
+    if not resolved_path_text:
+        return {
+            "exists": "false",
+            "mtime_jst": "",
+            "age_minutes": "n/a",
+            "freshness": "missing",
+        }
+
+    path = Path(resolved_path_text)
+    if not path.is_absolute():
+        path = base_dir / path
+    if not path.exists():
+        return {
+            "exists": "false",
+            "mtime_jst": "",
+            "age_minutes": "n/a",
+            "freshness": "missing",
+        }
+
+    now_jst = (reference_jst or datetime.now(tz=JST)).astimezone(JST)
+    modified_jst = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).astimezone(JST)
+    age_seconds = max(0.0, (now_jst - modified_jst).total_seconds())
+    age_hours = age_seconds / 3600
+    age_minutes = int(age_seconds // 60)
+    freshness = "fresh" if age_hours <= source_stale_after_hours else "stale"
+    return {
+        "exists": "true",
+        "mtime_jst": _manual_delivery_format_jst_timestamp(modified_jst),
+        "age_minutes": str(age_minutes),
+        "freshness": freshness,
+    }
+
+
+def _resolve_manual_delivery_source_detail_report_path(
+    base_dir: Path,
+    detail_report_path: str | None,
+) -> str:
+    resolved_detail_report_path = str(detail_report_path or "").strip()
+    if resolved_detail_report_path:
+        return resolved_detail_report_path
+    try:
+        return _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir)
+    except FileNotFoundError:
+        return ""
+
+
+def _manual_delivery_source_readiness_state(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
+) -> dict[str, str]:
+    generated_at_jst = (reference_jst or datetime.now(tz=JST)).astimezone(JST)
+    resolved_intraperiod_outcomes_path = _manual_delivery_source_display_path(intraperiod_outcomes_path)
+    if not resolved_intraperiod_outcomes_path:
+        resolved_intraperiod_outcomes_path = "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
+    resolved_detail_report_path = _resolve_manual_delivery_source_detail_report_path(
+        base_dir,
+        detail_report_path,
+    )
+    intraperiod_outcomes_fields = _manual_delivery_source_freshness_fields(
+        base_dir=base_dir,
+        path_text=resolved_intraperiod_outcomes_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=generated_at_jst,
+    )
+    detail_report_fields = _manual_delivery_source_freshness_fields(
+        base_dir=base_dir,
+        path_text=resolved_detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=generated_at_jst,
+    )
+    source_readiness = (
+        "ready"
+        if intraperiod_outcomes_fields["freshness"] == "fresh" and detail_report_fields["freshness"] == "fresh"
+        else "review_required_missing_or_stale_source"
+    )
+    return {
+        "generated_at_jst": _manual_delivery_format_jst_timestamp(generated_at_jst),
+        "source_stale_after_hours": str(source_stale_after_hours),
+        "intraperiod_outcomes_path": resolved_intraperiod_outcomes_path,
+        "intraperiod_outcomes_exists": intraperiod_outcomes_fields["exists"],
+        "intraperiod_outcomes_mtime_jst": intraperiod_outcomes_fields["mtime_jst"],
+        "intraperiod_outcomes_age_minutes": intraperiod_outcomes_fields["age_minutes"],
+        "intraperiod_outcomes_freshness": intraperiod_outcomes_fields["freshness"],
+        "detail_report_path": resolved_detail_report_path,
+        "detail_report_exists": detail_report_fields["exists"],
+        "detail_report_mtime_jst": detail_report_fields["mtime_jst"],
+        "detail_report_age_minutes": detail_report_fields["age_minutes"],
+        "detail_report_freshness": detail_report_fields["freshness"],
+        "source_readiness": source_readiness,
+    }
+
+
+def _latest_manual_delivery_input_json_seed_data(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+    recent_row_window: int,
+    source_stale_after_hours: float,
+    generated_at_jst: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    data_freshness: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    include_manual_delivery_checklist: bool,
+) -> dict[str, Any]:
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=datetime.fromisoformat(generated_at_jst),
+    )
+    intraperiod_outcomes_path_obj = Path(source_state["intraperiod_outcomes_path"])
+    if not intraperiod_outcomes_path_obj.is_absolute():
+        intraperiod_outcomes_path_obj = base_dir / intraperiod_outcomes_path_obj
+
+    summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+        intraperiod_outcomes_path_obj,
+        recent_row_window=recent_row_window,
+    )
+    pending_caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(summary["total_outcome_rows"]),
+        resolved_rows=int(summary["resolved_rows"]),
+        pending_rows=int(summary["pending_rows"]),
+        recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+        entry_not_touched_count=int(summary["entry_not_touched_count"]),
+    )
+
+    market_status_summary = "report-only manual preview; not FORMAL_GO; no automatic order; JSON seed"
+    intraperiod_evidence_summary = (
+        f"detail_report_exists={source_state['detail_report_exists']}; "
+        f"intraperiod_outcomes_exists={source_state['intraperiod_outcomes_exists']}; "
+        f"source_readiness={source_state['source_readiness']}; "
+        f"intraperiod_outcomes_freshness={source_state['intraperiod_outcomes_freshness']}; "
+        f"detail_report_freshness={source_state['detail_report_freshness']}; "
+        f"source_stale_after_hours={source_state['source_stale_after_hours']}; "
+        "local source resolver seed"
+    )
+    actionability_fields = _compute_actionability_gate_v1(
+        active_plan_label=active_plan_label,
+        source_readiness=source_state["source_readiness"],
+        pending_caveat=pending_caveat,
+        side=side,
+        entry_mode=entry_mode,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+    )
+
+    return {
+        "generated_at_jst": generated_at_jst,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "data_source": data_source,
+        "data_freshness": data_freshness,
+        "detail_report_path": source_state["detail_report_path"],
+        "market_status_summary": market_status_summary,
+        "active_plan_label": active_plan_label,
+        "side": side,
+        "entry_mode": entry_mode,
+        "entry_condition": entry_condition,
+        "tp_plan": tp_plan,
+        "sl_or_invalidation": sl_or_invalidation,
+        "timeout_or_wait_limit": timeout_or_wait_limit,
+        "intraperiod_evidence_summary": intraperiod_evidence_summary,
+        "pending_caveat": pending_caveat,
+        "actionability_label": actionability_fields["actionability_label"],
+        "actionability_reasons": actionability_fields["actionability_reasons"],
+        "human_action": actionability_fields["human_action"],
+        "actionability_safety": actionability_fields["actionability_safety"],
+        "include_manual_delivery_checklist": bool(include_manual_delivery_checklist),
+    }
+
+
+def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
+    now_jst = datetime.now(tz=JST)
+    output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
+    lines = [
+        "# Report Hub",
+        "",
+        f"- generated_at: {now_jst.strftime('%Y-%m-%d %H:%M JST')}",
+        "- purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。",
+        "",
+        "## ChatGPT が最初に開く順",
+        "1. `運用資料/NEXT_TASK.md`",
+        f"2. {_format_report_link(base_dir, output_md)}",
+        "3. 最新 `feedback_daily_sync`",
+        "4. 最新 `market_map_effectiveness`",
+        "5. 最新 `operational_focus`",
+        "6. 最新 `paper_opportunity_diagnostics`",
+        "7. テーマがあるときだけ追加の design report",
+        "",
+        "## 現役レポート",
+        "",
+    ]
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "current", now_jst))
+    lines.extend(["## 設計テーマ用 / on-demand", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "ondemand", now_jst))
+    lines.extend(["## Dormant / 補助診断", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "dormant", now_jst))
+    lines.extend(["## Archived / 現行運用外", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "archived", now_jst))
+    lines.extend(["## Evergreen 比較", ""])
+    lines.extend(_report_hub_section_lines(base_dir, REPORT_FAMILY_SPECS, "evergreen", now_jst))
+    lines.extend(
+        [
+            "## Legacy / 旧版説明",
+            "",
+            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02.3のレポート' / 'README.md')}",
+            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02までのレポート' / 'README.md')}",
+            "- purpose: 現行判断の正本ではなく、旧版の背景説明用。",
+            "",
+            "## missing / stale 警告",
+            "",
+        ]
+    )
+    warnings: list[str] = []
+    for spec in REPORT_FAMILY_SPECS:
+        entries = _gather_report_family_entries(base_dir, spec)
+        if not entries:
+            warnings.append(f"- missing: `{spec['name']}`")
+            continue
+        if spec.get("warn_if_stale", True) is False:
+            continue
+        latest = entries[0]
+        freshness = _report_freshness_label(latest["date"], now_jst)
+        if freshness.startswith("stale("):
+            warnings.append(
+                f"- stale: `{spec['name']}` latest={latest['path'].relative_to(base_dir).as_posix()} freshness={freshness}"
+            )
+    if warnings:
+        lines.extend(warnings)
+    else:
+        lines.append("- なし")
+    lines.append("")
+    report = "\n".join(lines)
+    _ensure_parent(output_md)
+    output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _review_state_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review" / "review_form_state.json"
 
 
 def _load_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -296,6 +1279,42 @@ def _load_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fp))
 
 
+def _load_csv_rows_with_fieldnames(path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    if not path.exists():
+        return [], []
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        rows = list(reader)
+        return rows, list(reader.fieldnames or [])
+
+
+def _is_stale_file(target: Path, sources: list[Path]) -> bool:
+    if not target.exists():
+        return True
+    try:
+        target_mtime = target.stat().st_mtime
+    except OSError:
+        return True
+    for source in sources:
+        if not source.exists():
+            continue
+        try:
+            if source.stat().st_mtime > target_mtime:
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _csv_missing_columns(path: Path, required_columns: list[str]) -> bool:
+    if not path.exists():
+        return True
+    with path.open("r", newline="", encoding="utf-8") as fp:
+        reader = csv.DictReader(fp)
+        columns = set(reader.fieldnames or [])
+    return any(column not in columns for column in required_columns)
+
+
 def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> Path:
     _ensure_parent(path)
     with path.open("w", newline="", encoding="utf-8") as fp:
@@ -303,6 +1322,1959 @@ def _write_csv_rows(path: Path, fieldnames: list[str], rows: list[dict[str, Any]
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
+    return path
+
+
+def _append_csv_row(path: Path, fieldnames: list[str], row: dict[str, Any]) -> Path:
+    _ensure_parent(path)
+    file_exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow({field: row.get(field, "") for field in fieldnames})
+    return path
+
+
+def _user_reviews_archive_path(base_dir: Path) -> Path:
+    return base_dir / "logs" / "csv" / "user_reviews_human_archive.csv"
+
+
+def _ai_post_review_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review" / "ai_post_reviews"
+
+
+def _ai_post_review_chart_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review" / "chart_snapshots"
+
+
+def _archive_existing_reviews(base_dir: Path, reviews_path: Path) -> Path | None:
+    rows = _load_csv_rows(reviews_path)
+    if not rows:
+        return None
+    archive_path = _user_reviews_archive_path(base_dir)
+    if archive_path.exists():
+        return archive_path
+    fieldnames = list(rows[0].keys())
+    _write_csv_rows(archive_path, fieldnames, rows)
+    return archive_path
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _review_source_value(row: dict[str, Any]) -> str:
+    source = str(row.get("review_source", "")).strip()
+    if source in VALID_REVIEW_SOURCE:
+        return source
+    if str(row.get("review_status", "")).strip() == "done":
+        return "human_override"
+    return ""
+
+
+def _review_source_badge(row: dict[str, Any]) -> tuple[str, str]:
+    source = _review_source_value(row)
+    if source == "ai":
+        model = str(row.get("review_model", "")).strip()
+        image_mode = str(row.get("review_image_mode", "")).strip()
+        detail_parts: list[str] = []
+        if model:
+            detail_parts.append(model)
+        if image_mode == "price_map_svg":
+            detail_parts.append("画像あり")
+        elif image_mode == "numeric_only_fallback":
+            detail_parts.append("数値のみ")
+        detail = " / ".join(detail_parts)
+        label = "AI評価済み"
+        return label, detail
+    if source == "human_override":
+        return "人が確認・修正済み", ""
+    if str(row.get("evaluation_status", "")).strip() == "complete":
+        return "AIレビュー待ち", ""
+    return "24時間後評価待ち", ""
+
+
+def _review_source_badge_class(row: dict[str, Any]) -> str:
+    source = _review_source_value(row)
+    if source == "ai":
+        return "ai"
+    if source == "human_override":
+        return "human_override"
+    if str(row.get("evaluation_status", "")).strip() == "complete":
+        return "awaiting_ai"
+    return "awaiting_outcome"
+
+
+def _review_workflow_steps(row: dict[str, Any]) -> list[tuple[str, str, str]]:
+    evaluation_complete = str(row.get("evaluation_status", "")).strip() == "complete"
+    source = _review_source_value(row)
+
+    machine_status = "完了" if evaluation_complete else "待ち"
+    machine_class = "done" if evaluation_complete else "waiting"
+
+    if source in {"ai", "human_override"}:
+        ai_status = "完了"
+        ai_class = "done"
+    elif evaluation_complete:
+        ai_status = "待ち"
+        ai_class = "waiting"
+    else:
+        ai_status = "未着手"
+        ai_class = "idle"
+
+    human_status = "済" if source == "human_override" else "未"
+    human_class = "done" if source == "human_override" else "idle"
+
+    return [
+        ("24時間後機械評価", machine_status, machine_class),
+        ("AIレビュー", ai_status, ai_class),
+        ("人が確認", human_status, human_class),
+    ]
+
+
+def _extract_price_map_svg(html_text: str) -> str:
+    match = re.search(r'(<svg[^>]*class="price-map"[\s\S]*?</svg>)', html_text)
+    return match.group(1) if match else ""
+
+
+def _signal_snapshot_path(base_dir: Path, signal_id: str) -> Path:
+    return base_dir / "logs" / "signals" / f"{signal_id}.json"
+
+
+def _recompute_current_setup_details(base_dir: Path, signal_id: str) -> dict[str, Any]:
+    payload = load_json(_signal_snapshot_path(base_dir, signal_id))
+    if not isinstance(payload, dict):
+        return {}
+    side = str(payload.get("primary_setup_side") or payload.get("bias") or "").strip().lower()
+    if side not in {"long", "short"}:
+        return {}
+    try:
+        price = float(payload.get("current_price", 0.0))
+        atr = float(payload.get("atr_15m_value", 0.0))
+        confidence = int(float(payload.get("confidence", 0.0)))
+        funding_rate = float(payload.get("funding_rate_pct", 0.0))
+        atr_ratio = float(payload.get("atr_ratio", 0.0))
+        volume_ratio = float(payload.get("volume_ratio", 0.0))
+        trigger_threshold = float(payload.get("trigger_volume_ratio_threshold", 0.0))
+    except (TypeError, ValueError):
+        return {}
+    try:
+        cfg = load_config(base_dir)
+    except Exception:  # noqa: BLE001
+        cfg = type(
+            "_RRReplayCfg",
+            (),
+            {
+                "SL_ATR_MULTIPLIER": 1.5,
+                "MIN_RR_RATIO": 1.1,
+                "CONFIDENCE_LONG_MIN": 45,
+                "CONFIDENCE_SHORT_MIN": 55,
+                "MIN_ACCEPTABLE_ATR_RATIO": 0.25,
+                "MAX_ACCEPTABLE_ATR_RATIO": 2.4,
+                "FUNDING_LONG_WARNING": 0.06,
+                "FUNDING_LONG_PROHIBITED": 0.10,
+                "FUNDING_SHORT_WARNING": -0.04,
+                "FUNDING_SHORT_PROHIBITED": -0.07,
+            },
+        )()
+    support_zones = payload.get("support_zones_all") or []
+    resistance_zones = payload.get("resistance_zones_all") or []
+    if not isinstance(support_zones, list) or not isinstance(resistance_zones, list):
+        return {}
+    warning_flags = payload.get("warning_flags") or []
+    warning_count = len(_split_values(warning_flags)) if isinstance(warning_flags, str) else len(warning_flags)
+    trigger_ready = bool(payload.get("breakout_up" if side == "long" else "breakout_down")) or volume_ratio >= trigger_threshold
+    setup, _ = build_setup(
+        side=side,
+        price=price,
+        atr=atr,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+        sl_atr_multiplier=float(getattr(cfg, "SL_ATR_MULTIPLIER", 1.5)),
+        min_rr_ratio=float(getattr(cfg, "MIN_RR_RATIO", 1.1)),
+        confidence=confidence,
+        confidence_min=int(getattr(cfg, "CONFIDENCE_LONG_MIN" if side == "long" else "CONFIDENCE_SHORT_MIN", 45)),
+        atr_ratio=atr_ratio,
+        atr_ratio_min=float(getattr(cfg, "MIN_ACCEPTABLE_ATR_RATIO", 0.25)),
+        atr_ratio_max=float(getattr(cfg, "MAX_ACCEPTABLE_ATR_RATIO", 2.4)),
+        funding_rate=funding_rate,
+        funding_warning=float(getattr(cfg, "FUNDING_LONG_WARNING" if side == "long" else "FUNDING_SHORT_WARNING", 0.0)),
+        funding_prohibited=float(getattr(cfg, "FUNDING_LONG_PROHIBITED" if side == "long" else "FUNDING_SHORT_PROHIBITED", 0.0)),
+        trigger_ready=trigger_ready,
+        warning_count=warning_count,
+    )
+    return {
+        "signal_id": signal_id,
+        "status": str(setup.get("status", "")),
+        "reason": str(setup.get("status_reason_code", "")),
+        "rr": _parse_float(setup.get("rr_estimate", 0.0), 0.0),
+    }
+
+
+def _recompute_current_setup_summary(base_dir: Path, signal_id: str) -> str:
+    details = _recompute_current_setup_details(base_dir, signal_id)
+    if not details:
+        return ""
+    return (
+        f"{signal_id}=>{details.get('status', '')}/{details.get('reason', '')}"
+        f"/rr={_parse_float(details.get('rr', 0.0), 0.0):.2f}"
+    )
+
+
+def _timestamp_in_jst_date_range(timestamp_jst: str, *, date_from: str = "", date_to: str = "") -> bool:
+    dt = _parse_dt(timestamp_jst)
+    if dt is None:
+        return False
+    current_date = dt.astimezone(JST).date()
+    if date_from:
+        from_date = datetime.fromisoformat(date_from).date()
+        if current_date < from_date:
+            return False
+    if date_to:
+        to_date = datetime.fromisoformat(date_to).date()
+        if current_date > to_date:
+            return False
+    return True
+
+
+def build_current_setup_comparison_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    limit: int = 20,
+    only_notified: bool = False,
+    previous_reason: str = "",
+    current_reason: str = "",
+    prelabel: str = "",
+    risk_flag: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    status_transition: str = "",
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows = _load_csv_rows(shadow_path)
+    differences: list[dict[str, Any]] = []
+    previous_reason_filter = previous_reason.strip()
+    current_reason_filter = current_reason.strip()
+    prelabel_filter = prelabel.strip().upper()
+    risk_flag_filter = risk_flag.strip()
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    status_transition_filter = status_transition.strip()
+    for row in rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        timestamp_jst = str(row.get("timestamp_jst", "")).strip()
+        if (date_from_filter or date_to_filter) and not _timestamp_in_jst_date_range(
+            timestamp_jst,
+            date_from=date_from_filter,
+            date_to=date_to_filter,
+        ):
+            continue
+        current = _recompute_current_setup_details(base_dir, signal_id)
+        if not current:
+            continue
+        previous_status = str(row.get("primary_setup_status", "")).strip()
+        previous_reason = str(row.get("primary_setup_reason", "")).strip()
+        current_status = str(current.get("status", "")).strip()
+        current_reason = str(current.get("reason", "")).strip()
+        if previous_status == current_status and previous_reason == current_reason:
+            continue
+        current_status_transition = f"{previous_status}->{current_status}"
+        normalized_prelabel = str(row.get("prelabel", "")).strip().upper()
+        notified = _parse_bool(row.get("was_notified"))
+        row_risk_flags = _split_values(row.get("risk_flags", ""))
+        if only_notified and not notified:
+            continue
+        if previous_reason_filter and previous_reason != previous_reason_filter:
+            continue
+        if current_reason_filter and current_reason != current_reason_filter:
+            continue
+        if prelabel_filter and normalized_prelabel != prelabel_filter:
+            continue
+        if risk_flag_filter and risk_flag_filter not in row_risk_flags:
+            continue
+        if status_transition_filter and current_status_transition != status_transition_filter:
+            continue
+        differences.append(
+            {
+                "signal_id": signal_id,
+                "timestamp_jst": timestamp_jst,
+                "prelabel": normalized_prelabel,
+                "previous_status": previous_status,
+                "previous_reason": previous_reason,
+                "current_status": current_status,
+                "current_reason": current_reason,
+                "current_rr": _parse_float(current.get("rr", 0.0), 0.0),
+                "notified": notified,
+                "risk_flags": row_risk_flags,
+                "notify_reasons": _parse_maybe_json_array(str(row.get("notify_reason", ""))),
+                "execution_shadow": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait_shadow": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+            }
+        )
+
+    differences.sort(key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+    status_changes = Counter(f"{item['previous_status']}->{item['current_status']}" for item in differences)
+    reason_changes = Counter(f"{item['previous_reason']}->{item['current_reason']}" for item in differences)
+    notified_count = sum(1 for item in differences if item["notified"])
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    status_group_counts: Counter[str] = Counter()
+    for item in differences:
+        risk_flag_counts.update(item["risk_flags"])
+        notify_reason_counts.update(item["notify_reasons"])
+        status_group_counts[item["previous_status"] + "->" + item["current_status"]] += 1
+    avg_execution = _mean_value(differences, "execution_shadow")
+    avg_wait = _mean_value(differences, "wait_shadow")
+
+    lines = ["# 現行 Setup 比較", ""]
+    lines.append(f"- 比較対象 shadow 行数: {len(rows)}")
+    if only_notified:
+        lines.append("- フィルタ: 通知済みのみ")
+    if previous_reason_filter:
+        lines.append(f"- フィルタ: 旧 reason={previous_reason_filter}")
+    if current_reason_filter:
+        lines.append(f"- フィルタ: 現行 reason={current_reason_filter}")
+    if prelabel_filter:
+        lines.append(f"- フィルタ: prelabel={prelabel_filter}")
+    if risk_flag_filter:
+        lines.append(f"- フィルタ: risk_flag={risk_flag_filter}")
+    if date_from_filter:
+        lines.append(f"- フィルタ: date_from={date_from_filter}")
+    if date_to_filter:
+        lines.append(f"- フィルタ: date_to={date_to_filter}")
+    if status_transition_filter:
+        lines.append(f"- フィルタ: status_transition={status_transition_filter}")
+    lines.append(f"- 現行 setup との差分あり: {len(differences)}")
+    lines.append(f"- 差分ありのうち通知済み: {notified_count}")
+    if differences:
+        lines.append(f"- 平均 execution_shadow: {avg_execution:.1f}")
+        lines.append(f"- 平均 wait_shadow: {avg_wait:.1f}")
+    if status_changes:
+        lines.append("- 主な status 変化: " + ", ".join(f"{label}={count}件" for label, count in status_changes.most_common(5)))
+    if reason_changes:
+        lines.append("- 主な reason 変化: " + ", ".join(f"{label}={count}件" for label, count in reason_changes.most_common(5)))
+    if risk_flag_counts:
+        lines.append("- 主な risk_flags: " + ", ".join(f"{label}={count}件" for label, count in risk_flag_counts.most_common(5)))
+    if notify_reason_counts:
+        lines.append("- 主な通知理由: " + ", ".join(f"{label}={count}件" for label, count in notify_reason_counts.most_common(5)))
+    lines.append("")
+    if status_group_counts:
+        lines.append("## status別集計")
+        for label, count in status_group_counts.most_common(5):
+            subset = [item for item in differences if item["previous_status"] + "->" + item["current_status"] == label]
+            lines.append(
+                f"- {label}: {count}件 / 平均 execution={_mean_value(subset, 'execution_shadow'):.1f} / 平均 wait={_mean_value(subset, 'wait_shadow'):.1f}"
+            )
+        lines.append("")
+    lines.append("## 代表例")
+    if differences:
+        for item in differences[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {item['previous_status']}/{item['previous_reason']} -> "
+                f"{item['current_status']}/{item['current_reason']} / rr={item['current_rr']:.2f} / "
+                f"prelabel={item['prelabel']} / notified={'yes' if item['notified'] else 'no'}"
+            )
+    else:
+        lines.append("- 差分はありません")
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def refresh_standard_setup_comparison_reports(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    analysis_dir: Path | None = None,
+    limit: int = 20,
+    date_from: str = "",
+    date_to: str = "",
+) -> dict[str, Path]:
+    analysis_dir = analysis_dir or base_dir / "運用資料" / "reports" / "analysis"
+    specs = [
+        {
+            "key": "notified_rr_to_entry",
+            "filename": "notified_rr_to_entry.md",
+            "only_notified": True,
+            "previous_reason": "rr_below_min",
+            "current_reason": "entry_zone_not_reached",
+        },
+        {
+            "key": "notified_rr_to_entry_orderbook_ask_heavy",
+            "filename": "notified_rr_to_entry_orderbook_ask_heavy.md",
+            "only_notified": True,
+            "previous_reason": "rr_below_min",
+            "current_reason": "entry_zone_not_reached",
+            "risk_flag": "orderbook_ask_heavy",
+        },
+        {
+            "key": "rr_to_confidence",
+            "filename": "rr_to_confidence.md",
+            "previous_reason": "rr_below_min",
+            "current_reason": "confidence_below_min",
+        },
+    ]
+    generated: dict[str, Path] = {}
+    for spec in specs:
+        output_md = analysis_dir / str(spec["filename"])
+        build_current_setup_comparison_report(
+            base_dir=base_dir,
+            shadow_path=shadow_path,
+            output_md=output_md,
+            limit=limit,
+            only_notified=bool(spec.get("only_notified", False)),
+            previous_reason=str(spec.get("previous_reason", "")),
+            current_reason=str(spec.get("current_reason", "")),
+            risk_flag=str(spec.get("risk_flag", "")),
+            date_from=date_from,
+            date_to=date_to,
+        )
+        generated[str(spec["key"])] = output_md
+    return generated
+
+
+def _age_bucket_label(timestamp_jst: str, *, now: datetime | None = None) -> str:
+    dt = _parse_dt(timestamp_jst)
+    if dt is None:
+        return "不明"
+    current = (now or datetime.now(tz=JST)).astimezone(JST)
+    age_days = max(0, (current.date() - dt.astimezone(JST).date()).days)
+    if age_days <= 1:
+        return "0-1日"
+    if age_days <= 3:
+        return "2-3日"
+    if age_days <= 7:
+        return "4-7日"
+    return "8日以上"
+
+
+def _filtered_shadow_rows(
+    *,
+    shadow_path: Path,
+    date_from: str = "",
+    date_to: str = "",
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    rows = _load_csv_rows(shadow_path)
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    filtered_rows = [
+        row
+        for row in rows
+        if not (date_from_filter or date_to_filter)
+        or _timestamp_in_jst_date_range(str(row.get("timestamp_jst", "")).strip(), date_from=date_from_filter, date_to=date_to_filter)
+    ]
+    return rows, filtered_rows
+
+
+def _collect_relax_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    blocked_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    combo_flags = {"orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"}
+    candidates: list[dict[str, Any]] = []
+    for row in blocked_rows:
+        reasons = _split_values(str(row.get("phase1_observation_reasons", "")))
+        if "confidence_below_min" not in reasons:
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if "sweep_incomplete" not in risk_flags or "lower_liquidity_close" not in risk_flags:
+            continue
+        if any(flag in combo_flags for flag in risk_flags):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "phase1_reasons": _split_values(str(row.get("phase1_observation_reasons", ""))),
+                "risk_flags": risk_flags,
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def _collect_confidence_watch_learning_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if not is_confidence_watch_learning_candidate(
+            primary_setup_status=str(row.get("primary_setup_status", "")),
+            primary_setup_reason=str(row.get("primary_setup_reason", "")),
+            prelabel=str(row.get("prelabel", "")),
+            risk_flags=risk_flags,
+            confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+        ):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_status": str(row.get("primary_setup_status", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def _phase1b_lite_gate_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    return determine_phase1b_lite_gate(
+        phase1_observation_type=str(row.get("phase1_observation_type", "")),
+        primary_setup_status=str(row.get("primary_setup_status", "")),
+        primary_setup_reason=str(row.get("primary_setup_reason", "")),
+        prelabel=str(row.get("prelabel", "")),
+        data_quality_flag=str(row.get("data_quality_flag", "")),
+        no_trade_flags=_split_values(str(row.get("no_trade_flags", ""))),
+        risk_flags=_split_values(str(row.get("risk_flags", ""))),
+        confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+        confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+        confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+    )
+
+
+def _collect_phase1b_lite_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        lite_gate = {
+            "phase1b_lite_gate": row.get("phase1b_lite_gate", ""),
+            "phase1b_lite_type": row.get("phase1b_lite_type", ""),
+            "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        }
+        if str(lite_gate["phase1b_lite_gate"]).strip() not in {"pass", "blocked"}:
+            lite_gate = _phase1b_lite_gate_from_row(row)
+        if str(lite_gate["phase1b_lite_gate"]).strip() != "pass":
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_status": str(row.get("primary_setup_status", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def _collect_counter_long_short_watch_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        if not is_counter_long_short_watch_candidate(
+            bias=str(row.get("bias", "")),
+            primary_setup_side=str(row.get("primary_setup_side", "")),
+            primary_setup_status=str(row.get("primary_setup_status", "")),
+            primary_setup_reason=str(row.get("primary_setup_reason", "")),
+            secondary_setup_status=str(row.get("short_status", "")) if str(row.get("bias", "")) == "long" else str(row.get("long_status", "")),
+            risk_flags=risk_flags,
+            confidence_direction_shadow=row.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=row.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=row.get("confidence_wait_shadow", ""),
+        ):
+            continue
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "bias": str(row.get("bias", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "direction": _parse_float(row.get("confidence_direction_shadow"), 0.0),
+                "execution": _parse_float(row.get("confidence_execution_shadow"), 0.0),
+                "wait": _parse_float(row.get("confidence_wait_shadow"), 0.0),
+                "risk_flags": risk_flags,
+                "outcome": row.get("outcome", ""),
+                "tp1_hit_first": row.get("tp1_hit_first", ""),
+                "signal_based_MFE_24h": row.get("signal_based_MFE_24h", ""),
+                "signal_based_MAE_24h": row.get("signal_based_MAE_24h", ""),
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def _top_factor_codes(row: dict[str, str]) -> list[str]:
+    value = str(row.get("top_positive_factors", "")).strip()
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    codes: list[str] = []
+    for item in parsed:
+        if isinstance(item, dict):
+            code = str(item.get("code", "")).strip()
+            if code:
+                codes.append(code)
+    return codes
+
+
+def _collect_failed_breakout_down_reversal_candidates(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("bias", "")).strip() != "long":
+            continue
+        if str(row.get("phase", "")).strip() != "breakout":
+            continue
+        top_factor_codes = _top_factor_codes(row)
+        if "breakout_up" not in top_factor_codes:
+            continue
+        if str(row.get("primary_setup_status", "")).strip() != "watch":
+            continue
+        if str(row.get("direction_outcome", "")).strip() != "wrong":
+            continue
+        if str(row.get("entry_outcome", "")).strip() != "poor_entry":
+            continue
+        if _parse_float(row.get("signal_based_MAE_24h"), 0.0) < 5.0:
+            continue
+        risk_flags = _split_values(str(row.get("risk_flags", "")))
+        notify_reasons = _split_values(str(row.get("notify_reason", "")))
+        candidates.append(
+            {
+                "signal_id": str(row.get("signal_id", "")).strip(),
+                "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                "prelabel": str(row.get("prelabel", "")).strip(),
+                "setup_reason": str(row.get("primary_setup_reason", "")).strip(),
+                "long_score": _parse_float(row.get("long_score"), 0.0),
+                "short_score": _parse_float(row.get("short_score"), 0.0),
+                "score_gap": _parse_float(row.get("score_gap"), 0.0),
+                "mfe24h": _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+                "mae24h": _parse_float(row.get("signal_based_MAE_24h"), 0.0),
+                "risk_flags": risk_flags,
+                "notify_reasons": notify_reasons,
+            }
+        )
+    candidates.sort(key=lambda row: row["timestamp_jst"], reverse=True)
+    return candidates
+
+
+def build_operational_focus_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 5,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    date_from_filter = date_from.strip()
+    date_to_filter = date_to.strip()
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from_filter, date_to=date_to_filter)
+
+    eligible_backlog_rows = []
+    for row in filtered_rows:
+        if not _parse_bool(row.get("was_notified")):
+            continue
+        if str(row.get("evaluation_status", "")).strip() != "complete":
+            continue
+        review_source = _review_source_value(row)
+        if review_source in {"ai", "human_override"}:
+            continue
+        eligible_backlog_rows.append(row)
+
+    age_counts: Counter[str] = Counter(_age_bucket_label(str(row.get("timestamp_jst", "")).strip()) for row in eligible_backlog_rows)
+    backlog_setup_counts = Counter(str(row.get("primary_setup_status", "")).strip() for row in eligible_backlog_rows)
+    backlog_prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in eligible_backlog_rows)
+    backlog_phase1_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in eligible_backlog_rows)
+    backlog_tier_counts = Counter(str(row.get("signal_tier", "")).strip() for row in eligible_backlog_rows)
+    backlog_action_counts = Counter(str(row.get("review_action_class", "")).strip() for row in eligible_backlog_rows)
+
+    pass_rows = [row for row in filtered_rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in filtered_rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    pass_type_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in pass_rows)
+    blocked_reason_counts: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocked_reason_counts.update(_split_values(str(row.get("phase1_observation_reasons", ""))))
+    blocked_reason_details: list[dict[str, Any]] = []
+    for reason, count in blocked_reason_counts.most_common(2):
+        subset = [
+            row
+            for row in blocked_rows
+            if reason in _split_values(str(row.get("phase1_observation_reasons", "")))
+        ]
+        prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in subset)
+        status_counts = Counter(str(row.get("primary_setup_status", "")).strip() for row in subset)
+        setup_reason_counts = Counter(str(row.get("primary_setup_reason", "")).strip() for row in subset)
+        risk_counts: Counter[str] = Counter()
+        for row in subset:
+            risk_counts.update(_split_values(str(row.get("risk_flags", ""))))
+        representatives = [
+            str(row.get("signal_id", "")).strip()
+            for row in sorted(subset, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+            if str(row.get("signal_id", "")).strip()
+        ][:3]
+        blocked_reason_details.append(
+            {
+                "reason": reason,
+                "count": count,
+                "prelabels": _format_counter(prelabel_counts, limit=4),
+                "statuses": _format_counter(status_counts, limit=4),
+                "setup_reasons": _format_counter(setup_reason_counts, limit=4),
+                "risk_flags": _format_counter(risk_counts, limit=4),
+                "representatives": representatives,
+            }
+        )
+    combo_focus_details: list[dict[str, Any]] = []
+    combo_flags = ["orderbook_ask_heavy", "ask_wall_close", "long_flush_exhaustion"]
+    relax_candidates = _collect_relax_candidates(filtered_rows)
+    promotion_candidates = _collect_confidence_watch_learning_candidates(filtered_rows)
+    for reason in ("confidence_below_min", "no_trade_candidate"):
+        subset = []
+        for row in blocked_rows:
+            reasons = _split_values(str(row.get("phase1_observation_reasons", "")))
+            risk_flags = _split_values(str(row.get("risk_flags", "")))
+            if reason not in reasons:
+                continue
+            if "sweep_incomplete" not in risk_flags or "lower_liquidity_close" not in risk_flags:
+                continue
+            subset.append(row)
+        if not subset:
+            continue
+        combo_counter: Counter[str] = Counter()
+        for row in subset:
+            risk_flags = _split_values(str(row.get("risk_flags", "")))
+            matched = [flag for flag in combo_flags if flag in risk_flags]
+            combo_counter.update(matched or ["補助flagなし"])
+        combo_focus_details.append(
+            {
+                "reason": reason,
+                "count": len(subset),
+                "combos": _format_counter(combo_counter, limit=5),
+                "avg_execution": _mean_value(subset, "confidence_execution_shadow"),
+                "avg_wait": _mean_value(subset, "confidence_wait_shadow"),
+            }
+        )
+
+    setup_watch_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "setup_watch_learning"
+    ]
+    setup_watch_reason_counts = Counter(str(row.get("primary_setup_reason", "")).strip() for row in setup_watch_rows)
+    setup_watch_risk_counts: Counter[str] = Counter()
+    for row in setup_watch_rows:
+        setup_watch_risk_counts.update(_split_values(str(row.get("risk_flags", ""))))
+
+    direction_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "direction_rr_learning"
+    ]
+
+    newest_backlog = sorted(
+        eligible_backlog_rows,
+        key=lambda item: str(item.get("timestamp_jst", "")),
+        reverse=True,
+    )[:limit]
+
+    lines = ["# 運用フォーカス分析", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from_filter:
+        lines.append(f"- フィルタ: date_from={date_from_filter}")
+    if date_to_filter:
+        lines.append(f"- フィルタ: date_to={date_to_filter}")
+    lines.append("")
+
+    lines.append("## AI backlog")
+    lines.append(f"- 未処理 backlog 候補: {len(eligible_backlog_rows)}件")
+    if eligible_backlog_rows:
+        lines.append(f"- 年齢分布: {_format_counter(age_counts, limit=4)}")
+        if backlog_phase1_counts:
+            lines.append(f"- phase1 観測タイプ: {_format_counter(backlog_phase1_counts, limit=5)}")
+        if backlog_setup_counts:
+            lines.append(f"- setup status: {_format_counter(backlog_setup_counts, limit=5)}")
+        if backlog_prelabel_counts:
+            lines.append(f"- prelabel: {_format_counter(backlog_prelabel_counts, limit=5)}")
+        if backlog_tier_counts:
+            lines.append(f"- signal_tier: {_format_counter(backlog_tier_counts, limit=5)}")
+        if any(backlog_action_counts):
+            lines.append(f"- review_action_class: {_format_counter(backlog_action_counts, limit=5)}")
+        lines.append("- 直近 backlog 例:")
+        for row in newest_backlog:
+            lines.append(
+                f"  - {row.get('signal_id', '')}: {str(row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / "
+                f"{row.get('primary_setup_status', '')}/{row.get('primary_setup_reason', '')} / "
+                f"prelabel={row.get('prelabel', '')} / phase1={row.get('phase1_observation_type', '') or 'none'}"
+            )
+    else:
+        lines.append("- backlog 候補はありません")
+    lines.append("")
+
+    lines.append("## Phase1 観測")
+    lines.append(f"- pass: {len(pass_rows)}件 / blocked: {len(blocked_rows)}件")
+    if pass_type_counts:
+        lines.append(f"- pass 内訳: {_format_counter(pass_type_counts, limit=5)}")
+    if blocked_reason_counts:
+        lines.append(f"- 主な blocked 理由: {_format_counter(blocked_reason_counts, limit=5)}")
+    if setup_watch_rows:
+        lines.append(
+            f"- setup_watch_learning: {len(setup_watch_rows)}件 / 平均 execution={_mean_value(setup_watch_rows, 'confidence_execution_shadow'):.1f} / "
+            f"平均 wait={_mean_value(setup_watch_rows, 'confidence_wait_shadow'):.1f}"
+        )
+        lines.append(f"- setup_watch の主な reason: {_format_counter(setup_watch_reason_counts, limit=5)}")
+        if setup_watch_risk_counts:
+            lines.append(f"- setup_watch の主な risk_flags: {_format_counter(setup_watch_risk_counts, limit=5)}")
+    if direction_rows:
+        lines.append(
+            f"- direction_rr_learning: {len(direction_rows)}件 / 平均 execution={_mean_value(direction_rows, 'confidence_execution_shadow'):.1f} / "
+            f"平均 wait={_mean_value(direction_rows, 'confidence_wait_shadow'):.1f}"
+        )
+    else:
+        lines.append("- direction_rr_learning: 0件")
+    if blocked_reason_details:
+        lines.append("")
+        lines.append("## blocked 上位理由の内訳")
+        for detail in blocked_reason_details:
+            lines.append(f"- {detail['reason']}: {detail['count']}件")
+            lines.append(f"  - prelabel: {detail['prelabels']}")
+            lines.append(f"  - setup status: {detail['statuses']}")
+            lines.append(f"  - setup reason: {detail['setup_reasons']}")
+            lines.append(f"  - risk_flags: {detail['risk_flags']}")
+            if detail["representatives"]:
+                lines.append(f"  - 代表例: {', '.join(detail['representatives'])}")
+    if combo_focus_details:
+        lines.append("")
+        lines.append("## sweep+lower_liquidity の補助flag内訳")
+        for detail in combo_focus_details:
+            lines.append(
+                f"- {detail['reason']}: {detail['count']}件 / 平均 execution={detail['avg_execution']:.1f} / 平均 wait={detail['avg_wait']:.1f}"
+            )
+            lines.append(f"  - 補助flag: {detail['combos']}")
+    if relax_candidates:
+        lines.append("")
+        lines.append("## 緩和候補の少数群")
+        for item in relax_candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: confidence_below_min / prelabel={item['prelabel']} / "
+                f"setup={item['setup_reason']} / execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+    if promotion_candidates:
+        lines.append("")
+        lines.append("## Phase 1B 昇格候補")
+        lines.append(
+            f"- 候補件数: {len(promotion_candidates)}件 / 平均 direction={_mean_value(promotion_candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(promotion_candidates, 'execution'):.1f} / 平均 wait={_mean_value(promotion_candidates, 'wait'):.1f}"
+        )
+        lines.append(
+            f"- prelabel: {_format_counter(Counter(str(item.get('prelabel', '')).strip() for item in promotion_candidates), limit=5)}"
+        )
+        for item in promotion_candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {item['setup_reason']} / prelabel={item['prelabel']} / "
+                f"direction={item['direction']:.1f} / execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_relaxation_candidates_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_relax_candidates(filtered_rows)
+
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    setup_reason_counts = Counter(str(row.get("setup_reason", "")).strip() for row in candidates)
+    phase1_reason_counts: Counter[str] = Counter()
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        phase1_reason_counts.update(row["phase1_reasons"])
+        risk_flag_counts.update(row["risk_flags"])
+
+    lines = ["# 緩和候補レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: blocked + confidence_below_min + sweep_incomplete + lower_liquidity_close + 補助 hard flag なし")
+    lines.append(f"- 候補件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- prelabel: {_format_counter(prelabel_counts, limit=5)}")
+        lines.append(f"- setup reason: {_format_counter(setup_reason_counts, limit=5)}")
+        lines.append(f"- phase1 reasons: {_format_counter(phase1_reason_counts, limit=5)}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(
+            f"- 平均 execution={_mean_value(candidates, 'execution'):.1f} / 平均 wait={_mean_value(candidates, 'wait'):.1f}"
+        )
+    lines.append("")
+    lines.append("## 候補一覧")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / setup={item['setup_reason']} / "
+                f"execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+    else:
+        lines.append("- 候補はありません")
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_phase1b_promotion_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_confidence_watch_learning_candidates(filtered_rows)
+    lite_candidates = _collect_phase1b_lite_candidates(filtered_rows)
+
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+
+    lines = ["# Phase 1B 昇格候補レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: watch + confidence_below_min + SWEEP_WAIT/RISKY_ENTRY + sweep_incomplete + lower_liquidity_close + 補助 hard flag なし")
+    lines.append("- 昇格観測条件: direction>=55 / execution>=18 / wait<=85")
+    lines.append(f"- 候補件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- prelabel: {_format_counter(prelabel_counts, limit=5)}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(
+            f"- 勝率={_format_pct(_ratio(sum(1 for flag in settled if flag), len(settled)))} / "
+            f"TP1先行={_format_pct(_ratio(sum(1 for row in tp_pool if row.get('tp1_hit_first') == 'true'), len(tp_pool)))} / "
+            f"近似PF={(mfe_sum / mae_sum) if mae_sum > 0 else 0.0:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={_mean_value(candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(candidates, 'execution'):.1f} / 平均 wait={_mean_value(candidates, 'wait'):.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={_mean_value(candidates, 'signal_based_MFE_24h'):.2f} / "
+            f"平均MAE={_mean_value(candidates, 'signal_based_MAE_24h'):.2f}"
+        )
+    lines.append("")
+    lines.append("## Phase 1B-lite")
+    lines.append("- 条件: confidence_watch_learning + SWEEP_WAIT 限定。正式 trade_execution_gate は緩めない")
+    lines.append(f"- lite 候補件数: {len(lite_candidates)}件")
+    if lite_candidates:
+        lite_settled = [flag for flag in (_success_flag(row) for row in lite_candidates) if flag is not None]
+        lite_tp_pool = [
+            row for row in lite_candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}
+        ]
+        lite_mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in lite_candidates)
+        lite_mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in lite_candidates)
+        lines.append(
+            f"- 勝率={_format_pct(_ratio(sum(1 for flag in lite_settled if flag), len(lite_settled)))} / "
+            f"TP1先行={_format_pct(_ratio(sum(1 for row in lite_tp_pool if row.get('tp1_hit_first') == 'true'), len(lite_tp_pool)))} / "
+            f"近似PF={(lite_mfe_sum / lite_mae_sum) if lite_mae_sum > 0 else 0.0:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={_mean_value(lite_candidates, 'direction'):.1f} / "
+            f"平均 execution={_mean_value(lite_candidates, 'execution'):.1f} / "
+            f"平均 wait={_mean_value(lite_candidates, 'wait'):.1f}"
+        )
+        lines.append("- 扱い: 実弾ではなく、正式 Phase 1B でもない。専用CSVでのみ追跡する")
+    lines.append("")
+    lines.append("## 候補一覧")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / direction={item['direction']:.1f} / "
+                f"execution={item['execution']:.1f} / wait={item['wait']:.1f}"
+            )
+    else:
+        lines.append("- 候補はありません")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_failed_breakout_down_reversal_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    candidates = _collect_failed_breakout_down_reversal_candidates(filtered_rows)
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+        notify_reason_counts.update(row["notify_reasons"])
+
+    lines = ["# failed_breakout_down_reversal レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append("- 条件: bias=long + phase=breakout + top_positive_factors に breakout_up + watch + direction_outcome=wrong + entry_outcome=poor_entry + MAE24h>=5.0")
+    lines.append(f"- 件数: {len(candidates)}件")
+    if candidates:
+        lines.append(f"- 平均MFE24h={_mean_value(candidates, 'mfe24h'):.2f} / 平均MAE24h={_mean_value(candidates, 'mae24h'):.2f}")
+        lines.append(f"- 平均 long_score={_mean_value(candidates, 'long_score'):.1f} / 平均 short_score={_mean_value(candidates, 'short_score'):.1f} / 平均 gap={_mean_value(candidates, 'score_gap'):.1f}")
+        lines.append(f"- risk_flags: {_format_counter(risk_flag_counts, limit=5)}")
+        lines.append(f"- notify_reason: {_format_counter(notify_reason_counts, limit=5)}")
+    lines.append("")
+    lines.append("## 代表例")
+    if candidates:
+        for item in candidates[:limit]:
+            lines.append(
+                f"- {item['signal_id']}: {str(item['timestamp_jst'])[:16].replace('T', ' ')} / "
+                f"prelabel={item['prelabel']} / setup={item['setup_reason']} / "
+                f"long={item['long_score']:.1f} / short={item['short_score']:.1f} / gap={item['score_gap']:.1f} / "
+                f"MFE24h={item['mfe24h']:.2f} / MAE24h={item['mae24h']:.2f}"
+            )
+    else:
+        lines.append("- 該当候補はありません")
+    lines.append("")
+    lines.append("## 次に触る候補")
+    lines.append("- src/analysis/scoring.py")
+    lines.append("- src/presentation/sanitize.py")
+    lines.append("- src/trade/observation_gate.py")
+    lines.append("- tools/log_feedback.py")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _market_map_group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    settled = [flag for flag in (_success_flag(row) for row in rows) if flag is not None]
+    wrong_count = sum(1 for row in rows if str(row.get("direction_outcome", "")).strip() == "wrong")
+    return {
+        "count": len(rows),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "wrong_rate": _ratio(wrong_count, len(rows)),
+        "avg_mfe": _mean_value(rows, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(rows, "signal_based_MAE_24h"),
+        "representatives": [str(row.get("signal_id", "")).strip() for row in rows[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def build_market_map_effectiveness_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    market_rows = [
+        row
+        for row in filtered_rows
+        if str(row.get("market_map_primary_state", "")).strip()
+        or _split_values(str(row.get("market_map_flags", "")))
+        or str(row.get("level_flip_state", "")).strip()
+        or str(row.get("failed_breakout_state", "")).strip()
+    ]
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    flip_counts: Counter[str] = Counter()
+    failed_counts: Counter[str] = Counter()
+    trend_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+        flip = str(row.get("level_flip_state", "")).strip()
+        if flip:
+            flip_counts[flip] += 1
+        failed = str(row.get("failed_breakout_state", "")).strip()
+        if failed:
+            failed_counts[failed] += 1
+        trend = str(row.get("trend_flip_state", "")).strip()
+        if trend:
+            trend_counts[trend] += 1
+
+    tracked_flags = [
+        "long_into_major_resistance",
+        "short_into_major_support",
+        "failed_breakout_down_reversal",
+        "failed_breakout_up_reversal",
+        "support_to_resistance_flip",
+        "resistance_to_support_flip",
+        "trend_flip_confirmed_down",
+        "trend_flip_confirmed_up",
+    ]
+    grouped: list[tuple[str, dict[str, Any]]] = []
+    for flag in tracked_flags:
+        group_rows = [row for row in market_rows if flag in _split_values(str(row.get("market_map_flags", "")))]
+        if group_rows:
+            grouped.append((flag, _market_map_group_stats(group_rows)))
+    grouped.sort(key=lambda item: item[1]["count"], reverse=True)
+
+    lines = ["# market_map 有効性レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- market_map 記録あり: {len(market_rows)}件")
+    lines.append(f"- primary_state: {_format_counter(primary_counts, limit=8)}")
+    lines.append(f"- market_map_flags: {_format_counter(flag_counts, limit=10)}")
+    lines.append(f"- level_flip_state: {_format_counter(flip_counts, limit=8)}")
+    lines.append(f"- failed_breakout_state: {_format_counter(failed_counts, limit=8)}")
+    lines.append(f"- trend_flip_state: {_format_counter(trend_counts, limit=8)}")
+    lines.append("")
+    lines.append("## flag別成績")
+    if grouped:
+        for flag, stats in grouped[:limit]:
+            lines.append(
+                f"- {flag}: 勝率={_format_pct(stats['win_rate'])}, wrong_rate={_format_pct(stats['wrong_rate'])}, "
+                f"平均MFE24h={stats['avg_mfe']:.2f}, 平均MAE24h={stats['avg_mae']:.2f} (n={stats['count']})"
+            )
+            if stats["representatives"]:
+                lines.append(f"  代表例: {', '.join(stats['representatives'])}")
+    else:
+        lines.append("- 集計対象の market_map flag はまだありません")
+    lines.append("")
+    lines.append("## 次に見る場所")
+    lines.append("- src/analysis/market_map.py")
+    lines.append("- src/analysis/scoring.py")
+    lines.append("- logs/csv/shadow_log.csv")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+MARKET_MAP_READINESS_FIELDS = (
+    "market_map_primary_state",
+    "market_map_flags",
+    "nearest_major_support",
+    "nearest_major_resistance",
+    "active_level_role",
+    "level_flip_state",
+    "failed_breakout_state",
+    "trend_flip_state",
+)
+
+
+def _has_market_map_value(row: dict[str, Any]) -> bool:
+    return any(str(row.get(field, "")).strip() for field in MARKET_MAP_READINESS_FIELDS)
+
+
+def _latest_timestamp_row(rows: list[dict[str, str]]) -> dict[str, str] | None:
+    dated_rows = [(dt, row) for row in rows if (dt := _parse_dt(str(row.get("timestamp_jst", "")).strip())) is not None]
+    if not dated_rows:
+        return rows[0] if rows else None
+    return max(dated_rows, key=lambda item: item[0])[1]
+
+
+def _extract_summary_version(row: dict[str, str] | None) -> str:
+    if not row:
+        return "なし"
+    subject = str(row.get("summary_subject", "")).strip()
+    match = re.search(r"\[(Ver[^\]]+)\]", subject)
+    if not match:
+        return "不明"
+    return match.group(1)
+
+
+def build_market_map_readiness_report(
+    *,
+    base_dir: Path,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    min_market_rows: int = 1,
+) -> str:
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    rows, filtered_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    market_rows = [row for row in filtered_rows if _has_market_map_value(row)]
+    latest_row = _latest_timestamp_row(filtered_rows)
+    latest_market_row = _latest_timestamp_row(market_rows)
+    empty_latest_fields = [
+        field
+        for field in MARKET_MAP_READINESS_FIELDS
+        if latest_row is not None and not str(latest_row.get(field, "")).strip()
+    ]
+    ready = len(market_rows) >= max(1, int(min_market_rows))
+
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+
+    lines = ["# market_map readiness レポート", ""]
+    lines.append(f"- 対象 shadow 行数: {len(filtered_rows)} / 全体 {len(rows)}")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- readiness: {'pass' if ready else 'wait'}")
+    lines.append(f"- market_map 記録あり: {len(market_rows)}件 / 必要件数 {max(1, int(min_market_rows))}件")
+    if latest_row:
+        lines.append(
+            f"- 最新 shadow: {latest_row.get('signal_id', '')} / "
+            f"{str(latest_row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / "
+            f"subject_version={_extract_summary_version(latest_row)}"
+        )
+        lines.append(f"- 最新 shadow の空 market_map 欄: {', '.join(empty_latest_fields) if empty_latest_fields else 'なし'}")
+    else:
+        lines.append("- 最新 shadow: なし")
+    if latest_market_row:
+        lines.append(
+            f"- 最新 market_map: {latest_market_row.get('signal_id', '')} / "
+            f"{str(latest_market_row.get('timestamp_jst', ''))[:16].replace('T', ' ')}"
+        )
+    else:
+        lines.append("- 最新 market_map: なし")
+    lines.append(f"- primary_state: {_format_counter(primary_counts, limit=8)}")
+    lines.append(f"- market_map_flags: {_format_counter(flag_counts, limit=10)}")
+    lines.append("")
+    lines.append("## 判定")
+    if ready:
+        lines.append("- market_map の実データが入り始めています。次は有効性レポートで flag 別成績を確認します。")
+    else:
+        lines.append("- market_map の実データはまだ入っていません。次回監視サイクル後に再確認します。")
+    lines.append("")
+    lines.append("## 次のコマンド")
+    lines.append("- ./.venv312/bin/python tools/log_feedback.py build-market-map-readiness-report --date-from 2026-05-13")
+    lines.append("- ./.venv312/bin/python tools/log_feedback.py build-market-map-effectiveness-report --date-from 2026-05-13")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _build_review_chart_svg_path(base_dir: Path, signal_id: str, temp_dir: Path, *, persist_dir: Path | None = None) -> Path | None:
+    signal_path = _signal_snapshot_path(base_dir, signal_id)
+    payload = load_json(signal_path)
+    if not isinstance(payload, dict):
+        return None
+    svg = _extract_price_map_svg(build_notification_detail_html(payload))
+    if not svg:
+        return None
+    out_path = temp_dir / f"{signal_id}_price_map.svg"
+    out_path.write_text(svg, encoding="utf-8")
+    if persist_dir is not None:
+        persist_path = persist_dir / out_path.name
+        _ensure_parent(persist_path)
+        persist_path.write_text(svg, encoding="utf-8")
+    return out_path
+
+
+def _infer_review_action_class(row: dict[str, Any]) -> str:
+    explicit = str(row.get("review_action_class", "")).strip()
+    if explicit in VALID_REVIEW_ACTION_CLASS and explicit:
+        return explicit
+    if str(row.get("misleading_entry_like_wording", "")).strip() == "yes":
+        return "tune_text"
+    if str(row.get("tp_eval", "")).strip() in {"too_close", "too_far"}:
+        return "tune_exit"
+    if str(row.get("sl_eval", "")).strip() in {"too_tight", "too_loose"}:
+        return "tune_risk"
+    if str(row.get("user_verdict", "")).strip() in {"too_early", "too_late"}:
+        return "tune_entry"
+    if str(row.get("tf_15m_eval", "")).strip() == "poor":
+        return "tune_entry"
+    if str(row.get("user_verdict", "")).strip() == "low_value":
+        return "watch"
+    return "none"
+
+
+def _infer_review_priority(row: dict[str, Any], action_class: str) -> str:
+    explicit = str(row.get("review_priority", "")).strip()
+    if explicit in VALID_REVIEW_PRIORITY and explicit:
+        return explicit
+    if action_class == "tune_text":
+        return "high"
+    if action_class == "tune_exit" and str(row.get("tp_eval", "")).strip() == "too_close":
+        return "high"
+    if action_class in {"tune_exit", "tune_entry", "tune_risk"}:
+        return "medium"
+    return "low"
+
+
+def _default_next_action(row: dict[str, Any], action_class: str) -> str:
+    provided = str(row.get("next_action", "")).strip()
+    if provided:
+        return provided[:120]
+    if action_class == "tune_text":
+        return "通知件名と本文の強さを抑え、執行可能と誤読されない表現にする"
+    if action_class == "tune_exit":
+        tp_eval = str(row.get("tp_eval", "")).strip()
+        if tp_eval == "too_close":
+            return "TP1/TP2 を遠めにする候補を検証する"
+        if tp_eval == "too_far":
+            return "TP が遠すぎる局面の利確目安を近づける"
+        return "出口設計を見直す"
+    if action_class == "tune_risk":
+        sl_eval = str(row.get("sl_eval", "")).strip()
+        if sl_eval == "too_tight":
+            return "SL が短期ノイズで刈られない幅か確認する"
+        if sl_eval == "too_loose":
+            return "SL 幅とRRのバランスを見直す"
+        return "SL とリスク幅を見直す"
+    if action_class == "tune_entry":
+        verdict = str(row.get("user_verdict", "")).strip()
+        if verdict == "too_early":
+            return "早すぎる通知を抑えるため発火条件を一段遅らせる"
+        if verdict == "too_late":
+            return "遅すぎる通知を減らすため発火条件を前倒しできるか見る"
+        return "15分足の執行条件を見直す"
+    if action_class == "watch":
+        return "同種通知を継続観測する"
+    return "対応なし"
+
+
+def _normalize_ai_post_review(
+    payload: dict[str, Any],
+    *,
+    model: str,
+    image_mode: str,
+) -> dict[str, str]:
+    verdict = str(payload.get("user_verdict", "")).strip()
+    if verdict not in VALID_USER_VERDICTS or not verdict:
+        verdict = "low_value"
+    verdict_defaults = VERDICT_DEFAULTS.get(verdict, {"would_trade": "no", "usefulness_1to5": "3"})
+    usefulness_raw = str(payload.get("usefulness_1to5", verdict_defaults["usefulness_1to5"])).strip()
+    usefulness = usefulness_raw if usefulness_raw.isdigit() and 1 <= int(usefulness_raw) <= 5 else verdict_defaults["usefulness_1to5"]
+    would_trade = str(payload.get("would_trade", verdict_defaults["would_trade"])).strip()
+    if would_trade not in VALID_WOULD_TRADE or not would_trade:
+        would_trade = verdict_defaults["would_trade"]
+    actual_move_driver = str(payload.get("actual_move_driver", "unknown")).strip()
+    if actual_move_driver not in VALID_MOVE_DRIVERS or not actual_move_driver:
+        actual_move_driver = "unknown"
+    misleading = str(payload.get("misleading_entry_like_wording", "no")).strip()
+    if misleading not in VALID_MISLEADING_ENTRY or not misleading:
+        misleading = "no"
+    sl_eval = str(payload.get("sl_eval", "good")).strip()
+    if sl_eval not in VALID_SL_EVAL or not sl_eval:
+        sl_eval = "good"
+    tp_eval = str(payload.get("tp_eval", "good")).strip()
+    if tp_eval not in VALID_TP_EVAL or not tp_eval:
+        tp_eval = "good"
+    tf_4h_eval = str(payload.get("tf_4h_eval", "good")).strip()
+    if tf_4h_eval not in VALID_TF_EVAL or not tf_4h_eval:
+        tf_4h_eval = "good"
+    tf_1h_eval = str(payload.get("tf_1h_eval", "good")).strip()
+    if tf_1h_eval not in VALID_TF_EVAL or not tf_1h_eval:
+        tf_1h_eval = "good"
+    tf_15m_eval = str(payload.get("tf_15m_eval", "good")).strip()
+    if tf_15m_eval not in VALID_TF_EVAL or not tf_15m_eval:
+        tf_15m_eval = "good"
+    review_context = {
+        "user_verdict": verdict,
+        "misleading_entry_like_wording": misleading,
+        "sl_eval": sl_eval,
+        "tp_eval": tp_eval,
+        "tf_15m_eval": tf_15m_eval,
+        "review_action_class": payload.get("review_action_class", ""),
+        "review_priority": payload.get("review_priority", ""),
+        "next_action": payload.get("next_action", ""),
+    }
+    review_action_class = _infer_review_action_class(review_context)
+    review_priority = _infer_review_priority(review_context, review_action_class)
+    next_action = _default_next_action(review_context, review_action_class)
+    memo = str(payload.get("memo", "")).strip()[:200]
+    return {
+        "user_verdict": verdict,
+        "usefulness_1to5": usefulness,
+        "would_trade": would_trade,
+        "actual_move_driver": actual_move_driver,
+        "misleading_entry_like_wording": misleading,
+        "sl_eval": sl_eval,
+        "tp_eval": tp_eval,
+        "tf_4h_eval": tf_4h_eval,
+        "tf_1h_eval": tf_1h_eval,
+        "tf_15m_eval": tf_15m_eval,
+        "review_action_class": review_action_class,
+        "review_priority": review_priority,
+        "next_action": next_action,
+        "memo": memo,
+        "review_source": "ai",
+        "review_model": str(model or "").strip(),
+        "review_image_mode": image_mode,
+        "review_variant": AI_POST_REVIEW_VARIANT,
+    }
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return None
+    try:
+        parsed = json.loads(stripped)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = json.loads(stripped[start : end + 1])
+                return parsed if isinstance(parsed, dict) else None
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def _request_ai_post_review_via_api(
+    *,
+    base_dir: Path,
+    cfg: Any,
+    signal_id: str,
+    payload: dict[str, Any],
+) -> dict[str, str] | None:
+    if not _is_true_like(getattr(cfg, "AI_POST_REVIEW_API_FALLBACK_ENABLED", False)):
+        return None
+    if not _api_usage_allowed(cfg):
+        return None
+    api_key = str(getattr(cfg, "OPENAI_API_KEY", "")).strip()
+    if not api_key:
+        return None
+    model = str(getattr(cfg, "AI_POST_REVIEW_API_MODEL", "") or getattr(cfg, "OPENAI_ADVICE_MODEL", "gpt-4o")).strip()
+    if not model:
+        model = "gpt-4o"
+    timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
+    retry_count = int(getattr(cfg, "AI_RETRY_COUNT", 1))
+    system_prompt = str(payload.get("system_prompt", ""))
+    user_payload = {key: value for key, value in payload.items() if key != "system_prompt"}
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key, timeout=timeout_sec)
+    last_error = ""
+    for attempt in range(1, max(1, retry_count) + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+                ],
+            )
+            content = response.choices[0].message.content or ""
+            parsed = _extract_json_object(content)
+            if parsed is None:
+                last_error = f"response was not valid JSON: {content[:500]}"
+                continue
+            return _normalize_ai_post_review(parsed, model=model, image_mode="api_numeric_fallback")
+        except Exception as exc:  # noqa: BLE001
+            last_error = f"{type(exc).__name__}: {exc}"
+            continue
+    write_ai_error_log(
+        base_dir,
+        "ai_post_review_error",
+        "\n".join(
+            [
+                f"signal_id={signal_id}",
+                "provider=api_fallback",
+                f"model={model}",
+                f"timeout_sec={timeout_sec}",
+                f"retry_count={retry_count}",
+                f"last_attempt={attempt}",
+                f"error={last_error}",
+            ]
+        ),
+    )
+    return None
+
+
+def _request_ai_post_review(
+    *,
+    base_dir: Path,
+    cfg: Any,
+    signal_id: str,
+    signal_row: dict[str, Any],
+    outcome_row: dict[str, Any],
+    auto_eval_summary: str,
+) -> tuple[dict[str, str] | None, bool]:
+    cli_command, resolved_fallback = _resolve_ai_cli_command(base_dir, cfg)
+    payload = {
+        "task": AI_POST_REVIEW_TASK,
+        "model": _effective_codex_cli_model(str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip()),
+        "system_prompt": (BASE_DIR / "prompts" / "post_review_prompt.md").read_text(encoding="utf-8"),
+        "signal": signal_row,
+        "outcome": outcome_row,
+        "auto_eval_summary": auto_eval_summary,
+    }
+    if not cli_command:
+        configured = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")).strip()
+        write_ai_error_log(
+            base_dir,
+            "ai_post_review_error",
+            f"provider=cli\nreason=AI_ADVICE_CLI_COMMAND is unresolved\nconfigured={configured or '<empty>'}",
+        )
+        api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+        if api_review is not None:
+            return api_review, resolved_fallback
+        return None, resolved_fallback
+    model = _effective_codex_cli_model(str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")).strip())
+    timeout_sec = int(getattr(cfg, "AI_TIMEOUT_SEC", 180))
+    save_chart_snapshots = bool(getattr(cfg, "AI_POST_REVIEW_SAVE_CHART_SNAPSHOTS", True))
+    persist_dir = _ai_post_review_chart_dir(base_dir) if save_chart_snapshots else None
+    with tempfile.TemporaryDirectory(prefix="btc-post-review-") as tmpdir:
+        tmp_path = Path(tmpdir)
+        image_path = _build_review_chart_svg_path(base_dir, signal_id, tmp_path, persist_dir=persist_dir)
+        try:
+            if image_path is not None:
+                with_image = dict(payload)
+                with_image["image_paths"] = [str(image_path)]
+                parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=with_image)
+                return _normalize_ai_post_review(parsed, model=model, image_mode="price_map_svg"), resolved_fallback
+            parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
+            return _normalize_ai_post_review(parsed, model=model, image_mode="no_chart"), resolved_fallback
+        except Exception as exc:  # noqa: BLE001
+            if image_path is not None:
+                try:
+                    parsed = run_cli_json(command=cli_command, timeout_sec=timeout_sec, payload=payload)
+                    return _normalize_ai_post_review(parsed, model=model, image_mode="numeric_only_fallback"), resolved_fallback
+                except Exception as fallback_exc:  # noqa: BLE001
+                    api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+                    if api_review is not None:
+                        return api_review, resolved_fallback
+                    write_ai_error_log(
+                        base_dir,
+                        "ai_post_review_error",
+                        f"signal_id={signal_id}\nimage_error={type(exc).__name__}: {exc}\nfallback_error={type(fallback_exc).__name__}: {fallback_exc}",
+                    )
+                    return None, resolved_fallback
+            api_review = _request_ai_post_review_via_api(base_dir=base_dir, cfg=cfg, signal_id=signal_id, payload=payload)
+            if api_review is not None:
+                return api_review, resolved_fallback
+            write_ai_error_log(
+                base_dir,
+                "ai_post_review_error",
+                f"signal_id={signal_id}\nerror={type(exc).__name__}: {exc}",
+            )
+            return None, resolved_fallback
+
+
+def _write_ai_post_review_snapshot(base_dir: Path, signal_id: str, row: dict[str, str]) -> Path:
+    out_path = _ai_post_review_dir(base_dir) / f"{signal_id}.json"
+    _ensure_parent(out_path)
+    payload = {
+        "signal_id": signal_id,
+        "saved_at_utc": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "review": row,
+    }
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return out_path
+
+
+def _load_ai_post_review_snapshot(base_dir: Path, signal_id: str) -> dict[str, str] | None:
+    path = _ai_post_review_dir(base_dir) / f"{signal_id}.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    review = payload.get("review")
+    if not isinstance(review, dict):
+        return None
+    return {str(key): str(value or "") for key, value in review.items()}
+
+
+def _reviewed_on_jst(row: dict[str, str], day_key: str) -> bool:
+    reviewed_at = _parse_dt(str(row.get("reviewed_at_utc", "")).strip())
+    if reviewed_at is None:
+        return False
+    return reviewed_at.astimezone(JST).strftime("%Y-%m-%d") == day_key
+
+
+def _effective_codex_cli_model(requested_model: str) -> str:
+    requested = str(requested_model or "").strip()
+    if "codex" in requested.lower():
+        return requested
+    return os.environ.get("CODEX_CLI_DEFAULT_MODEL", "").strip() or "gpt-5.3-codex"
+
+
+def _is_true_like(value: Any) -> bool:
+    return str(value or "").strip().lower() in _TRUE_LIKE
+
+
+def _api_usage_allowed(cfg: Any | None = None) -> bool:
+    if cfg is not None and hasattr(cfg, "AI_API_USAGE_ALLOWED"):
+        return _is_true_like(getattr(cfg, "AI_API_USAGE_ALLOWED"))
+    return _is_true_like(os.environ.get("AI_API_USAGE_ALLOWED", ""))
+
+
+def _resolve_ai_cli_command(base_dir: Path, cfg: Any) -> tuple[str, bool]:
+    raw = str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "") or "").strip()
+    if not raw:
+        return "", False
+    if "/" not in raw and "\\" not in raw:
+        return raw, False
+    configured_path = Path(raw).expanduser()
+    if configured_path.exists():
+        return str(configured_path), False
+    candidate = base_dir / "tools" / configured_path.name
+    if configured_path.name == "codex_cli_wrapper.py" and candidate.exists():
+        return str(candidate), True
+    return "", False
+
+
+def _normalize_ai_review_row(row: dict[str, Any]) -> dict[str, str]:
+    normalized = {str(key): str(value or "") for key, value in row.items()}
+    if _review_source_value(normalized) != "ai":
+        return normalized
+    normalized["review_source"] = "ai"
+    normalized["review_action_class"] = _infer_review_action_class(normalized)
+    normalized["review_priority"] = _infer_review_priority(normalized, normalized["review_action_class"])
+    normalized["next_action"] = _default_next_action(normalized, normalized["review_action_class"])
+    normalized["review_variant"] = AI_POST_REVIEW_VARIANT
+    return normalized
+
+
+def _latest_reviewed_at(rows: list[dict[str, str]], *, review_source: str = "ai") -> str:
+    candidates = [
+        str(row.get("reviewed_at_utc", "")).strip()
+        for row in rows
+        if _review_source_value(row) == review_source and str(row.get("reviewed_at_utc", "")).strip()
+    ]
+    return max(candidates, default="")
+
+
+def _latest_ai_error_summary(base_dir: Path, *, since_dt: datetime | None = None) -> tuple[str, int]:
+    error_dir = base_dir / "logs" / "errors"
+    if not error_dir.exists():
+        return "", 0
+    latest_ts = ""
+    count = 0
+    for path in sorted(error_dir.glob("*_ai_post_review_error.log")):
+        try:
+            modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            continue
+        modified_iso = modified.isoformat().replace("+00:00", "Z")
+        if modified_iso > latest_ts:
+            latest_ts = modified_iso
+        if since_dt is None or modified >= since_dt:
+            count += 1
+    return latest_ts, count
+
+
+def _load_latest_ai_sync_stats(base_dir: Path) -> dict[str, int]:
+    runtime_path = base_dir / "logs" / "runtime" / "ai_post_reviews.out"
+    if not runtime_path.exists():
+        return {}
+    try:
+        lines = runtime_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    latest_block: dict[str, int] = {}
+    current_block: dict[str, int] = {}
+    numeric_keys = {
+        "eligible",
+        "reused",
+        "created",
+        "request_failed",
+        "skipped_existing_ai",
+        "skipped_human_override",
+        "skipped_daily_cap",
+        "skipped_priority_filter",
+        "resolved_cli_fallback",
+        "daily_cap",
+        "stopped_after_failures",
+        "already_reviewed_today",
+        "backlog_pending",
+    }
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("reviews_path="):
+            if current_block:
+                latest_block = current_block
+            current_block = {}
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key not in numeric_keys:
+            continue
+        try:
+            current_block[key] = int(value)
+        except ValueError:
+            continue
+    if current_block:
+        latest_block = current_block
+    return latest_block
+
+
+def _ai_review_health_summary(
+    *,
+    base_dir: Path,
+    outcomes_path: Path,
+    reviews_path: Path,
+    trades_path: Path,
+    sync_stats: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    try:
+        cfg = load_config(base_dir)
+        main_only = bool(getattr(cfg, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY", True))
+        configured_daily_cap = int(getattr(cfg, "AI_POST_REVIEW_DAILY_MAX", 2))
+    except Exception:  # noqa: BLE001
+        cfg = None
+        main_only = True
+        configured_daily_cap = 2
+    outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
+    reviews = [row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")]
+    review_map = {row.get("signal_id", ""): row for row in reviews if row.get("signal_id", "")}
+    eligible_rows = []
+    for trade in _load_csv_rows(trades_path):
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id or not _parse_bool(trade.get("was_notified")):
+            continue
+        if main_only and _normalized_notification_kind(trade) != "main":
+            continue
+        outcome = outcomes.get(signal_id, {})
+        if str(outcome.get("evaluation_status", "")).strip() != "complete":
+            continue
+        eligible_rows.append(trade)
+    eligible = len(eligible_rows)
+    ai_count = 0
+    human_override_count = 0
+    unresolved = 0
+    for trade in eligible_rows:
+        current = review_map.get(str(trade.get("signal_id", "")).strip(), {})
+        source = _review_source_value(current)
+        if source == "ai":
+            ai_count += 1
+        elif source == "human_override":
+            human_override_count += 1
+        else:
+            unresolved += 1
+    last_ai_review_at = _latest_reviewed_at(reviews, review_source="ai")
+    last_ai_review_dt = _parse_dt(last_ai_review_at) if last_ai_review_at else None
+    last_ai_error_at, request_failed = _latest_ai_error_summary(base_dir, since_dt=last_ai_review_dt)
+    resolved_cli_fallback = 0
+    created = 0
+    reused = 0
+    daily_cap = configured_daily_cap
+    latest_runtime_stats = _load_latest_ai_sync_stats(base_dir)
+    if sync_stats:
+        created = int(sync_stats.get("created", 0))
+        reused = int(sync_stats.get("reused", 0))
+        request_failed = max(request_failed, int(sync_stats.get("request_failed", 0)))
+        resolved_cli_fallback = int(sync_stats.get("resolved_cli_fallback", 0))
+        daily_cap = int(sync_stats.get("daily_cap", daily_cap))
+    if latest_runtime_stats and created == 0 and reused == 0 and resolved_cli_fallback == 0 and (
+        request_failed == 0 or int(latest_runtime_stats.get("request_failed", 0)) > request_failed
+    ):
+        created = int(latest_runtime_stats.get("created", created))
+        reused = int(latest_runtime_stats.get("reused", reused))
+        request_failed = max(request_failed, int(latest_runtime_stats.get("request_failed", 0)))
+        resolved_cli_fallback = int(latest_runtime_stats.get("resolved_cli_fallback", resolved_cli_fallback))
+        daily_cap = int(latest_runtime_stats.get("daily_cap", daily_cap))
+    status = "healthy"
+    if unresolved > 0:
+        status = "backlog"
+    last_error_dt = _parse_dt(last_ai_error_at) if last_ai_error_at else None
+    if unresolved > 0 and request_failed > 0 and (last_ai_review_dt is None or (last_error_dt and last_error_dt >= last_ai_review_dt)):
+        status = "stalled"
+    return {
+        "status": status,
+        "eligible": eligible,
+        "ai_reviewed": ai_count,
+        "human_override": human_override_count,
+        "backlog_pending": unresolved,
+        "created": created,
+        "reused": reused,
+        "request_failed": request_failed,
+        "resolved_cli_fallback": resolved_cli_fallback,
+        "daily_cap": daily_cap,
+        "last_ai_review_at": last_ai_review_at or "未作成",
+        "last_ai_error_at": last_ai_error_at or "なし",
+    }
+
+
+def _ai_review_status_label(summary: dict[str, Any]) -> str:
+    status = str(summary.get("status", "")).strip()
+    if status == "stalled":
+        return "停止中"
+    if status == "backlog":
+        return "backlogあり"
+    return "正常"
+
+
+def _backfill_snapshot_backup_dir(base_dir: Path) -> Path:
+    return base_dir / "logs" / "review"
+
+
+def _backup_ai_review_artifacts(base_dir: Path, reviews_path: Path) -> dict[str, str]:
+    timestamp = datetime.now(tz=JST).strftime("%Y%m%d_%H%M%S")
+    backup_paths: dict[str, str] = {}
+    if reviews_path.exists():
+        csv_backup = reviews_path.with_name(f"{reviews_path.stem}_backfill_{timestamp}{reviews_path.suffix}")
+        _ensure_parent(csv_backup)
+        shutil.copy2(reviews_path, csv_backup)
+        backup_paths["reviews_csv"] = str(csv_backup)
+    snapshot_dir = _ai_post_review_dir(base_dir)
+    if snapshot_dir.exists():
+        snapshot_backup = _backfill_snapshot_backup_dir(base_dir) / f"{snapshot_dir.name}_backfill_{timestamp}"
+        if snapshot_backup.exists():
+            shutil.rmtree(snapshot_backup)
+        shutil.copytree(snapshot_dir, snapshot_backup)
+        backup_paths["snapshot_dir"] = str(snapshot_backup)
+    return backup_paths
+
+
+def backfill_ai_post_review_v2(
+    *,
+    base_dir: Path,
+    review_note_path: Path = DEFAULT_REVIEW_NOTE,
+    reviews_path: Path | None = None,
+) -> dict[str, Any]:
+    reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    rows = _load_csv_rows(reviews_path)
+    if not rows:
+        return {"updated_reviews": 0, "updated_snapshots": 0, "backup_paths": {}}
+    updated_rows: list[dict[str, str]] = []
+    changed_signal_ids: list[str] = []
+    for row in rows:
+        normalized = _normalize_ai_review_row(row)
+        updated_rows.append(normalized)
+        if normalized != {str(key): str(value or "") for key, value in row.items()}:
+            changed_signal_ids.append(str(normalized.get("signal_id", "")).strip())
+    updated_snapshots = 0
+    backup_paths: dict[str, str] = {}
+    if changed_signal_ids:
+        backup_paths = _backup_ai_review_artifacts(base_dir, reviews_path)
+        _write_csv_rows(reviews_path, USER_REVIEW_HEADER, updated_rows)
+        for signal_id in changed_signal_ids:
+            row = next((candidate for candidate in updated_rows if str(candidate.get("signal_id", "")).strip() == signal_id), None)
+            if row is None:
+                continue
+            _write_ai_post_review_snapshot(base_dir, signal_id, row)
+            updated_snapshots += 1
+        export_review_queue(base_dir=base_dir, review_note_path=review_note_path, reviews_path=reviews_path)
+    return {
+        "updated_reviews": len(changed_signal_ids),
+        "updated_snapshots": updated_snapshots,
+        "backup_paths": backup_paths,
+    }
+
+
+def _normalized_notification_kind(trade: dict[str, str]) -> str:
+    notification_kind = str(trade.get("notification_kind", "")).strip().lower()
+    if notification_kind:
+        return notification_kind
+    if _parse_bool(trade.get("was_notified")):
+        return "main"
+    return "none"
+
+
+def _ai_post_review_priority(trade: dict[str, str]) -> tuple[int, int, str]:
+    notification_kind = _normalized_notification_kind(trade)
+    signal_tier = str(trade.get("signal_tier", "")).strip()
+    main_rank = 0 if notification_kind == "main" else 1
+    tier_rank = {"strong_ai_confirmed": 0, "strong_machine": 1, "normal": 2}.get(signal_tier, 3)
+    timestamp = str(trade.get("timestamp_jst", "")).strip()
+    inverted_ts = "".join(chr(255 - ord(ch)) for ch in timestamp)
+    return (main_rank, tier_rank, inverted_ts)
+
+
+def _load_review_state_rows(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    rows = payload.get("rows", [])
+    if not isinstance(rows, list):
+        return []
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        normalized.append({str(key): str(value or "") for key, value in row.items()})
+    return normalized
+
+
+def _write_review_state(path: Path, rows: list[dict[str, Any]]) -> Path:
+    _ensure_parent(path)
+    payload = {
+        "version": REVIEW_STATE_VERSION,
+        "saved_at": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "rows": rows,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
@@ -618,6 +3590,7 @@ def evaluate_trade_row(trade_row: dict[str, str], future_df: pd.DataFrame) -> di
         "direction_outcome": direction_outcome,
         "entry_outcome": _evaluate_entry(prelabel, signal_mfe_4h, signal_mae_4h),
         "wait_outcome": _evaluate_wait(prelabel, bias, base_price, atr_value, future_4h),
+        "misleading_entry_like_wording": "",
         "skip_outcome": _evaluate_skip(prelabel, signal_mfe_4h, signal_mae_4h),
         "tp1_hit_first": tp1_hit_first,
         "outcome": outcome,
@@ -700,26 +3673,59 @@ def _load_review_note_rows(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def _render_review_note(rows: list[dict[str, str]]) -> str:
+def _render_review_note(rows: list[dict[str, str]], ai_health_summary: dict[str, Any] | None = None) -> str:
+    total = len(rows)
+    human_rows = [row for row in rows if _review_source_value(row) == "human_override"]
+    ai_rows = [row for row in rows if _review_source_value(row) == "ai"]
+    latest_review_saved = max(
+        (
+            str(row.get("reviewed_at_utc", "")).strip()
+            for row in rows
+            if str(row.get("reviewed_at_utc", "")).strip()
+        ),
+        default="未保存",
+    )
+    latest_regenerated = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    form_link = f"[評価シート入力フォーム](file://{DEFAULT_REVIEW_FORM})"
     lines = [
         "# 通知評価シート",
         "",
-        "このノートは、通知済みシグナルを翌日まとめてレビューするための専用ノートです。",
+        "このノートは、AI事後評価の進捗を確認し、必要時だけ人が上書きするための進捗メモです。",
         "",
-        "## 入力ルール",
-        "- `user_verdict`: useful_entry / useful_wait / useful_skip / too_early / too_late / low_value",
-        "- `would_trade`: yes / no / conditional",
-        "- `actual_move_driver`: technical / news / macro / unknown",
-        "- `logic_validated` は自動計算欄です。手入力しなくて大丈夫です。",
-        "- `review_status`: pending / done",
-        "- `memo` では `|` を使わないでください。",
+        "## 進捗",
+        f"- 評価対象は `{REVIEW_START_CUTOFF_JST}` 以降の通知だけです。",
+        f"- 総件数: {total}",
+        f"- AI評価済み: {len(ai_rows)}",
+        f"- 人が上書き済み: {len(human_rows)}",
+        f"- 最終レビュー保存: {latest_review_saved}",
+        f"- 最終再生成: {latest_regenerated}",
+        (
+            f"- AI自動評価状態: {_ai_review_status_label(ai_health_summary)}"
+            f" (候補残 {int(ai_health_summary.get('backlog_pending', 0))}件 / 最終AI評価 {ai_health_summary.get('last_ai_review_at', '未作成')} / human_override {int(ai_health_summary.get('human_override', 0))}件)"
+            if ai_health_summary
+            else "- AI自動評価状態: 未集計"
+        ),
+        f"- 入力画面: {form_link}",
         "",
-        "## レビュー一覧",
-        f"| {' | '.join(REVIEW_NOTE_COLUMNS)} |",
-        f"| {' | '.join(['---'] * len(REVIEW_NOTE_COLUMNS))} |",
+        "## 人が上書きした通知",
     ]
-    for row in rows:
-        lines.append("| " + " | ".join(_escape_md_cell(row.get(column, "")) for column in REVIEW_NOTE_COLUMNS) + " |")
+    if human_rows:
+        for row in human_rows[:5]:
+            lines.append(
+                "- "
+                + " / ".join(
+                    part
+                    for part in (
+                        _format_time_badge(str(row.get("timestamp_jst", ""))),
+                        str(row.get("subject", "")).strip(),
+                        USER_VERDICT_LABELS.get(str(row.get("user_verdict", "")).strip(), str(row.get("user_verdict", "")).strip()),
+                        f"役立ち度 {row.get('usefulness_1to5', '')}".strip(),
+                    )
+                    if part
+                )
+            )
+    else:
+        lines.append("- まだ human_override はありません。通常は AI 事後評価をそのまま使います。")
     lines.append("")
     return "\n".join(lines)
 
@@ -728,30 +3734,287 @@ def _review_form_path(review_note_path: Path) -> Path:
     return review_note_path.with_name("評価シート入力フォーム.html")
 
 
+def _pending_auto_eval_summary(trade: dict[str, str]) -> str:
+    parts = ["事後評価待ち"]
+    bias = str(trade.get("bias", "")).strip()
+    prelabel = str(trade.get("prelabel", "")).strip()
+    setup = str(trade.get("primary_setup_status", "")).strip()
+    tier = str(trade.get("signal_tier", "")).strip()
+    if bias:
+        parts.append(f"bias:{bias}")
+    if prelabel:
+        parts.append(f"prelabel:{prelabel}")
+    if setup:
+        parts.append(f"setup:{setup}")
+    if tier:
+        parts.append(f"tier:{tier}")
+    return " / ".join(parts)
+
+
+def _describe_code(value: str, labels: dict[str, str]) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "未記録"
+    return labels.get(raw, f"{raw} / 未定義コード")
+
+
+def _parse_maybe_json_array(value: str) -> list[str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    if raw.startswith("["):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _describe_notify_reason(value: str) -> str:
+    items = _parse_maybe_json_array(value)
+    if not items:
+        return "未記録"
+    return " / ".join(_describe_code(item, NOTIFY_REASON_LABELS) for item in items)
+
+
+def _format_time_badge(timestamp_jst: str) -> str:
+    raw = str(timestamp_jst or "").strip()
+    if len(raw) >= 16 and "T" in raw:
+        return raw[5:10].replace("-", "/") + " " + raw[11:16]
+    return raw or "--:--"
+
+
+def _is_review_target(timestamp_jst: str) -> bool:
+    cutoff = _parse_dt(REVIEW_START_CUTOFF_JST)
+    current = _parse_dt(str(timestamp_jst or "").strip())
+    if cutoff is None or current is None:
+        return False
+    return current >= cutoff
+
+
+def _describe_auto_eval_summary(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "未記録"
+    return (
+        raw.replace("bias:long", f"bias:{BIAS_LABELS['long']}")
+        .replace("bias:short", f"bias:{BIAS_LABELS['short']}")
+        .replace("bias:wait", f"bias:{BIAS_LABELS['wait']}")
+        .replace("prelabel:ENTRY_OK", f"prelabel:{PRELABEL_LABELS['ENTRY_OK']}")
+        .replace("prelabel:RISKY_ENTRY", f"prelabel:{PRELABEL_LABELS['RISKY_ENTRY']}")
+        .replace("prelabel:SWEEP_WAIT", f"prelabel:{PRELABEL_LABELS['SWEEP_WAIT']}")
+        .replace("prelabel:NO_TRADE_CANDIDATE", f"prelabel:{PRELABEL_LABELS['NO_TRADE_CANDIDATE']}")
+        .replace("setup:ready", f"setup:{SETUP_LABELS['ready']}")
+        .replace("setup:watch", f"setup:{SETUP_LABELS['watch']}")
+        .replace("setup:invalid", f"setup:{SETUP_LABELS['invalid']}")
+        .replace("setup:none", f"setup:{SETUP_LABELS['none']}")
+        .replace("tier:normal", f"tier:{TIER_LABELS['normal']}")
+        .replace("tier:strong_machine", f"tier:{TIER_LABELS['strong_machine']}")
+        .replace("tier:strong_ai_confirmed", f"tier:{TIER_LABELS['strong_ai_confirmed']}")
+    )
+
+
+def _render_select_html(
+    option_list: list[dict[str, str]],
+    value: str,
+    row_index: int,
+    key: str,
+) -> str:
+    selected_value = str(value or "")
+    options_html: list[str] = []
+    for item in option_list:
+        item_value = str(item.get("value", ""))
+        selected = ' selected="selected"' if item_value == selected_value else ""
+        options_html.append(
+            f'<option value="{html.escape(item_value, quote=True)}"{selected}>{html.escape(str(item.get("label", "")))}</option>'
+        )
+    return (
+        f'<select data-row-index="{row_index}" data-key="{html.escape(key, quote=True)}">'
+        + "".join(options_html)
+        + "</select>"
+    )
+
+
+def _metric_hint(metric_key: str, value: Any) -> str:
+    score = _parse_float(value, -1.0)
+    if score < 0:
+        return "未記録"
+    if metric_key == "direction_strength":
+        if score >= 70:
+            return "強い"
+        if score >= 40:
+            return "中くらい"
+        return "弱い"
+    if metric_key == "execution_readiness":
+        if score >= 70:
+            return "入りやすい"
+        if score >= 40:
+            return "条件つき"
+        return "まだ入りにくい"
+    if score >= 70:
+        return "強く待ちたい"
+    if score >= 40:
+        return "少し待ちたい"
+    return "待機圧力は低い"
+
+
+def _card_is_ready(row: dict[str, str]) -> bool:
+    return all(str(row.get(key, "")).strip() for key in ("user_verdict", "would_trade", "usefulness_1to5"))
+
+
+def _detail_open(row: dict[str, str]) -> bool:
+    return any(
+        str(row.get(key, "")).strip()
+        for key in (
+            "user_verdict",
+            "would_trade",
+            "usefulness_1to5",
+            "memo",
+            "actual_move_driver",
+            "misleading_entry_like_wording",
+            "logic_validated",
+        )
+    )
+
+
+def _render_static_review_cards(rows: list[dict[str, str]], options_payload: dict[str, list[dict[str, str]]]) -> str:
+    del options_payload
+    cards: list[str] = []
+    for index, row in enumerate(rows, start=1):
+        time_badge = _format_time_badge(str(row.get("timestamp_jst", "")))
+        status_done = str(row.get("review_status", "pending")).strip() == "done"
+        verdict_buttons = "".join(
+            f'<button type="button" class="choice-pill{" active" if item["value"] == str(row.get("user_verdict", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_VERDICT_OPTIONS
+            if item["value"]
+        )
+        trade_buttons = "".join(
+            f'<button type="button" class="choice-pill{" active" if item["value"] == str(row.get("would_trade", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_WOULD_TRADE_OPTIONS
+            if item["value"]
+        )
+        usefulness_buttons = "".join(
+            f'<button type="button" class="score-pill{" active" if item["value"] == str(row.get("usefulness_1to5", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_USEFULNESS_OPTIONS
+            if item["value"]
+        )
+        move_driver_buttons = "".join(
+            f'<button type="button" class="choice-pill{" active" if item["value"] == str(row.get("actual_move_driver", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_MOVE_DRIVER_OPTIONS
+            if item["value"]
+        )
+        misleading_buttons = "".join(
+            f'<button type="button" class="choice-pill{" active" if item["value"] == str(row.get("misleading_entry_like_wording", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_MISLEADING_ENTRY_OPTIONS
+            if item["value"]
+        )
+        memo_buttons = "".join(
+            f'<button type="button" class="memo-chip{" active" if item["value"] == str(row.get("memo", "")) else ""}">{html.escape(str(item["label"]))}</button>'
+            for item in FORM_MEMO_PRESET_OPTIONS
+            if item["value"]
+        )
+        logic_validated = str(row.get("logic_validated", "")).strip()
+        logic_validated_label = {
+            "true": "根拠整合: 合っていた",
+            "false": "根拠整合: ずれていた",
+        }.get(logic_validated, "根拠整合: 未判定")
+        metric_cards = "".join(
+            '<div class="metric-card">'
+            f'<div class="metric-top"><span class="context-label">{html.escape(label)}</span><span class="metric-hint">{html.escape(_metric_hint(key, value))}</span></div>'
+            f'<div class="metric-value">{html.escape(str(value or "未記録"))}</div>'
+            "</div>"
+            for key, label, value in (
+                ("direction_strength", "方向の強さ", str(row.get("confidence_direction_shadow", "")) or "未記録"),
+                ("execution_readiness", "実行しやすさ", str(row.get("confidence_execution_shadow", "")) or "未記録"),
+                ("wait_pressure", "待機圧力", str(row.get("confidence_wait_shadow", "")) or "未記録"),
+            )
+        )
+        source_badge, source_detail = _review_source_badge(row)
+        source_detail_chip = f'<span class="chip">評価詳細: {html.escape(source_detail)}</span>' if source_detail else ""
+        workflow_chips = "".join(
+            f'<span class="workflow-chip {html.escape(step_class)}"><span>{html.escape(step_label)}</span><strong>{html.escape(step_status)}</strong></span>'
+            for step_label, step_status, step_class in _review_workflow_steps(row)
+        )
+        cards.append(
+            '<div class="card">'
+            f'<div class="card-top"><h3>通知 {index}</h3><div class="card-top-right"><div class="workflow-badges">{workflow_chips}</div><div class="time-badge">{html.escape(time_badge)}</div></div></div>'
+            f'<div class="meta">{html.escape(str(row.get("timestamp_jst", "")))} / {html.escape(str(row.get("signal_id", "")))}</div>'
+            f'<div class="subject">{html.escape(str(row.get("subject", "")))}</div>'
+            '<div class="summary-row">'
+            f'<span class="source-chip {html.escape(_review_source_badge_class(row))}">{html.escape(source_badge)}</span>'
+            f'{source_detail_chip}'
+            f'<span class="chip">方向感: {html.escape(_describe_code(str(row.get("bias", "")), BIAS_LABELS))}</span>'
+            f'<span class="chip">位置評価: {html.escape(_describe_code(str(row.get("prelabel", "")), PRELABEL_LABELS))}</span>'
+            f'<span class="status-chip{" done" if status_done else ""}">{"完了" if status_done else "未完了"}</span>'
+            "</div>"
+            '<div class="primary-question">'
+            '<div class="section-title">この通知、役に立った？</div>'
+            f'<div class="choice-row">{verdict_buttons}</div>'
+            "</div>"
+            '<div class="detail-panel">'
+            '<div class="section-title">判断を残す</div>'
+            '<div class="compact-field"><div class="field-title">自分ならどうする？</div>'
+            f'<div class="choice-row">{trade_buttons}</div></div>'
+            '<div class="compact-field"><div class="field-title">役立ち度 1-5</div>'
+            f'<div class="choice-row">{usefulness_buttons}</div></div>'
+            f'<button type="button" class="complete-button{" ready" if _card_is_ready(row) else ""}">{"未完了に戻す" if status_done else "完了にする"}</button>'
+            f'<details class="detail-box"{" open" if _detail_open(row) else ""}>'
+            '<summary>詳細を見る</summary>'
+            f'<div class="metric-grid">{metric_cards}</div>'
+            f'<div class="detail-text"><strong>通知理由:</strong> {html.escape(_describe_notify_reason(str(row.get("notify_reason", ""))))}</div>'
+            f'<div class="detail-text"><strong>自動評価:</strong> {html.escape(_describe_auto_eval_summary(str(row.get("auto_eval_summary", ""))))}</div>'
+            '<div class="compact-field"><div class="field-title">値動きの主因</div>'
+            f'<div class="choice-row">{move_driver_buttons}</div></div>'
+            '<div class="compact-field"><div class="field-title">エントリー寄りに誤読した？</div>'
+            f'<div class="choice-row">{misleading_buttons}</div></div>'
+            f'<div class="detail-text"><strong>{html.escape(logic_validated_label)}</strong></div>'
+            '<div class="compact-field"><div class="field-title">一言メモ</div>'
+            f'<div class="memo-chip-row">{memo_buttons}</div>'
+            f'<textarea class="memo-input" rows="3">{html.escape(str(row.get("memo", "")))}</textarea></div>'
+            '</details>'
+            '</div>'
+            "</div>"
+        )
+    return "".join(cards)
+
+
 def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> str:
-    page_title = "通知評価シート入力フォーム"
+    page_title = "AI事後評価の確認・修正フォーム"
     options_payload = {
         "verdict": FORM_VERDICT_OPTIONS,
         "usefulness": FORM_USEFULNESS_OPTIONS,
         "wouldTrade": FORM_WOULD_TRADE_OPTIONS,
         "moveDriver": FORM_MOVE_DRIVER_OPTIONS,
-        "reviewStatus": FORM_REVIEW_STATUS_OPTIONS,
+        "misleadingEntry": FORM_MISLEADING_ENTRY_OPTIONS,
         "memoPreset": FORM_MEMO_PRESET_OPTIONS,
     }
     rows_payload = []
     for row in rows:
         row_copy = {column: str(row.get(column, "")) for column in REVIEW_NOTE_COLUMNS}
-        row_copy["memo_preset"] = row_copy["memo"] if row_copy["memo"] in {
-            item["value"] for item in FORM_MEMO_PRESET_OPTIONS if item["value"]
-        } else ""
+        for extra_key in (
+            "bias",
+            "prelabel",
+            "primary_setup_status",
+            "signal_tier",
+            "notify_reason",
+            "data_quality_flag",
+            "evaluation_status",
+            "confidence_direction_shadow",
+            "confidence_execution_shadow",
+            "confidence_wait_shadow",
+        ):
+            row_copy[extra_key] = str(row.get(extra_key, ""))
         rows_payload.append(row_copy)
 
     note_name = review_note_path.name
+    note_key = str(review_note_path)
     header_text = _render_review_note([])
+    initial_cards_html = _render_static_review_cards(rows_payload, options_payload)
     intro = (
-        "この画面は選択式でレビューを付けるための入力フォームです。"
-        " 入力後に「Markdownをコピー」または「Markdownを保存」で "
-        f"{note_name} を更新できます。"
+        "この画面は、AI が付けた事後評価を確認し、必要な通知だけ人が上書きするための入力フォームです。"
+        " 日常運用では AI 評価を主系として使い、保存した行だけ `human_override` として以後 AI で上書きしません。"
     )
 
     return f"""<!doctype html>
@@ -769,6 +4032,12 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       --muted: #6b7280;
       --line: #d1d5db;
       --accent: #1d4ed8;
+      --accent-soft: #dbeafe;
+      --chip: #eef2ff;
+      --chip-text: #334155;
+      --hero-bg: linear-gradient(135deg, #eff6ff 0%, #f8fafc 55%, #ecfeff 100%);
+      --soft-green: #dcfce7;
+      --soft-yellow: #fef3c7;
     }}
     body {{
       margin: 0;
@@ -790,6 +4059,9 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     }}
+    .hero {{
+      background: var(--hero-bg);
+    }}
     h1, h2, h3 {{
       margin: 0 0 10px;
     }}
@@ -797,11 +4069,70 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
       color: var(--muted);
       font-size: 14px;
     }}
+    .hero-grid {{
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }}
+    .hero-panel {{
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      padding: 14px;
+    }}
+    .hero-panel h2 {{
+      font-size: 15px;
+      margin-bottom: 8px;
+    }}
+    .hero-panel ul {{
+      margin: 0;
+      padding-left: 18px;
+    }}
+    .hero-panel li {{
+      margin-bottom: 6px;
+      color: var(--chip-text);
+    }}
     .toolbar {{
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       margin-top: 14px;
+      align-items: center;
+    }}
+    .progress-chip {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(255, 255, 255, 0.84);
+      color: var(--chip-text);
+      font-size: 13px;
+      padding: 8px 12px;
+    }}
+    .draft-status {{
+      font-size: 13px;
+      color: var(--muted);
+    }}
+    .env-alert {{
+      margin-top: 14px;
+      border-radius: 12px;
+      padding: 14px 16px;
+      border: 1px solid #f59e0b;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: 14px;
+      font-weight: 700;
+    }}
+    .env-alert.safe {{
+      border-color: #86efac;
+      background: #ecfdf5;
+      color: #166534;
+    }}
+    .env-alert strong {{
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
     }}
     button {{
       border: 0;
@@ -815,206 +4146,1038 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
     button.secondary {{
       background: #475569;
     }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-top: 12px;
-    }}
-    label {{
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }}
-    select {{
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px 12px;
-      background: #fff;
-      color: #111827;
-      font-size: 14px;
+    button.secondary.active-toggle {{
+      background: #0f766e;
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
     }}
     .meta {{
       font-size: 14px;
       color: var(--muted);
     }}
+    .card-top {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }}
+    .card-top-right {{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }}
+    .workflow-badges {{
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }}
+    .workflow-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+    }}
+    .workflow-chip strong {{
+      font-weight: 800;
+    }}
+    .workflow-chip.done {{
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #166534;
+    }}
+    .workflow-chip.waiting {{
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
+    }}
+    .workflow-chip.idle {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }}
+    .time-badge {{
+      min-width: 84px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      font-size: 24px;
+      line-height: 1;
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: 0.04em;
+    }}
     .subject {{
       font-weight: 700;
-      margin: 6px 0 2px;
+      margin: 8px 0 2px;
+      font-size: 20px;
     }}
-    .preview {{
-      width: 100%;
-      min-height: 280px;
+    .summary-row, .choice-row, .memo-chip-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }}
+    .summary-row {{
+      margin: 12px 0 4px;
+    }}
+    .chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--chip-text);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #cbd5e1;
+    }}
+    .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }}
+    .status-chip.done {{
+      background: var(--soft-green);
+      border-color: #86efac;
+      color: #166534;
+    }}
+    .source-chip {{
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      font-size: 12px;
+      font-weight: 800;
+    }}
+    .source-chip.ai {{
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }}
+    .source-chip.human_override {{
+      background: #fef3c7;
+      border-color: #fcd34d;
+      color: #92400e;
+    }}
+    .source-chip.pending {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }}
+    .source-chip.awaiting_outcome {{
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }}
+    .source-chip.awaiting_ai {{
+      background: #ede9fe;
+      border-color: #c4b5fd;
+      color: #6d28d9;
+    }}
+    .primary-question, .detail-panel {{
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.96);
+    }}
+    .section-title {{
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }}
+    .field-title {{
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }}
+    .choice-pill, .score-pill, .memo-chip {{
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 14px;
+    }}
+    .choice-pill.active, .score-pill.active {{
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+    }}
+    .memo-chip.active {{
+      background: var(--soft-yellow);
+      border-color: #f59e0b;
+      color: #92400e;
+    }}
+    .compact-field {{
+      margin-top: 14px;
+    }}
+    .complete-button {{
+      margin-top: 14px;
+      background: #475569;
+    }}
+    .complete-button.ready {{
+      background: #0f766e;
+    }}
+    .detail-box {{
+      margin-top: 14px;
+      border-top: 1px dashed var(--line);
+      padding-top: 14px;
+    }}
+    .detail-box summary {{
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--chip-text);
+    }}
+    .metric-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }}
+    .metric-card {{
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 12px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #f8fafc;
+    }}
+    .metric-top {{
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }}
+    .context-label {{
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }}
+    .metric-hint {{
       font-size: 12px;
-      white-space: pre-wrap;
+      color: var(--accent);
+      font-weight: 700;
+    }}
+    .metric-value {{
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+    }}
+    .detail-text {{
+      margin-top: 12px;
+      color: var(--chip-text);
+      font-size: 14px;
+    }}
+    textarea {{
+      width: 100%;
+      min-height: 88px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      box-sizing: border-box;
       background: #fff;
       color: #111827;
-      box-sizing: border-box;
+    }}
+    .status-panel {{
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: #f8fafc;
+      color: var(--chip-text);
+    }}
+    @media (max-width: 760px) {{
+      body {{
+        padding: 16px;
+      }}
+      .hero-grid {{
+        grid-template-columns: 1fr;
+      }}
+      .subject {{
+        font-size: 18px;
+      }}
+      .card-top-right, .workflow-badges {{
+        align-items: stretch;
+        justify-content: flex-start;
+      }}
+      .choice-pill, .score-pill, .memo-chip, button {{
+        width: 100%;
+      }}
+      .choice-row, .memo-chip-row {{
+        flex-direction: column;
+      }}
     }}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="hero">
-      <h1>{html.escape(page_title)}</h1>
-      <p>{html.escape(intro)}</p>
-      <p class="muted">使い方: 各通知でプルダウンを選ぶ → 下の「Markdownをコピー」または「Markdownを保存」を押す → {html.escape(note_name)} を更新する。</p>
-      <div class="toolbar">
-        <button type="button" onclick="copyMarkdown()">Markdownをコピー</button>
-        <button type="button" class="secondary" onclick="downloadMarkdown()">Markdownを保存</button>
-        <button type="button" class="secondary" onclick="resetSelections()">入力を初期化</button>
+      <div class="hero-grid">
+        <div>
+          <h1>{html.escape(page_title)}</h1>
+          <p>{html.escape(intro)}</p>
+          <p class="muted">使い方: まず AI の評価内容を確認 → 修正が必要なら `この通知、役に立った？` などを直す → 完了にする → `保存` を押す。</p>
+          <p class="muted">このブラウザでは入力内容を自動で下書き保存します。ページを開き直しても、同じ端末・同じブラウザなら復元されます。</p>
+        </div>
+        <div class="hero-panel">
+          <h2>今の確認軸</h2>
+          <ul>
+            <li><strong>対象範囲:</strong> 2026-03-30 05:05 JST 以降の通知だけを見る</li>
+            <li><strong>最初の問い:</strong> `この通知、役に立った？` を先に決める</li>
+            <li><strong>補足確認:</strong> `自分ならどうするか` と `役立ち度 1-5` を埋める</li>
+            <li><strong>詳細材料:</strong> 3 指標と通知理由は迷ったときだけ開く</li>
+          </ul>
+        </div>
       </div>
+      <div class="toolbar">
+        <span id="progress-chip" class="progress-chip">レビュー進捗: 0 / 0 完了</span>
+        <button type="button" id="pending-toggle-button" class="secondary" onclick="togglePendingOnly()">未完了だけ表示: OFF</button>
+        <button type="button" class="secondary" onclick="focusNextPending()">次の未完了へ</button>
+        <button type="button" id="save-button" onclick="saveToServer()">保存</button>
+        <button type="button" id="reload-button" class="secondary" onclick="reloadFromServer()">再読込</button>
+        <button type="button" class="secondary" onclick="resetSelections()">入力を初期化</button>
+        <span id="draft-status" class="draft-status">下書き未保存</span>
+      </div>
+      <div id="environment-alert" class="env-alert">この端末のローカル補助への接続を確認中です。</div>
     </div>
 
-    <div id="cards"></div>
+    <div id="cards">{initial_cards_html}</div>
 
-    <div class="card">
-      <h2>生成される Markdown</h2>
-      <p class="muted">この内容がそのまま {html.escape(note_name)} に入る想定です。</p>
-      <textarea id="preview" class="preview"></textarea>
+    <div class="card status-panel">
+      <h2>保存先</h2>
+      <p class="muted">この画面は AI 事後評価の確認・修正用です。保存先は JSON 正本で、保存時に CSV と {html.escape(note_name)} の要約も自動更新します。保存した行は `human_override` として固定されます。</p>
+      <div id="server-status">ローカル補助への接続を確認中です。</div>
     </div>
   </div>
 
   <script>
-    const reviewColumns = {json.dumps(REVIEW_NOTE_COLUMNS, ensure_ascii=False)};
-    const options = {json.dumps(options_payload, ensure_ascii=False)};
-    const rows = {json.dumps(rows_payload, ensure_ascii=False)};
-    const noteName = {json.dumps(note_name, ensure_ascii=False)};
-    const noteHeader = {json.dumps(header_text, ensure_ascii=False)};
+    var reviewColumns = {json.dumps(REVIEW_NOTE_COLUMNS, ensure_ascii=False)};
+    var options = {json.dumps(options_payload, ensure_ascii=False)};
+    var rows = {json.dumps(rows_payload, ensure_ascii=False)};
+    var noteName = {json.dumps(note_name, ensure_ascii=False)};
+    var noteKey = {json.dumps(note_key, ensure_ascii=False)};
+    var noteHeader = {json.dumps(header_text, ensure_ascii=False)};
+    var draftStorageKey = 'btc-monitor-review-form:' + noteKey;
+    var apiBase = window.location.protocol === 'http:' || window.location.protocol === 'https:' ? '' : 'http://{REVIEW_SERVER_HOST}:{REVIEW_SERVER_PORT}';
+    var localServerLabel = apiBase || 'この配信元';
+    var serverConnected = false;
+    var verdictDefaults = {json.dumps(VERDICT_DEFAULTS, ensure_ascii=False)};
+    var showPendingOnly = rows.some(function(row) {{ return String(row.review_status || 'pending') !== 'done'; }});
+    var biasLabels = {json.dumps(BIAS_LABELS, ensure_ascii=False)};
+    var prelabelLabels = {json.dumps(PRELABEL_LABELS, ensure_ascii=False)};
+    var evaluationLabels = {json.dumps(EVALUATION_LABELS, ensure_ascii=False)};
+    var setupLabels = {json.dumps(SETUP_LABELS, ensure_ascii=False)};
+    var tierLabels = {json.dumps(TIER_LABELS, ensure_ascii=False)};
+    var qualityLabels = {json.dumps(QUALITY_LABELS, ensure_ascii=False)};
+    var notifyReasonLabels = {json.dumps(NOTIFY_REASON_LABELS, ensure_ascii=False)};
+    var autoEvalLabels = {{
+      correct: 'correct / 方向は合っていた',
+      wrong: 'wrong / 方向は外れた',
+      unclear: 'unclear / 判定しきれない',
+      pending: 'pending / 評価待ち',
+      not_applicable: 'not_applicable / 対象外',
+      good_entry: 'good_entry / 入る価値があった',
+      poor_entry: 'poor_entry / 入るには弱かった',
+      wait_was_good: 'wait_was_good / 待機判断が良かった',
+      wait_too_strict: 'wait_too_strict / 待機が厳しすぎた',
+      skip_was_good: 'skip_was_good / 見送りが良かった',
+      skip_too_strict: 'skip_too_strict / 見送りが厳しすぎた',
+      win: 'win / 勝ち相当',
+      loss: 'loss / 負け相当',
+      breakeven: 'breakeven / 建値相当',
+      expired: 'expired / 時間切れ',
+      untouched: 'untouched / 未接触',
+      held: 'held / 守られた',
+      broken: 'broken / 抜けた',
+      touched: 'touched / 接触した',
+      touched_only: 'touched_only / 接触のみ',
+      'n/a': 'n/a / 対象外',
+    }};
 
-    function createSelect(optionList, value, onChange) {{
-      const select = document.createElement('select');
-      optionList.forEach((item) => {{
-        const opt = document.createElement('option');
-        opt.value = item.value;
-        opt.textContent = item.label;
-        if (item.value === value) opt.selected = true;
-        select.appendChild(opt);
+    function formatContext(value, fallback) {{
+      var defaultValue = fallback || '未記録';
+      return value && String(value).trim() ? String(value) : defaultValue;
+    }}
+
+    function parseMaybeJsonArray(value) {{
+      var raw = String(value || '').trim();
+      if (!raw) return [];
+      if (raw.charAt(0) === '[') {{
+        try {{
+          var parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(function(item) {{ return String(item); }});
+        }} catch (_error) {{
+        }}
+      }}
+      return raw.split(',').map(function(item) {{ return item.trim(); }}).filter(Boolean);
+    }}
+
+    function describeCode(value, labels) {{
+      var raw = String(value || '').trim();
+      if (!raw) return '未記録';
+      return labels[raw] || (raw + ' / 未定義コード');
+    }}
+
+    function describeBias(value) {{
+      return describeCode(value, biasLabels);
+    }}
+
+    function describePrelabel(value) {{
+      return describeCode(value, prelabelLabels);
+    }}
+
+    function describeEvaluation(value) {{
+      return describeCode(value, evaluationLabels);
+    }}
+
+    function describeSetup(value) {{
+      return describeCode(value, setupLabels);
+    }}
+
+    function describeTier(value) {{
+      return describeCode(value, tierLabels);
+    }}
+
+    function describeNotifyReason(value) {{
+      var items = parseMaybeJsonArray(value);
+      if (!items.length) return '未記録';
+      return items.map(function(item) {{ return describeCode(item, notifyReasonLabels); }}).join(' / ');
+    }}
+
+    function reviewSourceInfo(row) {{
+      var source = String(row.review_source || '').trim();
+      if (source === 'ai') {{
+        var detailParts = [];
+        if (String(row.review_model || '').trim()) detailParts.push(String(row.review_model || '').trim());
+        if (String(row.review_image_mode || '').trim() === 'price_map_svg') detailParts.push('画像あり');
+        if (String(row.review_image_mode || '').trim() === 'numeric_only_fallback') detailParts.push('数値のみ');
+        return {{ label: 'AI評価済み', className: 'ai', detail: detailParts.join(' / ') }};
+      }}
+      if (source === 'human_override') {{
+        return {{ label: '人が確認・修正済み', className: 'human_override', detail: '' }};
+      }}
+      if (String(row.evaluation_status || '').trim() === 'complete') {{
+        return {{ label: 'AIレビュー待ち', className: 'awaiting_ai', detail: '' }};
+      }}
+      return {{ label: '24時間後評価待ち', className: 'awaiting_outcome', detail: '' }};
+    }}
+
+    function workflowStepInfo(row) {{
+      var source = String(row.review_source || '').trim();
+      var evaluationComplete = String(row.evaluation_status || '').trim() === 'complete';
+      return [
+        {{
+          label: '24時間後機械評価',
+          status: evaluationComplete ? '完了' : '待ち',
+          className: evaluationComplete ? 'done' : 'waiting'
+        }},
+        {{
+          label: 'AIレビュー',
+          status: source === 'ai' || source === 'human_override' ? '完了' : (evaluationComplete ? '待ち' : '未着手'),
+          className: source === 'ai' || source === 'human_override' ? 'done' : (evaluationComplete ? 'waiting' : 'idle')
+        }},
+        {{
+          label: '人が確認',
+          status: source === 'human_override' ? '済' : '未',
+          className: source === 'human_override' ? 'done' : 'idle'
+        }}
+      ];
+    }}
+
+    function describeAutoEvalSummary(value) {{
+      var raw = String(value || '').trim();
+      if (!raw) return '未記録';
+      return raw
+        .replace(/bias:([A-Za-z_]+)/g, function(_m, code) {{ return 'bias:' + describeBias(code); }})
+        .replace(/prelabel:([A-Z_]+)/g, function(_m, code) {{ return 'prelabel:' + describePrelabel(code); }})
+        .replace(/setup:([A-Za-z_]+)/g, function(_m, code) {{ return 'setup:' + describeSetup(code); }})
+        .replace(/tier:([A-Za-z_]+)/g, function(_m, code) {{ return 'tier:' + describeTier(code); }})
+        .replace(/方向:([A-Za-z_]+)/g, function(_m, code) {{ return '方向:' + describeCode(code, autoEvalLabels); }})
+        .replace(/ENTRY:([A-Za-z_]+)/g, function(_m, code) {{ return 'ENTRY:' + describeCode(code, autoEvalLabels); }})
+        .replace(/WAIT:([A-Za-z_]+)/g, function(_m, code) {{ return 'WAIT:' + describeCode(code, autoEvalLabels); }})
+        .replace(/SKIP:([A-Za-z_]+)/g, function(_m, code) {{ return 'SKIP:' + describeCode(code, autoEvalLabels); }})
+        .replace(/結果:([A-Za-z_]+)/g, function(_m, code) {{ return '結果:' + describeCode(code, autoEvalLabels); }})
+        .replace(/S:([A-Za-z_]+)/g, function(_m, code) {{ return 'S:' + describeCode(code, autoEvalLabels); }})
+        .replace(/R:([A-Za-z_]+)/g, function(_m, code) {{ return 'R:' + describeCode(code, autoEvalLabels); }});
+    }}
+
+    function metricHint(metricKey, value) {{
+      var score = Number(value);
+      if (!isFinite(score)) return '未記録';
+      if (metricKey === 'direction_strength') {{
+        if (score >= 70) return '強い';
+        if (score >= 40) return '中くらい';
+        return '弱い';
+      }}
+      if (metricKey === 'execution_readiness') {{
+        if (score >= 70) return '入りやすい';
+        if (score >= 40) return '条件つき';
+        return 'まだ入りにくい';
+      }}
+      if (score >= 70) return '強く待ちたい';
+      if (score >= 40) return '少し待ちたい';
+      return '待機圧力は低い';
+    }}
+
+    function extractTime(value) {{
+      var raw = String(value || '').trim();
+      if (raw.length >= 16 && raw.indexOf('T') !== -1) return raw.slice(5, 10).replace('-', '/') + ' ' + raw.slice(11, 16);
+      return raw || '--:--';
+    }}
+
+    function isReadyForCompletion(row) {{
+      return Boolean(String(row.user_verdict || '').trim() && String(row.would_trade || '').trim() && String(row.usefulness_1to5 || '').trim());
+    }}
+
+    function updateReviewStatus(row) {{
+      if (String(row.review_status || 'pending') === 'done' && !isReadyForCompletion(row)) {{
+        row.review_status = 'pending';
+      }}
+    }}
+
+    function createActionButton(label, active, className, onClick) {{
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = className + (active ? ' active' : '');
+      button.textContent = label;
+      button.addEventListener('click', onClick);
+      return button;
+    }}
+
+    function applyVerdictDefaults(row) {{
+      var defaults = verdictDefaults[String(row.user_verdict || '')];
+      if (!defaults) return;
+      if (!row.would_trade || row.would_trade === row._auto_would_trade) {{
+        row.would_trade = String(defaults.would_trade || '');
+      }}
+      if (!row.usefulness_1to5 || row.usefulness_1to5 === row._auto_usefulness_1to5) {{
+        row.usefulness_1to5 = String(defaults.usefulness_1to5 || '');
+      }}
+      row._auto_would_trade = String(defaults.would_trade || '');
+      row._auto_usefulness_1to5 = String(defaults.usefulness_1to5 || '');
+      updateReviewStatus(row);
+    }}
+
+    function buildButtonRow(optionList, currentValue, className, onPick) {{
+      var wrap = document.createElement('div');
+      wrap.className = className === 'memo-chip' ? 'memo-chip-row' : 'choice-row';
+      optionList.forEach(function(item) {{
+        if (!item.value) return;
+        wrap.appendChild(createActionButton(item.label, item.value === currentValue, className, function() {{
+          onPick(item.value);
+          saveDraft();
+          renderCards();
+        }}));
       }});
-      select.addEventListener('change', onChange);
-      return select;
+      return wrap;
+    }}
+
+    function buildMetricCard(metricKey, label, value) {{
+      var card = document.createElement('div');
+      card.className = 'metric-card';
+      var top = document.createElement('div');
+      top.className = 'metric-top';
+      var labelEl = document.createElement('span');
+      labelEl.className = 'context-label';
+      labelEl.textContent = label;
+      var hintEl = document.createElement('span');
+      hintEl.className = 'metric-hint';
+      hintEl.textContent = metricHint(metricKey, value);
+      top.appendChild(labelEl);
+      top.appendChild(hintEl);
+      var valueEl = document.createElement('div');
+      valueEl.className = 'metric-value';
+      valueEl.textContent = formatContext(value);
+      card.appendChild(top);
+      card.appendChild(valueEl);
+      return card;
+    }}
+
+    function createChip(text, className) {{
+      var chip = document.createElement('span');
+      chip.className = className || 'chip';
+      chip.textContent = text;
+      return chip;
+    }}
+
+    function updateProgress() {{
+      var doneCount = rows.filter(function(row) {{ return String(row.review_status || 'pending') === 'done'; }}).length;
+      var chip = document.getElementById('progress-chip');
+      if (chip) chip.textContent = 'レビュー進捗: ' + String(doneCount) + ' / ' + String(rows.length) + ' 完了';
+    }}
+
+    function updateServerStatus(message) {{
+      var el = document.getElementById('server-status');
+      if (el) el.textContent = message;
+    }}
+
+    function updateActionButtons() {{
+      var saveButton = document.getElementById('save-button');
+      var reloadButton = document.getElementById('reload-button');
+      if (saveButton) {{
+        saveButton.disabled = !serverConnected;
+        saveButton.title = serverConnected ? '' : 'この端末では保存できません。ローカル補助の起動を確認してください。';
+      }}
+      if (reloadButton) {{
+        reloadButton.disabled = !serverConnected;
+        reloadButton.title = serverConnected ? '' : 'この端末では再読込できません。ローカル補助の起動を確認してください。';
+      }}
+    }}
+
+    function updateEnvironmentAlert() {{
+      var el = document.getElementById('environment-alert');
+      if (!el) return;
+      if (serverConnected) {{
+        el.className = 'env-alert safe';
+        el.innerHTML = '<strong>この端末で保存できます</strong>' +
+          'ローカル補助 ' + localServerLabel + ' に接続済みです。保存すると、この端末の JSON / CSV / Obsidian 要約を更新します。';
+        return;
+      }}
+      el.className = 'env-alert';
+      el.innerHTML = '<strong>この画面は閲覧中心です</strong>' +
+        'この端末ではローカル補助 ' + localServerLabel + ' に接続できていません。内容は見えますが、保存と再読込は使えません。' +
+        ' 正本更新は対象Macでフォーム常駐を起動した環境だけで行ってください。';
+    }}
+
+    function setServerConnected(connected) {{
+      serverConnected = connected;
+      updateActionButtons();
+      updateEnvironmentAlert();
+    }}
+
+    function updatePendingToggleButton() {{
+      var button = document.getElementById('pending-toggle-button');
+      if (!button) return;
+      button.textContent = showPendingOnly ? '未完了だけ表示: ON' : '未完了だけ表示: OFF';
+      if (showPendingOnly) {{
+        button.classList.add('active-toggle');
+      }} else {{
+        button.classList.remove('active-toggle');
+      }}
+    }}
+
+    function togglePendingOnly() {{
+      showPendingOnly = !showPendingOnly;
+      renderCards();
+    }}
+
+    function focusNextPending() {{
+      var pendingIndex = rows.findIndex(function(row) {{ return String(row.review_status || 'pending') !== 'done'; }});
+      var target = pendingIndex >= 0 ? document.getElementById('review-card-' + String(pendingIndex)) : null;
+      if (target && target.scrollIntoView) target.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
     }}
 
     function renderCards() {{
-      const root = document.getElementById('cards');
+      var root = document.getElementById('cards');
       root.innerHTML = '';
-      rows.forEach((row, index) => {{
-        const card = document.createElement('div');
+      rows.forEach(function(row, index) {{
+        updateReviewStatus(row);
+        if (showPendingOnly && String(row.review_status || 'pending') === 'done') return;
+
+        var card = document.createElement('div');
         card.className = 'card';
+        card.id = 'review-card-' + String(index);
 
-        const title = document.createElement('h3');
+        var cardTop = document.createElement('div');
+        cardTop.className = 'card-top';
+        var title = document.createElement('h3');
         title.textContent = '通知 ' + String(index + 1);
-        card.appendChild(title);
+        cardTop.appendChild(title);
+        var cardTopRight = document.createElement('div');
+        cardTopRight.className = 'card-top-right';
+        var workflowBadges = document.createElement('div');
+        workflowBadges.className = 'workflow-badges';
+        workflowStepInfo(row).forEach(function(step) {{
+          var chip = document.createElement('span');
+          chip.className = 'workflow-chip ' + step.className;
+          chip.innerHTML = '<span>' + step.label + '</span><strong>' + step.status + '</strong>';
+          workflowBadges.appendChild(chip);
+        }});
+        var timeBadge = document.createElement('div');
+        timeBadge.className = 'time-badge';
+        timeBadge.textContent = extractTime(row.timestamp_jst);
+        cardTopRight.appendChild(workflowBadges);
+        cardTopRight.appendChild(timeBadge);
+        cardTop.appendChild(cardTopRight);
+        card.appendChild(cardTop);
 
-        const meta = document.createElement('div');
+        var meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = `${{row.timestamp_jst}} / ${{row.signal_id}}`;
+        meta.textContent = row.timestamp_jst + ' / ' + row.signal_id;
         card.appendChild(meta);
 
-        const subject = document.createElement('div');
+        var subject = document.createElement('div');
         subject.className = 'subject';
         subject.textContent = row.subject;
         card.appendChild(subject);
 
-        const autoEval = document.createElement('p');
-        autoEval.className = 'muted';
-        autoEval.textContent = `自動評価: ${{row.auto_eval_summary}}`;
-        card.appendChild(autoEval);
+        var summaryRow = document.createElement('div');
+        summaryRow.className = 'summary-row';
+        var sourceInfo = reviewSourceInfo(row);
+        summaryRow.appendChild(createChip(sourceInfo.label, 'source-chip ' + sourceInfo.className));
+        if (sourceInfo.detail) {{
+          summaryRow.appendChild(createChip('評価詳細: ' + sourceInfo.detail));
+        }}
+        summaryRow.appendChild(createChip('方向感: ' + describeBias(row.bias)));
+        summaryRow.appendChild(createChip('位置評価: ' + describePrelabel(row.prelabel)));
+        summaryRow.appendChild(createChip(String(row.review_status || 'pending') === 'done' ? '完了' : '未完了', 'status-chip' + (String(row.review_status || 'pending') === 'done' ? ' done' : '')));
+        card.appendChild(summaryRow);
 
-        const grid = document.createElement('div');
-        grid.className = 'grid';
+        var primaryQuestion = document.createElement('div');
+        primaryQuestion.className = 'primary-question';
+        var primaryTitle = document.createElement('div');
+        primaryTitle.className = 'section-title';
+        primaryTitle.textContent = 'この通知、役に立った？';
+        primaryQuestion.appendChild(primaryTitle);
+        primaryQuestion.appendChild(buildButtonRow(options.verdict, row.user_verdict || '', 'choice-pill', function(value) {{
+          row.user_verdict = value;
+          applyVerdictDefaults(row);
+        }}));
+        card.appendChild(primaryQuestion);
 
-        const fields = [
-          ['user_verdict', '人の評価', options.verdict],
-          ['usefulness_1to5', '役立ち度', options.usefulness],
-          ['would_trade', '自分ならどうするか', options.wouldTrade],
-          ['actual_move_driver', '値動きの主因', options.moveDriver],
-          ['memo_preset', 'メモ候補', options.memoPreset],
-          ['review_status', 'レビュー状態', options.reviewStatus],
-        ];
+        var detailPanel = document.createElement('div');
+        detailPanel.className = 'detail-panel';
 
-        fields.forEach(([key, label, optionList]) => {{
-          const box = document.createElement('div');
-          const labelEl = document.createElement('label');
-          labelEl.textContent = label;
-          box.appendChild(labelEl);
-          box.appendChild(createSelect(optionList, row[key] || '', (event) => {{
-            row[key] = event.target.value;
-            if (key === 'memo_preset') {{
-              row.memo = event.target.value;
-            }}
-            updatePreview();
-          }}));
-          grid.appendChild(box);
+        var actionTitle = document.createElement('div');
+        actionTitle.className = 'section-title';
+        actionTitle.textContent = '判断を残す';
+        detailPanel.appendChild(actionTitle);
+
+        var wouldTradeField = document.createElement('div');
+        wouldTradeField.className = 'compact-field';
+        wouldTradeField.innerHTML = '<div class="field-title">自分ならどうする？</div>';
+        wouldTradeField.appendChild(buildButtonRow(options.wouldTrade, row.would_trade || '', 'choice-pill', function(value) {{
+          row.would_trade = value;
+          updateReviewStatus(row);
+        }}));
+        detailPanel.appendChild(wouldTradeField);
+
+        var usefulnessField = document.createElement('div');
+        usefulnessField.className = 'compact-field';
+        usefulnessField.innerHTML = '<div class="field-title">役立ち度 1-5</div>';
+        usefulnessField.appendChild(buildButtonRow(options.usefulness, row.usefulness_1to5 || '', 'score-pill', function(value) {{
+          row.usefulness_1to5 = value;
+          updateReviewStatus(row);
+        }}));
+        detailPanel.appendChild(usefulnessField);
+
+        var completeButton = document.createElement('button');
+        completeButton.type = 'button';
+        completeButton.className = 'complete-button' + (isReadyForCompletion(row) ? ' ready' : '');
+        completeButton.textContent = String(row.review_status || 'pending') === 'done' ? '未完了に戻す' : '完了にする';
+        completeButton.addEventListener('click', function() {{
+          if (String(row.review_status || 'pending') === 'done') {{
+            row.review_status = 'pending';
+          }} else if (isReadyForCompletion(row)) {{
+            row.review_status = 'done';
+          }}
+          saveDraft();
+          renderCards();
         }});
+        detailPanel.appendChild(completeButton);
 
-        card.appendChild(grid);
+        var details = document.createElement('details');
+        details.className = 'detail-box';
+        if (
+          String(row.user_verdict || '').trim() ||
+          String(row.would_trade || '').trim() ||
+          String(row.usefulness_1to5 || '').trim() ||
+          String(row.memo || '').trim() ||
+          String(row.actual_move_driver || '').trim() ||
+          String(row.misleading_entry_like_wording || '').trim() ||
+          String(row.logic_validated || '').trim()
+        ) {{
+          details.open = true;
+        }}
+        var summary = document.createElement('summary');
+        summary.textContent = '詳細を見る';
+        details.appendChild(summary);
+
+        var metricGrid = document.createElement('div');
+        metricGrid.className = 'metric-grid';
+        metricGrid.appendChild(buildMetricCard('direction_strength', '方向の強さ', row.confidence_direction_shadow));
+        metricGrid.appendChild(buildMetricCard('execution_readiness', '実行しやすさ', row.confidence_execution_shadow));
+        metricGrid.appendChild(buildMetricCard('wait_pressure', '待機圧力', row.confidence_wait_shadow));
+        details.appendChild(metricGrid);
+
+        var reasonText = document.createElement('div');
+        reasonText.className = 'detail-text';
+        reasonText.innerHTML = '<strong>通知理由:</strong> ' + describeNotifyReason(row.notify_reason);
+        details.appendChild(reasonText);
+
+        var autoEval = document.createElement('div');
+        autoEval.className = 'detail-text';
+        autoEval.innerHTML = '<strong>自動評価:</strong> ' + describeAutoEvalSummary(row.auto_eval_summary);
+        details.appendChild(autoEval);
+
+        var moveDriverField = document.createElement('div');
+        moveDriverField.className = 'compact-field';
+        moveDriverField.innerHTML = '<div class="field-title">値動きの主因</div>';
+        moveDriverField.appendChild(buildButtonRow(options.moveDriver, row.actual_move_driver || '', 'choice-pill', function(value) {{
+          row.actual_move_driver = value;
+          row.logic_validated = deriveLogicValidated(row);
+        }}));
+        details.appendChild(moveDriverField);
+
+        var misleadingField = document.createElement('div');
+        misleadingField.className = 'compact-field';
+        misleadingField.innerHTML = '<div class="field-title">エントリー寄りに誤読した？</div>';
+        misleadingField.appendChild(buildButtonRow(options.misleadingEntry, row.misleading_entry_like_wording || '', 'choice-pill', function(value) {{
+          row.misleading_entry_like_wording = value;
+        }}));
+        details.appendChild(misleadingField);
+
+        var logicField = document.createElement('div');
+        logicField.className = 'detail-text';
+        var logicValidated = String(row.logic_validated || '').trim();
+        logicField.innerHTML = '<strong>根拠整合:</strong> ' + (logicValidated === 'true' ? '合っていた' : logicValidated === 'false' ? 'ずれていた' : '未判定');
+        details.appendChild(logicField);
+
+        var memoField = document.createElement('div');
+        memoField.className = 'compact-field';
+        memoField.innerHTML = '<div class="field-title">一言メモ</div>';
+        memoField.appendChild(buildButtonRow(options.memoPreset, row.memo || '', 'memo-chip', function(value) {{
+          row.memo = value;
+        }}));
+        var memoInput = document.createElement('textarea');
+        memoInput.value = row.memo || '';
+        memoInput.placeholder = '必要なら短くメモを残します';
+        memoInput.addEventListener('input', function(event) {{
+          row.memo = event.target.value;
+          saveDraft();
+        }});
+        memoField.appendChild(memoInput);
+        details.appendChild(memoField);
+
+        detailPanel.appendChild(details);
+        card.appendChild(detailPanel);
         root.appendChild(card);
       }});
+      updateProgress();
+      updatePendingToggleButton();
     }}
 
-    function escapeMd(value) {{
-      return String(value ?? '').replaceAll('|', '\\\\|').replaceAll('\\n', ' ');
-    }}
-
-    function buildMarkdown() {{
-      const lines = noteHeader.split('\\n');
-      const tableHeader = `| ${{reviewColumns.join(' | ')}} |`;
-      const separator = `| ${{reviewColumns.map(() => '---').join(' | ')}} |`;
-      const body = rows.map((row) => {{
-        const cells = reviewColumns.map((column) => escapeMd(row[column] || ''));
-        return `| ${{cells.join(' | ')}} |`;
+    function syncRowsFromDom() {{
+      rows.forEach(function(row) {{
+        updateReviewStatus(row);
       }});
-      return [...lines, tableHeader, separator, ...body, ''].join('\\n');
+    }}
+
+    function bindSelectHandlers() {{
+      return;
     }}
 
     function updatePreview() {{
-      document.getElementById('preview').value = buildMarkdown();
+      return;
     }}
 
-    async function copyMarkdown() {{
-      const content = buildMarkdown();
-      await navigator.clipboard.writeText(content);
-      alert('Markdown をコピーしました。');
-      updatePreview();
+    function deriveLogicValidated(row) {{
+      var driver = String(row.actual_move_driver || '').trim();
+      if (!driver || driver === 'unknown') return '';
+      var summary = String(row.auto_eval_summary || '').trim();
+      var match = summary.match(/prelabel:([A-Z_]+)/);
+      var prelabel = match ? String(match[1] || '').trim() : '';
+      if (!prelabel) return '';
+      if (driver === 'technical') return prelabel === 'ENTRY_OK' || prelabel === 'SWEEP_WAIT' ? 'true' : 'false';
+      return 'false';
     }}
 
-    function downloadMarkdown() {{
-      const content = buildMarkdown();
-      const blob = new Blob([content], {{ type: 'text/markdown;charset=utf-8' }});
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = noteName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      updatePreview();
+    function updateDraftStatus(message) {{
+      var el = document.getElementById('draft-status');
+      if (el) el.textContent = message;
+    }}
+
+    function getDraftStorage() {{
+      try {{
+        if (!window.localStorage) return null;
+        var probeKey = draftStorageKey + ':probe';
+        window.localStorage.setItem(probeKey, 'ok');
+        window.localStorage.removeItem(probeKey);
+        return window.localStorage;
+      }} catch (_error) {{
+        return null;
+      }}
+    }}
+
+    function editableDraftFields(row) {{
+      return {{
+        signal_id: String(row.signal_id || ''),
+        user_verdict: String(row.user_verdict || ''),
+        usefulness_1to5: String(row.usefulness_1to5 || ''),
+        would_trade: String(row.would_trade || ''),
+        actual_move_driver: String(row.actual_move_driver || ''),
+        misleading_entry_like_wording: String(row.misleading_entry_like_wording || ''),
+        logic_validated: String(row.logic_validated || ''),
+        sl_eval: String(row.sl_eval || ''),
+        tp_eval: String(row.tp_eval || ''),
+        review_source: String(row.review_source || ''),
+        review_model: String(row.review_model || ''),
+        review_image_mode: String(row.review_image_mode || ''),
+        review_variant: String(row.review_variant || ''),
+        memo: String(row.memo || ''),
+        review_status: String(row.review_status || 'pending'),
+      }};
+    }}
+
+    function saveDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      var payload = {{
+        version: 1,
+        saved_at: new Date().toISOString(),
+        rows: rows.map(function(row) {{ return editableDraftFields(row); }}),
+      }};
+      storage.setItem(draftStorageKey, JSON.stringify(payload));
+      updateDraftStatus('下書き保存済み');
+    }}
+
+    function restoreDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      var raw = storage.getItem(draftStorageKey);
+      if (!raw) {{
+        updateDraftStatus('下書きなし');
+        return;
+      }}
+      try {{
+        var parsed = JSON.parse(raw);
+        var savedRows = Array.isArray(parsed.rows) ? parsed.rows : [];
+        var restored = 0;
+        rows.forEach(function(row) {{
+          var saved = null;
+          savedRows.forEach(function(item) {{
+            if (!saved && String(item.signal_id || '') === String(row.signal_id || '')) saved = item;
+          }});
+          if (!saved) return;
+          row.user_verdict = String(saved.user_verdict || '');
+          row.usefulness_1to5 = String(saved.usefulness_1to5 || '');
+          row.would_trade = String(saved.would_trade || '');
+          row.actual_move_driver = String(saved.actual_move_driver || '');
+          row.misleading_entry_like_wording = String(saved.misleading_entry_like_wording || '');
+          row.logic_validated = String(saved.logic_validated || '') || deriveLogicValidated(row);
+          row.sl_eval = String(saved.sl_eval || '');
+          row.tp_eval = String(saved.tp_eval || '');
+          row.review_source = String(saved.review_source || '');
+          row.review_model = String(saved.review_model || '');
+          row.review_image_mode = String(saved.review_image_mode || '');
+          row.review_variant = String(saved.review_variant || '');
+          row.memo = String(saved.memo || '');
+          row.review_status = String(saved.review_status || 'pending');
+          restored += 1;
+        }});
+        updateDraftStatus(restored ? ('下書きを復元しました: ' + restored + '件') : '下書きはありましたが一致行なし');
+      }} catch (_error) {{
+        updateDraftStatus('下書き復元に失敗');
+      }}
+    }}
+
+    function clearDraft() {{
+      var storage = getDraftStorage();
+      if (!storage) {{
+        updateDraftStatus('下書き保存はこのブラウザでは使えません');
+        return;
+      }}
+      storage.removeItem(draftStorageKey);
+      updateDraftStatus('下書きを削除');
+    }}
+
+    function savePayload() {{
+      syncRowsFromDom();
+      return {{ rows: rows }};
+    }}
+
+    async function saveToServer() {{
+      if (!serverConnected) {{
+        updateDraftStatus('この端末では保存できません');
+        updateServerStatus('閲覧用として開いています。対象Macのローカル補助を起動してください');
+        return;
+      }}
+      saveDraft();
+      updateDraftStatus('保存中...');
+      try {{
+        var response = await fetch(apiBase + '/api/review-form/save', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify(savePayload()),
+        }});
+        if (!response.ok) throw new Error('save failed');
+        var payload = await response.json();
+        rows = Array.isArray(payload.rows) ? payload.rows : rows;
+        updateDraftStatus('保存済み');
+        updateServerStatus('保存成功: JSON / CSV / Obsidian 要約を更新しました');
+        setServerConnected(true);
+        renderCards();
+      }} catch (_error) {{
+        updateDraftStatus('ローカル下書きのみ保存');
+        updateServerStatus('ローカル補助へ保存できませんでした。localhost 起動を確認してください');
+        setServerConnected(false);
+      }}
+    }}
+
+    async function reloadFromServer() {{
+      updateActionButtons();
+      updateServerStatus('ローカル補助へ接続中...');
+      try {{
+        var response = await fetch(apiBase + '/api/review-form/state');
+        if (!response.ok) throw new Error('load failed');
+        var payload = await response.json();
+        rows = Array.isArray(payload.rows) ? payload.rows : rows;
+        updateServerStatus('ローカル補助と接続済み。最新状態を読み込みました');
+        setServerConnected(true);
+        renderCards();
+      }} catch (_error) {{
+        updateServerStatus('ローカル補助へ接続できません。下書き復元で継続できます');
+        setServerConnected(false);
+      }}
     }}
 
     function resetSelections() {{
-      rows.forEach((row) => {{
+      rows.forEach(function(row) {{
         row.user_verdict = '';
         row.usefulness_1to5 = '';
         row.would_trade = '';
         row.actual_move_driver = '';
-        row.memo_preset = '';
+        row.misleading_entry_like_wording = '';
+        row.logic_validated = '';
         row.memo = '';
         row.review_status = 'pending';
+        row._auto_would_trade = '';
+        row._auto_usefulness_1to5 = '';
       }});
+      clearDraft();
       renderCards();
-      updatePreview();
     }}
 
     renderCards();
-    updatePreview();
+    restoreDraft();
+    renderCards();
+    updateActionButtons();
+    updateEnvironmentAlert();
+    bindSelectHandlers();
+    reloadFromServer();
   </script>
 </body>
 </html>
@@ -1024,8 +5187,69 @@ def _render_review_form_html(rows: list[dict[str, str]], review_note_path: Path)
 def write_review_form_html(rows: list[dict[str, str]], review_note_path: Path) -> Path:
     form_path = _review_form_path(review_note_path)
     _ensure_parent(form_path)
-    form_path.write_text(_render_review_form_html(rows, review_note_path), encoding="utf-8")
+    target_rows = [row for row in rows if _is_review_target(str(row.get("timestamp_jst", "")))]
+    form_path.write_text(_render_review_form_html(target_rows, review_note_path), encoding="utf-8")
     return form_path
+
+
+def _review_rows_to_csv_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    reviewed_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    imported_rows: list[dict[str, str]] = []
+    for row in rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or str(row.get("review_status", "")).strip() != "done":
+            continue
+        if not _is_review_target(str(row.get("timestamp_jst", ""))):
+            continue
+        imported_rows.append(
+            {
+                "signal_id": signal_id,
+                "timestamp_jst": str(row.get("timestamp_jst", "")),
+                "subject": str(row.get("subject", "")),
+                "auto_eval_summary": str(row.get("auto_eval_summary", "")),
+                "user_verdict": str(row.get("user_verdict", "")),
+                "usefulness_1to5": str(row.get("usefulness_1to5", "")),
+                "would_trade": str(row.get("would_trade", "")),
+                "actual_move_driver": str(row.get("actual_move_driver", "")),
+                "misleading_entry_like_wording": str(row.get("misleading_entry_like_wording", "")),
+                "logic_validated": str(row.get("logic_validated", "")),
+                "sl_eval": str(row.get("sl_eval", "")),
+                "tp_eval": str(row.get("tp_eval", "")),
+                "tf_4h_eval": str(row.get("tf_4h_eval", "")),
+                "tf_1h_eval": str(row.get("tf_1h_eval", "")),
+                "tf_15m_eval": str(row.get("tf_15m_eval", "")),
+                "review_source": _review_source_value(row),
+                "review_model": str(row.get("review_model", "")),
+                "review_image_mode": str(row.get("review_image_mode", "")),
+                "review_variant": str(row.get("review_variant", "")),
+                "review_action_class": str(row.get("review_action_class", "")),
+                "review_priority": str(row.get("review_priority", "")),
+                "next_action": str(row.get("next_action", "")),
+                "memo": str(row.get("memo", "")),
+                "review_status": "done",
+                "reviewed_at_utc": str(row.get("reviewed_at_utc", "")).strip() or reviewed_at,
+            }
+        )
+    return imported_rows
+
+
+def _merge_review_sources(
+    *,
+    state_rows: list[dict[str, str]],
+    note_rows: list[dict[str, str]],
+    review_rows: list[dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    merged: dict[str, dict[str, str]] = {}
+    for source_rows in (state_rows, note_rows, review_rows):
+        for row in source_rows:
+            signal_id = str(row.get("signal_id", "")).strip()
+            if not signal_id:
+                continue
+            current = merged.get(signal_id, {})
+            combined = current.copy()
+            combined.update({str(key): str(value or "") for key, value in row.items()})
+            merged[signal_id] = combined
+    return merged
 
 
 def export_review_queue(
@@ -1039,55 +5263,85 @@ def export_review_queue(
     outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
     reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
     trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    state_path = _review_state_path(base_dir)
 
     outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
     trades = {row.get("signal_id", ""): row for row in _load_csv_rows(trades_path) if row.get("signal_id", "")}
-    review_rows = {row.get("signal_id", ""): row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")}
+    review_rows = [row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")]
+    note_rows = _load_review_note_rows(review_note_path)
+    state_rows = _load_review_state_rows(state_path)
 
-    existing_rows = _load_review_note_rows(review_note_path)
-    merged_rows: dict[str, dict[str, str]] = {
-        row.get("signal_id", ""): row for row in existing_rows if row.get("signal_id", "")
-    }
+    merged_rows = _merge_review_sources(state_rows=state_rows, note_rows=note_rows, review_rows=review_rows)
 
-    for signal_id, row in review_rows.items():
-        merged_rows[signal_id] = {
-            "signal_id": signal_id,
-            "timestamp_jst": row.get("timestamp_jst", ""),
-            "subject": row.get("subject", ""),
-            "auto_eval_summary": row.get("auto_eval_summary", ""),
-            "user_verdict": row.get("user_verdict", ""),
-            "usefulness_1to5": row.get("usefulness_1to5", ""),
-            "would_trade": row.get("would_trade", ""),
-            "actual_move_driver": row.get("actual_move_driver", ""),
-            "logic_validated": row.get("logic_validated", ""),
-            "memo": row.get("memo", ""),
-            "review_status": row.get("review_status", "pending") or "pending",
-        }
-
-    for signal_id, outcome in outcomes.items():
-        trade = trades.get(signal_id, {})
+    for signal_id, trade in trades.items():
         if not _parse_bool(trade.get("was_notified")):
             continue
-        if outcome.get("evaluation_status") != "complete":
-            continue
         current = merged_rows.get(signal_id, {})
+        outcome = outcomes.get(signal_id, {})
+        actual_move_driver = current.get("actual_move_driver", "")
+        logic_validated = _logic_validated(trade.get("prelabel_primary_reason", ""), actual_move_driver) or current.get("logic_validated", "")
+        auto_eval_summary = current.get("auto_eval_summary", "")
+        if not auto_eval_summary:
+            if outcome.get("evaluation_status") == "complete":
+                auto_eval_summary = _auto_eval_summary(outcome)
+            else:
+                auto_eval_summary = _pending_auto_eval_summary(trade)
         merged_rows[signal_id] = {
             "signal_id": signal_id,
             "timestamp_jst": current.get("timestamp_jst", trade.get("timestamp_jst", outcome.get("timestamp_jst", ""))),
             "subject": current.get("subject", trade.get("summary_subject", "")),
-            "auto_eval_summary": current.get("auto_eval_summary", _auto_eval_summary(outcome)),
+            "auto_eval_summary": auto_eval_summary,
             "user_verdict": current.get("user_verdict", ""),
             "usefulness_1to5": current.get("usefulness_1to5", ""),
             "would_trade": current.get("would_trade", ""),
-            "actual_move_driver": current.get("actual_move_driver", ""),
-            "logic_validated": current.get("logic_validated", ""),
+            "actual_move_driver": actual_move_driver,
+            "misleading_entry_like_wording": current.get("misleading_entry_like_wording", ""),
+            "logic_validated": logic_validated,
+            "sl_eval": current.get("sl_eval", ""),
+            "tp_eval": current.get("tp_eval", ""),
+            "tf_4h_eval": current.get("tf_4h_eval", ""),
+            "tf_1h_eval": current.get("tf_1h_eval", ""),
+            "tf_15m_eval": current.get("tf_15m_eval", ""),
+            "review_source": _review_source_value(current),
+            "review_model": current.get("review_model", ""),
+            "review_image_mode": current.get("review_image_mode", ""),
+            "review_variant": current.get("review_variant", ""),
+            "review_action_class": current.get("review_action_class", ""),
+            "review_priority": current.get("review_priority", ""),
+            "next_action": current.get("next_action", ""),
             "memo": current.get("memo", ""),
             "review_status": current.get("review_status", "pending") or "pending",
+            "bias": trade.get("bias", ""),
+            "prelabel": trade.get("prelabel", ""),
+            "primary_setup_status": trade.get("primary_setup_status", ""),
+            "signal_tier": trade.get("signal_tier", ""),
+            "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
+            "data_quality_flag": trade.get("data_quality_flag", ""),
+            "evaluation_status": outcome.get("evaluation_status", ""),
+            "confidence_direction_shadow": trade.get("confidence_direction_shadow", ""),
+            "confidence_execution_shadow": trade.get("confidence_execution_shadow", ""),
+            "confidence_wait_shadow": trade.get("confidence_wait_shadow", ""),
+            "summary_variant": trade.get("summary_variant", ""),
+            "advice_variant": trade.get("advice_variant", ""),
+            "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
+            "reviewed_at_utc": current.get("reviewed_at_utc", ""),
         }
 
-    ordered_rows = sorted(merged_rows.values(), key=lambda row: row.get("timestamp_jst", ""), reverse=True)
+    ordered_rows = sorted(
+        [row for row in merged_rows.values() if _is_review_target(str(row.get("timestamp_jst", "")))],
+        key=lambda row: row.get("timestamp_jst", ""),
+        reverse=True,
+    )
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
+    _write_review_state(state_path, ordered_rows)
+    _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, _review_rows_to_csv_rows(ordered_rows), "signal_id")
     _ensure_parent(review_note_path)
-    review_note_path.write_text(_render_review_note(ordered_rows), encoding="utf-8")
+    review_note_path.write_text(_render_review_note(ordered_rows, ai_health_summary=ai_health_summary), encoding="utf-8")
     write_review_form_html(ordered_rows, review_note_path)
     return review_note_path
 
@@ -1099,47 +5353,206 @@ def import_reviews(
     reviews_path: Path | None = None,
 ) -> Path:
     reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
-    note_rows = _load_review_note_rows(review_note_path)
-    imported_rows: list[dict[str, Any]] = []
-    reviewed_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    state_rows = _load_review_state_rows(_review_state_path(base_dir))
+    source_rows = state_rows or _load_review_note_rows(review_note_path)
+    imported_rows = []
 
-    for row in note_rows:
+    for row in _review_rows_to_csv_rows(source_rows):
         signal_id = str(row.get("signal_id", "")).strip()
-        review_status = str(row.get("review_status", "")).strip()
         user_verdict = str(row.get("user_verdict", "")).strip()
         would_trade = str(row.get("would_trade", "")).strip()
         usefulness = str(row.get("usefulness_1to5", "")).strip()
         actual_move_driver = str(row.get("actual_move_driver", "")).strip()
-        if not signal_id or review_status != "done":
-            continue
+        misleading_entry_like_wording = str(row.get("misleading_entry_like_wording", "")).strip()
+        sl_eval = str(row.get("sl_eval", "")).strip()
+        tp_eval = str(row.get("tp_eval", "")).strip()
+        tf_4h_eval = str(row.get("tf_4h_eval", "")).strip()
+        tf_1h_eval = str(row.get("tf_1h_eval", "")).strip()
+        tf_15m_eval = str(row.get("tf_15m_eval", "")).strip()
+        review_action_class = str(row.get("review_action_class", "")).strip()
+        review_priority = str(row.get("review_priority", "")).strip()
+        review_source = _review_source_value(row)
         if user_verdict not in VALID_USER_VERDICTS:
             raise ValueError(f"invalid user_verdict: {signal_id} -> {user_verdict}")
         if would_trade not in VALID_WOULD_TRADE:
             raise ValueError(f"invalid would_trade: {signal_id} -> {would_trade}")
         if actual_move_driver not in VALID_MOVE_DRIVERS:
             raise ValueError(f"invalid actual_move_driver: {signal_id} -> {actual_move_driver}")
+        if misleading_entry_like_wording not in VALID_MISLEADING_ENTRY:
+            raise ValueError(f"invalid misleading_entry_like_wording: {signal_id} -> {misleading_entry_like_wording}")
+        if sl_eval not in VALID_SL_EVAL:
+            raise ValueError(f"invalid sl_eval: {signal_id} -> {sl_eval}")
+        if tp_eval not in VALID_TP_EVAL:
+            raise ValueError(f"invalid tp_eval: {signal_id} -> {tp_eval}")
+        if tf_4h_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_4h_eval: {signal_id} -> {tf_4h_eval}")
+        if tf_1h_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_1h_eval: {signal_id} -> {tf_1h_eval}")
+        if tf_15m_eval not in VALID_TF_EVAL:
+            raise ValueError(f"invalid tf_15m_eval: {signal_id} -> {tf_15m_eval}")
+        if review_action_class not in VALID_REVIEW_ACTION_CLASS:
+            raise ValueError(f"invalid review_action_class: {signal_id} -> {review_action_class}")
+        if review_priority not in VALID_REVIEW_PRIORITY:
+            raise ValueError(f"invalid review_priority: {signal_id} -> {review_priority}")
+        if review_source not in VALID_REVIEW_SOURCE:
+            raise ValueError(f"invalid review_source: {signal_id} -> {review_source}")
         if usefulness:
             usefulness_int = int(usefulness)
             if usefulness_int < 1 or usefulness_int > 5:
                 raise ValueError(f"invalid usefulness_1to5: {signal_id} -> {usefulness}")
-        imported_rows.append(
-            {
-                "signal_id": signal_id,
-                "timestamp_jst": row.get("timestamp_jst", ""),
-                "subject": row.get("subject", ""),
-                "auto_eval_summary": row.get("auto_eval_summary", ""),
-                "user_verdict": user_verdict,
-                "usefulness_1to5": usefulness,
-                "would_trade": would_trade,
-                "actual_move_driver": actual_move_driver,
-                "logic_validated": row.get("logic_validated", ""),
-                "memo": row.get("memo", ""),
-                "review_status": review_status,
-                "reviewed_at_utc": reviewed_at,
-            }
-        )
+        imported_rows.append(row)
 
     return _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, imported_rows, "signal_id")
+
+
+def _save_review_rows(
+    *,
+    base_dir: Path,
+    incoming_rows: list[dict[str, Any]],
+    review_note_path: Path = DEFAULT_REVIEW_NOTE,
+    reviews_path: Path | None = None,
+    outcomes_path: Path | None = None,
+    trades_path: Path | None = None,
+) -> list[dict[str, str]]:
+    reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    export_review_queue(
+        base_dir=base_dir,
+        review_note_path=review_note_path,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
+    state_path = _review_state_path(base_dir)
+    current_rows = _load_review_state_rows(state_path)
+    current_map = {str(row.get("signal_id", "")): row for row in current_rows if str(row.get("signal_id", "")).strip()}
+    trade_map = {str(row.get("signal_id", "")).strip(): row for row in _load_csv_rows(trades_path) if str(row.get("signal_id", "")).strip()}
+    for raw_row in incoming_rows:
+        signal_id = str(raw_row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        current = current_map.get(signal_id, {"signal_id": signal_id})
+        for key in (
+            "timestamp_jst",
+            "subject",
+            "auto_eval_summary",
+            "user_verdict",
+            "usefulness_1to5",
+            "would_trade",
+            "actual_move_driver",
+            "misleading_entry_like_wording",
+            "logic_validated",
+            "sl_eval",
+            "tp_eval",
+            "tf_4h_eval",
+            "tf_1h_eval",
+            "tf_15m_eval",
+            "review_source",
+            "review_model",
+            "review_image_mode",
+            "review_variant",
+            "memo",
+            "review_status",
+        ):
+            if key in raw_row:
+                current[key] = str(raw_row.get(key, "") or "")
+        current["logic_validated"] = _logic_validated(
+            trade_map.get(signal_id, {}).get("prelabel_primary_reason", ""),
+            current.get("actual_move_driver", ""),
+        ) or str(current.get("logic_validated", "") or "")
+        current["review_source"] = "human_override"
+        current["reviewed_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        current_map[signal_id] = current
+
+    ordered_rows = sorted(
+        [row for row in current_map.values() if _is_review_target(str(row.get("timestamp_jst", "")))],
+        key=lambda row: row.get("timestamp_jst", ""),
+        reverse=True,
+    )
+    _write_review_state(state_path, ordered_rows)
+    _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, _review_rows_to_csv_rows(ordered_rows), "signal_id")
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=base_dir / "logs" / "csv" / "signal_outcomes.csv",
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
+    review_note_path.write_text(_render_review_note(ordered_rows, ai_health_summary=ai_health_summary), encoding="utf-8")
+    write_review_form_html(ordered_rows, review_note_path)
+    return ordered_rows
+
+
+def serve_review_form(
+    *,
+    base_dir: Path,
+    review_note_path: Path = DEFAULT_REVIEW_NOTE,
+    host: str = REVIEW_SERVER_HOST,
+    port: int = REVIEW_SERVER_PORT,
+) -> None:
+    export_review_queue(base_dir=base_dir, review_note_path=review_note_path)
+    form_path = _review_form_path(review_note_path)
+
+    class ReviewFormHandler(BaseHTTPRequestHandler):
+        def _send(self, status: int, body: bytes, content_type: str) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.end_headers()
+
+        def do_GET(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            if parsed.path == "/":
+                export_review_queue(base_dir=base_dir, review_note_path=review_note_path)
+                self._send(200, form_path.read_bytes(), "text/html; charset=utf-8")
+                return
+            if parsed.path == "/api/review-form/state":
+                export_review_queue(base_dir=base_dir, review_note_path=review_note_path)
+                payload = {
+                    "rows": _load_review_state_rows(_review_state_path(base_dir)),
+                    "review_note_path": str(review_note_path),
+                    "review_form_path": str(form_path),
+                }
+                self._send(200, json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                return
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+
+        def do_POST(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            if parsed.path != "/api/review-form/save":
+                self._send(404, b"not found", "text/plain; charset=utf-8")
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except json.JSONDecodeError:
+                self._send(400, b"invalid json", "text/plain; charset=utf-8")
+                return
+            rows = payload.get("rows", [])
+            if not isinstance(rows, list):
+                self._send(400, b"rows must be list", "text/plain; charset=utf-8")
+                return
+            saved_rows = _save_review_rows(base_dir=base_dir, incoming_rows=rows, review_note_path=review_note_path)
+            self._send(
+                200,
+                json.dumps({"rows": saved_rows}, ensure_ascii=False).encode("utf-8"),
+                "application/json; charset=utf-8",
+            )
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return
+
+    server = ThreadingHTTPServer((host, port), ReviewFormHandler)
+    print(f"http://{host}:{port}/")
+    server.serve_forever()
 
 
 def _logic_validated(prelabel_primary_reason: str, actual_move_driver: str) -> str:
@@ -1181,8 +5594,60 @@ def build_shadow_log(
             continue
         outcome = outcomes.get(signal_id, {})
         review = reviews.get(signal_id, {})
+        effective_prelabel = reconcile_prelabel_with_setup(
+            str(trade.get("prelabel", "")),
+            str(trade.get("primary_setup_status", "")),
+        )
         actual_move_driver = review.get("actual_move_driver", "")
         logic_validated = _logic_validated(trade.get("prelabel_primary_reason", ""), actual_move_driver)
+        observation_gate = determine_phase1_observation_gate(
+            bias=str(trade.get("bias", "")),
+            primary_setup_side=str(trade.get("primary_setup_side", "")),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+            secondary_setup_status=str(trade.get("short_status", "")) if str(trade.get("bias", "")) == "long" else str(trade.get("long_status", "")),
+        )
+        effective_observation_type = trade.get("phase1_observation_type", "") or observation_gate["phase1_observation_type"]
+        lite_gate = determine_phase1b_lite_gate(
+            phase1_observation_type=str(effective_observation_type),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
+            prelabel=effective_prelabel,
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+        )
+        opportunity_gate = determine_opportunity_gate(
+            bias=str(trade.get("bias", "")),
+            primary_setup_side=str(trade.get("primary_setup_side", "")),
+            primary_setup_status=str(trade.get("primary_setup_status", "")),
+            primary_setup_reason=str(trade.get("primary_setup_reason", "")),
+            data_quality_flag=str(trade.get("data_quality_flag", "")),
+            no_trade_flags=_split_values(str(trade.get("no_trade_flags", ""))),
+            risk_flags=_split_values(str(trade.get("risk_flags", ""))),
+            market_map_flags=_split_values(str(trade.get("market_map_flags", ""))),
+            phase1_observation_gate=str(trade.get("phase1_observation_gate", "") or observation_gate["phase1_observation_gate"]),
+            phase1_observation_type=str(effective_observation_type),
+            phase1b_lite_gate=str(trade.get("phase1b_lite_gate", "") or lite_gate["phase1b_lite_gate"]),
+            phase1b_lite_type=str(trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"]),
+            trade_execution_gate=str(trade.get("trade_execution_gate", "")),
+            confidence_direction_shadow=trade.get("confidence_direction_shadow", ""),
+            confidence_execution_shadow=trade.get("confidence_execution_shadow", ""),
+            confidence_wait_shadow=trade.get("confidence_wait_shadow", ""),
+            execution_precision_action=str(trade.get("execution_precision_action", "")),
+            nearest_support_distance=trade.get("nearest_support_distance", ""),
+            nearest_resistance_distance=trade.get("nearest_resistance_distance", ""),
+        )
         shadow_rows.append(
             {
                 "signal_id": signal_id,
@@ -1190,21 +5655,40 @@ def build_shadow_log(
                 "price": trade.get("current_price", ""),
                 "bias": trade.get("bias", ""),
                 "regime": trade.get("market_regime", ""),
+                "market_map_primary_state": trade.get("market_map_primary_state", ""),
+                "market_map_flags": trade.get("market_map_flags", ""),
+                "nearest_major_support": trade.get("nearest_major_support", ""),
+                "nearest_major_resistance": trade.get("nearest_major_resistance", ""),
+                "active_level_role": trade.get("active_level_role", ""),
+                "level_flip_state": trade.get("level_flip_state", ""),
+                "failed_breakout_state": trade.get("failed_breakout_state", ""),
+                "trend_flip_state": trade.get("trend_flip_state", ""),
                 "phase": trade.get("phase", ""),
                 "long_score": trade.get("long_score", trade.get("long_display_score", "")),
                 "short_score": trade.get("short_score", trade.get("short_display_score", "")),
                 "score_gap": trade.get("score_gap", ""),
                 "confidence": trade.get("confidence", ""),
+                "raw_confidence": trade.get("raw_confidence", ""),
+                "confidence_direction_shadow": trade.get("confidence_direction_shadow", ""),
+                "confidence_execution_shadow": trade.get("confidence_execution_shadow", ""),
+                "confidence_wait_shadow": trade.get("confidence_wait_shadow", ""),
                 "top_positive_factors": trade.get("top_positive_factors", ""),
                 "top_negative_factors": trade.get("top_negative_factors", ""),
-                "prelabel": trade.get("prelabel", ""),
+                "prelabel": effective_prelabel,
                 "prelabel_primary_reason": trade.get("prelabel_primary_reason", ""),
                 "location_risk": trade.get("location_risk", ""),
+                "primary_setup_side": trade.get("primary_setup_side", ""),
                 "primary_setup_status": trade.get("primary_setup_status", ""),
+                "primary_setup_reason": trade.get("primary_setup_reason", ""),
                 "invalid_reason": trade.get("invalid_reason", ""),
+                "primary_entry_mid": trade.get("primary_entry_mid", ""),
+                "primary_stop_loss": trade.get("primary_stop_loss", ""),
                 "signal_tier": trade.get("signal_tier", "normal"),
                 "ai_decision": trade.get("ai_decision", ""),
                 "ai_confidence": trade.get("ai_confidence", ""),
+                "ai_audit_status": trade.get("ai_audit_status", ""),
+                "ai_audit_verdict": trade.get("ai_audit_verdict", ""),
+                "ai_audit_agreement": trade.get("ai_audit_agreement", ""),
                 "was_notified": trade.get("was_notified", ""),
                 "notify_reason": trade.get("notify_reason_codes", trade.get("reason_for_notification", "")),
                 "suppress_reason": trade.get("suppress_reason_codes", ""),
@@ -1234,12 +5718,28 @@ def build_shadow_log(
                 "warning_flags": trade.get("warning_flags", ""),
                 "no_trade_flags": trade.get("no_trade_flags", ""),
                 "summary_subject": trade.get("summary_subject", ""),
+                "summary_variant": trade.get("summary_variant", ""),
+                "advice_variant": trade.get("advice_variant", ""),
+                "evaluation_trace_version": trade.get("evaluation_trace_version", ""),
                 "actual_move_driver": actual_move_driver,
+                "sl_eval": review.get("sl_eval", ""),
+                "tp_eval": review.get("tp_eval", ""),
+                "tf_4h_eval": review.get("tf_4h_eval", ""),
+                "tf_1h_eval": review.get("tf_1h_eval", ""),
+                "tf_15m_eval": review.get("tf_15m_eval", ""),
+                "misleading_entry_like_wording": review.get("misleading_entry_like_wording", ""),
                 "logic_validated": logic_validated or review.get("logic_validated", ""),
+                "review_source": _review_source_value(review),
                 "review_status": review.get("review_status", ""),
                 "user_verdict": review.get("user_verdict", ""),
                 "usefulness_1to5": review.get("usefulness_1to5", ""),
                 "would_trade": review.get("would_trade", ""),
+                "review_model": review.get("review_model", ""),
+                "review_image_mode": review.get("review_image_mode", ""),
+                "review_variant": review.get("review_variant", ""),
+                "review_action_class": review.get("review_action_class", ""),
+                "review_priority": review.get("review_priority", ""),
+                "next_action": review.get("next_action", ""),
                 "memo": review.get("memo", ""),
                 "evaluation_status": outcome.get("evaluation_status", ""),
                 "risk_percent_applied": trade.get("risk_percent_applied", ""),
@@ -1256,11 +5756,10503 @@ def build_shadow_log(
                 "trail_atr_multiplier": trade.get("trail_atr_multiplier", ""),
                 "timeout_hours": trade.get("timeout_hours", ""),
                 "exit_rule_version": trade.get("exit_rule_version", ""),
+                "shadow_tp1_price": trade.get("shadow_tp1_price", ""),
+                "shadow_tp2_price": trade.get("shadow_tp2_price", ""),
+                "shadow_breakeven_after_tp1": trade.get("shadow_breakeven_after_tp1", ""),
+                "shadow_trail_atr_multiplier": trade.get("shadow_trail_atr_multiplier", ""),
+                "shadow_timeout_hours": trade.get("shadow_timeout_hours", ""),
+                "shadow_exit_rule_version": trade.get("shadow_exit_rule_version", ""),
+                "trade_execution_gate": trade.get("trade_execution_gate", ""),
+                "trade_execution_blockers": trade.get("trade_execution_blockers", ""),
+                "phase1_observation_gate": trade.get("phase1_observation_gate", "") or observation_gate["phase1_observation_gate"],
+                "phase1_observation_type": effective_observation_type,
+                "phase1_observation_reasons": trade.get("phase1_observation_reasons", "")
+                or json.dumps(observation_gate["phase1_observation_reasons"], ensure_ascii=False),
+                "phase1b_lite_gate": trade.get("phase1b_lite_gate", "") or lite_gate["phase1b_lite_gate"],
+                "phase1b_lite_type": trade.get("phase1b_lite_type", "") or lite_gate["phase1b_lite_type"],
+                "phase1b_lite_reasons": trade.get("phase1b_lite_reasons", "")
+                or json.dumps(lite_gate["phase1b_lite_reasons"], ensure_ascii=False),
+                "opportunity_gate": opportunity_gate["opportunity_gate"],
+                "opportunity_type": opportunity_gate["opportunity_type"],
+                "opportunity_reasons": json.dumps(opportunity_gate["opportunity_reasons"], ensure_ascii=False),
+                "paper_order_status": trade.get("paper_order_status", ""),
             }
         )
 
     shadow_rows.sort(key=lambda row: row.get("timestamp_jst", ""), reverse=True)
     return _write_csv_rows(shadow_path, SHADOW_HEADER, shadow_rows)
+
+
+def _observation_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    observation_type = str(row.get("phase1_observation_type", "")).strip()
+    observation_side = row.get("primary_setup_side", "")
+    if observation_type == "counter_long_short_watch":
+        bias = str(row.get("bias", "")).strip()
+        if bias == "long":
+            observation_side = "short"
+        elif bias == "short":
+            observation_side = "long"
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "observation_phase": "phase1A",
+        "observation_type": observation_type,
+        "observation_status": "observing",
+        "side": observation_side,
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": row.get("primary_setup_status", ""),
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "phase1_observation_reasons": row.get("phase1_observation_reasons", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+    }
+
+
+def _phase1b_lite_order_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "lite_phase": "phase1B-lite",
+        "lite_type": row.get("phase1b_lite_type", ""),
+        "lite_status": "observing",
+        "side": row.get("primary_setup_side", ""),
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": row.get("primary_setup_status", ""),
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+    }
+
+
+def _paper_position_from_trade(row: dict[str, Any]) -> dict[str, Any]:
+    setup_status = str(row.get("primary_setup_status", "")).strip()
+    position_status = "opened" if setup_status == "ready" else "pending"
+    return {
+        "signal_id": row.get("signal_id", ""),
+        "timestamp_jst": row.get("timestamp_jst", ""),
+        "position_phase": "pre_auto_paper",
+        "position_status": position_status,
+        "opportunity_type": row.get("opportunity_type", ""),
+        "opportunity_reasons": row.get("opportunity_reasons", ""),
+        "side": row.get("primary_setup_side", ""),
+        "reference_price": row.get("current_price", row.get("price", "")),
+        "entry_price": row.get("primary_entry_mid", ""),
+        "stop_loss_price": row.get("primary_stop_loss", ""),
+        "tp1_price": row.get("shadow_tp1_price", row.get("tp1_price", "")),
+        "tp2_price": row.get("shadow_tp2_price", row.get("tp2_price", "")),
+        "breakeven_after_tp1": row.get("shadow_breakeven_after_tp1", row.get("breakeven_after_tp1", "")),
+        "timeout_hours": row.get("shadow_timeout_hours", row.get("timeout_hours", "")),
+        "exit_rule_version": row.get("shadow_exit_rule_version", row.get("exit_rule_version", "")),
+        "rr_estimate": row.get("rr_estimate", ""),
+        "atr_15m_value": row.get("atr_15m_value", ""),
+        "prelabel": row.get("prelabel", ""),
+        "primary_setup_status": setup_status,
+        "primary_setup_reason": row.get("primary_setup_reason", ""),
+        "market_map_flags": row.get("market_map_flags", ""),
+        "confidence_direction_shadow": row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": row.get("trade_execution_gate", ""),
+        "opened_at_jst": row.get("timestamp_jst", "") if position_status == "opened" else "",
+        "closed_at_jst": "",
+        "exit_status": "",
+        "exit_reason": "",
+        "close_price": "",
+        "tp1_hit_at_jst": "",
+        "tp2_hit_at_jst": "",
+        "sl_hit_at_jst": "",
+        "timeout_at_jst": "",
+        "mfe_atr": "",
+        "mae_atr": "",
+        "realized_r": "",
+        "missed_opportunity": "",
+        "missed_reason": "",
+        "last_evaluated_at_utc": "",
+    }
+
+
+def _paper_position_realized_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    r_values = [_parse_float(row.get("realized_r"), 0.0) for row in rows if str(row.get("realized_r", "")).strip()]
+    positive = sum(value for value in r_values if value > 0)
+    negative = abs(sum(value for value in r_values if value < 0))
+    wins = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    return {
+        "count": len(rows),
+        "win_rate": _ratio(wins, len(rows)),
+        "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+        "approx_pf": (positive / negative) if negative > 0 else 0.0,
+    }
+
+
+_FILLED_PAPER_EXIT_STATUSES = {"sl_hit", "tp2_hit", "timeout"}
+_NON_ENTERED_PAPER_EXIT_STATUSES = {"missed_opportunity", "entry_not_reached"}
+
+
+def _paper_position_exit_status(row: dict[str, Any]) -> str:
+    return str(row.get("exit_status", "")).strip()
+
+
+def _paper_position_filled_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if _paper_position_exit_status(row) in _FILLED_PAPER_EXIT_STATUSES]
+
+
+def _paper_position_non_entered_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if _paper_position_exit_status(row) in _NON_ENTERED_PAPER_EXIT_STATUSES]
+
+
+def _paper_position_r_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    r_values = [_parse_float(row.get("realized_r"), 0.0) for row in rows if str(row.get("realized_r", "")).strip()]
+    positive = sum(value for value in r_values if value > 0)
+    negative = abs(sum(value for value in r_values if value < 0))
+    wins = sum(1 for row in rows if _paper_position_exit_status(row) == "tp2_hit")
+    return {
+        "count": len(rows),
+        "r_count": len(r_values),
+        "win_rate": _ratio(wins, len(rows)),
+        "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+        "approx_pf": (positive / negative) if negative > 0 else 0.0,
+    }
+
+
+def _paper_position_filled_only_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    filled_rows = _paper_position_filled_rows(rows)
+    non_entered_rows = _paper_position_non_entered_rows(rows)
+    filled_stats = _paper_position_r_stats(filled_rows)
+    all_stats = _paper_position_realized_stats(rows)
+    return {
+        **filled_stats,
+        "all_count": len(rows),
+        "filled_count": len(filled_rows),
+        "non_entered_count": len(non_entered_rows),
+        "missed_opportunity_count": sum(1 for row in non_entered_rows if _paper_position_exit_status(row) == "missed_opportunity"),
+        "entry_not_reached_count": sum(1 for row in non_entered_rows if _paper_position_exit_status(row) == "entry_not_reached"),
+        "all_avg_realized_r": all_stats["avg_realized_r"],
+        "all_approx_pf": all_stats["approx_pf"],
+    }
+
+
+def _paper_position_group_lines(
+    *,
+    title: str,
+    labels: list[tuple[str, list[dict[str, Any]]]],
+    limit: int = 12,
+) -> list[str]:
+    lines = ["", f"## {title}"]
+    emitted = 0
+    for label, subset in labels:
+        if not subset:
+            continue
+        stats = _paper_position_filled_only_stats(subset)
+        exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in subset)
+        lines.append(
+            f"- {label}: {stats['all_count']}件 / all={stats['all_count']}件 / filled={stats['filled_count']}件 / "
+            f"filled勝率={_format_pct(stats['win_rate'])} / filled平均R={stats['avg_realized_r']:.2f} / "
+            f"filled簡易PF={stats['approx_pf']:.2f} / "
+            f"missed={stats['missed_opportunity_count']}件 / entry_not_reached={stats['entry_not_reached_count']}件 / "
+            f"終了={_format_counter(exit_counts, limit=4)}"
+        )
+        emitted += 1
+        if emitted >= limit:
+            break
+    if emitted == 0:
+        lines.append("- 該当なし")
+    return lines
+
+
+def _paper_position_bucket(value: float, thresholds: list[tuple[float, str]], fallback: str) -> str:
+    for upper, label in thresholds:
+        if value < upper:
+            return label
+    return fallback
+
+
+def _paper_position_has_flag(row: dict[str, Any], flag: str) -> bool:
+    return flag in _split_values(str(row.get("market_map_flags", "")))
+
+
+def _classify_sl_failure(row: dict[str, Any]) -> str:
+    side = str(row.get("side", "")).strip()
+    wait = _parse_float(row.get("confidence_wait_shadow"), 0.0)
+    mfe_atr = _parse_float(row.get("mfe_atr"), 0.0)
+    mae_atr = _parse_float(row.get("mae_atr"), 0.0)
+    rr_estimate = _parse_float(row.get("rr_estimate"), 0.0)
+
+    if side == "long" and any(
+        _paper_position_has_flag(row, flag)
+        for flag in ("trend_flip_confirmed_up", "trend_flip_early_up")
+    ):
+        return "trend_flip_long_sl"
+    if wait >= 60.0:
+        return "late_wait_sl"
+    if rr_estimate > 0.0 and rr_estimate <= 1.3:
+        return "thin_rr_sl"
+    if mfe_atr >= 0.5 and mae_atr >= 0.8:
+        return "early_entry_sl"
+    if mfe_atr < 0.3 and mae_atr >= 0.8:
+        return "direction_mismatch_sl"
+    return "other_sl"
+
+
+def _paper_position_sl_failure_summary(rows: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    labels = [
+        "early_entry_sl",
+        "direction_mismatch_sl",
+        "thin_rr_sl",
+        "late_wait_sl",
+        "trend_flip_long_sl",
+        "other_sl",
+    ]
+    return [(label, [row for row in rows if _classify_sl_failure(row) == label]) for label in labels]
+
+
+def _paper_position_sl_group_lines(rows: list[dict[str, Any]]) -> list[str]:
+    lines = ["", "## SL失敗分類"]
+    summaries = _paper_position_sl_failure_summary(rows)
+    emitted = 0
+    for label, subset in summaries:
+        if not subset:
+            continue
+        stats = _paper_position_filled_only_stats(subset)
+        sample_ids = ", ".join(str(row.get("signal_id", "")).strip() for row in subset[:3] if str(row.get("signal_id", "")).strip())
+        lines.append(
+            f"- {label}: {len(subset)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled簡易PF={stats['approx_pf']:.2f} / "
+            f"平均MFE={_mean_value(subset, 'mfe_atr'):.2f} / 平均MAE={_mean_value(subset, 'mae_atr'):.2f} / "
+            f"代表={sample_ids or 'なし'}"
+        )
+        emitted += 1
+    if emitted == 0:
+        lines.append("- 該当なし")
+    return lines
+
+
+def _paper_review_summary_lines(
+    *,
+    title: str,
+    rows: list[dict[str, Any]],
+) -> list[str]:
+    lines = ["", f"## {title}"]
+    if not rows:
+        lines.append("- 該当なし")
+        return lines
+    summary = _review_summary(rows)
+    reviewed_count = int(summary.get("reviewed_count", 0))
+    lines.append(f"- review coverage: {reviewed_count}/{len(rows)}件")
+    source_counts: Counter[str] = summary.get("review_source_counts", Counter())
+    if source_counts:
+        lines.append("- review source: " + ", ".join(f"{key}={value}件" for key, value in source_counts.items() if key))
+    verdicts: Counter[str] = summary.get("verdicts", Counter())
+    if verdicts:
+        lines.append("- verdict: " + ", ".join(f"{key}={value}件" for key, value in verdicts.items() if key))
+    sl_counts: Counter[str] = summary.get("sl_eval_counts", Counter())
+    if sl_counts:
+        lines.append("- sl_eval: " + ", ".join(f"{key}={value}件" for key, value in sl_counts.items() if key))
+    tp_counts: Counter[str] = summary.get("tp_eval_counts", Counter())
+    if tp_counts:
+        lines.append("- tp_eval: " + ", ".join(f"{key}={value}件" for key, value in tp_counts.items() if key))
+    tf_15m_counts: Counter[str] = summary.get("tf_15m_eval_counts", Counter())
+    if tf_15m_counts:
+        lines.append("- tf_15m_eval: " + ", ".join(f"{key}={value}件" for key, value in tf_15m_counts.items() if key))
+    action_counts: Counter[str] = summary.get("action_class_counts", Counter())
+    if action_counts:
+        lines.append("- action_class: " + ", ".join(f"{key}={value}件" for key, value in action_counts.items() if key))
+    priority_counts: Counter[str] = summary.get("priority_counts", Counter())
+    if priority_counts:
+        lines.append("- priority: " + ", ".join(f"{key}={value}件" for key, value in priority_counts.items() if key))
+    high_priority_actions = summary.get("high_priority_actions", [])
+    if high_priority_actions:
+        lines.append("- high priority examples:")
+        for row in high_priority_actions[:3]:
+            lines.append(f"  - {row.get('signal_id', '')}: {row.get('review_action_class', '')} / {row.get('next_action', '')}")
+    return lines
+
+
+def _paper_review_backing_notes(rows: list[dict[str, Any]]) -> list[str]:
+    notes: list[str] = []
+    if not rows:
+        return notes
+    summary = _review_summary(rows)
+    sl_counts: Counter[str] = summary.get("sl_eval_counts", Counter())
+    too_tight = int(sl_counts.get("too_tight", 0))
+    if too_tight > 0:
+        notes.append(f"- AI裏付け: `sl_eval=too_tight` が {too_tight}件あり、SL幅再設計の裏付けがある。")
+    verdicts: Counter[str] = summary.get("verdicts", Counter())
+    too_early = int(verdicts.get("too_early", 0))
+    tf_15m_counts: Counter[str] = summary.get("tf_15m_eval_counts", Counter())
+    poor_15m = int(tf_15m_counts.get("poor", 0))
+    if too_early > 0 or poor_15m > 0:
+        notes.append(f"- AI裏付け: `too_early={too_early}件` / `tf_15m_eval=poor={poor_15m}件` で、発火遅延または15分足条件見直し候補。")
+    misleading_yes = sum(1 for row in rows if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
+    if misleading_yes > 0:
+        notes.append(f"- AI裏付け: `misleading_entry_like_wording=yes` が {misleading_yes}件あり、通知文面の中立化候補。")
+    logic_false = sum(1 for row in rows if str(row.get("logic_validated", "")).strip() == "false")
+    technical_driver = sum(1 for row in rows if str(row.get("actual_move_driver", "")).strip() == "technical")
+    if logic_false > 0 and technical_driver > 0:
+        notes.append(f"- AI裏付け: `actual_move_driver=technical` が {technical_driver}件ある一方で `logic_validated=false` が {logic_false}件あり、根拠整合の再設計候補。")
+    return notes
+
+
+def _paper_position_proposals(market_rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    proposals: list[tuple[str, str]] = []
+    long_high_wait_rows = [
+        row for row in market_rows
+        if str(row.get("side", "")).strip() == "long"
+        and _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0
+    ]
+    if long_high_wait_rows:
+        stats = _paper_position_filled_only_stats(long_high_wait_rows)
+        proposals.append(
+            (
+                "suppress_long_high_wait",
+                f"long かつ wait>=60 は {len(long_high_wait_rows)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled簡易PF={stats['approx_pf']:.2f} のため、紙候補でも一段抑制候補。",
+            )
+        )
+
+    trend_flip_up_rows = [
+        row for row in market_rows
+        if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
+    ]
+    if trend_flip_up_rows:
+        stats = _paper_position_filled_only_stats(trend_flip_up_rows)
+        proposals.append(
+            (
+                "suppress_trend_flip_up_strong",
+                f"上方向転換系は {len(trend_flip_up_rows)}件 / filled平均R={stats['avg_realized_r']:.2f} / filled勝率={_format_pct(stats['win_rate'])} のため、強評価へ戻さない候補。",
+            )
+        )
+
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    if high_wait_rows:
+        weak_exec_rows = [row for row in high_wait_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 35.0]
+        target_rows = weak_exec_rows or high_wait_rows
+        stats = _paper_position_filled_only_stats(target_rows)
+        proposals.append(
+            (
+                "require_execution_for_high_wait",
+                f"wait>=60 群は execution 下限強化候補。対象 {len(target_rows)}件 / 平均 execution={_mean_value(target_rows, 'confidence_execution_shadow'):.1f} / filled平均R={stats['avg_realized_r']:.2f}。",
+            )
+        )
+
+    sweep_wait_rows = [row for row in market_rows if str(row.get("prelabel", "")).strip() == "SWEEP_WAIT"]
+    if sweep_wait_rows:
+        weak_sweep_rows = [
+            row for row in sweep_wait_rows
+            if str(row.get("exit_status", "")).strip() in {"sl_hit", "missed_opportunity"}
+        ]
+        if weak_sweep_rows:
+            proposals.append(
+                (
+                    "delay_entry_on_sweep_wait",
+                    f"SWEEP_WAIT の弱い終了が {len(weak_sweep_rows)}件あるため、即 entry ではなく再確認待ちへ寄せる候補。",
+                )
+            )
+
+    thin_rr_rows = [row for row in market_rows if _classify_sl_failure(row) == "thin_rr_sl"]
+    if thin_rr_rows:
+        proposals.append(
+            (
+                "skip_thin_sl",
+                f"thin_rr_sl が {len(thin_rr_rows)}件あるため、SL拡張ではなく skip 優先で検討する候補。",
+            )
+        )
+    too_tight_rows = [row for row in market_rows if str(row.get("sl_eval", "")).strip() == "too_tight"]
+    if too_tight_rows:
+        proposals.append(
+            (
+                "widen_sl_for_noise",
+                f"`sl_eval=too_tight` が {len(too_tight_rows)}件あるため、短期ノイズで刈られにくい SL 幅へ再設計候補。",
+            )
+        )
+    early_or_poor_rows = [
+        row for row in market_rows
+        if str(row.get("user_verdict", "")).strip() == "too_early"
+        or str(row.get("tf_15m_eval", "")).strip() == "poor"
+    ]
+    if early_or_poor_rows:
+        proposals.append(
+            (
+                "delay_entry_from_ai_review",
+                f"`too_early` または `tf_15m_eval=poor` が {len(early_or_poor_rows)}件あり、entry 発火遅延または15分足条件見直し候補。",
+            )
+        )
+    misleading_rows = [row for row in market_rows if str(row.get("misleading_entry_like_wording", "")).strip() == "yes"]
+    if misleading_rows:
+        proposals.append(
+            (
+                "neutralize_wording",
+                f"`misleading_entry_like_wording=yes` が {len(misleading_rows)}件あり、通知文面をより中立にする候補。",
+            )
+        )
+    realign_rows = [
+        row
+        for row in market_rows
+        if str(row.get("actual_move_driver", "")).strip() == "technical"
+        and str(row.get("logic_validated", "")).strip() == "false"
+    ]
+    if realign_rows:
+        proposals.append(
+            (
+                "realign_reasoning",
+                f"`actual_move_driver=technical` かつ `logic_validated=false` が {len(realign_rows)}件あり、根拠整合の再設計候補。",
+            )
+        )
+    return proposals
+
+
+def _paper_position_missing_data_notes(rows: list[dict[str, Any]]) -> list[str]:
+    checks = [
+        ("mfe_atr", "MFE/MAE 判定"),
+        ("mae_atr", "MFE/MAE 判定"),
+        ("rr_estimate", "RR 判定"),
+        ("confidence_wait_shadow", "wait 判定"),
+        ("confidence_execution_shadow", "execution 判定"),
+    ]
+    notes: list[str] = []
+    for key, label in checks:
+        present = sum(1 for row in rows if str(row.get(key, "")).strip())
+        if rows and present < len(rows):
+            notes.append(f"- {label}: `{key}` が {len(rows) - present}件で欠落")
+    return notes
+
+
+def _counterfactual_leaf_hits_from_shadow_row(row: dict[str, Any]) -> set[str]:
+    hits: set[str] = set()
+    for raw_reason in _split_values(str(row.get("opportunity_reasons", ""))):
+        normalized = raw_reason.split(":", 1)[-1]
+        tokens = {token.strip() for token in normalized.split("+") if token.strip()}
+        for leaf in _QUALITY_GUARD_LEAF_REASONS:
+            if leaf in tokens:
+                hits.add(leaf)
+    return hits
+
+
+def _counterfactual_group_label(leaf_hits: set[str]) -> str | None:
+    mapping = {
+        frozenset({"require_execution_for_high_wait"}): "A only",
+        frozenset({"suppress_long_high_wait"}): "B only",
+        frozenset({"suppress_trend_flip_up_strong"}): "C only",
+        frozenset({"require_execution_for_high_wait", "suppress_long_high_wait"}): "A+B",
+        frozenset({"require_execution_for_high_wait", "suppress_trend_flip_up_strong"}): "A+C",
+        frozenset({"suppress_long_high_wait", "suppress_trend_flip_up_strong"}): "B+C",
+        frozenset(
+            {
+                "require_execution_for_high_wait",
+                "suppress_long_high_wait",
+                "suppress_trend_flip_up_strong",
+            }
+        ): "A+B+C",
+    }
+    return mapping.get(frozenset(leaf_hits))
+
+
+def _counterfactual_group_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    sl_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+    tp2_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    missed = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "missed_opportunity")
+    timeout = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "timeout")
+    entry_not_reached = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "entry_not_reached")
+    return {
+        "count": count,
+        "sl_hit": sl_hit,
+        "sl_hit_rate": _ratio(sl_hit, count),
+        "tp2_hit": tp2_hit,
+        "tp2_hit_rate": _ratio(tp2_hit, count),
+        "missed_opportunity": missed,
+        "missed_rate": _ratio(missed, count),
+        "timeout": timeout,
+        "entry_not_reached": entry_not_reached,
+        "avg_r": _mean_value(rows, "realized_r"),
+    }
+
+
+def _counterfactual_entered_non_entered_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    entered_statuses = {"sl_hit", "tp2_hit", "timeout"}
+    non_entered_statuses = {"missed_opportunity", "entry_not_reached"}
+    entered_rows = [row for row in rows if str(row.get("exit_status", "")).strip() in entered_statuses]
+    non_entered_rows = [row for row in rows if str(row.get("exit_status", "")).strip() in non_entered_statuses]
+    count = len(rows)
+    entered_count = len(entered_rows)
+    non_entered_count = len(non_entered_rows)
+    entered_sl_hit = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+    entered_tp2_hit = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "tp2_hit")
+    entered_timeout = sum(1 for row in entered_rows if str(row.get("exit_status", "")).strip() == "timeout")
+    missed = sum(1 for row in non_entered_rows if str(row.get("exit_status", "")).strip() == "missed_opportunity")
+    entry_not_reached = sum(1 for row in non_entered_rows if str(row.get("exit_status", "")).strip() == "entry_not_reached")
+    return {
+        "count": count,
+        "entered_count": entered_count,
+        "entered_sl_hit": entered_sl_hit,
+        "entered_sl_hit_rate": _ratio(entered_sl_hit, entered_count),
+        "entered_tp2_hit": entered_tp2_hit,
+        "entered_tp2_hit_rate": _ratio(entered_tp2_hit, entered_count),
+        "entered_timeout": entered_timeout,
+        "entered_avg_r": _mean_value(entered_rows, "realized_r"),
+        "non_entered_count": non_entered_count,
+        "missed_opportunity": missed,
+        "entry_not_reached": entry_not_reached,
+        "non_entered_avg_r": _mean_value(non_entered_rows, "realized_r"),
+    }
+
+
+def _entry_recheck_reason_hits(row: dict[str, Any], allowed_reasons: tuple[str, ...] = _ENTRY_RECHECK_REASONS) -> set[str]:
+    hits: set[str] = set()
+    reasons = set(_split_values(str(row.get("opportunity_reasons", ""))))
+    for raw_reason in reasons:
+        for allowed_reason in allowed_reasons:
+            if raw_reason == allowed_reason or raw_reason.endswith(f":{allowed_reason}"):
+                hits.add(allowed_reason)
+    return hits
+
+
+def _entry_recheck_impact_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed_opportunity = int(split_stats.get("missed_opportunity", 0))
+
+    if count < 10 or entered_count < 10:
+        return "insufficient_n"
+    if tp2_hit_rate >= 0.2 or _ratio(missed_opportunity, count) >= 0.4:
+        return "collateral_damage_risk"
+    if entered_count >= 10 and sl_hit_rate >= 0.7 and tp2_hit_rate < 0.2:
+        return "risk_confirmed"
+    return "monitor_only"
+
+
+def _paper_entry_recheck_impact_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_reason_hits(row))
+        for row in market_rows
+    ]
+    group_order = [
+        "entry_recheck_required_high_wait",
+        "entry_recheck_required_low_execution",
+        "entry_recheck_required_short_low_execution",
+        "entry_recheck_required_long_weakness",
+        "entry_recheck_required_trend_flip_up",
+        "price_distance_missing",
+        "entry_recheck_any",
+        "entry_recheck_none",
+        "market_map_opportunity 全体",
+    ]
+    grouped_rows: dict[str, list[dict[str, Any]]] = {
+        "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
+        "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_short_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_short_low_execution" in hits],
+        "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
+        "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
+        "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],
+        "entry_recheck_any": [row for row, hits in rows_with_hits if hits],
+        "entry_recheck_none": [row for row, hits in rows_with_hits if not hits],
+        "market_map_opportunity 全体": [row for row, _ in rows_with_hits],
+    }
+
+    lines = ["", "## entry recheck reason impact", ""]
+    lines.append(
+        "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in group_order:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _entry_recheck_impact_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{_mean_value(grouped_rows[label], 'realized_r'):.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### interpretation",
+            "- entry recheck reason は paper candidate 品質改善のための抑制理由であり、実弾 gate ではない。",
+            "- trade_execution_gate / phase1b_lite_gate は変更しない。",
+            "- price_distance_missing は非blocking reason として扱う。",
+            "- B/C 単独 soft risk は hard blocker 化しない。",
+            "- trend_flip_confirmed_up は強評価へ戻さない。",
+            "- この集計は次の再設計判断材料であり、即 Phase 1B 昇格材料ではない。",
+            "",
+        ]
+    )
+    return lines
+
+
+def _entry_recheck_counterfactual_hits(row: dict[str, Any]) -> set[str]:
+    primary_side = str(row.get("primary_setup_side", "")).strip()
+    bias_side = str(row.get("bias", "")).strip()
+    side = primary_side if primary_side in {"long", "short"} else bias_side
+    if side not in {"long", "short"}:
+        side = str(row.get("side", "")).strip()
+    risk_flags = set(_split_values(str(row.get("risk_flags", ""))))
+    market_flags = set(_split_values(str(row.get("market_map_flags", ""))))
+    if not market_flags:
+        market_flags = {
+            reason.split(":", 1)[1]
+            for reason in _split_values(str(row.get("opportunity_reasons", "")))
+            if reason.startswith("market_map:")
+        }
+    blocking_reasons, non_blocking_reasons = _opportunity_gate_entry_wait_price_recheck_reasons(
+        side=side,
+        setup_reason=str(row.get("primary_setup_reason", "")).strip(),
+        execution_precision_action=str(row.get("execution_precision_action", "")).strip(),
+        direction=_parse_float(row.get("confidence_direction_shadow"), 0.0),
+        execution=_parse_float(row.get("confidence_execution_shadow"), 0.0),
+        wait=_parse_float(row.get("confidence_wait_shadow"), 0.0),
+        risk_flags=risk_flags,
+        market_flags=market_flags,
+        nearest_support_distance=row.get("nearest_support_distance"),
+        nearest_resistance_distance=row.get("nearest_resistance_distance"),
+    )
+    return set(blocking_reasons + non_blocking_reasons)
+
+
+def _paper_entry_recheck_counterfactual_impact_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_counterfactual_hits(row))
+        for row in market_rows
+    ]
+    group_order = [
+        "entry_recheck_required_high_wait",
+        "entry_recheck_required_low_execution",
+        "entry_recheck_required_short_low_execution",
+        "entry_recheck_required_long_weakness",
+        "entry_recheck_required_trend_flip_up",
+        "price_distance_missing",
+        "entry_recheck_any",
+        "entry_recheck_none",
+        "market_map_opportunity 全体",
+    ]
+    grouped_rows: dict[str, list[dict[str, Any]]] = {
+        "entry_recheck_required_high_wait": [row for row, hits in rows_with_hits if "entry_recheck_required_high_wait" in hits],
+        "entry_recheck_required_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_low_execution" in hits],
+        "entry_recheck_required_short_low_execution": [row for row, hits in rows_with_hits if "entry_recheck_required_short_low_execution" in hits],
+        "entry_recheck_required_long_weakness": [row for row, hits in rows_with_hits if "entry_recheck_required_long_weakness" in hits],
+        "entry_recheck_required_trend_flip_up": [row for row, hits in rows_with_hits if "entry_recheck_required_trend_flip_up" in hits],
+        "price_distance_missing": [row for row, hits in rows_with_hits if "price_distance_missing" in hits],
+        "entry_recheck_any": [row for row, hits in rows_with_hits if hits],
+        "entry_recheck_none": [row for row, hits in rows_with_hits if not hits],
+        "market_map_opportunity 全体": [row for row, _ in rows_with_hits],
+    }
+
+    lines = ["", "## entry recheck counterfactual impact", ""]
+    lines.append(
+        "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | timeout | missed_opportunity | entry_not_reached | avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in group_order:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _entry_recheck_impact_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{_mean_value(grouped_rows[label], 'realized_r'):.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### interpretation",
+            "- このセクションは counterfactual であり、過去実行時に実際に出た reason ではない。",
+            "- logged impact が 0件でも、counterfactual impact で過去候補への影響を評価する。",
+            "- entry recheck reason は paper candidate 品質改善のための抑制理由であり、実弾 gate ではない。",
+            "- trade_execution_gate / phase1b_lite_gate は変更しない。",
+            "- price_distance_missing は非blocking reason として扱う。",
+            "- B/C 単独 soft risk は hard blocker 化しない。",
+            "- trend_flip_confirmed_up は強評価へ戻さない。",
+            "- この集計は Phase 1B 昇格材料ではなく、次の再設計判断材料。",
+            "",
+        ]
+    )
+    return lines
+
+
+def _entry_recheck_wait_band(wait_value: float) -> str:
+    if wait_value < 40.0:
+        return "wait<40"
+    if wait_value < 60.0:
+        return "40<=wait<60"
+    if wait_value < 80.0:
+        return "60<=wait<80"
+    return "wait>=80"
+
+
+def _entry_recheck_execution_band(execution_value: float) -> str:
+    if execution_value < 20.0:
+        return "execution<20"
+    if execution_value < 35.0:
+        return "20<=execution<35"
+    if execution_value < 50.0:
+        return "35<=execution<50"
+    return "execution>=50"
+
+
+def _entry_recheck_collateral_damage_breakdown_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed = int(split_stats.get("missed_opportunity", 0))
+    missed_rate = _ratio(missed, count)
+    if count < 5:
+        return "insufficient_n"
+    if tp2_hit_rate >= 0.15 or missed_rate >= 0.3:
+        return "collateral_damage_risk"
+    if sl_hit_rate >= 0.7 and tp2_hit_rate < 0.1 and missed_rate < 0.2:
+        return "suppress_candidate"
+    return "monitor_only"
+
+
+def _entry_recheck_grouped_rows(rows: list[dict[str, Any]], axis: str) -> list[tuple[str, list[dict[str, Any]]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        side = str(row.get("side", "")).strip() or "unknown"
+        wait_band = _entry_recheck_wait_band(_parse_float(row.get("confidence_wait_shadow"), 0.0))
+        execution_band = _entry_recheck_execution_band(_parse_float(row.get("confidence_execution_shadow"), 0.0))
+        setup_reason = str(row.get("primary_setup_reason", "")).strip() or "unknown"
+        if axis == "side":
+            labels = [side]
+        elif axis == "wait band":
+            labels = [wait_band]
+        elif axis == "execution band":
+            labels = [execution_band]
+        elif axis == "primary_setup_reason":
+            labels = [setup_reason]
+        elif axis == "market_map_flags":
+            labels = _split_values(str(row.get("market_map_flags", ""))) or ["none"]
+        elif axis == "side + wait band":
+            labels = [f"{side} | {wait_band}"]
+        elif axis == "side + execution band":
+            labels = [f"{side} | {execution_band}"]
+        elif axis == "setup reason + execution band":
+            labels = [f"{setup_reason} | {execution_band}"]
+        else:
+            labels = ["unknown"]
+        for label in labels:
+            grouped.setdefault(label, []).append(row)
+    ordered = sorted(grouped.items(), key=lambda item: (len(item[1]), item[0]), reverse=True)
+    return ordered
+
+
+def _paper_entry_recheck_collateral_damage_breakdown_section_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    rows_with_hits: list[tuple[dict[str, Any], set[str]]] = [
+        (row, _entry_recheck_counterfactual_hits(row))
+        for row in market_rows
+    ]
+    none_rows = [row for row, hits in rows_with_hits if not hits]
+    axes = [
+        "side",
+        "wait band",
+        "execution band",
+        "primary_setup_reason",
+        "market_map_flags",
+        "side + wait band",
+        "side + execution band",
+        "setup reason + execution band",
+    ]
+
+    lines = ["", "## entry recheck collateral damage breakdown", ""]
+    lines.append("- 対象: counterfactual `entry_recheck_none` group")
+    lines.append(f"- rows: `{len(none_rows)}件`")
+    for axis in axes:
+        grouped = _entry_recheck_grouped_rows(none_rows, axis)
+        lines.extend(["", f"### {axis}", ""])
+        lines.append(
+            "| group | count | entered_count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | avg_R | judgement |"
+        )
+        lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+        for label, grouped_rows in grouped:
+            split_stats = _counterfactual_entered_non_entered_stats(grouped_rows)
+            judgement = _entry_recheck_collateral_damage_breakdown_judgement(split_stats)
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        label,
+                        str(split_stats["count"]),
+                        str(split_stats["entered_count"]),
+                        str(split_stats["entered_sl_hit"]),
+                        _format_pct(split_stats["entered_sl_hit_rate"]),
+                        str(split_stats["entered_tp2_hit"]),
+                        _format_pct(split_stats["entered_tp2_hit_rate"]),
+                        str(split_stats["missed_opportunity"]),
+                        _format_pct(_ratio(int(split_stats["missed_opportunity"]), int(split_stats["count"]))),
+                        str(split_stats["entered_timeout"]),
+                        f"{_mean_value(grouped_rows, 'realized_r'):.2f}",
+                        judgement,
+                    ]
+                )
+                + " |"
+            )
+    lines.append("")
+    return lines
+
+
+def _counterfactual_group_judgement(split_stats: dict[str, Any]) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    non_entered_count = int(split_stats.get("non_entered_count", 0))
+    entry_not_reached = int(split_stats.get("entry_not_reached", 0))
+    entered_sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    entered_avg_r = float(split_stats.get("entered_avg_r", 0.0))
+    if count < 10 or entered_count < 10:
+        return "insufficient_n"
+    if _ratio(non_entered_count, count) >= 0.5 or _ratio(entry_not_reached, count) >= 0.4:
+        return "defer_due_to_non_entered_mix"
+    if count >= 10 and entered_count >= 10 and entered_sl_hit_rate >= 0.7 and entered_avg_r <= -0.30:
+        return "blocker_candidate"
+    return "monitor"
+
+
+def _soft_risk_collateral_damage_score(split_stats: dict[str, Any]) -> float:
+    score = (
+        float(split_stats.get("entered_tp2_hit", 0)) * 2.0
+        + float(split_stats.get("missed_opportunity", 0))
+        + float(split_stats.get("entry_not_reached", 0)) * 0.25
+        - float(split_stats.get("entered_sl_hit", 0)) * 0.5
+    )
+    return round(score, 2)
+
+
+def _soft_risk_collateral_damage_judgement(split_stats: dict[str, Any], collateral_damage_score: float) -> str:
+    count = int(split_stats.get("count", 0))
+    entered_count = int(split_stats.get("entered_count", 0))
+    entered_sl_hit_rate = float(split_stats.get("entered_sl_hit_rate", 0.0))
+    entered_tp2_hit_rate = float(split_stats.get("entered_tp2_hit_rate", 0.0))
+    missed_opportunity = int(split_stats.get("missed_opportunity", 0))
+
+    if count < 10 or entered_count < 10:
+        return "monitor_only"
+    if entered_tp2_hit_rate >= 0.2 or _ratio(missed_opportunity, count) >= 0.4:
+        return "avoid_hardening"
+    if count >= 10 and collateral_damage_score > 0:
+        return "keep_soft"
+    if count >= 10 and entered_count >= 10 and entered_sl_hit_rate >= 0.7 and collateral_damage_score <= 0:
+        return "harden_candidate"
+    return "monitor_only"
+
+
+def build_soft_risk_collateral_damage_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 5,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    closed_rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        if str(row.get("position_status", "")).strip() != "closed":
+            continue
+        if date_from or date_to:
+            if not _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")).strip(),
+                date_from=date_from.strip(),
+                date_to=date_to.strip(),
+            ):
+                continue
+        closed_rows.append(row)
+
+    joined_rows: list[dict[str, Any]] = []
+    missing_shadow_join_ids: list[str] = []
+    for row in closed_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        shadow = shadow_by_id.get(signal_id)
+        if shadow is None:
+            missing_shadow_join_ids.append(signal_id)
+            continue
+        leaf_hits = _counterfactual_leaf_hits_from_shadow_row(shadow)
+        merged = dict(shadow)
+        merged.update(row)
+        merged["_leaf_hits"] = leaf_hits
+        merged["_group_label"] = _counterfactual_group_label(leaf_hits)
+        joined_rows.append(merged)
+
+    grouped_rows = {
+        "B only": [row for row in joined_rows if row.get("_group_label") == "B only"],
+        "C only": [row for row in joined_rows if row.get("_group_label") == "C only"],
+        "B+C": [row for row in joined_rows if row.get("_group_label") == "B+C"],
+        "A+B": [row for row in joined_rows if row.get("_group_label") == "A+B"],
+        "A+C": [row for row in joined_rows if row.get("_group_label") == "A+C"],
+        "A+B+C": [row for row in joined_rows if row.get("_group_label") == "A+B+C"],
+        "B/C soft risk 全体": [
+            row
+            for row in joined_rows
+            if "require_execution_for_high_wait" not in row.get("_leaf_hits", set())
+            and bool({"suppress_long_high_wait", "suppress_trend_flip_up_strong"} & set(row.get("_leaf_hits", set())))
+        ],
+        "A hard 含み全体": [row for row in joined_rows if "require_execution_for_high_wait" in row.get("_leaf_hits", set())],
+        "guard非該当全体": [row for row in joined_rows if not row.get("_leaf_hits")],
+        "closed全体": joined_rows,
+    }
+    ordered_groups = [
+        "B only",
+        "C only",
+        "B+C",
+        "A+B",
+        "A+C",
+        "A+B+C",
+        "B/C soft risk 全体",
+        "A hard 含み全体",
+        "guard非該当全体",
+        "closed全体",
+    ]
+
+    lines = ["# soft risk collateral damage", "", "## 概要", ""]
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed 全体件数: `{len(closed_rows)}件`")
+    lines.append(f"- joined closed 件数: `{len(joined_rows)}件`")
+    lines.append(f"- missing_shadow_join: `{len(missing_shadow_join_ids)}件`")
+    if missing_shadow_join_ids:
+        lines.append(f"- missing_shadow_join 代表: `{', '.join(missing_shadow_join_ids[:5])}`")
+    lines.append(f"- B/C soft risk 対象件数: `{len(grouped_rows['B/C soft risk 全体'])}件`")
+    lines.append(f"- A hard 含み件数: `{len(grouped_rows['A hard 含み全体'])}件`")
+    lines.append("")
+    lines.append("## group table")
+    lines.append("")
+    lines.append(
+        "| group | count | entered_count | entered_sl_hit | entered_sl_hit_rate | entered_tp2_hit | entered_tp2_hit_rate | entered_timeout | entered_avg_R | non_entered_count | missed_opportunity | entry_not_reached | non_entered_avg_R | collateral_damage_score | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in ordered_groups:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        collateral_damage_score = _soft_risk_collateral_damage_score(split_stats)
+        judgement = _soft_risk_collateral_damage_judgement(split_stats, collateral_damage_score)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    f"{split_stats['entered_avg_r']:.2f}",
+                    str(split_stats["non_entered_count"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{split_stats['non_entered_avg_r']:.2f}",
+                    f"{collateral_damage_score:.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    max_examples = max(1, min(int(limit), 5))
+    lines.append("")
+    lines.append("## representative examples")
+    for label in ordered_groups:
+        lines.append("")
+        lines.append(f"### {label}")
+        group_rows = grouped_rows[label][:max_examples]
+        if not group_rows:
+            lines.append("- 該当なし")
+            continue
+        for row in group_rows:
+            flags = str(row.get("market_map_flags", "")).strip() or str(row.get("opportunity_reasons", "")).strip()
+            lines.append(
+                f"- {row.get('signal_id', '')}: {row.get('exit_status', '')} / "
+                f"side={row.get('side', '')} / setup={row.get('primary_setup_reason', '')} / "
+                f"flags={flags} / direction={_parse_float(row.get('confidence_direction_shadow'), 0.0):.1f} / "
+                f"execution={_parse_float(row.get('confidence_execution_shadow'), 0.0):.1f} / "
+                f"wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.1f} / "
+                f"realized_r={_parse_float(row.get('realized_r'), 0.0):.2f}"
+            )
+
+    lines.append("")
+    lines.append("## interpretation")
+    lines.append("- B/C 単独 soft risk は現時点では hard blocker 化しない。")
+    lines.append("- この report は guard 条件変更のための材料であり、即時変更ではない。")
+    lines.append("- missed_opportunity / entry_not_reached は約定後損益ではない。")
+    lines.append("- trend_flip_confirmed_up は強評価へ戻さない。")
+    lines.append("- trade_execution_gate / phase1b_lite_gate / opportunity_gate は変更しない。")
+    lines.append("")
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_quality_guard_effectiveness_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    closed_rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        if str(row.get("position_status", "")).strip() != "closed":
+            continue
+        if date_from or date_to:
+            if not _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")).strip(),
+                date_from=date_from.strip(),
+                date_to=date_to.strip(),
+            ):
+                continue
+        closed_rows.append(row)
+
+    joined_rows: list[dict[str, Any]] = []
+    missing_shadow_join_ids: list[str] = []
+    for row in closed_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        shadow = shadow_by_id.get(signal_id)
+        if shadow is None:
+            missing_shadow_join_ids.append(signal_id)
+            continue
+        leaf_hits = _counterfactual_leaf_hits_from_shadow_row(shadow)
+        merged = dict(row)
+        merged["_leaf_hits"] = leaf_hits
+        merged["_group_label"] = _counterfactual_group_label(leaf_hits)
+        joined_rows.append(merged)
+
+    grouped_rows = {
+        "A only": [row for row in joined_rows if row.get("_group_label") == "A only"],
+        "B only": [row for row in joined_rows if row.get("_group_label") == "B only"],
+        "C only": [row for row in joined_rows if row.get("_group_label") == "C only"],
+        "A+B": [row for row in joined_rows if row.get("_group_label") == "A+B"],
+        "A+C": [row for row in joined_rows if row.get("_group_label") == "A+C"],
+        "B+C": [row for row in joined_rows if row.get("_group_label") == "B+C"],
+        "A+B+C": [row for row in joined_rows if row.get("_group_label") == "A+B+C"],
+        "guard該当全体": [row for row in joined_rows if row.get("_leaf_hits")],
+        "guard非該当全体": [row for row in joined_rows if not row.get("_leaf_hits")],
+        "closed全体": joined_rows,
+    }
+    memo_by_group = {
+        "A only": "高 wait と低 execution の単独該当。失敗寄りが強い。",
+        "B only": "long + high wait 単独。sl より missed / 未到達巻き込みを確認する。",
+        "C only": "trend flip up 単独。件数が少ない場合は断定しない。",
+        "A+B": "high wait + low execution に long が重なる群。未到達巻き込みを確認する。",
+        "A+C": "A と C の重複。件数が少ない場合は断定しない。",
+        "B+C": "B と C の重複。件数が少ない場合は断定しない。",
+        "A+B+C": "3 条件重複。件数が少ない場合は断定しない。",
+        "guard該当全体": "後付け guard 対象全体。",
+        "guard非該当全体": "後付け guard 非該当全体。",
+        "closed全体": "closed 全母集団。",
+    }
+
+    lines = ["# quality guard 有効性", ""]
+    lines.append("## counterfactual_quality_guard")
+    lines.append("")
+    lines.append(
+        "- 目的: `paper_positions.csv` と `shadow_log.csv` を `signal_id` で突き合わせ、closed 母集団に対して quality guard 条件を後付け再計算する。"
+    )
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed 全体件数: `{len(closed_rows)}件`")
+    lines.append(f"- joined closed 件数: `{len(joined_rows)}件`")
+    lines.append(f"- missing_shadow_join: `{len(missing_shadow_join_ids)}件`")
+    if missing_shadow_join_ids:
+        lines.append(f"- missing_shadow_join 代表: `{', '.join(missing_shadow_join_ids[:5])}`")
+    lines.append("")
+    lines.append("| group | count | sl_hit | sl_hit_rate | tp2_hit | tp2_hit_rate | missed_opportunity | missed_rate | timeout | entry_not_reached | avg_R | memo |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in [
+        "A only",
+        "B only",
+        "C only",
+        "A+B",
+        "A+C",
+        "B+C",
+        "A+B+C",
+        "guard該当全体",
+        "guard非該当全体",
+        "closed全体",
+    ]:
+        stats = _counterfactual_group_stats(grouped_rows[label])
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(stats["count"]),
+                    str(stats["sl_hit"]),
+                    _format_pct(stats["sl_hit_rate"]),
+                    str(stats["tp2_hit"]),
+                    _format_pct(stats["tp2_hit_rate"]),
+                    str(stats["missed_opportunity"]),
+                    _format_pct(stats["missed_rate"]),
+                    str(stats["timeout"]),
+                    str(stats["entry_not_reached"]),
+                    f"{stats['avg_r']:.2f}",
+                    memo_by_group[label],
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append("## entered / non-entered split")
+    lines.append("")
+    lines.append(
+        "| group | count | entered_count | entered_sl_hit | entered_sl_hit_rate | entered_tp2_hit | entered_tp2_hit_rate | entered_timeout | entered_avg_R | non_entered_count | missed_opportunity | entry_not_reached | non_entered_avg_R | judgement |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
+    for label in [
+        "A only",
+        "B only",
+        "C only",
+        "A+B",
+        "A+C",
+        "B+C",
+        "A+B+C",
+        "guard該当全体",
+        "guard非該当全体",
+        "closed全体",
+    ]:
+        split_stats = _counterfactual_entered_non_entered_stats(grouped_rows[label])
+        judgement = _counterfactual_group_judgement(split_stats)
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    label,
+                    str(split_stats["count"]),
+                    str(split_stats["entered_count"]),
+                    str(split_stats["entered_sl_hit"]),
+                    _format_pct(split_stats["entered_sl_hit_rate"]),
+                    str(split_stats["entered_tp2_hit"]),
+                    _format_pct(split_stats["entered_tp2_hit_rate"]),
+                    str(split_stats["entered_timeout"]),
+                    f"{split_stats['entered_avg_r']:.2f}",
+                    str(split_stats["non_entered_count"]),
+                    str(split_stats["missed_opportunity"]),
+                    str(split_stats["entry_not_reached"]),
+                    f"{split_stats['non_entered_avg_r']:.2f}",
+                    judgement,
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append("注記:")
+    lines.append("- `avg_R` は `paper_positions.csv` の `realized_r` を使う。")
+    lines.append("- `entry_not_reached` や `missed_opportunity` にも `realized_r` が入る可能性があり、純粋な約定後損益だけではない。")
+    lines.append("- `avg_R` は従来互換の全 `exit_status` 混在値。")
+    lines.append("- quality guard の blocker 判断では `entered_avg_R` を主判断に使う。")
+    lines.append("- `non_entered_avg_R` は参考値であり、約定後損益として扱わない。")
+    lines.append("")
+    lines.append("## interpretation")
+    lines.append("- `judgement` は `insufficient_n > defer_due_to_non_entered_mix > blocker_candidate` の優先順で判定し、未該当は `monitor` とする。")
+    lines.append("- `A only` は失敗率が高く、hard blocker 維持を検討する材料。")
+    lines.append("- `B only` / `C only` は missed / 未到達の巻き込みを必ず見る。")
+    lines.append("- `B+C` や `A+B+C` は件数が少ない場合、断定しない。")
+    lines.append("- counterfactual は後付け再計算であり、実運用結果ではない。")
+    lines.append("- この report は guard 条件を即時変更するためのものではない。")
+    lines.append("")
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_paper_opportunity_diagnostics_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if date_from and (dt is None or dt.strftime("%Y-%m-%d") < date_from):
+            continue
+        if date_to and (dt is None or dt.strftime("%Y-%m-%d") > date_to):
+            continue
+        merged = dict(shadow_by_id.get(signal_id, {}))
+        merged.update(row)
+        positions.append(merged)
+
+    positions.sort(key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+    closed_rows = [row for row in positions if str(row.get("position_status", "")).strip() == "closed"]
+    market_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"]
+    observation_rows = [row for row in closed_rows if str(row.get("opportunity_type", "")).strip() != "market_map_opportunity"]
+    all_stats = _paper_position_filled_only_stats(closed_rows)
+    market_stats = _paper_position_filled_only_stats(market_rows)
+
+    exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in closed_rows if str(row.get("exit_status", "")).strip())
+    market_exit_counts = Counter(str(row.get("exit_status", "")).strip() for row in market_rows if str(row.get("exit_status", "")).strip())
+    closed_type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in closed_rows)
+
+    flag_names = sorted(
+        {
+            flag
+            for row in market_rows
+            for flag in _split_values(str(row.get("market_map_flags", "")))
+        }
+    )
+    by_flag = [
+        (flag, [row for row in market_rows if flag in _split_values(str(row.get("market_map_flags", "")))])
+        for flag in flag_names
+    ]
+    by_flag.sort(key=lambda item: (len(item[1]), _paper_position_filled_only_stats(item[1])["avg_realized_r"]), reverse=True)
+
+    reason_names = sorted(
+        {
+            reason
+            for row in market_rows
+            for reason in _split_values(str(row.get("opportunity_reasons", "")))
+        }
+    )
+    by_reason = [
+        (reason, [row for row in market_rows if reason in _split_values(str(row.get("opportunity_reasons", "")))])
+        for reason in reason_names
+    ]
+    by_reason.sort(key=lambda item: (len(item[1]), _paper_position_filled_only_stats(item[1])["avg_realized_r"]), reverse=True)
+
+    exit_groups = [
+        (label, [row for row in market_rows if str(row.get("exit_status", "")).strip() == label])
+        for label in ["tp2_hit", "sl_hit", "timeout", "missed_opportunity", "entry_not_reached"]
+    ]
+    confidence_groups = [
+        ("direction<60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) < 60]),
+        ("direction>=60", [row for row in market_rows if _parse_float(row.get("confidence_direction_shadow"), 0.0) >= 60]),
+        ("execution<24", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24]),
+        ("execution>=24", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) >= 24]),
+        ("wait>=60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60]),
+        ("wait<60", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) < 60]),
+    ]
+    wait_groups = [
+        ("wait<40", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) < 40.0]),
+        ("40<=wait<60", [row for row in market_rows if 40.0 <= _parse_float(row.get("confidence_wait_shadow"), 0.0) < 60.0]),
+        ("60<=wait<80", [row for row in market_rows if 60.0 <= _parse_float(row.get("confidence_wait_shadow"), 0.0) < 80.0]),
+        ("wait>=80", [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 80.0]),
+    ]
+    execution_groups = [
+        ("execution<20", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 20.0]),
+        ("20<=execution<35", [row for row in market_rows if 20.0 <= _parse_float(row.get("confidence_execution_shadow"), 0.0) < 35.0]),
+        ("35<=execution<50", [row for row in market_rows if 35.0 <= _parse_float(row.get("confidence_execution_shadow"), 0.0) < 50.0]),
+        ("execution>=50", [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) >= 50.0]),
+    ]
+    setup_groups = [
+        (label, [row for row in market_rows if str(row.get("primary_setup_reason", "")).strip() == label])
+        for label in sorted({str(row.get("primary_setup_reason", "")).strip() for row in market_rows if str(row.get("primary_setup_reason", "")).strip()})
+    ]
+    side_groups = [(label, [row for row in market_rows if str(row.get("side", "")).strip() == label]) for label in ["long", "short"]]
+    sl_rows = [row for row in market_rows if str(row.get("exit_status", "")).strip() == "sl_hit"]
+    proposals = _paper_position_proposals(market_rows)
+    missing_data_notes = _paper_position_missing_data_notes(market_rows)
+    long_rows = [row for row in market_rows if str(row.get("side", "")).strip() == "long"]
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    low_exec_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
+    trend_flip_up_rows = [
+        row
+        for row in market_rows
+        if any(_paper_position_has_flag(row, flag) for flag in ("trend_flip_confirmed_up", "trend_flip_early_up"))
+    ]
+    hard_quality_counts = _quality_guard_counts(shadow_rows, _HARD_QUALITY_GUARD_REASONS)
+    soft_quality_counts = _quality_guard_counts(shadow_rows, _SOFT_QUALITY_GUARD_REASONS)
+    quality_guard_blocked_rows = [
+        row
+        for row in shadow_rows
+        if str(row.get("opportunity_gate", "")).strip() == "blocked"
+        and _quality_guard_reason_hits(row, _HARD_QUALITY_GUARD_REASONS)
+    ]
+    soft_quality_risk_rows = [
+        row
+        for row in shadow_rows
+        if str(row.get("opportunity_gate", "")).strip() == "pass"
+        and _quality_guard_reason_hits(row, _SOFT_QUALITY_GUARD_REASONS)
+    ]
+    pre_guard_market_map_count = _pre_guard_market_map_count(shadow_rows)
+    guarded_sl_hit_count = sum(
+        1
+        for row in sl_rows
+        if _quality_guard_reason_hits(
+            shadow_by_id.get(str(row.get("signal_id", "")).strip(), {}),
+            _QUALITY_GUARD_LEAF_REASONS,
+        )
+    )
+    weak_examples = [
+        row
+        for row in market_rows
+        if str(row.get("exit_status", "")).strip() in {"sl_hit", "missed_opportunity", "timeout", "entry_not_reached"}
+    ][:limit]
+
+    lines = [
+        "# 紙実行候補 entry/wait 診断",
+        "",
+        "- 成績の主指標は filled-only です。`missed_opportunity` と `entry_not_reached` は未約定系として別集計します。",
+        "- 既存互換のため `realized_r` は残していますが、gate / score 判断では filled-only を優先します。",
+        "",
+    ]
+    lines.append(f"- 対象 paper_positions: {len(positions)}件")
+    if date_from:
+        lines.append(f"- フィルタ: date_from={date_from}")
+    if date_to:
+        lines.append(f"- フィルタ: date_to={date_to}")
+    lines.append(f"- closed: {len(closed_rows)}件 / opportunity_type: {_format_counter(closed_type_counts, limit=6)}")
+    lines.append(
+        f"- closed 全体: {all_stats['all_count']}件 / all={all_stats['all_count']}件 / filled={all_stats['filled_count']}件 / "
+        f"filled勝率={_format_pct(all_stats['win_rate'])} / filled平均R={all_stats['avg_realized_r']:.2f} / "
+        f"filled簡易PF={all_stats['approx_pf']:.2f} / missed={all_stats['missed_opportunity_count']}件 / "
+        f"entry_not_reached={all_stats['entry_not_reached_count']}件 / 終了={_format_counter(exit_counts, limit=6)}"
+    )
+    lines.append(
+        f"- market_map_opportunity: {market_stats['all_count']}件 / all={market_stats['all_count']}件 / filled={market_stats['filled_count']}件 / "
+        f"filled勝率={_format_pct(market_stats['win_rate'])} / filled平均R={market_stats['avg_realized_r']:.2f} / "
+        f"filled簡易PF={market_stats['approx_pf']:.2f} / missed={market_stats['missed_opportunity_count']}件 / "
+        f"entry_not_reached={market_stats['entry_not_reached_count']}件 / 終了={_format_counter(market_exit_counts, limit=6)}"
+    )
+    if observation_rows:
+        obs_stats = _paper_position_filled_only_stats(observation_rows)
+        lines.append(
+            f"- その他 opportunity: {obs_stats['all_count']}件 / all={obs_stats['all_count']}件 / filled={obs_stats['filled_count']}件 / "
+            f"filled勝率={_format_pct(obs_stats['win_rate'])} / filled平均R={obs_stats['avg_realized_r']:.2f} / "
+            f"filled簡易PF={obs_stats['approx_pf']:.2f}"
+        )
+    lines.append("")
+    lines.append("## 判断")
+    if market_rows and market_stats["win_rate"] <= 0.0:
+        lines.append("- market_map_opportunity は closed 範囲で TP2 勝ちがなく、現状のまま実弾 gate へ近づけない。")
+    if market_exit_counts.get("sl_hit", 0) >= market_exit_counts.get("missed_opportunity", 0):
+        lines.append("- 主な失敗は missed より SL 側に寄っており、入口を広げるより entry 発火または SL/TP 条件の精査を優先する。")
+    else:
+        lines.append("- 主な失敗は missed 側に寄っており、entry 到達前の TP 方向進行と待機条件の精査を優先する。")
+    lines.append("- `support_to_resistance_flip` などの flag 自体は有効でも、紙ポジション化する entry / wait 条件がまだ粗い。")
+    lines.append(
+        f"- quality guard blocked: {len(quality_guard_blocked_rows)}件 / "
+        f"理由={_format_counter(hard_quality_counts, limit=6) or 'なし'}"
+    )
+    lines.append(
+        f"- hard_quality_blocked: {len(quality_guard_blocked_rows)}件 / "
+        f"理由={_format_counter(hard_quality_counts, limit=6) or 'なし'}"
+    )
+    lines.append(
+        f"- soft_quality_risk: {len(soft_quality_risk_rows)}件 / "
+        f"理由={_format_counter(soft_quality_counts, limit=6) or 'なし'}"
+    )
+    lines.append(f"- market_map candidate before/after guard: {pre_guard_market_map_count}件 -> {market_stats['all_count']}件")
+    lines.append(f"- market_map candidate before/after hard guard: {pre_guard_market_map_count}件 -> {market_stats['all_count']}件")
+    lines.append(f"- closed sl_hit: {exit_counts.get('sl_hit', 0)}件 / quality guard 該当 closed sl_hit: {guarded_sl_hit_count}件")
+
+    lines.extend(_paper_position_group_lines(title="exit_status 別", labels=exit_groups))
+    lines.extend(_paper_position_group_lines(title="confidence 帯別", labels=confidence_groups))
+    lines.extend(_paper_position_group_lines(title="wait 帯別", labels=wait_groups))
+    lines.extend(_paper_position_group_lines(title="execution 帯別", labels=execution_groups))
+    lines.extend(_paper_position_group_lines(title="setup reason 別", labels=setup_groups))
+    lines.extend(_paper_position_group_lines(title="side 別", labels=side_groups))
+    lines.extend(_paper_position_group_lines(title="market_map flag 別", labels=by_flag, limit=limit))
+    lines.extend(_paper_position_group_lines(title="opportunity reason 別", labels=by_reason, limit=limit))
+    lines.extend(_paper_position_sl_group_lines(sl_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価サマリー", rows=market_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: long", rows=long_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: wait>=60", rows=high_wait_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: execution<24", rows=low_exec_rows))
+    lines.extend(_paper_review_summary_lines(title="AI事後評価: trend_flip_confirmed_up", rows=trend_flip_up_rows))
+
+    lines.append("")
+    lines.append("## proposal")
+    if proposals:
+        for label, note in proposals:
+            lines.append(f"- {label}: {note}")
+    else:
+        lines.append("- 該当なし")
+    backing_notes = _paper_review_backing_notes(market_rows)
+    if backing_notes:
+        lines.append("")
+        lines.append("## AI事後評価の裏付け")
+        lines.extend(backing_notes)
+
+    lines.append("")
+    lines.append("## 不足データ")
+    if missing_data_notes:
+        lines.extend(missing_data_notes)
+    else:
+        lines.append("- 主要な診断項目で目立つ欠落なし")
+
+    lines.append("")
+    lines.append("## 弱い代表例")
+    if weak_examples:
+        for row in weak_examples:
+            lines.append(
+                f"- {row.get('signal_id', '')}: {row.get('exit_status', '')} / side={row.get('side', '')} / "
+                f"setup={row.get('primary_setup_reason', '')} / flags={row.get('market_map_flags', '')} / "
+                f"dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.1f} / "
+                f"exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.1f} / "
+                f"wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.1f} / "
+                f"R={_parse_float(row.get('realized_r'), 0.0):.2f}"
+            )
+    else:
+        lines.append("- 該当なし")
+    lines.append("")
+    lines.append("## 次に触る候補")
+    lines.append("- src/trade/opportunity_gate.py")
+    lines.append("- src/trade/paper_position.py")
+    lines.append("- src/analysis/market_map.py")
+    lines.append("- tools/log_feedback.py")
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_active_trade_plan_diagnostics_report(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    trades_path: Path | None = None,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_candidates.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
+    output_md = output_md or (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_trade_plan_diagnostics_{resolved_report_date}.md"
+    )
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+
+    candidate_rows = _load_csv_rows(candidates_path) if candidates_path.exists() else []
+    trade_rows = _load_csv_rows(trades_path) if trades_path.exists() else []
+
+    if date_from_filter or date_to_filter:
+        candidate_rows = [
+            row
+            for row in candidate_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+        trade_rows = [
+            row
+            for row in trade_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    candidate_action_counts = Counter(
+        str(row.get("active_primary_action", "")).strip() or "blank"
+        for row in candidate_rows
+    )
+    candidate_type_counts = Counter(str(row.get("candidate_type", "")).strip() or "blank" for row in candidate_rows)
+    side_counts = Counter(str(row.get("side", "")).strip() or "blank" for row in candidate_rows)
+    candidate_status_counts = Counter(
+        str(row.get("candidate_status", "")).strip() or "blank"
+        for row in candidate_rows
+    )
+    entry_mode_counts = Counter(str(row.get("entry_mode", "")).strip() or "blank" for row in candidate_rows)
+
+    trade_action_counts = Counter(
+        str(row.get("active_primary_action", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    active_plan_version_counts = Counter(
+        str(row.get("active_plan_version", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    market_long_counts = Counter(str(row.get("active_market_entry_long", "")).strip() or "blank" for row in trade_rows)
+    market_short_counts = Counter(str(row.get("active_market_entry_short", "")).strip() or "blank" for row in trade_rows)
+    limit_long_counts = Counter(str(row.get("active_limit_retest_long", "")).strip() or "blank" for row in trade_rows)
+    limit_short_counts = Counter(str(row.get("active_limit_retest_short", "")).strip() or "blank" for row in trade_rows)
+    counter_long_counts = Counter(
+        str(row.get("active_countertrend_scalp_long", "")).strip() or "blank"
+        for row in trade_rows
+    )
+    counter_short_counts = Counter(
+        str(row.get("active_countertrend_scalp_short", "")).strip() or "blank"
+        for row in trade_rows
+    )
+
+    total_trade_rows = len(trade_rows)
+    no_action_count = trade_action_counts.get("NO_ACTION", 0)
+    blank_action_count = trade_action_counts.get("blank", 0)
+
+    lines = [
+        "# Active Trade Plan 診断",
+        "",
+        "## 1. 概要",
+        f"- report_date: `{resolved_report_date}`",
+        f"- candidates_path: `{candidates_path}`",
+        f"- trades_path: `{trades_path}`",
+        f"- date_from: `{date_from_filter or 'all'}`",
+        f"- date_to: `{date_to_filter or 'all'}`",
+    ]
+    if candidates_path.exists():
+        lines.append(f"- candidate rows: {len(candidate_rows)}")
+    else:
+        lines.append("- active_plan_candidates.csv: missing")
+    if trades_path.exists():
+        lines.append(f"- trade rows: {total_trade_rows}")
+    else:
+        lines.append("- trades.csv: missing")
+
+    lines.extend(["", "## 2. active_primary_action 分布"])
+    if trades_path.exists() and trade_rows:
+        for action, count in trade_action_counts.most_common():
+            lines.append(f"- trades `{action}`: {count} 件")
+    else:
+        lines.append("- trades action distribution: trades.csv missing or no rows")
+    if candidates_path.exists() and candidate_rows:
+        for action, count in candidate_action_counts.most_common():
+            lines.append(f"- candidates `{action}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- candidate action distribution: active_plan_candidates.csv missing")
+    else:
+        lines.append("- candidate action distribution: no rows")
+
+    lines.extend(["", "## 3. 候補タイプ別件数"])
+    if candidate_rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 4. side別件数"])
+    if candidate_rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 5. candidate_status別件数"])
+    if candidate_rows:
+        for candidate_status, count in candidate_status_counts.most_common():
+            lines.append(f"- `{candidate_status}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 6. entry_mode別件数"])
+    if candidate_rows:
+        for entry_mode, count in entry_mode_counts.most_common():
+            lines.append(f"- `{entry_mode}`: {count} 件")
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(["", "## 7. NO_ACTION 比率"])
+    if trades_path.exists():
+        lines.append(f"- total trades: {total_trade_rows}")
+        lines.append(f"- `NO_ACTION`: {no_action_count} 件 ({_format_pct(_ratio(no_action_count, total_trade_rows))})")
+        lines.append(f"- blank action: {blank_action_count} 件 ({_format_pct(_ratio(blank_action_count, total_trade_rows))})")
+        if active_plan_version_counts:
+            lines.append(f"- active_plan_version counts: {_format_counter(active_plan_version_counts, limit=5)}")
+        if total_trade_rows:
+            lines.append(
+                f"- market entry status: long={_format_counter(market_long_counts, limit=3)} / short={_format_counter(market_short_counts, limit=3)}"
+            )
+            lines.append(
+                f"- limit retest status: long={_format_counter(limit_long_counts, limit=3)} / short={_format_counter(limit_short_counts, limit=3)}"
+            )
+            lines.append(
+                f"- counter scalp status: long={_format_counter(counter_long_counts, limit=3)} / short={_format_counter(counter_short_counts, limit=3)}"
+            )
+    else:
+        lines.append("- trades.csv missing")
+
+    lines.extend(["", "## 8. 代表候補"])
+    if candidate_rows:
+        sorted_candidates = sorted(candidate_rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_candidates[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                f"{row.get('timestamp_jst', '')} / "
+                f"{row.get('candidate_id', '')} / "
+                f"{row.get('active_primary_action', '')} / "
+                f"{row.get('candidate_type', '')} / "
+                f"{row.get('candidate_status', '')} / "
+                f"{row.get('side', '')} / "
+                f"{row.get('entry_mode', '')} / "
+                f"entry={row.get('entry_price', '')} / "
+                f"rr_current_tp1={row.get('rr_current_tp1', '')} / "
+                f"rr_zone_mid_tp1={row.get('rr_zone_mid_tp1', '')} / "
+                f"next={row.get('next_condition', '')}"
+            )
+    elif not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv missing")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 9. 未解決事項",
+            "- Active Plan の判定ロジック自体は今回変更していない。",
+            "- candidate outcomes / daily-sync 接続は今回対象外。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    _ensure_parent(output_md)
+    output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _active_plan_join_outcomes(
+    trades: list[dict[str, Any]],
+    outcomes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    outcomes_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in outcomes
+        if str(row.get("signal_id", "")).strip()
+    }
+    joined: list[dict[str, Any]] = []
+    for trade in trades:
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        action = str(trade.get("active_primary_action", "") or "").strip()
+        active_json = str(trade.get("active_trade_plan_json", "") or "").strip()
+        if not action and not active_json:
+            continue
+        outcome = outcomes_by_id.get(signal_id, {})
+        joined.append({**trade, **{f"outcome_{key}": value for key, value in outcome.items()}})
+    return joined
+
+
+def _active_plan_action_value(row: dict[str, Any]) -> str:
+    return str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION"
+
+
+def _active_plan_effectiveness_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    completed_rows = [
+        row
+        for row in rows
+        if str(row.get("outcome_evaluation_status", "")).strip() == "complete"
+        or str(row.get("outcome_outcome", "")).strip()
+        or str(row.get("outcome_direction_outcome", "")).strip()
+    ]
+    direction_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_direction_outcome", "")).strip() in {"correct", "wrong"}
+    ]
+    direction_correct = sum(
+        1
+        for row in direction_pool
+        if str(row.get("outcome_direction_outcome", "")).strip() == "correct"
+    )
+    tp1_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_tp1_hit_first", "")).strip().lower() in {"true", "false"}
+    ]
+    tp1_first = sum(
+        1
+        for row in tp1_pool
+        if str(row.get("outcome_tp1_hit_first", "")).strip().lower() == "true"
+    )
+    win_pool = [
+        row
+        for row in completed_rows
+        if str(row.get("outcome_outcome", "")).strip() in {"win", "loss", "expired"}
+    ]
+    wins = sum(1 for row in win_pool if str(row.get("outcome_outcome", "")).strip() == "win")
+    return {
+        "count": count,
+        "completed_count": len(completed_rows),
+        "direction_pool": len(direction_pool),
+        "direction_correct_rate": _ratio(direction_correct, len(direction_pool)),
+        "tp1_pool": len(tp1_pool),
+        "tp1_first_rate": _ratio(tp1_first, len(tp1_pool)),
+        "win_pool": len(win_pool),
+        "win_rate": _ratio(wins, len(win_pool)),
+        "avg_mfe_24h": _mean_value(completed_rows, "outcome_signal_based_MFE_24h"),
+        "avg_mae_24h": _mean_value(completed_rows, "outcome_signal_based_MAE_24h"),
+        "avg_mfe_12h": _mean_value(completed_rows, "outcome_signal_based_MFE_12h"),
+        "avg_mae_12h": _mean_value(completed_rows, "outcome_signal_based_MAE_12h"),
+    }
+
+
+def build_active_trade_plan_effectiveness_report(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+
+    trades = _load_csv_rows(trades_path)
+    outcomes = _load_csv_rows(outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        trades = [
+            row
+            for row in trades
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    joined = _active_plan_join_outcomes(trades, outcomes)
+    total_stats = _active_plan_effectiveness_stats(joined)
+    action_counts = Counter(_active_plan_action_value(row) for row in joined)
+
+    lines = [
+        "# Active Trade Plan 有効性検証",
+        "",
+        "## 1. まず結論",
+    ]
+
+    if not joined:
+        lines.extend(
+            [
+                "- Active Trade Plan と outcome を結合できるデータはまだありません。",
+                "- `trades.csv` と `signal_outcomes.csv` の蓄積後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.append(f"- Active Plan 対象は {total_stats['count']} 件です。")
+        lines.append(f"- outcome 評価済みは {total_stats['completed_count']} 件です。")
+        lines.append(
+            f"- direction 正解率は {_format_pct(total_stats['direction_correct_rate'])} "
+            f"(n={total_stats['direction_pool']}) です。"
+        )
+        lines.append(
+            f"- TP1先行率は {_format_pct(total_stats['tp1_first_rate'])} "
+            f"(n={total_stats['tp1_pool']}) です。"
+        )
+        lines.append(
+            f"- 平均MFE24h={total_stats['avg_mfe_24h']:.2f} / "
+            f"平均MAE24h={total_stats['avg_mae_24h']:.2f} です。"
+        )
+        market_small = action_counts.get("ACTIVE_MARKET_SMALL", 0)
+        limit_retest = action_counts.get("ACTIVE_LIMIT_RETEST", 0) + action_counts.get(
+            "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP", 0
+        )
+        if market_small > limit_retest:
+            lines.append("- 注意: 成行小ロット候補が指値・戻り待ち系より多く、過剰売買の検証を優先してください。")
+        else:
+            lines.append("- 判定: action 分布は成行より指値・戻り待ち側を主戦場にしやすい構造です。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- trades_path: `{trades_path}`",
+            f"- outcomes_path: `{outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- joined rows: {len(joined)}",
+            "",
+            "## 3. action 別 effectiveness",
+        ]
+    )
+
+    if joined:
+        emitted = set()
+        action_order = _ACTIVE_PLAN_ACTION_ORDER if "_ACTIVE_PLAN_ACTION_ORDER" in globals() else [
+            "FORMAL_GO",
+            "ACTIVE_MARKET_SMALL",
+            "ACTIVE_LIMIT_RETEST",
+            "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP",
+            "ACTIVE_BREAKOUT_FOLLOW",
+            "ACTIVE_COUNTER_SCALP",
+            "NO_ACTION",
+        ]
+        for action in action_order:
+            subset = [row for row in joined if _active_plan_action_value(row) == action]
+            emitted.add(action)
+            if not subset:
+                continue
+            stats = _active_plan_effectiveness_stats(subset)
+            lines.append(
+                f"- `{action}`: count={stats['count']} / evaluated={stats['completed_count']} / "
+                f"direction={_format_pct(stats['direction_correct_rate'])} (n={stats['direction_pool']}) / "
+                f"TP1先行={_format_pct(stats['tp1_first_rate'])} (n={stats['tp1_pool']}) / "
+                f"MFE24h={stats['avg_mfe_24h']:.2f} / MAE24h={stats['avg_mae_24h']:.2f}"
+            )
+        for action, _count in action_counts.most_common():
+            if action in emitted:
+                continue
+            subset = [row for row in joined if _active_plan_action_value(row) == action]
+            stats = _active_plan_effectiveness_stats(subset)
+            lines.append(
+                f"- `{action}`: count={stats['count']} / evaluated={stats['completed_count']} / "
+                f"direction={_format_pct(stats['direction_correct_rate'])} (n={stats['direction_pool']}) / "
+                f"TP1先行={_format_pct(stats['tp1_first_rate'])} (n={stats['tp1_pool']}) / "
+                f"MFE24h={stats['avg_mfe_24h']:.2f} / MAE24h={stats['avg_mae_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. 重点確認",
+            "- `ACTIVE_MARKET_SMALL`: MFE より MAE が大きい場合、成行条件をさらに絞る。",
+            "- `ACTIVE_LIMIT_RETEST`: TP1先行率と MFE24h が改善するかを見る。",
+            "- `ACTIVE_COUNTER_SCALP`: conditional のまま、短期反発/反落警告として機能しているかを見る。",
+            "- `NO_ACTION`: 見送り後に大きな MFE が出ていないかを後続で missed opportunity と結合する。",
+            "",
+            "## 5. 代表例",
+        ]
+    )
+
+    if joined:
+        sorted_rows = sorted(joined, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_rows[:limit]:
+            signal_id = str(row.get("signal_id", "")).strip()
+            timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+            action = _active_plan_action_value(row)
+            direction = str(row.get("outcome_direction_outcome", "")).strip() or "pending"
+            outcome = str(row.get("outcome_outcome", "")).strip() or "pending"
+            mfe = _parse_float(row.get("outcome_signal_based_MFE_24h"), 0.0)
+            mae = _parse_float(row.get("outcome_signal_based_MAE_24h"), 0.0)
+            headline = str(row.get("active_headline", "")).strip()
+            lines.append(
+                f"- {timestamp} / {signal_id} / {action} / direction={direction} / "
+                f"outcome={outcome} / MFE24h={mfe:.2f} / MAE24h={mae:.2f} / {headline}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. 次の判断",
+            "- このレポートは実弾売買判断ではなく、Active Plan の後追い検証である。",
+            "- `ACTIVE_MARKET_SMALL` の MAE が大きい場合は、成行許可条件を強化する。",
+            "- `ACTIVE_LIMIT_RETEST` の TP1先行率が高い場合は、次に active plan 別の紙検証レーンを作る。",
+            "- `NO_ACTION` 後の MFE が大きい場合は、見送り条件と missed opportunity の切り分けを行う。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _active_plan_side_plan(active_plan: dict[str, Any], side: str) -> dict[str, Any]:
+    side_plans = active_plan.get("side_plans")
+    if not isinstance(side_plans, dict):
+        return {}
+    plan = side_plans.get(side)
+    return plan if isinstance(plan, dict) else {}
+
+
+def _active_plan_candidate_row(
+    *,
+    row: dict[str, Any],
+    active_plan: dict[str, Any],
+    side: str,
+    candidate_type: str,
+    entry_mode: str,
+    candidate_status: str,
+) -> dict[str, Any]:
+    side_plan = _active_plan_side_plan(active_plan, side)
+    signal_id = str(row.get("signal_id", "")).strip()
+    timestamp_jst = str(row.get("timestamp_jst", "")).strip()
+    active_action = str(row.get("active_primary_action", "") or active_plan.get("primary_action", "")).strip()
+    candidate_id = f"{signal_id}:{candidate_type}:{side}"
+
+    if entry_mode == "market":
+        entry_price = _parse_float(row.get("current_price"), 0.0)
+    else:
+        entry_price = _parse_float(side_plan.get("entry_mid"), 0.0)
+
+    return {
+        "candidate_id": candidate_id,
+        "source_signal_id": signal_id,
+        "timestamp_jst": timestamp_jst,
+        "active_primary_action": active_action,
+        "candidate_type": candidate_type,
+        "candidate_status": candidate_status,
+        "side": side,
+        "entry_mode": entry_mode,
+        "entry_price": entry_price,
+        "entry_zone_low": _parse_float(side_plan.get("entry_zone_low"), 0.0),
+        "entry_zone_high": _parse_float(side_plan.get("entry_zone_high"), 0.0),
+        "stop_loss": _parse_float(side_plan.get("stop_loss"), 0.0),
+        "tp1": _parse_float(side_plan.get("tp1"), 0.0),
+        "tp2": _parse_float(side_plan.get("tp2"), 0.0),
+        "rr_current_tp1": side_plan.get("rr_current_tp1", ""),
+        "rr_current_tp2": side_plan.get("rr_current_tp2", ""),
+        "rr_zone_mid_tp1": side_plan.get("rr_zone_mid_tp1", ""),
+        "rr_zone_mid_tp2": side_plan.get("rr_zone_mid_tp2", ""),
+        "market_entry_status": str(side_plan.get("market_entry_status", "")),
+        "limit_entry_status": str(side_plan.get("limit_entry_status", "")),
+        "counter_scalp_status": str(side_plan.get("counter_scalp_status", "")),
+        "breakout_status": str(side_plan.get("breakout_status", "")),
+        "active_subject_label": str(row.get("active_subject_label", "")).strip(),
+        "active_headline": str(row.get("active_headline", "") or active_plan.get("headline", "")).strip(),
+        "next_condition": str(side_plan.get("next_condition", "")),
+    }
+
+
+def _active_plan_candidate_rows_from_trade(row: dict[str, Any]) -> list[dict[str, Any]]:
+    active_plan = _json_dict(row.get("active_trade_plan_json"))
+    if not active_plan:
+        return []
+
+    candidates: list[dict[str, Any]] = []
+    signal_id = str(row.get("signal_id", "")).strip()
+    if not signal_id:
+        return []
+
+    for side in ["long", "short"]:
+        side_plan = _active_plan_side_plan(active_plan, side)
+        if not side_plan:
+            continue
+
+        market_status = str(side_plan.get("market_entry_status", "")).strip()
+        limit_status = str(side_plan.get("limit_entry_status", "")).strip()
+        counter_status = str(side_plan.get("counter_scalp_status", "")).strip()
+
+        if market_status == "allowed":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_market_small",
+                    entry_mode="market",
+                    candidate_status="candidate",
+                )
+            )
+
+        if limit_status == "allowed":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_limit_retest",
+                    entry_mode="limit_zone_mid",
+                    candidate_status="candidate",
+                )
+            )
+
+        if counter_status == "conditional":
+            candidates.append(
+                _active_plan_candidate_row(
+                    row=row,
+                    active_plan=active_plan,
+                    side=side,
+                    candidate_type="active_counter_scalp",
+                    entry_mode="market_conditional",
+                    candidate_status="conditional",
+                )
+            )
+
+    return candidates
+
+
+def build_active_plan_paper_candidates(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+
+    rows = _load_csv_rows(trades_path)
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        for candidate in _active_plan_candidate_rows_from_trade(row):
+            candidate_id = str(candidate.get("candidate_id", "")).strip()
+            if not candidate_id or candidate_id in seen:
+                continue
+            seen.add(candidate_id)
+            candidates.append(candidate)
+
+    _ensure_parent(output_csv)
+    with output_csv.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_PAPER_CANDIDATE_HEADER)
+        writer.writeheader()
+        for candidate in candidates:
+            writer.writerow({column: candidate.get(column, "") for column in ACTIVE_PLAN_PAPER_CANDIDATE_HEADER})
+
+    return output_csv
+
+
+def _candidate_delta(side: Any, entry_price: Any, forward_price: Any) -> float:
+    normalized_side = str(side or "").strip().lower()
+    entry = _parse_float(entry_price, 0.0)
+    forward = _parse_float(forward_price, 0.0)
+    if normalized_side not in {"long", "short"} or entry <= 0 or forward <= 0:
+        return 0.0
+    if normalized_side == "long":
+        return forward - entry
+    return entry - forward
+
+
+def _candidate_close_result(delta: float) -> str:
+    if delta > 0:
+        return "favorable"
+    if delta < 0:
+        return "adverse"
+    return "flat"
+
+
+def _candidate_close_reached(side: Any, forward_price: Any, level: Any, *, target: bool) -> str:
+    normalized_side = str(side or "").strip().lower()
+    forward = _parse_float(forward_price, 0.0)
+    target_level = _parse_float(level, 0.0)
+    if normalized_side not in {"long", "short"} or forward <= 0 or target_level <= 0:
+        return ""
+    if target:
+        if normalized_side == "long":
+            return "true" if forward >= target_level else "false"
+        return "true" if forward <= target_level else "false"
+    if normalized_side == "long":
+        return "true" if forward <= target_level else "false"
+    return "true" if forward >= target_level else "false"
+
+
+def _active_plan_parse_dt(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        try:
+            raw = float(text)
+        except ValueError:
+            return None
+        if raw > 10_000_000_000:
+            raw = raw / 1000
+        return datetime.fromtimestamp(raw, tz=timezone.utc).astimezone(JST)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=JST)
+    return dt.astimezone(JST)
+
+
+def _active_plan_format_jst(dt: datetime | None) -> str:
+    return "" if dt is None else dt.astimezone(JST).isoformat()
+
+
+def _active_plan_load_ohlcv_rows(path: Path | None) -> list[dict[str, Any]]:
+    if path is None or not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for row in _load_csv_rows(path):
+        dt = (
+            _active_plan_parse_dt(row.get("timestamp_jst"))
+            or _active_plan_parse_dt(row.get("timestamp_utc"))
+            or _active_plan_parse_dt(row.get("timestamp"))
+        )
+        if dt is None:
+            continue
+        rows.append(
+            {
+                "dt": dt,
+                "open": _parse_float(row.get("open"), 0.0),
+                "high": _parse_float(row.get("high"), 0.0),
+                "low": _parse_float(row.get("low"), 0.0),
+                "close": _parse_float(row.get("close"), 0.0),
+            }
+        )
+    return sorted(rows, key=lambda item: item["dt"])
+
+
+def _load_active_plan_intraperiod_ohlcv_df(path: Path | None) -> pd.DataFrame | None:
+    if path is None or not path.exists():
+        return None
+    try:
+        return pd.read_csv(path, keep_default_na=False)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
+def _active_plan_candidate_valid(candidate: dict[str, Any]) -> bool:
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_mode = str(candidate.get("entry_mode", "")).strip()
+    entry_price = _parse_float(candidate.get("entry_price"), 0.0)
+    stop_loss = _parse_float(candidate.get("stop_loss"), 0.0)
+    tp1 = _parse_float(candidate.get("tp1"), 0.0)
+    return side in {"long", "short"} and bool(entry_mode) and entry_price > 0 and stop_loss > 0 and tp1 > 0
+
+
+def _active_plan_touches_entry(side: str, high: float, low: float, entry: float) -> bool:
+    return low <= entry <= high
+
+
+def _active_plan_touches_tp(side: str, high: float, low: float, price: float) -> bool:
+    if side == "long":
+        return high >= price
+    if side == "short":
+        return low <= price
+    return False
+
+
+def _active_plan_touches_sl(side: str, high: float, low: float, stop_loss: float) -> bool:
+    if side == "long":
+        return low <= stop_loss
+    if side == "short":
+        return high >= stop_loss
+    return False
+
+
+def _active_plan_mfe_mae(
+    *,
+    side: str,
+    entry_price: float,
+    candles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not candles or entry_price <= 0:
+        return {
+            "mfe": "",
+            "mae": "",
+            "mfe_price": "",
+            "mae_price": "",
+            "max_favorable_at_jst": "",
+            "max_adverse_at_jst": "",
+        }
+
+    if side == "long":
+        favorable = max(candles, key=lambda item: float(item["high"]))
+        adverse = min(candles, key=lambda item: float(item["low"]))
+        mfe_price = float(favorable["high"])
+        mae_price = float(adverse["low"])
+        mfe = max(0.0, mfe_price - entry_price)
+        mae = max(0.0, entry_price - mae_price)
+    elif side == "short":
+        favorable = min(candles, key=lambda item: float(item["low"]))
+        adverse = max(candles, key=lambda item: float(item["high"]))
+        mfe_price = float(favorable["low"])
+        mae_price = float(adverse["high"])
+        mfe = max(0.0, entry_price - mfe_price)
+        mae = max(0.0, mae_price - entry_price)
+    else:
+        return {
+            "mfe": "",
+            "mae": "",
+            "mfe_price": "",
+            "mae_price": "",
+            "max_favorable_at_jst": "",
+            "max_adverse_at_jst": "",
+        }
+
+    return {
+        "mfe": f"{mfe:.2f}",
+        "mae": f"{mae:.2f}",
+        "mfe_price": f"{mfe_price:.2f}",
+        "mae_price": f"{mae_price:.2f}",
+        "max_favorable_at_jst": _active_plan_format_jst(favorable["dt"]),
+        "max_adverse_at_jst": _active_plan_format_jst(adverse["dt"]),
+    }
+
+
+def _evaluate_active_plan_intraperiod_candidate(
+    candidate: dict[str, Any],
+    ohlcv_rows: list[dict[str, Any]],
+    *,
+    evaluation_window_hours: float,
+) -> dict[str, Any]:
+    row = {column: "" for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER}
+    for column in ACTIVE_PLAN_CANDIDATE_INTRAPERIOD_HEADER:
+        if column in candidate:
+            row[column] = candidate.get(column, "")
+
+    row["evaluation_window_hours"] = str(
+        int(evaluation_window_hours) if float(evaluation_window_hours).is_integer() else evaluation_window_hours
+    )
+
+    candidate_dt = _active_plan_parse_dt(candidate.get("timestamp_jst"))
+    if candidate_dt is None or not _active_plan_candidate_valid(candidate):
+        row["evaluation_status"] = "invalid_candidate"
+        row["first_exit"] = "invalid_candidate"
+        row["notes"] = "invalid_candidate"
+        return row
+
+    if not ohlcv_rows:
+        row["evaluation_status"] = "no_ohlcv"
+        row["first_exit"] = "no_ohlcv"
+        row["notes"] = "no_ohlcv"
+        return row
+
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_mode = str(candidate.get("entry_mode", "")).strip()
+    entry_price = _parse_float(candidate.get("entry_price"), 0.0)
+    stop_loss = _parse_float(candidate.get("stop_loss"), 0.0)
+    tp1 = _parse_float(candidate.get("tp1"), 0.0)
+    tp2 = _parse_float(candidate.get("tp2"), 0.0)
+
+    window_end = candidate_dt + timedelta(hours=evaluation_window_hours)
+    future_rows = [
+        item
+        for item in ohlcv_rows
+        if candidate_dt <= item["dt"] <= window_end
+    ]
+
+    if not future_rows:
+        row["evaluation_status"] = "pending"
+        row["first_exit"] = "pending"
+        row["notes"] = "no_future_ohlcv_in_window"
+        return row
+
+    entry_row: dict[str, Any] | None = None
+    notes: list[str] = []
+
+    if entry_mode in {"market", "market_conditional"}:
+        entry_row = future_rows[0]
+        if entry_mode == "market_conditional":
+            notes.append("conditional_candidate_assumed_market_entry")
+    else:
+        for item in future_rows:
+            if _active_plan_touches_entry(side, float(item["high"]), float(item["low"]), entry_price):
+                entry_row = item
+                break
+
+    if entry_row is None:
+        if future_rows[-1]["dt"] >= window_end:
+            row["evaluation_status"] = "not_entered"
+            row["first_exit"] = "not_entered"
+        else:
+            row["evaluation_status"] = "pending"
+            row["first_exit"] = "pending"
+        row["entry_reached"] = "false"
+        row["bars_evaluated"] = str(len(future_rows))
+        row["notes"] = ";".join(notes)
+        return row
+
+    row["entry_reached"] = "true"
+    row["entry_reached_at_jst"] = _active_plan_format_jst(entry_row["dt"])
+    row["entry_reached_price"] = f"{entry_price:.2f}"
+
+    after_entry = [item for item in future_rows if item["dt"] >= entry_row["dt"]]
+    evaluated_candles: list[dict[str, Any]] = []
+    first_exit = ""
+    first_exit_row: dict[str, Any] | None = None
+    first_exit_price: float | None = None
+
+    for item in after_entry:
+        evaluated_candles.append(item)
+        high = float(item["high"])
+        low = float(item["low"])
+
+        tp1_hit = _active_plan_touches_tp(side, high, low, tp1)
+        tp2_hit = bool(tp2 > 0 and _active_plan_touches_tp(side, high, low, tp2))
+        sl_hit = _active_plan_touches_sl(side, high, low, stop_loss)
+
+        if tp1_hit:
+            row["tp1_reached"] = "true"
+            row["tp1_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+        if tp2_hit:
+            row["tp2_reached"] = "true"
+            row["tp2_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+        if sl_hit:
+            row["sl_reached"] = "true"
+            row["sl_reached_at_jst"] = _active_plan_format_jst(item["dt"])
+
+        if sl_hit and tp1_hit:
+            first_exit = "ambiguous_sl_first"
+            first_exit_row = item
+            first_exit_price = stop_loss
+            notes.append("same_bar_tp_sl_ambiguous_conservative_sl")
+            break
+        if sl_hit:
+            first_exit = "sl"
+            first_exit_row = item
+            first_exit_price = stop_loss
+            break
+        if tp1_hit:
+            first_exit = "tp1"
+            first_exit_row = item
+            first_exit_price = tp1
+            break
+        if item["dt"] >= window_end:
+            first_exit = "timeout"
+            first_exit_row = item
+            first_exit_price = float(item["close"])
+            row["timeout_reached"] = "true"
+            row["timeout_at_jst"] = _active_plan_format_jst(window_end)
+            break
+
+    if not first_exit:
+        first_exit = "pending"
+
+    row["first_exit"] = first_exit
+    if first_exit_row is not None:
+        row["first_exit_at_jst"] = _active_plan_format_jst(first_exit_row["dt"])
+    if first_exit_price is not None:
+        row["first_exit_price"] = f"{first_exit_price:.2f}"
+
+    if first_exit in {"tp1", "tp2", "sl", "ambiguous_sl_first"}:
+        row["evaluation_status"] = "complete"
+    elif first_exit == "timeout":
+        row["evaluation_status"] = "timeout"
+    elif first_exit == "pending":
+        row["evaluation_status"] = "pending"
+    else:
+        row["evaluation_status"] = first_exit
+
+    mfe_mae = _active_plan_mfe_mae(
+        side=side,
+        entry_price=entry_price,
+        candles=evaluated_candles,
+    )
+    row.update(mfe_mae)
+    row["bars_evaluated"] = str(len(evaluated_candles))
+    row["notes"] = ";".join(note for note in notes if note)
+    return row
+
+
+def build_active_plan_candidate_intraperiod_outcomes(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    ohlcv_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    evaluation_window_hours: float = 24.0,
+) -> Path:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+
+    candidates_df = pd.read_csv(candidates_path, keep_default_na=False)
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        if "timestamp_jst" in candidates_df.columns:
+            mask = candidates_df["timestamp_jst"].map(
+                lambda value: _timestamp_in_jst_date_range(
+                    str(value),
+                    date_from=date_from_filter,
+                    date_to=date_to_filter,
+                )
+            )
+            candidates_df = candidates_df.loc[mask].copy()
+        else:
+            candidates_df = candidates_df.iloc[0:0].copy()
+
+    ohlcv_df = _load_active_plan_intraperiod_ohlcv_df(ohlcv_path)
+    output_df = build_active_plan_intraperiod_outcome_rows(
+        candidates_df,
+        ohlcv_df,
+        timeout_hours=float(evaluation_window_hours),
+    )
+    _ensure_parent(output_csv)
+    output_df.to_csv(output_csv, index=False)
+    return output_csv
+
+
+def _active_plan_candidate_outcome_row(
+    candidate: dict[str, Any],
+    outcome: dict[str, Any],
+) -> dict[str, Any]:
+    side = str(candidate.get("side", "")).strip().lower()
+    entry_price = candidate.get("entry_price")
+    forward_12h = outcome.get("forward_price_12h", "")
+    forward_24h = outcome.get("forward_price_24h", "")
+
+    delta_12h = _candidate_delta(side, entry_price, forward_12h)
+    delta_24h = _candidate_delta(side, entry_price, forward_24h)
+
+    row = {column: "" for column in ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER}
+    for column in ACTIVE_PLAN_PAPER_CANDIDATE_HEADER:
+        if column in row:
+            row[column] = candidate.get(column, "")
+
+    row.update(
+        {
+            "outcome_evaluation_status": outcome.get("evaluation_status", ""),
+            "outcome_forward_price_12h": forward_12h,
+            "outcome_forward_price_24h": forward_24h,
+            "candidate_delta_12h": f"{delta_12h:.2f}",
+            "candidate_delta_24h": f"{delta_24h:.2f}",
+            "candidate_result_12h": _candidate_close_result(delta_12h),
+            "candidate_result_24h": _candidate_close_result(delta_24h),
+            "tp1_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("tp1"), target=True),
+            "tp2_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("tp2"), target=True),
+            "sl_close_reached_24h": _candidate_close_reached(side, forward_24h, candidate.get("stop_loss"), target=False),
+            "outcome_direction_outcome": outcome.get("direction_outcome", ""),
+            "outcome_tp1_hit_first": outcome.get("tp1_hit_first", ""),
+            "outcome_outcome": outcome.get("outcome", ""),
+        }
+    )
+    return row
+
+
+def build_active_plan_candidate_outcomes(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    outcomes_path: Path | None = None,
+    output_csv: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+) -> Path:
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    output_csv = output_csv or base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"
+
+    candidates = _load_csv_rows(candidates_path)
+    outcomes = _load_csv_rows(outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        candidates = [
+            row
+            for row in candidates
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    outcomes_by_signal_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in outcomes
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    rows: list[dict[str, Any]] = []
+    for candidate in candidates:
+        source_signal_id = str(candidate.get("source_signal_id", "")).strip()
+        outcome = outcomes_by_signal_id.get(source_signal_id, {})
+        rows.append(_active_plan_candidate_outcome_row(candidate, outcome))
+
+    _ensure_parent(output_csv)
+    with output_csv.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in ACTIVE_PLAN_CANDIDATE_OUTCOME_HEADER})
+
+    return output_csv
+
+
+_ACTIVE_PLAN_CANDIDATE_TYPE_ORDER = [
+    "active_market_small",
+    "active_limit_retest",
+    "active_counter_scalp",
+]
+
+
+def _active_candidate_bool_count(rows: list[dict[str, Any]], column: str, value: str = "true") -> int:
+    expected = str(value).strip().lower()
+    return sum(1 for row in rows if str(row.get(column, "")).strip().lower() == expected)
+
+
+def _active_candidate_result_count(rows: list[dict[str, Any]], column: str, result: str) -> int:
+    expected = str(result).strip().lower()
+    return sum(1 for row in rows if str(row.get(column, "")).strip().lower() == expected)
+
+
+def _active_candidate_mean_delta(rows: list[dict[str, Any]], column: str) -> float:
+    return _mean_value(rows, column)
+
+
+def _active_candidate_type_value(row: dict[str, Any]) -> str:
+    return str(row.get("candidate_type", "") or "unknown").strip() or "unknown"
+
+
+def _active_candidate_side_value(row: dict[str, Any]) -> str:
+    return str(row.get("side", "") or "unknown").strip() or "unknown"
+
+
+def _active_candidate_report_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    count = len(rows)
+    favorable_12h = _active_candidate_result_count(rows, "candidate_result_12h", "favorable")
+    favorable_24h = _active_candidate_result_count(rows, "candidate_result_24h", "favorable")
+    adverse_24h = _active_candidate_result_count(rows, "candidate_result_24h", "adverse")
+    flat_24h = _active_candidate_result_count(rows, "candidate_result_24h", "flat")
+    tp1_close = _active_candidate_bool_count(rows, "tp1_close_reached_24h", "true")
+    tp2_close = _active_candidate_bool_count(rows, "tp2_close_reached_24h", "true")
+    sl_close = _active_candidate_bool_count(rows, "sl_close_reached_24h", "true")
+    return {
+        "count": count,
+        "favorable_12h": favorable_12h,
+        "favorable_24h": favorable_24h,
+        "adverse_24h": adverse_24h,
+        "flat_24h": flat_24h,
+        "favorable_12h_rate": _ratio(favorable_12h, count),
+        "favorable_24h_rate": _ratio(favorable_24h, count),
+        "tp1_close": tp1_close,
+        "tp2_close": tp2_close,
+        "sl_close": sl_close,
+        "tp1_close_rate": _ratio(tp1_close, count),
+        "tp2_close_rate": _ratio(tp2_close, count),
+        "sl_close_rate": _ratio(sl_close, count),
+        "avg_delta_12h": _active_candidate_mean_delta(rows, "candidate_delta_12h"),
+        "avg_delta_24h": _active_candidate_mean_delta(rows, "candidate_delta_24h"),
+    }
+
+
+def _build_active_plan_candidate_outcomes_report_from_candidate_outcomes(
+    *,
+    base_dir: Path,
+    candidate_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    candidate_outcomes_path = candidate_outcomes_path or base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"
+    rows = _load_csv_rows(candidate_outcomes_path)
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    total_stats = _active_candidate_report_stats(rows)
+    type_counts = Counter(_active_candidate_type_value(row) for row in rows)
+    side_counts = Counter(_active_candidate_side_value(row) for row in rows)
+
+    lines = [
+        "# Active Plan 候補別暫定評価",
+        "",
+        "## 1. まず結論",
+    ]
+
+    if not rows:
+        lines.extend(
+            [
+                "- Active Plan candidate outcomes の記録はまだありません。",
+                "- `daily-sync` で `active_plan_candidate_outcomes.csv` が生成された後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.append(f"- 集計対象は {total_stats['count']} 候補です。")
+        lines.append(
+            f"- 24h favorable は {total_stats['favorable_24h']} 件 "
+            f"({_format_pct(total_stats['favorable_24h_rate'])}) です。"
+        )
+        lines.append(
+            f"- 24h終値ベースの TP1 close 到達は {total_stats['tp1_close']} 件 "
+            f"({_format_pct(total_stats['tp1_close_rate'])}) です。"
+        )
+        lines.append(
+            f"- 24h終値ベースの SL close 到達は {total_stats['sl_close']} 件 "
+            f"({_format_pct(total_stats['sl_close_rate'])}) です。"
+        )
+        lines.append(
+            f"- 平均deltaは 12h={total_stats['avg_delta_12h']:.2f} / "
+            f"24h={total_stats['avg_delta_24h']:.2f} です。"
+        )
+        if total_stats["sl_close"] > total_stats["tp1_close"]:
+            lines.append("- 注意: 24h終値ベースでは TP1 close 到達より SL close 到達が多く、候補条件の絞り込みが必要です。")
+        else:
+            lines.append("- 判定: 24h終値ベースでは SL close 到達より TP1 close 到達が優勢または同等です。")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- candidate_outcomes_path: `{candidate_outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- rows: {len(rows)}",
+            "",
+            "## 3. 候補タイプ別",
+        ]
+    )
+
+    if rows:
+        emitted = set()
+        for candidate_type in _ACTIVE_PLAN_CANDIDATE_TYPE_ORDER:
+            subset = [row for row in rows if _active_candidate_type_value(row) == candidate_type]
+            emitted.add(candidate_type)
+            if not subset:
+                continue
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{candidate_type}`: count={stats['count']} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"TP1 close={_format_pct(stats['tp1_close_rate'])} / "
+                f"SL close={_format_pct(stats['sl_close_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+        for candidate_type, _count in type_counts.most_common():
+            if candidate_type in emitted:
+                continue
+            subset = [row for row in rows if _active_candidate_type_value(row) == candidate_type]
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{candidate_type}`: count={stats['count']} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"TP1 close={_format_pct(stats['tp1_close_rate'])} / "
+                f"SL close={_format_pct(stats['sl_close_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. side 別",
+        ]
+    )
+
+    if rows:
+        for side, count in side_counts.most_common():
+            subset = [row for row in rows if _active_candidate_side_value(row) == side]
+            stats = _active_candidate_report_stats(subset)
+            lines.append(
+                f"- `{side}`: count={count} / "
+                f"24h favorable={_format_pct(stats['favorable_24h_rate'])} / "
+                f"avg_delta_24h={stats['avg_delta_24h']:.2f}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. status 集計",
+            f"- 12h favorable: {total_stats['favorable_12h']}",
+            f"- 24h favorable: {total_stats['favorable_24h']}",
+            f"- 24h adverse: {total_stats['adverse_24h']}",
+            f"- 24h flat: {total_stats['flat_24h']}",
+            f"- TP1 close reached 24h: {total_stats['tp1_close']}",
+            f"- TP2 close reached 24h: {total_stats['tp2_close']}",
+            f"- SL close reached 24h: {total_stats['sl_close']}",
+            "",
+            "## 6. 代表例",
+        ]
+    )
+
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+        for row in sorted_rows[:limit]:
+            timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+            candidate_id = str(row.get("candidate_id", "")).strip()
+            candidate_type = _active_candidate_type_value(row)
+            side = _active_candidate_side_value(row)
+            result_24h = str(row.get("candidate_result_24h", "")).strip() or "unknown"
+            delta_24h = _parse_float(row.get("candidate_delta_24h"), 0.0)
+            tp1_close = str(row.get("tp1_close_reached_24h", "")).strip() or ""
+            sl_close = str(row.get("sl_close_reached_24h", "")).strip() or ""
+            headline = str(row.get("active_headline", "")).strip()
+            lines.append(
+                f"- {timestamp} / {candidate_id} / {candidate_type} / {side} / "
+                f"24h={result_24h} / delta24h={delta_24h:.2f} / "
+                f"TP1close={tp1_close} / SLclose={sl_close} / {headline}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. 注意",
+            "- このレポートは forward close ベースの暫定評価であり、実際の途中到達判定ではない。",
+            "- TP1/TP2/SL close reached は、24h終値が水準を超えたかだけを見る。",
+            "- intraperiod の高値/安値到達、entry zone 到達、timeout は後続作業で扱う。",
+            "",
+            "## 8. 次の判断",
+            "- `active_limit_retest` の 24h favorable と TP1 close が高い場合は、本格的な候補別紙検証へ進む。",
+            "- `active_market_small` の SL close が多い場合は、成行許可条件をさらに絞る。",
+            "- `active_counter_scalp` は conditional として機能しているかを、side 別と代表例で確認する。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_active_plan_candidate_outcomes_report(
+    *,
+    base_dir: Path,
+    candidates_path: Path | None = None,
+    trades_path: Path | None = None,
+    candidate_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
+    resolved_output_md = output_md or (
+        base_dir / "運用資料" / "reports" / "analysis" / f"active_plan_candidate_outcomes_{resolved_report_date}.md"
+    )
+
+    if candidate_outcomes_path is not None and candidates_path is None and trades_path is None:
+        return _build_active_plan_candidate_outcomes_report_from_candidate_outcomes(
+            base_dir=base_dir,
+            candidate_outcomes_path=candidate_outcomes_path,
+            output_md=resolved_output_md,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+
+    candidates_path = candidates_path or base_dir / "logs" / "csv" / "active_plan_candidates.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+
+    candidate_rows, candidate_fields = _load_csv_rows_with_fieldnames(candidates_path)
+    trade_rows, trade_fields = _load_csv_rows_with_fieldnames(trades_path)
+
+    if date_from_filter or date_to_filter:
+        candidate_rows = [
+            row
+            for row in candidate_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+        trade_rows = [
+            row
+            for row in trade_rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    def _count_value(row: dict[str, Any], key: str) -> str:
+        return str(row.get(key, "")).strip() or "blank"
+
+    def _has_complete_entry_tp_sl(row: dict[str, Any]) -> bool:
+        return all(str(row.get(field, "")).strip() for field in ("entry_price", "stop_loss", "tp1", "tp2"))
+
+    def _has_followup_trade(row: dict[str, Any]) -> bool:
+        candidate_dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if candidate_dt is None:
+            return False
+        for trade_row in trade_rows:
+            trade_dt = _parse_dt(str(trade_row.get("timestamp_jst", "")))
+            if trade_dt is not None and trade_dt > candidate_dt:
+                return True
+        return False
+
+    candidate_type_counts = Counter(_count_value(row, "candidate_type") for row in candidate_rows)
+    candidate_status_counts = Counter(_count_value(row, "candidate_status") for row in candidate_rows)
+    side_counts = Counter(_count_value(row, "side") for row in candidate_rows)
+    entry_mode_counts = Counter(_count_value(row, "entry_mode") for row in candidate_rows)
+
+    entry_tp_sl_columns_present = all(field in candidate_fields for field in ("entry_price", "stop_loss", "tp1", "tp2"))
+    trades_active_primary_action_present = "active_primary_action" in trade_fields
+    complete_entry_tp_sl_count = sum(1 for row in candidate_rows if _has_complete_entry_tp_sl(row))
+    followup_trade_count = sum(1 for row in candidate_rows if _has_followup_trade(row))
+
+    if not candidate_rows:
+        provisional_outcome = "候補なし"
+    elif not entry_tp_sl_columns_present:
+        provisional_outcome = "候補あり・entry/TP/SL列不足"
+    elif complete_entry_tp_sl_count == 0:
+        provisional_outcome = "候補あり・entry/TP/SL値未充足"
+    elif followup_trade_count == 0:
+        provisional_outcome = "候補あり・後続trade未確認"
+    else:
+        provisional_outcome = "候補あり・後続tradeあり"
+
+    lines = [
+        "# Active Plan 候補別暫定評価",
+        "",
+        "## 1. 概要",
+        f"- report_date: `{resolved_report_date}`",
+        f"- candidates_path: `{candidates_path}`",
+        f"- trades_path: `{trades_path}`",
+        f"- date_from: `{date_from_filter or 'all'}`",
+        f"- date_to: `{date_to_filter or 'all'}`",
+        f"- candidate rows: {len(candidate_rows)}",
+        f"- trade rows: {len(trade_rows)}",
+        "",
+        "## 2. 入力状態",
+    ]
+
+    if not candidates_path.exists():
+        lines.append("- active_plan_candidates.csv: missing")
+    elif candidate_rows:
+        lines.append(f"- active_plan_candidates.csv: rows={len(candidate_rows)}")
+    else:
+        lines.append("- active_plan_candidates.csv: header only")
+
+    if not trades_path.exists():
+        lines.append("- trades.csv: missing")
+    elif trade_rows:
+        lines.append(f"- trades.csv: rows={len(trade_rows)}")
+    else:
+        lines.append("- trades.csv: header only")
+
+    lines.extend(
+        [
+            f"- entry/tp/sl columns present: {'yes' if entry_tp_sl_columns_present else 'no'}",
+            f"- trades has active_primary_action column: {'yes' if trades_active_primary_action_present else 'no'}",
+            f"- candidates with complete entry/tp/sl values: {complete_entry_tp_sl_count}/{len(candidate_rows)}",
+            f"- candidates with followup trade rows: {followup_trade_count}/{len(candidate_rows)}",
+            "",
+            "## 3. 候補タイプ別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. candidate_status別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for candidate_status, count in candidate_status_counts.most_common():
+            lines.append(f"- `{candidate_status}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. side別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. entry_mode別件数",
+        ]
+    )
+
+    if candidate_rows:
+        for entry_mode, count in entry_mode_counts.most_common():
+            lines.append(f"- `{entry_mode}`: {count} 件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. 暫定outcome",
+            f"- candidates with complete entry/tp/sl values: {complete_entry_tp_sl_count}/{len(candidate_rows)}",
+            f"- candidates with followup trade rows: {followup_trade_count}/{len(candidate_rows)}",
+            f"- provisional verdict: {provisional_outcome}",
+            "",
+            "## 8. 代表候補",
+        ]
+    )
+
+    if candidate_rows:
+        sorted_candidates = sorted(candidate_rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_candidates[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                f"{str(row.get('timestamp_jst', '')).strip()} / "
+                f"{str(row.get('candidate_id', '')).strip()} / "
+                f"{str(row.get('active_primary_action', '')).strip()} / "
+                f"{str(row.get('candidate_type', '')).strip()} / "
+                f"{str(row.get('candidate_status', '')).strip()} / "
+                f"{str(row.get('side', '')).strip()} / "
+                f"{str(row.get('entry_mode', '')).strip()} / "
+                f"{str(row.get('entry_price', '')).strip()} / "
+                f"{str(row.get('stop_loss', '')).strip()} / "
+                f"{str(row.get('tp1', '')).strip()} / "
+                f"{str(row.get('tp2', '')).strip()} / "
+                f"{str(row.get('rr_current_tp1', '')).strip()} / "
+                f"{str(row.get('rr_zone_mid_tp1', '')).strip()} / "
+                f"{str(row.get('next_condition', '')).strip()}"
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 9. 未解決事項",
+            "- このレポートは暫定版で、TP/SL 到達の厳密判定はまだ行っていない。",
+            "- 後続trade行の有無は timestamp_jst の後続行で簡易判定している。",
+            "- `active_plan_candidates.csv` が header only の場合は、候補行が発生するまで再評価を待つ。",
+        ]
+    )
+
+    report = "\n".join(lines)
+    _ensure_parent(resolved_output_md)
+    resolved_output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_active_plan_candidate_intraperiod_outcomes_report(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    intraperiod_outcomes_path = intraperiod_outcomes_path or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    resolved_report_date = datetime.now(tz=JST).strftime("%Y%m%d")
+    resolved_output_md = output_md or (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{resolved_report_date}.md"
+    )
+
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    input_exists = intraperiod_outcomes_path.exists()
+
+    date_from_filter = str(date_from).strip()
+    date_to_filter = str(date_to).strip()
+    if date_from_filter or date_to_filter:
+        rows = [
+            row
+            for row in rows
+            if _timestamp_in_jst_date_range(
+                str(row.get("timestamp_jst", "")),
+                date_from=date_from_filter,
+                date_to=date_to_filter,
+            )
+        ]
+
+    total_count = len(rows)
+    outcome_counts = Counter(str(row.get("outcome", "")).strip() or "blank" for row in rows)
+    candidate_type_counts = Counter(str(row.get("candidate_type", "")).strip() or "blank" for row in rows)
+    action_counts = Counter(str(row.get("active_primary_action", "")).strip() or "blank" for row in rows)
+    side_counts = Counter(str(row.get("side", "")).strip() or "blank" for row in rows)
+    exit_reason_counts = Counter(str(row.get("first_exit_reason", "")).strip() or "blank" for row in rows)
+
+    entry_reached_count = sum(1 for row in rows if _active_plan_intraperiod_entry_reached(row))
+    tp1_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "tp1_first")
+    tp2_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "tp2_first")
+    sl_first_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "sl_first")
+    timeout_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "timeout")
+    ambiguous_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "ambiguous")
+    no_ohlcv_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "no_ohlcv")
+    pending_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "pending")
+    not_entered_count = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "not_entered")
+
+    all_mfe_r = _active_plan_intraperiod_mean_metric(rows, "mfe_r", "mfe_price")
+    all_mae_r = _active_plan_intraperiod_mean_metric(rows, "mae_r", "mae_price")
+    all_mfe_price = _active_plan_intraperiod_mean_metric(rows, "mfe_price")
+    all_mae_price = _active_plan_intraperiod_mean_metric(rows, "mae_price")
+    entry_rows = [row for row in rows if _active_plan_intraperiod_entry_reached(row)]
+    entry_mfe_r = _active_plan_intraperiod_mean_metric(entry_rows, "mfe_r", "mfe_price")
+    entry_mae_r = _active_plan_intraperiod_mean_metric(entry_rows, "mae_r", "mae_price")
+    entry_mfe_price = _active_plan_intraperiod_mean_metric(entry_rows, "mfe_price")
+    entry_mae_price = _active_plan_intraperiod_mean_metric(entry_rows, "mae_price")
+
+    lines = [
+        "# BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価",
+        "",
+        "## 1. まず結論",
+        "- 実弾売買判断ではない。",
+        "- Active Plan は正式GOではない。",
+        "- 自動発注候補ではない。",
+        "- local CSV only",
+        "- no exchange fetch",
+        "- no daily-sync wiring",
+        "- report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+
+    if not input_exists:
+        lines.extend(
+            [
+                "- 入力CSVが見つかりません。",
+                "- 先に `build-active-plan-intraperiod-outcomes` で CSV を生成してください。",
+                "",
+            ]
+        )
+    elif not rows:
+        lines.extend(
+            [
+                "- intraperiod outcome rows はまだありません。",
+                "- `build-active-plan-intraperiod-outcomes` で CSV を生成した後に再実行してください。",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- 集計対象は {total_count} 行です。",
+                f"- entry到達は {entry_reached_count} 行です。",
+                f"- TP1先行は {tp1_first_count} 行、TP2先行は {tp2_first_count} 行、SL先行は {sl_first_count} 行です。",
+                f"- timeout は {timeout_count} 行、ambiguous は {ambiguous_count} 行、no_ohlcv は {no_ohlcv_count} 行、pending は {pending_count} 行です。",
+                f"- 平均MFE/R={all_mfe_r:.2f} / 平均MAE/R={all_mae_r:.2f} / 平均MFE価格={all_mfe_price:.2f} / 平均MAE価格={all_mae_price:.2f} です。",
+                "- 未解決事項として pending / ambiguous / no_ohlcv を残しています。" if (pending_count or ambiguous_count or no_ohlcv_count) else "- 未解決事項はありません。",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## 2. 集計条件",
+            f"- intraperiod_outcomes_path: `{intraperiod_outcomes_path}`",
+            f"- date_from: `{date_from_filter or 'all'}`",
+            f"- date_to: `{date_to_filter or 'all'}`",
+            f"- limit: `{limit}`",
+            f"- rows: {len(rows)}",
+            "",
+            "## 2.5. ローカルCSV生成ガイド",
+            "- local CSV only",
+            "- no exchange fetch",
+            "- no daily-sync wiring",
+            "- report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "```text",
+            "build-active-plan-intraperiod-outcomes",
+            "--candidates-csv logs/csv/active_plan_candidates.csv",
+            "--ohlcv-csv <local_15m_ohlcv_csv>",
+            "--output-csv logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+            "```",
+            "",
+            "## 3. outcome別集計",
+        ]
+    )
+
+    if rows:
+        emitted = set()
+        for outcome in _ACTIVE_PLAN_INTRAPERIOD_OUTCOME_ORDER:
+            count = outcome_counts.get(outcome, 0)
+            if count <= 0:
+                continue
+            lines.append(f"- `{outcome}`: {count}件")
+            emitted.add(outcome)
+        for outcome, count in outcome_counts.most_common():
+            if outcome in emitted:
+                continue
+            lines.append(f"- `{outcome}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 4. candidate_type別集計",
+        ]
+    )
+    if rows:
+        for candidate_type, count in candidate_type_counts.most_common():
+            lines.append(f"- `{candidate_type}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 5. active_primary_action別集計",
+        ]
+    )
+    if rows:
+        for action, count in action_counts.most_common():
+            lines.append(f"- `{action}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 6. side別集計",
+        ]
+    )
+    if rows:
+        for side, count in side_counts.most_common():
+            lines.append(f"- `{side}`: {count}件")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 7. entry到達 / TP1先行 / TP2先行 / SL先行 / timeout / ambiguous / no_ohlcv / pending",
+            f"- entry到達: {entry_reached_count}件",
+            f"- TP1先行: {tp1_first_count}件",
+            f"- TP2先行: {tp2_first_count}件",
+            f"- SL先行: {sl_first_count}件",
+            f"- timeout: {timeout_count}件",
+            f"- ambiguous: {ambiguous_count}件",
+            f"- no_ohlcv: {no_ohlcv_count}件",
+            f"- pending: {pending_count}件",
+            f"- not_entered: {not_entered_count}件",
+            "",
+            "## 8. MFE/MAE/Rの概要",
+            f"- 全体平均MFE/R: {all_mfe_r:.2f}",
+            f"- 全体平均MAE/R: {all_mae_r:.2f}",
+            f"- 全体平均MFE価格: {all_mfe_price:.2f}",
+            f"- 全体平均MAE価格: {all_mae_price:.2f}",
+            f"- entry到達後平均MFE/R: {entry_mfe_r:.2f}",
+            f"- entry到達後平均MAE/R: {entry_mae_r:.2f}",
+            f"- entry到達後平均MFE価格: {entry_mfe_price:.2f}",
+            f"- entry到達後平均MAE価格: {entry_mae_price:.2f}",
+            "",
+            "## 9. 代表例",
+        ]
+    )
+
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_rows[: max(0, int(limit))]:
+            lines.append(
+                "- "
+                + " / ".join(
+                    [
+                        str(row.get("timestamp_jst", "")).strip(),
+                        str(row.get("candidate_id", "")).strip(),
+                        str(row.get("signal_id", "")).strip(),
+                        str(row.get("candidate_type", "")).strip(),
+                        str(row.get("active_primary_action", "")).strip(),
+                        str(row.get("side", "")).strip(),
+                        str(row.get("entry_mode", "")).strip(),
+                        str(row.get("entry_price", "")).strip(),
+                        str(row.get("stop_price", "")).strip(),
+                        str(row.get("tp1_price", "")).strip(),
+                        str(row.get("tp2_price", "")).strip(),
+                        str(row.get("outcome", "")).strip(),
+                        str(row.get("first_exit_reason", "")).strip(),
+                        str(row.get("entry_reached_time", "")).strip(),
+                        str(row.get("first_exit_time", "")).strip(),
+                        str(row.get("mfe_r", "")).strip(),
+                        str(row.get("mae_r", "")).strip(),
+                    ]
+                )
+            )
+    else:
+        lines.append("- なし")
+
+    diagnostic_counts = Counter(_active_plan_intraperiod_major_turning_point_diagnostic_label(row) for row in rows)
+
+    lines.extend(
+        [
+            "",
+            "## 9.5. 大転換チャンス診断",
+            "- local/report-only",
+            "- not FORMAL_GO",
+            "- no automatic order",
+            "- human decides manually",
+            "- post-hoc diagnostic support",
+            "- this is post-hoc diagnostic support",
+            "- ここでの分類は大転換の確定ではない。",
+            "- it does not confirm a major turn",
+            "- 手動/自動エントリーの許可でもない。",
+            "- it does not authorize manual or automatic entry",
+            "- missed turn / fakeout / bad entry timing の再確認候補を見つけるための補助情報です。",
+            "- identify review candidates where missed turn, fakeout, or bad entry timing may need human review",
+            f"- 対象行数: {len(rows)}",
+            f"- potential_missed_turn: {diagnostic_counts.get('potential_missed_turn', 0)}件",
+            f"- potential_fakeout: {diagnostic_counts.get('potential_fakeout', 0)}件",
+            f"- bad_entry_timing: {diagnostic_counts.get('bad_entry_timing', 0)}件",
+            f"- inconclusive: {diagnostic_counts.get('inconclusive', 0)}件",
+            "",
+            "### 分類の考え方",
+            "- `potential_missed_turn`: TP2先行や十分な MFE が出ている候補を、大転換候補として再確認する分類です。",
+            "- `potential_fakeout`: SL先行・ambiguous・MAE優勢の候補を、ダマシ/フェイクアウト候補として見直す分類です。",
+            "- `bad_entry_timing`: timeout / entry_reached など、入るタイミングの見直し候補を示す分類です。",
+            "- `inconclusive`: 判断材料不足または保留で、現時点では判定しない分類です。",
+            "",
+            "### 代表例",
+        ]
+    )
+    if rows:
+        sorted_rows = sorted(rows, key=lambda row: str(row.get("timestamp_jst", "")).strip(), reverse=True)
+        for row in sorted_rows[: max(0, int(limit))]:
+            diagnostic_label = _active_plan_intraperiod_major_turning_point_diagnostic_label(row)
+            lines.append(
+                "- "
+                + " / ".join(
+                    [
+                        diagnostic_label,
+                        str(row.get("candidate_id", "")).strip(),
+                        str(row.get("signal_id", "")).strip(),
+                        str(row.get("timestamp_jst", "")).strip(),
+                        str(row.get("candidate_type", "")).strip(),
+                        str(row.get("active_primary_action", "")).strip(),
+                        str(row.get("side", "")).strip(),
+                        str(row.get("entry_mode", "")).strip(),
+                        str(row.get("outcome", "")).strip(),
+                        str(row.get("first_exit_reason", "")).strip(),
+                        str(row.get("entry_reached_time", "")).strip(),
+                        str(row.get("mfe_r", "")).strip(),
+                        str(row.get("mae_r", "")).strip(),
+                    ]
+                )
+            )
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 10. 未解決事項",
+        ]
+    )
+    unresolved_items: list[str] = []
+    if pending_count:
+        unresolved_items.append(f"pending={pending_count}件")
+    if ambiguous_count:
+        unresolved_items.append(f"ambiguous={ambiguous_count}件")
+    if no_ohlcv_count:
+        unresolved_items.append(f"no_ohlcv={no_ohlcv_count}件")
+
+    if not input_exists:
+        lines.append("- 入力CSVが見つからないため、まず `build-active-plan-intraperiod-outcomes` で CSV を生成してください。")
+    elif not rows:
+        lines.append("- intraperiod outcome rows が空なので、まず `build-active-plan-intraperiod-outcomes` で CSV を生成してください。")
+    elif unresolved_items:
+        for item in unresolved_items:
+            lines.append(f"- {item}")
+        lines.append("- report-only / not FORMAL_GO / no automatic order / human decides manually")
+    else:
+        lines.append("- 現時点で大きな未解決事項はありません。report-only / not FORMAL_GO / no automatic order / human decides manually")
+
+    report = "\n".join(lines)
+    _ensure_parent(resolved_output_md)
+    resolved_output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def format_active_plan_notification_contract(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    lines = [
+        "BTCFX Ver03-v2 report-only notification",
+        "",
+        "Notification Purpose",
+        "- This notification supports human BTC trading decisions.",
+        "- This notification is report-only.",
+        "- This notification is not FORMAL_GO.",
+        "- This notification is not an automatic order.",
+        "- The notification is meant to help a human decide whether to trade manually.",
+        "",
+        "Required Header Fields",
+        f"generated_at_jst: {generated_at_jst}",
+        f"data_freshness: {data_freshness}",
+        f"symbol: {symbol}",
+        f"timeframe: {timeframe}",
+        f"data_source: {data_source}",
+        "report_mode: report-only diagnostic",
+        "formal_go_status: not FORMAL_GO",
+        "auto_order_status: no automatic order",
+        f"detail_report_path: {detail_report_path}",
+        "",
+        "Required Market Summary Fields",
+        f"market_status_summary: {market_status_summary}",
+        f"active_plan_label: {active_plan_label}",
+        f"side: {side}",
+        f"entry_mode: {entry_mode}",
+        f"entry_condition: {entry_condition}",
+        f"tp_plan: {tp_plan}",
+        f"sl_or_invalidation: {sl_or_invalidation}",
+        f"timeout_or_wait_limit: {timeout_or_wait_limit}",
+        f"intraperiod_evidence_summary: {intraperiod_evidence_summary}",
+        f"pending_caveat: {pending_caveat or 'none'}",
+        "",
+        "Human Action Interpretation",
+        "- A human may use this notification to decide whether to inspect the detailed report, review the market, or consider a manual trade.",
+        "- A human must still decide the trade manually.",
+        "- ACTIVE_* is action guidance only.",
+        "- pending or unresolved outcomes reduce confidence and should be called out clearly.",
+        "- The notification must not be read as permission for automatic trading.",
+    ]
+    return "\n".join(lines)
+
+
+def format_active_plan_pending_coverage_caveat(
+    *,
+    total_outcome_rows: int,
+    resolved_rows: int,
+    pending_rows: int,
+    recent_unresolved_windows: int = 0,
+    entry_not_touched_count: int = 0,
+) -> str:
+    count_consistency = (
+        "matches" if resolved_rows + pending_rows == total_outcome_rows else "mismatch_review_required"
+    )
+    if total_outcome_rows <= 0:
+        pending_rate = "n/a"
+        diagnostic = "no_intraperiod_evidence"
+        action = "do_not_use_as_trade_trigger"
+    else:
+        pending_rate_value = (pending_rows / total_outcome_rows) * 100.0
+        pending_rate = f"{pending_rate_value:.1f}%"
+        if pending_rows == 0 and recent_unresolved_windows == 0 and entry_not_touched_count == 0:
+            diagnostic = "coverage_ok"
+            action = "still_review_detail_report_manually"
+        elif pending_rate_value >= 10.0 or recent_unresolved_windows > 0 or entry_not_touched_count > 0:
+            diagnostic = "coverage_caveat"
+            action = "reduce_confidence_and_review_detail_report_manually"
+        else:
+            diagnostic = "pending_monitor"
+            action = "review_pending_rows_before_manual_decision"
+
+    return (
+        "pending_coverage_caveat: "
+        f"total_outcome_rows={total_outcome_rows}; "
+        f"resolved_rows={resolved_rows}; "
+        f"pending_rows={pending_rows}; "
+        f"pending_rate={pending_rate}; "
+        f"recent_unresolved_windows={recent_unresolved_windows}; "
+        f"entry_not_touched_count={entry_not_touched_count}; "
+        f"count_consistency={count_consistency}; "
+        f"diagnostic={diagnostic}; "
+        f"action={action}; "
+        "safety=report-only_not_FORMAL_GO_no_automatic_order"
+    )
+
+
+_ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES = {
+    "entry_not_touched",
+    "entry_not_reached",
+    "entry_not_touched_by_simple_range_check",
+}
+
+
+def _active_plan_intraperiod_outcomes_timestamp_sort_key(row: dict[str, Any]) -> tuple[datetime, str]:
+    raw_timestamp = str(row.get("timestamp_jst", "")).strip()
+    parsed_timestamp = _parse_dt(raw_timestamp)
+    if parsed_timestamp is None:
+        return datetime.min.replace(tzinfo=JST), raw_timestamp
+    if parsed_timestamp.tzinfo is None:
+        return parsed_timestamp.replace(tzinfo=JST), raw_timestamp
+    return parsed_timestamp.astimezone(JST), raw_timestamp
+
+
+def _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_rows(
+    rows: list[dict[str, Any]],
+    *,
+    recent_row_window: int = 12,
+) -> dict[str, int]:
+    total_outcome_rows = len(rows)
+    if total_outcome_rows <= 0:
+        return {
+            "total_outcome_rows": 0,
+            "resolved_rows": 0,
+            "pending_rows": 0,
+            "recent_unresolved_windows": 0,
+            "entry_not_touched_count": 0,
+        }
+
+    pending_rows = sum(1 for row in rows if str(row.get("outcome", "")).strip() == "pending")
+    recent_rows = sorted(rows, key=_active_plan_intraperiod_outcomes_timestamp_sort_key, reverse=True)
+    recent_unresolved_windows = sum(
+        1 for row in recent_rows[: max(0, int(recent_row_window))] if str(row.get("outcome", "")).strip() == "pending"
+    )
+    entry_not_touched_count = sum(
+        1
+        for row in rows
+        if str(row.get("outcome", "")).strip() in _ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES
+        or str(row.get("first_exit_reason", "")).strip()
+        in _ACTIVE_PLAN_INTRAPERIOD_PENDING_COVERAGE_ENTRY_NOT_TOUCHED_VALUES
+    )
+    return {
+        "total_outcome_rows": total_outcome_rows,
+        "resolved_rows": total_outcome_rows - pending_rows,
+        "pending_rows": pending_rows,
+        "recent_unresolved_windows": recent_unresolved_windows,
+        "entry_not_touched_count": entry_not_touched_count,
+    }
+
+
+def _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+    intraperiod_outcomes_path: Path,
+    *,
+    recent_row_window: int = 12,
+) -> dict[str, int]:
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    if not intraperiod_outcomes_path.exists() or not rows:
+        return {
+            "total_outcome_rows": 0,
+            "resolved_rows": 0,
+            "pending_rows": 0,
+            "recent_unresolved_windows": 0,
+            "entry_not_touched_count": 0,
+        }
+    return _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_rows(
+        rows,
+        recent_row_window=recent_row_window,
+    )
+
+
+def _format_active_plan_practical_manual_preview(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    lines = [
+        "BTCFX Ver03-v2 manual trading support preview",
+        "",
+        "Safety status",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "",
+        "Market context",
+        f"generated_at_jst: {generated_at_jst}",
+        f"data_freshness: {data_freshness}",
+        f"symbol: {symbol}",
+        f"timeframe: {timeframe}",
+        f"data_source: {data_source}",
+        f"market_status_summary: {market_status_summary}",
+        "",
+        "Active Plan guidance",
+        f"active_plan_label: {active_plan_label}",
+        f"side: {side}",
+        f"entry_mode: {entry_mode}",
+        f"entry_condition: {entry_condition}",
+        f"tp_plan: {tp_plan}",
+        f"sl_or_invalidation: {sl_or_invalidation}",
+        f"timeout_or_wait_limit: {timeout_or_wait_limit}",
+        f"intraperiod_evidence_summary: {intraperiod_evidence_summary}",
+        f"pending_caveat: {pending_caveat or 'none'}",
+        "",
+        "Manual decision checklist",
+        "- Review the latest intraperiod report before deciding.",
+        "- Confirm the safety status above is still valid for the current market.",
+        "- Compare the entry, TP, SL, and timeout guidance against current conditions.",
+        "- Decide manually whether to wait, skip, or trade.",
+        "- Do not treat this preview as permission for automatic execution.",
+        "",
+        "Detail report",
+        f"detail_report_path: {detail_report_path}",
+        "- Open the linked report manually and inspect the intraperiod evidence.",
+        "",
+        "Caveats",
+        f"- pending_caveat: {pending_caveat or 'none'}",
+        "- The preview is report-only and does not authorize any automatic order.",
+        "- The human must decide manually.",
+        "- ACTIVE_* remains action guidance only.",
+    ]
+    return "\n".join(lines)
+
+
+def _current_jst_iso_like_timestamp() -> str:
+    return datetime.now(tz=JST).isoformat(timespec="seconds")
+
+
+LATEST_MANUAL_PREVIEW_JSON_KEYS = (
+    "generated_at_jst",
+    "symbol",
+    "timeframe",
+    "data_source",
+    "data_freshness",
+    "detail_report_path",
+    "market_status_summary",
+    "active_plan_label",
+    "side",
+    "entry_mode",
+    "entry_condition",
+    "tp_plan",
+    "sl_or_invalidation",
+    "timeout_or_wait_limit",
+    "intraperiod_evidence_summary",
+    "pending_caveat",
+    "include_manual_delivery_checklist",
+)
+
+LATEST_MANUAL_PREVIEW_REQUIRED_FIELDS = (
+    "market_status_summary",
+    "active_plan_label",
+    "side",
+    "entry_mode",
+    "entry_condition",
+    "tp_plan",
+    "sl_or_invalidation",
+    "timeout_or_wait_limit",
+    "intraperiod_evidence_summary",
+    "pending_caveat",
+)
+
+
+def _latest_active_plan_manual_preview_input_template() -> dict[str, Any]:
+    return {
+        "generated_at_jst": "YYYY-MM-DDTHH:MM:SS+09:00",
+        "symbol": "BTC_USDT",
+        "timeframe": "15m",
+        "data_source": "exchange-auto-public",
+        "data_freshness": "15m latest-window exchange-auto-public",
+        "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md",
+        "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
+        "active_plan_label": "ACTIVE_LIMIT_RETEST",
+        "side": "long",
+        "entry_mode": "limit_zone_mid",
+        "entry_condition": "entry zone must be touched before consideration",
+        "tp_plan": "TP1/TP2 from report context",
+        "sl_or_invalidation": "SL from report context",
+        "timeout_or_wait_limit": "timeout after configured window",
+        "intraperiod_evidence_summary": "latest intraperiod report linked",
+        "pending_caveat": "report-only manual preview; human must decide manually",
+        "include_manual_delivery_checklist": False,
+    }
+
+
+def _latest_active_plan_manual_preview_input_template_text() -> str:
+    return json.dumps(_latest_active_plan_manual_preview_input_template(), ensure_ascii=False, indent=2)
+
+
+def _load_json_object(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        message = f"failed to read JSON input: {path}: {exc}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message) from exc
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        message = f"invalid JSON in {path}: {exc.msg}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message) from exc
+    if not isinstance(data, dict):
+        message = f"JSON input must be an object: {path}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return data
+
+
+def _latest_manual_preview_json_value(
+    args: argparse.Namespace,
+    json_data: dict[str, Any],
+    field_name: str,
+    default: Any = None,
+) -> Any:
+    value = getattr(args, field_name, None)
+    if value is not None:
+        return value
+    if field_name in json_data:
+        return json_data[field_name]
+    return default
+
+
+def _latest_manual_preview_required_value(
+    args: argparse.Namespace,
+    json_data: dict[str, Any],
+    field_name: str,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    value = _latest_manual_preview_json_value(args, json_data, field_name)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        message = f"{field_name} is required after merging --input-json and CLI arguments"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return str(value)
+
+
+def _resolve_latest_active_plan_manual_preview_inputs(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    json_data: dict[str, Any] = {}
+    input_json_path = getattr(args, "input_json", None)
+    if input_json_path:
+        json_data = _load_json_object(Path(input_json_path), parser)
+
+    if "include_manual_delivery_checklist" in json_data and not isinstance(json_data["include_manual_delivery_checklist"], bool):
+        message = "include_manual_delivery_checklist in --input-json must be a boolean"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+
+    generated_at_jst = _latest_manual_preview_json_value(args, json_data, "generated_at_jst")
+    generated_at_jst = str(generated_at_jst).strip() if generated_at_jst is not None else ""
+    if not generated_at_jst:
+        generated_at_jst = _current_jst_iso_like_timestamp()
+
+    symbol = _latest_manual_preview_json_value(args, json_data, "symbol")
+    symbol = str(symbol).strip() if symbol is not None else ""
+    if not symbol:
+        symbol = "BTC_USDT"
+
+    timeframe = _latest_manual_preview_json_value(args, json_data, "timeframe")
+    timeframe = str(timeframe).strip() if timeframe is not None else ""
+    if not timeframe:
+        timeframe = "15m"
+
+    data_source = _latest_manual_preview_json_value(args, json_data, "data_source")
+    data_source = str(data_source).strip() if data_source is not None else ""
+    if not data_source:
+        data_source = "exchange-auto-public"
+
+    data_freshness = _latest_manual_preview_json_value(args, json_data, "data_freshness")
+    data_freshness = str(data_freshness).strip() if data_freshness is not None else ""
+    if not data_freshness:
+        data_freshness = "15m latest-window exchange-auto-public"
+
+    detail_report_path = _latest_manual_preview_json_value(args, json_data, "detail_report_path")
+    detail_report_path = str(detail_report_path).strip() if detail_report_path is not None else ""
+    if not detail_report_path:
+        detail_report_path = _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
+
+    merged = {
+        "generated_at_jst": generated_at_jst,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "data_source": data_source,
+        "data_freshness": data_freshness,
+        "detail_report_path": detail_report_path,
+        "include_manual_delivery_checklist": bool(
+            getattr(args, "include_manual_delivery_checklist", False)
+            or json_data.get("include_manual_delivery_checklist", False)
+        ),
+    }
+    for field_name in LATEST_MANUAL_PREVIEW_REQUIRED_FIELDS:
+        merged[field_name] = _latest_manual_preview_required_value(args, json_data, field_name, parser)
+    return merged
+
+
+def _format_manual_delivery_checklist() -> str:
+    lines = [
+        "Manual delivery checklist",
+        "",
+        "- report-only wording is visible",
+        "- not FORMAL_GO is visible",
+        "- no automatic order wording is visible",
+        "- ACTIVE_* guidance-only wording is visible",
+        "- pending caveat is visible",
+        "- detail_report_path is visible",
+        "- symbol, timeframe, and data freshness are visible",
+        "- entry, TP, SL, and timeout are visible",
+        "- a human inspected the detailed report and market context or intentionally chose not to trade",
+        "- no automatic trade/order action will be taken from the message",
+        "- the external app choice and any send/post/share action are human actions outside repo automation",
+    ]
+    return "\n".join(lines)
+
+
+def write_active_plan_notification_preview(
+    *,
+    output_path: Path | None = None,
+    include_manual_delivery_checklist: bool = False,
+    practical_manual_preview: bool = False,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    preview_formatter = (
+        _format_active_plan_practical_manual_preview
+        if practical_manual_preview
+        else format_active_plan_notification_contract
+    )
+    body = preview_formatter(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+    if include_manual_delivery_checklist:
+        body = f"{body}\n\n{_format_manual_delivery_checklist()}"
+    if output_path is not None:
+        _ensure_parent(output_path)
+        output_path.write_text(body, encoding="utf-8")
+    return body
+
+
+def write_latest_active_plan_manual_preview(
+    *,
+    output_path: Path | None = None,
+    include_manual_delivery_checklist: bool = False,
+    generated_at_jst: str | None = None,
+    symbol: str = "BTC_USDT",
+    timeframe: str = "15m",
+    data_source: str = "exchange-auto-public",
+    data_freshness: str = "15m latest-window exchange-auto-public",
+    detail_report_path: str | None = None,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+) -> str:
+    resolved_detail_report_path = (
+        detail_report_path
+        if detail_report_path is not None
+        else _resolve_latest_active_plan_intraperiod_report_relative_path(BASE_DIR)
+    )
+    return write_active_plan_notification_preview(
+        output_path=output_path,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+        practical_manual_preview=True,
+        generated_at_jst=generated_at_jst or _current_jst_iso_like_timestamp(),
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=resolved_detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+
+
+def _format_manual_delivery_copy_package(
+    *,
+    subject_prefix: str,
+    delivery_target_label: str,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    include_manual_delivery_checklist: bool = False,
+) -> str:
+    body = _manual_delivery_copy_package_body(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+    )
+    subject = _manual_delivery_copy_package_subject(
+        subject_prefix=subject_prefix,
+        symbol=symbol,
+        timeframe=timeframe,
+        active_plan_label=active_plan_label,
+        side=side,
+    )
+    checklist = _manual_delivery_copy_package_checklist(delivery_target_label=delivery_target_label)
+    lines = [
+        "Manual delivery copy package",
+        "",
+        "Copy-ready subject",
+        f"subject: {subject}",
+        f"delivery_target_label: {delivery_target_label}",
+        "",
+        "Copy-ready body",
+        body,
+        "",
+        "Human send checklist",
+        *checklist.splitlines()[1:],
+    ]
+    return "\n".join(lines)
+
+
+def _manual_delivery_copy_package_subject(
+    *,
+    subject_prefix: str,
+    symbol: str,
+    timeframe: str,
+    active_plan_label: str,
+    side: str,
+) -> str:
+    return f"{subject_prefix} | {symbol} | {timeframe} | {active_plan_label} | {side} | report-only"
+
+
+def _manual_delivery_copy_package_body(
+    *,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    include_manual_delivery_checklist: bool = False,
+) -> str:
+    return write_active_plan_notification_preview(
+        output_path=None,
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+        practical_manual_preview=True,
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+    )
+
+
+def _manual_delivery_copy_package_checklist(*, delivery_target_label: str) -> str:
+    lines = [
+        "Human send checklist",
+        "",
+        "- human must decide manually",
+        "- copy/paste is a human action outside repo automation",
+        "- confirm no automatic order is triggered",
+        "- confirm not FORMAL_GO",
+        "- confirm generated preview files are not committed unless explicitly approved",
+        f"- delivery target label: {delivery_target_label}",
+        "",
+        "Safety boundary",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+    ]
+    return "\n".join(lines)
+
+
+def _manual_delivery_file_bundle_readme() -> str:
+    lines = [
+        "Manual delivery local file bundle",
+        "",
+        "- explicit local output only",
+        "- files are for manual copy/paste only",
+        "- generated files must not be committed unless explicitly approved",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* is action guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+        "- no email, Gmail, webhook, Slack, LINE, Discord, cron, launchd, clipboard, or address-book integration is performed",
+        "- this workflow does not run daily-sync, report hub generation, runtime, deploy, trading, API keys, private endpoints, or paper_positions.csv changes",
+    ]
+    return "\n".join(lines)
+
+
+def _manual_delivery_file_bundle_texts(
+    *,
+    subject_prefix: str,
+    delivery_target_label: str,
+    generated_at_jst: str,
+    data_freshness: str,
+    symbol: str,
+    timeframe: str,
+    data_source: str,
+    detail_report_path: str,
+    market_status_summary: str,
+    active_plan_label: str,
+    side: str,
+    entry_mode: str,
+    entry_condition: str,
+    tp_plan: str,
+    sl_or_invalidation: str,
+    timeout_or_wait_limit: str,
+    intraperiod_evidence_summary: str,
+    pending_caveat: str,
+    body_include_manual_delivery_checklist: bool,
+    package_include_manual_delivery_checklist: bool,
+) -> dict[str, str]:
+    subject = _manual_delivery_copy_package_subject(
+        subject_prefix=subject_prefix,
+        symbol=symbol,
+        timeframe=timeframe,
+        active_plan_label=active_plan_label,
+        side=side,
+    )
+    body = _manual_delivery_copy_package_body(
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=body_include_manual_delivery_checklist,
+    )
+    checklist = _manual_delivery_copy_package_checklist(delivery_target_label=delivery_target_label)
+    package = _format_manual_delivery_copy_package(
+        subject_prefix=subject_prefix,
+        delivery_target_label=delivery_target_label,
+        generated_at_jst=generated_at_jst,
+        data_freshness=data_freshness,
+        symbol=symbol,
+        timeframe=timeframe,
+        data_source=data_source,
+        detail_report_path=detail_report_path,
+        market_status_summary=market_status_summary,
+        active_plan_label=active_plan_label,
+        side=side,
+        entry_mode=entry_mode,
+        entry_condition=entry_condition,
+        tp_plan=tp_plan,
+        sl_or_invalidation=sl_or_invalidation,
+        timeout_or_wait_limit=timeout_or_wait_limit,
+        intraperiod_evidence_summary=intraperiod_evidence_summary,
+        pending_caveat=pending_caveat,
+        include_manual_delivery_checklist=package_include_manual_delivery_checklist,
+    )
+    readme = _manual_delivery_file_bundle_readme()
+    return {
+        "subject.txt": subject,
+        "body.txt": body,
+        "checklist.txt": checklist,
+        "package.txt": package,
+        "README.txt": readme,
+    }
+
+
+def _non_negative_int_arg(value: str) -> int:
+    try:
+        parsed = int(value, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _non_negative_float_arg(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a non-negative float") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative float")
+    return parsed
+
+
+def _add_pending_coverage_caveat_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--total-outcome-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--resolved-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--pending-rows", required=True, type=_non_negative_int_arg)
+    parser.add_argument("--recent-unresolved-windows", type=_non_negative_int_arg, default=0)
+    parser.add_argument("--entry-not-touched-count", type=_non_negative_int_arg, default=0)
+
+
+def _add_pending_coverage_caveat_from_csv_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+
+
+def _run_format_active_plan_pending_coverage_caveat_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(args.total_outcome_rows),
+        resolved_rows=int(args.resolved_rows),
+        pending_rows=int(args.pending_rows),
+        recent_unresolved_windows=int(getattr(args, "recent_unresolved_windows", 0)),
+        entry_not_touched_count=int(getattr(args, "entry_not_touched_count", 0)),
+    )
+    print(caveat)
+
+
+def _run_format_active_plan_pending_coverage_caveat_from_csv_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    intraperiod_outcomes_path = Path(str(getattr(args, "intraperiod_outcomes_path", "")).strip())
+    if not intraperiod_outcomes_path.is_absolute():
+        intraperiod_outcomes_path = BASE_DIR / intraperiod_outcomes_path
+    summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+        intraperiod_outcomes_path,
+        recent_row_window=int(getattr(args, "recent_row_window", 12)),
+    )
+    caveat = format_active_plan_pending_coverage_caveat(
+        total_outcome_rows=int(summary["total_outcome_rows"]),
+        resolved_rows=int(summary["resolved_rows"]),
+        pending_rows=int(summary["pending_rows"]),
+        recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+        entry_not_touched_count=int(summary["entry_not_touched_count"]),
+    )
+    sys.stdout.write(caveat + "\n")
+
+
+def _print_latest_active_plan_manual_preview_input_template() -> None:
+    sys.stdout.write(_latest_active_plan_manual_preview_input_template_text() + "\n")
+
+
+def _write_latest_active_plan_manual_preview_input_template(output_path: Path) -> Path:
+    template_text = _latest_active_plan_manual_preview_input_template_text()
+    _ensure_parent(output_path)
+    output_path.write_text(template_text, encoding="utf-8")
+    return output_path
+
+
+def _add_active_plan_notification_preview_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst", required=True)
+    parser.add_argument("--data-freshness", required=True)
+    parser.add_argument("--symbol", required=True)
+    parser.add_argument("--timeframe", required=True)
+    parser.add_argument("--data-source", required=True)
+    parser.add_argument("--detail-report-path")
+    parser.add_argument(
+        "--use-latest-intraperiod-report",
+        action="store_true",
+        help="Use the latest active_plan_candidate_intraperiod_outcomes report as detail_report_path.",
+    )
+    parser.add_argument("--market-status-summary", required=True)
+    parser.add_argument("--active-plan-label", required=True)
+    parser.add_argument("--side", required=True)
+    parser.add_argument("--entry-mode", required=True)
+    parser.add_argument("--entry-condition", required=True)
+    parser.add_argument("--tp-plan", required=True)
+    parser.add_argument("--sl-or-invalidation", required=True)
+    parser.add_argument("--timeout-or-wait-limit", required=True)
+    parser.add_argument("--intraperiod-evidence-summary", required=True)
+    parser.add_argument("--pending-caveat", required=True)
+    parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--practical-manual-preview", action="store_true")
+
+
+def _add_latest_active_plan_manual_preview_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--input-json")
+    parser.add_argument("--print-input-json-template", action="store_true")
+    parser.add_argument("--write-input-json-template", metavar="PATH")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
+
+
+def _add_latest_active_plan_manual_delivery_package_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--output-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--input-json")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
+    parser.add_argument("--subject-prefix", default="BTCFX Ver03-v2 report-only")
+    parser.add_argument("--delivery-target-label", default="manual external app")
+
+
+def _add_latest_active_plan_manual_delivery_files_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--generated-at-jst")
+    parser.add_argument("--symbol")
+    parser.add_argument("--timeframe")
+    parser.add_argument("--data-source")
+    parser.add_argument("--data-freshness")
+    parser.add_argument("--detail-report-path")
+    parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    parser.add_argument("--input-json")
+    parser.add_argument("--market-status-summary")
+    parser.add_argument("--active-plan-label")
+    parser.add_argument("--side")
+    parser.add_argument("--entry-mode")
+    parser.add_argument("--entry-condition")
+    parser.add_argument("--tp-plan")
+    parser.add_argument("--sl-or-invalidation")
+    parser.add_argument("--timeout-or-wait-limit")
+    parser.add_argument("--intraperiod-evidence-summary")
+    parser.add_argument("--pending-caveat")
+    parser.add_argument("--subject-prefix", default="BTCFX Ver03-v2 report-only")
+    parser.add_argument("--delivery-target-label", default="manual external app")
+    parser.add_argument("--output-dir", required=True)
+
+
+def _resolve_active_plan_notification_detail_report_path(
+    *,
+    base_dir: Path,
+    detail_report_path: str | None,
+    use_latest_intraperiod_report: bool,
+) -> str:
+    if use_latest_intraperiod_report:
+        return _resolve_latest_active_plan_intraperiod_report_relative_path(base_dir)
+    resolved_detail_report_path = str(detail_report_path or "").strip()
+    if not resolved_detail_report_path:
+        raise ValueError("--detail-report-path is required unless --use-latest-intraperiod-report is supplied")
+    return resolved_detail_report_path
+
+
+def _run_active_plan_notification_preview_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    try:
+        detail_report_path = _resolve_active_plan_notification_detail_report_path(
+            base_dir=BASE_DIR,
+            detail_report_path=getattr(args, "detail_report_path", None),
+            use_latest_intraperiod_report=bool(getattr(args, "use_latest_intraperiod_report", False)),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        if parser is not None:
+            parser.error(str(exc))
+        raise
+    body = write_active_plan_notification_preview(
+        output_path=Path(args.output_path) if args.output_path else None,
+        generated_at_jst=str(args.generated_at_jst),
+        data_freshness=str(args.data_freshness),
+        symbol=str(args.symbol),
+        timeframe=str(args.timeframe),
+        data_source=str(args.data_source),
+        detail_report_path=detail_report_path,
+        market_status_summary=str(args.market_status_summary),
+        active_plan_label=str(args.active_plan_label),
+        side=str(args.side),
+        entry_mode=str(args.entry_mode),
+        entry_condition=str(args.entry_condition),
+        tp_plan=str(args.tp_plan),
+        sl_or_invalidation=str(args.sl_or_invalidation),
+        timeout_or_wait_limit=str(args.timeout_or_wait_limit),
+        intraperiod_evidence_summary=str(args.intraperiod_evidence_summary),
+        pending_caveat=str(args.pending_caveat),
+        include_manual_delivery_checklist=bool(args.include_manual_delivery_checklist),
+        practical_manual_preview=bool(args.practical_manual_preview),
+    )
+    sys.stdout.write(body)
+
+
+def _run_latest_active_plan_manual_preview_command(args: argparse.Namespace, parser: argparse.ArgumentParser | None = None) -> None:
+    if bool(getattr(args, "print_input_json_template", False)) or getattr(args, "write_input_json_template", None):
+        template_text = _latest_active_plan_manual_preview_input_template_text()
+        if bool(getattr(args, "print_input_json_template", False)):
+            sys.stdout.write(template_text + "\n")
+        write_input_json_template = getattr(args, "write_input_json_template", None)
+        if write_input_json_template:
+            written_path = _write_latest_active_plan_manual_preview_input_template(Path(write_input_json_template))
+            if not bool(getattr(args, "print_input_json_template", False)):
+                sys.stdout.write(f"{written_path}\n")
+        return
+
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    body = write_active_plan_notification_preview(
+        output_path=Path(args.output_path) if args.output_path else None,
+        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+        practical_manual_preview=True,
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+    )
+    sys.stdout.write(body)
+
+
+def _run_latest_active_plan_manual_delivery_package_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    package = _format_manual_delivery_copy_package(
+        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
+        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app")),
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    if getattr(args, "output_path", None):
+        output_path = Path(args.output_path)
+        _ensure_parent(output_path)
+        output_path.write_text(package, encoding="utf-8")
+    sys.stdout.write(package)
+
+
+def _run_latest_active_plan_manual_delivery_files_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    texts = _manual_delivery_file_bundle_texts(
+        subject_prefix=str(getattr(args, "subject_prefix", "BTCFX Ver03-v2 report-only")),
+        delivery_target_label=str(getattr(args, "delivery_target_label", "manual external app")),
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    outputs = {
+        "subject_path": output_dir / "subject.txt",
+        "body_path": output_dir / "body.txt",
+        "checklist_path": output_dir / "checklist.txt",
+        "package_path": output_dir / "package.txt",
+        "readme_path": output_dir / "README.txt",
+    }
+    for filename, text in texts.items():
+        key = {
+            "subject.txt": "subject_path",
+            "body.txt": "body_path",
+            "checklist.txt": "checklist_path",
+            "package.txt": "package_path",
+            "README.txt": "readme_path",
+        }[filename]
+        outputs[key].write_text(text, encoding="utf-8")
+    for key, path in outputs.items():
+        sys.stdout.write(f"{key}={path}\n")
+
+
+def _resolve_manual_delivery_files_from_json_inputs(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    merged = _resolve_latest_active_plan_manual_preview_inputs(args, parser)
+    if bool(getattr(args, "auto_pending_caveat_from_csv", False)):
+        intraperiod_outcomes_path = Path(str(getattr(args, "intraperiod_outcomes_path", "")).strip())
+        if not intraperiod_outcomes_path.is_absolute():
+            intraperiod_outcomes_path = BASE_DIR / intraperiod_outcomes_path
+        summary = _summarize_active_plan_pending_coverage_caveat_from_intraperiod_outcomes_csv(
+            intraperiod_outcomes_path,
+            recent_row_window=int(getattr(args, "recent_row_window", 12)),
+        )
+        merged["pending_caveat"] = format_active_plan_pending_coverage_caveat(
+            total_outcome_rows=int(summary["total_outcome_rows"]),
+            resolved_rows=int(summary["resolved_rows"]),
+            pending_rows=int(summary["pending_rows"]),
+            recent_unresolved_windows=int(summary["recent_unresolved_windows"]),
+            entry_not_touched_count=int(summary["entry_not_touched_count"]),
+        )
+    return merged
+
+
+def _run_latest_active_plan_manual_delivery_files_from_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    merged = _resolve_manual_delivery_files_from_json_inputs(args, parser)
+    texts = _manual_delivery_file_bundle_texts(
+        subject_prefix="BTCFX Ver03-v2 report-only",
+        delivery_target_label="manual external app",
+        generated_at_jst=str(merged["generated_at_jst"]),
+        data_freshness=str(merged["data_freshness"]),
+        symbol=str(merged["symbol"]),
+        timeframe=str(merged["timeframe"]),
+        data_source=str(merged["data_source"]),
+        detail_report_path=str(merged["detail_report_path"]),
+        market_status_summary=str(merged["market_status_summary"]),
+        active_plan_label=str(merged["active_plan_label"]),
+        side=str(merged["side"]),
+        entry_mode=str(merged["entry_mode"]),
+        entry_condition=str(merged["entry_condition"]),
+        tp_plan=str(merged["tp_plan"]),
+        sl_or_invalidation=str(merged["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(merged["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(merged["intraperiod_evidence_summary"]),
+        pending_caveat=str(merged["pending_caveat"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(merged["include_manual_delivery_checklist"]),
+    )
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for filename, text in texts.items():
+        (output_dir / filename).write_text(text, encoding="utf-8")
+    sys.stdout.write(f"{output_dir}\n")
+
+
+def _run_resolve_latest_manual_delivery_source_files_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    del parser
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=str(
+            getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")
+        ),
+        detail_report_path=getattr(args, "detail_report_path", None),
+        source_stale_after_hours=float(getattr(args, "source_stale_after_hours", 24.0)),
+    )
+    lines = _manual_delivery_source_files_lines(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=source_state["intraperiod_outcomes_path"],
+        detail_report_path=source_state["detail_report_path"],
+        source_stale_after_hours=float(source_state["source_stale_after_hours"]),
+        reference_jst=datetime.fromisoformat(source_state["generated_at_jst"]),
+    )
+    sys.stdout.write("\n".join(lines) + "\n")
+
+
+def _run_write_latest_manual_delivery_input_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    del parser
+    generated_at_jst = _current_jst_iso_like_timestamp()
+    seed_data = _latest_manual_delivery_input_json_seed_data(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv")),
+        detail_report_path=getattr(args, "detail_report_path", None),
+        recent_row_window=int(getattr(args, "recent_row_window", 12)),
+        source_stale_after_hours=float(getattr(args, "source_stale_after_hours", 24.0)),
+        generated_at_jst=generated_at_jst,
+        symbol=str(getattr(args, "symbol", "BTC_USDT")),
+        timeframe=str(getattr(args, "timeframe", "15m")),
+        data_source=str(getattr(args, "data_source", "exchange-auto-public")),
+        data_freshness=str(getattr(args, "data_freshness", "15m latest-window exchange-auto-public")),
+        active_plan_label=str(getattr(args, "active_plan_label", "NO_ACTION_REVIEW_REQUIRED")),
+        side=str(getattr(args, "side", "review_required")),
+        entry_mode=str(getattr(args, "entry_mode", "review_required")),
+        entry_condition=str(getattr(args, "entry_condition", "review latest report before any manual decision")),
+        tp_plan=str(getattr(args, "tp_plan", "review_required")),
+        sl_or_invalidation=str(getattr(args, "sl_or_invalidation", "review_required")),
+        timeout_or_wait_limit=str(getattr(args, "timeout_or_wait_limit", "review_required")),
+        include_manual_delivery_checklist=bool(getattr(args, "include_manual_delivery_checklist", False)),
+    )
+    output_json = Path(args.output_json)
+    _ensure_parent(output_json)
+    output_json.write_text(json.dumps(seed_data, ensure_ascii=False, indent=2), encoding="utf-8")
+    sys.stdout.write(f"{output_json}\n")
+
+
+def _run_write_actionability_shadow_decision_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_csv = Path(args.output_csv)
+    if output_csv.name == "paper_positions.csv":
+        if parser is None:
+            raise ValueError("output_csv must not be paper_positions.csv")
+        parser.error("output_csv must not be paper_positions.csv")
+    row = build_actionability_shadow_decision_row(
+        generated_at_jst=str(args.generated_at_jst),
+        signal_id=str(args.signal_id),
+        symbol=str(args.symbol),
+        timeframe=str(args.timeframe),
+        active_plan_label=str(args.active_plan_label),
+        side=str(args.side),
+        entry_mode=str(args.entry_mode),
+        actionability_label=str(args.actionability_label),
+        actionability_reasons=[str(reason) for reason in list(getattr(args, "actionability_reason", []))],
+        human_action=str(args.human_action),
+        source_readiness=str(args.source_readiness),
+        pending_caveat=str(args.pending_caveat),
+        detail_report_path=str(args.detail_report_path),
+        final_outcome=str(getattr(args, "final_outcome", "pending")),
+        notes=str(getattr(args, "notes", "")),
+    )
+    _append_csv_row(output_csv, ACTIONABILITY_SHADOW_DECISION_HEADER, row)
+    sys.stdout.write(f"{output_csv}\n")
+
+
+def _json_required_string_field(
+    json_data: dict[str, Any],
+    field_name: str,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    value = json_data.get(field_name, "")
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized:
+        message = f"input_json missing required field: {field_name}"
+        if parser is not None:
+            parser.error(message)
+        raise ValueError(message)
+    return normalized
+
+
+def _normalize_actionability_reasons_from_json(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    normalized = str(value).strip() if value is not None else ""
+    if not normalized:
+        return []
+    return [normalized]
+
+
+def _write_actionability_shadow_decision_from_json(
+    *,
+    input_json_path: Path,
+    output_csv: Path,
+    final_outcome: str,
+    notes: str,
+    parser: argparse.ArgumentParser | None = None,
+) -> Path:
+    if output_csv.name == "paper_positions.csv":
+        if parser is None:
+            raise ValueError("output_csv must not be paper_positions.csv")
+        parser.error("output_csv must not be paper_positions.csv")
+    json_data = _load_json_object(input_json_path, parser)
+    intraperiod_evidence_summary = str(json_data.get("intraperiod_evidence_summary", ""))
+    source_readiness = _manual_delivery_extract_summary_field(intraperiod_evidence_summary, "source_readiness") or "unknown"
+    row = build_actionability_shadow_decision_row(
+        generated_at_jst=_json_required_string_field(json_data, "generated_at_jst", parser),
+        signal_id=str(json_data.get("signal_id", "")).strip(),
+        symbol=_json_required_string_field(json_data, "symbol", parser),
+        timeframe=_json_required_string_field(json_data, "timeframe", parser),
+        active_plan_label=_json_required_string_field(json_data, "active_plan_label", parser),
+        side=_json_required_string_field(json_data, "side", parser),
+        entry_mode=_json_required_string_field(json_data, "entry_mode", parser),
+        actionability_label=_json_required_string_field(json_data, "actionability_label", parser),
+        actionability_reasons=_normalize_actionability_reasons_from_json(json_data.get("actionability_reasons")),
+        human_action=_json_required_string_field(json_data, "human_action", parser),
+        source_readiness=source_readiness,
+        pending_caveat=_json_required_string_field(json_data, "pending_caveat", parser),
+        detail_report_path=_json_required_string_field(json_data, "detail_report_path", parser),
+        final_outcome=str(final_outcome),
+        notes=str(notes),
+    )
+    _append_csv_row(output_csv, ACTIONABILITY_SHADOW_DECISION_HEADER, row)
+    return output_csv
+
+
+def _run_write_actionability_shadow_decision_from_json_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_csv = _write_actionability_shadow_decision_from_json(
+        input_json_path=Path(args.input_json),
+        output_csv=Path(args.output_csv),
+        final_outcome=str(getattr(args, "final_outcome", "pending")),
+        notes=str(getattr(args, "notes", "")),
+        parser=parser,
+    )
+    sys.stdout.write(f"{output_csv}\n")
+
+
+def _normalize_actionability_shadow_summary_value(value: Any) -> str:
+    normalized = str(value).strip() if value is not None else ""
+    return normalized if normalized else "UNKNOWN"
+
+
+def _load_actionability_shadow_summary_rows(
+    *,
+    input_csv: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> list[dict[str, str]]:
+    if input_csv.name == "paper_positions.csv":
+        message = "input_csv must not be paper_positions.csv"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not input_csv.exists():
+        message = f"input_csv does not exist: {input_csv}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    rows, fieldnames = _load_csv_rows_with_fieldnames(input_csv)
+    missing_columns = [column for column in ACTIONABILITY_SHADOW_DECISION_HEADER if column not in fieldnames]
+    if missing_columns:
+        message = "input_csv missing required columns: " + ", ".join(missing_columns)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    normalized_rows: list[dict[str, str]] = []
+    for row in rows:
+        normalized_rows.append(
+            {column: str(row.get(column, "")).strip() if row.get(column) is not None else "" for column in ACTIONABILITY_SHADOW_DECISION_HEADER}
+        )
+    return normalized_rows
+
+
+def _actionability_shadow_summary_section_lines(
+    *,
+    section_title: str,
+    rows: list[dict[str, str]],
+    field_name: str,
+) -> list[str]:
+    counts = Counter(_normalize_actionability_shadow_summary_value(row.get(field_name, "")) for row in rows)
+    lines = [f"## {section_title}", ""]
+    if counts:
+        for label in sorted(counts):
+            lines.append(f"- {label}: {counts[label]}件")
+    else:
+        lines.append("- none")
+    lines.append("")
+    return lines
+
+
+def build_actionability_shadow_decision_summary(
+    *,
+    input_csv: Path,
+    output_md: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> str:
+    rows = _load_actionability_shadow_summary_rows(input_csv=input_csv, parser=parser)
+    lines = [
+        "# Actionability Shadow Decision Summary",
+        "",
+        "- safety boundary: report-only, not FORMAL_GO, no automatic order, human decides manually",
+        f"- total row count: {len(rows)}",
+        "",
+    ]
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by actionability_label",
+            rows=rows,
+            field_name="actionability_label",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by human_action",
+            rows=rows,
+            field_name="human_action",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by active_plan_label",
+            rows=rows,
+            field_name="active_plan_label",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by final_outcome",
+            rows=rows,
+            field_name="final_outcome",
+        )
+    )
+    lines.extend(
+        _actionability_shadow_summary_section_lines(
+            section_title="Counts by source_readiness",
+            rows=rows,
+            field_name="source_readiness",
+        )
+    )
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def _run_summarize_actionability_shadow_decisions_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    report = build_actionability_shadow_decision_summary(
+        input_csv=Path(args.input_csv),
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        parser=parser,
+    )
+    if output_md_arg:
+        sys.stdout.write(f"actionability_shadow_summary_output_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(report)
+
+
+def _load_manual_delivery_input_json_if_exists(path: Path, parser: argparse.ArgumentParser | None = None) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    return _load_json_object(path, parser)
+
+
+def _manual_delivery_local_inbox_markdown(
+    *,
+    input_json_path: Path,
+    bundle_dir: Path,
+    input_json: dict[str, Any],
+    actionability_shadow_output_csv: Path | None = None,
+    actionability_shadow_summary_output_md: Path | None = None,
+) -> str:
+    display_json = dict(input_json)
+    if any(key not in display_json for key in ("actionability_label", "actionability_reasons", "human_action", "actionability_safety")):
+        display_json.update(
+            _compute_actionability_gate_v1(
+                active_plan_label=str(display_json.get("active_plan_label", "")),
+                source_readiness=_manual_delivery_extract_summary_field(
+                    str(display_json.get("intraperiod_evidence_summary", "")),
+                    "source_readiness",
+                )
+                or "unknown",
+                pending_caveat=str(display_json.get("pending_caveat", "")),
+                side=str(display_json.get("side", "")),
+                entry_mode=str(display_json.get("entry_mode", "")),
+                tp_plan=str(display_json.get("tp_plan", "")),
+                sl_or_invalidation=str(display_json.get("sl_or_invalidation", "")),
+                timeout_or_wait_limit=str(display_json.get("timeout_or_wait_limit", "")),
+            )
+        )
+    lines = [
+        "# Manual Delivery Local Inbox",
+        "",
+        "## Safety Status",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- ACTIVE_* guidance only",
+        "- human must decide manually",
+        "- no external notification integration",
+        "",
+        "## Input JSON",
+        f"- input_json_path={input_json_path}",
+        f"- input_json_exists={str(input_json_path.exists()).lower()}",
+    ]
+    for key in [
+        "generated_at_jst",
+        "symbol",
+        "timeframe",
+        "data_source",
+        "data_freshness",
+        "detail_report_path",
+        "active_plan_label",
+        "side",
+        "entry_mode",
+        "intraperiod_evidence_summary",
+        "pending_caveat",
+        "actionability_label",
+        "actionability_reasons",
+        "human_action",
+        "actionability_safety",
+    ]:
+        if key in display_json:
+            lines.append(f"- {key}={display_json[key]}")
+
+    lines.extend(
+        [
+            "",
+            "## Bundle Files",
+        ]
+    )
+    for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]:
+        bundle_path = bundle_dir / filename
+        lines.append(f"- {filename} exists={str(bundle_path.exists()).lower()} path={bundle_path}")
+
+    if actionability_shadow_output_csv is not None:
+        lines.extend(
+            [
+                "",
+                "## Actionability Shadow Output",
+                f"- actionability_shadow_output_csv={actionability_shadow_output_csv}",
+                f"- actionability_shadow_output_csv_exists={str(actionability_shadow_output_csv.exists()).lower()}",
+                "- safety=report-only, not FORMAL_GO, no automatic order, human decides manually",
+            ]
+        )
+        if actionability_shadow_summary_output_md is not None:
+            lines.extend(
+                [
+                    f"- actionability_shadow_summary_output_md={actionability_shadow_summary_output_md}",
+                    f"- actionability_shadow_summary_output_md_exists={str(actionability_shadow_summary_output_md.exists()).lower()}",
+                ]
+            )
+
+    lines.extend(
+        [
+            "",
+            "## Human Review Checklist",
+            "- confirm JSON was reviewed by a human",
+            "- confirm body/package wording is report-only",
+            "- confirm not FORMAL_GO is visible",
+            "- confirm no automatic order is visible",
+            "- confirm pending caveat is visible",
+            "- confirm human decides manually",
+            "- confirm any send/post/share action is outside repo automation",
+            "",
+            "## Next Human Action",
+            "- inspect the generated local files manually",
+            "- optionally copy/paste manually into an external app",
+            "- do not treat the inbox as trade approval",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def _run_write_latest_manual_delivery_local_inbox_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    input_json_path = Path(args.input_json)
+    try:
+        input_json = _load_manual_delivery_input_json_if_exists(input_json_path, parser)
+    except (OSError, ValueError):
+        raise
+    bundle_dir = Path(args.bundle_dir)
+    markdown = _manual_delivery_local_inbox_markdown(
+        input_json_path=input_json_path,
+        bundle_dir=bundle_dir,
+        input_json=input_json,
+    )
+    output_md = Path(args.output_md)
+    _ensure_parent(output_md)
+    output_md.write_text(markdown, encoding="utf-8")
+    sys.stdout.write(f"{output_md}\n")
+
+
+def _manual_delivery_source_files_lines(
+    *,
+    base_dir: Path,
+    intraperiod_outcomes_path: str,
+    detail_report_path: str | None,
+    source_stale_after_hours: float,
+    reference_jst: datetime | None = None,
+) -> list[str]:
+    source_state = _manual_delivery_source_readiness_state(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        source_stale_after_hours=source_stale_after_hours,
+        reference_jst=reference_jst,
+    )
+    return [
+        f"intraperiod_outcomes_path={source_state['intraperiod_outcomes_path']}",
+        f"intraperiod_outcomes_exists={source_state['intraperiod_outcomes_exists']}",
+        f"detail_report_path={source_state['detail_report_path']}",
+        f"detail_report_exists={source_state['detail_report_exists']}",
+        f"generated_at_jst={source_state['generated_at_jst']}",
+        f"source_stale_after_hours={source_state['source_stale_after_hours']}",
+        f"intraperiod_outcomes_mtime_jst={source_state['intraperiod_outcomes_mtime_jst']}",
+        f"intraperiod_outcomes_age_minutes={source_state['intraperiod_outcomes_age_minutes']}",
+        f"intraperiod_outcomes_freshness={source_state['intraperiod_outcomes_freshness']}",
+        f"detail_report_mtime_jst={source_state['detail_report_mtime_jst']}",
+        f"detail_report_age_minutes={source_state['detail_report_age_minutes']}",
+        f"detail_report_freshness={source_state['detail_report_freshness']}",
+        f"source_readiness={source_state['source_readiness']}",
+        "safety=report-only_not_FORMAL_GO_no_automatic_order",
+    ]
+
+
+def _manual_delivery_extract_summary_field(summary_text: str, field_name: str) -> str:
+    prefix = f"{field_name}="
+    for part in str(summary_text).split(";"):
+        normalized = part.strip()
+        if normalized.startswith(prefix):
+            return normalized[len(prefix) :].strip()
+    return ""
+
+
+def _manual_delivery_local_flow_manifest_data(
+    *,
+    output_dir: Path,
+    generated_at_jst: str,
+    source_readiness: str,
+    actionability_label: str,
+    actionability_reasons: list[str],
+    human_action: str,
+    actionability_safety: str,
+    source_files_path: Path,
+    input_json_path: Path,
+    bundle_dir: Path,
+    inbox_path: Path,
+    shadow_decision_enabled: bool,
+    actionability_shadow_output_csv: Path | None = None,
+    actionability_shadow_summary_output_md: Path | None = None,
+) -> dict[str, Any]:
+    def _artifact_entry(path: Path) -> dict[str, Any]:
+        return {"path": str(path), "exists": path.exists()}
+
+    bundle_files = {
+        filename: _artifact_entry(bundle_dir / filename)
+        for filename in ["subject.txt", "body.txt", "checklist.txt", "package.txt", "README.txt"]
+    }
+    manifest: dict[str, Any] = {
+        "schema_version": "manual_delivery_local_flow.v1",
+        "generated_at_jst": generated_at_jst,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "output_dir": str(output_dir),
+        "source_readiness": source_readiness,
+        "actionability_label": actionability_label,
+        "actionability_reasons": list(actionability_reasons),
+        "human_action": human_action,
+        "actionability_safety": actionability_safety,
+        "artifacts": {
+            "source_files": _artifact_entry(source_files_path),
+            "input_json": _artifact_entry(input_json_path),
+            "bundle": bundle_files,
+            "inbox": _artifact_entry(inbox_path),
+        },
+        "shadow_decision_enabled": shadow_decision_enabled,
+        "actionability_shadow_output_csv": str(actionability_shadow_output_csv) if actionability_shadow_output_csv is not None else "",
+        "actionability_shadow_output_csv_exists": bool(actionability_shadow_output_csv and actionability_shadow_output_csv.exists()),
+        "actionability_shadow_summary_output_md": (
+            str(actionability_shadow_summary_output_md) if actionability_shadow_summary_output_md is not None else ""
+        ),
+        "actionability_shadow_summary_output_md_exists": bool(
+            actionability_shadow_summary_output_md and actionability_shadow_summary_output_md.exists()
+        ),
+        "paper_positions_integration": False,
+        "external_notification_integration": False,
+    }
+    return manifest
+
+
+def _manual_delivery_local_flow_manifest_artifact_readiness_counts(
+    artifacts: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[int, int]:
+    existing = 0
+    total = 0
+
+    def _visit(node: Any, location: str) -> None:
+        nonlocal existing, total
+        if isinstance(node, dict) and "path" in node and "exists" in node:
+            path_value = node.get("path")
+            exists_value = node.get("exists")
+            if not isinstance(path_value, str):
+                message = f"manifest artifact path must be a string at {location}"
+                if parser is None:
+                    raise ValueError(message)
+                parser.error(message)
+            if not isinstance(exists_value, bool):
+                message = f"manifest artifact exists must be a boolean at {location}"
+                if parser is None:
+                    raise ValueError(message)
+                parser.error(message)
+            total += 1
+            if exists_value:
+                existing += 1
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                child_location = f"{location}.{key}" if location else str(key)
+                _visit(value, child_location)
+            return
+        message = f"manifest artifacts must contain only nested objects or path/exists entries: {location or 'artifacts'}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    _visit(artifacts, "artifacts")
+    return existing, total
+
+
+def _load_manual_delivery_local_flow_manifest_json(
+    manifest_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if not manifest_json.exists():
+        message = f"manifest_json does not exist: {manifest_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    manifest = _load_json_object(manifest_json, parser)
+    schema_version = str(manifest.get("schema_version", "")).strip()
+    if schema_version != "manual_delivery_local_flow.v1":
+        message = f"unsupported manifest schema_version: {schema_version or 'missing'}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    required_top_level_keys = [
+        "generated_at_jst",
+        "safety_boundary",
+        "output_dir",
+        "source_readiness",
+        "actionability_label",
+        "actionability_reasons",
+        "human_action",
+        "actionability_safety",
+        "artifacts",
+        "shadow_decision_enabled",
+        "actionability_shadow_output_csv",
+        "actionability_shadow_output_csv_exists",
+        "actionability_shadow_summary_output_md",
+        "actionability_shadow_summary_output_md_exists",
+    ]
+    missing_keys = [key for key in required_top_level_keys if key not in manifest]
+    if missing_keys:
+        message = "manifest missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    safety_boundary = str(manifest.get("safety_boundary", "")).strip()
+    required_safety_terms = ["report-only", "not FORMAL_GO", "no automatic order", "human decides manually"]
+    if not all(term in safety_boundary for term in required_safety_terms):
+        message = f'manifest safety_boundary must contain: "{" / ".join(required_safety_terms)}"'
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if manifest.get("paper_positions_integration") is not False:
+        message = "manifest paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if manifest.get("external_notification_integration") is not False:
+        message = "manifest external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    return manifest
+
+
+def _manual_delivery_local_flow_manifest_summary_markdown(manifest: dict[str, Any], parser: argparse.ArgumentParser | None = None) -> str:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    existing_artifacts, total_artifacts = _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    lines = [
+        "# Manual Delivery Local Flow Manifest Summary",
+        "",
+        f"- schema_version: {manifest['schema_version']}",
+        f"- generated_at_jst: {manifest['generated_at_jst']}",
+        f"- output_dir: {manifest['output_dir']}",
+        f"- source_readiness: {manifest['source_readiness']}",
+        f"- actionability_label: {manifest['actionability_label']}",
+        f"- human_action: {manifest['human_action']}",
+        f"- shadow_decision_enabled: {str(manifest['shadow_decision_enabled']).lower()}",
+        f"- actionability_shadow_output_csv: {manifest['actionability_shadow_output_csv']}",
+        f"- actionability_shadow_output_csv_exists: {str(manifest['actionability_shadow_output_csv_exists']).lower()}",
+        f"- actionability_shadow_summary_output_md: {manifest['actionability_shadow_summary_output_md']}",
+        f"- actionability_shadow_summary_output_md_exists: {str(manifest['actionability_shadow_summary_output_md_exists']).lower()}",
+        f"- safety_boundary: {manifest['safety_boundary']}",
+        f"- paper_positions_integration: {str(manifest['paper_positions_integration']).lower()}",
+        f"- external_notification_integration: {str(manifest['external_notification_integration']).lower()}",
+        "",
+        "## Artifact Readiness",
+        f"- existing/total: {existing_artifacts}/{total_artifacts}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_local_flow_manifest_review_data(
+    manifest: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        message = "manifest artifacts must be an object"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    existing_artifacts, total_artifacts = _manual_delivery_local_flow_manifest_artifact_readiness_counts(artifacts, parser)
+    return {
+        "schema_version": "manual_delivery_manifest_review.v1",
+        "manifest_schema_version": manifest["schema_version"],
+        "generated_at_jst": manifest["generated_at_jst"],
+        "output_dir": manifest["output_dir"],
+        "review_status": "valid_report_only_manifest",
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "paper_positions_integration": False,
+        "external_notification_integration": False,
+        "safety_boundary": manifest["safety_boundary"],
+        "source_readiness": manifest["source_readiness"],
+        "actionability_label": manifest["actionability_label"],
+        "human_action": manifest["human_action"],
+        "shadow_decision_enabled": bool(manifest["shadow_decision_enabled"]),
+        "artifact_existing_count": existing_artifacts,
+        "artifact_total_count": total_artifacts,
+        "artifact_readiness": "complete" if existing_artifacts == total_artifacts else "incomplete",
+        "actionability_shadow_output_csv": manifest["actionability_shadow_output_csv"],
+        "actionability_shadow_output_csv_exists": bool(manifest["actionability_shadow_output_csv_exists"]),
+        "actionability_shadow_summary_output_md": manifest["actionability_shadow_summary_output_md"],
+        "actionability_shadow_summary_output_md_exists": bool(manifest["actionability_shadow_summary_output_md_exists"]),
+    }
+
+
+def build_manual_delivery_local_flow_manifest_review(
+    *,
+    manifest_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    manifest = _load_manual_delivery_local_flow_manifest_json(manifest_json, parser)
+    report = _manual_delivery_local_flow_manifest_summary_markdown(manifest, parser)
+    review_data = _manual_delivery_local_flow_manifest_review_data(manifest, parser)
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(review_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return report, review_data
+
+
+def _manual_delivery_latest_pointer_data(
+    *,
+    review_data: dict[str, Any],
+    manifest_json: Path,
+    manifest_summary_md: Path,
+    manifest_review_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    _manual_delivery_latest_manifest_review_data(review_data, parser)
+    return {
+        "schema_version": "manual_delivery_latest_pointer.v1",
+        "generated_at_jst": review_data["generated_at_jst"],
+        "output_dir": review_data["output_dir"],
+        "manifest_json": str(manifest_json),
+        "manifest_summary_md": str(manifest_summary_md),
+        "manifest_review_json": str(manifest_review_json),
+        "review_status": review_data["review_status"],
+        "human_review_required": bool(review_data["human_review_required"]),
+        "trade_execution_allowed": bool(review_data["trade_execution_allowed"]),
+        "paper_positions_integration": bool(review_data["paper_positions_integration"]),
+        "external_notification_integration": bool(review_data["external_notification_integration"]),
+        "source_readiness": review_data["source_readiness"],
+        "actionability_label": review_data["actionability_label"],
+        "human_action": review_data["human_action"],
+        "shadow_decision_enabled": bool(review_data["shadow_decision_enabled"]),
+    }
+
+
+def _manual_delivery_latest_manifest_review_data(
+    review_data: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    required_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in review_data]
+    if missing_keys:
+        message = "review JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "safety_boundary",
+    ]
+    for key in string_keys:
+        if not isinstance(review_data[key], str):
+            message = f"review JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(review_data["schema_version"]).strip() != "manual_delivery_manifest_review.v1":
+        message = f"review JSON schema_version must be manual_delivery_manifest_review.v1: {review_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(review_data["review_status"]).strip() != "valid_report_only_manifest":
+        message = f"review JSON review_status must be valid_report_only_manifest: {review_data['review_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["human_review_required"] is not True:
+        message = "review JSON human_review_required must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["trade_execution_allowed"] is not False:
+        message = "review JSON trade_execution_allowed must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["paper_positions_integration"] is not False:
+        message = "review JSON paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["external_notification_integration"] is not False:
+        message = "review JSON external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if review_data["shadow_decision_enabled"] not in (True, False):
+        message = "review JSON shadow_decision_enabled must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    safety_boundary = str(review_data["safety_boundary"]).strip()
+    required_safety_terms = ["report-only", "not FORMAL_GO", "no automatic order", "human decides manually"]
+    if not all(term in safety_boundary for term in required_safety_terms):
+        message = f'review JSON safety_boundary must contain: "{" / ".join(required_safety_terms)}"'
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return review_data
+
+
+def _load_manual_delivery_latest_pointer_json(
+    latest_pointer_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if not latest_pointer_json.exists():
+        message = f"latest pointer json does not exist: {latest_pointer_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    pointer_data = _load_json_object(latest_pointer_json, parser)
+    required_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "manifest_json",
+        "manifest_summary_md",
+        "manifest_review_json",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    missing_keys = [key for key in required_keys if key not in pointer_data]
+    if missing_keys:
+        message = "latest pointer JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "generated_at_jst",
+        "output_dir",
+        "manifest_json",
+        "manifest_summary_md",
+        "manifest_review_json",
+        "review_status",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+    ]
+    for key in string_keys:
+        if not isinstance(pointer_data[key], str):
+            message = f"latest pointer JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(pointer_data["schema_version"]).strip() != "manual_delivery_latest_pointer.v1":
+        message = f"latest pointer JSON schema_version must be manual_delivery_latest_pointer.v1: {pointer_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["human_review_required"] is not True:
+        message = "latest pointer JSON human_review_required must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["trade_execution_allowed"] is not False:
+        message = "latest pointer JSON trade_execution_allowed must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["paper_positions_integration"] is not False:
+        message = "latest pointer JSON paper_positions_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["external_notification_integration"] is not False:
+        message = "latest pointer JSON external_notification_integration must be false"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if pointer_data["shadow_decision_enabled"] not in (True, False):
+        message = "latest pointer JSON shadow_decision_enabled must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return pointer_data
+
+
+def _manual_delivery_latest_status_markdown(
+    *,
+    output_dir: str,
+    manifest_json: Path,
+    manifest_json_exists: bool,
+    manifest_summary_md: Path,
+    manifest_summary_md_exists: bool,
+    manifest_review_json: Path,
+    manifest_review_json_exists: bool,
+    review_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Latest Status",
+        "",
+        f"- output_dir: {output_dir}",
+        f"- manifest_json: {manifest_json}",
+        f"- manifest_json_exists: {str(manifest_json_exists).lower()}",
+        f"- manifest_summary_md: {manifest_summary_md}",
+        f"- manifest_summary_md_exists: {str(manifest_summary_md_exists).lower()}",
+        f"- manifest_review_json: {manifest_review_json}",
+        f"- manifest_review_json_exists: {str(manifest_review_json_exists).lower()}",
+        f"- review_status: {review_data['review_status']}",
+        f"- source_readiness: {review_data['source_readiness']}",
+        f"- actionability_label: {review_data['actionability_label']}",
+        f"- human_action: {review_data['human_action']}",
+        f"- shadow_decision_enabled: {str(review_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: {review_data['safety_boundary']}",
+        f"- status: ready_for_human_review",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_latest_status_data(
+    *,
+    pointer_data: dict[str, Any],
+    review_data: dict[str, Any],
+    manifest_json_path: Path,
+    manifest_summary_md_path: Path,
+    manifest_review_json_path: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    comparable_keys = [
+        "generated_at_jst",
+        "output_dir",
+        "review_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "paper_positions_integration",
+        "external_notification_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    for key in comparable_keys:
+        if pointer_data[key] != review_data[key]:
+            message = f"latest pointer JSON {key} does not match review JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    manifest_json_exists = manifest_json_path.exists()
+    manifest_summary_md_exists = manifest_summary_md_path.exists()
+    manifest_review_json_exists = manifest_review_json_path.exists()
+    return {
+        "schema_version": "manual_delivery_latest_status.v1",
+        "status": "ready_for_human_review",
+        "output_dir": review_data["output_dir"],
+        "review_status": review_data["review_status"],
+        "human_review_required": review_data["human_review_required"],
+        "trade_execution_allowed": review_data["trade_execution_allowed"],
+        "paper_positions_integration": review_data["paper_positions_integration"],
+        "external_notification_integration": review_data["external_notification_integration"],
+        "source_readiness": review_data["source_readiness"],
+        "actionability_label": review_data["actionability_label"],
+        "human_action": review_data["human_action"],
+        "shadow_decision_enabled": review_data["shadow_decision_enabled"],
+        "manifest_json_exists": manifest_json_exists,
+        "manifest_summary_md_exists": manifest_summary_md_exists,
+        "manifest_review_json_exists": manifest_review_json_exists,
+    }
+
+
+def _manual_delivery_latest_status_json_data(
+    *,
+    latest_status_data: dict[str, Any],
+    expected_status_data: dict[str, Any],
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    if str(latest_status_data.get("schema_version", "")).strip() != "manual_delivery_latest_status.v1":
+        message = f"latest status JSON schema_version must be manual_delivery_latest_status.v1: {latest_status_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in expected_status_data.items():
+        if latest_status_data.get(key) != expected_value:
+            message = f"latest status JSON {key} does not match validated latest status data"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    return latest_status_data
+
+
+def _write_manual_delivery_latest_status_outputs(
+    *,
+    latest_pointer_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json, parser)
+    manifest_json_path = Path(pointer_data["manifest_json"])
+    manifest_summary_md_path = Path(pointer_data["manifest_summary_md"])
+    manifest_review_json_path = Path(pointer_data["manifest_review_json"])
+    for label, path in [
+        ("manifest_json", manifest_json_path),
+        ("manifest_summary_md", manifest_summary_md_path),
+        ("manifest_review_json", manifest_review_json_path),
+    ]:
+        if not path.exists():
+            message = f"latest pointer {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    review_data = _load_json_object(manifest_review_json_path, parser)
+    _manual_delivery_latest_manifest_review_data(review_data, parser)
+    status_data = _manual_delivery_latest_status_data(
+        pointer_data=pointer_data,
+        review_data=review_data,
+        manifest_json_path=manifest_json_path,
+        manifest_summary_md_path=manifest_summary_md_path,
+        manifest_review_json_path=manifest_review_json_path,
+        parser=parser,
+    )
+    summary_text = _manual_delivery_latest_status_markdown(
+        output_dir=str(status_data["output_dir"]),
+        manifest_json=manifest_json_path,
+        manifest_json_exists=bool(status_data["manifest_json_exists"]),
+        manifest_summary_md=manifest_summary_md_path,
+        manifest_summary_md_exists=bool(status_data["manifest_summary_md_exists"]),
+        manifest_review_json=manifest_review_json_path,
+        manifest_review_json_exists=bool(status_data["manifest_review_json_exists"]),
+        review_data=review_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, status_data
+
+
+def _manual_delivery_human_gate_markdown(
+    *,
+    output_dir: str,
+    latest_pointer_json: Path,
+    latest_pointer_json_exists: bool,
+    latest_status_json: Path,
+    latest_status_json_exists: bool,
+    gate_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Human Gate",
+        "",
+        f"- output_dir: {output_dir}",
+        f"- latest_pointer_json: {latest_pointer_json}",
+        f"- latest_pointer_json_exists: {str(latest_pointer_json_exists).lower()}",
+        f"- latest_status_json: {latest_status_json}",
+        f"- latest_status_json_exists: {str(latest_status_json_exists).lower()}",
+        f"- review_status: {gate_data['review_status']}",
+        f"- source_readiness: {gate_data['source_readiness']}",
+        f"- actionability_label: {gate_data['actionability_label']}",
+        f"- human_action: {gate_data['human_action']}",
+        f"- shadow_decision_enabled: {str(gate_data['shadow_decision_enabled']).lower()}",
+        f"- gate_status: {gate_data['gate_status']}",
+        f"- allowed_next_action: {gate_data['allowed_next_action']}",
+        f"- trade_execution_allowed: {str(gate_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(gate_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(gate_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(gate_data['paper_positions_integration']).lower()}",
+        f"- human_review_required: {str(gate_data['human_review_required']).lower()}",
+        f"- safety_boundary: {gate_data['safety_boundary']}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_human_gate_data(
+    *,
+    output_dir: Path,
+    latest_pointer_json: Path,
+    latest_status_json: Path,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_human_gate.v1",
+        "gate_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "human_review_required": True,
+        "output_dir": str(output_dir),
+        "latest_status_json": str(latest_status_json),
+        "latest_pointer_json": str(latest_pointer_json),
+        "review_status": status_data["review_status"],
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _load_manual_delivery_human_gate_json(
+    human_gate_json: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    gate_data = _load_json_object(human_gate_json, parser)
+    if str(gate_data.get("schema_version", "")).strip() != "manual_delivery_human_gate.v1":
+        message = f"human gate JSON schema_version must be manual_delivery_human_gate.v1: {gate_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(gate_data.get("gate_status", "")).strip() != "ready_for_human_review":
+        message = f"human gate JSON gate_status must be ready_for_human_review: {gate_data.get('gate_status')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("allowed_next_action", "human_review_only"),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("human_review_required", True),
+    ]:
+        if gate_data.get(key) != expected_value:
+            message = f"human gate JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(gate_data.get("safety_boundary", "")).strip() != "report-only / not FORMAL_GO / no automatic order / human decides manually":
+        message = "human gate JSON safety_boundary must be report-only / not FORMAL_GO / no automatic order / human decides manually"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return gate_data
+
+
+def _write_manual_delivery_human_gate_outputs(
+    *,
+    human_gate_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    gate_data = _load_manual_delivery_human_gate_json(human_gate_json, parser)
+    latest_pointer_json_path = Path(gate_data["latest_pointer_json"])
+    latest_status_json_path = Path(gate_data["latest_status_json"])
+    for label, path in [
+        ("latest_pointer_json", latest_pointer_json_path),
+        ("latest_status_json", latest_status_json_path),
+    ]:
+        if not path.exists():
+            message = f"human gate {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
+    _, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        parser=parser,
+    )
+    latest_status_data = _load_json_object(latest_status_json_path, parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=status_data,
+        parser=parser,
+    )
+    expected_gate_data = _manual_delivery_human_gate_data(
+        output_dir=latest_status_json_path.parent,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_status_json=latest_status_json_path,
+        status_data=status_data,
+    )
+    if gate_data != expected_gate_data:
+        message = "human gate JSON does not match validated human gate data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_human_gate_markdown(
+        output_dir=str(gate_data["output_dir"]),
+        latest_pointer_json=latest_pointer_json_path,
+        latest_pointer_json_exists=True,
+        latest_status_json=latest_status_json_path,
+        latest_status_json_exists=True,
+        gate_data=gate_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, gate_data
+
+
+def _manual_delivery_local_handoff_status_markdown(
+    *,
+    handoff_dir: Path,
+    package_dir: Path,
+    human_gate_json: Path,
+    human_gate_json_exists: bool,
+    latest_pointer_json: Path,
+    latest_pointer_json_exists: bool,
+    latest_status_md: Path,
+    latest_status_md_exists: bool,
+    latest_status_json: Path,
+    latest_status_json_exists: bool,
+    package_manifest_json: Path,
+    package_manifest_json_exists: bool,
+    package_manifest_summary_md: Path,
+    package_manifest_summary_md_exists: bool,
+    package_manifest_review_json: Path,
+    package_manifest_review_json_exists: bool,
+    status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Local Handoff Status",
+        "",
+        f"- handoff_dir: {handoff_dir}",
+        f"- handoff_status: ready_for_human_review",
+        f"- allowed_next_action: human_review_only",
+        f"- package_dir: {package_dir}",
+        f"- source_readiness: {status_data['source_readiness']}",
+        f"- actionability_label: {status_data['actionability_label']}",
+        f"- human_action: {status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(status_data['shadow_decision_enabled']).lower()}",
+        f"- human_gate_json: {human_gate_json}",
+        f"- human_gate_json_exists: {str(human_gate_json_exists).lower()}",
+        f"- latest_pointer_json: {latest_pointer_json}",
+        f"- latest_pointer_json_exists: {str(latest_pointer_json_exists).lower()}",
+        f"- latest_status_md: {latest_status_md}",
+        f"- latest_status_md_exists: {str(latest_status_md_exists).lower()}",
+        f"- latest_status_json: {latest_status_json}",
+        f"- latest_status_json_exists: {str(latest_status_json_exists).lower()}",
+        f"- package_manifest_json: {package_manifest_json}",
+        f"- package_manifest_json_exists: {str(package_manifest_json_exists).lower()}",
+        f"- package_manifest_summary_md: {package_manifest_summary_md}",
+        f"- package_manifest_summary_md_exists: {str(package_manifest_summary_md_exists).lower()}",
+        f"- package_manifest_review_json: {package_manifest_review_json}",
+        f"- package_manifest_review_json_exists: {str(package_manifest_review_json_exists).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_local_handoff_status_data(
+    *,
+    handoff_dir: Path,
+    package_dir: Path,
+    human_gate_json_exists: bool,
+    latest_pointer_json_exists: bool,
+    latest_status_md_exists: bool,
+    latest_status_json_exists: bool,
+    package_manifest_json_exists: bool,
+    package_manifest_summary_md_exists: bool,
+    package_manifest_review_json_exists: bool,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_local_handoff_status.v1",
+        "handoff_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "handoff_dir": str(handoff_dir),
+        "package_dir": str(package_dir),
+        "human_gate_json_exists": human_gate_json_exists,
+        "latest_pointer_json_exists": latest_pointer_json_exists,
+        "latest_status_md_exists": latest_status_md_exists,
+        "latest_status_json_exists": latest_status_json_exists,
+        "package_manifest_json_exists": package_manifest_json_exists,
+        "package_manifest_summary_md_exists": package_manifest_summary_md_exists,
+        "package_manifest_review_json_exists": package_manifest_review_json_exists,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "human_review_required": True,
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+    }
+
+
+def _write_manual_delivery_local_handoff_status_outputs(
+    *,
+    handoff_dir: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    human_gate_json_path = handoff_dir / "human-gate.json"
+    latest_pointer_json_path = handoff_dir / "latest-pointer.json"
+    latest_status_md_path = handoff_dir / "latest-status.md"
+    latest_status_json_path = handoff_dir / "latest-status.json"
+    package_dir = handoff_dir / "package"
+    package_manifest_json_path = package_dir / "manifest.json"
+    package_manifest_summary_md_path = package_dir / "review" / "manifest-summary.md"
+    package_manifest_review_json_path = package_dir / "review" / "manifest-review.json"
+    for label, path in [
+        ("human_gate_json", human_gate_json_path),
+        ("latest_pointer_json", latest_pointer_json_path),
+        ("latest_status_md", latest_status_md_path),
+        ("latest_status_json", latest_status_json_path),
+        ("package_manifest_json", package_manifest_json_path),
+        ("package_manifest_summary_md", package_manifest_summary_md_path),
+        ("package_manifest_review_json", package_manifest_review_json_path),
+    ]:
+        if not path.exists():
+            message = f"local handoff {label} does not exist: {path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+    gate_data = _load_manual_delivery_human_gate_json(human_gate_json_path, parser)
+    pointer_data = _load_manual_delivery_latest_pointer_json(latest_pointer_json_path, parser)
+    expected_package_dir = handoff_dir / "package"
+    expected_package_summary_md = expected_package_dir / "review" / "manifest-summary.md"
+    expected_package_review_json = expected_package_dir / "review" / "manifest-review.json"
+    for key, expected_value in [
+        ("output_dir", str(expected_package_dir)),
+        ("manifest_json", str(package_manifest_json_path)),
+        ("manifest_summary_md", str(expected_package_summary_md)),
+        ("manifest_review_json", str(expected_package_review_json)),
+    ]:
+        if pointer_data[key] != expected_value:
+            message = f"latest pointer JSON {key} does not match stable handoff layout"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    summary_text, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        parser=parser,
+    )
+    if latest_status_md_path.read_text(encoding="utf-8") != summary_text:
+        message = "latest status markdown does not match validated latest status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    latest_status_data = _load_json_object(latest_status_json_path, parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=status_data,
+        parser=parser,
+    )
+    expected_gate_data = _manual_delivery_human_gate_data(
+        output_dir=handoff_dir,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_status_json=latest_status_json_path,
+        status_data=status_data,
+    )
+    if gate_data != expected_gate_data:
+        message = "human gate JSON does not match validated human gate data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_markdown = _manual_delivery_local_handoff_status_markdown(
+        handoff_dir=handoff_dir,
+        package_dir=expected_package_dir,
+        human_gate_json=human_gate_json_path,
+        human_gate_json_exists=True,
+        latest_pointer_json=latest_pointer_json_path,
+        latest_pointer_json_exists=True,
+        latest_status_md=latest_status_md_path,
+        latest_status_md_exists=True,
+        latest_status_json=latest_status_json_path,
+        latest_status_json_exists=True,
+        package_manifest_json=package_manifest_json_path,
+        package_manifest_json_exists=True,
+        package_manifest_summary_md=package_manifest_summary_md_path,
+        package_manifest_summary_md_exists=True,
+        package_manifest_review_json=package_manifest_review_json_path,
+        package_manifest_review_json_exists=True,
+        status_data=status_data,
+    )
+    handoff_status_data = _manual_delivery_local_handoff_status_data(
+        handoff_dir=handoff_dir,
+        package_dir=expected_package_dir,
+        human_gate_json_exists=True,
+        latest_pointer_json_exists=True,
+        latest_status_md_exists=True,
+        latest_status_json_exists=True,
+        package_manifest_json_exists=True,
+        package_manifest_summary_md_exists=True,
+        package_manifest_review_json_exists=True,
+        status_data=status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_markdown, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(handoff_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_markdown, handoff_status_data
+
+
+def _resolve_manual_delivery_review_package_handoff_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    output_dir = Path(args.output_dir)
+    review_dir = output_dir / "review"
+    latest_pointer_json_arg = getattr(args, "latest_pointer_json", None)
+    latest_status_md_arg = getattr(args, "latest_status_md", None)
+    latest_status_json_arg = getattr(args, "latest_status_json", None)
+    write_local_handoff = bool(getattr(args, "write_local_handoff", False))
+    if write_local_handoff:
+        if latest_pointer_json_arg is None:
+            latest_pointer_json_arg = str(review_dir / "latest-pointer.json")
+        if latest_status_md_arg is None:
+            latest_status_md_arg = str(review_dir / "latest-status.md")
+        if latest_status_json_arg is None:
+            latest_status_json_arg = str(review_dir / "latest-status.json")
+    if (latest_status_md_arg or latest_status_json_arg) and not latest_pointer_json_arg:
+        message = "--latest-status-md and --latest-status-json require --latest-pointer-json"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    return latest_pointer_json_arg, latest_status_md_arg, latest_status_json_arg
+
+
+def _resolve_manual_delivery_local_handoff_status_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None]:
+    handoff_dir = Path(args.handoff_dir)
+    write_handoff_status = bool(getattr(args, "write_handoff_status", False))
+    handoff_status_md_arg = getattr(args, "handoff_status_md", None)
+    handoff_status_json_arg = getattr(args, "handoff_status_json", None)
+    if (handoff_status_md_arg or handoff_status_json_arg) and not write_handoff_status:
+        message = "--handoff-status-md and --handoff-status-json require --write-handoff-status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if write_handoff_status:
+        if handoff_status_md_arg is None:
+            handoff_status_md_arg = str(handoff_dir / "handoff-status.md")
+        if handoff_status_json_arg is None:
+            handoff_status_json_arg = str(handoff_dir / "handoff-status.json")
+    return handoff_status_md_arg, handoff_status_json_arg
+
+
+def _run_summarize_manual_delivery_local_flow_manifest_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    report, _review_data = build_manual_delivery_local_flow_manifest_review(
+        manifest_json=Path(args.manifest_json),
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_manifest_summary_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_manifest_review_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_manifest_summary_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(report)
+    else:
+        sys.stdout.write(report)
+
+
+def _run_latest_manual_delivery_local_flow_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    intraperiod_outcomes_path = str(getattr(args, "intraperiod_outcomes_path", "logs/csv/active_plan_candidate_intraperiod_outcomes.csv"))
+    detail_report_path = getattr(args, "detail_report_path", None)
+    recent_row_window = int(getattr(args, "recent_row_window", 12))
+    source_stale_after_hours = float(getattr(args, "source_stale_after_hours", 24.0))
+    include_manual_delivery_checklist = bool(getattr(args, "include_manual_delivery_checklist", False))
+    generated_at_jst = _current_jst_iso_like_timestamp()
+    reference_jst = datetime.fromisoformat(generated_at_jst)
+
+    source_files_text = "\n".join(
+        _manual_delivery_source_files_lines(
+            base_dir=BASE_DIR,
+            intraperiod_outcomes_path=intraperiod_outcomes_path,
+            detail_report_path=detail_report_path,
+            source_stale_after_hours=source_stale_after_hours,
+            reference_jst=reference_jst,
+        )
+    ) + "\n"
+    (output_dir / "source-files.txt").write_text(source_files_text, encoding="utf-8")
+
+    seed_data = _latest_manual_delivery_input_json_seed_data(
+        base_dir=BASE_DIR,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+        detail_report_path=detail_report_path,
+        recent_row_window=recent_row_window,
+        source_stale_after_hours=source_stale_after_hours,
+        generated_at_jst=generated_at_jst,
+        symbol="BTC_USDT",
+        timeframe="15m",
+        data_source="exchange-auto-public",
+        data_freshness="15m latest-window exchange-auto-public",
+        active_plan_label="NO_ACTION_REVIEW_REQUIRED",
+        side="review_required",
+        entry_mode="review_required",
+        entry_condition="review latest report before any manual decision",
+        tp_plan="review_required",
+        sl_or_invalidation="review_required",
+        timeout_or_wait_limit="review_required",
+        include_manual_delivery_checklist=include_manual_delivery_checklist,
+    )
+    input_json_path = output_dir / "manual-delivery-input.json"
+    input_json_path.write_text(json.dumps(seed_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    bundle_dir = output_dir / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle_texts = _manual_delivery_file_bundle_texts(
+        subject_prefix="BTCFX Ver03-v2 report-only",
+        delivery_target_label="manual external app",
+        generated_at_jst=str(seed_data["generated_at_jst"]),
+        data_freshness=str(seed_data["data_freshness"]),
+        symbol=str(seed_data["symbol"]),
+        timeframe=str(seed_data["timeframe"]),
+        data_source=str(seed_data["data_source"]),
+        detail_report_path=str(seed_data["detail_report_path"]),
+        market_status_summary=str(seed_data["market_status_summary"]),
+        active_plan_label=str(seed_data["active_plan_label"]),
+        side=str(seed_data["side"]),
+        entry_mode=str(seed_data["entry_mode"]),
+        entry_condition=str(seed_data["entry_condition"]),
+        tp_plan=str(seed_data["tp_plan"]),
+        sl_or_invalidation=str(seed_data["sl_or_invalidation"]),
+        timeout_or_wait_limit=str(seed_data["timeout_or_wait_limit"]),
+        intraperiod_evidence_summary=str(seed_data["intraperiod_evidence_summary"]),
+        pending_caveat=str(seed_data["pending_caveat"]),
+        body_include_manual_delivery_checklist=False,
+        package_include_manual_delivery_checklist=bool(seed_data["include_manual_delivery_checklist"]),
+    )
+    for filename, text in bundle_texts.items():
+        (bundle_dir / filename).write_text(text, encoding="utf-8")
+
+    sys.stdout.write(f"{output_dir}\n")
+    shadow_output_csv: Path | None = None
+    shadow_summary_output_md_path: Path | None = None
+    if write_actionability_shadow_decision:
+        shadow_output_csv = _write_actionability_shadow_decision_from_json(
+            input_json_path=input_json_path,
+            output_csv=Path(getattr(args, "actionability_shadow_output_csv", "logs/csv/active_plan_shadow_decisions.csv")),
+            final_outcome=str(getattr(args, "actionability_shadow_final_outcome", "pending")),
+            notes=str(getattr(args, "actionability_shadow_notes", "")),
+            parser=parser,
+        )
+        sys.stdout.write(f"actionability_shadow_output_csv={shadow_output_csv}\n")
+        if actionability_shadow_summary_output_md:
+            shadow_summary_output_md_path = Path(actionability_shadow_summary_output_md)
+            build_actionability_shadow_decision_summary(
+                input_csv=shadow_output_csv,
+                output_md=shadow_summary_output_md_path,
+                parser=parser,
+            )
+            sys.stdout.write(f"actionability_shadow_summary_output_md={actionability_shadow_summary_output_md}\n")
+        inbox_markdown = _manual_delivery_local_inbox_markdown(
+            input_json_path=input_json_path,
+            bundle_dir=bundle_dir,
+            input_json=seed_data,
+            actionability_shadow_output_csv=shadow_output_csv,
+            actionability_shadow_summary_output_md=shadow_summary_output_md_path,
+        )
+    else:
+        inbox_markdown = _manual_delivery_local_inbox_markdown(
+            input_json_path=input_json_path,
+            bundle_dir=bundle_dir,
+            input_json=seed_data,
+        )
+    (output_dir / "inbox.md").write_text(inbox_markdown, encoding="utf-8")
+    manifest_path = output_dir / "manifest.json"
+    manifest_data = _manual_delivery_local_flow_manifest_data(
+        output_dir=output_dir,
+        generated_at_jst=str(seed_data["generated_at_jst"]),
+        source_readiness=str(_manual_delivery_extract_summary_field(str(seed_data["intraperiod_evidence_summary"]), "source_readiness") or "unknown"),
+        actionability_label=str(seed_data["actionability_label"]),
+        actionability_reasons=[str(reason) for reason in list(seed_data["actionability_reasons"])],
+        human_action=str(seed_data["human_action"]),
+        actionability_safety=str(seed_data["actionability_safety"]),
+        source_files_path=output_dir / "source-files.txt",
+        input_json_path=input_json_path,
+        bundle_dir=bundle_dir,
+        inbox_path=output_dir / "inbox.md",
+        shadow_decision_enabled=write_actionability_shadow_decision,
+        actionability_shadow_output_csv=shadow_output_csv,
+        actionability_shadow_summary_output_md=shadow_summary_output_md_path,
+    )
+    manifest_path.write_text(json.dumps(manifest_data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    sys.stdout.write(f"manual_delivery_manifest_json={manifest_path}\n")
+
+
+def _run_write_latest_manual_delivery_review_package_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    latest_pointer_json_arg, latest_status_md_arg, latest_status_json_arg = _resolve_manual_delivery_review_package_handoff_paths(args, parser)
+    _run_latest_manual_delivery_local_flow_command(args, parser)
+    output_dir = Path(args.output_dir)
+    review_dir = output_dir / "review"
+    summary_md_path = review_dir / "manifest-summary.md"
+    review_json_path = review_dir / "manifest-review.json"
+    build_manual_delivery_local_flow_manifest_review(
+        manifest_json=output_dir / "manifest.json",
+        output_md=summary_md_path,
+        output_json=review_json_path,
+        parser=parser,
+    )
+    review_data = _load_json_object(review_json_path, parser)
+    latest_pointer_json_path: Path | None = None
+    if latest_pointer_json_arg:
+        latest_pointer_json_path = Path(latest_pointer_json_arg)
+        pointer_data = _manual_delivery_latest_pointer_data(
+            review_data=review_data,
+            manifest_json=output_dir / "manifest.json",
+            manifest_summary_md=summary_md_path,
+            manifest_review_json=review_json_path,
+            parser=parser,
+        )
+        _ensure_parent(latest_pointer_json_path)
+        latest_pointer_json_path.write_text(json.dumps(pointer_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    sys.stdout.write(f"manual_delivery_manifest_summary_md={summary_md_path}\n")
+    sys.stdout.write(f"manual_delivery_manifest_review_json={review_json_path}\n")
+    if latest_pointer_json_path is not None:
+        sys.stdout.write(f"latest_manual_delivery_pointer_json={latest_pointer_json_path}\n")
+        if latest_status_md_arg or latest_status_json_arg:
+            latest_status_md_path = Path(latest_status_md_arg) if latest_status_md_arg else None
+            latest_status_json_path = Path(latest_status_json_arg) if latest_status_json_arg else None
+            _write_manual_delivery_latest_status_outputs(
+                latest_pointer_json=latest_pointer_json_path,
+                output_md=latest_status_md_path,
+                output_json=latest_status_json_path,
+                parser=parser,
+            )
+            if latest_status_md_path is not None and latest_status_json_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_md={latest_status_md_path}\n")
+                sys.stdout.write(f"manual_delivery_latest_status_json={latest_status_json_path}\n")
+            elif latest_status_md_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_md={latest_status_md_path}\n")
+            elif latest_status_json_path is not None:
+                sys.stdout.write(f"manual_delivery_latest_status_json={latest_status_json_path}\n")
+
+
+def _run_write_latest_manual_delivery_local_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    handoff_status_md_arg, handoff_status_json_arg = _resolve_manual_delivery_local_handoff_status_paths(args, parser)
+
+    handoff_dir = Path(args.handoff_dir)
+    review_package_args = argparse.Namespace(**vars(args))
+    review_package_args.output_dir = str(handoff_dir / "package")
+    review_package_args.latest_pointer_json = str(handoff_dir / "latest-pointer.json")
+    review_package_args.latest_status_md = str(handoff_dir / "latest-status.md")
+    review_package_args.latest_status_json = str(handoff_dir / "latest-status.json")
+    review_package_args.write_local_handoff = False
+    sys.stdout.write(f"handoff_dir={handoff_dir}\n")
+    _run_write_latest_manual_delivery_review_package_command(review_package_args, parser)
+    human_gate_json_path = handoff_dir / "human-gate.json"
+    _, _status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=handoff_dir / "latest-pointer.json",
+        parser=parser,
+    )
+    latest_status_data = _load_json_object(handoff_dir / "latest-status.json", parser)
+    _manual_delivery_latest_status_json_data(
+        latest_status_data=latest_status_data,
+        expected_status_data=_status_data,
+        parser=parser,
+    )
+    human_gate_data = _manual_delivery_human_gate_data(
+        output_dir=handoff_dir,
+        latest_pointer_json=handoff_dir / "latest-pointer.json",
+        latest_status_json=handoff_dir / "latest-status.json",
+        status_data=_status_data,
+    )
+    _ensure_parent(human_gate_json_path)
+    human_gate_json_path.write_text(json.dumps(human_gate_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    sys.stdout.write(f"manual_delivery_human_gate_json={human_gate_json_path}\n")
+    if handoff_status_md_arg or handoff_status_json_arg:
+        handoff_status_md_path = Path(handoff_status_md_arg) if handoff_status_md_arg else None
+        handoff_status_json_path = Path(handoff_status_json_arg) if handoff_status_json_arg else None
+        _write_manual_delivery_local_handoff_status_outputs(
+            handoff_dir=handoff_dir,
+            output_md=handoff_status_md_path,
+            output_json=handoff_status_json_path,
+            parser=parser,
+        )
+        if handoff_status_md_path is not None and handoff_status_json_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_md={handoff_status_md_path}\n")
+            sys.stdout.write(f"manual_delivery_local_handoff_status_json={handoff_status_json_path}\n")
+        elif handoff_status_md_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_md={handoff_status_md_path}\n")
+        elif handoff_status_json_path is not None:
+            sys.stdout.write(f"manual_delivery_local_handoff_status_json={handoff_status_json_path}\n")
+
+
+def _run_write_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    current_handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    current_args = argparse.Namespace(**vars(args))
+    current_args.handoff_dir = str(current_handoff_dir)
+    current_args.write_handoff_status = True
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        _run_write_latest_manual_delivery_local_handoff_command(current_args, parser)
+    sys.stdout.write(f"current_manual_delivery_handoff_dir={current_handoff_dir}\n")
+    sys.stdout.write(stdout_buffer.getvalue())
+
+
+def _run_summarize_latest_manual_delivery_pointer_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    latest_pointer_json_path = Path(args.latest_pointer_json)
+    summary_text, status_data = _write_manual_delivery_latest_status_outputs(
+        latest_pointer_json=latest_pointer_json_path,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_latest_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_latest_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_summarize_manual_delivery_human_gate_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    human_gate_json_path = Path(args.human_gate_json)
+    summary_text, gate_data = _write_manual_delivery_human_gate_outputs(
+        human_gate_json=human_gate_json_path,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_human_gate_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_human_gate_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_human_gate_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_summarize_manual_delivery_local_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    handoff_dir = Path(args.handoff_dir)
+    summary_text, handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"manual_delivery_local_handoff_status_md={output_md_arg}\n")
+        sys.stdout.write(f"manual_delivery_local_handoff_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"manual_delivery_local_handoff_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_summarize_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    summary_text, _handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_handoff_status_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_handoff_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_handoff_status_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(f"current_manual_delivery_handoff_dir={handoff_dir}\n")
+        sys.stdout.write(summary_text)
+
+
+def _manual_delivery_current_handoff_self_check_status_markdown(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    handoff_status_json: Path,
+    self_check_data: dict[str, Any],
+    handoff_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff Self-Check Status",
+        "",
+        f"- self_check_json: {self_check_json}",
+        f"- self_check_json_exists: true",
+        f"- handoff_dir: {handoff_dir}",
+        f"- handoff_dir_exists: true",
+        f"- handoff_status_json: {handoff_status_json}",
+        f"- handoff_status_json_exists: true",
+        f"- self_check_status: {self_check_data['self_check_status']}",
+        f"- write_command_status: {self_check_data['write_command_status']}",
+        f"- summarize_command_status: {self_check_data['summarize_command_status']}",
+        f"- handoff_status: {self_check_data['handoff_status']}",
+        f"- allowed_next_action: {self_check_data['allowed_next_action']}",
+        f"- source_readiness: {self_check_data['source_readiness']}",
+        f"- actionability_label: {self_check_data['actionability_label']}",
+        f"- human_action: {self_check_data['human_action']}",
+        f"- shadow_decision_enabled: {str(self_check_data['shadow_decision_enabled']).lower()}",
+        f"- human_review_required: {str(self_check_data['human_review_required']).lower()}",
+        f"- trade_execution_allowed: {str(self_check_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(self_check_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(self_check_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(self_check_data['paper_positions_integration']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_self_check_status_data(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    handoff_status_json: Path,
+    self_check_data: dict[str, Any],
+    handoff_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_current_handoff_self_check_status.v1",
+        "self_check_status": "pass",
+        "self_check_json": str(self_check_json),
+        "self_check_json_exists": True,
+        "handoff_dir": str(handoff_dir),
+        "handoff_dir_exists": True,
+        "handoff_status_json": str(handoff_status_json),
+        "handoff_status_json_exists": True,
+        "handoff_status": self_check_data["handoff_status"],
+        "allowed_next_action": self_check_data["allowed_next_action"],
+        "human_review_required": self_check_data["human_review_required"],
+        "trade_execution_allowed": self_check_data["trade_execution_allowed"],
+        "automatic_order_allowed": self_check_data["automatic_order_allowed"],
+        "external_notification_allowed": self_check_data["external_notification_allowed"],
+        "paper_positions_integration": self_check_data["paper_positions_integration"],
+        "source_readiness": self_check_data["source_readiness"],
+        "actionability_label": self_check_data["actionability_label"],
+        "human_action": self_check_data["human_action"],
+        "shadow_decision_enabled": self_check_data["shadow_decision_enabled"],
+        "write_command_status": self_check_data["write_command_status"],
+        "summarize_command_status": self_check_data["summarize_command_status"],
+    }
+
+
+def _write_manual_delivery_current_handoff_self_check_status_outputs(
+    *,
+    self_check_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any], Path]:
+    if not self_check_json.exists():
+        message = f"current handoff self-check JSON does not exist: {self_check_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    self_check_data = _load_json_object(self_check_json, parser)
+    required_keys = [
+        "schema_version",
+        "self_check_status",
+        "handoff_dir",
+        "write_command_status",
+        "summarize_command_status",
+        "handoff_status",
+        "allowed_next_action",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    missing_keys = [key for key in required_keys if key not in self_check_data]
+    if missing_keys:
+        message = "current handoff self-check JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "self_check_status",
+        "handoff_dir",
+        "write_command_status",
+        "summarize_command_status",
+        "handoff_status",
+        "allowed_next_action",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+    ]
+    for key in string_keys:
+        if not isinstance(self_check_data[key], str):
+            message = f"current handoff self-check JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(self_check_data["schema_version"]).strip() != "manual_delivery_current_handoff_self_check.v1":
+        message = (
+            "current handoff self-check JSON schema_version must be "
+            f"manual_delivery_current_handoff_self_check.v1: {self_check_data['schema_version']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(self_check_data["self_check_status"]).strip() != "pass":
+        message = f"current handoff self-check JSON self_check_status must be pass: {self_check_data['self_check_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(self_check_data["write_command_status"]).strip() != "pass":
+        message = f"current handoff self-check JSON write_command_status must be pass: {self_check_data['write_command_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(self_check_data["summarize_command_status"]).strip() != "pass":
+        message = f"current handoff self-check JSON summarize_command_status must be pass: {self_check_data['summarize_command_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(self_check_data["handoff_status"]).strip() != "ready_for_human_review":
+        message = f"current handoff self-check JSON handoff_status must be ready_for_human_review: {self_check_data['handoff_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(self_check_data["allowed_next_action"]).strip() != "human_review_only":
+        message = f"current handoff self-check JSON allowed_next_action must be human_review_only: {self_check_data['allowed_next_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    bool_checks = [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]
+    for key, expected_value in bool_checks:
+        if self_check_data[key] is not expected_value:
+            message = f"current handoff self-check JSON {key} must be {str(expected_value).lower()}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    handoff_dir = Path(str(self_check_data["handoff_dir"]))
+    if not handoff_dir.exists():
+        message = f"current handoff self-check handoff_dir does not exist: {handoff_dir}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    handoff_status_json = handoff_dir / "handoff-status.json"
+    if not handoff_status_json.exists():
+        message = f"current handoff self-check handoff-status JSON does not exist: {handoff_status_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    handoff_status_data = _load_json_object(handoff_status_json, parser)
+    if str(handoff_status_data.get("schema_version", "")).strip() != "manual_delivery_local_handoff_status.v1":
+        message = (
+            "current handoff self-check handoff-status JSON schema_version must be "
+            f"manual_delivery_local_handoff_status.v1: {handoff_status_data.get('schema_version')}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key in [
+        "handoff_status",
+        "allowed_next_action",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]:
+        if handoff_status_data.get(key) != self_check_data[key]:
+            message = f"current handoff self-check handoff-status JSON {key} does not match self-check JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    summary_text = _manual_delivery_current_handoff_self_check_status_markdown(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        handoff_status_json=handoff_status_json,
+        self_check_data=self_check_data,
+        handoff_status_data=handoff_status_data,
+    )
+    self_check_status_data = _manual_delivery_current_handoff_self_check_status_data(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        handoff_status_json=handoff_status_json,
+        self_check_data=self_check_data,
+        handoff_status_data=handoff_status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(self_check_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, self_check_status_data, handoff_dir
+
+
+def _manual_delivery_current_handoff_app_state_markdown(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    self_check_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App State",
+        "",
+        f"- app_state: ready_for_human_review",
+        f"- display_mode: manual_delivery_review",
+        f"- primary_action: human_review_only",
+        f"- allowed_next_action: {self_check_status_data['allowed_next_action']}",
+        f"- self_check_json: {self_check_json}",
+        f"- handoff_dir: {handoff_dir}",
+        f"- handoff_status: {self_check_status_data['handoff_status']}",
+        f"- source_readiness: {self_check_status_data['source_readiness']}",
+        f"- actionability_label: {self_check_status_data['actionability_label']}",
+        f"- human_action: {self_check_status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(self_check_status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_state_data(
+    *,
+    self_check_json: Path,
+    handoff_dir: Path,
+    self_check_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_state.v1",
+        "app_state": "ready_for_human_review",
+        "display_mode": "manual_delivery_review",
+        "primary_action": "human_review_only",
+        "allowed_next_action": self_check_status_data["allowed_next_action"],
+        "trade_execution_allowed": self_check_status_data["trade_execution_allowed"],
+        "automatic_order_allowed": self_check_status_data["automatic_order_allowed"],
+        "external_notification_allowed": self_check_status_data["external_notification_allowed"],
+        "paper_positions_integration": self_check_status_data["paper_positions_integration"],
+        "human_review_required": self_check_status_data["human_review_required"],
+        "source_readiness": self_check_status_data["source_readiness"],
+        "actionability_label": self_check_status_data["actionability_label"],
+        "human_action": self_check_status_data["human_action"],
+        "shadow_decision_enabled": self_check_status_data["shadow_decision_enabled"],
+        "self_check_json": str(self_check_json),
+        "handoff_dir": str(handoff_dir),
+        "handoff_status": self_check_status_data["handoff_status"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _write_current_manual_delivery_app_state_outputs(
+    *,
+    self_check_json: Path,
+    app_state_json: Path | None = None,
+    app_state_md: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[dict[str, Any], Path, str]:
+    summary_text, self_check_status_data, handoff_dir = _write_manual_delivery_current_handoff_self_check_status_outputs(
+        self_check_json=self_check_json,
+        parser=parser,
+    )
+    _ = summary_text
+    resolved_app_state_json = app_state_json or (handoff_dir / "app-state.json")
+    resolved_app_state_md = app_state_md or (handoff_dir / "app-state.md")
+    app_state_text = _manual_delivery_current_handoff_app_state_markdown(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        self_check_status_data=self_check_status_data,
+    )
+    app_state_data = _manual_delivery_current_handoff_app_state_data(
+        self_check_json=self_check_json,
+        handoff_dir=handoff_dir,
+        self_check_status_data=self_check_status_data,
+    )
+    _ensure_parent(resolved_app_state_md)
+    _ensure_parent(resolved_app_state_json)
+    resolved_app_state_md.write_text(app_state_text, encoding="utf-8")
+    resolved_app_state_json.write_text(json.dumps(app_state_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return app_state_data, handoff_dir, app_state_text
+
+
+def _manual_delivery_current_handoff_app_state_status_markdown(
+    *,
+    app_state_json: Path,
+    self_check_json: Path,
+    handoff_dir: Path,
+    app_state_data: dict[str, Any],
+    self_check_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App State Status",
+        "",
+        f"- app_state_json: {app_state_json}",
+        f"- app_state_json_exists: true",
+        f"- app_state: {app_state_data['app_state']}",
+        f"- display_mode: {app_state_data['display_mode']}",
+        f"- primary_action: {app_state_data['primary_action']}",
+        f"- handoff_dir: {handoff_dir}",
+        f"- self_check_json: {self_check_json}",
+        f"- self_check_json_exists: true",
+        f"- handoff_status: {app_state_data['handoff_status']}",
+        f"- source_readiness: {app_state_data['source_readiness']}",
+        f"- actionability_label: {app_state_data['actionability_label']}",
+        f"- human_action: {app_state_data['human_action']}",
+        f"- shadow_decision_enabled: {str(app_state_data['shadow_decision_enabled']).lower()}",
+        f"- human_review_required: {str(app_state_data['human_review_required']).lower()}",
+        f"- trade_execution_allowed: {str(app_state_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(app_state_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(app_state_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(app_state_data['paper_positions_integration']).lower()}",
+        f"- safety_boundary: {app_state_data['safety_boundary']}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_state_status_data(
+    *,
+    app_state_json: Path,
+    self_check_json: Path,
+    handoff_dir: Path,
+    app_state_data: dict[str, Any],
+    self_check_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_state_status.v1",
+        "app_state_status": "valid_ready_for_human_review",
+        "app_state_json": str(app_state_json),
+        "app_state_json_exists": True,
+        "self_check_json": str(self_check_json),
+        "self_check_json_exists": True,
+        "handoff_dir": str(handoff_dir),
+        "app_state": app_state_data["app_state"],
+        "display_mode": app_state_data["display_mode"],
+        "primary_action": app_state_data["primary_action"],
+        "allowed_next_action": app_state_data["allowed_next_action"],
+        "handoff_status": app_state_data["handoff_status"],
+        "human_review_required": app_state_data["human_review_required"],
+        "trade_execution_allowed": app_state_data["trade_execution_allowed"],
+        "automatic_order_allowed": app_state_data["automatic_order_allowed"],
+        "external_notification_allowed": app_state_data["external_notification_allowed"],
+        "paper_positions_integration": app_state_data["paper_positions_integration"],
+        "source_readiness": app_state_data["source_readiness"],
+        "actionability_label": app_state_data["actionability_label"],
+        "human_action": app_state_data["human_action"],
+        "shadow_decision_enabled": app_state_data["shadow_decision_enabled"],
+    }
+
+
+def _write_manual_delivery_current_handoff_app_state_status_outputs(
+    *,
+    app_state_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any], Path]:
+    if not app_state_json.exists():
+        message = f"current handoff app-state JSON does not exist: {app_state_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    app_state_data = _load_json_object(app_state_json, parser)
+    required_keys = [
+        "schema_version",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "human_review_required",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "self_check_json",
+        "handoff_dir",
+        "handoff_status",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in app_state_data]
+    if missing_keys:
+        message = "current handoff app-state JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "self_check_json",
+        "handoff_dir",
+        "handoff_status",
+        "safety_boundary",
+    ]
+    for key in string_keys:
+        if not isinstance(app_state_data[key], str):
+            message = f"current handoff app-state JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(app_state_data["schema_version"]).strip() != "manual_delivery_app_state.v1":
+        message = (
+            "current handoff app-state JSON schema_version must be "
+            f"manual_delivery_app_state.v1: {app_state_data['schema_version']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["app_state"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-state JSON app_state must be ready_for_human_review: {app_state_data['app_state']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-state JSON display_mode must be manual_delivery_review: {app_state_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-state JSON primary_action must be human_review_only: {app_state_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["allowed_next_action"]).strip() != "human_review_only":
+        message = f"current handoff app-state JSON allowed_next_action must be human_review_only: {app_state_data['allowed_next_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["handoff_status"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-state JSON handoff_status must be ready_for_human_review: {app_state_data['handoff_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    bool_checks = [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]
+    for key, expected_value in bool_checks:
+        if app_state_data[key] is not expected_value:
+            message = f"current handoff app-state JSON {key} must be {str(expected_value).lower()}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(app_state_data["safety_boundary"]).strip() != "report-only / not FORMAL_GO / no automatic order / human decides manually":
+        message = (
+            "current handoff app-state JSON safety_boundary must be "
+            "report-only / not FORMAL_GO / no automatic order / human decides manually"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    self_check_json_path = Path(str(app_state_data["self_check_json"]))
+    if not self_check_json_path.exists():
+        message = f"current handoff app-state self-check JSON does not exist: {self_check_json_path}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    _, self_check_status_data, handoff_dir = _write_manual_delivery_current_handoff_self_check_status_outputs(
+        self_check_json=self_check_json_path,
+        parser=parser,
+    )
+    for key in [
+        "allowed_next_action",
+        "handoff_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]:
+        if app_state_data[key] != self_check_status_data[key]:
+            message = f"current handoff app-state JSON {key} does not match self-check JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if Path(str(app_state_data["handoff_dir"])) != handoff_dir:
+        message = f"current handoff app-state JSON handoff_dir does not match self-check JSON: {app_state_data['handoff_dir']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_state_status_markdown(
+        app_state_json=app_state_json,
+        self_check_json=self_check_json_path,
+        handoff_dir=handoff_dir,
+        app_state_data=app_state_data,
+        self_check_status_data=self_check_status_data,
+    )
+    app_state_status_data = _manual_delivery_current_handoff_app_state_status_data(
+        app_state_json=app_state_json,
+        self_check_json=self_check_json_path,
+        handoff_dir=handoff_dir,
+        app_state_data=app_state_data,
+        self_check_status_data=self_check_status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(app_state_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, app_state_status_data, handoff_dir
+
+
+def _manual_delivery_current_handoff_self_check_data(
+    *,
+    handoff_dir: Path,
+    handoff_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_current_handoff_self_check.v1",
+        "self_check_status": "pass",
+        "handoff_dir": str(handoff_dir),
+        "write_command_status": "pass",
+        "summarize_command_status": "pass",
+        "handoff_status": handoff_status_data["handoff_status"],
+        "allowed_next_action": handoff_status_data["allowed_next_action"],
+        "human_review_required": handoff_status_data["human_review_required"],
+        "trade_execution_allowed": handoff_status_data["trade_execution_allowed"],
+        "automatic_order_allowed": handoff_status_data["automatic_order_allowed"],
+        "external_notification_allowed": handoff_status_data["external_notification_allowed"],
+        "paper_positions_integration": handoff_status_data["paper_positions_integration"],
+        "source_readiness": handoff_status_data["source_readiness"],
+        "actionability_label": handoff_status_data["actionability_label"],
+        "human_action": handoff_status_data["human_action"],
+        "shadow_decision_enabled": handoff_status_data["shadow_decision_enabled"],
+    }
+
+
+def _run_self_check_current_manual_delivery_handoff_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    write_actionability_shadow_decision = bool(getattr(args, "write_actionability_shadow_decision", False))
+    actionability_shadow_summary_output_md = getattr(args, "actionability_shadow_summary_output_md", None)
+    if actionability_shadow_summary_output_md and not write_actionability_shadow_decision:
+        message = "--actionability-shadow-summary-output-md requires --write-actionability-shadow-decision"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    current_args = argparse.Namespace(**vars(args))
+    current_args.handoff_dir = str(handoff_dir)
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        _run_write_current_manual_delivery_handoff_command(current_args, parser)
+    _, handoff_status_data = _write_manual_delivery_local_handoff_status_outputs(
+        handoff_dir=handoff_dir,
+        parser=parser,
+    )
+    self_check_data = _manual_delivery_current_handoff_self_check_data(
+        handoff_dir=handoff_dir,
+        handoff_status_data=handoff_status_data,
+    )
+    self_check_json_path = Path(self_check_json_arg)
+    _ensure_parent(self_check_json_path)
+    self_check_json_path.write_text(json.dumps(self_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    sys.stdout.write(f"current_manual_delivery_self_check_dir={handoff_dir}\n")
+    sys.stdout.write(stdout_buffer.getvalue())
+    sys.stdout.write(f"current_manual_delivery_self_check_json={self_check_json_path}\n")
+
+
+def _run_summarize_current_manual_delivery_handoff_self_check_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    self_check_json = Path(getattr(args, "self_check_json", "local/manual_delivery_handoff/self-check.json"))
+    summary_text, _self_check_status_data, _handoff_dir = _write_manual_delivery_current_handoff_self_check_status_outputs(
+        self_check_json=self_check_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_self_check_status_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_self_check_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_self_check_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_write_current_manual_delivery_app_state_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    self_check_json = Path(getattr(args, "self_check_json", "local/manual_delivery_handoff/self-check.json"))
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    app_state_json_path = Path(app_state_json_arg) if app_state_json_arg else None
+    app_state_md_path = Path(app_state_md_arg) if app_state_md_arg else None
+    app_state_data, _handoff_dir, _app_state_text = _write_current_manual_delivery_app_state_outputs(
+        self_check_json=self_check_json,
+        app_state_json=app_state_json_path,
+        app_state_md=app_state_md_path,
+        parser=parser,
+    )
+    resolved_app_state_json = app_state_json_path or Path(app_state_data["handoff_dir"]) / "app-state.json"
+    resolved_app_state_md = app_state_md_path or Path(app_state_data["handoff_dir"]) / "app-state.md"
+    sys.stdout.write(f"current_manual_delivery_app_state_md={resolved_app_state_md}\n")
+    sys.stdout.write(f"current_manual_delivery_app_state_json={resolved_app_state_json}\n")
+
+
+def _run_summarize_current_manual_delivery_app_state_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    app_state_json = Path(getattr(args, "app_state_json", "local/manual_delivery_handoff/app-state.json"))
+    summary_text, _app_state_status_data, _handoff_dir = _write_manual_delivery_current_handoff_app_state_status_outputs(
+        app_state_json=app_state_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_app_state_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_state_status_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_state_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_state_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _manual_delivery_current_handoff_app_state_ready_check_markdown(
+    *,
+    app_state_status_json: Path,
+    status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App State Ready Check",
+        "",
+        f"- app_state_status_json: {app_state_status_json}",
+        f"- current_manual_delivery_ready: true",
+        f"- readiness_status: ready_for_human_review",
+        f"- allowed_next_action: {status_data['allowed_next_action']}",
+        f"- app_state_status: {status_data['app_state_status']}",
+        f"- app_state: {status_data['app_state']}",
+        f"- display_mode: {status_data['display_mode']}",
+        f"- primary_action: {status_data['primary_action']}",
+        f"- human_review_required: {str(status_data['human_review_required']).lower()}",
+        f"- trade_execution_allowed: {str(status_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(status_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(status_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(status_data['paper_positions_integration']).lower()}",
+        f"- source_readiness: {status_data['source_readiness']}",
+        f"- actionability_label: {status_data['actionability_label']}",
+        f"- human_action: {status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_state_ready_check_data(
+    *,
+    app_state_status_json: Path,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_state_ready_check.v1",
+        "current_manual_delivery_ready": True,
+        "readiness_status": "ready_for_human_review",
+        "allowed_next_action": status_data["allowed_next_action"],
+        "app_state_status_json": str(app_state_status_json),
+        "app_state_status": status_data["app_state_status"],
+        "app_state": status_data["app_state"],
+        "display_mode": status_data["display_mode"],
+        "primary_action": status_data["primary_action"],
+        "human_review_required": status_data["human_review_required"],
+        "trade_execution_allowed": status_data["trade_execution_allowed"],
+        "automatic_order_allowed": status_data["automatic_order_allowed"],
+        "external_notification_allowed": status_data["external_notification_allowed"],
+        "paper_positions_integration": status_data["paper_positions_integration"],
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _write_manual_delivery_current_handoff_app_state_ready_check_outputs(
+    *,
+    app_state_status_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not app_state_status_json.exists():
+        message = f"current handoff app-state status JSON does not exist: {app_state_status_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    status_data = _load_json_object(app_state_status_json, parser)
+    required_keys = [
+        "schema_version",
+        "app_state_status",
+        "app_state_json",
+        "app_state_json_exists",
+        "self_check_json",
+        "self_check_json_exists",
+        "handoff_dir",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "handoff_status",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]
+    missing_keys = [key for key in required_keys if key not in status_data]
+    if missing_keys:
+        message = "current handoff app-state status JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "app_state_status",
+        "app_state_json",
+        "self_check_json",
+        "handoff_dir",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "handoff_status",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+    ]
+    for key in string_keys:
+        if not isinstance(status_data[key], str):
+            message = f"current handoff app-state status JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(status_data["schema_version"]).strip() != "manual_delivery_app_state_status.v1":
+        message = (
+            "current handoff app-state status JSON schema_version must be "
+            f"manual_delivery_app_state_status.v1: {status_data['schema_version']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["app_state_status"]).strip() != "valid_ready_for_human_review":
+        message = (
+            "current handoff app-state status JSON app_state_status must be "
+            f"valid_ready_for_human_review: {status_data['app_state_status']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["app_state"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-state status JSON app_state must be ready_for_human_review: {status_data['app_state']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-state status JSON display_mode must be manual_delivery_review: {status_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-state status JSON primary_action must be human_review_only: {status_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["allowed_next_action"]).strip() != "human_review_only":
+        message = f"current handoff app-state status JSON allowed_next_action must be human_review_only: {status_data['allowed_next_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["handoff_status"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-state status JSON handoff_status must be ready_for_human_review: {status_data['handoff_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    bool_checks = [
+        ("app_state_json_exists", True),
+        ("self_check_json_exists", True),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]
+    for key, expected_value in bool_checks:
+        if status_data[key] is not expected_value:
+            message = f"current handoff app-state status JSON {key} must be {str(expected_value).lower()}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    app_state_json_path = Path(str(status_data["app_state_json"]))
+    if not app_state_json_path.exists():
+        message = f"current handoff app-state status app-state JSON does not exist: {app_state_json_path}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    _, expected_status_data, _handoff_dir = _write_manual_delivery_current_handoff_app_state_status_outputs(
+        app_state_json=app_state_json_path,
+        parser=parser,
+    )
+    if status_data != expected_status_data:
+        message = "current handoff app-state status JSON does not match validated app-state status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_state_ready_check_markdown(
+        app_state_status_json=app_state_status_json,
+        status_data=status_data,
+    )
+    ready_check_data = _manual_delivery_current_handoff_app_state_ready_check_data(
+        app_state_status_json=app_state_status_json,
+        status_data=status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, ready_check_data
+
+
+def _run_check_current_manual_delivery_app_state_ready_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    app_state_status_json = Path(getattr(args, "app_state_status_json", "local/manual_delivery_handoff/app-state-status.json"))
+    _summary_text, _ready_check_data = _write_manual_delivery_current_handoff_app_state_ready_check_outputs(
+        app_state_status_json=app_state_status_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    elif output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_ready_check_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_ready_check_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_ready_check_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(
+            "current_manual_delivery_ready=true\n"
+            "allowed_next_action=human_review_only\n"
+            "trade_execution_allowed=false\n"
+            "automatic_order_allowed=false\n"
+            "external_notification_allowed=false\n"
+            "paper_positions_integration=false\n"
+            "human_review_required=true\n"
+            f"app_state_status_json={app_state_status_json}\n"
+        )
+
+
+def _manual_delivery_current_handoff_app_ready_check_markdown(
+    *,
+    app_snapshot_status_json: Path,
+    status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App Ready Check",
+        "",
+        f"- app_snapshot_status_json: {app_snapshot_status_json}",
+        f"- app_snapshot_status_json_exists: true",
+        f"- current_manual_delivery_app_ready: true",
+        f"- readiness_status: ready_for_human_review",
+        f"- allowed_next_action: {status_data['allowed_next_action']}",
+        f"- app_snapshot_status: {status_data['app_snapshot_status']}",
+        f"- snapshot_status: {status_data['snapshot_status']}",
+        f"- current_manual_delivery_ready: {str(status_data['current_manual_delivery_ready']).lower()}",
+        f"- display_mode: {status_data['display_mode']}",
+        f"- primary_action: {status_data['primary_action']}",
+        f"- human_review_required: {str(status_data['human_review_required']).lower()}",
+        f"- trade_execution_allowed: {str(status_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(status_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(status_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(status_data['paper_positions_integration']).lower()}",
+        f"- source_readiness: {status_data['source_readiness']}",
+        f"- actionability_label: {status_data['actionability_label']}",
+        f"- human_action: {status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: {status_data['safety_boundary']}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_ready_check_data(
+    *,
+    app_snapshot_status_json: Path,
+    status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_ready_check.v1",
+        "current_manual_delivery_app_ready": True,
+        "readiness_status": "ready_for_human_review",
+        "allowed_next_action": status_data["allowed_next_action"],
+        "app_snapshot_status_json": str(app_snapshot_status_json),
+        "app_snapshot_status": status_data["app_snapshot_status"],
+        "snapshot_status": status_data["snapshot_status"],
+        "current_manual_delivery_ready": status_data["current_manual_delivery_ready"],
+        "display_mode": status_data["display_mode"],
+        "primary_action": status_data["primary_action"],
+        "human_review_required": status_data["human_review_required"],
+        "trade_execution_allowed": status_data["trade_execution_allowed"],
+        "automatic_order_allowed": status_data["automatic_order_allowed"],
+        "external_notification_allowed": status_data["external_notification_allowed"],
+        "paper_positions_integration": status_data["paper_positions_integration"],
+        "source_readiness": status_data["source_readiness"],
+        "actionability_label": status_data["actionability_label"],
+        "human_action": status_data["human_action"],
+        "shadow_decision_enabled": status_data["shadow_decision_enabled"],
+        "safety_boundary": status_data["safety_boundary"],
+    }
+
+
+def _write_manual_delivery_current_handoff_app_ready_check_outputs(
+    *,
+    app_snapshot_status_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not app_snapshot_status_json.exists():
+        message = f"current handoff app-snapshot status JSON does not exist: {app_snapshot_status_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    status_data = _load_json_object(app_snapshot_status_json, parser)
+    required_keys = [
+        "schema_version",
+        "app_snapshot_status",
+        "app_snapshot_json",
+        "app_snapshot_json_exists",
+        "ready_check_json",
+        "ready_check_json_exists",
+        "app_state_json",
+        "app_state_json_exists",
+        "snapshot_status",
+        "current_manual_delivery_ready",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in status_data]
+    if missing_keys:
+        message = "current handoff app-snapshot status JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "app_snapshot_status",
+        "app_snapshot_json",
+        "ready_check_json",
+        "app_state_json",
+        "snapshot_status",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "safety_boundary",
+    ]
+    for key in string_keys:
+        if not isinstance(status_data[key], str):
+            message = f"current handoff app-snapshot status JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(status_data["schema_version"]).strip() != "manual_delivery_app_snapshot_status.v1":
+        message = (
+            "current handoff app-snapshot status JSON schema_version must be "
+            f"manual_delivery_app_snapshot_status.v1: {status_data['schema_version']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["app_snapshot_status"]).strip() != "valid_ready_for_human_review":
+        message = (
+            "current handoff app-snapshot status JSON app_snapshot_status must be "
+            f"valid_ready_for_human_review: {status_data['app_snapshot_status']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["snapshot_status"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-snapshot status JSON snapshot_status must be ready_for_human_review: {status_data['snapshot_status']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if status_data["current_manual_delivery_ready"] is not True:
+        message = "current handoff app-snapshot status JSON current_manual_delivery_ready must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-snapshot status JSON display_mode must be manual_delivery_review: {status_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot status JSON primary_action must be human_review_only: {status_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(status_data["allowed_next_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot status JSON allowed_next_action must be human_review_only: {status_data['allowed_next_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    bool_checks = [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("app_snapshot_json_exists", True),
+        ("ready_check_json_exists", True),
+        ("app_state_json_exists", True),
+    ]
+    for key, expected_value in bool_checks:
+        if status_data[key] is not expected_value:
+            message = f"current handoff app-snapshot status JSON {key} must be {str(expected_value).lower()}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    app_snapshot_json_path = Path(str(status_data["app_snapshot_json"]))
+    if not app_snapshot_json_path.exists():
+        message = f"current handoff app-snapshot status app-snapshot JSON does not exist: {app_snapshot_json_path}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    ready_check_json_path = Path(str(status_data["ready_check_json"]))
+    if not ready_check_json_path.exists():
+        message = f"current handoff app-snapshot status ready-check JSON does not exist: {ready_check_json_path}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    app_state_json_path = Path(str(status_data["app_state_json"]))
+    if not app_state_json_path.exists():
+        message = f"current handoff app-snapshot status app-state JSON does not exist: {app_state_json_path}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    _, expected_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json_path,
+        parser=parser,
+    )
+    if status_data != expected_status_data:
+        message = "current handoff app-snapshot status JSON does not match validated app-snapshot status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_ready_check_markdown(
+        app_snapshot_status_json=app_snapshot_status_json,
+        status_data=status_data,
+    )
+    ready_check_data = _manual_delivery_current_handoff_app_ready_check_data(
+        app_snapshot_status_json=app_snapshot_status_json,
+        status_data=status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, ready_check_data
+
+
+def _run_check_current_manual_delivery_app_ready_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    app_snapshot_status_json = Path(getattr(args, "app_snapshot_status_json", "local/manual_delivery_handoff/app-snapshot-status.json"))
+    summary_text, _ready_check_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+        app_snapshot_status_json=app_snapshot_status_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    elif output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_ready_check_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_ready_check_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_ready_check_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(
+            "current_manual_delivery_app_ready=true\n"
+            "allowed_next_action=human_review_only\n"
+            "trade_execution_allowed=false\n"
+            "automatic_order_allowed=false\n"
+            "external_notification_allowed=false\n"
+            "paper_positions_integration=false\n"
+            "human_review_required=true\n"
+            f"app_snapshot_status_json={app_snapshot_status_json}\n"
+        )
+
+
+def _manual_delivery_current_app_dashboard_value(value: Any, default: str = "not available") -> str:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value).strip()
+    return text if text else default
+
+
+def _manual_delivery_current_app_dashboard_list_value(value: Any) -> str:
+    if not isinstance(value, list):
+        return _manual_delivery_current_app_dashboard_value(value)
+    if not value:
+        return "none"
+    return ", ".join(_manual_delivery_current_app_dashboard_value(item) for item in value)
+
+
+def _manual_delivery_current_app_operator_triage_summary_data(
+    *,
+    app_contract_data: dict[str, Any] | None = None,
+    status_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    app_contract_data = app_contract_data or {}
+    status_data = status_data or {}
+
+    def _contract_evidence_state(key: str) -> dict[str, Any]:
+        present = isinstance(app_contract_data.get(key), dict)
+        return {
+            "present": present,
+            "ready": present,
+        }
+
+    manual_action_checklist_present = bool(status_data)
+    readiness_value = status_data.get("readiness_status", status_data.get("snapshot_status"))
+    snapshot_status_value = status_data.get("app_snapshot_status", status_data.get("snapshot_status"))
+    manual_action_checklist_ready = (
+        readiness_value == "ready_for_human_review"
+        and snapshot_status_value in {"valid_ready_for_human_review", "ready_for_human_review"}
+        and status_data.get("allowed_next_action") == "human_review_only"
+        and bool(status_data.get("human_review_required")) is True
+        and status_data.get("trade_execution_allowed") is False
+        and status_data.get("automatic_order_allowed") is False
+        and status_data.get("external_notification_allowed") is False
+        and status_data.get("paper_positions_integration") is False
+        and status_data.get("safety_boundary") == "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    )
+
+    evidence = {
+        "operator_status_diagnostic": _contract_evidence_state("operator_status_diagnostic"),
+        "safe_config_schema_audit": _contract_evidence_state("safe_config_schema_audit"),
+        "intraperiod_review_stdout_json": _contract_evidence_state("intraperiod_review_stdout_json"),
+        "manual_action_checklist_surface": {
+            "present": manual_action_checklist_present,
+            "ready": manual_action_checklist_ready,
+        },
+    }
+    all_evidence_present = all(item["present"] for item in evidence.values())
+    all_evidence_ready = all(item["ready"] for item in evidence.values())
+    return {
+        "schema_version": "manual_delivery_app_operator_triage_summary.v1",
+        "summary_status": "ready_for_human_review" if all_evidence_ready else "partial_or_missing",
+        "all_evidence_present": all_evidence_present,
+        "all_evidence_ready": all_evidence_ready,
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "evidence": evidence,
+        "note": "derived from existing app contract data only",
+    }
+
+
+def _manual_delivery_current_app_operator_triage_summary_rows(
+    operator_triage_summary: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    evidence = operator_triage_summary.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    def _evidence_state_text(key: str) -> str:
+        evidence_state = evidence.get(key)
+        if not isinstance(evidence_state, dict):
+            return "present=false / ready=false"
+        return (
+            f"present={_manual_delivery_current_app_dashboard_value(evidence_state.get('present', False))} "
+            f"/ ready={_manual_delivery_current_app_dashboard_value(evidence_state.get('ready', False))}"
+        )
+
+    return [
+        ("Summary status", operator_triage_summary.get("summary_status")),
+        ("operator_status_diagnostic", _evidence_state_text("operator_status_diagnostic")),
+        ("safe_config_schema_audit", _evidence_state_text("safe_config_schema_audit")),
+        ("intraperiod_review_stdout_json", _evidence_state_text("intraperiod_review_stdout_json")),
+        ("manual_action_checklist_surface", _evidence_state_text("manual_action_checklist_surface")),
+        ("Safety", operator_triage_summary.get("safety_boundary")),
+        ("Note", operator_triage_summary.get("note")),
+    ]
+
+
+def _manual_delivery_current_app_integrated_evidence_overview_data(
+    *,
+    app_contract_data: dict[str, Any] | None = None,
+    status_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    app_contract_data = app_contract_data or {}
+    status_data = status_data or {}
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    operator_triage_evidence = operator_triage_summary.get("evidence")
+    if not isinstance(operator_triage_evidence, dict):
+        operator_triage_evidence = {}
+
+    def _contract_evidence_state(key: str) -> dict[str, Any]:
+        present = isinstance(app_contract_data.get(key), dict)
+        return {
+            "present": present,
+            "ready_or_valid": present,
+            "execution_required": False,
+        }
+
+    manual_action_checklist_state = operator_triage_evidence.get("manual_action_checklist_surface")
+    if not isinstance(manual_action_checklist_state, dict):
+        manual_action_checklist_state = {
+            "present": bool(status_data),
+            "ready": False,
+        }
+
+    expected_evidence_keys = (
+        "intraperiod_review_stdout_json",
+        "operator_status_diagnostic",
+        "safe_config_schema_audit",
+        "operator_triage_summary",
+        "manual_action_checklist_surface",
+    )
+
+    evidence = {
+        "intraperiod_review_stdout_json": _contract_evidence_state("intraperiod_review_stdout_json"),
+        "operator_status_diagnostic": _contract_evidence_state("operator_status_diagnostic"),
+        "safe_config_schema_audit": _contract_evidence_state("safe_config_schema_audit"),
+        "operator_triage_summary": {
+            "present": bool(operator_triage_summary),
+            "ready_or_valid": operator_triage_summary.get("summary_status") == "ready_for_human_review",
+            "execution_required": False,
+        },
+        "manual_action_checklist_surface": {
+            "present": bool(manual_action_checklist_state.get("present", False)),
+            "ready_or_valid": bool(manual_action_checklist_state.get("ready", False)),
+            "execution_required": False,
+        },
+    }
+    evidence_keys = sorted(key for key in evidence if key in expected_evidence_keys)
+    missing_evidence_keys = sorted(
+        key for key in expected_evidence_keys if not bool(evidence[key].get("present", False))
+    )
+    not_ready_evidence_keys = sorted(
+        key for key in expected_evidence_keys if key not in evidence or not bool(evidence[key].get("ready_or_valid", False))
+    )
+    execution_required_keys = sorted(
+        key for key in expected_evidence_keys if key in evidence and bool(evidence[key].get("execution_required", False))
+    )
+    all_evidence_present = all(item["present"] for item in evidence.values())
+    all_evidence_ready = all(item["ready_or_valid"] for item in evidence.values())
+    integrated_evidence_overview = {
+        "schema_version": "manual_delivery_app_integrated_evidence_overview.v1",
+        "summary_status": "ready_for_human_review" if all_evidence_ready else "partial_or_missing",
+        "all_evidence_present": all_evidence_present,
+        "all_evidence_ready": all_evidence_ready,
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "evidence": evidence,
+        "evidence_keys": evidence_keys,
+        "missing_evidence_keys": missing_evidence_keys,
+        "not_ready_evidence_keys": not_ready_evidence_keys,
+        "execution_required_keys": execution_required_keys,
+        "note": "derived from existing app contract/status data only",
+    }
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
+    )
+    return integrated_evidence_overview
+
+
+def _manual_delivery_current_app_integrated_evidence_overview_hint_data(
+    integrated_evidence_overview: dict[str, Any],
+) -> dict[str, Any]:
+    missing_evidence_keys = integrated_evidence_overview.get("missing_evidence_keys")
+    if not isinstance(missing_evidence_keys, list):
+        missing_evidence_keys = []
+    not_ready_evidence_keys = integrated_evidence_overview.get("not_ready_evidence_keys")
+    if not isinstance(not_ready_evidence_keys, list):
+        not_ready_evidence_keys = []
+    execution_required_keys = integrated_evidence_overview.get("execution_required_keys")
+    if not isinstance(execution_required_keys, list):
+        execution_required_keys = []
+
+    if execution_required_keys:
+        return {
+            "operator_hint_status": "blocked_by_execution_required",
+            "operator_hint_reason": "integrated evidence unexpectedly requires execution",
+            "operator_hint_next_action": "stop and review safety boundary manually",
+        }
+    if missing_evidence_keys or not_ready_evidence_keys:
+        return {
+            "operator_hint_status": "evidence_attention_required",
+            "operator_hint_reason": "missing_or_not_ready_integrated_evidence",
+            "operator_hint_next_action": "inspect listed evidence keys manually; do not execute diagnostics from app surface",
+        }
+    return {
+        "operator_hint_status": "ready_for_human_review",
+        "operator_hint_reason": "all integrated evidence is present and ready",
+        "operator_hint_next_action": "continue manual review; do not execute diagnostics from app surface",
+    }
+
+
+def _manual_delivery_current_app_integrated_evidence_overview_rows(
+    integrated_evidence_overview: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    evidence = integrated_evidence_overview.get("evidence")
+    if not isinstance(evidence, dict):
+        evidence = {}
+
+    def _evidence_state_text(key: str) -> str:
+        evidence_state = evidence.get(key)
+        if not isinstance(evidence_state, dict):
+            return "present=false / ready_or_valid=false / execution_required=false"
+        return (
+            f"present={_manual_delivery_current_app_dashboard_value(evidence_state.get('present', False))} "
+            f"/ ready_or_valid={_manual_delivery_current_app_dashboard_value(evidence_state.get('ready_or_valid', False))} "
+            f"/ execution_required={_manual_delivery_current_app_dashboard_value(evidence_state.get('execution_required', False))}"
+        )
+
+    return [
+        ("Summary status", integrated_evidence_overview.get("summary_status")),
+        ("Operator hint status", integrated_evidence_overview.get("operator_hint_status")),
+        ("Operator hint reason", integrated_evidence_overview.get("operator_hint_reason")),
+        ("Operator hint next action", integrated_evidence_overview.get("operator_hint_next_action")),
+        ("evidence_keys", integrated_evidence_overview.get("evidence_keys")),
+        ("missing_evidence_keys", integrated_evidence_overview.get("missing_evidence_keys")),
+        ("not_ready_evidence_keys", integrated_evidence_overview.get("not_ready_evidence_keys")),
+        ("execution_required_keys", integrated_evidence_overview.get("execution_required_keys")),
+        ("intraperiod_review_stdout_json", _evidence_state_text("intraperiod_review_stdout_json")),
+        ("operator_status_diagnostic", _evidence_state_text("operator_status_diagnostic")),
+        ("safe_config_schema_audit", _evidence_state_text("safe_config_schema_audit")),
+        ("operator_triage_summary", _evidence_state_text("operator_triage_summary")),
+        ("manual_action_checklist_surface", _evidence_state_text("manual_action_checklist_surface")),
+        ("Safety", integrated_evidence_overview.get("safety_boundary")),
+        ("Note", integrated_evidence_overview.get("note")),
+    ]
+
+
+def _manual_delivery_current_app_major_turning_point_diagnostic_data(
+    *,
+    intraperiod_outcomes_path: Path | None = None,
+    limit: int = 5,
+) -> dict[str, Any]:
+    intraperiod_outcomes_path = intraperiod_outcomes_path or BASE_DIR / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    rows = _load_csv_rows(intraperiod_outcomes_path)
+    diagnostic_counts = Counter(_active_plan_intraperiod_major_turning_point_diagnostic_label(row) for row in rows)
+    representative_rows: list[dict[str, Any]] = []
+    if rows:
+        resolved_limit = max(0, int(limit))
+        sorted_rows = sorted(
+            rows,
+            key=lambda row: (
+                str(row.get("timestamp_jst", "")).strip(),
+                str(row.get("candidate_id", "")).strip(),
+                str(row.get("signal_id", "")).strip(),
+            ),
+            reverse=True,
+        )
+        for row in sorted_rows[:resolved_limit]:
+            representative_rows.append(
+                {
+                    "diagnostic_label": _active_plan_intraperiod_major_turning_point_diagnostic_label(row),
+                    "candidate_id": str(row.get("candidate_id", "")).strip(),
+                    "signal_id": str(row.get("signal_id", "")).strip(),
+                    "timestamp_jst": str(row.get("timestamp_jst", "")).strip(),
+                    "candidate_type": str(row.get("candidate_type", "")).strip(),
+                    "active_primary_action": str(row.get("active_primary_action", "")).strip(),
+                    "side": str(row.get("side", "")).strip(),
+                    "entry_mode": str(row.get("entry_mode", "")).strip(),
+                    "outcome": str(row.get("outcome", "")).strip(),
+                    "first_exit_reason": str(row.get("first_exit_reason", "")).strip(),
+                    "entry_reached_time": str(row.get("entry_reached_time", "")).strip(),
+                    "mfe_r": str(row.get("mfe_r", "")).strip(),
+                    "mae_r": str(row.get("mae_r", "")).strip(),
+                }
+            )
+
+    total_rows = len(rows)
+    return {
+        "schema_version": "manual_delivery_app_major_turning_point_diagnostic.v1",
+        "summary_status": "ready_for_human_review" if total_rows else "no_intraperiod_outcome_rows",
+        "report_only": True,
+        "formal_go": False,
+        "automatic_order_allowed": False,
+        "human_decides_manually": True,
+        "source": "active_plan_candidate_intraperiod_outcomes_csv",
+        "source_exists": intraperiod_outcomes_path.exists(),
+        "total_rows": total_rows,
+        "counts": {
+            "potential_missed_turn": int(diagnostic_counts.get("potential_missed_turn", 0)),
+            "potential_fakeout": int(diagnostic_counts.get("potential_fakeout", 0)),
+            "bad_entry_timing": int(diagnostic_counts.get("bad_entry_timing", 0)),
+            "inconclusive": int(diagnostic_counts.get("inconclusive", 0)),
+        },
+        "representative_rows": representative_rows,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "note": (
+            "local/report-only; derived from local active_plan_candidate_intraperiod_outcomes.csv only; "
+            "post-hoc diagnostic support; does not confirm a major turn; "
+            "does not authorize manual or automatic entry"
+        ),
+    }
+
+
+def _manual_delivery_current_app_major_turning_point_diagnostic_rows(
+    major_turning_point_diagnostic: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    counts = major_turning_point_diagnostic.get("counts")
+    if not isinstance(counts, dict):
+        counts = {}
+
+    representative_rows = major_turning_point_diagnostic.get("representative_rows")
+    if not isinstance(representative_rows, list):
+        representative_rows = []
+
+    representative_row_texts: list[str] = []
+    for row in representative_rows:
+        if not isinstance(row, dict):
+            representative_row_texts.append(_manual_delivery_current_app_dashboard_value(row))
+            continue
+        representative_row_texts.append(
+            " / ".join(
+                [
+                    _manual_delivery_current_app_dashboard_value(row.get("diagnostic_label")),
+                    _manual_delivery_current_app_dashboard_value(row.get("candidate_id")),
+                    _manual_delivery_current_app_dashboard_value(row.get("signal_id")),
+                    _manual_delivery_current_app_dashboard_value(row.get("timestamp_jst")),
+                    _manual_delivery_current_app_dashboard_value(row.get("candidate_type")),
+                    _manual_delivery_current_app_dashboard_value(row.get("active_primary_action")),
+                    _manual_delivery_current_app_dashboard_value(row.get("side")),
+                    _manual_delivery_current_app_dashboard_value(row.get("entry_mode")),
+                    _manual_delivery_current_app_dashboard_value(row.get("outcome")),
+                    _manual_delivery_current_app_dashboard_value(row.get("first_exit_reason")),
+                    _manual_delivery_current_app_dashboard_value(row.get("entry_reached_time")),
+                    _manual_delivery_current_app_dashboard_value(row.get("mfe_r")),
+                    _manual_delivery_current_app_dashboard_value(row.get("mae_r")),
+                ]
+            )
+        )
+
+    return [
+        ("Summary status", major_turning_point_diagnostic.get("summary_status")),
+        ("Total rows", major_turning_point_diagnostic.get("total_rows")),
+        ("potential_missed_turn", counts.get("potential_missed_turn", 0)),
+        ("potential_fakeout", counts.get("potential_fakeout", 0)),
+        ("bad_entry_timing", counts.get("bad_entry_timing", 0)),
+        ("inconclusive", counts.get("inconclusive", 0)),
+        ("Representative rows", representative_row_texts),
+        ("Safety boundary", major_turning_point_diagnostic.get("safety_boundary")),
+        ("Note", major_turning_point_diagnostic.get("note")),
+    ]
+
+
+def _manual_delivery_current_app_dashboard_html(
+    *,
+    app_snapshot_json: Path,
+    app_snapshot_status_json: Path,
+    snapshot_data: dict[str, Any],
+    status_data: dict[str, Any],
+    app_contract_data: dict[str, Any] | None = None,
+    intraperiod_outcomes_path: Path | None = None,
+) -> str:
+    def _dashboard_value(key: str) -> str:
+        for source_data in (status_data, snapshot_data):
+            if key not in source_data:
+                continue
+            value = source_data.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return _manual_delivery_current_app_dashboard_value(value)
+        return "not available"
+
+    readiness_status = status_data.get("snapshot_status", "ready_for_human_review")
+    current_ready = status_data.get("current_manual_delivery_ready", True)
+    generated_at_value = None
+    for source_data in (status_data, snapshot_data):
+        for key in ("generated_at_jst", "generated_at"):
+            if source_data.get(key):
+                generated_at_value = source_data.get(key)
+                break
+        if generated_at_value:
+            break
+
+    source_rows = [
+        ("app_snapshot_json", app_snapshot_json),
+        ("app_snapshot_status_json", app_snapshot_status_json),
+        ("ready_check_json", status_data.get("ready_check_json")),
+        ("app_state_json", status_data.get("app_state_json")),
+        ("self_check_json", status_data.get("self_check_json")),
+        ("generated_at_jst", generated_at_value),
+    ]
+    readiness_rows = [
+        ("readiness/status", f"{readiness_status} / {status_data.get('app_snapshot_status', 'valid_ready_for_human_review')}"),
+        ("current_manual_delivery_ready", current_ready),
+        ("allowed_next_action", status_data.get("allowed_next_action")),
+        ("display_mode", status_data.get("display_mode")),
+        ("primary_action", status_data.get("primary_action")),
+        ("source_readiness", status_data.get("source_readiness")),
+        ("actionability_label", status_data.get("actionability_label")),
+        ("human_action", status_data.get("human_action")),
+        ("shadow_decision_enabled", status_data.get("shadow_decision_enabled")),
+        ("safety boundary", status_data.get("safety_boundary")),
+    ]
+    active_plan_rows = [
+        ("active_plan", status_data.get("active_plan_label")),
+        ("side", status_data.get("side")),
+        ("entry", status_data.get("entry_mode")),
+        ("TP", status_data.get("tp_plan")),
+        ("SL", status_data.get("sl_or_invalidation")),
+        ("wait/timeout summary", status_data.get("timeout_or_wait_limit")),
+        ("evidence summary", status_data.get("intraperiod_evidence_summary")),
+    ]
+    timeout_value = _dashboard_value("timeout_or_wait_limit")
+    safety_value = _dashboard_value("safety_boundary")
+    operator_status_diagnostic = (app_contract_data or {}).get("operator_status_diagnostic")
+    operator_status_rows = [
+        ("Wrapper command", operator_status_diagnostic.get("wrapper_command") if isinstance(operator_status_diagnostic, dict) else None),
+        ("Check command", operator_status_diagnostic.get("wrapper_check_command") if isinstance(operator_status_diagnostic, dict) else None),
+        (
+            "Exit codes",
+            "0 ok, 2 waiting_for_html_cycle, 3 startup_status_unavailable"
+            if isinstance(operator_status_diagnostic, dict)
+            else None,
+        ),
+        ("json_required", operator_status_diagnostic.get("json_required") if isinstance(operator_status_diagnostic, dict) else None),
+        ("Safety", operator_status_diagnostic.get("safety_boundary") if isinstance(operator_status_diagnostic, dict) else None),
+        (
+            "Allowed behavior",
+            operator_status_diagnostic.get("allowed_behavior") if isinstance(operator_status_diagnostic, dict) else None,
+        ),
+        ("Note", "app surface does not execute this command"),
+    ]
+    safe_config_schema_audit = (app_contract_data or {}).get("safe_config_schema_audit")
+    safe_config_rows = [
+        ("Command", safe_config_schema_audit.get("command") if isinstance(safe_config_schema_audit, dict) else None),
+        (
+            "stdout JSON command",
+            safe_config_schema_audit.get("stdout_json_command") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "schema_version",
+            safe_config_schema_audit.get("schema_version") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "contract_only",
+            safe_config_schema_audit.get("contract_only") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "command_executed_by_app",
+            safe_config_schema_audit.get("command_executed_by_app") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "reads_env_values",
+            safe_config_schema_audit.get("reads_env_values") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "reads_dotenv_values",
+            safe_config_schema_audit.get("reads_dotenv_values") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "calls_private_endpoints",
+            safe_config_schema_audit.get("calls_private_endpoints") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "calls_order_endpoints",
+            safe_config_schema_audit.get("calls_order_endpoints") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "live_trading_allowed",
+            safe_config_schema_audit.get("live_trading_allowed") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        (
+            "secret_values_exposed",
+            safe_config_schema_audit.get("secret_values_exposed") if isinstance(safe_config_schema_audit, dict) else None,
+        ),
+        ("Safety", safe_config_schema_audit.get("safety_boundary") if isinstance(safe_config_schema_audit, dict) else None),
+        ("Note", "This app surface does not execute ./.venv312/bin/python tools/safe_config_schema_audit.py"),
+    ]
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    operator_triage_rows = _manual_delivery_current_app_operator_triage_summary_rows(operator_triage_summary)
+    integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
+        app_contract_data=app_contract_data,
+        status_data=status_data,
+    )
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
+    )
+    integrated_evidence_rows = _manual_delivery_current_app_integrated_evidence_overview_rows(
+        integrated_evidence_overview
+    )
+    major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
+    major_turning_point_diagnostic_rows = _manual_delivery_current_app_major_turning_point_diagnostic_rows(
+        major_turning_point_diagnostic
+    )
+    manual_action_rows = [
+        ("Entry mode", _dashboard_value("entry_mode")),
+        ("Entry condition", _dashboard_value("entry_condition")),
+        (
+            "TP / SL",
+            " / ".join(
+                [
+                    _dashboard_value("tp_plan"),
+                    _dashboard_value("sl_or_invalidation"),
+                ]
+            ),
+        ),
+        (
+            "Invalidation / wait",
+            " / ".join(
+                [
+                    _dashboard_value("sl_or_invalidation"),
+                    _dashboard_value("actionability_label"),
+                    _dashboard_value("human_action"),
+                ]
+            ),
+        ),
+        ("Timeout / validity", timeout_value if timeout_value != "not available" else _dashboard_value("allowed_next_action")),
+        (
+            "Safety",
+            safety_value if safety_value != "not available" else "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        ),
+    ]
+    major_turning_point_rows = [
+        ("Active plan", _dashboard_value("active_plan_label")),
+        ("Side", _dashboard_value("side")),
+        ("Entry mode", _dashboard_value("entry_mode")),
+        ("Entry condition", _dashboard_value("entry_condition")),
+        ("TP plan", _dashboard_value("tp_plan")),
+        ("SL / invalidation", _dashboard_value("sl_or_invalidation")),
+        ("Timeout / wait limit", _dashboard_value("timeout_or_wait_limit")),
+        ("Actionability", _dashboard_value("actionability_label")),
+        ("Human action", _dashboard_value("human_action")),
+        ("Intraperiod evidence summary", _dashboard_value("intraperiod_evidence_summary")),
+        ("Allowed next action", _dashboard_value("allowed_next_action")),
+        ("Primary action", _dashboard_value("primary_action")),
+        ("Source readiness", _dashboard_value("source_readiness")),
+        (
+            "Turning point guidance",
+            "major turning point candidate / false-break / fakeout caution / do not decide from a single short-timeframe reaction / "
+            "check entry condition / invalidation / next condition before deciding / human review only",
+        ),
+        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]
+
+    def _table_rows(rows: list[tuple[str, Any]]) -> str:
+        return "\n".join(
+            f"          <tr><th>{html.escape(str(label))}</th><td>{html.escape(_manual_delivery_current_app_dashboard_list_value(value))}</td></tr>"
+            for label, value in rows
+        )
+
+    return f"""<!doctype html>
+<html lang=\"ja\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Manual Delivery Current App Dashboard</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --border: #dbe3ef;
+      --text: #132033;
+      --muted: #5b6b82;
+      --accent: #0f766e;
+      --accent-soft: #e6fffb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      color: var(--text);
+    }}
+    main {{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }}
+    header {{
+      background: linear-gradient(135deg, #0f172a, #1e293b 60%, #334155);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+    }}
+    header .eyebrow {{
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      opacity: 0.72;
+      margin-bottom: 8px;
+    }}
+    header h1 {{
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.1;
+    }}
+    header p {{
+      margin: 14px 0 0;
+      max-width: 920px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+    }}
+    .card h2, .card h3 {{
+      margin: 0 0 14px;
+      font-size: 18px;
+    }}
+    .card p, .card li {{
+      color: var(--text);
+      line-height: 1.6;
+    }}
+    .muted {{ color: var(--muted); }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }}
+    th, td {{
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      vertical-align: top;
+      text-align: left;
+    }}
+    th {{
+      width: 30%;
+      color: var(--muted);
+      font-weight: 600;
+    }}
+    td {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      word-break: break-word;
+    }}
+    .status-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }}
+    .section-title {{
+      margin: 0 0 12px;
+      font-size: 20px;
+    }}
+    .full-width {{ grid-column: 1 / -1; }}
+    ul {{ margin: 0; padding-left: 18px; }}
+    code {{
+      background: #eef2f7;
+      padding: 1px 6px;
+      border-radius: 6px;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class=\"eyebrow\">Manual Delivery / Local App Surface</div>
+      <h1>Current App Dashboard</h1>
+      <p>Static UTF-8 HTML only. No JavaScript, no network, no auto-refresh. Report-only, not FORMAL_GO, no automatic order, human decides manually.</p>
+    </header>
+
+    <div class=\"grid\">
+      <section class=\"card\">
+        <div class=\"status-pill\">Readiness / Status</div>
+        <h2 class=\"section-title\">Readiness / Status</h2>
+        <table>
+          {_table_rows(readiness_rows)}
+        </table>
+      </section>
+
+      <section class=\"card\">
+        <h2 class=\"section-title\">Active Plan Summary</h2>
+        <table>
+          {_table_rows(active_plan_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Manual Action Checklist</h2>
+        <table>
+          {_table_rows(manual_action_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Major Turning Point Opportunity</h2>
+        <table>
+          {_table_rows(major_turning_point_rows)}
+        </table>
+        <p class=\"muted\">major turning point candidate / false-break / fakeout caution / do not decide from a single short-timeframe reaction / check entry condition / invalidation / next condition before deciding / human review only</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Major Turning Point Diagnostic</h2>
+        <table>
+          {_table_rows(major_turning_point_diagnostic_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Operator Triage Summary</h2>
+        <table>
+          {_table_rows(operator_triage_rows)}
+        </table>
+        <p class=\"muted\">derived from existing app contract data only. report-only / not FORMAL_GO / no automatic order / human decides manually.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Integrated Evidence Overview</h2>
+        <table>
+          {_table_rows(integrated_evidence_rows)}
+        </table>
+        <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / human decides manually. derived from existing app contract/status data only.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Operator Status Diagnostics</h2>
+        <table>
+          {_table_rows(operator_status_rows)}
+        </table>
+        <p class=\"muted\">report/local diagnostics only. no FORMAL_GO, no automatic order, no exchange fetch, no private/account/order endpoints, no secrets.</p>
+        <p class=\"muted\">This app surface does not execute <code>./.venv312/bin/python tools/operator_status.py</code>.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Safe Config Schema Audit</h2>
+        <table>
+          {_table_rows(safe_config_rows)}
+        </table>
+        <p class=\"muted\">static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading.</p>
+        <p class=\"muted\">This app surface does not execute <code>./.venv312/bin/python tools/safe_config_schema_audit.py</code>.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Source Files / Generated At</h2>
+        <table>
+          {_table_rows(source_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Safety Boundary</h2>
+        <p><strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong></p>
+        <p class=\"muted\">This dashboard surfaces the validated local handoff state for human review only.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _write_current_manual_delivery_app_dashboard_outputs(
+    *,
+    app_snapshot_json: Path,
+    app_snapshot_status_json: Path,
+    output_html: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not app_snapshot_json.exists():
+        message = f"current handoff app-snapshot JSON does not exist: {app_snapshot_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    if not app_snapshot_status_json.exists():
+        message = f"current handoff app-snapshot status JSON does not exist: {app_snapshot_status_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+
+    snapshot_data = _load_json_object(app_snapshot_json, parser)
+    _, expected_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json,
+        parser=parser,
+    )
+    status_data = _load_json_object(app_snapshot_status_json, parser)
+    if status_data != expected_status_data:
+        message = "current handoff app-snapshot status JSON does not match validated app-snapshot status data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    dashboard_html = _manual_delivery_current_app_dashboard_html(
+        app_snapshot_json=app_snapshot_json,
+        app_snapshot_status_json=app_snapshot_status_json,
+        snapshot_data=snapshot_data,
+        status_data=status_data,
+    )
+    _ensure_parent(output_html)
+    output_html.write_text(dashboard_html, encoding="utf-8")
+    return dashboard_html, status_data
+
+
+def _run_write_current_manual_delivery_app_dashboard_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    app_snapshot_json = Path(getattr(args, "app_snapshot_json", "local/manual_delivery_handoff/app-snapshot.json"))
+    app_snapshot_status_json = Path(getattr(args, "app_snapshot_status_json", "local/manual_delivery_handoff/app-snapshot-status.json"))
+    output_html_arg = getattr(args, "app_dashboard_html", None)
+    if output_html_arg is None:
+        output_html_arg = str(app_snapshot_json.parent / "app-dashboard.html")
+    _dashboard_html, _status_data = _write_current_manual_delivery_app_dashboard_outputs(
+        app_snapshot_json=app_snapshot_json,
+        app_snapshot_status_json=app_snapshot_status_json,
+        output_html=Path(output_html_arg),
+        parser=parser,
+    )
+    sys.stdout.write(f"{output_html_arg}\n")
+
+
+def _manual_delivery_current_app_surface_index_html(
+    *,
+    output_dir: Path,
+    handoff_dir: Path,
+) -> str:
+    file_links = [
+        ("app-dashboard.html", "Current App Dashboard"),
+        ("app-ready.json", "Current App Ready JSON"),
+        ("app-contract.json", "Current App Contract JSON"),
+        ("app-snapshot.json", "Current App Snapshot JSON"),
+        ("app-snapshot-status.json", "Current App Snapshot Status JSON"),
+        ("app-surface-manifest.json", "Current App Surface Manifest JSON"),
+    ]
+    list_items = "\n".join(
+        f"        <li><a href=\"{html.escape(filename)}\">{html.escape(label)}</a></li>"
+        for filename, label in file_links
+    )
+    return f"""<!doctype html>
+<html lang=\"ja\">
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>Manual Delivery Current App Surface</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --border: #dbe3ef;
+      --text: #132033;
+      --muted: #5b6b82;
+      --accent: #0f766e;
+      --accent-soft: #e6fffb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      color: var(--text);
+    }}
+    main {{
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }}
+    header {{
+      background: linear-gradient(135deg, #0f172a, #1e293b 60%, #334155);
+      color: #fff;
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
+    }}
+    header .eyebrow {{
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      opacity: 0.72;
+      margin-bottom: 8px;
+    }}
+    header h1 {{
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.1;
+    }}
+    header p {{
+      margin: 14px 0 0;
+      max-width: 900px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.6;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }}
+    .card {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+    }}
+    .card h2 {{
+      margin: 0 0 14px;
+      font-size: 18px;
+    }}
+    .muted {{ color: var(--muted); }}
+    ul {{ margin: 0; padding-left: 18px; }}
+    li {{ line-height: 1.8; }}
+    a {{ color: var(--accent); text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    code {{
+      background: #eef2f7;
+      padding: 1px 6px;
+      border-radius: 6px;
+    }}
+    .status-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 12px;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class=\"eyebrow\">Manual Delivery / Local App Surface</div>
+      <h1>Current App Surface Bundle</h1>
+      <p>Static UTF-8 HTML only. No JavaScript, no network, no auto-refresh. Report-only, not FORMAL_GO, no automatic order, human decides manually.</p>
+    </header>
+
+    <div class=\"grid\">
+      <section class=\"card\">
+        <div class=\"status-pill\">Generated Files</div>
+        <h2>Generated Files</h2>
+        <ul>
+{list_items}
+        </ul>
+      </section>
+
+      <section class=\"card\">
+        <h2>Context</h2>
+        <p class=\"muted\">Handoff directory: <code>{html.escape(str(handoff_dir))}</code></p>
+        <p class=\"muted\">App surface directory: <code>{html.escape(str(output_dir))}</code></p>
+        <p class=\"muted\">Use this bundle for human review only.</p>
+      </section>
+
+      <section class=\"card\">
+        <h2>Safety Boundary</h2>
+        <p><strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong></p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _write_current_manual_delivery_app_surface_outputs(
+    *,
+    handoff_dir: Path,
+    output_dir: Path,
+    parser: argparse.ArgumentParser | None = None,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    app_contract_json_path = output_dir / "app-contract.json"
+    _contract_markdown, _contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+        output_json=app_contract_json_path,
+    )
+
+    app_snapshot_json_path = output_dir / "app-snapshot.json"
+    ready_check_json_path = handoff_dir / "ready-check.json"
+    app_state_json_path = handoff_dir / "app-state.json"
+    _snapshot_markdown, _snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=ready_check_json_path,
+        app_state_json=app_state_json_path,
+        output_json=app_snapshot_json_path,
+        parser=parser,
+    )
+
+    app_snapshot_status_json_path = output_dir / "app-snapshot-status.json"
+    _snapshot_status_markdown, _snapshot_status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json_path,
+        output_json=app_snapshot_status_json_path,
+        parser=parser,
+    )
+
+    app_ready_json_path = output_dir / "app-ready.json"
+    _ready_check_markdown, _ready_check_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+        app_snapshot_status_json=app_snapshot_status_json_path,
+        output_json=app_ready_json_path,
+        parser=parser,
+    )
+
+    app_dashboard_html_path = output_dir / "app-dashboard.html"
+    app_dashboard_html = _manual_delivery_current_app_dashboard_html(
+        app_snapshot_json=app_snapshot_json_path,
+        app_snapshot_status_json=app_snapshot_status_json_path,
+        snapshot_data=_snapshot_data,
+        status_data=_snapshot_status_data,
+        app_contract_data=_contract_data,
+    )
+    app_dashboard_html_path.write_text(app_dashboard_html, encoding="utf-8")
+
+    index_html_path = output_dir / "index.html"
+    index_html = _manual_delivery_current_app_surface_index_html(
+        output_dir=output_dir,
+        handoff_dir=handoff_dir,
+    )
+    index_html_path.write_text(index_html, encoding="utf-8")
+
+    app_surface_manifest_json_path = output_dir / "app-surface-manifest.json"
+    app_surface_manifest_data = _manual_delivery_current_app_surface_manifest_data(output_dir=output_dir)
+    app_surface_manifest_json_path.write_text(
+        json.dumps(app_surface_manifest_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    return output_dir
+
+
+def _manual_delivery_current_app_surface_manifest_data(*, output_dir: Path) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_surface_manifest.v1",
+        "surface_status": "ready_for_human_review",
+        "app_surface_dir": str(output_dir),
+        "entrypoint": "index.html",
+        "files": {
+            "index_html": "index.html",
+            "app_dashboard_html": "app-dashboard.html",
+            "app_ready_json": "app-ready.json",
+            "app_contract_json": "app-contract.json",
+            "app_snapshot_json": "app-snapshot.json",
+            "app_snapshot_status_json": "app-snapshot-status.json",
+            "app_surface_manifest_json": "app-surface-manifest.json",
+        },
+        "commands": {
+            "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+            "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+            "surface_export": "export-current-manual-delivery-app-surface",
+        },
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _manual_delivery_current_app_surface_validation_data(
+    *,
+    app_surface_dir: Path,
+    intraperiod_outcomes_path: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any]:
+    index_html_path = app_surface_dir / "index.html"
+    app_dashboard_html_path = app_surface_dir / "app-dashboard.html"
+    app_ready_json_path = app_surface_dir / "app-ready.json"
+    app_contract_json_path = app_surface_dir / "app-contract.json"
+    app_snapshot_json_path = app_surface_dir / "app-snapshot.json"
+    app_snapshot_status_json_path = app_surface_dir / "app-snapshot-status.json"
+    app_surface_manifest_json_path = app_surface_dir / "app-surface-manifest.json"
+    required_paths = [
+        index_html_path,
+        app_dashboard_html_path,
+        app_ready_json_path,
+        app_contract_json_path,
+        app_snapshot_json_path,
+        app_snapshot_status_json_path,
+        app_surface_manifest_json_path,
+    ]
+    for required_path in required_paths:
+        if not required_path.exists():
+            message = f"current manual delivery app surface file does not exist: {required_path}"
+            if parser is None:
+                raise FileNotFoundError(message)
+            parser.error(message)
+
+    index_html_text = index_html_path.read_text(encoding="utf-8")
+    for expected_text in [
+        "app-dashboard.html",
+        "app-ready.json",
+        "app-contract.json",
+        "app-snapshot.json",
+        "app-snapshot-status.json",
+        "app-surface-manifest.json",
+        "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]:
+        if expected_text not in index_html_text:
+            message = f"current manual delivery app surface index.html missing required text: {expected_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    app_dashboard_html_text = app_dashboard_html_path.read_text(encoding="utf-8")
+    for expected_text in [
+        "Readiness / Status",
+        "Active Plan Summary",
+        "Manual Action Checklist",
+        "Operator Triage Summary",
+        "Integrated Evidence Overview",
+        "Major Turning Point Diagnostic",
+        "Source Files / Generated At",
+        "Safety Boundary",
+        "Entry mode",
+        "Entry condition",
+        "TP / SL",
+        "Invalidation / wait",
+        "Timeout / validity",
+        "Safety",
+        "Summary status",
+        "operator_status_diagnostic",
+        "safe_config_schema_audit",
+        "intraperiod_review_stdout_json",
+        "operator_triage_summary",
+        "manual_action_checklist_surface",
+        "potential_missed_turn",
+        "potential_fakeout",
+        "bad_entry_timing",
+        "inconclusive",
+        "Representative rows",
+        "Safety boundary",
+        "Note",
+        "post-hoc diagnostic support",
+        "does not confirm a major turn",
+        "does not authorize manual or automatic entry",
+        "present=true / ready_or_valid=true / execution_required=false",
+        "derived from existing app contract data only",
+        "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]:
+        if expected_text not in app_dashboard_html_text:
+            message = f"current manual delivery app surface app-dashboard.html missing required text: {expected_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    for prohibited_text, haystack in [
+        ("smtp", app_dashboard_html_text.lower()),
+        ("Gmail", app_dashboard_html_text),
+        ("send_email", app_dashboard_html_text),
+        ("private/order", app_dashboard_html_text),
+        ("automatic_order_allowed=true", app_dashboard_html_text),
+    ]:
+        if prohibited_text in haystack:
+            message = f"current manual delivery app surface app-dashboard.html contains prohibited text: {prohibited_text}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    app_ready_data = _load_json_object(app_ready_json_path, parser)
+    app_contract_data = _load_json_object(app_contract_json_path, parser)
+    app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
+    app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
+    app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
+    expected_contract_data = _manual_delivery_current_app_integration_contract_data()
+    expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
+    expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
+    expected_safe_config_schema_audit = expected_contract_data["safe_config_schema_audit"]
+    major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
+
+    if str(app_ready_data.get("schema_version", "")).strip() != "manual_delivery_app_ready_check.v1":
+        message = f"current manual delivery app surface app-ready JSON schema_version must be manual_delivery_app_ready_check.v1: {app_ready_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("current_manual_delivery_app_ready", True),
+        ("readiness_status", "ready_for_human_review"),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_ready_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-ready JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    actual_intraperiod_review_stdout_json = app_contract_data.get("intraperiod_review_stdout_json")
+    if not isinstance(actual_intraperiod_review_stdout_json, dict):
+        message = "current manual delivery app surface app-contract JSON missing_intraperiod_review_stdout_json_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("entrypoint_command", expected_intraperiod_review_stdout_json["entrypoint_command"]),
+        ("schema_version", expected_intraperiod_review_stdout_json["schema_version"]),
+        ("safety_boundary", expected_intraperiod_review_stdout_json["safety_boundary"]),
+        ("allowed_behavior", expected_intraperiod_review_stdout_json["allowed_behavior"]),
+        ("output_fields", expected_intraperiod_review_stdout_json["output_fields"]),
+    ]:
+        if actual_intraperiod_review_stdout_json.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_intraperiod_review_stdout_json_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if actual_intraperiod_review_stdout_json.get("required_safety_flags") != expected_intraperiod_review_stdout_json["required_safety_flags"]:
+        message = "current manual delivery app surface app-contract JSON invalid_intraperiod_review_stdout_json_safety_flags"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    actual_operator_status_diagnostic = app_contract_data.get("operator_status_diagnostic")
+    if not isinstance(actual_operator_status_diagnostic, dict):
+        message = "current manual delivery app surface app-contract JSON missing_operator_status_diagnostic_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("wrapper_command", expected_operator_status_diagnostic["wrapper_command"]),
+        ("wrapper_check_command", expected_operator_status_diagnostic["wrapper_check_command"]),
+        ("json_required", expected_operator_status_diagnostic["json_required"]),
+        ("safety_boundary", expected_operator_status_diagnostic["safety_boundary"]),
+        ("allowed_behavior", expected_operator_status_diagnostic["allowed_behavior"]),
+    ]:
+        if actual_operator_status_diagnostic.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_operator_status_diagnostic_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if actual_operator_status_diagnostic.get("check_exit_codes") != expected_operator_status_diagnostic["check_exit_codes"]:
+        message = "current manual delivery app surface app-contract JSON invalid_operator_status_diagnostic_check_exit_codes"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    actual_safe_config_schema_audit = app_contract_data.get("safe_config_schema_audit")
+    if not isinstance(actual_safe_config_schema_audit, dict):
+        message = "current manual delivery app surface app-contract JSON missing_safe_config_schema_audit_contract"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("command", expected_safe_config_schema_audit["command"]),
+        ("stdout_json_command", expected_safe_config_schema_audit["stdout_json_command"]),
+        ("schema_version", expected_safe_config_schema_audit["schema_version"]),
+        ("contract_only", expected_safe_config_schema_audit["contract_only"]),
+        ("command_executed_by_app", expected_safe_config_schema_audit["command_executed_by_app"]),
+        ("reads_env_values", expected_safe_config_schema_audit["reads_env_values"]),
+        ("reads_dotenv_values", expected_safe_config_schema_audit["reads_dotenv_values"]),
+        ("calls_private_endpoints", expected_safe_config_schema_audit["calls_private_endpoints"]),
+        ("calls_order_endpoints", expected_safe_config_schema_audit["calls_order_endpoints"]),
+        ("live_trading_allowed", expected_safe_config_schema_audit["live_trading_allowed"]),
+        ("secret_values_exposed", expected_safe_config_schema_audit["secret_values_exposed"]),
+        ("safety_boundary", expected_safe_config_schema_audit["safety_boundary"]),
+    ]:
+        if actual_safe_config_schema_audit.get(key) != expected_value:
+            message = "current manual delivery app surface app-contract JSON invalid_safe_config_schema_audit_contract"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    if app_contract_data != expected_contract_data:
+        message = "current manual delivery app surface app-contract JSON does not match validated contract data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    operator_triage_summary = _manual_delivery_current_app_operator_triage_summary_data(
+        app_contract_data=app_contract_data,
+        status_data=app_snapshot_status_data,
+    )
+    integrated_evidence_overview = _manual_delivery_current_app_integrated_evidence_overview_data(
+        app_contract_data=app_contract_data,
+        status_data=app_snapshot_status_data,
+    )
+    integrated_evidence_overview.update(
+        _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
+    )
+
+    if str(app_surface_manifest_data.get("schema_version", "")).strip() != "manual_delivery_app_surface_manifest.v1":
+        message = f"current manual delivery app surface app-surface-manifest JSON schema_version must be manual_delivery_app_surface_manifest.v1: {app_surface_manifest_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("surface_status") != "ready_for_human_review":
+        message = "current manual delivery app surface app-surface-manifest JSON surface_status must be ready_for_human_review"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("entrypoint") != "index.html":
+        message = "current manual delivery app surface app-surface-manifest JSON entrypoint must be index.html"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("files") != {
+        "index_html": "index.html",
+        "app_dashboard_html": "app-dashboard.html",
+        "app_ready_json": "app-ready.json",
+        "app_contract_json": "app-contract.json",
+        "app_snapshot_json": "app-snapshot.json",
+        "app_snapshot_status_json": "app-snapshot-status.json",
+        "app_surface_manifest_json": "app-surface-manifest.json",
+    }:
+        message = "current manual delivery app surface app-surface-manifest JSON files must match exported surface files"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_surface_manifest_data.get("commands") != {
+        "surface_ready_gate": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "surface_validate": "check-current-manual-delivery-app-surface --stdout-json",
+        "surface_export": "export-current-manual-delivery-app-surface",
+    }:
+        message = "current manual delivery app surface app-surface-manifest JSON commands must match exported surface commands"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_surface_manifest_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-surface-manifest JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    if str(app_snapshot_data.get("schema_version", "")).strip() != "manual_delivery_app_snapshot.v1":
+        message = f"current manual delivery app surface app-snapshot JSON schema_version must be manual_delivery_app_snapshot.v1: {app_snapshot_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("snapshot_status", "ready_for_human_review"),
+        ("current_manual_delivery_ready", True),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_snapshot_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-snapshot JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    if str(app_snapshot_status_data.get("schema_version", "")).strip() != "manual_delivery_app_snapshot_status.v1":
+        message = f"current manual delivery app surface app-snapshot-status JSON schema_version must be manual_delivery_app_snapshot_status.v1: {app_snapshot_status_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("app_snapshot_status", "valid_ready_for_human_review"),
+        ("snapshot_status", "ready_for_human_review"),
+        ("current_manual_delivery_ready", True),
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+        ("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]:
+        if app_snapshot_status_data.get(key) != expected_value:
+            message = f"current manual delivery app surface app-snapshot-status JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+
+    return {
+        "schema_version": "manual_delivery_app_surface_validation.v1",
+        "surface_status": "valid_ready_for_human_review",
+        "app_surface_dir": str(app_surface_dir),
+        "index_html": str(index_html_path),
+        "app_dashboard_html": str(app_dashboard_html_path),
+        "app_ready_json": str(app_ready_json_path),
+        "app_contract_json": str(app_contract_json_path),
+        "app_snapshot_json": str(app_snapshot_json_path),
+        "app_snapshot_status_json": str(app_snapshot_status_json_path),
+        "app_surface_manifest_json": str(app_surface_manifest_json_path),
+        "current_manual_delivery_app_ready": True,
+        "readiness_status": "ready_for_human_review",
+        "allowed_next_action": "human_review_only",
+        "human_review_required": True,
+        "trade_execution_allowed": False,
+        "automatic_order_allowed": False,
+        "external_notification_allowed": False,
+        "paper_positions_integration": False,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
+        "operator_status_diagnostic_contract": True,
+        "operator_status_wrapper_command": expected_operator_status_diagnostic["wrapper_command"],
+        "operator_status_check_command": expected_operator_status_diagnostic["wrapper_check_command"],
+        "operator_status_json_required": expected_operator_status_diagnostic["json_required"],
+        "operator_status_check_exit_codes": expected_operator_status_diagnostic["check_exit_codes"],
+        "operator_status_contract_only": True,
+        "operator_status_command_executed": False,
+        "operator_status_safety_boundary": expected_operator_status_diagnostic["safety_boundary"],
+        "safe_config_schema_audit_contract": True,
+        "safe_config_schema_audit_command": expected_safe_config_schema_audit["command"],
+        "safe_config_schema_audit_stdout_json_command": expected_safe_config_schema_audit["stdout_json_command"],
+        "safe_config_schema_audit_schema_version": expected_safe_config_schema_audit["schema_version"],
+        "safe_config_schema_audit_contract_only": expected_safe_config_schema_audit["contract_only"],
+        "safe_config_schema_audit_command_executed_by_app": expected_safe_config_schema_audit["command_executed_by_app"],
+        "safe_config_schema_audit_reads_env_values": expected_safe_config_schema_audit["reads_env_values"],
+        "safe_config_schema_audit_reads_dotenv_values": expected_safe_config_schema_audit["reads_dotenv_values"],
+        "safe_config_schema_audit_calls_private_endpoints": expected_safe_config_schema_audit["calls_private_endpoints"],
+        "safe_config_schema_audit_calls_order_endpoints": expected_safe_config_schema_audit["calls_order_endpoints"],
+        "safe_config_schema_audit_live_trading_allowed": expected_safe_config_schema_audit["live_trading_allowed"],
+        "safe_config_schema_audit_secret_values_exposed": expected_safe_config_schema_audit["secret_values_exposed"],
+        "safe_config_schema_audit_safety_boundary": expected_safe_config_schema_audit["safety_boundary"],
+        "operator_triage_summary": operator_triage_summary,
+        "integrated_evidence_overview": integrated_evidence_overview,
+        "integrated_evidence_overview_schema_version": integrated_evidence_overview["schema_version"],
+        "integrated_evidence_overview_summary_status": integrated_evidence_overview["summary_status"],
+        "integrated_evidence_overview_all_evidence_present": integrated_evidence_overview["all_evidence_present"],
+        "integrated_evidence_overview_all_evidence_ready": integrated_evidence_overview["all_evidence_ready"],
+        "integrated_evidence_overview_report_only": integrated_evidence_overview["report_only"],
+        "integrated_evidence_overview_formal_go": integrated_evidence_overview["formal_go"],
+        "integrated_evidence_overview_automatic_order_allowed": integrated_evidence_overview["automatic_order_allowed"],
+        "integrated_evidence_overview_human_decides_manually": integrated_evidence_overview["human_decides_manually"],
+        "integrated_evidence_overview_evidence_keys": integrated_evidence_overview["evidence_keys"],
+        "integrated_evidence_overview_missing_evidence_keys": integrated_evidence_overview["missing_evidence_keys"],
+        "integrated_evidence_overview_not_ready_evidence_keys": integrated_evidence_overview["not_ready_evidence_keys"],
+        "integrated_evidence_overview_execution_required_keys": integrated_evidence_overview["execution_required_keys"],
+        "integrated_evidence_overview_operator_hint_status": integrated_evidence_overview["operator_hint_status"],
+        "integrated_evidence_overview_operator_hint_reason": integrated_evidence_overview["operator_hint_reason"],
+        "integrated_evidence_overview_operator_hint_next_action": integrated_evidence_overview[
+            "operator_hint_next_action"
+        ],
+        "major_turning_point_diagnostic": major_turning_point_diagnostic,
+    }
+
+
+def _manual_delivery_current_app_integration_contract_markdown() -> str:
+    lines = [
+        "# Manual Delivery Current App Integration Contract",
+        "",
+        "- schema_version: manual_delivery_app_integration_contract.v1",
+        "- contract_status: stable_for_local_app_integration",
+        "- integration_command: refresh-current-manual-delivery-app --stdout-json",
+        "- read_side_check_command: check-current-manual-delivery-app-ready --stdout-json",
+        "- readiness_schema_version: manual_delivery_app_ready_check.v1",
+        "- stable_read_file: local/manual_delivery_handoff/app-snapshot.json",
+        "- validator_status_file: local/manual_delivery_handoff/app-snapshot-status.json",
+        "- default_handoff_dir: local/manual_delivery_handoff",
+        "- default_app_surface_dir: local/manual_delivery_app_surface",
+        "- surface_export_command: export-current-manual-delivery-app-surface",
+        "- refresh_surface_export_command: refresh-current-manual-delivery-app --export-app-surface",
+        "- surface_validation_command: check-current-manual-delivery-app-surface --stdout-json",
+        "- surface_ready_gate_command: refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "- surface_validation_schema_version: manual_delivery_app_surface_validation.v1",
+        "- surface_ready_gate_stdout_mode: json_only",
+        "- surface_index_file: local/manual_delivery_app_surface/index.html",
+        "- surface_dashboard_file: local/manual_delivery_app_surface/app-dashboard.html",
+        "- surface_ready_file: local/manual_delivery_app_surface/app-ready.json",
+        "- surface_contract_file: local/manual_delivery_app_surface/app-contract.json",
+        "- surface_snapshot_file: local/manual_delivery_app_surface/app-snapshot.json",
+        "- surface_snapshot_status_file: local/manual_delivery_app_surface/app-snapshot-status.json",
+        "- surface_manifest_file: local/manual_delivery_app_surface/app-surface-manifest.json",
+        "- surface_manifest_schema_version: manual_delivery_app_surface_manifest.v1",
+        "- surface_mode: static_html_and_json_only",
+        "- stdout_mode: json_only",
+        "- required_ready_keys: schema_version, current_manual_delivery_app_ready, readiness_status, allowed_next_action, app_snapshot_status_json, app_snapshot_status, snapshot_status, current_manual_delivery_ready, display_mode, primary_action, human_review_required, trade_execution_allowed, automatic_order_allowed, external_notification_allowed, paper_positions_integration, source_readiness, actionability_label, human_action, shadow_decision_enabled, safety_boundary",
+        "- required_safety_values:",
+        "  - readiness_status: ready_for_human_review",
+        "  - allowed_next_action: human_review_only",
+        "  - trade_execution_allowed: false",
+        "  - automatic_order_allowed: false",
+        "  - external_notification_allowed: false",
+        "  - paper_positions_integration: false",
+        "  - human_review_required: true",
+        "  - safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "- prohibited_behavior: send, notify, trade, runtime_restart, API_key, private_account_order_endpoint, paper_positions_integration",
+        "- notes: report-only; app may display/review, human decides manually",
+        "",
+        "## Intraperiod Review JSON",
+        "",
+        "- entrypoint_command: build-active-plan-intraperiod-review --stdout-json",
+        "- schema_version: active_plan_intraperiod_review.v1",
+        "- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "- allowed_behavior: local/report-only; no exchange fetch; no daily-sync wiring; no secret/API key reading",
+        "- decision_model: human decides manually",
+        "- output_fields: schema_version, command, candidates_csv, ohlcv_csv, outcomes_csv, report_md, row_count, report_only, formal_go, automatic_order_allowed, exchange_fetch_allowed, daily_sync_wiring, secret_reading_allowed, human_decides_manually, safety_boundary",
+        "- example_command:",
+        "```text",
+        "build-active-plan-intraperiod-review --stdout-json",
+        "--candidates-csv logs/csv/active_plan_candidates.csv",
+        "--ohlcv-csv <local_15m_ohlcv_csv>",
+        "--outcomes-csv logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+        "--output-md <local_intraperiod_report_md>",
+        "```",
+        "",
+        "## Operator Status Diagnostics",
+        "",
+        "- wrapper_command: ./.venv312/bin/python tools/operator_status.py",
+        "- wrapper_check_command: ./.venv312/bin/python tools/operator_status.py --check",
+        "- json_required: false",
+        "- check_exit_codes: 0=ok, 2=waiting_for_html_cycle, 3=startup_status_unavailable",
+        "- safety_boundary: report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
+        "- prohibited_behavior: send, notify, restart_runtime, fetch_exchange_data, read_secrets, private_account_order_endpoint, place_orders, imply_FORMAL_GO",
+        "",
+        "## Safe Config Schema Audit",
+        "",
+        "- command: ./.venv312/bin/python tools/safe_config_schema_audit.py",
+        "- stdout_json_command: ./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+        "- schema_version: safe_config_schema_audit.v1",
+        "- contract_only: true",
+        "- command_executed_by_app: false",
+        "- reads_env_values: false",
+        "- reads_dotenv_values: false",
+        "- calls_private_endpoints: false",
+        "- calls_order_endpoints: false",
+        "- live_trading_allowed: false",
+        "- secret_values_exposed: false",
+        "- safety_boundary: static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_integration_contract.v1",
+        "contract_status": "stable_for_local_app_integration",
+        "integration_command": "refresh-current-manual-delivery-app --stdout-json",
+        "read_side_check_command": "check-current-manual-delivery-app-ready --stdout-json",
+        "readiness_schema_version": "manual_delivery_app_ready_check.v1",
+        "stable_read_file": "local/manual_delivery_handoff/app-snapshot.json",
+        "validator_status_file": "local/manual_delivery_handoff/app-snapshot-status.json",
+        "default_handoff_dir": "local/manual_delivery_handoff",
+        "default_app_surface_dir": "local/manual_delivery_app_surface",
+        "surface_export_command": "export-current-manual-delivery-app-surface",
+        "refresh_surface_export_command": "refresh-current-manual-delivery-app --export-app-surface",
+        "surface_validation_command": "check-current-manual-delivery-app-surface --stdout-json",
+        "surface_ready_gate_command": "refresh-and-check-current-manual-delivery-app-surface --stdout-json",
+        "surface_validation_schema_version": "manual_delivery_app_surface_validation.v1",
+        "surface_ready_gate_stdout_mode": "json_only",
+        "surface_index_file": "local/manual_delivery_app_surface/index.html",
+        "surface_dashboard_file": "local/manual_delivery_app_surface/app-dashboard.html",
+        "surface_ready_file": "local/manual_delivery_app_surface/app-ready.json",
+        "surface_contract_file": "local/manual_delivery_app_surface/app-contract.json",
+        "surface_snapshot_file": "local/manual_delivery_app_surface/app-snapshot.json",
+        "surface_snapshot_status_file": "local/manual_delivery_app_surface/app-snapshot-status.json",
+        "surface_manifest_file": "local/manual_delivery_app_surface/app-surface-manifest.json",
+        "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
+        "surface_mode": "static_html_and_json_only",
+        "stdout_mode": "json_only",
+        "required_ready_keys": [
+            "schema_version",
+            "current_manual_delivery_app_ready",
+            "readiness_status",
+            "allowed_next_action",
+            "app_snapshot_status_json",
+            "app_snapshot_status",
+            "snapshot_status",
+            "current_manual_delivery_ready",
+            "display_mode",
+            "primary_action",
+            "human_review_required",
+            "trade_execution_allowed",
+            "automatic_order_allowed",
+            "external_notification_allowed",
+            "paper_positions_integration",
+            "source_readiness",
+            "actionability_label",
+            "human_action",
+            "shadow_decision_enabled",
+            "safety_boundary",
+        ],
+        "required_safety_values": {
+            "readiness_status": "ready_for_human_review",
+            "allowed_next_action": "human_review_only",
+            "trade_execution_allowed": False,
+            "automatic_order_allowed": False,
+            "external_notification_allowed": False,
+            "paper_positions_integration": False,
+            "human_review_required": True,
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        },
+        "prohibited_behavior": [
+            "send",
+            "notify",
+            "trade",
+            "runtime_restart",
+            "API_key",
+            "private_account_order_endpoint",
+            "paper_positions_integration",
+        ],
+        "notes": "report-only; app may display/review, human decides manually",
+        "intraperiod_review_stdout_json": {
+            "entrypoint_command": "build-active-plan-intraperiod-review --stdout-json",
+            "schema_version": "active_plan_intraperiod_review.v1",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "allowed_behavior": [
+                "local/report-only",
+                "no exchange fetch",
+                "no daily-sync wiring",
+                "no secret/API key reading",
+            ],
+            "decision_model": "human decides manually",
+            "output_fields": [
+                "schema_version",
+                "command",
+                "candidates_csv",
+                "ohlcv_csv",
+                "outcomes_csv",
+                "report_md",
+                "row_count",
+                "report_only",
+                "formal_go",
+                "automatic_order_allowed",
+                "exchange_fetch_allowed",
+                "daily_sync_wiring",
+                "secret_reading_allowed",
+                "human_decides_manually",
+                "safety_boundary",
+            ],
+            "example_command_lines": [
+                "build-active-plan-intraperiod-review --stdout-json",
+                "--candidates-csv logs/csv/active_plan_candidates.csv",
+                "--ohlcv-csv <local_15m_ohlcv_csv>",
+                "--outcomes-csv logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+                "--output-md <local_intraperiod_report_md>",
+            ],
+            "required_safety_flags": {
+                "report_only": True,
+                "formal_go": False,
+                "automatic_order_allowed": False,
+                "exchange_fetch_allowed": False,
+                "daily_sync_wiring": False,
+                "secret_reading_allowed": False,
+                "human_decides_manually": True,
+            },
+        },
+        "operator_status_diagnostic": {
+            "wrapper_command": "./.venv312/bin/python tools/operator_status.py",
+            "wrapper_check_command": "./.venv312/bin/python tools/operator_status.py --check",
+            "json_required": False,
+            "check_exit_codes": {
+                "ok": 0,
+                "waiting_for_html_cycle": 2,
+                "startup_status_unavailable": 3,
+            },
+            "safety_boundary": "report/local diagnostics only / no FORMAL_GO / no automatic order / no exchange fetch / no private/account/order endpoints / no secrets",
+            "allowed_behavior": [
+                "read-only",
+                "local diagnostics",
+                "no notifications",
+                "no runtime restart",
+                "no exchange fetch",
+                "no secrets",
+                "no private/account/order endpoints",
+                "no FORMAL_GO",
+            ],
+        },
+        "safe_config_schema_audit": {
+            "command": "./.venv312/bin/python tools/safe_config_schema_audit.py",
+            "stdout_json_command": "./.venv312/bin/python tools/safe_config_schema_audit.py --stdout-json",
+            "schema_version": "safe_config_schema_audit.v1",
+            "contract_only": True,
+            "command_executed_by_app": False,
+            "reads_env_values": False,
+            "reads_dotenv_values": False,
+            "calls_private_endpoints": False,
+            "calls_order_endpoints": False,
+            "live_trading_allowed": False,
+            "secret_values_exposed": False,
+            "safety_boundary": "static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading",
+        },
+    }
+
+
+def _write_manual_delivery_current_app_integration_contract_outputs(
+    *,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+) -> tuple[str, dict[str, Any]]:
+    summary_text = _manual_delivery_current_app_integration_contract_markdown()
+    contract_data = _manual_delivery_current_app_integration_contract_data()
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, contract_data
+
+
+def _run_describe_current_manual_delivery_app_contract_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    summary_text, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_contract_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_contract_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_contract_md={output_md_arg}\n")
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _run_export_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    output_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+        handoff_dir=handoff_dir,
+        output_dir=output_dir,
+        parser=parser,
+    )
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={_surface_dir}\n")
+
+
+def _run_check_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_json_arg = getattr(args, "stdout_json", False)
+    app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    validation_data = _manual_delivery_current_app_surface_validation_data(
+        app_surface_dir=app_surface_dir,
+        parser=parser,
+    )
+    if output_json_arg:
+        sys.stdout.write(json.dumps(validation_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    sys.stdout.write("current_manual_delivery_app_surface_valid=true\n")
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={app_surface_dir}\n")
+
+
+def _run_refresh_and_check_current_manual_delivery_app_surface_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    stdout_json = bool(getattr(args, "stdout_json", False))
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.export_app_surface = True
+    refresh_args.app_surface_dir = str(app_surface_dir)
+
+    refresh_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_stdout):
+        _run_refresh_current_manual_delivery_app_command(refresh_args, parser)
+
+    validation_data = _manual_delivery_current_app_surface_validation_data(
+        app_surface_dir=app_surface_dir,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(validation_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    sys.stdout.write("current_manual_delivery_app_surface_ready=true\n")
+    sys.stdout.write(f"current_manual_delivery_app_surface_dir={app_surface_dir}\n")
+    sys.stdout.write("current_manual_delivery_app_surface_status=valid_ready_for_human_review\n")
+
+
+def _manual_delivery_current_handoff_app_snapshot_markdown(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    handoff_dir: Path,
+    ready_check_data: dict[str, Any],
+    app_state_status_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App Snapshot",
+        "",
+        f"- snapshot_status: ready_for_human_review",
+        f"- current_manual_delivery_ready: true",
+        f"- display_mode: {ready_check_data['display_mode']}",
+        f"- primary_action: {ready_check_data['primary_action']}",
+        f"- handoff_dir: {handoff_dir}",
+        f"- source_readiness: {app_state_status_data['source_readiness']}",
+        f"- actionability_label: {app_state_status_data['actionability_label']}",
+        f"- human_action: {app_state_status_data['human_action']}",
+        f"- shadow_decision_enabled: {str(app_state_status_data['shadow_decision_enabled']).lower()}",
+        f"- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_snapshot_data(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    handoff_dir: Path,
+    ready_check_data: dict[str, Any],
+    app_state_status_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_snapshot.v1",
+        "snapshot_status": "ready_for_human_review",
+        "current_manual_delivery_ready": True,
+        "display_mode": ready_check_data["display_mode"],
+        "primary_action": ready_check_data["primary_action"],
+        "allowed_next_action": ready_check_data["allowed_next_action"],
+        "human_review_required": ready_check_data["human_review_required"],
+        "trade_execution_allowed": ready_check_data["trade_execution_allowed"],
+        "automatic_order_allowed": ready_check_data["automatic_order_allowed"],
+        "external_notification_allowed": ready_check_data["external_notification_allowed"],
+        "paper_positions_integration": ready_check_data["paper_positions_integration"],
+        "handoff_dir": str(handoff_dir),
+        "ready_check_json": str(ready_check_json),
+        "app_state_json": str(app_state_json),
+        "source_readiness": app_state_status_data["source_readiness"],
+        "actionability_label": app_state_status_data["actionability_label"],
+        "human_action": app_state_status_data["human_action"],
+        "shadow_decision_enabled": app_state_status_data["shadow_decision_enabled"],
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _write_current_manual_delivery_app_snapshot_outputs(
+    *,
+    ready_check_json: Path,
+    app_state_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not ready_check_json.exists():
+        message = f"current handoff app-snapshot ready-check JSON does not exist: {ready_check_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    if not app_state_json.exists():
+        message = f"current handoff app-snapshot app-state JSON does not exist: {app_state_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    ready_check_data = _load_json_object(ready_check_json, parser)
+    if str(ready_check_data.get("schema_version", "")).strip() != "manual_delivery_app_state_ready_check.v1":
+        message = f"current handoff app-snapshot ready-check JSON schema_version must be manual_delivery_app_state_ready_check.v1: {ready_check_data.get('schema_version')}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if ready_check_data.get("current_manual_delivery_ready") is not True:
+        message = "current handoff app-snapshot ready-check JSON current_manual_delivery_ready must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(ready_check_data.get("readiness_status", "")).strip() != "ready_for_human_review":
+        message = (
+            "current handoff app-snapshot ready-check JSON readiness_status must be "
+            f"ready_for_human_review: {ready_check_data.get('readiness_status')}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("allowed_next_action", "human_review_only"),
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]:
+        if ready_check_data.get(key) != expected_value:
+            message = f"current handoff app-snapshot ready-check JSON {key} must be {expected_value}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    app_state_data = _load_json_object(app_state_json, parser)
+    required_keys = [
+        "schema_version",
+        "app_state",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "human_review_required",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "self_check_json",
+        "handoff_dir",
+        "handoff_status",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in app_state_data]
+    if missing_keys:
+        message = "current handoff app-snapshot app-state JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["schema_version"]).strip() != "manual_delivery_app_state.v1":
+        message = f"current handoff app-snapshot app-state JSON schema_version must be manual_delivery_app_state.v1: {app_state_data['schema_version']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["app_state"]).strip() != "ready_for_human_review":
+        message = f"current handoff app-snapshot app-state JSON app_state must be ready_for_human_review: {app_state_data['app_state']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-snapshot app-state JSON display_mode must be manual_delivery_review: {app_state_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(app_state_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot app-state JSON primary_action must be human_review_only: {app_state_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key in [
+        "allowed_next_action",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "human_review_required",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+    ]:
+        if key in ready_check_data and app_state_data.get(key) != ready_check_data[key]:
+            message = f"current handoff app-snapshot app-state JSON {key} does not match ready-check JSON"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    handoff_dir = Path(str(app_state_data["handoff_dir"]))
+    if handoff_dir != app_state_json.parent:
+        message = f"current handoff app-snapshot app-state JSON handoff_dir does not match app-state JSON path: {app_state_data['handoff_dir']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if ready_check_json.parent != handoff_dir:
+        message = f"current handoff app-snapshot ready-check JSON path does not match handoff_dir: {ready_check_json}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    _, app_state_status_data, app_state_status_handoff_dir = _write_manual_delivery_current_handoff_app_state_status_outputs(
+        app_state_json=app_state_json,
+        parser=parser,
+    )
+    if app_state_status_handoff_dir != handoff_dir:
+        message = f"current handoff app-snapshot app-state status handoff_dir does not match handoff_dir: {app_state_status_handoff_dir}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if app_state_status_data["source_readiness"] != ready_check_data["source_readiness"]:
+        message = "current handoff app-snapshot app-state status source_readiness does not match ready-check JSON"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_snapshot_markdown(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        handoff_dir=handoff_dir,
+        ready_check_data=ready_check_data,
+        app_state_status_data=app_state_status_data,
+    )
+    snapshot_data = _manual_delivery_current_handoff_app_snapshot_data(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        handoff_dir=handoff_dir,
+        ready_check_data=ready_check_data,
+        app_state_status_data=app_state_status_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(snapshot_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, snapshot_data
+
+
+def _run_write_current_manual_delivery_app_snapshot_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "app_snapshot_md", None)
+    output_json_arg = getattr(args, "app_snapshot_json", None)
+    ready_check_json = Path(getattr(args, "ready_check_json", "local/manual_delivery_handoff/ready-check.json"))
+    app_state_json = Path(getattr(args, "app_state_json", "local/manual_delivery_handoff/app-state.json"))
+    _summary_text, _snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(_summary_text)
+    else:
+        sys.stdout.write(_summary_text)
+
+
+def _run_refresh_current_manual_delivery_app_state_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    if app_state_json_arg is None:
+        app_state_json_arg = str(handoff_dir / "app-state.json")
+
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    if app_state_md_arg is None:
+        app_state_md_arg = str(handoff_dir / "app-state.md")
+
+    app_state_status_md_arg = getattr(args, "app_state_status_md", None)
+    if app_state_status_md_arg is None:
+        app_state_status_md_arg = str(handoff_dir / "app-state-status.md")
+
+    app_state_status_json_arg = getattr(args, "app_state_status_json", None)
+    if app_state_status_json_arg is None:
+        app_state_status_json_arg = str(handoff_dir / "app-state-status.json")
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.self_check_json = self_check_json_arg
+    refresh_args.app_state_json = app_state_json_arg
+    refresh_args.app_state_md = app_state_md_arg
+    refresh_args.output_md = app_state_status_md_arg
+    refresh_args.output_json = app_state_status_json_arg
+
+    self_check_stdout = io.StringIO()
+    app_state_stdout = io.StringIO()
+    app_state_status_stdout = io.StringIO()
+    with contextlib.redirect_stdout(self_check_stdout):
+        _run_self_check_current_manual_delivery_handoff_command(refresh_args, parser)
+    with contextlib.redirect_stdout(app_state_stdout):
+        _run_write_current_manual_delivery_app_state_command(refresh_args, parser)
+    with contextlib.redirect_stdout(app_state_status_stdout):
+        _run_summarize_current_manual_delivery_app_state_command(refresh_args, parser)
+
+    sys.stdout.write(f"current_manual_delivery_refresh_dir={handoff_dir}\n")
+    sys.stdout.write(self_check_stdout.getvalue())
+    sys.stdout.write(app_state_stdout.getvalue())
+    sys.stdout.write(app_state_status_stdout.getvalue())
+
+
+def _run_refresh_and_check_current_manual_delivery_app_state_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    if app_state_json_arg is None:
+        app_state_json_arg = str(handoff_dir / "app-state.json")
+
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    if app_state_md_arg is None:
+        app_state_md_arg = str(handoff_dir / "app-state.md")
+
+    app_state_status_md_arg = getattr(args, "app_state_status_md", None)
+    if app_state_status_md_arg is None:
+        app_state_status_md_arg = str(handoff_dir / "app-state-status.md")
+
+    app_state_status_json_arg = getattr(args, "app_state_status_json", None)
+    if app_state_status_json_arg is None:
+        app_state_status_json_arg = str(handoff_dir / "app-state-status.json")
+
+    ready_check_md_arg = getattr(args, "ready_check_md", None)
+    if ready_check_md_arg is None:
+        ready_check_md_arg = str(handoff_dir / "ready-check.md")
+
+    ready_check_json_arg = getattr(args, "ready_check_json", None)
+    if ready_check_json_arg is None:
+        ready_check_json_arg = str(handoff_dir / "ready-check.json")
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.self_check_json = self_check_json_arg
+    refresh_args.app_state_json = app_state_json_arg
+    refresh_args.app_state_md = app_state_md_arg
+    refresh_args.app_state_status_json = app_state_status_json_arg
+    refresh_args.app_state_status_md = app_state_status_md_arg
+
+    ready_check_args = argparse.Namespace(**vars(args))
+    ready_check_args.app_state_status_json = app_state_status_json_arg
+    ready_check_args.output_md = ready_check_md_arg
+    ready_check_args.output_json = ready_check_json_arg
+
+    refresh_stdout = io.StringIO()
+    ready_check_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_stdout):
+        _run_refresh_current_manual_delivery_app_state_command(refresh_args, parser)
+    with contextlib.redirect_stdout(ready_check_stdout):
+        _run_check_current_manual_delivery_app_state_ready_command(ready_check_args, parser)
+
+    sys.stdout.write(f"current_manual_delivery_refresh_ready_dir={handoff_dir}\n")
+    sys.stdout.write(refresh_stdout.getvalue())
+    sys.stdout.write(ready_check_stdout.getvalue())
+
+
+def _resolve_current_manual_delivery_app_snapshot_status_paths(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str | None, str | None]:
+    handoff_dir = Path(args.handoff_dir)
+    write_app_snapshot_status = bool(getattr(args, "write_app_snapshot_status", False))
+    app_snapshot_status_md_arg = getattr(args, "app_snapshot_status_md", None)
+    app_snapshot_status_json_arg = getattr(args, "app_snapshot_status_json", None)
+    if (app_snapshot_status_md_arg or app_snapshot_status_json_arg) and not write_app_snapshot_status:
+        message = "--app-snapshot-status-md and --app-snapshot-status-json require --write-app-snapshot-status"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if write_app_snapshot_status:
+        if app_snapshot_status_md_arg is None:
+            app_snapshot_status_md_arg = str(handoff_dir / "app-snapshot-status.md")
+        if app_snapshot_status_json_arg is None:
+            app_snapshot_status_json_arg = str(handoff_dir / "app-snapshot-status.json")
+    return app_snapshot_status_md_arg, app_snapshot_status_json_arg
+
+
+def _run_refresh_current_manual_delivery_app_snapshot_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+
+    self_check_json_arg = getattr(args, "self_check_json", None)
+    if self_check_json_arg is None:
+        self_check_json_arg = str(handoff_dir / "self-check.json")
+
+    app_state_json_arg = getattr(args, "app_state_json", None)
+    if app_state_json_arg is None:
+        app_state_json_arg = str(handoff_dir / "app-state.json")
+
+    app_state_md_arg = getattr(args, "app_state_md", None)
+    if app_state_md_arg is None:
+        app_state_md_arg = str(handoff_dir / "app-state.md")
+
+    app_state_status_md_arg = getattr(args, "app_state_status_md", None)
+    if app_state_status_md_arg is None:
+        app_state_status_md_arg = str(handoff_dir / "app-state-status.md")
+
+    app_state_status_json_arg = getattr(args, "app_state_status_json", None)
+    if app_state_status_json_arg is None:
+        app_state_status_json_arg = str(handoff_dir / "app-state-status.json")
+
+    ready_check_md_arg = getattr(args, "ready_check_md", None)
+    if ready_check_md_arg is None:
+        ready_check_md_arg = str(handoff_dir / "ready-check.md")
+
+    ready_check_json_arg = getattr(args, "ready_check_json", None)
+    if ready_check_json_arg is None:
+        ready_check_json_arg = str(handoff_dir / "ready-check.json")
+
+    app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(args, parser)
+
+    app_snapshot_json_arg = getattr(args, "app_snapshot_json", None)
+    if app_snapshot_json_arg is None:
+        app_snapshot_json_arg = str(handoff_dir / "app-snapshot.json")
+
+    app_snapshot_md_arg = getattr(args, "app_snapshot_md", None)
+    if app_snapshot_md_arg is None:
+        app_snapshot_md_arg = str(handoff_dir / "app-snapshot.md")
+
+    refresh_args = argparse.Namespace(**vars(args))
+    refresh_args.handoff_dir = str(handoff_dir)
+    refresh_args.self_check_json = self_check_json_arg
+    refresh_args.app_state_json = app_state_json_arg
+    refresh_args.app_state_md = app_state_md_arg
+    refresh_args.app_state_status_json = app_state_status_json_arg
+    refresh_args.app_state_status_md = app_state_status_md_arg
+    refresh_args.ready_check_md = ready_check_md_arg
+    refresh_args.ready_check_json = ready_check_json_arg
+
+    snapshot_args = argparse.Namespace(**vars(args))
+    snapshot_args.ready_check_json = ready_check_json_arg
+    snapshot_args.app_state_json = app_state_json_arg
+    snapshot_args.app_snapshot_json = app_snapshot_json_arg
+    snapshot_args.app_snapshot_md = app_snapshot_md_arg
+
+    refresh_stdout = io.StringIO()
+    snapshot_stdout = io.StringIO()
+    app_snapshot_status_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_stdout):
+        _run_refresh_and_check_current_manual_delivery_app_state_command(refresh_args, parser)
+    with contextlib.redirect_stdout(snapshot_stdout):
+        _run_write_current_manual_delivery_app_snapshot_command(snapshot_args, parser)
+    if app_snapshot_status_md_arg or app_snapshot_status_json_arg:
+        app_snapshot_status_args = argparse.Namespace(**vars(args))
+        app_snapshot_status_args.app_snapshot_json = app_snapshot_json_arg
+        app_snapshot_status_args.output_md = app_snapshot_status_md_arg
+        app_snapshot_status_args.output_json = app_snapshot_status_json_arg
+        with contextlib.redirect_stdout(app_snapshot_status_stdout):
+            _run_summarize_current_manual_delivery_app_snapshot_command(app_snapshot_status_args, parser)
+
+    sys.stdout.write(f"current_manual_delivery_app_snapshot_refresh_dir={handoff_dir}\n")
+    sys.stdout.write(refresh_stdout.getvalue())
+    sys.stdout.write(snapshot_stdout.getvalue())
+    sys.stdout.write(app_snapshot_status_stdout.getvalue())
+
+
+def _run_refresh_current_manual_delivery_app_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    write_app_dashboard = bool(getattr(args, "write_app_dashboard", False))
+    export_app_surface = bool(getattr(args, "export_app_surface", False))
+    app_dashboard_html_arg = getattr(args, "app_dashboard_html", None)
+    if app_dashboard_html_arg is not None and not write_app_dashboard:
+        message = "--app-dashboard-html requires --write-app-dashboard"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    app_surface_dir_arg = getattr(args, "app_surface_dir", None)
+    if app_surface_dir_arg is not None and not export_app_surface:
+        message = "--app-surface-dir requires --export-app-surface"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+
+    app_snapshot_json_arg = getattr(args, "app_snapshot_json", None)
+    if app_snapshot_json_arg is None:
+        app_snapshot_json_arg = str(handoff_dir / "app-snapshot.json")
+
+    refresh_snapshot_args = argparse.Namespace(**vars(args))
+    refresh_snapshot_args.handoff_dir = str(handoff_dir)
+    refresh_snapshot_args.write_app_snapshot_status = True
+    app_snapshot_status_md_arg, app_snapshot_status_json_arg = _resolve_current_manual_delivery_app_snapshot_status_paths(
+        refresh_snapshot_args,
+        parser,
+    )
+
+    if stdout_json:
+        refresh_snapshot_stdout = io.StringIO()
+        with contextlib.redirect_stdout(refresh_snapshot_stdout):
+            _run_refresh_current_manual_delivery_app_snapshot_command(refresh_snapshot_args, parser)
+        _summary_text, ready_check_data = _write_manual_delivery_current_handoff_app_ready_check_outputs(
+            app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+            parser=parser,
+        )
+        if write_app_dashboard:
+            if app_dashboard_html_arg is None:
+                app_dashboard_html_arg = str(handoff_dir / "app-dashboard.html")
+            _dashboard_html, _dashboard_status_data = _write_current_manual_delivery_app_dashboard_outputs(
+                app_snapshot_json=Path(app_snapshot_json_arg),
+                app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+                output_html=Path(app_dashboard_html_arg),
+                parser=parser,
+            )
+        if export_app_surface:
+            if app_surface_dir_arg is None:
+                app_surface_dir_arg = "local/manual_delivery_app_surface"
+            _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+                handoff_dir=handoff_dir,
+                output_dir=Path(app_surface_dir_arg),
+                parser=parser,
+            )
+        sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+
+    refresh_snapshot_stdout = io.StringIO()
+    with contextlib.redirect_stdout(refresh_snapshot_stdout):
+        _run_refresh_current_manual_delivery_app_snapshot_command(refresh_snapshot_args, parser)
+
+    dashboard_output_line = None
+    if write_app_dashboard:
+        if app_dashboard_html_arg is None:
+            app_dashboard_html_arg = str(handoff_dir / "app-dashboard.html")
+        _dashboard_html, _dashboard_status_data = _write_current_manual_delivery_app_dashboard_outputs(
+            app_snapshot_json=Path(app_snapshot_json_arg),
+            app_snapshot_status_json=Path(app_snapshot_status_json_arg),
+            output_html=Path(app_dashboard_html_arg),
+            parser=parser,
+        )
+        dashboard_output_line = f"current_manual_delivery_app_dashboard_html={app_dashboard_html_arg}\n"
+    if export_app_surface:
+        if app_surface_dir_arg is None:
+            app_surface_dir_arg = "local/manual_delivery_app_surface"
+        _surface_dir = _write_current_manual_delivery_app_surface_outputs(
+            handoff_dir=handoff_dir,
+            output_dir=Path(app_surface_dir_arg),
+            parser=parser,
+        )
+        surface_output_line = f"current_manual_delivery_app_surface_dir={_surface_dir}\n"
+    else:
+        surface_output_line = None
+    sys.stdout.write(f"current_manual_delivery_app_refresh_dir={handoff_dir}\n")
+    sys.stdout.write(refresh_snapshot_stdout.getvalue())
+    if dashboard_output_line is not None:
+        sys.stdout.write(dashboard_output_line)
+    if surface_output_line is not None:
+        sys.stdout.write(surface_output_line)
+
+
+def _manual_delivery_current_handoff_app_snapshot_status_markdown(
+    *,
+    app_snapshot_json: Path,
+    snapshot_data: dict[str, Any],
+) -> str:
+    lines = [
+        "# Manual Delivery Current Handoff App Snapshot Status",
+        "",
+        f"- app_snapshot_json: {app_snapshot_json}",
+        f"- app_snapshot_json_exists: true",
+        f"- snapshot_status: {snapshot_data['snapshot_status']}",
+        f"- current_manual_delivery_ready: true",
+        f"- display_mode: {snapshot_data['display_mode']}",
+        f"- primary_action: {snapshot_data['primary_action']}",
+        f"- allowed_next_action: {snapshot_data['allowed_next_action']}",
+        f"- handoff_dir: {snapshot_data['handoff_dir']}",
+        f"- ready_check_json: {snapshot_data['ready_check_json']}",
+        f"- ready_check_json_exists: true",
+        f"- app_state_json: {snapshot_data['app_state_json']}",
+        f"- app_state_json_exists: true",
+        f"- source_readiness: {snapshot_data['source_readiness']}",
+        f"- actionability_label: {snapshot_data['actionability_label']}",
+        f"- human_action: {snapshot_data['human_action']}",
+        f"- shadow_decision_enabled: {str(snapshot_data['shadow_decision_enabled']).lower()}",
+        f"- human_review_required: {str(snapshot_data['human_review_required']).lower()}",
+        f"- trade_execution_allowed: {str(snapshot_data['trade_execution_allowed']).lower()}",
+        f"- automatic_order_allowed: {str(snapshot_data['automatic_order_allowed']).lower()}",
+        f"- external_notification_allowed: {str(snapshot_data['external_notification_allowed']).lower()}",
+        f"- paper_positions_integration: {str(snapshot_data['paper_positions_integration']).lower()}",
+        f"- safety_boundary: {snapshot_data['safety_boundary']}",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _manual_delivery_current_handoff_app_snapshot_status_data(
+    *,
+    app_snapshot_json: Path,
+    snapshot_data: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": "manual_delivery_app_snapshot_status.v1",
+        "app_snapshot_status": "valid_ready_for_human_review",
+        "app_snapshot_json": str(app_snapshot_json),
+        "app_snapshot_json_exists": True,
+        "ready_check_json": str(snapshot_data["ready_check_json"]),
+        "ready_check_json_exists": True,
+        "app_state_json": str(snapshot_data["app_state_json"]),
+        "app_state_json_exists": True,
+        "snapshot_status": snapshot_data["snapshot_status"],
+        "current_manual_delivery_ready": snapshot_data["current_manual_delivery_ready"],
+        "display_mode": snapshot_data["display_mode"],
+        "primary_action": snapshot_data["primary_action"],
+        "allowed_next_action": snapshot_data["allowed_next_action"],
+        "handoff_dir": snapshot_data["handoff_dir"],
+        "human_review_required": snapshot_data["human_review_required"],
+        "trade_execution_allowed": snapshot_data["trade_execution_allowed"],
+        "automatic_order_allowed": snapshot_data["automatic_order_allowed"],
+        "external_notification_allowed": snapshot_data["external_notification_allowed"],
+        "paper_positions_integration": snapshot_data["paper_positions_integration"],
+        "source_readiness": snapshot_data["source_readiness"],
+        "actionability_label": snapshot_data["actionability_label"],
+        "human_action": snapshot_data["human_action"],
+        "shadow_decision_enabled": snapshot_data["shadow_decision_enabled"],
+        "safety_boundary": snapshot_data["safety_boundary"],
+    }
+
+
+def _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+    *,
+    app_snapshot_json: Path,
+    output_md: Path | None = None,
+    output_json: Path | None = None,
+    parser: argparse.ArgumentParser | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not app_snapshot_json.exists():
+        message = f"current handoff app-snapshot JSON does not exist: {app_snapshot_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    snapshot_data = _load_json_object(app_snapshot_json, parser)
+    required_keys = [
+        "schema_version",
+        "snapshot_status",
+        "current_manual_delivery_ready",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "human_review_required",
+        "trade_execution_allowed",
+        "automatic_order_allowed",
+        "external_notification_allowed",
+        "paper_positions_integration",
+        "handoff_dir",
+        "ready_check_json",
+        "app_state_json",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "shadow_decision_enabled",
+        "safety_boundary",
+    ]
+    missing_keys = [key for key in required_keys if key not in snapshot_data]
+    if missing_keys:
+        message = "current handoff app-snapshot JSON missing required keys: " + ", ".join(missing_keys)
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    string_keys = [
+        "schema_version",
+        "snapshot_status",
+        "display_mode",
+        "primary_action",
+        "allowed_next_action",
+        "handoff_dir",
+        "ready_check_json",
+        "app_state_json",
+        "source_readiness",
+        "actionability_label",
+        "human_action",
+        "safety_boundary",
+    ]
+    for key in string_keys:
+        if not isinstance(snapshot_data[key], str):
+            message = f"current handoff app-snapshot JSON {key} must be a string"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    if str(snapshot_data["schema_version"]).strip() != "manual_delivery_app_snapshot.v1":
+        message = (
+            "current handoff app-snapshot JSON schema_version must be "
+            f"manual_delivery_app_snapshot.v1: {snapshot_data['schema_version']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(snapshot_data["snapshot_status"]).strip() != "ready_for_human_review":
+        message = (
+            "current handoff app-snapshot JSON snapshot_status must be "
+            f"ready_for_human_review: {snapshot_data['snapshot_status']}"
+        )
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if snapshot_data.get("current_manual_delivery_ready") is not True:
+        message = "current handoff app-snapshot JSON current_manual_delivery_ready must be true"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(snapshot_data["display_mode"]).strip() != "manual_delivery_review":
+        message = f"current handoff app-snapshot JSON display_mode must be manual_delivery_review: {snapshot_data['display_mode']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(snapshot_data["primary_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot JSON primary_action must be human_review_only: {snapshot_data['primary_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if str(snapshot_data["allowed_next_action"]).strip() != "human_review_only":
+        message = f"current handoff app-snapshot JSON allowed_next_action must be human_review_only: {snapshot_data['allowed_next_action']}"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    for key, expected_value in [
+        ("human_review_required", True),
+        ("trade_execution_allowed", False),
+        ("automatic_order_allowed", False),
+        ("external_notification_allowed", False),
+        ("paper_positions_integration", False),
+    ]:
+        if snapshot_data.get(key) is not expected_value:
+            message = f"current handoff app-snapshot JSON {key} must be {str(expected_value).lower()}"
+            if parser is None:
+                raise ValueError(message)
+            parser.error(message)
+    ready_check_json = Path(str(snapshot_data["ready_check_json"]))
+    app_state_json = Path(str(snapshot_data["app_state_json"]))
+    if not ready_check_json.exists():
+        message = f"current handoff app-snapshot ready-check JSON does not exist: {ready_check_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    if not app_state_json.exists():
+        message = f"current handoff app-snapshot app-state JSON does not exist: {app_state_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    _, expected_snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
+        ready_check_json=ready_check_json,
+        app_state_json=app_state_json,
+        parser=parser,
+    )
+    if snapshot_data != expected_snapshot_data:
+        message = "current handoff app-snapshot JSON does not match validated snapshot data"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    summary_text = _manual_delivery_current_handoff_app_snapshot_status_markdown(
+        app_snapshot_json=app_snapshot_json,
+        snapshot_data=snapshot_data,
+    )
+    status_data = _manual_delivery_current_handoff_app_snapshot_status_data(
+        app_snapshot_json=app_snapshot_json,
+        snapshot_data=snapshot_data,
+    )
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(summary_text, encoding="utf-8")
+    if output_json is not None:
+        _ensure_parent(output_json)
+        output_json.write_text(json.dumps(status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary_text, status_data
+
+
+def _run_summarize_current_manual_delivery_app_snapshot_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None = None,
+) -> None:
+    output_md_arg = getattr(args, "output_md", None)
+    output_json_arg = getattr(args, "output_json", None)
+    stdout_json = bool(getattr(args, "stdout_json", False))
+    app_snapshot_json = Path(getattr(args, "app_snapshot_json", "local/manual_delivery_handoff/app-snapshot.json"))
+    summary_text, _status_data = _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
+        app_snapshot_json=app_snapshot_json,
+        output_md=Path(output_md_arg) if output_md_arg else None,
+        output_json=Path(output_json_arg) if output_json_arg else None,
+        parser=parser,
+    )
+    if stdout_json:
+        sys.stdout.write(json.dumps(_status_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        return
+    if output_md_arg and output_json_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_status_md={output_md_arg}\n")
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_status_json={output_json_arg}\n")
+    elif output_md_arg:
+        sys.stdout.write(f"current_manual_delivery_app_snapshot_status_md={output_md_arg}\n")
+    elif output_json_arg:
+        sys.stdout.write(summary_text)
+    else:
+        sys.stdout.write(summary_text)
+
+
+def _paper_entry_sl_wait_redesign_label_lines(market_rows: list[dict[str, Any]]) -> list[str]:
+    high_wait_rows = [row for row in market_rows if _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0]
+    low_execution_rows = [row for row in market_rows if _parse_float(row.get("confidence_execution_shadow"), 0.0) < 24.0]
+    long_rows = [row for row in market_rows if str(row.get("side", "")).strip() == "long"]
+    trend_flip_up_rows = [
+        row
+        for row in market_rows
+        if _paper_position_has_flag(row, "trend_flip_confirmed_up")
+    ]
+
+    def _sl_majority(rows: list[dict[str, Any]]) -> tuple[bool, int, int]:
+        sl_hit = sum(1 for row in rows if str(row.get("exit_status", "")).strip() == "sl_hit")
+        non_sl = max(0, len(rows) - sl_hit)
+        return (sl_hit > 0 and sl_hit >= non_sl, sl_hit, len(rows))
+
+    high_wait_triggered, high_wait_sl, high_wait_total = _sl_majority(high_wait_rows)
+    low_exec_triggered, low_exec_sl, low_exec_total = _sl_majority(low_execution_rows)
+    long_triggered, long_sl, long_total = _sl_majority(long_rows)
+    trend_triggered, trend_sl, trend_total = _sl_majority(trend_flip_up_rows)
+
+    sl_too_tight_count = sum(1 for row in market_rows if str(row.get("sl_eval", "")).strip() == "too_tight")
+    entry_delay_count = sum(
+        1
+        for row in market_rows
+        if str(row.get("user_verdict", "")).strip() == "too_early"
+        or str(row.get("tf_15m_eval", "")).strip() == "poor"
+    )
+
+    lines = [
+        f"- high_wait_sl_risk: {'triggered' if high_wait_triggered else 'monitor'} / wait>=60 sl_hit={high_wait_sl}件 / total={high_wait_total}件",
+        f"- low_execution_sl_risk: {'triggered' if low_exec_triggered else 'monitor'} / execution<24 sl_hit={low_exec_sl}件 / total={low_exec_total}件",
+        f"- long_side_sl_risk: {'triggered' if long_triggered else 'monitor'} / side=long sl_hit={long_sl}件 / total={long_total}件",
+        f"- trend_flip_up_sl_risk: {'triggered' if trend_triggered else 'monitor'} / trend_flip_confirmed_up sl_hit={trend_sl}件 / total={trend_total}件",
+        f"- sl_too_tight_review_risk: {'triggered' if sl_too_tight_count > 0 else 'monitor'} / sl_eval=too_tight {sl_too_tight_count}件",
+        f"- entry_delay_review_risk: {'triggered' if entry_delay_count > 0 else 'monitor'} / too_early or tf_15m_eval=poor {entry_delay_count}件",
+    ]
+    return lines
+
+
+def build_paper_entry_sl_wait_redesign_report(
+    *,
+    base_dir: Path,
+    paper_positions_path: Path | None = None,
+    shadow_path: Path | None = None,
+    output_md: Path | None = None,
+    date_from: str = "",
+    date_to: str = "",
+    limit: int = 20,
+) -> str:
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    _, shadow_rows = _filtered_shadow_rows(shadow_path=shadow_path, date_from=date_from, date_to=date_to)
+    shadow_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in shadow_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions: list[dict[str, Any]] = []
+    for row in _load_csv_rows(paper_positions_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        dt = _parse_dt(str(row.get("timestamp_jst", "")))
+        if date_from and (dt is None or dt.strftime("%Y-%m-%d") < date_from):
+            continue
+        if date_to and (dt is None or dt.strftime("%Y-%m-%d") > date_to):
+            continue
+        merged = dict(shadow_by_id.get(signal_id, {}))
+        merged.update(row)
+        positions.append(merged)
+
+    market_rows = [
+        row
+        for row in positions
+        if str(row.get("position_status", "")).strip() == "closed"
+        and str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"
+    ]
+
+    base_report = build_paper_opportunity_diagnostics_report(
+        base_dir=base_dir,
+        paper_positions_path=paper_positions_path,
+        shadow_path=shadow_path,
+        output_md=None,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
+    lines = base_report.rstrip("\n").split("\n")
+    label_section = ["", "## 設計判断ラベル", *_paper_entry_sl_wait_redesign_label_lines(market_rows)]
+    impact_section = _paper_entry_recheck_impact_section_lines(market_rows)
+    counterfactual_impact_section = _paper_entry_recheck_counterfactual_impact_section_lines(market_rows)
+    collateral_damage_breakdown_section = _paper_entry_recheck_collateral_damage_breakdown_section_lines(market_rows)
+    try:
+        proposal_idx = lines.index("## proposal")
+        lines = [
+            *lines[:proposal_idx],
+            *label_section,
+            *impact_section,
+            *counterfactual_impact_section,
+            *collateral_damage_breakdown_section,
+            *lines[proposal_idx:],
+        ]
+    except ValueError:
+        lines.extend(label_section)
+        lines.extend(impact_section)
+        lines.extend(counterfactual_impact_section)
+        lines.extend(collateral_damage_breakdown_section)
+
+    report = "\n".join(lines) + "\n"
+    if output_md is not None:
+        _ensure_parent(output_md)
+        output_md.write_text(report, encoding="utf-8")
+    return report
+
+
+def build_observation_paper_orders(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    orders: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        if str(row.get("phase1_observation_gate", "")).strip() != "pass":
+            continue
+        orders.append(_observation_order_from_trade(row))
+        seen.add(signal_id)
+    orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, OBSERVATION_PAPER_ORDER_HEADER, orders)
+
+
+def build_phase1b_lite_paper_orders(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "phase1b_lite_paper_orders.csv"
+    orders: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        lite_gate = {
+            "phase1b_lite_gate": row.get("phase1b_lite_gate", ""),
+            "phase1b_lite_type": row.get("phase1b_lite_type", ""),
+            "phase1b_lite_reasons": row.get("phase1b_lite_reasons", ""),
+        }
+        if str(lite_gate["phase1b_lite_gate"]).strip() not in {"pass", "blocked"}:
+            lite_gate = _phase1b_lite_gate_from_row(row)
+        if str(lite_gate["phase1b_lite_gate"]).strip() != "pass":
+            continue
+        enriched = dict(row)
+        enriched.update(lite_gate)
+        orders.append(_phase1b_lite_order_from_trade(enriched))
+        seen.add(signal_id)
+    orders.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, PHASE1B_LITE_PAPER_ORDER_HEADER, orders)
+
+
+def build_paper_positions(
+    *,
+    base_dir: Path,
+    trades_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    trades_path = trades_path or base_dir / "logs" / "csv" / "shadow_log.csv"
+    output_path = output_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    existing_rows = _load_csv_rows(output_path)
+    existing_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in existing_rows
+        if str(row.get("signal_id", "")).strip()
+    }
+    candidates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in _load_csv_rows(trades_path):
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id or signal_id in seen:
+            continue
+        if str(row.get("opportunity_gate", "")).strip() != "pass":
+            continue
+        new_row = _paper_position_from_trade(row)
+        current = existing_by_id.get(signal_id, {})
+        if current:
+            merged = dict(new_row)
+            for field in STATE_FIELDS | {"position_status"}:
+                if str(current.get(field, "")).strip():
+                    merged[field] = current.get(field, "")
+            if str(current.get("position_status", "")).strip() == "closed":
+                merged["position_status"] = "closed"
+        else:
+            merged = new_row
+        candidates.append(merged)
+        seen.add(signal_id)
+
+    future_df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+    if candidates:
+        try:
+            cfg = load_config(base_dir)
+            future_df = _fetch_future_15m_df(cfg, candidates)
+        except OSError:
+            future_df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+    evaluated_by_id = {
+        str(row.get("signal_id", "")).strip(): evaluate_paper_position(row, future_df)
+        for row in candidates
+        if str(row.get("signal_id", "")).strip()
+    }
+
+    positions_by_id = dict(existing_by_id)
+    positions_by_id.update(evaluated_by_id)
+    positions = sorted(positions_by_id.values(), key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return _write_csv_rows(output_path, PAPER_POSITION_HEADER, positions)
 
 
 def _period_filter(rows: list[dict[str, Any]], period: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1299,6 +16291,143 @@ def _ratio(numerator: int, denominator: int) -> float:
 
 def _format_pct(value: float) -> str:
     return f"{value * 100:.1f}%"
+
+
+def _format_counter(counter: Counter[str], *, limit: int = 3) -> str:
+    items = [(key, count) for key, count in counter.most_common(limit) if key]
+    if not items:
+        return "なし"
+    return ", ".join(f"{key}={count}件" for key, count in items)
+
+
+_ACTIVE_PLAN_ACTION_ORDER = [
+    "FORMAL_GO",
+    "ACTIVE_MARKET_SMALL",
+    "ACTIVE_LIMIT_RETEST",
+    "ACTIVE_LIMIT_RETEST+ACTIVE_COUNTER_SCALP",
+    "ACTIVE_BREAKOUT_FOLLOW",
+    "ACTIVE_COUNTER_SCALP",
+    "NO_ACTION",
+]
+
+_ACTIVE_PLAN_INTRAPERIOD_OUTCOME_ORDER = [
+    "entry_reached",
+    "tp1_first",
+    "tp2_first",
+    "sl_first",
+    "timeout",
+    "ambiguous",
+    "no_ohlcv",
+    "pending",
+    "not_entered",
+]
+
+
+def _active_plan_status_count(rows: list[dict[str, Any]], column: str, status: str) -> int:
+    return sum(1 for row in rows if str(row.get(column, "")).strip() == status)
+
+
+def _active_plan_action_counts(rows: list[dict[str, Any]]) -> Counter[str]:
+    return Counter(str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION" for row in rows)
+
+
+def _active_plan_rows_with_action(rows: list[dict[str, Any]], action: str) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in rows
+        if (str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION") == action
+    ]
+
+
+def _active_plan_intraperiod_entry_reached(row: dict[str, Any]) -> bool:
+    if str(row.get("entry_reached_time", "")).strip():
+        return True
+    return str(row.get("outcome", "")).strip() in {
+        "entry_reached",
+        "tp1_first",
+        "tp2_first",
+        "sl_first",
+        "timeout",
+        "ambiguous",
+    }
+
+
+def _active_plan_intraperiod_metric_value(
+    row: dict[str, Any],
+    primary_key: str,
+    fallback_key: str = "",
+) -> float | None:
+    for key in (primary_key, fallback_key):
+        if not key:
+            continue
+        raw_value = str(row.get(key, "")).strip()
+        if not raw_value:
+            continue
+        value = _parse_float(raw_value, default=float("nan"))
+        if value == value:
+            return value
+    return None
+
+
+def _active_plan_intraperiod_mean_metric(
+    rows: list[dict[str, Any]],
+    primary_key: str,
+    fallback_key: str = "",
+) -> float:
+    values = [
+        value
+        for row in rows
+        if (value := _active_plan_intraperiod_metric_value(row, primary_key, fallback_key)) is not None
+    ]
+    return mean(values) if values else 0.0
+
+
+def _active_plan_intraperiod_major_turning_point_diagnostic_label(row: dict[str, Any]) -> str:
+    outcome = str(row.get("outcome", "")).strip()
+    if outcome in {"", "pending", "no_ohlcv", "not_entered"}:
+        return "inconclusive"
+
+    entry_reached_time = str(row.get("entry_reached_time", "")).strip()
+    first_exit_reason = str(row.get("first_exit_reason", "")).strip()
+    mfe_r = _active_plan_intraperiod_metric_value(row, "mfe_r", "mfe_price")
+    mae_r = _active_plan_intraperiod_metric_value(row, "mae_r", "mae_price")
+
+    if (
+        outcome not in {"tp2_first", "tp1_first", "sl_first", "timeout", "entry_reached", "ambiguous"}
+        and not entry_reached_time
+        and not first_exit_reason
+        and mfe_r is None
+        and mae_r is None
+    ):
+        return "inconclusive"
+
+    if outcome in {"sl_first", "ambiguous"} or first_exit_reason in {"sl", "ambiguous"} or (
+        mae_r is not None and mae_r >= 1.0 and (mfe_r is None or mfe_r < 1.0)
+    ):
+        return "potential_fakeout"
+
+    if outcome == "tp2_first" or (mfe_r is not None and mfe_r >= 2.0) or (outcome == "tp1_first" and mfe_r is not None and mfe_r >= 1.0):
+        return "potential_missed_turn"
+
+    if outcome in {"timeout", "entry_reached"} or (
+        entry_reached_time and not first_exit_reason and mfe_r is not None and mfe_r > 0
+    ):
+        return "bad_entry_timing"
+
+    return "inconclusive"
+
+
+def _active_plan_representatives(rows: list[dict[str, Any]], *, limit: int = 5) -> list[str]:
+    representatives: list[str] = []
+    for row in rows[:limit]:
+        signal_id = str(row.get("signal_id", "")).strip()
+        timestamp = str(row.get("timestamp_jst", "")).strip()[:16].replace("T", " ")
+        action = str(row.get("active_primary_action", "") or "NO_ACTION").strip() or "NO_ACTION"
+        label = str(row.get("active_subject_label", "")).strip()
+        headline = str(row.get("active_headline", "")).strip()
+        parts = [part for part in [timestamp, signal_id, action, label, headline] if part]
+        representatives.append(" / ".join(parts))
+    return representatives
 
 
 def _sample_note(count: int) -> str:
@@ -1356,12 +16485,109 @@ def _signal_tier_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _review_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     verdicts = Counter(row.get("user_verdict", "") for row in rows if row.get("user_verdict"))
     usefulness = [int(row.get("usefulness_1to5", "0")) for row in rows if str(row.get("usefulness_1to5", "")).isdigit()]
+    review_source_counts = Counter(_review_source_value(row) for row in rows if _review_source_value(row))
+    reviewed_count = sum(
+        1
+        for row in rows
+        if _review_source_value(row) in {"ai", "human_override"}
+        or str(row.get("user_verdict", "")).strip()
+        or str(row.get("sl_eval", "")).strip()
+        or str(row.get("tp_eval", "")).strip()
+        or str(row.get("tf_15m_eval", "")).strip()
+    )
     actual_move_driver_count = sum(1 for row in rows if row.get("actual_move_driver"))
+    misleading_marked = [row for row in rows if str(row.get("misleading_entry_like_wording", "")).strip() in {"yes", "no"}]
+    misleading_yes_count = sum(1 for row in misleading_marked if str(row.get("misleading_entry_like_wording", "")).strip() == "yes")
+    logic_marked = [row for row in rows if str(row.get("logic_validated", "")).strip() in {"true", "false"}]
+    logic_true_count = sum(1 for row in logic_marked if str(row.get("logic_validated", "")).strip() == "true")
+    sl_marked = [row for row in rows if str(row.get("sl_eval", "")).strip() in {"good", "too_tight", "too_loose"}]
+    tp_marked = [row for row in rows if str(row.get("tp_eval", "")).strip() in {"good", "too_close", "too_far"}]
+    tf_4h_marked = [row for row in rows if str(row.get("tf_4h_eval", "")).strip() in {"good", "mixed", "poor"}]
+    tf_1h_marked = [row for row in rows if str(row.get("tf_1h_eval", "")).strip() in {"good", "mixed", "poor"}]
+    tf_15m_marked = [row for row in rows if str(row.get("tf_15m_eval", "")).strip() in {"good", "mixed", "poor"}]
+    action_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not row.get("user_verdict") and not row.get("tp_eval") and not row.get("sl_eval"):
+            continue
+        action_class = _infer_review_action_class(row)
+        priority = _infer_review_priority(row, action_class)
+        next_action = _default_next_action(row, action_class)
+        action_rows.append({**row, "review_action_class": action_class, "review_priority": priority, "next_action": next_action})
     return {
         "verdicts": verdicts,
+        "reviewed_count": reviewed_count,
+        "review_source_counts": review_source_counts,
         "avg_usefulness": mean(usefulness) if usefulness else 0.0,
         "actual_move_driver_rate": _ratio(actual_move_driver_count, len(rows)),
+        "misleading_entry_rate": _ratio(misleading_yes_count, len(misleading_marked)),
+        "misleading_entry_coverage": _ratio(len(misleading_marked), len(rows)),
+        "logic_validated_true_rate": _ratio(logic_true_count, len(logic_marked)),
+        "logic_validated_coverage": _ratio(len(logic_marked), len(rows)),
+        "sl_eval_counts": Counter(str(row.get("sl_eval", "")).strip() for row in sl_marked),
+        "tp_eval_counts": Counter(str(row.get("tp_eval", "")).strip() for row in tp_marked),
+        "tf_4h_eval_counts": Counter(str(row.get("tf_4h_eval", "")).strip() for row in tf_4h_marked),
+        "tf_1h_eval_counts": Counter(str(row.get("tf_1h_eval", "")).strip() for row in tf_1h_marked),
+        "tf_15m_eval_counts": Counter(str(row.get("tf_15m_eval", "")).strip() for row in tf_15m_marked),
+        "action_class_counts": Counter(str(row.get("review_action_class", "")).strip() for row in action_rows),
+        "priority_counts": Counter(str(row.get("review_priority", "")).strip() for row in action_rows),
+        "high_priority_actions": [
+            row
+            for row in action_rows
+            if str(row.get("review_priority", "")).strip() == "high"
+            and str(row.get("review_action_class", "")).strip() != "none"
+        ][:3],
     }
+
+
+def _format_period_range(rows: list[dict[str, Any]]) -> str:
+    dt_values = sorted(row.get("timestamp_jst", "") for row in rows if row.get("timestamp_jst", ""))
+    if not dt_values:
+        return "集計期間なし"
+    return f"{dt_values[0][:16].replace('T', ' ')} 〜 {dt_values[-1][:16].replace('T', ' ')}"
+
+
+def _verdict_summary_lines(review_summary: dict[str, Any]) -> list[str]:
+    verdicts: Counter[str] = review_summary["verdicts"]
+    if not verdicts:
+        return ["- 完了レビューはまだありません"]
+    return [
+        f"- {USER_VERDICT_LABELS.get(verdict, verdict)}: {count}件"
+        for verdict, count in verdicts.most_common()
+    ]
+
+
+def _headline_findings(
+    completed: list[dict[str, Any]],
+    review_summary: dict[str, Any],
+    improvements: list[dict[str, Any]],
+) -> list[str]:
+    if not completed:
+        return ["- まだ集計対象の完了データがありません"]
+
+    findings = [
+        f"- 今回の完了データは {len(completed)} 件です。近似PF は {_profit_factor_proxy(completed):.2f}、全体勝率は {_format_pct(_ratio(sum(1 for row in completed if _success_flag(row) is True), sum(1 for row in completed if _success_flag(row) is not None)))} でした。"
+    ]
+    verdicts: Counter[str] = review_summary["verdicts"]
+    if verdicts:
+        top_verdict, top_count = verdicts.most_common(1)[0]
+        findings.append(f"- 事後評価では「{USER_VERDICT_LABELS.get(top_verdict, top_verdict)}」が最も多く、{top_count} 件でした。")
+        if review_summary["avg_usefulness"] > 0:
+            findings.append(f"- 平均の役立ち度は {review_summary['avg_usefulness']:.2f} / 5 でした。")
+        if review_summary["logic_validated_coverage"] > 0:
+            findings.append(
+                f"- 根拠整合の入力率は {_format_pct(review_summary['logic_validated_coverage'])}、整合した比率は {_format_pct(review_summary['logic_validated_true_rate'])} でした。"
+            )
+        if review_summary["misleading_entry_coverage"] > 0:
+            findings.append(
+                f"- エントリー寄り誤読の入力率は {_format_pct(review_summary['misleading_entry_coverage'])}、誤読ありは {_format_pct(review_summary['misleading_entry_rate'])} でした。"
+            )
+    else:
+        findings.append("- 事後評価はまだ十分に集まっていません。")
+    if improvements:
+        findings.append(f"- 今回の改善候補の最上位は「{improvements[0]['title']}」です。")
+    else:
+        findings.append("- 目立った改善候補はまだ確定していません。")
+    return findings
 
 
 def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1390,11 +16616,738 @@ def _phase1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _shadow_tp_is_wider(row: dict[str, Any]) -> bool:
+    side = str(row.get("primary_setup_side", "")).strip()
+    tp1 = _parse_float(row.get("tp1_price"), 0.0)
+    shadow_tp1 = _parse_float(row.get("shadow_tp1_price"), 0.0)
+    if side == "long":
+        return shadow_tp1 > tp1 > 0
+    if side == "short":
+        return 0 < shadow_tp1 < tp1
+    return False
+
+
+def _paper_trade_summary(rows: list[dict[str, Any]], paper_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
+    matched_orders = [row for row in paper_rows if str(row.get("signal_id", "")).strip() in period_ids]
+    gate_pass_rows = [row for row in rows if str(row.get("trade_execution_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in rows if str(row.get("trade_execution_gate", "")).strip() == "blocked"]
+    blocker_counts: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocker_counts.update(_split_values(str(row.get("trade_execution_blockers", ""))))
+    shadow_rows = [row for row in rows if str(row.get("shadow_exit_rule_version", "")).strip() == "phase1_v1_shadow"]
+    too_close_rows = [row for row in rows if str(row.get("tp_eval", "")).strip() == "too_close"]
+    too_close_shadow_wider = [row for row in too_close_rows if _shadow_tp_is_wider(row)]
+    return {
+        "paper_count": len(matched_orders),
+        "planned_count": sum(1 for row in matched_orders if str(row.get("paper_order_status", "")).strip() == "planned"),
+        "gate_pass_count": len(gate_pass_rows),
+        "gate_blocked_count": len(blocked_rows),
+        "blockers": _format_counter(blocker_counts, limit=5),
+        "shadow_count": len(shadow_rows),
+        "too_close_count": len(too_close_rows),
+        "too_close_shadow_wider_count": len(too_close_shadow_wider),
+    }
+
+
+def _paper_position_summary(rows: list[dict[str, Any]], position_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    pass_rows = [row for row in rows if str(row.get("opportunity_gate", "")).strip() == "pass"]
+    pass_ids = {str(row.get("signal_id", "")).strip() for row in pass_rows if str(row.get("signal_id", "")).strip()}
+    matched = [row for row in position_rows if str(row.get("signal_id", "")).strip() in pass_ids]
+    matched_by_id = {
+        str(row.get("signal_id", "")).strip(): row
+        for row in matched
+        if str(row.get("signal_id", "")).strip()
+    }
+    type_counts = Counter(str(row.get("opportunity_type", "")).strip() for row in pass_rows)
+    status_counts = Counter(str(row.get("position_status", "")).strip() for row in matched)
+    exit_status_counts = Counter(str(row.get("exit_status", "")).strip() for row in matched if str(row.get("exit_status", "")).strip())
+    closed_rows = [row for row in matched if str(row.get("position_status", "")).strip() == "closed"]
+    missed_rows = [
+        row
+        for row in matched
+        if str(row.get("missed_opportunity", "")).strip().lower() == "true"
+        or str(row.get("exit_status", "")).strip() == "missed_opportunity"
+    ]
+    old_pending_rows = [
+        row
+        for row in matched
+        if str(row.get("position_status", "")).strip() == "pending"
+        and (datetime.now(tz=JST) - (_parse_dt(row.get("timestamp_jst", "")) or datetime.now(tz=JST))).total_seconds()
+        > 24 * 60 * 60
+    ]
+
+    by_type: dict[str, dict[str, Any]] = {}
+    for opportunity_type in sorted({str(row.get("opportunity_type", "")).strip() or "unknown" for row in closed_rows}):
+        subset = [row for row in closed_rows if (str(row.get("opportunity_type", "")).strip() or "unknown") == opportunity_type]
+        r_values = [_parse_float(row.get("realized_r"), 0.0) for row in subset if str(row.get("realized_r", "")).strip()]
+        positive = sum(value for value in r_values if value > 0)
+        negative = abs(sum(value for value in r_values if value < 0))
+        wins = sum(1 for row in subset if str(row.get("exit_status", "")).strip() == "tp2_hit")
+        by_type[opportunity_type] = {
+            "count": len(subset),
+            "win_rate": _ratio(wins, len(subset)),
+            "avg_realized_r": (sum(r_values) / len(r_values)) if r_values else 0.0,
+            "approx_pf": (positive / negative) if negative > 0 else 0.0,
+        }
+    recorded_ids = {str(row.get("signal_id", "")).strip() for row in matched}
+    missing_ids = [
+        str(row.get("signal_id", "")).strip()
+        for row in pass_rows
+        if str(row.get("signal_id", "")).strip() and str(row.get("signal_id", "")).strip() not in recorded_ids
+    ]
+    hard_quality_counts = _quality_guard_counts(rows, _HARD_QUALITY_GUARD_REASONS)
+    soft_quality_counts = _quality_guard_counts(rows, _SOFT_QUALITY_GUARD_REASONS)
+    quality_guard_blocked_count = sum(
+        1
+        for row in rows
+        if str(row.get("opportunity_gate", "")).strip() == "blocked"
+        and _quality_guard_reason_hits(row, _HARD_QUALITY_GUARD_REASONS)
+    )
+    soft_quality_risk_count = sum(
+        1
+        for row in pass_rows
+        if _quality_guard_reason_hits(row, _SOFT_QUALITY_GUARD_REASONS)
+    )
+    pre_guard_market_map_count = _pre_guard_market_map_count(rows)
+    post_guard_market_map_count = sum(
+        1
+        for row in pass_rows
+        if str(row.get("opportunity_type", "")).strip() == "market_map_opportunity"
+    )
+    guarded_sl_hit_count = sum(
+        1
+        for row in rows
+        if str(row.get("signal_id", "")).strip() in matched_by_id
+        and str(matched_by_id[str(row.get("signal_id", "")).strip()].get("exit_status", "")).strip() == "sl_hit"
+        and _quality_guard_reason_hits(row, _QUALITY_GUARD_LEAF_REASONS)
+    )
+    return {
+        "opportunity_pass_count": len(pass_rows),
+        "position_count": len(matched),
+        "missing_position_count": len(missing_ids),
+        "quality_guard_counts": _format_counter(hard_quality_counts, limit=6),
+        "quality_guard_blocked_count": quality_guard_blocked_count,
+        "hard_quality_counts": _format_counter(hard_quality_counts, limit=6),
+        "hard_quality_blocked_count": quality_guard_blocked_count,
+        "soft_quality_counts": _format_counter(soft_quality_counts, limit=6),
+        "soft_quality_risk_count": soft_quality_risk_count,
+        "pre_guard_market_map_count": pre_guard_market_map_count,
+        "post_guard_market_map_count": post_guard_market_map_count,
+        "guarded_sl_hit_count": guarded_sl_hit_count,
+        "type_counts": _format_counter(type_counts, limit=6),
+        "status_counts": _format_counter(status_counts, limit=4),
+        "exit_status_counts": _format_counter(exit_status_counts, limit=6),
+        "closed_by_type": by_type,
+        "missed_count": len(missed_rows),
+        "missed_examples": [str(row.get("signal_id", "")).strip() for row in missed_rows if str(row.get("signal_id", "")).strip()][:3],
+        "old_pending_count": len(old_pending_rows),
+        "representatives": missing_ids[:3],
+    }
+
+
+def _phase1_observation_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    pass_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    blocked_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "blocked"]
+    type_counts = Counter(str(row.get("phase1_observation_type", "")).strip() for row in pass_rows)
+    blocked_reasons: Counter[str] = Counter()
+    for row in blocked_rows:
+        blocked_reasons.update(_split_values(str(row.get("phase1_observation_reasons", ""))))
+
+    def perf(subset: list[dict[str, Any]]) -> dict[str, Any]:
+        settled = [flag for flag in (_success_flag(row) for row in subset) if flag is not None]
+        tp_pool = [row for row in subset if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+        mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in subset)
+        mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in subset)
+        return {
+            "count": len(subset),
+            "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+            "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+            "avg_mfe": _mean_value(subset, "signal_based_MFE_24h"),
+            "avg_mae": _mean_value(subset, "signal_based_MAE_24h"),
+            "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        }
+
+    representatives = [
+        str(row.get("signal_id", "")).strip()
+        for row in sorted(pass_rows, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+        if str(row.get("signal_id", "")).strip()
+    ][:5]
+    return {
+        "pass_count": len(pass_rows),
+        "blocked_count": len(blocked_rows),
+        "type_counts": _format_counter(type_counts, limit=5),
+        "blocked_reasons": _format_counter(blocked_reasons, limit=5),
+        "overall": perf(pass_rows),
+        "direction_rr_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "direction_rr_learning"]),
+        "setup_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "setup_watch_learning"]),
+        "confidence_watch_learning": perf([row for row in pass_rows if row.get("phase1_observation_type") == "confidence_watch_learning"]),
+        "counter_long_short_watch": perf([row for row in pass_rows if row.get("phase1_observation_type") == "counter_long_short_watch"]),
+        "representatives": representatives,
+    }
+
+
+def _phase1b_promotion_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_confidence_watch_learning_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    prelabel_counts = Counter(str(row.get("prelabel", "")).strip() for row in candidates)
+    return {
+        "count": len(candidates),
+        "prelabels": _format_counter(prelabel_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _phase1b_lite_summary(rows: list[dict[str, Any]], lite_orders: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_phase1b_lite_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    order_ids = {str(row.get("signal_id", "")).strip() for row in lite_orders if str(row.get("signal_id", "")).strip()}
+    candidate_ids = {str(row.get("signal_id", "")).strip() for row in candidates if str(row.get("signal_id", "")).strip()}
+    status_counts = Counter(str(row.get("lite_status", "")).strip() for row in lite_orders if str(row.get("lite_status", "")).strip())
+    return {
+        "count": len(candidates),
+        "order_count": len(order_ids),
+        "missing_order_count": len(candidate_ids - order_ids),
+        "status_counts": _format_counter(status_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _counter_long_short_watch_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_counter_long_short_watch_candidates(rows)
+    settled = [flag for flag in (_success_flag(row) for row in candidates) if flag is not None]
+    tp_pool = [row for row in candidates if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    mfe_sum = sum(_parse_float(row.get("signal_based_MFE_24h"), 0.0) for row in candidates)
+    mae_sum = sum(_parse_float(row.get("signal_based_MAE_24h"), 0.0) for row in candidates)
+    risk_flag_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+    return {
+        "count": len(candidates),
+        "risk_flags": _format_counter(risk_flag_counts, limit=5),
+        "win_rate": _ratio(sum(1 for flag in settled if flag), len(settled)),
+        "tp1_first_rate": _ratio(sum(1 for row in tp_pool if row.get("tp1_hit_first") == "true"), len(tp_pool)),
+        "avg_direction": _mean_value(candidates, "direction"),
+        "avg_execution": _mean_value(candidates, "execution"),
+        "avg_wait": _mean_value(candidates, "wait"),
+        "avg_mfe": _mean_value(candidates, "signal_based_MFE_24h"),
+        "avg_mae": _mean_value(candidates, "signal_based_MAE_24h"),
+        "approx_pf": (mfe_sum / mae_sum) if mae_sum > 0 else 0.0,
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _failed_breakout_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_failed_breakout_down_reversal_candidates(rows)
+    risk_flag_counts: Counter[str] = Counter()
+    notify_reason_counts: Counter[str] = Counter()
+    for row in candidates:
+        risk_flag_counts.update(row["risk_flags"])
+        notify_reason_counts.update(row["notify_reasons"])
+    return {
+        "count": len(candidates),
+        "risk_flags": _format_counter(risk_flag_counts, limit=5),
+        "notify_reasons": _format_counter(notify_reason_counts, limit=5),
+        "avg_long_score": _mean_value(candidates, "long_score"),
+        "avg_short_score": _mean_value(candidates, "short_score"),
+        "avg_gap": _mean_value(candidates, "score_gap"),
+        "avg_mfe": _mean_value(candidates, "mfe24h"),
+        "avg_mae": _mean_value(candidates, "mae24h"),
+        "representatives": [str(row.get("signal_id", "")).strip() for row in candidates[:5] if str(row.get("signal_id", "")).strip()],
+    }
+
+
+def _market_map_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    market_rows = [
+        row
+        for row in rows
+        if str(row.get("market_map_primary_state", "")).strip()
+        or _split_values(str(row.get("market_map_flags", "")))
+    ]
+    flag_counts: Counter[str] = Counter()
+    primary_counts: Counter[str] = Counter()
+    trend_counts: Counter[str] = Counter()
+    for row in market_rows:
+        flag_counts.update(_split_values(str(row.get("market_map_flags", ""))))
+        primary = str(row.get("market_map_primary_state", "")).strip()
+        if primary:
+            primary_counts[primary] += 1
+        trend = str(row.get("trend_flip_state", "")).strip()
+        if trend:
+            trend_counts[trend] += 1
+
+    down_reversal_rows = [
+        row
+        for row in market_rows
+        if "failed_breakout_down_reversal" in _split_values(str(row.get("market_map_flags", "")))
+        or "support_to_resistance_flip" in _split_values(str(row.get("market_map_flags", "")))
+    ]
+    stats = _market_map_group_stats(down_reversal_rows)
+    return {
+        "count": len(market_rows),
+        "primary_states": _format_counter(primary_counts, limit=5),
+        "flags": _format_counter(flag_counts, limit=8),
+        "trend_states": _format_counter(trend_counts, limit=5),
+        "down_reversal_count": stats["count"],
+        "down_reversal_win_rate": stats["win_rate"],
+        "down_reversal_wrong_rate": stats["wrong_rate"],
+        "down_reversal_avg_mfe": stats["avg_mfe"],
+        "down_reversal_avg_mae": stats["avg_mae"],
+        "representatives": stats["representatives"],
+    }
+
+
+def _phase1a_observation_order_summary(
+    rows: list[dict[str, Any]],
+    observation_orders: list[dict[str, Any]],
+) -> dict[str, Any]:
+    period_ids = {str(row.get("signal_id", "")).strip() for row in rows if str(row.get("signal_id", "")).strip()}
+    matched_orders = [
+        row for row in observation_orders if str(row.get("signal_id", "")).strip() in period_ids
+    ]
+    order_ids = {str(row.get("signal_id", "")).strip() for row in matched_orders if str(row.get("signal_id", "")).strip()}
+    pass_rows = [row for row in rows if str(row.get("phase1_observation_gate", "")).strip() == "pass"]
+    missing_order_rows = [
+        row for row in pass_rows if str(row.get("signal_id", "")).strip() not in order_ids
+    ]
+    type_counts = Counter(str(row.get("observation_type", "")).strip() for row in matched_orders)
+    status_counts = Counter(str(row.get("observation_status", "")).strip() for row in matched_orders)
+    setup_watch_rows = [
+        row for row in pass_rows if str(row.get("phase1_observation_type", "")).strip() == "setup_watch_learning"
+    ]
+    entry_zone_not_reached_rows = [
+        row for row in setup_watch_rows if str(row.get("primary_setup_reason", "")).strip() == "entry_zone_not_reached"
+    ]
+    representatives = [
+        str(row.get("signal_id", "")).strip()
+        for row in sorted(matched_orders, key=lambda item: str(item.get("timestamp_jst", "")), reverse=True)
+        if str(row.get("signal_id", "")).strip()
+    ][:5]
+    return {
+        "order_count": len(matched_orders),
+        "missing_order_count": len(missing_order_rows),
+        "type_counts": _format_counter(type_counts, limit=5),
+        "status_counts": _format_counter(status_counts, limit=5),
+        "setup_watch_count": len(setup_watch_rows),
+        "entry_zone_not_reached_rate": _ratio(len(entry_zone_not_reached_rows), len(setup_watch_rows)),
+        "representatives": representatives,
+    }
+
+
+def _format_observation_perf(label: str, item: dict[str, Any]) -> str:
+    return (
+        f"- {label}: {item['count']}件 / 勝率={_format_pct(item['win_rate'])} / "
+        f"TP1先行={_format_pct(item['tp1_first_rate'])} / 近似PF={item['approx_pf']:.2f} / "
+        f"平均MFE={item['avg_mfe']:.2f} / 平均MAE={item['avg_mae']:.2f}"
+    )
+
+
+def _phase1_gate_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    ready_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() == "ready"]
+    active_rows = [row for row in rows if _parse_bool(row.get("phase1_active"))]
+    blocker_rows = [row for row in rows if str(row.get("primary_setup_status", "")).strip() in {"invalid", "watch"}]
+    blockers = Counter(
+        str(row.get("primary_setup_reason", "")).strip()
+        or str(row.get("invalid_reason", "")).strip()
+        or str(row.get("primary_setup_status", "")).strip()
+        for row in blocker_rows
+    )
+    tp1_pool = [row for row in active_rows if str(row.get("tp1_hit_first", "")).strip() in {"true", "false"}]
+    expired_pool = [row for row in active_rows if str(row.get("outcome", "")).strip()]
+    return {
+        "ready_count": len(ready_rows),
+        "active_count": len(active_rows),
+        "blocker_text": _format_counter(blockers, limit=5),
+        "tp1_first_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "true"), len(tp1_pool)),
+        "tp1_missed_rate": _ratio(sum(1 for row in tp1_pool if row.get("tp1_hit_first") == "false"), len(tp1_pool)),
+        "expired_rate": _ratio(sum(1 for row in expired_pool if row.get("outcome") == "expired"), len(expired_pool)),
+        "cap_rate": _ratio(sum(1 for row in active_rows if _parse_bool(row.get("max_size_capped"))), len(active_rows)),
+    }
+
+
+def _phase1_blocker_examples(rows: list[dict[str, Any]], *, limit_per_reason: int = 2) -> dict[str, list[str]]:
+    reasons = ("rr_below_min", "confidence_below_min")
+    examples: dict[str, list[str]] = {}
+    for reason in reasons:
+        subset = [row for row in rows if str(row.get("primary_setup_reason", "")).strip() == reason]
+        subset.sort(
+            key=lambda row: (
+                _success_flag(row) is True,
+                _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+                -_parse_float(row.get("signal_based_MAE_24h"), 0.0),
+            ),
+            reverse=True,
+        )
+        formatted: list[str] = []
+        for row in subset[:limit_per_reason]:
+            formatted.append(
+                (
+                    f"{row.get('signal_id', '')}"
+                    f"({row.get('primary_setup_status', '')}/{row.get('prelabel', '')}"
+                    f", dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.0f}"
+                    f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+                    f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f}"
+                    f", MFE24h={_parse_float(row.get('signal_based_MFE_24h'), 0.0):.2f}"
+                    f", MAE24h={_parse_float(row.get('signal_based_MAE_24h'), 0.0):.2f}"
+                    f", outcome={row.get('outcome', '') or 'pending'})"
+                )
+            )
+        examples[reason] = formatted
+    return examples
+
+
+def _phase1_gate_decision(summary: dict[str, Any]) -> tuple[str, str]:
+    active_count = int(summary.get("active_count", 0) or 0)
+    ready_count = int(summary.get("ready_count", 0) or 0)
+    if active_count >= 1:
+        return (
+            "Phase 1 の本有効確認を進めてよい",
+            "phase1_active=true の実データが出ているため、正式指標の観測を優先する",
+        )
+    if ready_count >= 1:
+        return (
+            "Phase 1 の準備観測を進める",
+            "ready は出ているが本有効はまだ無いため、次の phase1_active=true を待って観測を続ける",
+        )
+    return (
+        "Phase 1 の本有効待ち",
+        "ready / phase1_active ともに未検出のため、通知観測を継続する",
+    )
+
+
+def _phase1_focus_rows(rows: list[dict[str, Any]], *, limit: int = 3) -> list[dict[str, Any]]:
+    focus = [
+        row
+        for row in rows
+        if _parse_bool(row.get("phase1_active"))
+        or str(row.get("primary_setup_status", "")).strip() == "ready"
+    ]
+    focus.sort(key=lambda row: str(row.get("timestamp_jst", "")), reverse=True)
+    return focus[:limit]
+
+
 def _negative_outcome(row: dict[str, Any]) -> bool:
     return any(
         row.get(key) in {"poor_entry", "wait_too_strict", "skip_too_strict", "wrong", "loss"}
         for key in ("entry_outcome", "wait_outcome", "skip_outcome", "direction_outcome", "outcome")
     )
+
+
+_COUNTERTREND_LONG_CLUSTER_FLAGS = {
+    "lower_liquidity_close",
+    "orderbook_ask_heavy",
+    "long_flush_exhaustion",
+    "cvd_bullish_divergence",
+    "sweep_incomplete",
+}
+
+
+def _direction_execution_conflict(row: dict[str, Any]) -> bool:
+    return (
+        _parse_float(row.get("confidence_direction_shadow"), 0.0) >= 60.0
+        and _parse_float(row.get("confidence_execution_shadow"), 999.0) <= 20.0
+        and _parse_float(row.get("confidence_wait_shadow"), 0.0) >= 60.0
+    )
+
+
+def _entry_ok_invalid_conflict(row: dict[str, Any]) -> bool:
+    return row.get("prelabel") == "ENTRY_OK" and row.get("primary_setup_status") == "invalid"
+
+
+def _entry_ok_invalid_reason_text(rows: list[dict[str, Any]]) -> str:
+    reasons = Counter(
+        str(row.get("primary_setup_reason", "")).strip() or str(row.get("invalid_reason", "")).strip() or "unknown"
+        for row in rows
+    )
+    if not reasons:
+        return "理由コードなし"
+    return ", ".join(f"{reason}={count}件" for reason, count in reasons.most_common(3))
+
+
+def _entry_ok_rr_blocker_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    blocked = [
+        row
+        for row in rows
+        if _entry_ok_invalid_conflict(row)
+        and (
+            str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+            or "RR不足" in str(row.get("invalid_reason", ""))
+        )
+    ]
+    flags: Counter[str] = Counter()
+    for row in blocked:
+        flags.update(_split_values(row.get("risk_flags", "")))
+    avg_execution = _mean_value(blocked, "confidence_execution_shadow")
+    avg_wait = _mean_value(blocked, "confidence_wait_shadow")
+    threshold_hints: list[str] = []
+    if blocked:
+        common_flags = {flag for flag, count in flags.items() if count >= max(2, len(blocked) // 2)}
+        if {"lower_liquidity_close", "sweep_incomplete"} <= common_flags:
+            threshold_hints.append(
+                "position_risk候補: lower_liquidity_close + sweep_incomplete 同居時は ENTRY_OK から RISKY_ENTRY 寄せを検討"
+            )
+        elif "lower_liquidity_close" in common_flags:
+            threshold_hints.append("position_risk候補: lower_liquidity_close の単独加点を強めるか close 閾値を再確認")
+        elif "upper_liquidity_close" in common_flags:
+            threshold_hints.append("position_risk候補: upper_liquidity_close の単独加点を強めるか close 閾値を再確認")
+        if avg_execution <= 20.0 and avg_wait >= 60.0:
+            threshold_hints.append("confidence候補: execution<=20 かつ wait>=60 の本通知上位扱いを抑制")
+    return {
+        "count": len(blocked),
+        "avg_execution": avg_execution,
+        "avg_wait": avg_wait,
+        "risk_flags": _format_counter(flags),
+        "threshold_hints": threshold_hints,
+    }
+
+
+def _risky_rr_near_threshold_summary(
+    base_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    execution_floor: float = 20.0,
+    limit: int = 3,
+) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("prelabel", "")).strip() == "RISKY_ENTRY"
+        and str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+        and _parse_float(row.get("confidence_execution_shadow"), 0.0) >= execution_floor
+    ]
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _success_flag(row) is True,
+            _parse_float(row.get("signal_based_MFE_24h"), 0.0),
+        ),
+        reverse=True,
+    )
+    flags: Counter[str] = Counter()
+    for row in candidates:
+        flags.update(_split_values(row.get("risk_flags", "")))
+    formatted_examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"(exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", dir={_parse_float(row.get('confidence_direction_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f}"
+            f", MFE24h={_parse_float(row.get('signal_based_MFE_24h'), 0.0):.2f}"
+            f", MAE24h={_parse_float(row.get('signal_based_MAE_24h'), 0.0):.2f}"
+            f", outcome={row.get('outcome', '') or 'pending'})"
+        )
+        for row in candidates[:limit]
+    ]
+    current_logic_examples = [
+        item for item in (_recompute_current_setup_summary(base_dir, str(row.get("signal_id", ""))) for row in candidates[:limit]) if item
+    ]
+    return {
+        "count": len(candidates),
+        "avg_execution": _mean_value(candidates, "confidence_execution_shadow"),
+        "avg_wait": _mean_value(candidates, "confidence_wait_shadow"),
+        "risk_flags": _format_counter(flags),
+        "examples": formatted_examples,
+        "current_logic_examples": current_logic_examples,
+    }
+
+
+def _sweep_rr_notified_summary(rows: list[dict[str, Any]], *, limit: int = 3) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("prelabel", "")).strip() == "RISKY_ENTRY"
+        and str(row.get("primary_setup_status", "")).strip() == "invalid"
+        and str(row.get("primary_setup_reason", "")).strip() == "rr_below_min"
+        and "sweep_incomplete" in _split_values(row.get("risk_flags", ""))
+        and _parse_bool(row.get("was_notified"))
+    ]
+    notify_reasons: Counter[str] = Counter()
+    for row in candidates:
+        notify_reasons.update(_parse_maybe_json_array(str(row.get("notify_reason", ""))))
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _parse_float(row.get("confidence_wait_shadow"), 0.0) * -1,
+            str(row.get("timestamp_jst", "")),
+        ),
+        reverse=True,
+    )
+    examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"({','.join(_parse_maybe_json_array(str(row.get('notify_reason', '')))[:2]) or 'no_reason'}"
+            f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f})"
+        )
+        for row in candidates[:limit]
+    ]
+    return {
+        "count": len(candidates),
+        "notify_reasons": _format_counter(notify_reasons),
+        "examples": examples,
+    }
+
+
+def _sweep_watch_notified_summary(base_dir: Path, rows: list[dict[str, Any]], *, limit: int = 3) -> dict[str, Any]:
+    candidates = [
+        row
+        for row in rows
+        if str(row.get("primary_setup_status", "")).strip() == "watch"
+        and str(row.get("primary_setup_reason", "")).strip() in {
+            "entry_zone_not_reached",
+            "near_entry_zone_waiting_trigger",
+            "inside_entry_zone_with_trigger",
+        }
+        and str(row.get("prelabel", "")).strip() in {"SWEEP_WAIT", "RISKY_ENTRY"}
+        and "sweep_incomplete" in _split_values(row.get("risk_flags", ""))
+        and _parse_bool(row.get("was_notified"))
+    ]
+    notify_reasons: Counter[str] = Counter()
+    for row in candidates:
+        notify_reasons.update(_parse_maybe_json_array(str(row.get("notify_reason", ""))))
+    candidates.sort(
+        key=lambda row: (
+            _parse_float(row.get("confidence_execution_shadow"), 0.0),
+            _parse_float(row.get("confidence_wait_shadow"), 0.0) * -1,
+            str(row.get("timestamp_jst", "")),
+        ),
+        reverse=True,
+    )
+    examples = [
+        (
+            f"{row.get('signal_id', '')}"
+            f"({','.join(_parse_maybe_json_array(str(row.get('notify_reason', '')))[:2]) or 'no_reason'}"
+            f", exec={_parse_float(row.get('confidence_execution_shadow'), 0.0):.0f}"
+            f", wait={_parse_float(row.get('confidence_wait_shadow'), 0.0):.0f})"
+        )
+        for row in candidates[:limit]
+    ]
+    current_logic_examples = [
+        item
+        for item in (_recompute_current_setup_summary(base_dir, str(row.get("signal_id", ""))) for row in candidates[:limit])
+        if item
+    ]
+    return {
+        "count": len(candidates),
+        "notify_reasons": _format_counter(notify_reasons),
+        "examples": examples,
+        "current_logic_examples": current_logic_examples,
+    }
+
+
+def _countertrend_long_cluster(row: dict[str, Any]) -> bool:
+    if row.get("bias") != "long":
+        return False
+    flags = set(_split_values(str(row.get("risk_flags", ""))))
+    return len(flags & _COUNTERTREND_LONG_CLUSTER_FLAGS) >= 2
+
+
+def _recent_rows(rows: list[dict[str, Any]], *, hours: int = 12) -> list[dict[str, Any]]:
+    start = datetime.now(tz=JST) - timedelta(hours=hours)
+    recent: list[dict[str, Any]] = []
+    for row in rows:
+        dt = _parse_dt(row.get("timestamp_jst", ""))
+        if dt is None:
+            continue
+        if dt >= start:
+            recent.append(row)
+    return recent
+
+
+def _bias_direction_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
+    for bias in ("long", "short", "wait"):
+        subset = [row for row in rows if row.get("bias") == bias]
+        if not subset:
+            continue
+        counts = Counter(row.get("direction_outcome", "") for row in subset if row.get("direction_outcome", ""))
+        total = len(subset)
+        summary.append(
+            {
+                "bias": bias,
+                "count": total,
+                "correct": counts.get("correct", 0),
+                "wrong": counts.get("wrong", 0),
+                "unclear": counts.get("unclear", 0),
+                "wrong_rate": _ratio(counts.get("wrong", 0), total),
+            }
+        )
+    return summary
+
+
+def _risk_flag_wrong_rate_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: Counter[str] = Counter()
+    wrongs: Counter[str] = Counter()
+    for row in rows:
+        flags = _split_values(row.get("risk_flags", ""))
+        is_wrong = row.get("direction_outcome") == "wrong"
+        for flag in flags:
+            counts[flag] += 1
+            if is_wrong:
+                wrongs[flag] += 1
+    summary: list[dict[str, Any]] = []
+    for flag, count in counts.items():
+        if count < 5:
+            continue
+        summary.append(
+            {
+                "flag": flag,
+                "count": count,
+                "wrong_count": wrongs[flag],
+                "wrong_rate": _ratio(wrongs[flag], count),
+            }
+        )
+    summary.sort(key=lambda item: (item["wrong_rate"], item["count"]), reverse=True)
+    return summary
+
+
+def _recent_live_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    direction_conflicts = [row for row in rows if _direction_execution_conflict(row)]
+    entry_invalid_rows = [row for row in rows if _entry_ok_invalid_conflict(row)]
+    countertrend_rows = [row for row in rows if _countertrend_long_cluster(row)]
+    direction_conflict_flags: Counter[str] = Counter()
+    direction_conflict_reasons: Counter[str] = Counter()
+    suppress_reasons: Counter[str] = Counter()
+    for row in direction_conflicts:
+        direction_conflict_flags.update(_split_values(row.get("risk_flags", "")))
+        reason = str(row.get("primary_setup_reason", "")).strip() or str(row.get("invalid_reason", "")).strip()
+        if reason:
+            direction_conflict_reasons[reason] += 1
+    for row in rows:
+        suppress_reasons.update(_split_values(row.get("suppress_reason", "")))
+    return {
+        "count": len(rows),
+        "direction_execution_conflict_count": len(direction_conflicts),
+        "direction_execution_conflict_flags": _format_counter(direction_conflict_flags),
+        "direction_execution_conflict_reasons": _format_counter(direction_conflict_reasons),
+        "entry_ok_invalid_count": len(entry_invalid_rows),
+        "countertrend_long_cluster_count": len(countertrend_rows),
+        "suppress_reasons": _format_counter(suppress_reasons),
+        "rr_sweep_recheck_wait_count": suppress_reasons.get("rr_sweep_recheck_wait", 0),
+        "attention_rr_sweep_recheck_wait_count": suppress_reasons.get("attention_rr_sweep_recheck_wait", 0),
+    }
 
 
 def _risk_flag_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1442,10 +17395,34 @@ def _profit_factor_proxy(rows: list[dict[str, Any]]) -> float:
     return gross_profit / gross_loss
 
 
-def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) -> list[dict[str, Any]]:
+def _build_improvement_candidates(
+    rows: list[dict[str, Any]],
+    *,
+    monthly: bool,
+    period_rows: list[dict[str, Any]] | None = None,
+    recent_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    max_candidates = 2 if monthly else 3
+    period_rows = period_rows or []
+    recent_rows = recent_rows or []
 
-    entry_rows = [row for row in rows if row.get("prelabel") == "ENTRY_OK"]
+    entry_invalid_rows = [row for row in period_rows if _entry_ok_invalid_conflict(row)]
+    if len(entry_invalid_rows) >= 3:
+        candidates.append(
+            {
+                "title": "ENTRY_OK と setup invalid の整合性崩れ",
+                "reason": (
+                    f"期間内で ENTRY_OK + invalid が {len(entry_invalid_rows)} 件あります"
+                    f"。主理由: {_entry_ok_invalid_reason_text(entry_invalid_rows)}"
+                ),
+                "evidence_count": len(entry_invalid_rows),
+                "category": "評価整合性",
+                "touchpoints": "main.py, src/analysis/confidence.py, src/analysis/position_risk.py",
+            }
+        )
+
+    entry_rows = [row for row in rows if row.get("prelabel") == "ENTRY_OK" and not _entry_ok_invalid_conflict(row)]
     if entry_rows:
         poor_count = sum(1 for row in entry_rows if row.get("entry_outcome") == "poor_entry")
         poor_rate = _ratio(poor_count, len(entry_rows))
@@ -1490,6 +17467,54 @@ def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) 
                 }
             )
 
+    long_rows = [row for row in rows if row.get("bias") == "long"]
+    short_rows = [row for row in rows if row.get("bias") == "short"]
+    if len(long_rows) >= 20 and short_rows:
+        long_wrong_count = sum(1 for row in long_rows if row.get("direction_outcome") == "wrong")
+        short_wrong_count = sum(1 for row in short_rows if row.get("direction_outcome") == "wrong")
+        long_wrong_rate = _ratio(long_wrong_count, len(long_rows))
+        short_wrong_rate = _ratio(short_wrong_count, len(short_rows))
+        if long_wrong_rate >= 0.55 and (long_wrong_rate - short_wrong_rate) >= 0.15:
+            candidates.append(
+                {
+                    "title": "ロング方向スコアが強すぎる",
+                    "reason": (
+                        f"bias=long の wrong が {long_wrong_count}/{len(long_rows)} 件 ({_format_pct(long_wrong_rate)}) "
+                        f"で、short より {_format_pct(long_wrong_rate - short_wrong_rate)} 悪い"
+                    ),
+                    "evidence_count": long_wrong_count,
+                    "category": "direction/confidence 補正",
+                    "touchpoints": "main.py, src/analysis/confidence.py",
+                }
+            )
+
+    cluster_rows = [row for row in rows if _countertrend_long_cluster(row)]
+    if len(cluster_rows) >= 8:
+        wrong_count = sum(1 for row in cluster_rows if row.get("direction_outcome") == "wrong")
+        wrong_rate = _ratio(wrong_count, len(cluster_rows))
+        if wrong_rate >= 0.6:
+            candidates.append(
+                {
+                    "title": "反発示唆の過大評価",
+                    "reason": f"countertrend_long_cluster の wrong が {wrong_count}/{len(cluster_rows)} 件 ({_format_pct(wrong_rate)})",
+                    "evidence_count": wrong_count,
+                    "category": "risk_flag と direction の整合",
+                    "touchpoints": "src/analysis/confidence.py, src/analysis/position_risk.py",
+                }
+            )
+
+    direction_conflicts = [row for row in recent_rows if _direction_execution_conflict(row)]
+    if len(direction_conflicts) >= 2:
+        candidates.append(
+            {
+                "title": "速報で方向/実行不整合が継続",
+                "reason": f"直近12時間で direction_execution_conflict が {len(direction_conflicts)} 件あります",
+                "evidence_count": len(direction_conflicts),
+                "category": "速報監視",
+                "touchpoints": "tools/log_feedback.py",
+            }
+        )
+
     normal_rows = [row for row in rows if row.get("signal_tier", "normal") == "normal"]
     strong_ai_rows = [row for row in rows if row.get("signal_tier") == "strong_ai_confirmed"]
     if normal_rows and strong_ai_rows:
@@ -1532,6 +17557,105 @@ def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) 
                 }
             )
 
+    misleading_marked_rows = [row for row in rows if row.get("misleading_entry_like_wording") in {"yes", "no"}]
+    if len(misleading_marked_rows) >= 5:
+        misleading_yes_count = sum(1 for row in misleading_marked_rows if row.get("misleading_entry_like_wording") == "yes")
+        misleading_rate = _ratio(misleading_yes_count, len(misleading_marked_rows))
+        if misleading_yes_count >= 3 and misleading_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "件名または本文がエントリー寄りに誤読されやすい",
+                    "reason": f"misleading_entry_like_wording=yes が {misleading_yes_count}/{len(misleading_marked_rows)} 件 ({_format_pct(misleading_rate)})",
+                    "evidence_count": misleading_yes_count,
+                    "category": "通知文面",
+                    "touchpoints": "src/notification/detail_page.py, src/ai/summary.py",
+                }
+            )
+
+    logic_marked_rows = [row for row in rows if row.get("logic_validated") in {"true", "false"}]
+    if len(logic_marked_rows) >= 5:
+        logic_false_count = sum(1 for row in logic_marked_rows if row.get("logic_validated") == "false")
+        logic_false_rate = _ratio(logic_false_count, len(logic_marked_rows))
+        if logic_false_count >= 3 and logic_false_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "通知根拠と実際の値動き要因がずれやすい",
+                    "reason": f"logic_validated=false が {logic_false_count}/{len(logic_marked_rows)} 件 ({_format_pct(logic_false_rate)})",
+                    "evidence_count": logic_false_count,
+                    "category": "根拠整合",
+                    "touchpoints": "main.py, src/ai/summary.py, tools/log_feedback.py",
+                }
+            )
+
+    tp_marked_rows = [row for row in rows if row.get("tp_eval") in {"good", "too_close", "too_far"}]
+    if len(tp_marked_rows) >= 5:
+        too_close_count = sum(1 for row in tp_marked_rows if row.get("tp_eval") == "too_close")
+        too_far_count = sum(1 for row in tp_marked_rows if row.get("tp_eval") == "too_far")
+        too_close_rate = _ratio(too_close_count, len(tp_marked_rows))
+        too_far_rate = _ratio(too_far_count, len(tp_marked_rows))
+        if too_close_count >= 3 and too_close_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "TP が近すぎるケースが多い",
+                    "reason": f"tp_eval=too_close が {too_close_count}/{len(tp_marked_rows)} 件 ({_format_pct(too_close_rate)})",
+                    "evidence_count": too_close_count,
+                    "category": "TP/出口精度",
+                    "touchpoints": "src/analysis/rr.py, src/trade/exit_manager.py",
+                }
+            )
+        if too_far_count >= 3 and too_far_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "TP が遠すぎるケースが多い",
+                    "reason": f"tp_eval=too_far が {too_far_count}/{len(tp_marked_rows)} 件 ({_format_pct(too_far_rate)})",
+                    "evidence_count": too_far_count,
+                    "category": "TP/出口精度",
+                    "touchpoints": "src/analysis/rr.py, src/trade/exit_manager.py",
+                }
+            )
+
+    sl_marked_rows = [row for row in rows if row.get("sl_eval") in {"good", "too_tight", "too_loose"}]
+    if len(sl_marked_rows) >= 5:
+        too_tight_count = sum(1 for row in sl_marked_rows if row.get("sl_eval") == "too_tight")
+        too_loose_count = sum(1 for row in sl_marked_rows if row.get("sl_eval") == "too_loose")
+        too_tight_rate = _ratio(too_tight_count, len(sl_marked_rows))
+        too_loose_rate = _ratio(too_loose_count, len(sl_marked_rows))
+        if too_tight_count >= 3 and too_tight_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "SL が狭すぎるケースが多い",
+                    "reason": f"sl_eval=too_tight が {too_tight_count}/{len(sl_marked_rows)} 件 ({_format_pct(too_tight_rate)})",
+                    "evidence_count": too_tight_count,
+                    "category": "SL精度",
+                    "touchpoints": "src/analysis/rr.py",
+                }
+            )
+        if too_loose_count >= 3 and too_loose_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "SL が広すぎるケースが多い",
+                    "reason": f"sl_eval=too_loose が {too_loose_count}/{len(sl_marked_rows)} 件 ({_format_pct(too_loose_rate)})",
+                    "evidence_count": too_loose_count,
+                    "category": "SL精度",
+                    "touchpoints": "src/analysis/rr.py",
+                }
+            )
+
+    tf_15m_marked_rows = [row for row in rows if row.get("tf_15m_eval") in {"good", "mixed", "poor"}]
+    if len(tf_15m_marked_rows) >= 5:
+        poor_count = sum(1 for row in tf_15m_marked_rows if row.get("tf_15m_eval") == "poor")
+        poor_rate = _ratio(poor_count, len(tf_15m_marked_rows))
+        if poor_count >= 3 and poor_rate >= 0.35:
+            candidates.append(
+                {
+                    "title": "15分足の執行価格精度が弱い",
+                    "reason": f"tf_15m_eval=poor が {poor_count}/{len(tf_15m_marked_rows)} 件 ({_format_pct(poor_rate)})",
+                    "evidence_count": poor_count,
+                    "category": "価格帯/執行精度",
+                    "touchpoints": "src/analysis/rr.py, src/notification/detail_page.py",
+                }
+            )
+
     touched_zone_rows = [
         row
         for row in rows
@@ -1557,8 +17681,7 @@ def _build_improvement_candidates(rows: list[dict[str, Any]], *, monthly: bool) 
             )
 
     candidates.sort(key=lambda item: item["evidence_count"], reverse=True)
-    limit = 2 if monthly else 3
-    return candidates[:limit]
+    return candidates[:max_candidates]
 
 
 def build_feedback_report(
@@ -1567,29 +17690,293 @@ def build_feedback_report(
     period: str,
     output_md: Path | None = None,
     shadow_path: Path | None = None,
+    paper_orders_path: Path | None = None,
+    observation_paper_orders_path: Path | None = None,
+    phase1b_lite_paper_orders_path: Path | None = None,
+    paper_positions_path: Path | None = None,
+    ai_health_summary: dict[str, Any] | None = None,
 ) -> str:
+    explicit_shadow_path = shadow_path is not None
     shadow_path = shadow_path or base_dir / "logs" / "csv" / "shadow_log.csv"
-    if not shadow_path.exists():
-        build_shadow_log(base_dir=base_dir, shadow_path=shadow_path)
+    paper_orders_path = paper_orders_path or base_dir / "logs" / "csv" / "paper_orders.csv"
+    observation_paper_orders_path = (
+        observation_paper_orders_path or base_dir / "logs" / "csv" / "observation_paper_orders.csv"
+    )
+    phase1b_lite_paper_orders_path = (
+        phase1b_lite_paper_orders_path or base_dir / "logs" / "csv" / "phase1b_lite_paper_orders.csv"
+    )
+    paper_positions_path = paper_positions_path or base_dir / "logs" / "csv" / "paper_positions.csv"
+    trades_path = base_dir / "logs" / "csv" / "trades.csv"
+    outcomes_path = base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    reviews_path = base_dir / "logs" / "csv" / "user_reviews.csv"
+    if _is_stale_file(shadow_path, [trades_path, outcomes_path, reviews_path]) or (
+        not explicit_shadow_path and _csv_missing_columns(shadow_path, SHADOW_HEADER)
+    ):
+        build_shadow_log(
+            base_dir=base_dir,
+            shadow_path=shadow_path,
+            trades_path=trades_path,
+            outcomes_path=outcomes_path,
+            reviews_path=reviews_path,
+        )
+    if _is_stale_file(observation_paper_orders_path, [shadow_path]) or _csv_missing_columns(
+        observation_paper_orders_path, OBSERVATION_PAPER_ORDER_HEADER
+    ):
+        build_observation_paper_orders(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=observation_paper_orders_path,
+        )
+    if _is_stale_file(phase1b_lite_paper_orders_path, [shadow_path]) or _csv_missing_columns(
+        phase1b_lite_paper_orders_path, PHASE1B_LITE_PAPER_ORDER_HEADER
+    ):
+        build_phase1b_lite_paper_orders(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=phase1b_lite_paper_orders_path,
+        )
+    if _is_stale_file(paper_positions_path, [shadow_path]) or _csv_missing_columns(
+        paper_positions_path, PAPER_POSITION_HEADER
+    ):
+        build_paper_positions(
+            base_dir=base_dir,
+            trades_path=shadow_path,
+            output_path=paper_positions_path,
+        )
     all_rows = _load_csv_rows(shadow_path)
     rows, previous_rows = _period_filter(all_rows, period)
     completed = [row for row in rows if row.get("evaluation_status") == "complete"]
     previous_completed = [row for row in previous_rows if row.get("evaluation_status") == "complete"]
+    review_summary = _review_summary(completed)
+    ai_health_summary = ai_health_summary or _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=trades_path,
+    )
+    phase1_gate = _phase1_gate_summary(completed)
+    paper_summary = _paper_trade_summary(completed, _load_csv_rows(paper_orders_path))
+    paper_position_summary = _paper_position_summary(completed, _load_csv_rows(paper_positions_path))
+    observation_summary = _phase1_observation_summary(completed)
+    phase1a_summary = _phase1a_observation_order_summary(
+        completed,
+        _load_csv_rows(observation_paper_orders_path),
+    )
+    promotion_summary = _phase1b_promotion_summary(completed)
+    phase1b_lite_summary = _phase1b_lite_summary(completed, _load_csv_rows(phase1b_lite_paper_orders_path))
+    counter_watch_summary = _counter_long_short_watch_summary(completed)
+    failed_breakout_summary = _failed_breakout_summary(completed)
+    market_map_summary = _market_map_summary(completed)
+    phase1_decision, phase1_reason = _phase1_gate_decision(phase1_gate)
+    phase1_focus = _phase1_focus_rows(completed)
+    phase1_blocker_examples = _phase1_blocker_examples(completed)
+    recent_rows = _recent_rows(all_rows, hours=12)
+    live_summary = _recent_live_summary(recent_rows)
+    entry_ok_rr_blockers = _entry_ok_rr_blocker_summary(completed)
+    risky_rr_near_threshold = _risky_rr_near_threshold_summary(base_dir, completed)
+    sweep_rr_notified = _sweep_rr_notified_summary(completed)
+    sweep_watch_notified = _sweep_watch_notified_summary(base_dir, completed)
+    improvements = _build_improvement_candidates(
+        completed,
+        monthly=(period == "monthly"),
+        period_rows=rows,
+        recent_rows=recent_rows,
+    )
 
     lines = [f"# フィードバック分析レポート ({period})", ""]
-    lines.append("## 1. 集計概要")
-    if completed:
-        dt_values = sorted(row.get("timestamp_jst", "") for row in completed if row.get("timestamp_jst", ""))
-        if dt_values:
-            lines.append(f"- 集計期間: {dt_values[-1][:16].replace('T', ' ')} 〜 {dt_values[0][:16].replace('T', ' ')}")
+    lines.append("## 1. まず結論")
+    lines.extend(_headline_findings(completed, review_summary, improvements))
+    if ai_health_summary["status"] == "stalled":
+        lines.append(
+            f"- AI事後評価は停止中です。候補残 {ai_health_summary['backlog_pending']} 件、直近エラー {ai_health_summary['last_ai_error_at']}。"
+        )
+    lines.append(
+        f"- Phase 1 判定では ready={phase1_gate['ready_count']} 件、phase1_active=true={phase1_gate['active_count']} 件です。"
+    )
+    lines.append(f"- 判定: {phase1_decision} ({phase1_reason})")
+    lines.append("")
+
+    lines.append("## 2. 今回の対象")
+    lines.append(f"- 集計期間: {_format_period_range(completed)}")
     lines.append(f"- 総観測件数: {len(completed)}")
     quality_counts = Counter(row.get("data_quality_flag", "") or "unknown" for row in completed)
     quality_text = ", ".join(f"{key}={value}" for key, value in sorted(quality_counts.items())) or "なし"
-    lines.append(f"- data_quality_flag 別件数: {quality_text}")
+    lines.append(f"- データ品質の内訳: {quality_text}")
     lines.append(f"- 近似PF: {_profit_factor_proxy(completed):.2f}")
     lines.append("")
 
-    lines.append("## 2. regime別件数・勝率・平均MFE・平均MAE")
+    lines.append("## 3. Phase 1 判定サマリー")
+    lines.append(f"- `primary_setup_status=ready` 件数: {phase1_gate['ready_count']}")
+    lines.append(f"- `phase1_active=true` 件数: {phase1_gate['active_count']}")
+    lines.append(f"- 判定: {phase1_decision}")
+    lines.append(f"- 補足: {phase1_reason}")
+    lines.append(f"- TP1 到達率: {_format_pct(phase1_gate['tp1_first_rate'])}")
+    lines.append(f"- `tp1_hit_first=false` 率: {_format_pct(phase1_gate['tp1_missed_rate'])}")
+    lines.append(f"- `expired` 率: {_format_pct(phase1_gate['expired_rate'])}")
+    lines.append(f"- `max_size_capped` 発生率: {_format_pct(phase1_gate['cap_rate'])}")
+    lines.append(f"- ready阻害理由: {phase1_gate['blocker_text']}")
+    if phase1_blocker_examples["rr_below_min"]:
+        lines.append(f"- rr_below_min 代表例: {' / '.join(phase1_blocker_examples['rr_below_min'])}")
+    if phase1_blocker_examples["confidence_below_min"]:
+        lines.append(
+            f"- confidence_below_min 代表例: {' / '.join(phase1_blocker_examples['confidence_below_min'])}"
+        )
+    if phase1_focus:
+        lines.append("- 直近の観測対象:")
+        for row in phase1_focus:
+            lines.append(
+                f"  - {str(row.get('timestamp_jst', ''))[:16].replace('T', ' ')} / {row.get('signal_id', '')} / setup={row.get('primary_setup_status', '')} / phase1_active={row.get('phase1_active', '') or 'false'} / outcome={row.get('outcome', '') or 'pending'}"
+            )
+    lines.append("")
+
+    lines.append("## 4. AI事後評価サマリー")
+    lines.extend(_verdict_summary_lines(review_summary))
+    if review_summary["verdicts"]:
+        lines.append(f"- 平均の役立ち度: {review_summary['avg_usefulness']:.2f} / 5")
+        source_counts: Counter[str] = review_summary["review_source_counts"]
+        if source_counts:
+            lines.append(
+                "- レビュー source: "
+                + ", ".join(f"{key}={value}件" for key, value in source_counts.items() if key)
+            )
+        lines.append(f"- 値動きの主因の入力率: {_format_pct(review_summary['actual_move_driver_rate'])}")
+        lines.append(
+            f"- エントリー寄り誤読の入力率: {_format_pct(review_summary['misleading_entry_coverage'])} / 誤読あり率: {_format_pct(review_summary['misleading_entry_rate'])}"
+        )
+        lines.append(
+            f"- 根拠整合の入力率: {_format_pct(review_summary['logic_validated_coverage'])} / 整合率: {_format_pct(review_summary['logic_validated_true_rate'])}"
+        )
+        sl_counts: Counter[str] = review_summary["sl_eval_counts"]
+        tp_counts: Counter[str] = review_summary["tp_eval_counts"]
+        tf_4h_counts: Counter[str] = review_summary["tf_4h_eval_counts"]
+        tf_1h_counts: Counter[str] = review_summary["tf_1h_eval_counts"]
+        tf_15m_counts: Counter[str] = review_summary["tf_15m_eval_counts"]
+        if sl_counts:
+            lines.append(
+                "- SL評価: "
+                + ", ".join(f"{SL_EVAL_LABELS.get(key, key)}={value}件" for key, value in sl_counts.items())
+            )
+        if tp_counts:
+            lines.append(
+                "- TP評価: "
+                + ", ".join(f"{TP_EVAL_LABELS.get(key, key)}={value}件" for key, value in tp_counts.items())
+            )
+        if tf_4h_counts:
+            lines.append(
+                "- 4時間足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_4h_counts.items())
+            )
+        if tf_1h_counts:
+            lines.append(
+                "- 1時間足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_1h_counts.items())
+            )
+        if tf_15m_counts:
+            lines.append(
+                "- 15分足評価: "
+                + ", ".join(f"{TF_EVAL_LABELS.get(key, key)}={value}件" for key, value in tf_15m_counts.items())
+            )
+    action_counts: Counter[str] = review_summary["action_class_counts"]
+    priority_counts: Counter[str] = review_summary["priority_counts"]
+    if any(key for key in action_counts):
+        lines.append("### 改善アクション")
+        lines.append(
+            "- 分類: "
+            + ", ".join(
+                f"{REVIEW_ACTION_CLASS_LABELS.get(key, key)}={value}件"
+                for key, value in action_counts.items()
+                if key
+            )
+        )
+        if any(key for key in priority_counts):
+            lines.append(
+                "- 重要度: "
+                + ", ".join(
+                    f"{REVIEW_PRIORITY_LABELS.get(key, key)}={value}件"
+                    for key, value in priority_counts.items()
+                    if key
+                )
+            )
+        high_priority_actions = review_summary["high_priority_actions"]
+        if high_priority_actions:
+            lines.append("- 高優先の代表例:")
+            for row in high_priority_actions:
+                lines.append(
+                    f"  - {row.get('signal_id', '')}: {REVIEW_ACTION_CLASS_LABELS.get(str(row.get('review_action_class', '')), row.get('review_action_class', ''))} / {row.get('next_action', '')}"
+                )
+    lines.append("### AI事後評価 health")
+    lines.append(f"- 状態: {_ai_review_status_label(ai_health_summary)}")
+    lines.append(
+        f"- 候補件数: eligible={ai_health_summary['eligible']} / backlog={ai_health_summary['backlog_pending']} / AI済み={ai_health_summary['ai_reviewed']} / human_override={ai_health_summary['human_override']}"
+    )
+    lines.append(
+        f"- 今回の同期: created={ai_health_summary['created']} / reused={ai_health_summary['reused']} / request_failed={ai_health_summary['request_failed']} / daily_cap={ai_health_summary['daily_cap']}"
+    )
+    lines.append(
+        f"- 最終AI評価: {ai_health_summary['last_ai_review_at']} / 最終エラー: {ai_health_summary['last_ai_error_at']}"
+    )
+    if int(ai_health_summary.get("resolved_cli_fallback", 0)) > 0:
+        lines.append(f"- 補足: 旧CLIパスを現行repoへ自動補正 {ai_health_summary['resolved_cli_fallback']} 件")
+    lines.append("")
+
+    lines.append("## 5. 改善候補")
+    if improvements:
+        for idx, item in enumerate(improvements, start=1):
+            lines.append(f"{idx}. {item['title']}")
+            lines.append(f"   理由: {item['reason']}")
+            lines.append(f"   主に触る場所: {item['touchpoints']}")
+    else:
+        lines.append("- まだ改善候補を絞れるだけのデータがありません")
+    if entry_ok_rr_blockers["count"]:
+        lines.append("")
+        lines.append("補助集計:")
+        lines.append(
+            f"- ENTRY_OK + rr_below_min: {entry_ok_rr_blockers['count']}件"
+            f" / 平均 execution={entry_ok_rr_blockers['avg_execution']:.1f}"
+            f" / 平均 wait={entry_ok_rr_blockers['avg_wait']:.1f}"
+        )
+        lines.append(f"- ENTRY_OK + rr_below_min の主な risk_flags: {entry_ok_rr_blockers['risk_flags']}")
+        for hint in entry_ok_rr_blockers["threshold_hints"]:
+            lines.append(f"- {hint}")
+    if risky_rr_near_threshold["count"]:
+        if not entry_ok_rr_blockers["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(
+            f"- RISKY_ENTRY + rr_below_min かつ execution>=20: {risky_rr_near_threshold['count']}件"
+            f" / 平均 execution={risky_rr_near_threshold['avg_execution']:.1f}"
+            f" / 平均 wait={risky_rr_near_threshold['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- RISKY_ENTRY + rr_below_min の主な risk_flags: {risky_rr_near_threshold['risk_flags']}"
+        )
+        lines.append(f"- RR再調整候補: {' / '.join(risky_rr_near_threshold['examples'])}")
+        if risky_rr_near_threshold["current_logic_examples"]:
+            lines.append(f"- 現行RR再計算: {' / '.join(risky_rr_near_threshold['current_logic_examples'])}")
+    if sweep_rr_notified["count"]:
+        if not entry_ok_rr_blockers["count"] and not risky_rr_near_threshold["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(f"- sweep_incomplete を含む RISKY_ENTRY + rr_below_min の通知済み履歴: {sweep_rr_notified['count']}件")
+        lines.append(f"- 主な通知理由: {sweep_rr_notified['notify_reasons']}")
+        lines.append(f"- 代表例: {' / '.join(sweep_rr_notified['examples'])}")
+    if sweep_watch_notified["count"]:
+        if not entry_ok_rr_blockers["count"] and not risky_rr_near_threshold["count"] and not sweep_rr_notified["count"]:
+            lines.append("")
+            lines.append("補助集計:")
+        lines.append(
+            f"- sweep_incomplete を含む watch 系通知済み履歴: {sweep_watch_notified['count']}件"
+        )
+        lines.append(f"- 主な通知理由: {sweep_watch_notified['notify_reasons']}")
+        lines.append(f"- 代表例: {' / '.join(sweep_watch_notified['examples'])}")
+        if sweep_watch_notified["current_logic_examples"]:
+            lines.append(f"- 現行watch再計算: {' / '.join(sweep_watch_notified['current_logic_examples'])}")
+    lines.append("")
+
+    lines.append("## 6. 技術集計")
+    lines.append("")
+
+    lines.append("### regime別件数・勝率・平均MFE・平均MAE")
     regime_summary = _summary_by_field(completed, "regime")
     if regime_summary:
         for item in regime_summary:
@@ -1600,7 +17987,7 @@ def build_feedback_report(
         lines.append("- まだ十分なデータがありません")
     lines.append("")
 
-    lines.append("## 3. signal_tier別件数・勝率・平均MFE・平均MAE")
+    lines.append("### signal_tier別件数・勝率・平均MFE・平均MAE")
     tier_summary = _signal_tier_summary(completed)
     if tier_summary:
         for item in tier_summary:
@@ -1611,7 +17998,7 @@ def build_feedback_report(
         lines.append("- まだ十分なデータがありません")
     lines.append("")
 
-    lines.append("## 4. prelabel別件数・勝率・平均MFE・平均MAE")
+    lines.append("### prelabel別件数・勝率・平均MFE・平均MAE")
     prelabel_summary = _prelabel_summary(completed)
     if prelabel_summary:
         for item in prelabel_summary:
@@ -1622,7 +18009,7 @@ def build_feedback_report(
         lines.append("- まだ十分なデータがありません")
     lines.append("")
 
-    lines.append("## 5. bias別件数・勝率")
+    lines.append("### bias別件数・勝率")
     bias_summary = _summary_by_field(completed, "bias", ["long", "short", "wait"])
     if bias_summary:
         for item in bias_summary:
@@ -1631,7 +18018,18 @@ def build_feedback_report(
         lines.append("- まだ十分なデータがありません")
     lines.append("")
 
-    lines.append("## 6. 成績指標")
+    lines.append("### bias別 direction 正誤")
+    bias_direction_summary = _bias_direction_summary(completed)
+    if bias_direction_summary:
+        for item in bias_direction_summary:
+            lines.append(
+                f"- {item['bias']}: correct={item['correct']}, wrong={item['wrong']}, unclear={item['unclear']} / wrong_rate={_format_pct(item['wrong_rate'])} (n={item['count']})"
+            )
+    else:
+        lines.append("- まだ十分なデータがありません")
+    lines.append("")
+
+    lines.append("### 成績指標")
     lines.append(f"- 全体勝率: {_format_pct(_ratio(sum(1 for row in completed if _success_flag(row) is True), sum(1 for row in completed if _success_flag(row) is not None)))}")
     lines.append(f"- 平均MFE(signal_based): {_mean_value(completed, 'signal_based_MFE_24h'):.2f}")
     lines.append(f"- 平均MAE(signal_based): {_mean_value(completed, 'signal_based_MAE_24h'):.2f}")
@@ -1641,35 +18039,42 @@ def build_feedback_report(
     lines.append(f"- TP1先行率: {_format_pct(_ratio(sum(1 for row in tp1_pool if row.get('tp1_hit_first') == 'true'), len(tp1_pool)))}")
     lines.append("")
 
-    lines.append("## 7. 通知品質")
+    lines.append("### 通知品質")
     audit = _notification_audit(completed)
-    lines.append(f"- A: 通知して良かった = {audit['A']}")
-    lines.append(f"- B: 通知したが微妙 = {audit['B']}")
-    lines.append(f"- C: 通知しなかったが本当は良かった = {audit['C']}")
-    lines.append(f"- D: 通知しなかったので正解 = {audit['D']}")
+    lines.append(f"- A: 通知して良かった = {audit['A']}件")
+    lines.append(f"- B: 通知したが微妙 = {audit['B']}件")
+    lines.append(f"- C: 通知しなかったが本当は良かった = {audit['C']}件")
+    lines.append(f"- D: 通知しなかったので正解 = {audit['D']}件")
     lines.append("")
 
-    lines.append("## 8. データ品質とレビュー")
-    review_summary = _review_summary(completed)
-    lines.append(f"- actual_move_driver 入力率: {_format_pct(review_summary['actual_move_driver_rate'])}")
-    if review_summary["verdicts"]:
-        for verdict, count in review_summary["verdicts"].most_common():
-            lines.append(f"- {verdict}: {count}")
-        lines.append(f"- 平均 usefulness: {review_summary['avg_usefulness']:.2f}")
+    lines.append("### risk flag 群別 wrong rate")
+    wrong_rate_summary = _risk_flag_wrong_rate_summary(completed)
+    if wrong_rate_summary:
+        for item in wrong_rate_summary:
+            lines.append(
+                f"- {item['flag']}: wrong_rate={_format_pct(item['wrong_rate'])} (wrong={item['wrong_count']}/{item['count']})"
+            )
     else:
-        lines.append("- 完了レビューはまだありません")
+        lines.append("- 比較対象となる risk_flag はまだありません")
     lines.append("")
 
-    lines.append("## 9. 改善候補")
-    improvements = _build_improvement_candidates(completed, monthly=(period == "monthly"))
-    if improvements:
-        for idx, item in enumerate(improvements, start=1):
-            lines.append(f"{idx}. {item['title']}: {item['reason']}")
-    else:
-        lines.append("- まだ改善候補を絞れるだけのデータがありません")
+    lines.append("### 直近12時間速報")
+    lines.append(f"- 対象件数: {live_summary['count']}件")
+    lines.append(f"- direction_execution_conflict: {live_summary['direction_execution_conflict_count']}件")
+    if live_summary["direction_execution_conflict_count"]:
+        lines.append(f"- direction_execution_conflict の主な理由: {live_summary['direction_execution_conflict_reasons']}")
+        lines.append(f"- direction_execution_conflict の主な risk_flags: {live_summary['direction_execution_conflict_flags']}")
+    if live_summary["rr_sweep_recheck_wait_count"]:
+        lines.append(f"- rr_sweep_recheck_wait: {live_summary['rr_sweep_recheck_wait_count']}件")
+    if live_summary["attention_rr_sweep_recheck_wait_count"]:
+        lines.append(f"- attention_rr_sweep_recheck_wait: {live_summary['attention_rr_sweep_recheck_wait_count']}件")
+    if live_summary["suppress_reasons"]:
+        lines.append(f"- suppress_reason の内訳: {live_summary['suppress_reasons']}")
+    lines.append(f"- ENTRY_OK + invalid: {live_summary['entry_ok_invalid_count']}件")
+    lines.append(f"- countertrend_long_cluster: {live_summary['countertrend_long_cluster_count']}件")
     lines.append("")
 
-    lines.append("## 10. Phase 1 計画ログ")
+    lines.append("### Phase 1 計画ログ")
     phase1_summary = _phase1_summary(completed)
     if phase1_summary["count"] > 0:
         lines.append(f"- Phase 1 計画付き件数: {phase1_summary['count']}")
@@ -1686,8 +18091,204 @@ def build_feedback_report(
         lines.append("- まだ Phase 1 計画ログは集計対象にありません")
     lines.append("")
 
+    lines.append("### Phase 1 観測 gate")
+    lines.append(f"- phase1_observation_gate=pass: {observation_summary['pass_count']}件")
+    lines.append(f"- phase1_observation_gate=blocked: {observation_summary['blocked_count']}件")
+    if observation_summary["pass_count"]:
+        lines.append(f"- 観測タイプ: {observation_summary['type_counts']}")
+        lines.append(_format_observation_perf("観測候補全体", observation_summary["overall"]))
+        if observation_summary["direction_rr_learning"]["count"]:
+            lines.append(_format_observation_perf("direction_rr_learning", observation_summary["direction_rr_learning"]))
+        if observation_summary["setup_watch_learning"]["count"]:
+            lines.append(_format_observation_perf("setup_watch_learning", observation_summary["setup_watch_learning"]))
+        if observation_summary["confidence_watch_learning"]["count"]:
+            lines.append(_format_observation_perf("confidence_watch_learning", observation_summary["confidence_watch_learning"]))
+        if observation_summary["counter_long_short_watch"]["count"]:
+            lines.append(_format_observation_perf("counter_long_short_watch", observation_summary["counter_long_short_watch"]))
+        if observation_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(observation_summary['representatives'])}")
+    if observation_summary["blocked_count"]:
+        lines.append(f"- 主な観測ブロック理由: {observation_summary['blocked_reasons']}")
+    lines.append("")
+
+    lines.append("### Phase 1A 観測紙トレード")
+    lines.append(f"- observation_paper_orders observing: {phase1a_summary['order_count']}件")
+    lines.append(f"- 観測タイプ: {phase1a_summary['type_counts'] or 'なし'}")
+    lines.append(f"- 状態: {phase1a_summary['status_counts'] or 'なし'}")
+    lines.append(f"- gate pass だが観測紙トレード未記録: {phase1a_summary['missing_order_count']}件")
+    if phase1a_summary["setup_watch_count"]:
+        lines.append(
+            f"- setup_watch_learning の entry_zone_not_reached 率: "
+            f"{_format_pct(phase1a_summary['entry_zone_not_reached_rate'])}"
+        )
+    if phase1a_summary["representatives"]:
+        lines.append(f"- 代表例: {', '.join(phase1a_summary['representatives'])}")
+    lines.append("- 扱い: 実行候補ではなく、方向・待機条件・仮想SL/TPの検証ログ")
+    lines.append("")
+
+    lines.append("### Phase 1B 昇格候補")
+    lines.append(f"- confidence_watch_learning 候補: {promotion_summary['count']}件")
+    if promotion_summary["count"]:
+        lines.append(f"- prelabel: {promotion_summary['prelabels']}")
+        lines.append(
+            f"- 勝率={_format_pct(promotion_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(promotion_summary['tp1_first_rate'])} / "
+            f"近似PF={promotion_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={promotion_summary['avg_direction']:.1f} / "
+            f"平均 execution={promotion_summary['avg_execution']:.1f} / "
+            f"平均 wait={promotion_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={promotion_summary['avg_mfe']:.2f} / 平均MAE={promotion_summary['avg_mae']:.2f}"
+        )
+        if promotion_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(promotion_summary['representatives'])}")
+    lines.append("- 扱い: `trade_execution_gate=pass` ではないが、限定条件付きで Phase 1B 候補へ昇格を検討する母集団")
+    lines.append("")
+
+    lines.append("### Phase 1B-lite")
+    lines.append(f"- lite 候補: {phase1b_lite_summary['count']}件")
+    lines.append(f"- phase1b_lite_paper_orders observing: {phase1b_lite_summary['order_count']}件")
+    lines.append(f"- lite pass だが専用紙トレード未記録: {phase1b_lite_summary['missing_order_count']}件")
+    if phase1b_lite_summary["status_counts"]:
+        lines.append(f"- 状態: {phase1b_lite_summary['status_counts']}")
+    if phase1b_lite_summary["count"]:
+        lines.append(
+            f"- 勝率={_format_pct(phase1b_lite_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(phase1b_lite_summary['tp1_first_rate'])} / "
+            f"近似PF={phase1b_lite_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={phase1b_lite_summary['avg_direction']:.1f} / "
+            f"平均 execution={phase1b_lite_summary['avg_execution']:.1f} / "
+            f"平均 wait={phase1b_lite_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={phase1b_lite_summary['avg_mfe']:.2f} / "
+            f"平均MAE={phase1b_lite_summary['avg_mae']:.2f}"
+        )
+        if phase1b_lite_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(phase1b_lite_summary['representatives'])}")
+    lines.append("- 扱い: 実弾ではなく、正式 Phase 1B でもない。件名ランクは執行候補へ上げない")
+    lines.append("")
+
+    lines.append("### counter_long_short_watch")
+    lines.append(f"- 候補件数: {counter_watch_summary['count']}件")
+    if counter_watch_summary["count"]:
+        lines.append(f"- risk_flags: {counter_watch_summary['risk_flags']}")
+        lines.append(
+            f"- 勝率={_format_pct(counter_watch_summary['win_rate'])} / "
+            f"TP1先行={_format_pct(counter_watch_summary['tp1_first_rate'])} / "
+            f"近似PF={counter_watch_summary['approx_pf']:.2f}"
+        )
+        lines.append(
+            f"- 平均 direction={counter_watch_summary['avg_direction']:.1f} / "
+            f"平均 execution={counter_watch_summary['avg_execution']:.1f} / "
+            f"平均 wait={counter_watch_summary['avg_wait']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE={counter_watch_summary['avg_mfe']:.2f} / 平均MAE={counter_watch_summary['avg_mae']:.2f}"
+        )
+        if counter_watch_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(counter_watch_summary['representatives'])}")
+    lines.append("- 扱い: ロング監視の失敗初動をショート観測候補として切り出す Phase 1A 母集団")
+    lines.append("")
+
+    lines.append("### failed_breakout_down_reversal")
+    lines.append(f"- 件数: {failed_breakout_summary['count']}件")
+    if failed_breakout_summary["count"]:
+        lines.append(
+            f"- 平均 long_score={failed_breakout_summary['avg_long_score']:.1f} / "
+            f"平均 short_score={failed_breakout_summary['avg_short_score']:.1f} / "
+            f"平均 gap={failed_breakout_summary['avg_gap']:.1f}"
+        )
+        lines.append(
+            f"- 平均MFE24h={failed_breakout_summary['avg_mfe']:.2f} / "
+            f"平均MAE24h={failed_breakout_summary['avg_mae']:.2f}"
+        )
+        lines.append(f"- risk_flags: {failed_breakout_summary['risk_flags']}")
+        lines.append(f"- notify_reason: {failed_breakout_summary['notify_reasons']}")
+        if failed_breakout_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(failed_breakout_summary['representatives'])}")
+    lines.append("- 扱い: breakout_up が効かず大きく下落した watch 群の失敗型を継続追跡する")
+    lines.append("")
+
+    lines.append("### market_map")
+    lines.append(f"- 記録あり: {market_map_summary['count']}件")
+    if market_map_summary["count"]:
+        lines.append(f"- primary_state: {market_map_summary['primary_states']}")
+        lines.append(f"- flags: {market_map_summary['flags']}")
+        lines.append(f"- trend_state: {market_map_summary['trend_states']}")
+        lines.append(
+            f"- 下方向反転系: {market_map_summary['down_reversal_count']}件 / "
+            f"勝率={_format_pct(market_map_summary['down_reversal_win_rate'])} / "
+            f"wrong_rate={_format_pct(market_map_summary['down_reversal_wrong_rate'])}"
+        )
+        lines.append(
+            f"- 下方向反転系 平均MFE24h={market_map_summary['down_reversal_avg_mfe']:.2f} / "
+            f"平均MAE24h={market_map_summary['down_reversal_avg_mae']:.2f}"
+        )
+        if market_map_summary["representatives"]:
+            lines.append(f"- 代表例: {', '.join(market_map_summary['representatives'])}")
+    lines.append("- 扱い: レジサポ実体、役割転換、失敗ブレイクの新判定を後追い検証する")
+    lines.append("")
+
+    lines.append("### 紙トレード準備")
+    lines.append(f"- trade_execution_gate=pass: {paper_summary['gate_pass_count']}件")
+    lines.append(f"- trade_execution_gate=blocked: {paper_summary['gate_blocked_count']}件")
+    if paper_summary["gate_blocked_count"]:
+        lines.append(f"- 主なブロック理由: {paper_summary['blockers']}")
+    lines.append(f"- paper_orders planned: {paper_summary['planned_count']}件")
+    lines.append(f"- phase1_v1_shadow 記録付き: {paper_summary['shadow_count']}件")
+    lines.append(f"- opportunity_gate=pass: {paper_position_summary['opportunity_pass_count']}件")
+    lines.append(
+        f"- quality guard blocked: {paper_position_summary['quality_guard_blocked_count']}件 / "
+        f"理由={paper_position_summary['quality_guard_counts'] or 'なし'}"
+    )
+    lines.append(
+        f"- hard_quality_blocked: {paper_position_summary['hard_quality_blocked_count']}件 / "
+        f"理由={paper_position_summary['hard_quality_counts'] or 'なし'}"
+    )
+    lines.append(
+        f"- soft_quality_risk: {paper_position_summary['soft_quality_risk_count']}件 / "
+        f"理由={paper_position_summary['soft_quality_counts'] or 'なし'}"
+    )
+    lines.append(
+        f"- market_map opportunity before/after guard: "
+        f"{paper_position_summary['pre_guard_market_map_count']}件 -> {paper_position_summary['post_guard_market_map_count']}件"
+    )
+    lines.append(
+        f"- market_map opportunity before/after hard guard: "
+        f"{paper_position_summary['pre_guard_market_map_count']}件 -> {paper_position_summary['post_guard_market_map_count']}件"
+    )
+    lines.append(f"- paper_positions 記録: {paper_position_summary['position_count']}件")
+    lines.append(f"- 紙ポジション状態: {paper_position_summary['status_counts'] or 'なし'}")
+    lines.append(f"- 紙ポジション終了状態: {paper_position_summary['exit_status_counts'] or 'なし'}")
+    lines.append(f"- quality guard 該当 closed sl_hit: {paper_position_summary['guarded_sl_hit_count']}件")
+    lines.append(f"- 紙実行候補タイプ: {paper_position_summary['type_counts'] or 'なし'}")
+    if paper_position_summary["closed_by_type"]:
+        lines.append("- opportunity_type 別 closed:")
+        for opportunity_type, item in paper_position_summary["closed_by_type"].items():
+            lines.append(
+                f"  - {opportunity_type}: {item['count']}件 / 勝率={_format_pct(item['win_rate'])} / "
+                f"平均R={item['avg_realized_r']:.2f} / 簡易PF={item['approx_pf']:.2f}"
+            )
+    lines.append(f"- missed_opportunity: {paper_position_summary['missed_count']}件")
+    if paper_position_summary["missed_examples"]:
+        lines.append(f"- missed代表例: {', '.join(paper_position_summary['missed_examples'])}")
+    lines.append(f"- 24h超の pending: {paper_position_summary['old_pending_count']}件")
+    lines.append(f"- opportunity pass だが paper_positions 未記録: {paper_position_summary['missing_position_count']}件")
+    if paper_summary["too_close_count"]:
+        lines.append(
+            f"- tp_eval=too_close のうち shadow TP1 が現行TP1より遠い候補: "
+            f"{paper_summary['too_close_shadow_wider_count']}/{paper_summary['too_close_count']}件"
+        )
+    lines.append("")
+
     if period == "weekly":
-        lines.append("## 11. risk_flags 有効性比較")
+        lines.append("### risk_flags 有効性比較")
         risk_flags = _risk_flag_summary(completed)
         if risk_flags:
             for item in risk_flags:
@@ -1696,14 +18297,14 @@ def build_feedback_report(
             lines.append("- 比較対象となる risk_flag はまだありません")
         lines.append("")
     else:
-        lines.append("## 11. 前月比")
+        lines.append("### 前月比")
         if previous_completed:
             lines.append(f"- 前月件数: {len(previous_completed)}")
             lines.append(f"- 今月との差: {len(completed) - len(previous_completed)} 件")
         else:
             lines.append("- 前月データはまだありません")
         lines.append("")
-        lines.append("## 12. 設定変更提案")
+        lines.append("### 設定変更提案")
         if improvements:
             for item in improvements:
                 lines.append(
@@ -1720,32 +18321,258 @@ def build_feedback_report(
     return report
 
 
+def sync_ai_post_reviews(
+    *,
+    base_dir: Path,
+    outcomes_path: Path | None = None,
+    reviews_path: Path | None = None,
+    trades_path: Path | None = None,
+    max_new_reviews: int | None = None,
+) -> tuple[Path, dict[str, int]]:
+    outcomes_path = outcomes_path or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    reviews_path = reviews_path or base_dir / "logs" / "csv" / "user_reviews.csv"
+    trades_path = trades_path or base_dir / "logs" / "csv" / "trades.csv"
+    _archive_existing_reviews(base_dir, reviews_path)
+    cfg = load_config(base_dir)
+    daily_max = int(max_new_reviews if max_new_reviews is not None else getattr(cfg, "AI_POST_REVIEW_DAILY_MAX", 2))
+    max_consecutive_failures = int(getattr(cfg, "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES", 3))
+    main_only = bool(getattr(cfg, "AI_POST_REVIEW_PRIORITY_MAIN_ONLY", True))
+    outcomes = {row.get("signal_id", ""): row for row in _load_csv_rows(outcomes_path) if row.get("signal_id", "")}
+    review_map = {row.get("signal_id", ""): row for row in _load_csv_rows(reviews_path) if row.get("signal_id", "")}
+    ai_rows: list[dict[str, str]] = []
+    stats = {
+        "eligible": 0,
+        "reused": 0,
+        "created": 0,
+        "request_failed": 0,
+        "skipped_existing_ai": 0,
+        "skipped_human_override": 0,
+        "skipped_daily_cap": 0,
+        "skipped_priority_filter": 0,
+        "resolved_cli_fallback": 0,
+        "daily_cap": max(0, daily_max),
+        "stopped_after_failures": 0,
+    }
+
+    reviewed_today = sum(
+        1
+        for row in review_map.values()
+        if _review_source_value(row) == "ai"
+        and _reviewed_on_jst(row, datetime.now(tz=JST).strftime("%Y-%m-%d"))
+    )
+    new_review_budget = max(0, daily_max - reviewed_today)
+    stats["already_reviewed_today"] = reviewed_today
+    consecutive_failures = 0
+
+    trades = sorted(_load_csv_rows(trades_path), key=_ai_post_review_priority)
+
+    for trade in trades:
+        signal_id = str(trade.get("signal_id", "")).strip()
+        if not signal_id or not _parse_bool(trade.get("was_notified")):
+            continue
+        if main_only and _normalized_notification_kind(trade) != "main":
+            stats["skipped_priority_filter"] += 1
+            continue
+        outcome = outcomes.get(signal_id, {})
+        if str(outcome.get("evaluation_status", "")).strip() != "complete":
+            continue
+        stats["eligible"] += 1
+        current = review_map.get(signal_id, {})
+        current_source = _review_source_value(current)
+        if current_source == "human_override":
+            stats["skipped_human_override"] += 1
+            continue
+        if current_source == "ai":
+            normalized_current = _normalize_ai_review_row(current)
+            if normalized_current != {str(key): str(value or "") for key, value in current.items()}:
+                ai_rows.append(normalized_current)
+                review_map[signal_id] = normalized_current
+                _write_ai_post_review_snapshot(base_dir, signal_id, normalized_current)
+            stats["skipped_existing_ai"] += 1
+            continue
+        cached_review = _load_ai_post_review_snapshot(base_dir, signal_id)
+        if cached_review is not None:
+            normalized_cached = _normalize_ai_review_row(cached_review)
+            ai_rows.append(normalized_cached)
+            review_map[signal_id] = normalized_cached
+            if normalized_cached != cached_review:
+                _write_ai_post_review_snapshot(base_dir, signal_id, normalized_cached)
+            stats["reused"] += 1
+            continue
+        if new_review_budget <= 0:
+            stats["skipped_daily_cap"] += 1
+            continue
+        signal_payload = load_json(_signal_snapshot_path(base_dir, signal_id))
+        if not isinstance(signal_payload, dict):
+            signal_payload = {"signal_id": signal_id}
+        auto_eval_summary = _auto_eval_summary(outcome)
+        ai_review, resolved_fallback = _request_ai_post_review(
+            base_dir=base_dir,
+            cfg=cfg,
+            signal_id=signal_id,
+            signal_row=signal_payload,
+            outcome_row=outcome,
+            auto_eval_summary=auto_eval_summary,
+        )
+        if ai_review is None:
+            stats["request_failed"] += 1
+            consecutive_failures += 1
+            if max_consecutive_failures > 0 and consecutive_failures >= max_consecutive_failures:
+                stats["stopped_after_failures"] = 1
+                break
+            continue
+        if resolved_fallback:
+            stats["resolved_cli_fallback"] += 1
+        reviewed_at = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        row = {
+            "signal_id": signal_id,
+            "timestamp_jst": str(current.get("timestamp_jst", trade.get("timestamp_jst", outcome.get("timestamp_jst", "")))),
+            "subject": str(current.get("subject", trade.get("summary_subject", signal_payload.get("summary_subject", "")))),
+            "auto_eval_summary": auto_eval_summary,
+            "user_verdict": ai_review["user_verdict"],
+            "usefulness_1to5": ai_review["usefulness_1to5"],
+            "would_trade": ai_review["would_trade"],
+            "actual_move_driver": ai_review["actual_move_driver"],
+            "misleading_entry_like_wording": ai_review["misleading_entry_like_wording"],
+            "logic_validated": _logic_validated(trade.get("prelabel_primary_reason", ""), ai_review["actual_move_driver"]),
+            "sl_eval": ai_review["sl_eval"],
+            "tp_eval": ai_review["tp_eval"],
+            "tf_4h_eval": ai_review["tf_4h_eval"],
+            "tf_1h_eval": ai_review["tf_1h_eval"],
+            "tf_15m_eval": ai_review["tf_15m_eval"],
+            "review_source": ai_review["review_source"],
+            "review_model": ai_review["review_model"],
+            "review_image_mode": ai_review["review_image_mode"],
+            "review_variant": ai_review["review_variant"],
+            "review_action_class": ai_review["review_action_class"],
+            "review_priority": ai_review["review_priority"],
+            "next_action": ai_review["next_action"],
+            "memo": ai_review["memo"],
+            "review_status": "done",
+            "reviewed_at_utc": reviewed_at,
+        }
+        row = _normalize_ai_review_row(row)
+        ai_rows.append(row)
+        review_map[signal_id] = row
+        _write_ai_post_review_snapshot(base_dir, signal_id, row)
+        stats["created"] += 1
+        consecutive_failures = 0
+        new_review_budget -= 1
+
+    if ai_rows:
+        _upsert_csv_rows(reviews_path, USER_REVIEW_HEADER, ai_rows, "signal_id")
+    stats["backlog_pending"] = max(
+        0,
+        stats["eligible"] - stats["skipped_existing_ai"] - stats["skipped_human_override"] - stats["reused"] - stats["created"],
+    )
+    return reviews_path, stats
+
+
 def daily_sync(
     *,
     base_dir: Path,
     review_note_path: Path = DEFAULT_REVIEW_NOTE,
     output_md: Path | None = None,
-) -> dict[str, Path]:
+    max_new_reviews: int | None = 0,
+) -> dict[str, Path | int]:
     outcomes_path = update_outcomes(base_dir=base_dir)
     reviews_path = import_reviews(base_dir=base_dir, review_note_path=review_note_path)
+    reviews_path, sync_stats = sync_ai_post_reviews(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        max_new_reviews=max_new_reviews,
+    )
     shadow_path = build_shadow_log(base_dir=base_dir, outcomes_path=outcomes_path, reviews_path=reviews_path)
+    observation_paper_orders_path = build_observation_paper_orders(base_dir=base_dir, trades_path=shadow_path)
+    phase1b_lite_paper_orders_path = build_phase1b_lite_paper_orders(base_dir=base_dir, trades_path=shadow_path)
+    paper_positions_path = build_paper_positions(base_dir=base_dir, trades_path=shadow_path)
+    active_plan_paper_candidates_path = build_active_plan_paper_candidates(
+        base_dir=base_dir,
+        trades_path=base_dir / "logs" / "csv" / "trades.csv",
+    )
+    active_plan_candidate_outcomes_path = build_active_plan_candidate_outcomes(
+        base_dir=base_dir,
+        candidates_path=active_plan_paper_candidates_path,
+        outcomes_path=outcomes_path,
+    )
+    today = datetime.now(tz=JST).strftime("%Y%m%d")
+    active_plan_candidate_outcomes_report_path = (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_outcomes_{today}.md"
+    )
+    build_active_plan_candidate_outcomes_report(
+        base_dir=base_dir,
+        candidate_outcomes_path=active_plan_candidate_outcomes_path,
+        output_md=active_plan_candidate_outcomes_report_path,
+    )
+    active_plan_intraperiod_ohlcv_path = base_dir / "logs" / "csv" / "active_plan_intraperiod_ohlcv.csv"
+    active_plan_candidate_intraperiod_outcomes_path = build_active_plan_candidate_intraperiod_outcomes(
+        base_dir=base_dir,
+        candidates_path=active_plan_paper_candidates_path,
+        ohlcv_path=active_plan_intraperiod_ohlcv_path if active_plan_intraperiod_ohlcv_path.exists() else None,
+    )
+    active_plan_candidate_intraperiod_outcomes_report_path = (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{today}.md"
+    )
+    build_active_plan_candidate_intraperiod_outcomes_report(
+        base_dir=base_dir,
+        intraperiod_outcomes_path=active_plan_candidate_intraperiod_outcomes_path,
+        output_md=active_plan_candidate_intraperiod_outcomes_report_path,
+    )
     review_note = export_review_queue(
         base_dir=base_dir,
         review_note_path=review_note_path,
         outcomes_path=outcomes_path,
         reviews_path=reviews_path,
     )
+    ai_health_summary = _ai_review_health_summary(
+        base_dir=base_dir,
+        outcomes_path=outcomes_path,
+        reviews_path=reviews_path,
+        trades_path=base_dir / "logs" / "csv" / "trades.csv",
+        sync_stats=sync_stats,
+    )
     if output_md is None:
         today = datetime.now(tz=JST).strftime("%Y%m%d")
         output_md = base_dir / "運用資料" / "reports" / f"feedback_daily_sync_{today}.md"
-    build_feedback_report(base_dir=base_dir, period="weekly", output_md=output_md, shadow_path=shadow_path)
+    build_feedback_report(
+        base_dir=base_dir,
+        period="weekly",
+        output_md=output_md,
+        shadow_path=shadow_path,
+        ai_health_summary=ai_health_summary,
+    )
     return {
         "outcomes_path": outcomes_path,
         "reviews_path": reviews_path,
         "shadow_path": shadow_path,
+        "observation_paper_orders_path": observation_paper_orders_path,
+        "phase1b_lite_paper_orders_path": phase1b_lite_paper_orders_path,
+        "paper_positions_path": paper_positions_path,
+        "active_plan_paper_candidates_path": active_plan_paper_candidates_path,
+        "active_plan_candidate_outcomes_path": active_plan_candidate_outcomes_path,
+        "active_plan_candidate_outcomes_report_path": active_plan_candidate_outcomes_report_path,
+        "active_plan_candidate_intraperiod_outcomes_path": active_plan_candidate_intraperiod_outcomes_path,
+        "active_plan_candidate_intraperiod_outcomes_report_path": active_plan_candidate_intraperiod_outcomes_report_path,
         "review_note_path": review_note,
         "review_form_path": _review_form_path(review_note),
         "report_path": output_md,
+        "ai_post_review_eligible": sync_stats["eligible"],
+        "ai_post_review_reused": sync_stats["reused"],
+        "ai_post_review_created": sync_stats["created"],
+        "ai_post_review_skipped_existing_ai": sync_stats["skipped_existing_ai"],
+        "ai_post_review_skipped_human_override": sync_stats["skipped_human_override"],
+        "ai_post_review_request_failed": sync_stats["request_failed"],
+        "ai_post_review_backlog_pending": sync_stats["backlog_pending"],
+        "ai_post_review_resolved_cli_fallback": sync_stats["resolved_cli_fallback"],
     }
 
 
@@ -1754,6 +18581,16 @@ def _default_report_path(base_dir: Path, period: str) -> Path:
     if period == "weekly":
         return base_dir / "運用資料" / "reports" / f"feedback_weekly_{now.strftime('%Y%m%d')}.md"
     return base_dir / "運用資料" / "reports" / f"feedback_monthly_{now.strftime('%Y-%m')}.md"
+
+
+def _default_active_plan_intraperiod_report_path(base_dir: Path) -> Path:
+    return (
+        base_dir
+        / "運用資料"
+        / "reports"
+        / "analysis"
+        / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1776,16 +18613,655 @@ def _build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--period", choices=["weekly", "monthly"], required=True)
     report_parser.add_argument("--output-md")
 
+    compare_parser = subparsers.add_parser("compare-current-setup")
+    compare_parser.add_argument("--output-md")
+    compare_parser.add_argument("--limit", type=int, default=20)
+    compare_parser.add_argument("--only-notified", action="store_true")
+    compare_parser.add_argument("--previous-reason", default="")
+    compare_parser.add_argument("--current-reason", default="")
+    compare_parser.add_argument("--prelabel", default="")
+    compare_parser.add_argument("--risk-flag", default="")
+    compare_parser.add_argument("--date-from", default="")
+    compare_parser.add_argument("--date-to", default="")
+    compare_parser.add_argument("--status-transition", default="")
+
+    standard_compare_parser = subparsers.add_parser("refresh-standard-setup-reports")
+    standard_compare_parser.add_argument("--analysis-dir")
+    standard_compare_parser.add_argument("--limit", type=int, default=20)
+    standard_compare_parser.add_argument("--date-from", default="")
+    standard_compare_parser.add_argument("--date-to", default="")
+
+    focus_parser = subparsers.add_parser("build-operational-focus-report")
+    focus_parser.add_argument("--output-md")
+    focus_parser.add_argument("--date-from", default="")
+    focus_parser.add_argument("--date-to", default="")
+    focus_parser.add_argument("--limit", type=int, default=5)
+
+    relaxation_parser = subparsers.add_parser("build-relaxation-candidates-report")
+    relaxation_parser.add_argument("--output-md")
+    relaxation_parser.add_argument("--date-from", default="")
+    relaxation_parser.add_argument("--date-to", default="")
+    relaxation_parser.add_argument("--limit", type=int, default=20)
+
+    promotion_parser = subparsers.add_parser("build-phase1b-promotion-report")
+    promotion_parser.add_argument("--output-md")
+    promotion_parser.add_argument("--date-from", default="")
+    promotion_parser.add_argument("--date-to", default="")
+    promotion_parser.add_argument("--limit", type=int, default=20)
+
+    failed_breakout_parser = subparsers.add_parser("build-failed-breakout-down-reversal-report")
+    failed_breakout_parser.add_argument("--output-md")
+    failed_breakout_parser.add_argument("--date-from", default="")
+    failed_breakout_parser.add_argument("--date-to", default="")
+    failed_breakout_parser.add_argument("--limit", type=int, default=20)
+
+    market_map_parser = subparsers.add_parser("build-market-map-effectiveness-report")
+    market_map_parser.add_argument("--output-md")
+    market_map_parser.add_argument("--date-from", default="")
+    market_map_parser.add_argument("--date-to", default="")
+    market_map_parser.add_argument("--limit", type=int, default=20)
+
+    market_map_readiness_parser = subparsers.add_parser("build-market-map-readiness-report")
+    market_map_readiness_parser.add_argument("--output-md")
+    market_map_readiness_parser.add_argument("--date-from", default="")
+    market_map_readiness_parser.add_argument("--date-to", default="")
+    market_map_readiness_parser.add_argument("--min-market-rows", type=int, default=1)
+
+    paper_diagnostics_parser = subparsers.add_parser("build-paper-opportunity-diagnostics-report")
+    paper_diagnostics_parser.add_argument("--output-md")
+    paper_diagnostics_parser.add_argument("--date-from", default="")
+    paper_diagnostics_parser.add_argument("--date-to", default="")
+    paper_diagnostics_parser.add_argument("--limit", type=int, default=20)
+
+    active_plan_parser = subparsers.add_parser("build-active-trade-plan-diagnostics-report")
+    active_plan_parser.add_argument("--output-md")
+    active_plan_parser.add_argument("--candidates-path")
+    active_plan_parser.add_argument("--trades-path")
+    active_plan_parser.add_argument("--active-plan-report-date")
+    active_plan_parser.add_argument("--date-from", default="")
+    active_plan_parser.add_argument("--date-to", default="")
+    active_plan_parser.add_argument("--limit", type=int, default=20)
+
+    active_plan_effectiveness_parser = subparsers.add_parser("build-active-trade-plan-effectiveness-report")
+    active_plan_effectiveness_parser.add_argument("--output-md")
+    active_plan_effectiveness_parser.add_argument("--trades-path")
+    active_plan_effectiveness_parser.add_argument("--outcomes-path")
+    active_plan_effectiveness_parser.add_argument("--date-from", default="")
+    active_plan_effectiveness_parser.add_argument("--date-to", default="")
+    active_plan_effectiveness_parser.add_argument("--limit", type=int, default=20)
+
+    active_plan_candidates_parser = subparsers.add_parser("build-active-plan-paper-candidates")
+    active_plan_candidates_parser.add_argument("--trades-path")
+    active_plan_candidates_parser.add_argument("--output-csv")
+    active_plan_candidates_parser.add_argument("--date-from", default="")
+    active_plan_candidates_parser.add_argument("--date-to", default="")
+
+    active_plan_candidate_outcomes_parser = subparsers.add_parser("build-active-plan-candidate-outcomes")
+    active_plan_candidate_outcomes_parser.add_argument("--candidates-path")
+    active_plan_candidate_outcomes_parser.add_argument("--outcomes-path")
+    active_plan_candidate_outcomes_parser.add_argument("--output-csv")
+    active_plan_candidate_outcomes_parser.add_argument("--date-from", default="")
+    active_plan_candidate_outcomes_parser.add_argument("--date-to", default="")
+
+    active_plan_intraperiod_parser = subparsers.add_parser("build-active-plan-candidate-intraperiod-outcomes")
+    active_plan_intraperiod_parser.add_argument("--candidates-path")
+    active_plan_intraperiod_parser.add_argument("--ohlcv-path")
+    active_plan_intraperiod_parser.add_argument("--output-csv")
+    active_plan_intraperiod_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_parser.add_argument("--evaluation-window-hours", type=float, default=24.0)
+
+    active_plan_intraperiod_cli_parser = subparsers.add_parser("build-active-plan-intraperiod-outcomes")
+    active_plan_intraperiod_cli_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
+    active_plan_intraperiod_cli_parser.add_argument("--ohlcv-csv", required=True)
+    active_plan_intraperiod_cli_parser.add_argument(
+        "--output-csv",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    active_plan_intraperiod_cli_parser.add_argument("--timeout-hours", type=float, default=24.0)
+    active_plan_intraperiod_cli_parser.add_argument("--now", default="")
+
+    active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
+    active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
+    active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
+    active_plan_intraperiod_review_parser.add_argument(
+        "--outcomes-csv",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    active_plan_intraperiod_review_parser.add_argument("--output-md")
+    active_plan_intraperiod_review_parser.add_argument("--timeout-hours", type=float, default=24.0)
+    active_plan_intraperiod_review_parser.add_argument("--now", default="")
+    active_plan_intraperiod_review_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_review_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_review_parser.add_argument("--limit", type=int, default=10)
+    active_plan_intraperiod_review_parser.add_argument("--stdout-json", action="store_true")
+
+    active_plan_candidate_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-outcomes-report")
+    active_plan_candidate_outcomes_report_parser.add_argument("--candidates-path")
+    active_plan_candidate_outcomes_report_parser.add_argument("--trades-path")
+    active_plan_candidate_outcomes_report_parser.add_argument("--candidate-outcomes-path")
+    active_plan_candidate_outcomes_report_parser.add_argument("--output-md")
+    active_plan_candidate_outcomes_report_parser.add_argument("--active-plan-report-date")
+    active_plan_candidate_outcomes_report_parser.add_argument("--date-from", default="")
+    active_plan_candidate_outcomes_report_parser.add_argument("--date-to", default="")
+    active_plan_candidate_outcomes_report_parser.add_argument("--limit", type=int, default=20)
+
+    active_plan_intraperiod_outcomes_report_parser = subparsers.add_parser("build-active-plan-candidate-intraperiod-outcomes-report")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--intraperiod-outcomes-path")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--output-md")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--date-from", default="")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--date-to", default="")
+    active_plan_intraperiod_outcomes_report_parser.add_argument("--limit", type=int, default=20)
+
+    paper_entry_redesign_parser = subparsers.add_parser("build-paper-entry-sl-wait-redesign-report")
+    paper_entry_redesign_parser.add_argument("--output-md")
+    paper_entry_redesign_parser.add_argument("--date-from", default="")
+    paper_entry_redesign_parser.add_argument("--date-to", default="")
+    paper_entry_redesign_parser.add_argument("--limit", type=int, default=20)
+
+    quality_guard_effectiveness_parser = subparsers.add_parser("build-quality-guard-effectiveness-report")
+    quality_guard_effectiveness_parser.add_argument("--output-md")
+    quality_guard_effectiveness_parser.add_argument("--date-from", default="")
+    quality_guard_effectiveness_parser.add_argument("--date-to", default="")
+
+    soft_risk_collateral_damage_parser = subparsers.add_parser("build-soft-risk-collateral-damage-report")
+    soft_risk_collateral_damage_parser.add_argument("--output-md")
+    soft_risk_collateral_damage_parser.add_argument("--date-from", default="")
+    soft_risk_collateral_damage_parser.add_argument("--date-to", default="")
+    soft_risk_collateral_damage_parser.add_argument("--limit", type=int, default=5)
+
+    report_hub_parser = subparsers.add_parser("build-report-hub")
+    report_hub_parser.add_argument("--output-md")
+
+    notification_preview_parser = subparsers.add_parser("write-active-plan-notification-preview")
+    _add_active_plan_notification_preview_arguments(notification_preview_parser)
+
+    latest_manual_preview_parser = subparsers.add_parser("write-latest-active-plan-manual-preview")
+    _add_latest_active_plan_manual_preview_arguments(latest_manual_preview_parser)
+
+    manual_delivery_package_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-package")
+    _add_latest_active_plan_manual_delivery_package_arguments(manual_delivery_package_parser)
+
+    manual_delivery_files_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files")
+    _add_latest_active_plan_manual_delivery_files_arguments(manual_delivery_files_parser)
+
+    manual_delivery_files_from_json_parser = subparsers.add_parser("write-latest-active-plan-manual-delivery-files-from-json")
+    manual_delivery_files_from_json_parser.add_argument("--input-json", required=True)
+    manual_delivery_files_from_json_parser.add_argument("--output-dir", required=True)
+    manual_delivery_files_from_json_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_files_from_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_files_from_json_parser.add_argument("--auto-pending-caveat-from-csv", action="store_true")
+
+    manual_delivery_source_files_parser = subparsers.add_parser("resolve-latest-manual-delivery-source-files")
+    manual_delivery_source_files_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_source_files_parser.add_argument("--detail-report-path")
+    manual_delivery_source_files_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_source_files_parser.add_argument("--format", choices=["key-value"], default="key-value")
+
+    manual_delivery_input_json_parser = subparsers.add_parser("write-latest-manual-delivery-input-json")
+    manual_delivery_input_json_parser.add_argument("--output-json", required=True)
+    manual_delivery_input_json_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_input_json_parser.add_argument("--detail-report-path")
+    manual_delivery_input_json_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_input_json_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_input_json_parser.add_argument("--symbol", default="BTC_USDT")
+    manual_delivery_input_json_parser.add_argument("--timeframe", default="15m")
+    manual_delivery_input_json_parser.add_argument("--data-source", default="exchange-auto-public")
+    manual_delivery_input_json_parser.add_argument("--data-freshness", default="15m latest-window exchange-auto-public")
+    manual_delivery_input_json_parser.add_argument("--active-plan-label", default="NO_ACTION_REVIEW_REQUIRED")
+    manual_delivery_input_json_parser.add_argument("--side", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--entry-mode", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--entry-condition", default="review latest report before any manual decision")
+    manual_delivery_input_json_parser.add_argument("--tp-plan", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--sl-or-invalidation", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--timeout-or-wait-limit", default="review_required")
+    manual_delivery_input_json_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+
+    manual_delivery_local_inbox_parser = subparsers.add_parser("write-latest-manual-delivery-local-inbox")
+    manual_delivery_local_inbox_parser.add_argument("--input-json", required=True)
+    manual_delivery_local_inbox_parser.add_argument("--bundle-dir", required=True)
+    manual_delivery_local_inbox_parser.add_argument("--output-md", required=True)
+
+    manual_delivery_local_flow_parser = subparsers.add_parser("write-latest-manual-delivery-local-flow")
+    manual_delivery_local_flow_parser.add_argument("--output-dir", required=True)
+    manual_delivery_local_flow_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_local_flow_parser.add_argument("--detail-report-path")
+    manual_delivery_local_flow_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_local_flow_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_local_flow_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_local_flow_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_local_flow_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    manual_delivery_review_package_parser = subparsers.add_parser("write-latest-manual-delivery-review-package")
+    manual_delivery_review_package_parser.add_argument("--output-dir", required=True)
+    manual_delivery_review_package_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_review_package_parser.add_argument("--detail-report-path")
+    manual_delivery_review_package_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_review_package_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_review_package_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_review_package_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_review_package_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_review_package_parser.add_argument("--actionability-shadow-summary-output-md")
+    manual_delivery_review_package_parser.add_argument("--latest-pointer-json")
+    manual_delivery_review_package_parser.add_argument("--latest-status-md")
+    manual_delivery_review_package_parser.add_argument("--latest-status-json")
+    manual_delivery_review_package_parser.add_argument("--write-local-handoff", action="store_true")
+
+    manual_delivery_local_handoff_parser = subparsers.add_parser("write-latest-manual-delivery-local-handoff")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-dir", required=True)
+    manual_delivery_local_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    manual_delivery_local_handoff_parser.add_argument("--detail-report-path")
+    manual_delivery_local_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    manual_delivery_local_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    manual_delivery_local_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    manual_delivery_local_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+    manual_delivery_local_handoff_parser.add_argument("--write-handoff-status", action="store_true")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-status-md")
+    manual_delivery_local_handoff_parser.add_argument("--handoff-status-json")
+
+    current_manual_delivery_handoff_parser = subparsers.add_parser("write-current-manual-delivery-handoff")
+    current_manual_delivery_handoff_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_handoff_parser.add_argument("--detail-report-path")
+    current_manual_delivery_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    manual_delivery_human_gate_parser = subparsers.add_parser("summarize-manual-delivery-human-gate")
+    manual_delivery_human_gate_parser.add_argument("--human-gate-json", required=True)
+    manual_delivery_human_gate_parser.add_argument("--output-md")
+    manual_delivery_human_gate_parser.add_argument("--output-json")
+
+    manual_delivery_local_handoff_status_parser = subparsers.add_parser("summarize-manual-delivery-local-handoff")
+    manual_delivery_local_handoff_status_parser.add_argument("--handoff-dir", required=True)
+    manual_delivery_local_handoff_status_parser.add_argument("--output-md")
+    manual_delivery_local_handoff_status_parser.add_argument("--output-json")
+
+    current_manual_delivery_handoff_status_parser = subparsers.add_parser("summarize-current-manual-delivery-handoff")
+    current_manual_delivery_handoff_status_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_handoff_status_parser.add_argument("--output-md")
+    current_manual_delivery_handoff_status_parser.add_argument("--output-json")
+
+    self_check_current_manual_delivery_handoff_parser = subparsers.add_parser("self-check-current-manual-delivery-handoff")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    self_check_current_manual_delivery_handoff_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    self_check_current_manual_delivery_handoff_parser.add_argument("--detail-report-path")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    self_check_current_manual_delivery_handoff_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    self_check_current_manual_delivery_handoff_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    self_check_current_manual_delivery_handoff_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-notes", default="")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--actionability-shadow-summary-output-md")
+    self_check_current_manual_delivery_handoff_parser.add_argument("--self-check-json")
+
+    current_manual_delivery_handoff_self_check_status_parser = subparsers.add_parser("summarize-current-manual-delivery-handoff-self-check")
+    current_manual_delivery_handoff_self_check_status_parser.add_argument(
+        "--self-check-json",
+        default="local/manual_delivery_handoff/self-check.json",
+    )
+    current_manual_delivery_handoff_self_check_status_parser.add_argument("--output-md")
+    current_manual_delivery_handoff_self_check_status_parser.add_argument("--output-json")
+
+    current_manual_delivery_app_state_parser = subparsers.add_parser("write-current-manual-delivery-app-state")
+    current_manual_delivery_app_state_parser.add_argument(
+        "--self-check-json",
+        default="local/manual_delivery_handoff/self-check.json",
+    )
+    current_manual_delivery_app_state_parser.add_argument(
+        "--app-state-json",
+        default="local/manual_delivery_handoff/app-state.json",
+    )
+    current_manual_delivery_app_state_parser.add_argument(
+        "--app-state-md",
+        default="local/manual_delivery_handoff/app-state.md",
+    )
+
+    current_manual_delivery_app_state_status_parser = subparsers.add_parser("summarize-current-manual-delivery-app-state")
+    current_manual_delivery_app_state_status_parser.add_argument(
+        "--app-state-json",
+        default="local/manual_delivery_handoff/app-state.json",
+    )
+    current_manual_delivery_app_state_status_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_state_status_parser.add_argument("--output-md")
+    current_manual_delivery_app_state_status_parser.add_argument("--output-json")
+
+    current_manual_delivery_app_state_ready_parser = subparsers.add_parser("check-current-manual-delivery-app-state-ready")
+    current_manual_delivery_app_state_ready_parser.add_argument(
+        "--app-state-status-json",
+        default="local/manual_delivery_handoff/app-state-status.json",
+    )
+    current_manual_delivery_app_state_ready_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_state_ready_parser.add_argument("--output-md")
+    current_manual_delivery_app_state_ready_parser.add_argument("--output-json")
+
+    current_manual_delivery_app_snapshot_parser = subparsers.add_parser("write-current-manual-delivery-app-snapshot")
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--ready-check-json",
+        default="local/manual_delivery_handoff/ready-check.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-state-json",
+        default="local/manual_delivery_handoff/app-state.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-snapshot-json",
+        default="local/manual_delivery_handoff/app-snapshot.json",
+    )
+    current_manual_delivery_app_snapshot_parser.add_argument(
+        "--app-snapshot-md",
+        default="local/manual_delivery_handoff/app-snapshot.md",
+    )
+
+    current_manual_delivery_app_snapshot_status_parser = subparsers.add_parser("summarize-current-manual-delivery-app-snapshot")
+    current_manual_delivery_app_snapshot_status_parser.add_argument(
+        "--app-snapshot-json",
+        default="local/manual_delivery_handoff/app-snapshot.json",
+    )
+    current_manual_delivery_app_snapshot_status_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_snapshot_status_parser.add_argument("--output-md")
+    current_manual_delivery_app_snapshot_status_parser.add_argument("--output-json")
+
+    current_manual_delivery_app_ready_parser = subparsers.add_parser("check-current-manual-delivery-app-ready")
+    current_manual_delivery_app_ready_parser.add_argument(
+        "--app-snapshot-status-json",
+        default="local/manual_delivery_handoff/app-snapshot-status.json",
+    )
+    current_manual_delivery_app_ready_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_ready_parser.add_argument("--output-md")
+    current_manual_delivery_app_ready_parser.add_argument("--output-json")
+
+    current_manual_delivery_app_contract_parser = subparsers.add_parser("describe-current-manual-delivery-app-contract")
+    current_manual_delivery_app_contract_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_contract_parser.add_argument("--output-json")
+    current_manual_delivery_app_contract_parser.add_argument("--output-md")
+
+    current_manual_delivery_app_state_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-state")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--self-check-json")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--app-state-json")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--app-state-md")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--app-state-status-json")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--app-state-status-md")
+    current_manual_delivery_app_state_refresh_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_state_refresh_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_state_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_state_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_state_refresh_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_app_state_refresh_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    current_manual_delivery_app_state_refresh_ready_parser = subparsers.add_parser("refresh-and-check-current-manual-delivery-app-state")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--self-check-json")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--app-state-json")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--app-state-md")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--app-state-status-json")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--app-state-status-md")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--ready-check-json")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--ready-check-md")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    current_manual_delivery_app_snapshot_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-snapshot")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--self-check-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-status-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-state-status-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--ready-check-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--ready-check-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--write-app-snapshot-status", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-status-md")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--app-snapshot-status-json")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    current_manual_delivery_app_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app")
+    current_manual_delivery_app_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_refresh_parser.add_argument("--self-check-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-state-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-state-md")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-state-status-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-state-status-md")
+    current_manual_delivery_app_refresh_parser.add_argument("--ready-check-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--ready-check-md")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-md")
+    current_manual_delivery_app_refresh_parser.add_argument("--write-app-snapshot-status", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-md")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-snapshot-status-json")
+    current_manual_delivery_app_refresh_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--write-app-dashboard", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-dashboard-html")
+    current_manual_delivery_app_refresh_parser.add_argument("--export-app-surface", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--app-surface-dir")
+    current_manual_delivery_app_refresh_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_refresh_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_refresh_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument(
+        "--actionability-shadow-output-csv",
+        default="logs/csv/active_plan_shadow_decisions.csv",
+    )
+    current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-final-outcome", default="pending")
+    current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-notes", default="")
+    current_manual_delivery_app_refresh_parser.add_argument("--actionability-shadow-summary-output-md")
+
+    current_manual_delivery_app_dashboard_parser = subparsers.add_parser("write-current-manual-delivery-app-dashboard")
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-snapshot-json",
+        default="local/manual_delivery_handoff/app-snapshot.json",
+    )
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-snapshot-status-json",
+        default="local/manual_delivery_handoff/app-snapshot-status.json",
+    )
+    current_manual_delivery_app_dashboard_parser.add_argument(
+        "--app-dashboard-html",
+        default="local/manual_delivery_handoff/app-dashboard.html",
+    )
+
+    current_manual_delivery_app_surface_export_parser = subparsers.add_parser("export-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_export_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_surface_export_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+
+    current_manual_delivery_app_surface_check_parser = subparsers.add_parser("check-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_check_parser.add_argument("--stdout-json", action="store_true")
+
+    current_manual_delivery_app_surface_refresh_check_parser = subparsers.add_parser("refresh-and-check-current-manual-delivery-app-surface")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--detail-report-path")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--recent-row-window", type=_non_negative_int_arg, default=12)
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
+
+    actionability_shadow_decision_parser = subparsers.add_parser("write-actionability-shadow-decision")
+    actionability_shadow_decision_parser.add_argument("--generated-at-jst", required=True)
+    actionability_shadow_decision_parser.add_argument("--signal-id", required=True)
+    actionability_shadow_decision_parser.add_argument("--symbol", required=True)
+    actionability_shadow_decision_parser.add_argument("--timeframe", required=True)
+    actionability_shadow_decision_parser.add_argument("--active-plan-label", required=True)
+    actionability_shadow_decision_parser.add_argument("--side", required=True)
+    actionability_shadow_decision_parser.add_argument("--entry-mode", required=True)
+    actionability_shadow_decision_parser.add_argument("--actionability-label", required=True)
+    actionability_shadow_decision_parser.add_argument("--human-action", required=True)
+    actionability_shadow_decision_parser.add_argument("--source-readiness", required=True)
+    actionability_shadow_decision_parser.add_argument("--pending-caveat", required=True)
+    actionability_shadow_decision_parser.add_argument("--detail-report-path", required=True)
+    actionability_shadow_decision_parser.add_argument("--actionability-reason", action="append", default=[])
+    actionability_shadow_decision_parser.add_argument("--final-outcome", default="pending")
+    actionability_shadow_decision_parser.add_argument("--notes", default="")
+    actionability_shadow_decision_parser.add_argument("--output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+
+    actionability_shadow_from_json_parser = subparsers.add_parser("write-actionability-shadow-decision-from-json")
+    actionability_shadow_from_json_parser.add_argument("--input-json", required=True)
+    actionability_shadow_from_json_parser.add_argument("--output-csv", default="logs/csv/active_plan_shadow_decisions.csv")
+    actionability_shadow_from_json_parser.add_argument("--final-outcome", default="pending")
+    actionability_shadow_from_json_parser.add_argument("--notes", default="")
+
+    actionability_shadow_summary_parser = subparsers.add_parser("summarize-actionability-shadow-decisions")
+    actionability_shadow_summary_parser.add_argument("--input-csv", required=True)
+    actionability_shadow_summary_parser.add_argument("--output-md")
+
+    manual_delivery_manifest_summary_parser = subparsers.add_parser("summarize-manual-delivery-local-flow-manifest")
+    manual_delivery_manifest_summary_parser.add_argument("--manifest-json", required=True)
+    manual_delivery_manifest_summary_parser.add_argument("--output-md")
+    manual_delivery_manifest_summary_parser.add_argument("--output-json")
+
+    latest_manual_delivery_pointer_summary_parser = subparsers.add_parser("summarize-latest-manual-delivery-pointer")
+    latest_manual_delivery_pointer_summary_parser.add_argument("--latest-pointer-json", required=True)
+    latest_manual_delivery_pointer_summary_parser.add_argument("--output-md")
+    latest_manual_delivery_pointer_summary_parser.add_argument("--output-json")
+
+    pending_coverage_caveat_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat")
+    _add_pending_coverage_caveat_arguments(pending_coverage_caveat_parser)
+
+    pending_coverage_caveat_from_csv_parser = subparsers.add_parser("format-active-plan-pending-coverage-caveat-from-csv")
+    _add_pending_coverage_caveat_from_csv_arguments(pending_coverage_caveat_from_csv_parser)
+
+    paper_positions_parser = subparsers.add_parser("build-paper-positions")
+    paper_positions_parser.add_argument("--trades-path")
+    paper_positions_parser.add_argument("--output-csv")
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
+    sync_parser.add_argument("--max-new-ai-reviews", type=int, default=0)
+
+    ai_sync_parser = subparsers.add_parser("sync-ai-post-reviews")
+    ai_sync_parser.add_argument("--max-new-ai-reviews", type=int)
+
+    backfill_parser = subparsers.add_parser("backfill-ai-post-review-v2")
+    backfill_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
+
+    serve_parser = subparsers.add_parser("serve-review-form")
+    serve_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
+    serve_parser.add_argument("--host", default=REVIEW_SERVER_HOST)
+    serve_parser.add_argument("--port", type=int, default=REVIEW_SERVER_PORT)
 
     return parser
 
 
 def main() -> None:
     parser = _build_parser()
-    args = parser.parse_args()
+    argv = list(sys.argv[1:])
+    if argv and argv[0] == "--paper-entry-sl-wait-redesign":
+        argv = ["build-paper-entry-sl-wait-redesign-report", *argv[1:]]
+    if argv and argv[0] == "--quality-guard-effectiveness":
+        argv = ["build-quality-guard-effectiveness-report", *argv[1:]]
+    if argv and argv[0] == "--soft-risk-collateral-damage":
+        argv = ["build-soft-risk-collateral-damage-report", *argv[1:]]
+    if argv and argv[0] == "--report-hub":
+        argv = ["build-report-hub", *argv[1:]]
+    if argv and argv[0] == "--build-active-trade-plan-diagnostics":
+        argv = ["build-active-trade-plan-diagnostics-report", *argv[1:]]
+    if argv and argv[0] == "--build-active-plan-candidate-outcomes":
+        argv = ["build-active-plan-candidate-outcomes-report", *argv[1:]]
+    args = parser.parse_args(argv)
     base_dir = BASE_DIR
 
     if args.command == "update-outcomes":
@@ -1817,11 +19293,625 @@ def main() -> None:
             print(report)
         return
 
+    if args.command == "compare-current-setup":
+        report = build_current_setup_comparison_report(
+            base_dir=base_dir,
+            output_md=Path(args.output_md) if args.output_md else None,
+            limit=int(args.limit),
+            only_notified=bool(args.only_notified),
+            previous_reason=str(args.previous_reason),
+            current_reason=str(args.current_reason),
+            prelabel=str(args.prelabel),
+            risk_flag=str(args.risk_flag),
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            status_transition=str(args.status_transition),
+        )
+        if args.output_md:
+            print(Path(args.output_md))
+        else:
+            print(report)
+        return
+
+    if args.command == "refresh-standard-setup-reports":
+        generated = refresh_standard_setup_comparison_reports(
+            base_dir=base_dir,
+            analysis_dir=Path(args.analysis_dir) if args.analysis_dir else None,
+            limit=int(args.limit),
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        for key, path in generated.items():
+            print(f"{key}={path}")
+        return
+
+    if args.command == "build-operational-focus-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_operational_focus_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-relaxation-candidates-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_relaxation_candidates_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-phase1b-promotion-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_phase1b_promotion_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-failed-breakout-down-reversal-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_failed_breakout_down_reversal_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-market-map-effectiveness-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_market_map_effectiveness_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-market-map-readiness-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_market_map_readiness_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            min_market_rows=int(args.min_market_rows),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-paper-opportunity-diagnostics-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_paper_opportunity_diagnostics_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-active-trade-plan-diagnostics-report":
+        report_date = str(args.active_plan_report_date or "").strip()
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_active_trade_plan_diagnostics_report(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_md=output_md,
+            report_date=report_date or None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        resolved_output_md = output_md or (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_trade_plan_diagnostics_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        print(resolved_output_md)
+        return
+
+    if args.command == "build-active-trade-plan-effectiveness-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_trade_plan_effectiveness_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_active_trade_plan_effectiveness_report(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            outcomes_path=Path(args.outcomes_path) if args.outcomes_path else None,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-active-plan-paper-candidates":
+        path = build_active_plan_paper_candidates(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        print(path)
+        return
+
+    if args.command == "build-active-plan-candidate-outcomes":
+        path = build_active_plan_candidate_outcomes(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            outcomes_path=Path(args.outcomes_path) if args.outcomes_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        print(path)
+        return
+
+    if args.command == "build-active-plan-candidate-intraperiod-outcomes":
+        path = build_active_plan_candidate_intraperiod_outcomes(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            ohlcv_path=Path(args.ohlcv_path) if args.ohlcv_path else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            evaluation_window_hours=float(args.evaluation_window_hours),
+        )
+        print(path)
+        return
+
+    if args.command == "build-active-plan-intraperiod-outcomes":
+        candidates_csv = Path(args.candidates_csv)
+        ohlcv_csv = Path(args.ohlcv_csv)
+        output_csv = Path(args.output_csv)
+        now_text = str(args.now or "").strip()
+        now = None
+        if now_text:
+            now = _parse_dt(now_text)
+            if now is None:
+                parser.error(f"invalid --now datetime: {now_text}")
+        ohlcv_df = pd.read_csv(ohlcv_csv)
+        _ensure_parent(output_csv)
+        output_df = write_active_plan_intraperiod_outcomes(
+            candidates_csv_path=candidates_csv,
+            ohlcv_df=ohlcv_df,
+            output_csv_path=output_csv,
+            now=now,
+            timeout_hours=float(args.timeout_hours),
+        )
+        sys.stdout.write(f"active_plan_intraperiod_outcomes_csv={output_csv}\n")
+        sys.stdout.write(f"row_count={len(output_df)}\n")
+        return
+
+    if args.command == "build-active-plan-intraperiod-review":
+        candidates_csv = Path(args.candidates_csv)
+        ohlcv_csv = Path(args.ohlcv_csv)
+        outcomes_csv = Path(args.outcomes_csv)
+        output_md = Path(args.output_md) if args.output_md else _default_active_plan_intraperiod_report_path(base_dir)
+        stdout_json = bool(getattr(args, "stdout_json", False))
+        now_text = str(args.now or "").strip()
+        now = None
+        if now_text:
+            now = _parse_dt(now_text)
+            if now is None:
+                parser.error(f"invalid --now datetime: {now_text}")
+        ohlcv_df = pd.read_csv(ohlcv_csv)
+        _ensure_parent(outcomes_csv)
+        output_df = write_active_plan_intraperiod_outcomes(
+            candidates_csv_path=candidates_csv,
+            ohlcv_df=ohlcv_df,
+            output_csv_path=outcomes_csv,
+            now=now,
+            timeout_hours=float(args.timeout_hours),
+        )
+        build_active_plan_candidate_intraperiod_outcomes_report(
+            base_dir=base_dir,
+            intraperiod_outcomes_path=outcomes_csv,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if stdout_json:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "schema_version": "active_plan_intraperiod_review.v1",
+                        "command": "build-active-plan-intraperiod-review",
+                        "candidates_csv": str(candidates_csv),
+                        "ohlcv_csv": str(ohlcv_csv),
+                        "outcomes_csv": str(outcomes_csv),
+                        "report_md": str(output_md),
+                        "row_count": len(output_df),
+                        "report_only": True,
+                        "formal_go": False,
+                        "automatic_order_allowed": False,
+                        "exchange_fetch_allowed": False,
+                        "daily_sync_wiring": False,
+                        "secret_reading_allowed": False,
+                        "human_decides_manually": True,
+                        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            return
+        sys.stdout.write(f"active_plan_intraperiod_outcomes_csv={outcomes_csv}\n")
+        sys.stdout.write(f"active_plan_intraperiod_report_md={output_md}\n")
+        sys.stdout.write(f"row_count={len(output_df)}\n")
+        return
+
+    if args.command == "build-active-plan-candidate-outcomes-report":
+        report_date = str(args.active_plan_report_date or "").strip()
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_active_plan_candidate_outcomes_report(
+            base_dir=base_dir,
+            candidates_path=Path(args.candidates_path) if args.candidates_path else None,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            candidate_outcomes_path=Path(args.candidate_outcomes_path) if args.candidate_outcomes_path else None,
+            output_md=output_md,
+            report_date=report_date or None,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        resolved_output_md = output_md or (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"active_plan_candidate_outcomes_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        print(resolved_output_md)
+        return
+
+    if args.command == "build-active-plan-candidate-intraperiod-outcomes-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_active_plan_candidate_intraperiod_outcomes_report(
+            base_dir=base_dir,
+            intraperiod_outcomes_path=Path(args.intraperiod_outcomes_path) if args.intraperiod_outcomes_path else None,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        resolved_output_md = output_md or _default_active_plan_intraperiod_report_path(base_dir)
+        print(resolved_output_md)
+        return
+
+    if args.command == "build-paper-entry-sl-wait-redesign-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"paper_entry_sl_wait_redesign_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_paper_entry_sl_wait_redesign_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-quality-guard-effectiveness-report":
+        output_md = (
+            Path(args.output_md)
+            if args.output_md
+            else base_dir / "運用資料" / "reports" / "analysis" / f"quality_guard_effectiveness_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        report = build_quality_guard_effectiveness_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-soft-risk-collateral-damage-report":
+        default_output_md = (
+            base_dir
+            / "運用資料"
+            / "reports"
+            / "analysis"
+            / f"soft_risk_collateral_damage_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+        )
+        output_md = Path(args.output_md) if args.output_md else default_output_md
+        report = build_soft_risk_collateral_damage_report(
+            base_dir=base_dir,
+            output_md=output_md,
+            date_from=str(args.date_from),
+            date_to=str(args.date_to),
+            limit=int(args.limit),
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(report)
+        return
+
+    if args.command == "build-report-hub":
+        output_md = Path(args.output_md) if args.output_md else None
+        report = build_report_hub(
+            base_dir=base_dir,
+            output_md=output_md,
+        )
+        if output_md:
+            print(output_md)
+        else:
+            print(base_dir / "運用資料" / "reports" / "report_hub_latest.md")
+            print(report)
+        return
+
+    if args.command == "write-active-plan-notification-preview":
+        _run_active_plan_notification_preview_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-preview":
+        _run_latest_active_plan_manual_preview_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-package":
+        _run_latest_active_plan_manual_delivery_package_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-files":
+        _run_latest_active_plan_manual_delivery_files_command(args, parser)
+        return
+
+    if args.command == "write-latest-active-plan-manual-delivery-files-from-json":
+        _run_latest_active_plan_manual_delivery_files_from_json_command(args, parser)
+        return
+
+    if args.command == "resolve-latest-manual-delivery-source-files":
+        _run_resolve_latest_manual_delivery_source_files_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-input-json":
+        _run_write_latest_manual_delivery_input_json_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-inbox":
+        _run_write_latest_manual_delivery_local_inbox_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-flow":
+        _run_latest_manual_delivery_local_flow_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-review-package":
+        _run_write_latest_manual_delivery_review_package_command(args, parser)
+        return
+
+    if args.command == "write-latest-manual-delivery-local-handoff":
+        _run_write_latest_manual_delivery_local_handoff_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-handoff":
+        _run_write_current_manual_delivery_handoff_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-human-gate":
+        _run_summarize_manual_delivery_human_gate_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-local-handoff":
+        _run_summarize_manual_delivery_local_handoff_command(args, parser)
+        return
+
+    if args.command == "summarize-current-manual-delivery-handoff":
+        _run_summarize_current_manual_delivery_handoff_command(args, parser)
+        return
+
+    if args.command == "self-check-current-manual-delivery-handoff":
+        _run_self_check_current_manual_delivery_handoff_command(args, parser)
+        return
+
+    if args.command == "summarize-current-manual-delivery-handoff-self-check":
+        _run_summarize_current_manual_delivery_handoff_self_check_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-state":
+        _run_write_current_manual_delivery_app_state_command(args, parser)
+        return
+
+    if args.command == "summarize-current-manual-delivery-app-state":
+        _run_summarize_current_manual_delivery_app_state_command(args, parser)
+        return
+
+    if args.command == "check-current-manual-delivery-app-state-ready":
+        _run_check_current_manual_delivery_app_state_ready_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-snapshot":
+        _run_write_current_manual_delivery_app_snapshot_command(args, parser)
+        return
+
+    if args.command == "summarize-current-manual-delivery-app-snapshot":
+        _run_summarize_current_manual_delivery_app_snapshot_command(args, parser)
+        return
+
+    if args.command == "check-current-manual-delivery-app-ready":
+        _run_check_current_manual_delivery_app_ready_command(args, parser)
+        return
+
+    if args.command == "describe-current-manual-delivery-app-contract":
+        _run_describe_current_manual_delivery_app_contract_command(args, parser)
+        return
+
+    if args.command == "refresh-current-manual-delivery-app-state":
+        _run_refresh_current_manual_delivery_app_state_command(args, parser)
+        return
+
+    if args.command == "refresh-and-check-current-manual-delivery-app-state":
+        _run_refresh_and_check_current_manual_delivery_app_state_command(args, parser)
+        return
+
+    if args.command == "refresh-current-manual-delivery-app-snapshot":
+        _run_refresh_current_manual_delivery_app_snapshot_command(args, parser)
+        return
+
+    if args.command == "refresh-current-manual-delivery-app":
+        _run_refresh_current_manual_delivery_app_command(args, parser)
+        return
+
+    if args.command == "write-current-manual-delivery-app-dashboard":
+        _run_write_current_manual_delivery_app_dashboard_command(args, parser)
+        return
+
+    if args.command == "export-current-manual-delivery-app-surface":
+        _run_export_current_manual_delivery_app_surface_command(args, parser)
+        return
+    if args.command == "check-current-manual-delivery-app-surface":
+        _run_check_current_manual_delivery_app_surface_command(args, parser)
+        return
+
+    if args.command == "refresh-and-check-current-manual-delivery-app-surface":
+        _run_refresh_and_check_current_manual_delivery_app_surface_command(args, parser)
+        return
+
+    if args.command == "write-actionability-shadow-decision":
+        _run_write_actionability_shadow_decision_command(args, parser)
+        return
+
+    if args.command == "write-actionability-shadow-decision-from-json":
+        _run_write_actionability_shadow_decision_from_json_command(args, parser)
+        return
+
+    if args.command == "summarize-actionability-shadow-decisions":
+        _run_summarize_actionability_shadow_decisions_command(args, parser)
+        return
+
+    if args.command == "summarize-manual-delivery-local-flow-manifest":
+        _run_summarize_manual_delivery_local_flow_manifest_command(args, parser)
+        return
+
+    if args.command == "summarize-latest-manual-delivery-pointer":
+        _run_summarize_latest_manual_delivery_pointer_command(args, parser)
+        return
+
+    if args.command == "format-active-plan-pending-coverage-caveat":
+        _run_format_active_plan_pending_coverage_caveat_command(args, parser)
+        return
+
+    if args.command == "format-active-plan-pending-coverage-caveat-from-csv":
+        _run_format_active_plan_pending_coverage_caveat_from_csv_command(args, parser)
+        return
+
+    if args.command == "build-paper-positions":
+        path = build_paper_positions(
+            base_dir=base_dir,
+            trades_path=Path(args.trades_path) if args.trades_path else None,
+            output_path=Path(args.output_csv) if args.output_csv else None,
+        )
+        print(path)
+        return
+
+    if args.command == "serve-review-form":
+        serve_review_form(
+            base_dir=base_dir,
+            review_note_path=Path(args.review_note),
+            host=str(args.host),
+            port=int(args.port),
+        )
+        return
+
     if args.command == "daily-sync":
         output_md = Path(args.output_md) if args.output_md else None
-        paths = daily_sync(base_dir=base_dir, review_note_path=Path(args.review_note), output_md=output_md)
+        paths = daily_sync(
+            base_dir=base_dir,
+            review_note_path=Path(args.review_note),
+            output_md=output_md,
+            max_new_reviews=int(args.max_new_ai_reviews),
+        )
         for key, path in paths.items():
             print(f"{key}={path}")
+        return
+
+    if args.command == "sync-ai-post-reviews":
+        reviews_path, stats = sync_ai_post_reviews(
+            base_dir=base_dir,
+            max_new_reviews=args.max_new_ai_reviews,
+        )
+        print(f"reviews_path={reviews_path}")
+        for key, value in stats.items():
+            print(f"{key}={value}")
+        return
+
+    if args.command == "backfill-ai-post-review-v2":
+        result = backfill_ai_post_review_v2(
+            base_dir=base_dir,
+            review_note_path=Path(args.review_note),
+        )
+        for key, value in result.items():
+            print(f"{key}={value}")
         return
 
 

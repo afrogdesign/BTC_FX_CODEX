@@ -7,6 +7,10 @@ def _round2(value: float) -> float:
     return round(float(value), 2)
 
 
+_TP1_MIN_RR = 1.3
+_TP2_MIN_RR = 2.4
+
+
 def _empty_setup(reason: str = "") -> dict[str, Any]:
     return {
         "status": "invalid",
@@ -60,6 +64,17 @@ def _nearest_target(side: str, entry_mid: float, support_zones: list[dict[str, A
     return max(below) if below else None
 
 
+def _target_candidates(
+    side: str,
+    entry_mid: float,
+    support_zones: list[dict[str, Any]],
+    resistance_zones: list[dict[str, Any]],
+) -> list[float]:
+    if side == "long":
+        return sorted(float(z["low"]) for z in resistance_zones if float(z["low"]) > entry_mid)
+    return sorted((float(z["high"]) for z in support_zones if float(z["high"]) < entry_mid), reverse=True)
+
+
 def build_setup(
     *,
     side: str,
@@ -98,17 +113,25 @@ def build_setup(
     if side == "long":
         stop_loss = entry_low - sl_atr_multiplier * atr
         risk = max(entry_mid - stop_loss, 1e-9)
-        target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
-        tp1 = target_hint if target_hint and target_hint > entry_mid else entry_mid + risk * 1.8
-        tp2 = entry_mid + risk * 2.0
+        targets = _target_candidates(side, entry_mid, support_zones, resistance_zones)
+        tp1_floor = entry_mid + risk * _TP1_MIN_RR
+        tp2_floor = entry_mid + risk * _TP2_MIN_RR
+        tp1_hint = targets[0] if targets else None
+        tp2_hint = next((target for target in targets[1:] if target > tp1_floor), None)
+        tp1 = max(tp1_hint, tp1_floor) if tp1_hint is not None else tp1_floor
+        tp2 = max(tp2_hint, tp2_floor) if tp2_hint is not None else tp2_floor
         tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = tp1 - entry_mid
     else:
         stop_loss = entry_high + sl_atr_multiplier * atr
         risk = max(stop_loss - entry_mid, 1e-9)
-        target_hint = _nearest_target(side, entry_mid, support_zones, resistance_zones)
-        tp1 = target_hint if target_hint and target_hint < entry_mid else entry_mid - risk * 1.8
-        tp2 = entry_mid - risk * 2.0
+        targets = _target_candidates(side, entry_mid, support_zones, resistance_zones)
+        tp1_floor = entry_mid - risk * _TP1_MIN_RR
+        tp2_floor = entry_mid - risk * _TP2_MIN_RR
+        tp1_hint = targets[0] if targets else None
+        tp2_hint = next((target for target in targets[1:] if target < tp1_floor), None)
+        tp1 = min(tp1_hint, tp1_floor) if tp1_hint is not None else tp1_floor
+        tp2 = min(tp2_hint, tp2_floor) if tp2_hint is not None else tp2_floor
         tp1, tp2 = _normalize_take_profits(side, entry_mid, tp1, tp2)
         reward = entry_mid - tp1
 
@@ -145,7 +168,7 @@ def build_setup(
         invalid_reasons.append("confidence不足")
         invalid_reason_codes.append("confidence_below_min")
 
-    if warning_count >= 2:
+    if warning_count >= 3:
         invalid_reasons.append("warning多発")
         invalid_reason_codes.append("warning_cluster")
 
@@ -158,6 +181,9 @@ def build_setup(
         if inside_zone and trigger_ready:
             status = "ready"
             status_reason_code = "inside_entry_zone_with_trigger"
+        elif zone_distance <= atr * 0.08 and trigger_ready:
+            status = "ready"
+            status_reason_code = "near_entry_zone_with_trigger"
         elif zone_distance <= atr * 0.3:
             status = "watch"
             status_reason_code = "near_entry_zone_waiting_trigger"
@@ -181,8 +207,80 @@ def build_setup(
         "entry_to_target_pct": _round2(entry_to_target_pct),
         "invalid_reason": " / ".join(invalid_reasons),
         "invalid_reason_codes": invalid_reason_codes,
+        "blocking_flags": sorted(set(no_trade_flags)),
     }
     return setup, sorted(set(no_trade_flags))
+
+
+def _market_map_distance_atr(market_map: dict[str, Any], key: str) -> float | None:
+    level = market_map.get(key)
+    if not isinstance(level, dict):
+        return None
+    value = level.get("distance_atr")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def refine_execution_precision(
+    setup: dict[str, Any],
+    *,
+    side: str,
+    market_map: dict[str, Any] | None,
+    signal_15m: str,
+    breakout_up: bool,
+    breakout_down: bool,
+) -> tuple[dict[str, Any], list[str]]:
+    refined = dict(setup)
+    flags = {str(flag) for flag in refined.get("execution_precision_flags", []) if str(flag)}
+    market_map = market_map or {}
+    market_flags = {str(flag) for flag in market_map.get("flags", []) if str(flag)}
+    action = str(refined.get("execution_precision_action") or "keep")
+    reason = str(refined.get("execution_precision_reason") or "")
+
+    support_distance_atr = _market_map_distance_atr(market_map, "nearest_major_support")
+    resistance_distance_atr = _market_map_distance_atr(market_map, "nearest_major_resistance")
+
+    if side == "short":
+        if "short_into_major_support" in market_flags or (
+            support_distance_atr is not None and support_distance_atr <= 0.30
+        ):
+            flags.add("short_at_major_support_wait_only")
+            action = "wait_only"
+            reason = "主要サポートが近く、15分足ショートは追いかけず待機"
+        if {"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_flags and signal_15m != "short":
+            flags.add("short_invalidated_by_up_break")
+            action = "wait_only"
+            reason = "上抜け後の支持化が残り、15分足ショート発火は無効寄り"
+        if breakout_down and {"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_flags:
+            flags.add("breakout_follow_candidate")
+    elif side == "long":
+        if "long_into_major_resistance" in market_flags or (
+            resistance_distance_atr is not None and resistance_distance_atr <= 0.30
+        ):
+            flags.add("long_at_major_resistance_wait_only")
+            action = "wait_only"
+            reason = "主要レジスタンスが近く、15分足ロングは追いかけず待機"
+        if {"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_flags and signal_15m != "long":
+            flags.add("long_invalidated_by_down_break")
+            action = "wait_only"
+            reason = "下抜け後の抵抗化が残り、15分足ロング発火は無効寄り"
+        if breakout_up and {"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_flags:
+            flags.add("breakout_follow_candidate")
+
+    if action == "wait_only" and refined.get("status") == "ready":
+        refined["status"] = "watch"
+        refined["status_reason_code"] = "execution_precision_wait_only"
+        existing = [str(flag) for flag in refined.get("blocking_flags", []) if str(flag)]
+        refined["blocking_flags"] = sorted(set(existing + ["execution_precision_wait_only"]))
+
+    refined["execution_precision_action"] = action
+    refined["execution_precision_flags"] = sorted(flags)
+    refined["execution_precision_reason"] = reason
+    return refined, sorted(flags)
 
 
 def choose_primary_setup(bias: str, long_setup: dict[str, Any], short_setup: dict[str, Any]) -> tuple[str, str]:
