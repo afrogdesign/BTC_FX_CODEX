@@ -18,6 +18,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Basic committed-secret hygiene
+        run: |
+          set -e
+          if git ls-files | grep -E '(^|/)(\.env|.*\.pem|id_rsa|id_ed25519)$'; then
+            echo "Sensitive runtime or private-key file is tracked." >&2
+            exit 1
+          fi
+          if git grep -n -I -E '(sk-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY=.+|SMTP_PASSWORD=.+)' -- ':!*.md' ':!.env.example' ':!SECURITY.md' ':!CONTRIBUTING.md' ':!.github/workflows/ci.yml'; then
+            echo "Potential committed secret value found." >&2
+            exit 1
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
