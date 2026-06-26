@@ -47,6 +47,15 @@ Please include:
 - Security impact, if any
 - Whether output format changes
 
+## Maintenance references
+
+For larger changes, review these documents first:
+
+- [`docs/maintenance/codex-workflow.md`](docs/maintenance/codex-workflow.md)
+- [`docs/maintenance/release-checklist.md`](docs/maintenance/release-checklist.md)
+- [`docs/maintenance/security-review-checklist.md`](docs/maintenance/security-review-checklist.md)
+- [`docs/samples/anonymized-output.md`](docs/samples/anonymized-output.md)
+
 ## Coding guidelines
 
 - Prefer small, explicit functions
@@ -59,6 +68,8 @@ Please include:
 ## Security-related changes
 
 If a change touches credentials, `.env`, logs, external APIs, SMTP, or notification behavior, describe the risk and mitigation in the pull request.
+
+Security-related changes should also use the security review checklist in `docs/maintenance/security-review-checklist.md`.
 
 ## Financial-safety note
 
