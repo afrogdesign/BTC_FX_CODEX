@@ -1,138 +1,286 @@
-# BTC Monitor
+# BTC FX CODEX
 
-更新日: 2026-03-13 16:32 JST
+BTC FX CODEX is an AI-assisted BTC market monitoring project.
 
-BTC監視システムの実行プロジェクトです。
+BTC/FX の相場データを定期的に取得し、テクニカル指標・市場構造・流動性・Funding Rate・建玉/出来高系の情報を整理して、判断材料として読みやすく通知するための監視システムです。
 
-## セットアップ
+> [!WARNING]
+> このプロジェクトは投資助言、売買指示、自動売買の推奨を目的としたものではありません。出力される分析や通知は、学習・検証・個人の判断補助のための情報です。実際の取引判断は利用者自身の責任で行ってください。
+
+---
+
+## Overview
+
+このリポジトリは、BTC/FX 取引における「見るべき情報が多すぎる」「判断材料が散らばる」「ログが残らない」という問題を減らすために作られています。
+
+主な目的は次のとおりです。
+
+- BTC/USDT 周辺の市場データを定期取得する
+- 複数時間足の構造、指標、流動性、Funding Rate を整理する
+- AI による要約・補助コメントを生成する
+- メール通知やログ保存によって、あとから検証できる形にする
+- Codex / OpenAI API / CLI を使ったメンテナンス・検証ワークフローを育てる
+
+このプロジェクトはまだ成長段階ですが、金融系ツールとして扱うため、テスト、レビュー、依存関係管理、ログ管理、認証情報の扱いを重視して継続的に整備しています。
+
+---
+
+## Features
+
+- **Market data monitoring**
+  - MEXC の BTC/USDT データ取得
+  - Binance Futures の市場構造補助データ取得
+
+- **Technical analysis**
+  - EMA / RSI / ATR / Volume
+  - 複数時間足の構造判定
+  - Support / Resistance
+  - Liquidity / Liquidation cluster
+  - Funding Rate
+  - OI / CVD 系の補助分析
+
+- **Risk and setup support**
+  - Long / Short の方向性スコア
+  - Confidence score
+  - Signal tier
+  - Position risk
+  - RR / exit plan / position sizing の補助情報
+
+- **AI-assisted workflow**
+  - OpenAI API による要約・助言文生成
+  - CLI 経由の AI 実行に切り替え可能
+  - JSON 入出力を前提にした拡張可能な設計
+
+- **Operations**
+  - メール通知
+  - heartbeat 出力
+  - last result 保存
+  - signal snapshot 保存
+  - logs / tmp / status の運用整理
+
+---
+
+## Repository structure
+
+```text
+.
+├── main.py                 # 監視システムのエントリーポイント
+├── config.py               # 設定読み込み
+├── requirements.txt        # Python dependencies
+├── .env.example            # 環境変数テンプレート
+├── src/
+│   ├── ai/                 # AI要約・助言
+│   ├── analysis/           # 市場構造・流動性・スコアリング分析
+│   ├── data/               # 取引所データ取得・検証
+│   ├── indicators/         # テクニカル指標
+│   ├── notification/       # メール通知
+│   ├── storage/            # JSON / CSV / snapshot 保存
+│   └── trade/              # リスク・ポジション補助
+└── 運用資料/                # 運用メモ・進捗記録
+```
+
+---
+
+## Requirements
+
+- Python 3.12 recommended
+- OpenAI API key, if AI summary/advice is enabled
+- SMTP account, if email notification is enabled
+- Internet access to the configured exchange public APIs
+
+Dependencies are listed in `requirements.txt`.
+
+```text
+numpy
+pandas
+requests
+schedule
+openai
+websocket-client
+```
+
+---
+
+## Setup
+
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+git clone https://github.com/afrogdesign/BTC_FX_CODEX.git
+cd BTC_FX_CODEX
+
 python3.12 -m venv .venv312
+.venv312/bin/python -m pip install --upgrade pip
 .venv312/bin/python -m pip install -r requirements.txt
+
 cp .env.example .env
 ```
 
-## 実行
+Then edit `.env`.
+
 ```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
+OPENAI_API_KEY=
+SMTP_USER=
+SMTP_PASSWORD=
+MAIL_FROM=
+MAIL_TO=
+```
+
+> [!CAUTION]
+> `.env` には API key や SMTP password などの機密情報を入れます。絶対に Git にコミットしないでください。
+
+---
+
+## Basic usage
+
+```bash
 .venv312/bin/python main.py
 ```
 
-## 補足
-- 運用メモ・手順書は `運用資料/` にあります。
-- 市場構造の補助データとして Binance の公開APIも使います。
-- Funding 閾値（`FUNDING_*`）は `%` 単位で設定します（例: `0.05` は `0.05%`）。
+`REPORT_TIMES` に指定された時刻に、相場データを取得し、分析・要約・通知を実行します。
 
-## AI の切り替え
+例:
 
-- 助言と要約は、それぞれ `API / CLI` を別々に切り替えられます。
-- `.env` の設定例:
+```env
+REPORT_TIMES=00:05,01:05,02:05,03:05,04:05,05:05,06:05,07:05,08:05,09:05,10:05,11:05,12:05,13:05,14:05,15:05,16:05,17:05,18:05,19:05,20:05,21:05,22:05,23:05
+```
 
-```bash
+---
+
+## AI provider settings
+
+AI の助言と要約は、それぞれ `api` または `cli` に切り替えられます。
+
+```env
 AI_ADVICE_PROVIDER=api
-AI_SUMMARY_PROVIDER=cli
+AI_SUMMARY_PROVIDER=api
 AI_ADVICE_CLI_COMMAND=
-AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py
+AI_SUMMARY_CLI_COMMAND=
 ```
 
-- `AI_ADVICE_PROVIDER`
-  - `api` なら OpenAI API を使います
-  - `cli` なら `AI_ADVICE_CLI_COMMAND` を実行します
-- `AI_SUMMARY_PROVIDER`
-  - `api` なら OpenAI API を使います
-  - `cli` なら `AI_SUMMARY_CLI_COMMAND` を実行します
-- CLI モードでは、監視システムは JSON を標準入力へ渡し、標準出力を受け取ります。
-  - 助言CLIは JSON オブジェクトを返す必要があります
-  - 要約CLIは本文テキストを返す想定です
-- 同じラッパーを両方に使えます。
-  - `AI_ADVICE_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
-  - `AI_SUMMARY_CLI_COMMAND=/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py`
-  - ラッパー側は、入力 JSON の `task` を見て `summary` と `ai_advice` を自動で切り替えます
+- `api`: OpenAI API を使います
+- `cli`: 指定した CLI コマンドへ JSON を渡し、標準出力を受け取ります
 
-## 本番運用の考え方
+CLI モードを使う場合の例:
 
-- Git は「コードの正本」に使います。
-  - 正本: いちばん信頼して管理する元データ
-- `logs/` や実行中に増える CSV / JSON は Git へ入れません。
-- 本番 MBP2020 への反映は、`git ls-files` を元にした `rsync` 配備へ寄せます。
-- 本番ログの確認は、必要なものだけを別同期します。
-- 実行履歴は `運用資料/progress.md` を軽く保ち、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避します。
-- `tmp/` は `status/`、`snapshots/`、`errors/` に分け、日常確認では `status/` だけを見ます。
-
-### コードを本番 Ver02.1 へ反映する
-
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/deploy_ver021_prod.sh
+```env
+AI_ADVICE_PROVIDER=cli
+AI_SUMMARY_PROVIDER=cli
+AI_ADVICE_CLI_COMMAND=/path/to/codex_cli_wrapper.py
+AI_SUMMARY_CLI_COMMAND=/path/to/codex_cli_wrapper.py
 ```
 
-### 本番 Ver02.1 状態を軽く同期する
+この設計により、OpenAI API、Codex CLI、ローカル検証用スクリプトなどを用途に応じて差し替えられます。
 
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/sync_ver021_prod_status.sh
+---
+
+## Important environment variables
+
+| Variable | Purpose |
+|---|---|
+| `MEXC_BASE_URL` | MEXC public API endpoint |
+| `MEXC_SYMBOL` | MEXC symbol, for example `BTC_USDT` |
+| `BINANCE_BASE_URL` | Binance Futures public API endpoint |
+| `BINANCE_SYMBOL` | Binance symbol, for example `BTCUSDT` |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_SUMMARY_MODEL` | Model for summary generation |
+| `OPENAI_ADVICE_MODEL` | Model for advice generation |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP server settings |
+| `MAIL_FROM` / `MAIL_TO` | Notification mail settings |
+| `REPORT_TIMES` | Scheduled execution times |
+| `DRYRUN_MODE` | Dry-run mode flag |
+| `HEARTBEAT_FILE` | Health check heartbeat path |
+
+Funding Rate thresholds are expressed in percent.
+
+```env
+# 0.05 means 0.05%, not raw value 0.0005
+FUNDING_LONG_WARNING=0.05
+FUNDING_LONG_PROHIBITED=0.08
+FUNDING_SHORT_WARNING=-0.03
+FUNDING_SHORT_PROHIBITED=-0.05
 ```
 
-補足:
+---
 
-- まずはこちらを普段使いの入口にします。
-- 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
-- そのあと `tmp/status/prod_status_summary.json` と `tmp/status/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
+## Security notes
 
-### 2時間ごとの軽量同期を登録する
+This project may interact with API keys, SMTP credentials, logs, and external market-data APIs. Security review is important even though the project does not aim to execute trades automatically.
 
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/start_prod_status_sync.sh
-```
+Recommended checks:
 
-補足:
+- Keep `.env` and runtime logs out of Git
+- Review logs before sharing issue reports
+- Avoid exposing API keys, mail credentials, account identifiers, or private URLs
+- Keep dependencies updated
+- Use least-privilege credentials where possible
+- Run in dry-run or local verification mode before production operation
 
-- Mac 側 `launchd` で `tools/sync_ver021_prod_status.sh` を 2 時間ごとに実行します。
-- 停止するときは `zsh tools/stop_prod_status_sync.sh` を使います。
-- 定期処理は `launchd` に固定し、AI の自動巡回は使いません。
-- 日常確認は、まず `tmp/status/prod_status_summary.md` と `tmp/status/prod_status_sync_last_success.txt` だけを見ます。
+---
 
-### 本番 Ver02.1 ログをフル取得する
+## Logs and runtime files
 
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/pull_ver021_prod_logs_auto.sh
-```
+Runtime files should not be treated as source code.
 
-補足:
+Typical runtime outputs include:
 
-- これで「コード反映」と「実データ確認」を分けて扱えます。
-- 普段は使わず、通知発生後や詳細調査のときだけ使います。
-- `tmp/status/prod_status_summary.md` で足りるあいだは呼びません。
-- `tools/pull_ver021_prod_logs.sh` は下位入口で、個別オプションを直接使いたいときだけ呼びます。
-- 標準は鍵認証です。パスワード fallback が本当に必要なときだけ `zsh tools/pull_ver021_prod_logs_with_password.sh` を明示的に使います。
+- `logs/`
+- `tmp/status/`
+- `tmp/snapshots/`
+- `tmp/errors/`
+- `last_result.json`
+- `heartbeat.txt`
 
-### `tmp/` を整理する
+The repository should remain the source of truth for code and documentation, while operational logs should be handled separately.
 
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/cleanup_tmp_status.sh
-```
+---
 
-補足:
+## Maintenance policy
 
-- 日常確認用を `tmp/status/`、詳細 snapshot を `tmp/snapshots/`、失敗記録を `tmp/errors/` へ寄せます。
-- 古い `.tgz` や不要な `.DS_Store`、比較母集団外の古い snapshot を掃除します。
-- `--light` を付けると、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得します。
-- `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。
-- 件名は `SYSTEM_LABEL` に加えて実行モードも自動で付きます。
-  - 例: `[Ver02.1] [API] [BTC監視] ...`
-  - 例: `[Ver02.1] [CLI] [BTC監視] ...`
+This repository is maintained as a practical OSS experiment for AI-assisted financial-data monitoring.
 
-### 週次 progress を圧縮する
+Current maintenance priorities:
 
-```bash
-cd /Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor
-zsh tools/archive_progress_week.sh
-```
+1. Improve README and operational documentation
+2. Add safer test cases for data parsing and scoring logic
+3. Improve error handling around external APIs
+4. Review security risks around keys, logs, dependencies, and notifications
+5. Make Codex-assisted maintenance reproducible
 
-補足:
+---
 
-- `運用資料/progress.md` は入口だけを軽く保ちます。
-- 週次アーカイブは「システム本体の変化 / 検証結果 / 未解決」だけを残す方向で圧縮します。
+## Roadmap
+
+- [ ] Add automated tests for core analysis modules
+- [ ] Add sample anonymized output
+- [ ] Add GitHub Actions for lint/test checks
+- [ ] Add security checklist for releases
+- [ ] Improve English documentation for international users
+- [ ] Document Codex-based maintenance workflow
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+For changes related to market analysis logic, please include:
+
+- What changed
+- Why it changed
+- How it was tested
+- Whether it affects notifications, scoring, or output format
+
+For security-related issues, avoid posting secrets or private operational logs in public issues.
+
+---
+
+## License
+
+No license file is currently included.
+
+If you intend to reuse this project, please check the repository owner’s latest license decision before redistribution or commercial use.
+
+---
+
+## Disclaimer
+
+This software is provided for learning, research, and operational assistance only. It is not financial advice. The maintainer is not responsible for trading losses, operational errors, missed notifications, API outages, or decisions made based on the output of this system.
