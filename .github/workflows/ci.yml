@@ -43,8 +43,7 @@ jobs:
       - name: Run tests if present
         run: |
           if [ -d tests ]; then
-            python -m pip install pytest
-            python -m pytest -q
+            python -m unittest discover -s tests -p "test*.py"
           else
-            echo "No tests directory found yet. Skipping pytest."
+            echo "No tests directory found yet. Skipping unittest."
           fi
