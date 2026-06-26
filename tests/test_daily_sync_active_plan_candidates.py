@@ -11,7 +11,13 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from tools.log_feedback import daily_sync
+from tools.log_feedback import ACTIVE_PLAN_PAPER_CANDIDATE_HEADER, daily_sync
+
+
+def _write_active_plan_paper_candidates_csv(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(",".join(ACTIVE_PLAN_PAPER_CANDIDATE_HEADER) + "\n", encoding="utf-8")
+    return path
 
 
 class DailySyncActivePlanCandidatesTests(unittest.TestCase):
@@ -40,6 +46,8 @@ class DailySyncActivePlanCandidatesTests(unittest.TestCase):
                 "backlog_pending": 0,
                 "resolved_cli_fallback": 0,
             }
+
+            _write_active_plan_paper_candidates_csv(candidates_path)
 
             with (
                 patch("tools.log_feedback.update_outcomes", return_value=outcomes_path),
