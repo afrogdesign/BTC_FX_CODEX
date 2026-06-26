@@ -87,7 +87,10 @@ BTC/FX の相場データを定期的に取得し、テクニカル指標・市�
 ├── SECURITY.md             # Security policy
 ├── CONTRIBUTING.md         # Contribution guide
 ├── CODE_OF_CONDUCT.md      # Community rules
-├── .github/workflows/      # CI checks
+├── .github/                # CI, PR template, issue templates
+├── docs/
+│   ├── maintenance/        # Release / security / Codex maintenance docs
+│   └── samples/            # Redacted or synthetic sample outputs
 ├── src/
 │   ├── ai/                 # AI要約・助言
 │   ├── analysis/           # 市場構造・流動性・スコアリング分析
@@ -223,6 +226,19 @@ FUNDING_SHORT_PROHIBITED=-0.05
 
 ---
 
+## Maintenance and review workflow
+
+This project documents its maintenance process so that AI-assisted work remains reviewable and safe.
+
+| Document | Purpose |
+|---|---|
+| [`docs/maintenance/codex-workflow.md`](docs/maintenance/codex-workflow.md) | ChatGPT / Codex-assisted maintenance roles and review rules |
+| [`docs/maintenance/release-checklist.md`](docs/maintenance/release-checklist.md) | Release and public-review checklist |
+| [`docs/maintenance/security-review-checklist.md`](docs/maintenance/security-review-checklist.md) | Credential, log, API, and financial-safety checks |
+| [`docs/samples/anonymized-output.md`](docs/samples/anonymized-output.md) | Synthetic sample output and wording standard |
+
+---
+
 ## Security notes
 
 This project may interact with API keys, SMTP credentials, logs, and external market-data APIs. Security review is important even though the project does not aim to execute trades automatically.
@@ -236,7 +252,7 @@ Recommended checks:
 - Use least-privilege credentials where possible
 - Run in dry-run or local verification mode before production operation
 
-For details, see [`SECURITY.md`](SECURITY.md).
+For details, see [`SECURITY.md`](SECURITY.md) and [`docs/maintenance/security-review-checklist.md`](docs/maintenance/security-review-checklist.md).
 
 ---
 
@@ -263,6 +279,8 @@ This repository includes a basic GitHub Actions workflow.
 
 Current checks:
 
+- Check for obvious committed runtime/private-key files
+- Check for obvious committed API or SMTP secret values
 - Install Python dependencies
 - Compile Python files
 - Run `unittest discover` if a `tests/` directory exists
@@ -280,8 +298,8 @@ Current maintenance priorities:
 1. Add safer test cases for data parsing and scoring logic
 2. Improve error handling around external APIs
 3. Review security risks around keys, logs, dependencies, and notifications
-4. Add anonymized sample output for contributors
-5. Make Codex-assisted maintenance reproducible
+4. Add more anonymized sample outputs for contributors
+5. Keep Codex-assisted maintenance reproducible and human-reviewed
 
 ---
 
@@ -292,11 +310,11 @@ Current maintenance priorities:
 - [x] Add contributing guide
 - [x] Add basic GitHub Actions checks
 - [x] Add documented current version marker
+- [x] Add documented Codex-assisted maintenance workflow
+- [x] Add release and security-review checklists
+- [x] Add anonymized sample output
 - [ ] Add automated tests for core analysis modules
-- [ ] Add sample anonymized output
-- [ ] Add security checklist for releases
 - [ ] Improve English documentation for international users
-- [ ] Document Codex-based maintenance workflow
 
 ---
 
