@@ -8608,6 +8608,23 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(
+                output_json_only_data["evidence_quality_summary"],
+                {
+                    "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+                    "total_rows": 1418,
+                    "no_ohlcv_rows": 1330,
+                    "valid_sample_rows": 88,
+                    "entry_reached_rows": 76,
+                    "win_like_rows": 35,
+                    "loss_like_rows": 39,
+                    "unresolved_entry_rows": 2,
+                    "potential_fakeout": 39,
+                    "potential_missed_turn": 35,
+                    "bad_entry_timing": 2,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
                 output_json_only_data["prohibited_behavior"],
                 [
                     "send",
@@ -8658,6 +8675,23 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(stdout_json_json_only_data["surface_manifest_schema_version"], "manual_delivery_app_surface_manifest.v1")
             self.assertEqual(stdout_json_json_only_data["surface_mode"], "static_html_and_json_only")
             self.assertEqual(stdout_json_json_only_data["contract_status"], "stable_for_local_app_integration")
+            self.assertEqual(
+                stdout_json_json_only_data["evidence_quality_summary"],
+                {
+                    "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+                    "total_rows": 1418,
+                    "no_ohlcv_rows": 1330,
+                    "valid_sample_rows": 88,
+                    "entry_reached_rows": 76,
+                    "win_like_rows": 35,
+                    "loss_like_rows": 39,
+                    "unresolved_entry_rows": 2,
+                    "potential_fakeout": 39,
+                    "potential_missed_turn": 35,
+                    "bad_entry_timing": 2,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
 
             self.assertEqual(stdout_json_md_only_code, 0, msg=stdout_json_md_only_stderr)
             self.assertTrue(stdout_json_md_only_stdout.startswith("{\n"))
@@ -8690,6 +8724,23 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(stdout_json_only_data["surface_mode"], "static_html_and_json_only")
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+            self.assertEqual(
+                stdout_json_only_data["evidence_quality_summary"],
+                {
+                    "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+                    "total_rows": 1418,
+                    "no_ohlcv_rows": 1330,
+                    "valid_sample_rows": 88,
+                    "entry_reached_rows": 76,
+                    "win_like_rows": 35,
+                    "loss_like_rows": 39,
+                    "unresolved_entry_rows": 2,
+                    "potential_fakeout": 39,
+                    "potential_missed_turn": 35,
+                    "bad_entry_timing": 2,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
 
     def test_summarize_current_manual_delivery_app_snapshot_cli_supports_default_explicit_and_output_modes(self) -> None:
         with TemporaryDirectory() as tmpdir:
