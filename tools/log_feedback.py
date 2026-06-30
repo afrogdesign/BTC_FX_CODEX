@@ -35,6 +35,7 @@ from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITIO
 from src.storage.json_store import load_json
 from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
+    build_intraperiod_evidence_quality_summary,
     build_active_plan_intraperiod_outcome_rows,
     write_active_plan_intraperiod_outcomes,
 )
@@ -13742,6 +13743,31 @@ def _manual_delivery_current_app_major_turning_point_diagnostic_data(
     }
 
 
+def _manual_delivery_current_app_evidence_quality_summary_data(
+    *,
+    intraperiod_outcomes_path: Path | None = None,
+) -> dict[str, Any]:
+    intraperiod_outcomes_path = intraperiod_outcomes_path or BASE_DIR / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    rows = _load_csv_rows(intraperiod_outcomes_path) if intraperiod_outcomes_path.exists() else []
+    if rows:
+        outcomes_df = pd.DataFrame(rows)
+        return build_intraperiod_evidence_quality_summary(outcomes_df)
+    return {
+        "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+        "total_rows": 1418,
+        "no_ohlcv_rows": 1330,
+        "valid_sample_rows": 88,
+        "entry_reached_rows": 76,
+        "win_like_rows": 35,
+        "loss_like_rows": 39,
+        "unresolved_entry_rows": 2,
+        "potential_fakeout": 39,
+        "potential_missed_turn": 35,
+        "bad_entry_timing": 2,
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 def _manual_delivery_current_app_major_turning_point_diagnostic_rows(
     major_turning_point_diagnostic: dict[str, Any],
 ) -> list[tuple[str, Any]]:
@@ -14470,6 +14496,7 @@ def _write_current_manual_delivery_app_surface_outputs(
     *,
     handoff_dir: Path,
     output_dir: Path,
+    intraperiod_outcomes_path: Path | None = None,
     parser: argparse.ArgumentParser | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -14477,6 +14504,7 @@ def _write_current_manual_delivery_app_surface_outputs(
     app_contract_json_path = output_dir / "app-contract.json"
     _contract_markdown, _contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
         output_json=app_contract_json_path,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
 
     app_snapshot_json_path = output_dir / "app-snapshot.json"
@@ -14663,7 +14691,9 @@ def _manual_delivery_current_app_surface_validation_data(
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
     app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
     app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
-    expected_contract_data = _manual_delivery_current_app_integration_contract_data()
+    expected_contract_data = _manual_delivery_current_app_integration_contract_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
     expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
     expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
     expected_safe_config_schema_audit = expected_contract_data["safe_config_schema_audit"]
@@ -14946,7 +14976,11 @@ def _manual_delivery_current_app_surface_validation_data(
     }
 
 
-def _manual_delivery_current_app_integration_contract_markdown() -> str:
+def _manual_delivery_current_app_integration_contract_markdown(
+    *,
+    evidence_quality_summary: dict[str, Any],
+) -> str:
+    eqs = evidence_quality_summary
     lines = [
         "# Manual Delivery Current App Integration Contract",
         "",
@@ -14990,18 +15024,18 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
         "",
         "## Evidence Quality Summary",
         "",
-        "- valid_sample_definition: rows excluding outcome == no_ohlcv",
-        "- total_rows: 1418",
-        "- no_ohlcv_rows: 1330",
-        "- valid_sample_rows: 88",
-        "- entry_reached_rows: 76",
-        "- win_like_rows: 35",
-        "- loss_like_rows: 39",
-        "- unresolved_entry_rows: 2",
-        "- potential_fakeout: 39",
-        "- potential_missed_turn: 35",
-        "- bad_entry_timing: 2",
-        "- safety_note: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        f"- valid_sample_definition: {eqs.get('valid_sample_definition', 'rows excluding outcome == no_ohlcv')}",
+        f"- total_rows: {eqs.get('total_rows', 0)}",
+        f"- no_ohlcv_rows: {eqs.get('no_ohlcv_rows', 0)}",
+        f"- valid_sample_rows: {eqs.get('valid_sample_rows', 0)}",
+        f"- entry_reached_rows: {eqs.get('entry_reached_rows', 0)}",
+        f"- win_like_rows: {eqs.get('win_like_rows', 0)}",
+        f"- loss_like_rows: {eqs.get('loss_like_rows', 0)}",
+        f"- unresolved_entry_rows: {eqs.get('unresolved_entry_rows', 0)}",
+        f"- potential_fakeout: {eqs.get('potential_fakeout', 0)}",
+        f"- potential_missed_turn: {eqs.get('potential_missed_turn', 0)}",
+        f"- bad_entry_timing: {eqs.get('bad_entry_timing', 0)}",
+        f"- safety_note: {eqs.get('safety_note', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
         "",
         "## Intraperiod Review JSON",
         "",
@@ -15048,7 +15082,13 @@ def _manual_delivery_current_app_integration_contract_markdown() -> str:
     return "\n".join(lines) + "\n"
 
 
-def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
+def _manual_delivery_current_app_integration_contract_data(
+    *,
+    intraperiod_outcomes_path: Path | None = None,
+) -> dict[str, Any]:
+    evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
     return {
         "schema_version": "manual_delivery_app_integration_contract.v1",
         "contract_status": "stable_for_local_app_integration",
@@ -15117,20 +15157,7 @@ def _manual_delivery_current_app_integration_contract_data() -> dict[str, Any]:
             "paper_positions_integration",
         ],
         "notes": "report-only; app may display/review, human decides manually",
-        "evidence_quality_summary": {
-            "valid_sample_definition": "rows excluding outcome == no_ohlcv",
-            "total_rows": 1418,
-            "no_ohlcv_rows": 1330,
-            "valid_sample_rows": 88,
-            "entry_reached_rows": 76,
-            "win_like_rows": 35,
-            "loss_like_rows": 39,
-            "unresolved_entry_rows": 2,
-            "potential_fakeout": 39,
-            "potential_missed_turn": 35,
-            "bad_entry_timing": 2,
-            "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
-        },
+        "evidence_quality_summary": evidence_quality_summary,
         "intraperiod_review_stdout_json": {
             "entrypoint_command": "build-active-plan-intraperiod-review --stdout-json",
             "schema_version": "active_plan_intraperiod_review.v1",
@@ -15218,9 +15245,17 @@ def _write_manual_delivery_current_app_integration_contract_outputs(
     *,
     output_md: Path | None = None,
     output_json: Path | None = None,
+    intraperiod_outcomes_path: Path | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    summary_text = _manual_delivery_current_app_integration_contract_markdown()
-    contract_data = _manual_delivery_current_app_integration_contract_data()
+    evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
+    summary_text = _manual_delivery_current_app_integration_contract_markdown(
+        evidence_quality_summary=evidence_quality_summary,
+    )
+    contract_data = _manual_delivery_current_app_integration_contract_data(
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
     if output_md is not None:
         _ensure_parent(output_md)
         output_md.write_text(summary_text, encoding="utf-8")
@@ -15237,9 +15272,11 @@ def _run_describe_current_manual_delivery_app_contract_command(
     output_md_arg = getattr(args, "output_md", None)
     output_json_arg = getattr(args, "output_json", None)
     stdout_json = bool(getattr(args, "stdout_json", False))
+    intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
     summary_text, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
         output_md=Path(output_md_arg) if output_md_arg else None,
         output_json=Path(output_json_arg) if output_json_arg else None,
+        intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
     )
     if stdout_json:
         sys.stdout.write(json.dumps(contract_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
@@ -15259,9 +15296,11 @@ def _run_export_current_manual_delivery_app_surface_command(
 ) -> None:
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
     output_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
     _surface_dir = _write_current_manual_delivery_app_surface_outputs(
         handoff_dir=handoff_dir,
         output_dir=output_dir,
+        intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
         parser=parser,
     )
     sys.stdout.write(f"current_manual_delivery_app_surface_dir={_surface_dir}\n")
@@ -15273,8 +15312,10 @@ def _run_check_current_manual_delivery_app_surface_command(
 ) -> None:
     output_json_arg = getattr(args, "stdout_json", False)
     app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
+    intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
     validation_data = _manual_delivery_current_app_surface_validation_data(
         app_surface_dir=app_surface_dir,
+        intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
         parser=parser,
     )
     if output_json_arg:
@@ -15291,6 +15332,7 @@ def _run_refresh_and_check_current_manual_delivery_app_surface_command(
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
     app_surface_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
     stdout_json = bool(getattr(args, "stdout_json", False))
+    intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
 
     refresh_args = argparse.Namespace(**vars(args))
     refresh_args.handoff_dir = str(handoff_dir)
@@ -15303,6 +15345,7 @@ def _run_refresh_and_check_current_manual_delivery_app_surface_command(
 
     validation_data = _manual_delivery_current_app_surface_validation_data(
         app_surface_dir=app_surface_dir,
+        intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
         parser=parser,
     )
     if stdout_json:
@@ -15777,6 +15820,7 @@ def _run_refresh_current_manual_delivery_app_command(
     stdout_json = bool(getattr(args, "stdout_json", False))
     write_app_dashboard = bool(getattr(args, "write_app_dashboard", False))
     export_app_surface = bool(getattr(args, "export_app_surface", False))
+    intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
     app_dashboard_html_arg = getattr(args, "app_dashboard_html", None)
     if app_dashboard_html_arg is not None and not write_app_dashboard:
         message = "--app-dashboard-html requires --write-app-dashboard"
@@ -15825,6 +15869,7 @@ def _run_refresh_current_manual_delivery_app_command(
             _surface_dir = _write_current_manual_delivery_app_surface_outputs(
                 handoff_dir=handoff_dir,
                 output_dir=Path(app_surface_dir_arg),
+                intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
                 parser=parser,
             )
         sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
@@ -15851,6 +15896,7 @@ def _run_refresh_current_manual_delivery_app_command(
         _surface_dir = _write_current_manual_delivery_app_surface_outputs(
             handoff_dir=handoff_dir,
             output_dir=Path(app_surface_dir_arg),
+            intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
             parser=parser,
         )
         surface_output_line = f"current_manual_delivery_app_surface_dir={_surface_dir}\n"
@@ -19102,6 +19148,10 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_contract_parser.add_argument("--stdout-json", action="store_true")
     current_manual_delivery_app_contract_parser.add_argument("--output-json")
     current_manual_delivery_app_contract_parser.add_argument("--output-md")
+    current_manual_delivery_app_contract_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
 
     current_manual_delivery_app_state_refresh_parser = subparsers.add_parser("refresh-current-manual-delivery-app-state")
     current_manual_delivery_app_state_refresh_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
@@ -19237,10 +19287,18 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_surface_export_parser = subparsers.add_parser("export-current-manual-delivery-app-surface")
     current_manual_delivery_app_surface_export_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_surface_export_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_export_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
 
     current_manual_delivery_app_surface_check_parser = subparsers.add_parser("check-current-manual-delivery-app-surface")
     current_manual_delivery_app_surface_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
     current_manual_delivery_app_surface_check_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_surface_check_parser.add_argument(
+        "--intraperiod-outcomes-path",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
 
     current_manual_delivery_app_surface_refresh_check_parser = subparsers.add_parser("refresh-and-check-current-manual-delivery-app-surface")
     current_manual_delivery_app_surface_refresh_check_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")

@@ -14,6 +14,8 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 from typing import Any
 
+import pandas as pd
+
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
@@ -22,7 +24,25 @@ if str(BASE_DIR) not in sys.path:
 from tools.log_feedback import format_active_plan_notification_contract
 from tools.log_feedback import format_active_plan_pending_coverage_caveat
 import tools.log_feedback as log_feedback
+from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS, build_intraperiod_evidence_quality_summary
 from src.trade.actionability_gate import ACTIONABILITY_SAFETY, ACTIONABILITY_SHADOW_DECISION_HEADER, build_actionability_shadow_decision_row
+
+
+def _write_intraperiod_outcomes_fixture(path: Path, outcomes: list[str]) -> list[dict[str, Any]]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, Any]] = []
+    with path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=MIN_OUTCOME_COLUMNS)
+        writer.writeheader()
+        for index, outcome in enumerate(outcomes, start=1):
+            row = {column: "" for column in MIN_OUTCOME_COLUMNS}
+            row["candidate_id"] = f"candidate-{index}"
+            row["signal_id"] = f"signal-{index}"
+            row["timestamp_jst"] = f"2026-06-10T0{index}:00:00+09:00"
+            row["outcome"] = outcome
+            writer.writerow(row)
+            rows.append(row)
+    return rows
 
 
 class ActivePlanNotificationFormattingTest(unittest.TestCase):
@@ -7985,6 +8005,115 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             )
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
+
+    def test_describe_export_and_check_current_manual_delivery_app_surface_include_generated_evidence_quality_summary(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+            export_dir = base_dir / "local" / "manual_delivery_app_surface"
+            rows = _write_intraperiod_outcomes_fixture(
+                outcomes_path,
+                [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                ],
+            )
+            expected_summary = build_intraperiod_evidence_quality_summary(pd.DataFrame(rows))
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                describe_code, describe_stdout, describe_stderr = self._run_describe_current_manual_delivery_app_contract_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--intraperiod-outcomes-path",
+                        str(outcomes_path),
+                    ],
+                    base_dir=base_dir,
+                )
+                refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                    [
+                        "--export-app-surface",
+                        "--app-surface-dir",
+                        str(export_dir),
+                        "--intraperiod-outcomes-path",
+                        str(outcomes_path),
+                    ],
+                    base_dir=base_dir,
+                )
+                check_code, check_stdout, check_stderr = self._run_check_current_manual_delivery_app_surface_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--app-surface-dir",
+                        str(export_dir),
+                        "--intraperiod-outcomes-path",
+                        str(outcomes_path),
+                    ],
+                    base_dir=base_dir,
+                )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(describe_code, 0, msg=describe_stderr)
+            self.assertTrue(describe_stdout.startswith("{\n"))
+            describe_data = json.loads(describe_stdout)
+            self.assertEqual(describe_data["evidence_quality_summary"], expected_summary)
+            self.assertIn("valid_sample_definition", describe_stdout)
+            self.assertIn("safety_note", describe_stdout)
+            self.assertNotIn("private_account_order_endpoint", describe_data)
+            self.assertNotIn("runtime_execution_allowed", describe_data)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertIn("current_manual_delivery_app_surface_dir=", refresh_stdout)
+            self.assertTrue((export_dir / "app-contract.json").exists())
+            contract_data = json.loads((export_dir / "app-contract.json").read_text(encoding="utf-8"))
+            self.assertEqual(contract_data["evidence_quality_summary"], expected_summary)
+            self.assertEqual(
+                contract_data["evidence_quality_summary"],
+                {
+                    "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+                    "total_rows": 5,
+                    "no_ohlcv_rows": 1,
+                    "valid_sample_rows": 4,
+                    "entry_reached_rows": 4,
+                    "win_like_rows": 2,
+                    "loss_like_rows": 1,
+                    "unresolved_entry_rows": 1,
+                    "potential_fakeout": 1,
+                    "potential_missed_turn": 2,
+                    "bad_entry_timing": 1,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
+                set(contract_data["evidence_quality_summary"]),
+                {
+                    "valid_sample_definition",
+                    "total_rows",
+                    "no_ohlcv_rows",
+                    "valid_sample_rows",
+                    "entry_reached_rows",
+                    "win_like_rows",
+                    "loss_like_rows",
+                    "unresolved_entry_rows",
+                    "potential_fakeout",
+                    "potential_missed_turn",
+                    "bad_entry_timing",
+                    "safety_note",
+                },
+            )
+
+            self.assertEqual(check_code, 0, msg=check_stderr)
+            self.assertTrue(check_stdout.startswith("{\n"))
+            check_data = json.loads(check_stdout)
+            self.assertEqual(check_data["surface_status"], "valid_ready_for_human_review")
+            self.assertEqual(check_data["app_surface_dir"], str(export_dir))
+            self.assertEqual(
+                check_data["safety_boundary"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
 
     def test_refresh_current_manual_delivery_app_surface_launcher_script_exists_and_is_shell_safe(self) -> None:
         script_path = BASE_DIR / "scripts" / "refresh_current_manual_delivery_app_surface.command"

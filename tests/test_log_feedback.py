@@ -144,6 +144,23 @@ def _write_current_manual_delivery_app_surface_fixture(
     )
 
 
+def _write_intraperiod_outcomes_fixture(path: Path, outcomes: list[str]) -> list[dict[str, Any]]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, Any]] = []
+    with path.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=MIN_OUTCOME_COLUMNS)
+        writer.writeheader()
+        for index, outcome in enumerate(outcomes, start=1):
+            row = {column: "" for column in MIN_OUTCOME_COLUMNS}
+            row["candidate_id"] = f"candidate-{index}"
+            row["signal_id"] = f"signal-{index}"
+            row["timestamp_jst"] = f"2026-06-10T0{index}:00:00+09:00"
+            row["outcome"] = outcome
+            writer.writerow(row)
+            rows.append(row)
+    return rows
+
+
 def _evidence_quality_summary_payload() -> dict[str, Any]:
     return {
         "valid_sample_definition": "rows excluding outcome == no_ohlcv",
@@ -217,7 +234,7 @@ from tools.log_feedback import (
     _manual_delivery_current_app_surface_validation_data,
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
-from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS
+from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS, build_intraperiod_evidence_quality_summary
 
 
 class LogFeedbackTest(unittest.TestCase):
@@ -730,7 +747,9 @@ class LogFeedbackTest(unittest.TestCase):
                 "ready_check_json": "ready-check.json",
                 "self_check_json": "self-check.json",
             }
-            contract_data = _manual_delivery_current_app_integration_contract_data()
+            contract_data = _manual_delivery_current_app_integration_contract_data(
+                intraperiod_outcomes_path=outcomes_path,
+            )
             dashboard_html = _manual_delivery_current_app_dashboard_html(
                 app_snapshot_json=Path("app-snapshot.json"),
                 app_snapshot_status_json=Path("app-snapshot-status.json"),
@@ -1259,6 +1278,73 @@ class LogFeedbackTest(unittest.TestCase):
                 },
             )
             self.assertIn("report/local diagnostics only", operator_status_diag["safety_boundary"])
+
+    def test_manual_delivery_current_app_integration_contract_uses_intraperiod_outcomes_path_for_evidence_quality_summary(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+            output_md = base_dir / "app-contract.md"
+            output_json = base_dir / "app-contract.json"
+            rows = _write_intraperiod_outcomes_fixture(
+                outcomes_path,
+                [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                ],
+            )
+            expected_summary = build_intraperiod_evidence_quality_summary(pd.DataFrame(rows))
+
+            markdown, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+                output_md=output_md,
+                output_json=output_json,
+                intraperiod_outcomes_path=outcomes_path,
+            )
+
+            self.assertTrue(output_md.exists())
+            self.assertTrue(output_json.exists())
+            self.assertIn("Evidence Quality Summary", markdown)
+            self.assertIn("rows excluding outcome == no_ohlcv", markdown)
+            self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
+            parsed = json.loads(output_json.read_text(encoding="utf-8"))
+            self.assertEqual(contract_data, parsed)
+            self.assertEqual(parsed["evidence_quality_summary"], expected_summary)
+            self.assertEqual(
+                parsed["evidence_quality_summary"],
+                {
+                    "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+                    "total_rows": 5,
+                    "no_ohlcv_rows": 1,
+                    "valid_sample_rows": 4,
+                    "entry_reached_rows": 4,
+                    "win_like_rows": 2,
+                    "loss_like_rows": 1,
+                    "unresolved_entry_rows": 1,
+                    "potential_fakeout": 1,
+                    "potential_missed_turn": 2,
+                    "bad_entry_timing": 1,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
+                set(parsed["evidence_quality_summary"]),
+                {
+                    "valid_sample_definition",
+                    "total_rows",
+                    "no_ohlcv_rows",
+                    "valid_sample_rows",
+                    "entry_reached_rows",
+                    "win_like_rows",
+                    "loss_like_rows",
+                    "unresolved_entry_rows",
+                    "potential_fakeout",
+                    "potential_missed_turn",
+                    "bad_entry_timing",
+                    "safety_note",
+                },
+            )
 
     def test_manual_delivery_current_app_surface_validation_data_requires_intraperiod_review_stdout_json_contract(self) -> None:
         def write_surface_files(surface_dir: Path, contract_data: dict[str, Any]) -> None:
