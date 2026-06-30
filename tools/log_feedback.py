@@ -13850,6 +13850,13 @@ def _manual_delivery_current_app_dashboard_html(
         ("external_notification_allowed", _dashboard_value("external_notification_allowed")),
         ("paper_positions_integration", _dashboard_value("paper_positions_integration")),
     ]
+    surface_roles_rows = [
+        ("Public HTML notification report", "current main manual-trading UI"),
+        ("Notification mail", "triage / entry point"),
+        ("Local dashboard / app surface", "confirmation and future automation surface"),
+        ("Single source of truth", "same decision source, no separate decision path"),
+        ("Safety boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+    ]
     active_plan_rows = [
         ("active_plan", status_data.get("active_plan_label")),
         ("side", status_data.get("side")),
@@ -14143,6 +14150,13 @@ def _manual_delivery_current_app_dashboard_html(
         <h2 class=\"section-title\">Safety Flags</h2>
         <table>
           {_table_rows(safety_flags_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Surface Roles</h2>
+        <table>
+          {_table_rows(surface_roles_rows)}
         </table>
       </section>
 

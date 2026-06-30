@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-APP-DASHBOARD-PARITY-SAFETY-FLAGS`
+- current_work_id: `BTCFX-20260630-APP-DASHBOARD-PARITY-SURFACE-ROLES`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Improve local app dashboard parity by adding explicit ready-gate safety flags to the dashboard HTML generator and targeted test.
+Improve local app dashboard parity by adding a compact Surface Roles section explaining the public HTML / notification mail / local dashboard relationship.
 
 ## Current summary
 
@@ -19,5 +19,5 @@ Improve local app dashboard parity by adding explicit ready-gate safety flags to
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-APP-DASHBOARD-PARITY-REVIEW`
-- Goal: Review the dashboard parity safety-flags change and decide the next small product improvement from MCP-primary baseline.
+- `BTCFX-20260630-APP-DASHBOARD-PARITY-READY-GATE-COPY`
+- Goal: Make the local dashboard ready-gate guidance more copyable for human review without changing runtime behavior or trading logic.
