@@ -225,6 +225,48 @@ def _path_metrics(
     )
 
 
+def summarize_intraperiod_outcome_coverage(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
+    if outcomes_df is None or outcomes_df.empty or "outcome" not in outcomes_df.columns:
+        total_rows = 0
+        no_ohlcv_rows = 0
+        valid_sample_rows = 0
+        entry_reached_rows = 0
+        no_ohlcv_rate = 0.0
+        valid_sample_rate = 0.0
+        entry_reached_rate = 0.0
+    else:
+        total_rows = int(len(outcomes_df))
+        outcome_series = outcomes_df["outcome"].astype("object")
+        no_ohlcv_rows = int((outcome_series == "no_ohlcv").sum())
+        valid_sample_rows = int(total_rows - no_ohlcv_rows)
+        entry_reached_rows = int(
+            outcome_series.isin(
+                {
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                    "ambiguous",
+                    "entry_reached",
+                }
+            ).sum()
+        )
+        no_ohlcv_rate = float(no_ohlcv_rows / total_rows) if total_rows else 0.0
+        valid_sample_rate = float(valid_sample_rows / total_rows) if total_rows else 0.0
+        entry_reached_rate = float(entry_reached_rows / total_rows) if total_rows else 0.0
+
+    return {
+        "total_rows": total_rows,
+        "no_ohlcv_rows": no_ohlcv_rows,
+        "valid_sample_rows": valid_sample_rows,
+        "entry_reached_rows": entry_reached_rows,
+        "no_ohlcv_rate": no_ohlcv_rate,
+        "valid_sample_rate": valid_sample_rate,
+        "entry_reached_rate": entry_reached_rate,
+        "valid_sample_definition": 'rows excluding outcome == no_ohlcv',
+    }
+
+
 def evaluate_active_plan_intraperiod_candidate(
     candidate_row: Any,
     ohlcv_df: pd.DataFrame | None,
@@ -394,5 +436,6 @@ __all__ = [
     "MIN_OUTCOME_COLUMNS",
     "build_active_plan_intraperiod_outcome_rows",
     "evaluate_active_plan_intraperiod_candidate",
+    "summarize_intraperiod_outcome_coverage",
     "write_active_plan_intraperiod_outcomes",
 ]

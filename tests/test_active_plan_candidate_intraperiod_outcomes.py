@@ -10,6 +10,7 @@ import pandas as pd
 from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_active_plan_intraperiod_outcome_rows,
+    summarize_intraperiod_outcome_coverage,
     write_active_plan_intraperiod_outcomes,
 )
 
@@ -227,6 +228,42 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
             self.assertEqual(result.loc[0, "candidate_id"], "cand-writer")
             self.assertEqual(written.loc[0, "candidate_id"], "cand-writer")
             self.assertEqual(written.loc[0, "outcome"], "tp1_first")
+
+    def test_summarize_intraperiod_outcome_coverage(self) -> None:
+        outcomes_df = pd.DataFrame(
+            {
+                "outcome": [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "sl_first",
+                    "timeout",
+                    "not_entered",
+                ]
+            }
+        )
+
+        summary = summarize_intraperiod_outcome_coverage(outcomes_df)
+
+        self.assertEqual(summary["total_rows"], 5)
+        self.assertEqual(summary["no_ohlcv_rows"], 1)
+        self.assertEqual(summary["valid_sample_rows"], 4)
+        self.assertEqual(summary["entry_reached_rows"], 3)
+        self.assertAlmostEqual(summary["no_ohlcv_rate"], 0.2)
+        self.assertAlmostEqual(summary["valid_sample_rate"], 0.8)
+        self.assertAlmostEqual(summary["entry_reached_rate"], 0.6)
+        self.assertEqual(summary["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
+
+        empty_summary = summarize_intraperiod_outcome_coverage(pd.DataFrame())
+        none_summary = summarize_intraperiod_outcome_coverage(None)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item["total_rows"], 0)
+            self.assertEqual(item["no_ohlcv_rows"], 0)
+            self.assertEqual(item["valid_sample_rows"], 0)
+            self.assertEqual(item["entry_reached_rows"], 0)
+            self.assertEqual(item["no_ohlcv_rate"], 0.0)
+            self.assertEqual(item["valid_sample_rate"], 0.0)
+            self.assertEqual(item["entry_reached_rate"], 0.0)
+            self.assertEqual(item["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
 
 
 if __name__ == "__main__":
