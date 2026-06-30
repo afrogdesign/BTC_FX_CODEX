@@ -16,7 +16,9 @@
 
 - runtime execution repo は current editing target ではない
 - GitHub は checkpoint / history / sync 用であり、毎回の default read path ではない
-- GitHub push は meaningful checkpoint branch のときに行い、小さい docs-only step ごとには必須ではない
+- GitHub push は meaningful checkpoint branch のときだけ行う
+- routine push は wasteful なので default では要求しない
+- old runtime repo への反映は checkpoint push 後の GitHub pull later で行う
 
 ## Roles
 
@@ -30,6 +32,14 @@
 3. `CURRENT_STATE.md`
 4. `NEXT_ACTION.md`
 5. `CONTROL.md`
+
+## Default operation
+
+- MCP primary
+- local edit / local validation / local commit
+- `PUSH: none` for normal tasks
+- checkpoint push only
+- avoid `.venv312/`, logs, generated files, and full `TASK_LEDGER.md` by default
 
 ## Core files
 

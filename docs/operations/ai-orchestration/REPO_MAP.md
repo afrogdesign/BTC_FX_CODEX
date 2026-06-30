@@ -11,7 +11,7 @@
 | Label | Path | Rule |
 |---|---|---|
 | MCP primary repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | default read / edit / test / git |
-| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default |
+| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default; update later by GitHub pull after checkpoint push |
 
 ## AI operation anchors
 
@@ -33,6 +33,7 @@
 - `logs/`
 - generated CSV / report / HTML outputs
 - large generated files under `local/`
+- full `TASK_LEDGER.md`
 
 ## Project source directories
 
@@ -57,3 +58,4 @@
 - AI should start with `AGENTS.md` and `docs/operations/ai-orchestration/START_HERE.md`
 - do not full-scan the repo unless explicitly asked
 - read only the files named in the current task plus required nearby context
+- normal MCP task should end with local commit or `PUSH: none`, not routine push

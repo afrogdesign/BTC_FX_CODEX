@@ -15,6 +15,9 @@ Do not take over planning unless explicitly asked.
 - Do not edit or run the old runtime execution repo unless explicitly instructed.
 - Runtime execution repo updates should happen later by GitHub pull after a clean checkpoint branch/push from the MCP working repo.
 - GitHub push is checkpoint-based and is not required for every small task.
+- Commit locally when useful and checks pass.
+- Do not push unless the task explicitly says `CHECKPOINT_PUSH` or push is required.
+- For normal MCP-primary tasks, report `PUSH: none`.
 - Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 - Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
@@ -81,8 +84,8 @@ For each task:
 4. Run the specified validation command first.
 5. Run broader validation only when requested or clearly necessary.
 6. Check `git diff --check` before commit.
-7. Commit when validation passes and the diff is intentional.
-8. Push only when the branch/remote target is clear and the task explicitly permits or requests a checkpoint push.
+7. Commit locally when validation passes and the diff is intentional.
+8. Push only when the task explicitly permits or requests `CHECKPOINT_PUSH` and the branch/remote target is clear.
 9. Return the compact report format.
 
 ## Stop conditions

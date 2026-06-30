@@ -3,8 +3,9 @@
 ## Operation Modes
 
 - `CHATGPT_ONLY`: use when ChatGPT should handle repo review, scope selection, or design judgment without spending Codex credits.
-- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed.
-- `NORMAL_CODEX`: use for fixed-scope edit/test/commit/push work.
+- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed; local commit optional, no push by default.
+- `NORMAL_CODEX`: use for fixed-scope edit/test work; local commit if checks pass, no push unless explicit checkpoint.
+- `CHECKPOINT_PUSH`: the only mode that pushes.
 - `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
 - `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
 - Keep orchestration metadata lightweight: normal tasks should not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md`.
@@ -20,7 +21,8 @@
 - do not run runtime execution during normal orchestration tasks
 - use AFROG_MCP as the primary repo inspection path
 - use GitHub for checkpoint/history/sync, not as the default read path for every review
-- do not automatically push to GitHub unless checkpoint/push is explicitly requested or clearly authorized
+- normal task default is local edit + local validation + local commit + compact report
+- do not automatically push to GitHub unless `CHECKPOINT_PUSH` is explicitly requested or clearly authorized
 - compact report is still written to `response.txt` exactly once
 - browser-side `AUTO_SEND` / `HUMAN_CHECK` concepts stay unchanged by these prompt rules
 
@@ -57,7 +59,8 @@ Test: <commands>
 Stop: <conditions>
 Report: compact
 Do not edit or run the old runtime execution repo.
-Do not push unless checkpoint/push is explicitly requested or clearly authorized.
+Local commit is optional.
+Do not push by default.
 ```
 
 ## FIX
@@ -72,7 +75,23 @@ Test: <commands>
 Stop: if the fix requires design changes outside this scope
 Report: compact
 Do not edit or run the old runtime execution repo.
-Do not push unless checkpoint/push is explicitly requested or clearly authorized.
+Commit locally if checks pass.
+Do not push unless explicit `CHECKPOINT_PUSH`.
+```
+
+## CHECKPOINT_PUSH
+
+```text
+CHECKPOINT_PUSH <WORK_ID>
+Goal: prepare and publish a meaningful checkpoint branch/push.
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Read: <files>
+Edit: <files>
+Test: <commands>
+Stop: if branch/remote target is ambiguous or push is not explicitly approved
+Report: compact
+Do not edit or run the old runtime execution repo.
+Push only after local checks pass and checkpoint target is explicit.
 ```
 
 ## REVIEW_ONLY

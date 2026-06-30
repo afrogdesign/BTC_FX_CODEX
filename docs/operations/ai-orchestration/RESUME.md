@@ -33,6 +33,9 @@ After `cd /Users/marupro/CODEX/100_MCP_Server/btc_monitor`, these repo-relative 
 - MCP/Codex normal orchestration tasks use the MCP working repo
 - runtime execution repo exists separately and must not be edited or run during normal MCP orchestration tasks
 - runtime execution repo should receive updates later by GitHub pull after a clean checkpoint branch/push from the MCP working repo
+- normal MCP task does not require routine GitHub push
+- push is reserved for explicit checkpoint tasks
+- default avoid list includes `.venv312/`, `logs/`, generated outputs, and full `TASK_LEDGER.md`
 
 ## CONTROL.md Semantics
 
@@ -55,8 +58,9 @@ After `cd /Users/marupro/CODEX/100_MCP_Server/btc_monitor`, these repo-relative 
 ## Low-Cost Modes
 
 - `CHATGPT_ONLY`: use when ChatGPT should handle review, scope selection, or design judgment without spending Codex credits.
-- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed.
-- `NORMAL_CODEX`: use for fixed-scope edit/test/commit/push work.
+- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed; local commit optional, no push by default.
+- `NORMAL_CODEX`: use for fixed-scope edit/test work; local commit if checks pass, no push unless explicit checkpoint.
+- `CHECKPOINT_PUSH`: use only when a meaningful checkpoint branch/push is explicitly requested.
 - `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
 - `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
 - Keep orchestration metadata lightweight: normal tasks should not trigger `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md` updates.

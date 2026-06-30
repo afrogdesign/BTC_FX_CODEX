@@ -1,11 +1,15 @@
 # ChatGPT 作業ディレクトリ
 
+現在の AI orchestration entrypoint は `docs/operations/ai-orchestration/START_HERE.md` です。
+この `chatgpt/` 配下は reference material であり、active orchestration entrypoint ではありません。
+
 このフォルダーは、BTC Monitor プロジェクトにおける ChatGPT 専用の作業領域です。
 
 ChatGPT は診断、考察、設計、仕様化を担当し、Codex は確定済み仕様に基づいて実装、テスト、Git 操作を担当します。
 設定の正本は `運用資料/ChatGPTプロジェクト設定.md` に置き、最新の状態と次指示の正本は `運用資料/NEXT_TASK.md` に置きます。
 レポート導線の案内板は `運用資料/reports/report_hub_latest.md` に置きます。
 このディレクトリは入口と受け渡しに絞って使います。
+古い ChatGPT analysis/spec folders は reference として保持し、現在の repo-local orchestration 正本とは分けて扱います。
 
 ## ChatGPT が最初に読む順
 
@@ -35,6 +39,7 @@ chatgpt/
 ### `analysis/`
 
 ChatGPT が行う診断、考察、改善案比較のレポートを保存します。
+旧 analysis は reference material であり、active orchestration entrypoint ではありません。
 
 例:
 
@@ -59,6 +64,7 @@ chatgpt/specs/active/20260526_entry_gate_update.md
 
 実施済み、または履歴参照用の仕様書を保存します。
 Codex は通常ここを起点に実装しません。
+archive は削除対象ではなく、reference として残します。
 
 ### `templates/`
 

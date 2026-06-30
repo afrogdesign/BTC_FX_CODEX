@@ -1,23 +1,23 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-ORCHESTRATION-MCP-OPS-OPTIMIZE`
+- current_work_id: `BTCFX-20260630-ORCHESTRATION-CONTROL-SPLIT-AND-CLEANUP`
 - mode: `LIGHT_CODEX`
 
 ## Current goal
 
-MCP primary workflow に合わせて AI orchestration docs を整理し、resume を速く安全にする。
+MCP-primary / no-routine-push を repo-local default にし、軽い current-control と legacy/reference の分離を進める。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
 | Read | `AGENTS.md`, `README.md`, `docs/operations/ai-orchestration/*` の指定ファイル、`docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` |
-| Edit | `AGENTS.md`, `START_HERE.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `README.md`, `RESUME.md`, `INITIAL_PROMPT.md`, `PROMPTS.md`, `REPO_MAP.md` |
-| Do not | `src/`, `tools/`, `tests/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, `TASK_LEDGER.md`, `CONTROL.md`, `CURRENT_HANDOFF.md`, old runtime execution repo |
+| Edit | `AGENTS.md`, `chatgpt/README.md`, `CONTROL.md`, `MILESTONES.md`, `CLEANUP_CANDIDATES.md`, `START_HERE.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `README.md`, `RESUME.md`, `PROMPTS.md`, `REPO_MAP.md`, `legacy/chatgpt_AGENT_GITHUB_LEGACY.md` |
+| Do not | `src/`, `tools/`, `tests/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, `TASK_LEDGER.md`, `CURRENT_HANDOFF.md`, old runtime execution repo |
 | Test | `git diff --check`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Stop | git repo でない、unexpected uncommitted changes、scope 外編集が必要、runtime/source/generated edit が必要、test/check fail、branch/push ambiguity |
+| Stop | git repo でない、unexpected uncommitted changes、scope 外編集が必要、runtime/source/generated edit が必要、deletion が必要、test/check fail、push required |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-ORCHESTRATION-CONTROL-SPLIT`
-- Goal: split long `CONTROL.md` history into lighter current-control and milestone/history files without changing product behavior.
+- `BTCFX-20260630-ORCHESTRATION-CHECKPOINT-PUSH-DESIGN`
+- Goal: define the minimal checkpoint branch/push procedure and old runtime repo pull handoff, without executing push or pull.

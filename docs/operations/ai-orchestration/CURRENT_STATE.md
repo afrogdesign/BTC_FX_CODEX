@@ -27,5 +27,13 @@
 ## Current repo-operation mode
 
 - MCP primary
-- GitHub checkpoint
+- no routine GitHub push
+- checkpoint push only
 - runtime repo pull later
+
+## Default avoid list
+
+- `.venv312/`
+- `logs/`
+- generated CSV / report / HTML
+- full `TASK_LEDGER.md`

@@ -1,3 +1,8 @@
+# Legacy Notice
+
+このファイルは GitHub-era legacy entrypoint です。現在の AI entrypoint ではありません。
+現在は `docs/operations/ai-orchestration/START_HERE.md` を先に読んでください。
+
 # ChatGPT Agent Prompt
 
 以下は、この GitHub repo を ChatGPT で精査し、次の作業指示を作るための専用プロンプトです。  
@@ -133,4 +138,3 @@
 
 - この repo では ChatGPT が設計、Codex が実装を担当します
 - ChatGPT が最終的に作るべきものは、「次に Codex がそのまま着手できる仕様書案」です
-

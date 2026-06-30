@@ -14,6 +14,9 @@
 - ChatGPT は AFROG_MCP を primary repo inspection path として使う
 - GitHub は checkpoint / history / sync 用であり、毎回の review の default read path ではない
 - Codex は明示指示がない限り MCP working repo だけを編集する
+- normal Codex task は local edit + local commit + compact report が基本
+- push は `CHECKPOINT_PUSH` task だけで行う
+- routine push は wasteful なので通常 task で要求しない
 
 ## Default avoid list
 
@@ -42,4 +45,5 @@
 - repo正本は repo-local docs を優先し、chat history だけで判断しない
 - current branch は `git status --short --branch` と `CONTROL.md` から読む
 - runtime execution repo を通常 task で読みに行かない、走らせない、編集しない
+- runtime execution repo への変更反映は checkpoint branch/push と GitHub pull のあとで行う
 - product behavior, trading logic, runtime behavior を変える前に explicit task scope を確認する
