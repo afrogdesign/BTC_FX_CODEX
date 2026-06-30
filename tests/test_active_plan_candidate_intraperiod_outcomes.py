@@ -10,6 +10,7 @@ import pandas as pd
 from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_active_plan_intraperiod_outcome_rows,
+    summarize_intraperiod_candidate_dimension_breakdowns,
     summarize_intraperiod_entry_reached_outcomes,
     summarize_intraperiod_outcome_coverage,
     summarize_intraperiod_valid_sample_winrate,
@@ -410,6 +411,67 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
                 item["safety_note"],
                 "report-only / not FORMAL_GO / no automatic order / human decides manually",
             )
+
+    def test_summarize_intraperiod_candidate_dimension_breakdowns(self) -> None:
+        outcomes_df = pd.DataFrame(
+            {
+                "candidate_type": [
+                    "active_limit_retest",
+                    "active_limit_retest",
+                    "active_counter_scalp",
+                    "active_counter_scalp",
+                    "",
+                ],
+                "side": [
+                    "long",
+                    "long",
+                    "short",
+                    "short",
+                    "",
+                ],
+                "active_primary_action": [
+                    "ACTION_A",
+                    "ACTION_A",
+                    "ACTION_B",
+                    "ACTION_B",
+                    "",
+                ],
+                "outcome": [
+                    "tp1_first",
+                    "sl_first",
+                    "no_ohlcv",
+                    "timeout",
+                    "pending",
+                ],
+            }
+        )
+
+        summary = summarize_intraperiod_candidate_dimension_breakdowns(outcomes_df)
+
+        self.assertEqual(set(summary.keys()), {"candidate_type", "side", "active_primary_action"})
+        self.assertIn("(blank)", summary["candidate_type"])
+        self.assertIn("(blank)", summary["side"])
+        self.assertIn("(blank)", summary["active_primary_action"])
+
+        candidate_type_summary = summary["candidate_type"]["active_limit_retest"]
+        self.assertEqual(candidate_type_summary["total_rows"], 2)
+        self.assertEqual(candidate_type_summary["entry_reached_rows"], 2)
+        self.assertEqual(candidate_type_summary["win_like_rows"], 1)
+        self.assertEqual(candidate_type_summary["loss_like_rows"], 1)
+
+        side_summary = summary["side"]["short"]
+        self.assertEqual(side_summary["total_rows"], 2)
+        self.assertEqual(side_summary["no_ohlcv_rows"], 1)
+        self.assertEqual(side_summary["valid_sample_rows"], 1)
+
+        action_summary = summary["active_primary_action"]["ACTION_A"]
+        self.assertEqual(action_summary["total_rows"], 2)
+        self.assertEqual(action_summary["entry_reached_rows"], 2)
+
+        empty_summary = summarize_intraperiod_candidate_dimension_breakdowns(pd.DataFrame())
+        none_summary = summarize_intraperiod_candidate_dimension_breakdowns(None)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item, {"candidate_type": {}, "side": {}, "active_primary_action": {}})
 
 
 if __name__ == "__main__":

@@ -403,6 +403,38 @@ def summarize_intraperiod_entry_reached_outcomes(outcomes_df: pd.DataFrame | Non
     }
 
 
+def _normalize_dimension_value(value: Any) -> str:
+    if value is None:
+        return "(blank)"
+    if isinstance(value, str):
+        return value if value.strip() else "(blank)"
+    if pd.isna(value):
+        return "(blank)"
+    return str(value)
+
+
+def summarize_intraperiod_candidate_dimension_breakdowns(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
+    dimension_names = ("candidate_type", "side", "active_primary_action")
+    breakdowns: dict[str, Any] = {dimension: {} for dimension in dimension_names}
+
+    if outcomes_df is None or outcomes_df.empty or "outcome" not in outcomes_df.columns:
+        return breakdowns
+
+    for dimension in dimension_names:
+        if dimension not in outcomes_df.columns:
+            breakdowns[dimension] = {}
+            continue
+
+        working_df = outcomes_df.loc[:, [dimension, "outcome"]].copy()
+        working_df[dimension] = working_df[dimension].map(_normalize_dimension_value)
+        dimension_breakdown: dict[str, Any] = {}
+        for dimension_value, group_df in working_df.groupby(dimension, sort=True):
+            dimension_breakdown[str(dimension_value)] = summarize_intraperiod_valid_sample_winrate(group_df)
+        breakdowns[dimension] = dimension_breakdown
+
+    return breakdowns
+
+
 def evaluate_active_plan_intraperiod_candidate(
     candidate_row: Any,
     ohlcv_df: pd.DataFrame | None,
@@ -572,6 +604,7 @@ __all__ = [
     "MIN_OUTCOME_COLUMNS",
     "build_active_plan_intraperiod_outcome_rows",
     "evaluate_active_plan_intraperiod_candidate",
+    "summarize_intraperiod_candidate_dimension_breakdowns",
     "summarize_intraperiod_entry_reached_outcomes",
     "summarize_intraperiod_outcome_coverage",
     "summarize_intraperiod_valid_sample_winrate",

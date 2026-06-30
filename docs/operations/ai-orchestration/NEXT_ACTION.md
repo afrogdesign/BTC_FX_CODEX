@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-LIGHTWEIGHT-ORCHESTRATION-RULES`
-- mode: `LIGHT_CODEX`
+- current_work_id: `BTCFX-20260630-CANDIDATE-TYPE-SIDE-BREAKDOWN`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MCP 正本運用に合わせて、Codex のプロンプトと記録を軽量化する。
+candidate_type / side / active_primary_action の report-only breakdown を追加する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`, `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`, `docs/operations/ai-orchestration/CURRENT_STATE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`, `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`, `docs/operations/ai-orchestration/CURRENT_STATE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | lightweight orchestration の方針を短く同期する |
-| Tests | `git diff --check -- docs/operations/ai-orchestration/MINI_CODEX_RULES.md docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md docs/operations/ai-orchestration/CURRENT_STATE.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | docs の軽量運用方針を人間に残す状態変更として 1 commit |
-| Stop | docs 以外の編集が必要、old runtime repo access が必要、push/pull/runtime action が必要、trading logic 変更が必要、テスト失敗、allowed 外 file が stage される |
+| Read | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `docs/operations/ai-orchestration/ENTRY_REACHED_OUTCOME_BREAKDOWN.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `docs/operations/ai-orchestration/CANDIDATE_TYPE_SIDE_BREAKDOWN.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | candidate_type / side / active_primary_action の report-only breakdown を追加する |
+| Tests | `.venv312/bin/python -m unittest tests.test_active_plan_candidate_intraperiod_outcomes`, `git diff --check -- src/trade/active_plan_intraperiod.py tests/test_active_plan_candidate_intraperiod_outcomes.py docs/operations/ai-orchestration/CANDIDATE_TYPE_SIDE_BREAKDOWN.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | source/test/docs の一区切りとして 1 commit |
+| Stop | trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、source/test/docs 以外の編集が必要、test 失敗、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-CANDIDATE-TYPE-SIDE-BREAKDOWN`
-- Goal: resume evidence-quality implementation with compact diff-based Codex prompts.
+- `BTCFX-20260630-MAJOR-TURN-CANDIDATE-REVIEW`
+- Goal: review potential_fakeout and potential_missed_turn candidates using report-only evidence, without changing trading logic.
