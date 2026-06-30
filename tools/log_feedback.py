@@ -13857,6 +13857,20 @@ def _manual_delivery_current_app_dashboard_html(
         ("Single source of truth", "same decision source, no separate decision path"),
         ("Safety boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
     ]
+    ready_gate_copy_lines = [
+        f"manual_trade_ready={_manual_delivery_current_app_dashboard_list_value(current_ready)}",
+        f"readiness_status={_dashboard_value('readiness_status')}",
+        f"allowed_next_action={_dashboard_value('allowed_next_action')}",
+        f"human_review_required={_dashboard_value('human_review_required')}",
+        f"trade_execution_allowed={_dashboard_value('trade_execution_allowed')}",
+        f"automatic_order_allowed={_dashboard_value('automatic_order_allowed')}",
+        f"external_notification_allowed={_dashboard_value('external_notification_allowed')}",
+        f"paper_positions_integration={_dashboard_value('paper_positions_integration')}",
+        "dashboard=local/manual_delivery_app_surface/app-dashboard.html",
+        "snapshot=local/manual_delivery_app_surface/app-snapshot.json",
+        "manifest=local/manual_delivery_app_surface/app-surface-manifest.json",
+        "safety_boundary=report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
     active_plan_rows = [
         ("active_plan", status_data.get("active_plan_label")),
         ("side", status_data.get("side")),
@@ -14158,6 +14172,11 @@ def _manual_delivery_current_app_dashboard_html(
         <table>
           {_table_rows(surface_roles_rows)}
         </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Ready Gate Copy</h2>
+        <pre class=\"muted\">{html.escape(chr(10).join(ready_gate_copy_lines))}</pre>
       </section>
 
       <section class=\"card\">

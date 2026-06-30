@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-APP-DASHBOARD-PARITY-SURFACE-ROLES`
+- current_work_id: `BTCFX-20260630-APP-DASHBOARD-PARITY-READY-GATE-COPY`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Improve local app dashboard parity by adding a compact Surface Roles section explaining the public HTML / notification mail / local dashboard relationship.
+Make the local dashboard ready-gate guidance more copyable for human review without changing runtime behavior or trading logic.
 
 ## Current summary
 
@@ -19,5 +19,5 @@ Improve local app dashboard parity by adding a compact Surface Roles section exp
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-APP-DASHBOARD-PARITY-READY-GATE-COPY`
-- Goal: Make the local dashboard ready-gate guidance more copyable for human review without changing runtime behavior or trading logic.
+- `BTCFX-20260630-APP-DASHBOARD-PARITY-SMOKE-TEST`
+- Goal: Perform a targeted dashboard parity smoke test covering Safety Flags, Surface Roles, Ready Gate Copy, single-source boundary, and report-only safety.
