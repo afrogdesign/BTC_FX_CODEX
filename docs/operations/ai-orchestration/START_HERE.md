@@ -41,6 +41,7 @@
 10. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
 11. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` when direction matters
 12. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, latest rows only
+13. `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` when Codex is used
 
 ## Quick rules
 
@@ -50,3 +51,5 @@
 - runtime execution repo への変更反映は checkpoint branch/push と GitHub pull のあとで行う
 - 通常 work は push しない、runtime repo も触らない
 - product behavior, trading logic, runtime behavior を変える前に explicit task scope を確認する
+- Codex 5.4-mini medium には小さく機械的な task を渡す
+- ChatGPT が scope を決めてから Codex を開始する

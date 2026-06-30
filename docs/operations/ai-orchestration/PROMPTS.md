@@ -14,6 +14,15 @@
 - `CURRENT_HANDOFF.md` should be updated only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
 - Keep the logical separation intact without physically splitting the repo: orchestration operations stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 
+## MINI_CODEX_MEDIUM
+
+- `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` を先に読む
+- smaller tasks を選ぶ
+- required changes を明示する
+- broad exploration を避ける
+- mechanical edits を優先する
+- ambiguity があれば `BLOCKED` にする
+
 ## MCP_PRIMARY_OPERATION
 
 - default working dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
@@ -53,6 +62,9 @@ Do not edit or run the old runtime execution repo.
 NEXT <WORK_ID>
 Goal: <one sentence>
 Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Codex model constraint: intended for Codex 5.4-mini medium
+Do not make design judgments.
+Stop if task requires broad repo inspection or product judgment.
 Read: <files>
 Edit: <files>
 Test: <commands>
@@ -69,6 +81,9 @@ Do not push by default.
 FIX <WORK_ID>
 Issue: <specific issue>
 Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Codex model constraint: intended for Codex 5.4-mini medium
+Do not make design judgments.
+Stop if task requires broad repo inspection or product judgment.
 Read: <files>
 Edit: <files>
 Test: <commands>
@@ -85,6 +100,9 @@ Do not push unless explicit `CHECKPOINT_PUSH`.
 CHECKPOINT_PUSH <WORK_ID>
 Goal: prepare and publish a meaningful checkpoint branch/push.
 Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Codex model constraint: intended for Codex 5.4-mini medium
+Do not make design judgments.
+Stop if task requires broad repo inspection or product judgment.
 Read: docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md, <files>
 Edit: <files>
 Test: <commands>
@@ -100,6 +118,9 @@ Push only after local checks pass and checkpoint target is explicit.
 RUNTIME_PULL_HANDOFF <WORK_ID>
 Goal: define or execute the handoff from checkpoint push to old runtime repo pull.
 Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Codex model constraint: intended for Codex 5.4-mini medium
+Do not make design judgments.
+Stop if task requires broad repo inspection or product judgment.
 Read: docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md, <files>
 Edit: <files>
 Test: <commands>
