@@ -6,16 +6,15 @@ Codex 5.4-mini medium 向けの最小運用ルールです。
 
 ## Lightweight workflow
 
-- ChatGPT が MCP で repo 確認、判断、対象 file 特定を担う
-- Codex は local edit、最小 test、必要時 commit に集中する
+- ChatGPT が MCP で repo 確認、設計、対象 file 特定を担う
+- ChatGPT が妥当と判断した範囲なら、複数ファイルを一度に扱ってよい
+- Codex は指定範囲内で local edit、test、必要時 commit に集中する
 - 同じ Codex thread 内では既知前提を繰り返さず、差分指示でよい
 - `Read` / `Edit` / `Do not edit` の巨大リストは通常不要
 - ただし `source` / `runtime` / `generated` / `logs` / `private` / `order` 系の危険境界は明示する
 
 ## Scope control
 
-- task は 1 から 3 個の edit files を基本にする
-- 5 個を超える edit files は明示的 authorization が必要
 - broad repo exploration はしない
 - missing required file があれば `BLOCKED`
 - source / runtime / generated files は Edit に明示されたときだけ触る
