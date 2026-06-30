@@ -4,6 +4,11 @@
 
 Codex 5.4-mini medium 向けの最小運用ルールです。
 
+## ChatGPT preflight dependency
+
+- Codex は ChatGPT が `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` を先に通した前提で動く
+- prompt が file limit, push/pull rule, judgment rule に違反するなら `BLOCKED`
+
 ## Default task shape
 
 - 1 から 3 個の edit files を基本にする

@@ -23,6 +23,13 @@
 - mechanical edits を優先する
 - ambiguity があれば `BLOCKED` にする
 
+## PROMPT_PREFLIGHT
+
+- `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` を先に読む
+- AUTO_SEND の前に毎回 checklist を通す
+- malformed または oversized な prompt は送る前に書き直す
+- push, pull, runtime repo, product judgment, safety judgment が unresolved なら `HUMAN_CHECK` を使う
+
 ## MCP_PRIMARY_OPERATION
 
 - default working dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
@@ -65,6 +72,7 @@ Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Codex model constraint: intended for Codex 5.4-mini medium
 Do not make design judgments.
 Stop if task requires broad repo inspection or product judgment.
+Stop if task requires push, pull, or runtime repo access.
 Read: <files>
 Edit: <files>
 Test: <commands>
@@ -84,6 +92,7 @@ Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Codex model constraint: intended for Codex 5.4-mini medium
 Do not make design judgments.
 Stop if task requires broad repo inspection or product judgment.
+Stop if task requires push, pull, or runtime repo access.
 Read: <files>
 Edit: <files>
 Test: <commands>
@@ -103,6 +112,7 @@ Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Codex model constraint: intended for Codex 5.4-mini medium
 Do not make design judgments.
 Stop if task requires broad repo inspection or product judgment.
+Stop if runtime repo access is required outside checkpoint scope.
 Read: docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md, <files>
 Edit: <files>
 Test: <commands>
@@ -121,6 +131,7 @@ Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Codex model constraint: intended for Codex 5.4-mini medium
 Do not make design judgments.
 Stop if task requires broad repo inspection or product judgment.
+Stop if push / pull target or runtime handoff target is ambiguous.
 Read: docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md, <files>
 Edit: <files>
 Test: <commands>
