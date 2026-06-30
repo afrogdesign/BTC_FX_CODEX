@@ -13843,6 +13843,13 @@ def _manual_delivery_current_app_dashboard_html(
         ("shadow_decision_enabled", status_data.get("shadow_decision_enabled")),
         ("safety boundary", status_data.get("safety_boundary")),
     ]
+    safety_flags_rows = [
+        ("human_review_required", _dashboard_value("human_review_required")),
+        ("trade_execution_allowed", _dashboard_value("trade_execution_allowed")),
+        ("automatic_order_allowed", _dashboard_value("automatic_order_allowed")),
+        ("external_notification_allowed", _dashboard_value("external_notification_allowed")),
+        ("paper_positions_integration", _dashboard_value("paper_positions_integration")),
+    ]
     active_plan_rows = [
         ("active_plan", status_data.get("active_plan_label")),
         ("side", status_data.get("side")),
@@ -14129,6 +14136,13 @@ def _manual_delivery_current_app_dashboard_html(
         <h2 class=\"section-title\">Readiness / Status</h2>
         <table>
           {_table_rows(readiness_rows)}
+        </table>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Safety Flags</h2>
+        <table>
+          {_table_rows(safety_flags_rows)}
         </table>
       </section>
 

@@ -1,23 +1,23 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-APP-RESUME-AND-NEXT-PRODUCT-STEP`
-- mode: `LIGHT_CODEX`
+- current_work_id: `BTCFX-20260630-APP-DASHBOARD-PARITY-SAFETY-FLAGS`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Return to app/product work from the new MCP-primary orchestration baseline.
+Improve local app dashboard parity by adding explicit ready-gate safety flags to the dashboard HTML generator and targeted test.
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `RESUME_SMOKE_TEST.md`, `START_HERE.md`, `CONTROL.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHECKPOINT_RUNBOOK.md`, `RUNTIME_PULL_HANDOFF.md`, `REPO_MAP.md`, `ACTIVE_PLAN_MANUAL_PREVIEW_RUNBOOK.md`, `scripts/refresh_current_manual_delivery_app_surface.command`, `tests/test_notification_detail_page.py`, `tests/test_summary_format.py`, `tests/test_summary_active_plan_subject.py` |
-| Edit | `APP_PRODUCT_RESUME.md`, `NEXT_ACTION.md` |
-| Do not | `AGENTS.md`, `START_HERE.md`, `CONTROL.md`, `CURRENT_STATE.md`, `PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHECKPOINT_RUNBOOK.md`, `RUNTIME_PULL_HANDOFF.md`, `REPO_MAP.md`, `TASK_LEDGER.md`, `CURRENT_HANDOFF.md`, `src/`, `tools/`, `tests/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, old runtime execution repo, push, pull, runtime actions |
-| Test | `git diff --check`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Stop | git repo でない、unexpected uncommitted changes、scope 外編集が必要、runtime/source/generated edit が必要、push/pull/runtime action が必要、test/check fail |
+| Read | `START_HERE.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `MINI_CODEX_RULES.md`, `APP_PRODUCT_RESUME.md`, `NEXT_ACTION.md`, `VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`, `local/manual_delivery_app_surface/app-ready.json`, `local/manual_delivery_app_surface/app-dashboard.html`, `tools/log_feedback.py`, `tests/test_active_plan_notification_formatting.py` |
+| Edit | `tools/log_feedback.py`, `tests/test_active_plan_notification_formatting.py`, `NEXT_ACTION.md` |
+| Do not | `AGENTS.md`, `START_HERE.md`, `CONTROL.md`, `CURRENT_STATE.md`, `PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `APP_PRODUCT_RESUME.md`, `TASK_LEDGER.md`, `CURRENT_HANDOFF.md`, `src/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, `VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`, old runtime execution repo, push, pull, runtime actions |
+| Test | `.venv312/bin/python -m unittest tests.test_active_plan_notification_formatting.ActivePlanNotificationFormattingTest.test_write_current_manual_delivery_app_dashboard_cli_supports_help_and_writes_static_html`, `git diff --check`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Stop | unexpected uncommitted changes、scope 外編集が必要、dashboard generator 不明、runtime/source/generated edit が必要、push/pull/runtime action が必要、test/check fail |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-APP-DASHBOARD-PARITY-CHECK`
-- Goal: compare local app dashboard readiness/safety context against the public HTML and mail surface expectations, then make one small dashboard-parity improvement if a concrete missing field is found.
+- `BTCFX-20260630-APP-DASHBOARD-PARITY-REVIEW`
+- Goal: Review the dashboard parity safety-flags change and decide the next small product improvement from MCP-primary baseline.
