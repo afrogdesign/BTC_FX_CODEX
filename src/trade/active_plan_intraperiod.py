@@ -267,6 +267,72 @@ def summarize_intraperiod_outcome_coverage(outcomes_df: pd.DataFrame | None) -> 
     }
 
 
+def summarize_intraperiod_valid_sample_winrate(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
+    valid_sample_definition = "rows excluding outcome == no_ohlcv"
+    winrate_definition = "win-like outcomes divided by entry-reached rows; report-only, not profitability"
+    safety_note = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    entry_reached_outcomes = {
+        "tp1_first",
+        "tp2_first",
+        "sl_first",
+        "timeout",
+        "ambiguous",
+        "entry_reached",
+    }
+
+    if outcomes_df is None or outcomes_df.empty or "outcome" not in outcomes_df.columns:
+        return {
+            "total_rows": 0,
+            "no_ohlcv_rows": 0,
+            "valid_sample_rows": 0,
+            "entry_reached_rows": 0,
+            "win_like_rows": 0,
+            "loss_like_rows": 0,
+            "unresolved_entry_rows": 0,
+            "not_entered_rows": 0,
+            "pending_rows": 0,
+            "valid_sample_rate": 0.0,
+            "entry_reached_rate_of_valid_sample": 0.0,
+            "win_like_rate_of_entry_reached": 0.0,
+            "loss_like_rate_of_entry_reached": 0.0,
+            "unresolved_rate_of_entry_reached": 0.0,
+            "valid_sample_definition": valid_sample_definition,
+            "winrate_definition": winrate_definition,
+            "safety_note": safety_note,
+        }
+
+    outcome_series = outcomes_df["outcome"].astype("object")
+    total_rows = int(len(outcomes_df))
+    no_ohlcv_rows = int((outcome_series == "no_ohlcv").sum())
+    valid_sample_rows = int(total_rows - no_ohlcv_rows)
+    entry_reached_rows = int(outcome_series.isin(entry_reached_outcomes).sum())
+    win_like_rows = int(outcome_series.isin({"tp1_first", "tp2_first"}).sum())
+    loss_like_rows = int((outcome_series == "sl_first").sum())
+    unresolved_entry_rows = int(outcome_series.isin({"timeout", "ambiguous", "entry_reached"}).sum())
+    not_entered_rows = int((outcome_series == "not_entered").sum())
+    pending_rows = int((outcome_series == "pending").sum())
+
+    return {
+        "total_rows": total_rows,
+        "no_ohlcv_rows": no_ohlcv_rows,
+        "valid_sample_rows": valid_sample_rows,
+        "entry_reached_rows": entry_reached_rows,
+        "win_like_rows": win_like_rows,
+        "loss_like_rows": loss_like_rows,
+        "unresolved_entry_rows": unresolved_entry_rows,
+        "not_entered_rows": not_entered_rows,
+        "pending_rows": pending_rows,
+        "valid_sample_rate": float(valid_sample_rows / total_rows) if total_rows else 0.0,
+        "entry_reached_rate_of_valid_sample": float(entry_reached_rows / valid_sample_rows) if valid_sample_rows else 0.0,
+        "win_like_rate_of_entry_reached": float(win_like_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "loss_like_rate_of_entry_reached": float(loss_like_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "unresolved_rate_of_entry_reached": float(unresolved_entry_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "valid_sample_definition": valid_sample_definition,
+        "winrate_definition": winrate_definition,
+        "safety_note": safety_note,
+    }
+
+
 def evaluate_active_plan_intraperiod_candidate(
     candidate_row: Any,
     ohlcv_df: pd.DataFrame | None,
@@ -437,5 +503,6 @@ __all__ = [
     "build_active_plan_intraperiod_outcome_rows",
     "evaluate_active_plan_intraperiod_candidate",
     "summarize_intraperiod_outcome_coverage",
+    "summarize_intraperiod_valid_sample_winrate",
     "write_active_plan_intraperiod_outcomes",
 ]

@@ -11,6 +11,7 @@ from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_active_plan_intraperiod_outcome_rows,
     summarize_intraperiod_outcome_coverage,
+    summarize_intraperiod_valid_sample_winrate,
     write_active_plan_intraperiod_outcomes,
 )
 
@@ -264,6 +265,76 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
             self.assertEqual(item["valid_sample_rate"], 0.0)
             self.assertEqual(item["entry_reached_rate"], 0.0)
             self.assertEqual(item["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
+
+    def test_summarize_intraperiod_valid_sample_winrate(self) -> None:
+        outcomes_df = pd.DataFrame(
+            {
+                "outcome": [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                    "ambiguous",
+                    "entry_reached",
+                    "not_entered",
+                    "pending",
+                ]
+            }
+        )
+
+        summary = summarize_intraperiod_valid_sample_winrate(outcomes_df)
+
+        self.assertEqual(summary["total_rows"], 9)
+        self.assertEqual(summary["no_ohlcv_rows"], 1)
+        self.assertEqual(summary["valid_sample_rows"], 8)
+        self.assertEqual(summary["entry_reached_rows"], 6)
+        self.assertEqual(summary["win_like_rows"], 2)
+        self.assertEqual(summary["loss_like_rows"], 1)
+        self.assertEqual(summary["unresolved_entry_rows"], 3)
+        self.assertEqual(summary["not_entered_rows"], 1)
+        self.assertEqual(summary["pending_rows"], 1)
+        self.assertAlmostEqual(summary["valid_sample_rate"], 8 / 9)
+        self.assertAlmostEqual(summary["entry_reached_rate_of_valid_sample"], 6 / 8)
+        self.assertAlmostEqual(summary["win_like_rate_of_entry_reached"], 2 / 6)
+        self.assertAlmostEqual(summary["loss_like_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["unresolved_rate_of_entry_reached"], 3 / 6)
+        self.assertEqual(summary["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
+        self.assertEqual(
+            summary["winrate_definition"],
+            "win-like outcomes divided by entry-reached rows; report-only, not profitability",
+        )
+        self.assertEqual(
+            summary["safety_note"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+
+        empty_summary = summarize_intraperiod_valid_sample_winrate(pd.DataFrame())
+        none_summary = summarize_intraperiod_valid_sample_winrate(None)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item["total_rows"], 0)
+            self.assertEqual(item["no_ohlcv_rows"], 0)
+            self.assertEqual(item["valid_sample_rows"], 0)
+            self.assertEqual(item["entry_reached_rows"], 0)
+            self.assertEqual(item["win_like_rows"], 0)
+            self.assertEqual(item["loss_like_rows"], 0)
+            self.assertEqual(item["unresolved_entry_rows"], 0)
+            self.assertEqual(item["not_entered_rows"], 0)
+            self.assertEqual(item["pending_rows"], 0)
+            self.assertEqual(item["valid_sample_rate"], 0.0)
+            self.assertEqual(item["entry_reached_rate_of_valid_sample"], 0.0)
+            self.assertEqual(item["win_like_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["loss_like_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["unresolved_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
+            self.assertEqual(
+                item["winrate_definition"],
+                "win-like outcomes divided by entry-reached rows; report-only, not profitability",
+            )
+            self.assertEqual(
+                item["safety_note"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
 
 
 if __name__ == "__main__":
