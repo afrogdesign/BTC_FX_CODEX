@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-GUARD`
-- mode: `NORMAL_CODEX`
+- current_work_id: `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-E2E-SMOKE`
+- mode: `LIGHT_CODEX`
 
 ## Current goal
 
-old OHLCV coverage が silently `no_ohlcv` を支配しないように、report-only の OHLCV range freshness / staleness visibility を追加する。
+report-only export/check smoke を走らせ、OHLCV range freshness fields が exported artifacts に出ることを確認する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `src/trade/active_plan_intraperiod.py`, `tools/log_feedback.py`, `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `tests/test_active_plan_notification_formatting.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_log_feedback.py`, `docs/operations/ai-orchestration/OHLCV_WINDOW_GAP_AUDIT.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `src/trade/active_plan_intraperiod.py`, `tools/log_feedback.py`, `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `tests/test_active_plan_notification_formatting.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_log_feedback.py`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | OHLCV range freshness / staleness visibility を report-only で追加する |
-| Tests | `./.venv312/bin/python -m unittest tests.test_active_plan_candidate_intraperiod_outcomes tests.test_active_plan_notification_formatting tests.test_summary_format tests.test_notification_detail_page tests.test_log_feedback`, `git diff --check -- src/trade/active_plan_intraperiod.py tools/log_feedback.py src/ai/summary.py src/notification/detail_page.py tests/test_active_plan_candidate_intraperiod_outcomes.py tests/test_active_plan_notification_formatting.py tests/test_summary_format.py tests/test_notification_detail_page.py tests/test_log_feedback.py docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | source/test/docs の一区切りとして 1 commit |
-| Stop | OHLCV fetch が必要、trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、generated/logs を commit する必要がある、test 失敗、allowed 外 file が stage される |
+| Read | `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_E2E_SMOKE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | report-only export/check smoke で freshness fields の露出を確認する |
+| Tests | smoke commands, `git diff --check -- docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_E2E_SMOKE.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | docs smoke record の区切りとして docs 2 files を 1 commit |
+| Stop | smoke command 失敗、freshness fields 未確認、generated/logs を commit する必要、source/test 編集が必要、trading logic 変更が必要、OHLCV fetch が必要、runtime / old runtime / private / order / notification が必要、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-E2E-SMOKE`
-- Goal: run report-only export/check smoke and confirm OHLCV range freshness fields appear without committing generated files.
+- `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-CHECKPOINT-REVIEW`
+- Goal: review completed OHLCV freshness visibility path and decide the next report-only product-quality task.
