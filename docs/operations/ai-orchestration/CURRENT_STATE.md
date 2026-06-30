@@ -12,11 +12,12 @@
 ## Current focus
 
 - MCP-primary orchestration baseline is established
+- this repo is now the current source of truth
+- runtime pull handoff is not needed unless user explicitly reopens it
 - app/product work has resumed
 - dashboard parity is complete
 - checkpoint push was reported successful
-- next operational phase is runtime pull handoff review, not runtime execution
-- next product-quality phase after handoff review is evidence / intraperiod / win-rate diagnostics
+- current product-quality phase is evidence / intraperiod / win-rate diagnostics
 - automatic trading remains out of scope
 
 ## Current known status
@@ -39,7 +40,7 @@
 ## Procedure note
 
 - checkpoint push procedure is now documented
-- runtime pull handoff is separate and explicit
+- runtime pull handoff is closed unless explicitly reopened
 - no routine push remains the default
 
 ## Default avoid list
