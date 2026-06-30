@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-CHECKPOINT-REVIEW`
-- mode: `LIGHT_CODEX`
+- current_work_id: `BTCFX-20260630-OHLCV-STALE-COVERAGE-OPERATOR-WARNING`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-OHLCV range freshness visibility path を一区切りとして review し、次の report-only product-quality task を決める。
+`ohlcv_range_freshness_status == stale_before_latest_candidate` のとき、operator / manual surface 上で stale OHLCV coverage を見落とせない report-only warning として表示する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `docs/operations/ai-orchestration/OHLCV_WINDOW_GAP_AUDIT.md`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_E2E_SMOKE.md`, `docs/operations/ai-orchestration/NO_OHLCV_COVERAGE_ACTUAL_SNAPSHOT.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_CHECKPOINT_REVIEW.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | freshness visibility の review と次の report-only task 決定 |
-| Tests | `git diff --check -- docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_CHECKPOINT_REVIEW.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | docs checkpoint の区切りとして docs 2 files を 1 commit |
-| Stop | source/test 編集が必要、generated/logs 編集が必要、trading logic 変更が必要、OHLCV fetch が必要、runtime / old runtime / private / order / notification が必要、generated files を commit する必要がある、allowed 外 file が stage される |
+| Read | `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_active_plan_notification_formatting.py`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_CHECKPOINT_REVIEW.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_active_plan_notification_formatting.py`, `docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_OPERATOR_WARNING.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | stale OHLCV coverage を report-only warning として可視化する |
+| Tests | `./.venv312/bin/python -m unittest tests.test_summary_format tests.test_notification_detail_page tests.test_active_plan_notification_formatting`, `git diff --check -- src/ai/summary.py src/notification/detail_page.py tests/test_summary_format.py tests/test_notification_detail_page.py tests/test_active_plan_notification_formatting.py docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_OPERATOR_WARNING.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | source/test/docs の一区切りとして 1 commit |
+| Stop | OHLCV fetch が必要、trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、generated/logs を commit する必要がある、test 失敗、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-OHLCV-STALE-COVERAGE-OPERATOR-WARNING`
-- Goal: surface stale OHLCV coverage as a prominent report-only operator warning without changing trading logic.
+- `BTCFX-20260630-OHLCV-STALE-COVERAGE-WARNING-E2E-SMOKE`
+- Goal: run report-only export/check smoke and confirm stale OHLCV warning appears without committing generated files.

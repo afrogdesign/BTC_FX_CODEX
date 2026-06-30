@@ -8126,6 +8126,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("ohlcv_source_coverage_summary", describe_stdout)
             self.assertIn("ohlcv_range_freshness_status", describe_stdout)
             self.assertIn("candidate_rows", describe_stdout)
+            self.assertNotIn("OHLCV stale coverage warning", describe_stdout)
             self.assertNotIn("private_account_order_endpoint", describe_data)
             self.assertNotIn("runtime_execution_allowed", describe_data)
 
@@ -8224,6 +8225,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("candidate_timestamp_max", dashboard_html)
             self.assertIn("ohlcv_range_freshness_status", dashboard_html)
             self.assertIn("coverage_note", dashboard_html)
+            self.assertNotIn("OHLCV stale coverage warning", dashboard_html)
 
             self.assertEqual(check_code, 0, msg=check_stderr)
             self.assertTrue(check_stdout.startswith("{\n"))

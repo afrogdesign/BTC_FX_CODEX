@@ -1226,6 +1226,17 @@ def _ohlcv_source_coverage_summary_html(
         ("coverage_note", _value("coverage_note")),
         ("safety_note", _value("safety_note")),
     ]
+    warning_html = ""
+    if str(evidence.get("ohlcv_range_freshness_status", "")).strip() == "stale_before_latest_candidate":
+        warning_text = (
+            "report-only / not FORMAL_GO / no automatic order / human decides manually; "
+            "stale_before_latest_candidate; old OHLCV coverage can make no_ohlcv dominate; "
+            f"candidate_max_after_ohlcv_end_hours: {_value('candidate_max_after_ohlcv_end_hours')}"
+        )
+        warning_html = (
+            "<p class=\"warning warning-stale\"><strong>OHLCV stale coverage warning:</strong> "
+            f"{html.escape(warning_text)}</p>"
+        )
     rows_html = "".join(
         f"<li><strong>{html.escape(label)}:</strong> {html.escape(value)}</li>" for label, value in rows
     )
@@ -1233,6 +1244,7 @@ def _ohlcv_source_coverage_summary_html(
         <h3>OHLCV source coverage summary</h3>
         <p>local/report-only の表示です。candidate timestamp と OHLCV coverage だけを見て、app surface はこの概要を実行しません。</p>
         <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        {warning_html}
         <ul>{rows_html}</ul>
     """
 

@@ -255,6 +255,18 @@ def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
     }
 
 
+def _ohlcv_source_coverage_summary_stale_payload() -> dict[str, object]:
+    payload = _ohlcv_source_coverage_summary_payload()
+    payload.update(
+        {
+            "candidate_max_after_ohlcv_end_hours": 479.83358999527775,
+            "ohlcv_range_freshness_status": "stale_before_latest_candidate",
+            "freshness_note": "latest candidate is 479.8h after OHLCV end; old OHLCV coverage can silently dominate no_ohlcv",
+        }
+    )
+    return payload
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
@@ -508,6 +520,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             "<strong>safety_note:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually",
             html,
         )
+        self.assertNotIn("OHLCV stale coverage warning", html)
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)
@@ -1053,6 +1066,21 @@ class NotificationDetailPageTests(unittest.TestCase):
             ],
             calls,
         )
+
+    def test_build_notification_detail_html_renders_stale_ohlcv_warning(self) -> None:
+        payload = {
+            **_sample_detail_payload(),
+            "ohlcv_source_coverage_summary": _ohlcv_source_coverage_summary_stale_payload(),
+        }
+
+        html = build_notification_detail_html(payload)
+
+        self.assertIn("OHLCV stale coverage warning", html)
+        self.assertIn("stale_before_latest_candidate", html)
+        self.assertIn("candidate_max_after_ohlcv_end_hours: 479.83358999527775", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertNotIn("<script", html.lower())
+        self.assertNotIn("fetch(", html.lower())
 
 
 if __name__ == "__main__":

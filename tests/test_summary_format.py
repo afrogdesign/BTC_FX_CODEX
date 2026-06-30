@@ -138,6 +138,18 @@ def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
     }
 
 
+def _ohlcv_source_coverage_summary_stale_payload() -> dict[str, object]:
+    payload = _ohlcv_source_coverage_summary_payload()
+    payload.update(
+        {
+            "candidate_max_after_ohlcv_end_hours": 479.83358999527775,
+            "ohlcv_range_freshness_status": "stale_before_latest_candidate",
+            "freshness_note": "latest candidate is 479.8h after OHLCV end; old OHLCV coverage can silently dominate no_ohlcv",
+        }
+    )
+    return payload
+
+
 class SummaryFormatTest(unittest.TestCase):
     def test_ready_case_separates_direction_and_execution(self) -> None:
         payload = {
@@ -797,6 +809,7 @@ class SummaryFormatTest(unittest.TestCase):
             "safety_note: report-only / not FORMAL_GO / no automatic order / human decides manually",
             body,
         )
+        self.assertNotIn("OHLCV stale coverage warning", body)
         self.assertIn("【OHLCV source coverage summary】", body)
         self.assertIn("candidate_rows: 3", body)
         self.assertIn("ohlcv_input_rows: 2", body)
@@ -838,15 +851,33 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("cand-bad-entry-1", body)
         self.assertIn("cand-inconclusive-1", body)
         self.assertIn("post-hoc diagnostic support", body)
-        self.assertIn("does not confirm a major turn", body)
-        self.assertIn("does not authorize manual or automatic entry", body)
-        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
-        self.assertIn(
-            "note: derived from local active_plan_candidate_intraperiod_outcomes.csv only; post-hoc diagnostic support; does not confirm a major turn; does not authorize manual or automatic entry",
-            body,
+
+    def test_ohlcv_stale_coverage_warning_is_rendered_for_stale_summary(self) -> None:
+        payload = {
+            "integrated_evidence_overview": {
+                "summary_status": "ready_for_human_review",
+                "all_evidence_present": True,
+                "all_evidence_ready": True,
+            },
+            "evidence_quality_summary": _evidence_quality_summary_payload(),
+            "ohlcv_source_coverage_summary": _ohlcv_source_coverage_summary_stale_payload(),
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
         )
-        self.assertIn("safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually", body)
-        self.assertIn("note: derived from existing app contract/status data only", body)
+
+        self.assertIn("OHLCV stale coverage warning", body)
+        self.assertIn("stale_before_latest_candidate", body)
+        self.assertIn("candidate_max_after_ohlcv_end_hours: 479.83358999527775", body)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertNotIn("smtp", body.lower())
         self.assertNotIn("Gmail", body)

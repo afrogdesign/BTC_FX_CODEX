@@ -842,6 +842,12 @@ def _ohlcv_source_coverage_summary_lines(
         "local/report-only の表示です。candidate timestamp と OHLCV coverage だけを見て、実行はしません。",
         "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]
+    if str(evidence.get("ohlcv_range_freshness_status", "")).strip() == "stale_before_latest_candidate":
+        lines.append(
+            "OHLCV stale coverage warning: report-only / not FORMAL_GO / no automatic order / human decides manually; "
+            "stale_before_latest_candidate; old OHLCV coverage can make no_ohlcv dominate; "
+            f"candidate_max_after_ohlcv_end_hours: {_evidence_quality_summary_value(evidence.get('candidate_max_after_ohlcv_end_hours'))}"
+        )
     for label, key in (
         ("candidate_rows", "candidate_rows"),
         ("ohlcv_input_rows", "ohlcv_input_rows"),
