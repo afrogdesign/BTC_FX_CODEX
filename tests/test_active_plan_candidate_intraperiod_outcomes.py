@@ -10,6 +10,7 @@ import pandas as pd
 from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_active_plan_intraperiod_outcome_rows,
+    summarize_intraperiod_entry_reached_outcomes,
     summarize_intraperiod_outcome_coverage,
     summarize_intraperiod_valid_sample_winrate,
     write_active_plan_intraperiod_outcomes,
@@ -330,6 +331,80 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
             self.assertEqual(
                 item["winrate_definition"],
                 "win-like outcomes divided by entry-reached rows; report-only, not profitability",
+            )
+            self.assertEqual(
+                item["safety_note"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+
+    def test_summarize_intraperiod_entry_reached_outcomes(self) -> None:
+        outcomes_df = pd.DataFrame(
+            {
+                "outcome": [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                    "ambiguous",
+                    "entry_reached",
+                    "not_entered",
+                    "pending",
+                ]
+            }
+        )
+
+        summary = summarize_intraperiod_entry_reached_outcomes(outcomes_df)
+
+        self.assertEqual(summary["entry_reached_rows"], 6)
+        self.assertEqual(summary["tp1_first_rows"], 1)
+        self.assertEqual(summary["tp2_first_rows"], 1)
+        self.assertEqual(summary["sl_first_rows"], 1)
+        self.assertEqual(summary["timeout_rows"], 1)
+        self.assertEqual(summary["ambiguous_rows"], 1)
+        self.assertEqual(summary["open_entry_reached_rows"], 1)
+        self.assertEqual(summary["resolved_exit_rows"], 3)
+        self.assertEqual(summary["unresolved_entry_rows"], 3)
+        self.assertAlmostEqual(summary["tp1_first_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["tp2_first_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["sl_first_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["timeout_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["ambiguous_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["open_entry_reached_rate_of_entry_reached"], 1 / 6)
+        self.assertAlmostEqual(summary["resolved_exit_rate_of_entry_reached"], 3 / 6)
+        self.assertAlmostEqual(summary["unresolved_entry_rate_of_entry_reached"], 3 / 6)
+        self.assertEqual(
+            summary["entry_reached_definition"],
+            "tp1_first, tp2_first, sl_first, timeout, ambiguous, entry_reached",
+        )
+        self.assertEqual(
+            summary["safety_note"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+
+        empty_summary = summarize_intraperiod_entry_reached_outcomes(pd.DataFrame())
+        none_summary = summarize_intraperiod_entry_reached_outcomes(None)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item["entry_reached_rows"], 0)
+            self.assertEqual(item["tp1_first_rows"], 0)
+            self.assertEqual(item["tp2_first_rows"], 0)
+            self.assertEqual(item["sl_first_rows"], 0)
+            self.assertEqual(item["timeout_rows"], 0)
+            self.assertEqual(item["ambiguous_rows"], 0)
+            self.assertEqual(item["open_entry_reached_rows"], 0)
+            self.assertEqual(item["resolved_exit_rows"], 0)
+            self.assertEqual(item["unresolved_entry_rows"], 0)
+            self.assertEqual(item["tp1_first_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["tp2_first_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["sl_first_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["timeout_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["ambiguous_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["open_entry_reached_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["resolved_exit_rate_of_entry_reached"], 0.0)
+            self.assertEqual(item["unresolved_entry_rate_of_entry_reached"], 0.0)
+            self.assertEqual(
+                item["entry_reached_definition"],
+                "tp1_first, tp2_first, sl_first, timeout, ambiguous, entry_reached",
             )
             self.assertEqual(
                 item["safety_note"],

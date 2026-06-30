@@ -333,6 +333,76 @@ def summarize_intraperiod_valid_sample_winrate(outcomes_df: pd.DataFrame | None)
     }
 
 
+def summarize_intraperiod_entry_reached_outcomes(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
+    entry_reached_definition = "tp1_first, tp2_first, sl_first, timeout, ambiguous, entry_reached"
+    safety_note = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    entry_reached_outcomes = {
+        "tp1_first",
+        "tp2_first",
+        "sl_first",
+        "timeout",
+        "ambiguous",
+        "entry_reached",
+    }
+    unresolved_outcomes = {"timeout", "ambiguous", "entry_reached"}
+
+    if outcomes_df is None or outcomes_df.empty or "outcome" not in outcomes_df.columns:
+        return {
+            "entry_reached_rows": 0,
+            "tp1_first_rows": 0,
+            "tp2_first_rows": 0,
+            "sl_first_rows": 0,
+            "timeout_rows": 0,
+            "ambiguous_rows": 0,
+            "open_entry_reached_rows": 0,
+            "resolved_exit_rows": 0,
+            "unresolved_entry_rows": 0,
+            "tp1_first_rate_of_entry_reached": 0.0,
+            "tp2_first_rate_of_entry_reached": 0.0,
+            "sl_first_rate_of_entry_reached": 0.0,
+            "timeout_rate_of_entry_reached": 0.0,
+            "ambiguous_rate_of_entry_reached": 0.0,
+            "open_entry_reached_rate_of_entry_reached": 0.0,
+            "resolved_exit_rate_of_entry_reached": 0.0,
+            "unresolved_entry_rate_of_entry_reached": 0.0,
+            "entry_reached_definition": entry_reached_definition,
+            "safety_note": safety_note,
+        }
+
+    outcome_series = outcomes_df["outcome"].astype("object")
+    entry_reached_rows = int(outcome_series.isin(entry_reached_outcomes).sum())
+    tp1_first_rows = int((outcome_series == "tp1_first").sum())
+    tp2_first_rows = int((outcome_series == "tp2_first").sum())
+    sl_first_rows = int((outcome_series == "sl_first").sum())
+    timeout_rows = int((outcome_series == "timeout").sum())
+    ambiguous_rows = int((outcome_series == "ambiguous").sum())
+    open_entry_reached_rows = int((outcome_series == "entry_reached").sum())
+    resolved_exit_rows = int(tp1_first_rows + tp2_first_rows + sl_first_rows)
+    unresolved_entry_rows = int(timeout_rows + ambiguous_rows + open_entry_reached_rows)
+
+    return {
+        "entry_reached_rows": entry_reached_rows,
+        "tp1_first_rows": tp1_first_rows,
+        "tp2_first_rows": tp2_first_rows,
+        "sl_first_rows": sl_first_rows,
+        "timeout_rows": timeout_rows,
+        "ambiguous_rows": ambiguous_rows,
+        "open_entry_reached_rows": open_entry_reached_rows,
+        "resolved_exit_rows": resolved_exit_rows,
+        "unresolved_entry_rows": unresolved_entry_rows,
+        "tp1_first_rate_of_entry_reached": float(tp1_first_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "tp2_first_rate_of_entry_reached": float(tp2_first_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "sl_first_rate_of_entry_reached": float(sl_first_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "timeout_rate_of_entry_reached": float(timeout_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "ambiguous_rate_of_entry_reached": float(ambiguous_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "open_entry_reached_rate_of_entry_reached": float(open_entry_reached_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "resolved_exit_rate_of_entry_reached": float(resolved_exit_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "unresolved_entry_rate_of_entry_reached": float(unresolved_entry_rows / entry_reached_rows) if entry_reached_rows else 0.0,
+        "entry_reached_definition": entry_reached_definition,
+        "safety_note": safety_note,
+    }
+
+
 def evaluate_active_plan_intraperiod_candidate(
     candidate_row: Any,
     ohlcv_df: pd.DataFrame | None,
@@ -502,6 +572,7 @@ __all__ = [
     "MIN_OUTCOME_COLUMNS",
     "build_active_plan_intraperiod_outcome_rows",
     "evaluate_active_plan_intraperiod_candidate",
+    "summarize_intraperiod_entry_reached_outcomes",
     "summarize_intraperiod_outcome_coverage",
     "summarize_intraperiod_valid_sample_winrate",
     "write_active_plan_intraperiod_outcomes",
