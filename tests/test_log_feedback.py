@@ -235,6 +235,7 @@ from tools.log_feedback import (
 )
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS, build_intraperiod_evidence_quality_summary
+from src.trade.active_plan_intraperiod import summarize_intraperiod_ohlcv_source_coverage
 
 
 class LogFeedbackTest(unittest.TestCase):
@@ -1283,6 +1284,8 @@ class LogFeedbackTest(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+            candidates_path = base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+            ohlcv_path = base_dir / "logs" / "csv" / "active_plan_intraperiod_ohlcv.csv"
             output_md = base_dir / "app-contract.md"
             output_json = base_dir / "app-contract.json"
             rows = _write_intraperiod_outcomes_fixture(
@@ -1296,21 +1299,81 @@ class LogFeedbackTest(unittest.TestCase):
                 ],
             )
             expected_summary = build_intraperiod_evidence_quality_summary(pd.DataFrame(rows))
-
-            markdown, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
-                output_md=output_md,
-                output_json=output_json,
-                intraperiod_outcomes_path=outcomes_path,
+            candidate_rows = [
+                {
+                    "candidate_id": "candidate-1",
+                    "timestamp_jst": "2026-06-30T00:00:00+00:00",
+                    "candidate_type": "active_limit_retest",
+                    "side": "long",
+                    "active_primary_action": "ACTION_A",
+                },
+                {
+                    "candidate_id": "candidate-2",
+                    "timestamp_jst": "2026-06-30T01:00:00+00:00",
+                    "candidate_type": "active_counter_scalp",
+                    "side": "short",
+                    "active_primary_action": "ACTION_B",
+                },
+                {
+                    "candidate_id": "candidate-3",
+                    "timestamp_jst": "2026-06-30T10:00:00+00:00",
+                    "candidate_type": "",
+                    "side": "",
+                    "active_primary_action": "",
+                },
+            ]
+            ohlcv_rows = [
+                {
+                    "timestamp_jst": "2026-06-30T00:30:00+00:00",
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.5,
+                    "close": 100.5,
+                },
+                {
+                    "timestamp_jst": "2026-06-30T01:30:00+00:00",
+                    "open": 100.5,
+                    "high": 101.5,
+                    "low": 100.0,
+                    "close": 101.0,
+                },
+            ]
+            candidates_path.parent.mkdir(parents=True, exist_ok=True)
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=["candidate_id", "timestamp_jst", "candidate_type", "side", "active_primary_action"],
+                )
+                writer.writeheader()
+                for row in candidate_rows:
+                    writer.writerow(row)
+            with ohlcv_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                for row in ohlcv_rows:
+                    writer.writerow(row)
+            expected_ohlcv_summary = summarize_intraperiod_ohlcv_source_coverage(
+                pd.DataFrame(candidate_rows),
+                pd.DataFrame(ohlcv_rows),
             )
+
+            with patch("tools.log_feedback.BASE_DIR", base_dir):
+                markdown, contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
+                    output_md=output_md,
+                    output_json=output_json,
+                    intraperiod_outcomes_path=outcomes_path,
+                )
 
             self.assertTrue(output_md.exists())
             self.assertTrue(output_json.exists())
             self.assertIn("Evidence Quality Summary", markdown)
             self.assertIn("rows excluding outcome == no_ohlcv", markdown)
             self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
+            self.assertIn("OHLCV Source Coverage Summary", markdown)
             parsed = json.loads(output_json.read_text(encoding="utf-8"))
             self.assertEqual(contract_data, parsed)
             self.assertEqual(parsed["evidence_quality_summary"], expected_summary)
+            self.assertEqual(parsed["ohlcv_source_coverage_summary"], expected_ohlcv_summary)
             self.assertEqual(
                 parsed["evidence_quality_summary"],
                 {
@@ -1329,6 +1392,24 @@ class LogFeedbackTest(unittest.TestCase):
                 },
             )
             self.assertEqual(
+                parsed["ohlcv_source_coverage_summary"],
+                {
+                    "candidate_rows": 3,
+                    "ohlcv_input_rows": 2,
+                    "ohlcv_valid_rows": 2,
+                    "candidate_timestamp_rows": 3,
+                    "missing_candidate_timestamp_rows": 0,
+                    "window_covered_rows": 2,
+                    "window_missing_rows": 1,
+                    "no_global_ohlcv_risk_rows": 0,
+                    "window_missing_rate": 1 / 3,
+                    "ohlcv_start": "2026-06-30T00:30:00+00:00",
+                    "ohlcv_end": "2026-06-30T01:30:00+00:00",
+                    "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
                 set(parsed["evidence_quality_summary"]),
                 {
                     "valid_sample_definition",
@@ -1342,6 +1423,24 @@ class LogFeedbackTest(unittest.TestCase):
                     "potential_fakeout",
                     "potential_missed_turn",
                     "bad_entry_timing",
+                    "safety_note",
+                },
+            )
+            self.assertEqual(
+                set(parsed["ohlcv_source_coverage_summary"]),
+                {
+                    "candidate_rows",
+                    "ohlcv_input_rows",
+                    "ohlcv_valid_rows",
+                    "candidate_timestamp_rows",
+                    "missing_candidate_timestamp_rows",
+                    "window_covered_rows",
+                    "window_missing_rows",
+                    "no_global_ohlcv_risk_rows",
+                    "window_missing_rate",
+                    "ohlcv_start",
+                    "ohlcv_end",
+                    "coverage_note",
                     "safety_note",
                 },
             )
@@ -1399,6 +1498,13 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>manual_action_checklist_surface</section>",
                         "<section>present=true / ready_or_valid=true / execution_required=false</section>",
                         "<section>derived from existing app contract data only</section>",
+                        "<section>OHLCV Source Coverage Summary</section>",
+                        "<section>candidate_rows</section>",
+                        "<section>ohlcv_input_rows</section>",
+                        "<section>ohlcv_valid_rows</section>",
+                        "<section>coverage_note</section>",
+                        "<section>safety_note</section>",
+                        "<section>derived from existing candidate/OHLCV data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
                         "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",
@@ -1910,6 +2016,13 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>manual_action_checklist_surface</section>",
                         "<section>present=true / ready_or_valid=true / execution_required=false</section>",
                         "<section>derived from existing app contract data only</section>",
+                        "<section>OHLCV Source Coverage Summary</section>",
+                        "<section>candidate_rows</section>",
+                        "<section>ohlcv_input_rows</section>",
+                        "<section>ohlcv_valid_rows</section>",
+                        "<section>coverage_note</section>",
+                        "<section>safety_note</section>",
+                        "<section>derived from existing candidate/OHLCV data only</section>",
                         "<section>Source Files / Generated At</section>",
                         "<section>Safety Boundary</section>",
                         "<section>report-only / not FORMAL_GO / no automatic order / human decides manually</section>",

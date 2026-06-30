@@ -794,6 +794,73 @@ def _evidence_quality_summary_lines(
     return lines
 
 
+def _ohlcv_source_coverage_summary_evidence(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    direct_evidence = result.get("ohlcv_source_coverage_summary")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container in (notification_context, display_context):
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("ohlcv_source_coverage_summary")
+        if isinstance(evidence, dict):
+            return evidence
+    for container in (
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict):
+            evidence = container.get("ohlcv_source_coverage_summary")
+            if isinstance(evidence, dict):
+                return evidence
+    return None
+
+
+def _ohlcv_source_coverage_summary_lines(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> list[str]:
+    evidence = _ohlcv_source_coverage_summary_evidence(result, notification_context, display_context)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【OHLCV source coverage summary】",
+        "local/report-only の表示です。candidate timestamp と OHLCV coverage だけを見て、実行はしません。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+    for label, key in (
+        ("candidate_rows", "candidate_rows"),
+        ("ohlcv_input_rows", "ohlcv_input_rows"),
+        ("ohlcv_valid_rows", "ohlcv_valid_rows"),
+        ("candidate_timestamp_rows", "candidate_timestamp_rows"),
+        ("missing_candidate_timestamp_rows", "missing_candidate_timestamp_rows"),
+        ("window_covered_rows", "window_covered_rows"),
+        ("window_missing_rows", "window_missing_rows"),
+        ("no_global_ohlcv_risk_rows", "no_global_ohlcv_risk_rows"),
+        ("window_missing_rate", "window_missing_rate"),
+        ("ohlcv_start", "ohlcv_start"),
+        ("ohlcv_end", "ohlcv_end"),
+        ("coverage_note", "coverage_note"),
+        ("safety_note", "safety_note"),
+    ):
+        lines.append(f"{label}: {_evidence_quality_summary_value(evidence.get(key))}")
+    return lines
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -845,6 +912,7 @@ def _root_summary_lines(
     lines.extend(_operator_triage_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
+    lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -944,6 +1012,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_operator_triage_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
+    lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [

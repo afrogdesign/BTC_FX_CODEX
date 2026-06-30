@@ -231,6 +231,24 @@ def _evidence_quality_summary_payload() -> dict[str, object]:
     }
 
 
+def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
+    return {
+        "candidate_rows": 3,
+        "ohlcv_input_rows": 2,
+        "ohlcv_valid_rows": 2,
+        "candidate_timestamp_rows": 3,
+        "missing_candidate_timestamp_rows": 0,
+        "window_covered_rows": 2,
+        "window_missing_rows": 1,
+        "no_global_ohlcv_risk_rows": 0,
+        "window_missing_rate": 1 / 3,
+        "ohlcv_start": "2026-06-30T00:30:00+00:00",
+        "ohlcv_end": "2026-06-30T01:30:00+00:00",
+        "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
@@ -315,6 +333,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             "integrated_evidence_overview_execution_required_keys": [],
             "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
             "evidence_quality_summary": _evidence_quality_summary_payload(),
+            "ohlcv_source_coverage_summary": _ohlcv_source_coverage_summary_payload(),
         }
 
         html = build_notification_detail_html(payload)
@@ -454,6 +473,26 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("local/manual_delivery_app_surface/app-surface-manifest.json", html)
         self.assertIn("report-only", html)
         self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", html)
+        self.assertIn("OHLCV source coverage summary", html)
+        self.assertIn("<strong>candidate_rows:</strong> 3", html)
+        self.assertIn("<strong>ohlcv_input_rows:</strong> 2", html)
+        self.assertIn("<strong>ohlcv_valid_rows:</strong> 2", html)
+        self.assertIn("<strong>candidate_timestamp_rows:</strong> 3", html)
+        self.assertIn("<strong>missing_candidate_timestamp_rows:</strong> 0", html)
+        self.assertIn("<strong>window_covered_rows:</strong> 2", html)
+        self.assertIn("<strong>window_missing_rows:</strong> 1", html)
+        self.assertIn("<strong>no_global_ohlcv_risk_rows:</strong> 0", html)
+        self.assertIn("<strong>window_missing_rate:</strong> 0.3333333333333333", html)
+        self.assertIn("<strong>ohlcv_start:</strong> 2026-06-30T00:30:00+00:00", html)
+        self.assertIn("<strong>ohlcv_end:</strong> 2026-06-30T01:30:00+00:00", html)
+        self.assertIn(
+            "<strong>coverage_note:</strong> report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+            html,
+        )
+        self.assertIn(
+            "<strong>safety_note:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually",
+            html,
+        )
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)
@@ -600,6 +639,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 },
                 "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
                 "evidence_quality_summary": _evidence_quality_summary_payload(),
+                "ohlcv_source_coverage_summary": _ohlcv_source_coverage_summary_payload(),
             },
             "integrated_evidence_overview_operator_hint_status": "ready_for_human_review",
             "integrated_evidence_overview_operator_hint_reason": "all integrated evidence is present and ready",
@@ -658,6 +698,26 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("does not authorize manual or automatic entry", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("local/report-only の表示です。既存の契約/検証データだけを使い、app surface はこの概要を実行しません。", html)
+        self.assertIn("OHLCV source coverage summary", html)
+        self.assertIn("<strong>candidate_rows:</strong> 3", html)
+        self.assertIn("<strong>ohlcv_input_rows:</strong> 2", html)
+        self.assertIn("<strong>ohlcv_valid_rows:</strong> 2", html)
+        self.assertIn("<strong>candidate_timestamp_rows:</strong> 3", html)
+        self.assertIn("<strong>missing_candidate_timestamp_rows:</strong> 0", html)
+        self.assertIn("<strong>window_covered_rows:</strong> 2", html)
+        self.assertIn("<strong>window_missing_rows:</strong> 1", html)
+        self.assertIn("<strong>no_global_ohlcv_risk_rows:</strong> 0", html)
+        self.assertIn("<strong>window_missing_rate:</strong> 0.3333333333333333", html)
+        self.assertIn("<strong>ohlcv_start:</strong> 2026-06-30T00:30:00+00:00", html)
+        self.assertIn("<strong>ohlcv_end:</strong> 2026-06-30T01:30:00+00:00", html)
+        self.assertIn(
+            "<strong>coverage_note:</strong> report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+            html,
+        )
+        self.assertIn(
+            "<strong>safety_note:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually",
+            html,
+        )
         self.assertNotIn("smtp", html.lower())
         self.assertNotIn("Gmail", html)
         self.assertNotIn("send_email", html)

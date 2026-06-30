@@ -25,6 +25,7 @@ from tools.log_feedback import format_active_plan_notification_contract
 from tools.log_feedback import format_active_plan_pending_coverage_caveat
 import tools.log_feedback as log_feedback
 from src.trade.active_plan_intraperiod import MIN_OUTCOME_COLUMNS, build_intraperiod_evidence_quality_summary
+from src.trade.active_plan_intraperiod import summarize_intraperiod_ohlcv_source_coverage
 from src.trade.actionability_gate import ACTIONABILITY_SAFETY, ACTIONABILITY_SHADOW_DECISION_HEADER, build_actionability_shadow_decision_row
 
 
@@ -8010,6 +8011,8 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+            candidates_path = base_dir / "logs" / "csv" / "active_plan_paper_candidates.csv"
+            ohlcv_path = base_dir / "logs" / "csv" / "active_plan_intraperiod_ohlcv.csv"
             export_dir = base_dir / "local" / "manual_delivery_app_surface"
             rows = _write_intraperiod_outcomes_fixture(
                 outcomes_path,
@@ -8022,6 +8025,63 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                 ],
             )
             expected_summary = build_intraperiod_evidence_quality_summary(pd.DataFrame(rows))
+            candidate_rows = [
+                {
+                    "candidate_id": "candidate-1",
+                    "timestamp_jst": "2026-06-30T00:00:00+00:00",
+                    "candidate_type": "active_limit_retest",
+                    "side": "long",
+                    "active_primary_action": "ACTION_A",
+                },
+                {
+                    "candidate_id": "candidate-2",
+                    "timestamp_jst": "2026-06-30T01:00:00+00:00",
+                    "candidate_type": "active_counter_scalp",
+                    "side": "short",
+                    "active_primary_action": "ACTION_B",
+                },
+                {
+                    "candidate_id": "candidate-3",
+                    "timestamp_jst": "2026-06-30T10:00:00+00:00",
+                    "candidate_type": "",
+                    "side": "",
+                    "active_primary_action": "",
+                },
+            ]
+            ohlcv_rows = [
+                {
+                    "timestamp_jst": "2026-06-30T00:30:00+00:00",
+                    "open": 100.0,
+                    "high": 101.0,
+                    "low": 99.5,
+                    "close": 100.5,
+                },
+                {
+                    "timestamp_jst": "2026-06-30T01:30:00+00:00",
+                    "open": 100.5,
+                    "high": 101.5,
+                    "low": 100.0,
+                    "close": 101.0,
+                },
+            ]
+            candidates_path.parent.mkdir(parents=True, exist_ok=True)
+            with candidates_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(
+                    fp,
+                    fieldnames=["candidate_id", "timestamp_jst", "candidate_type", "side", "active_primary_action"],
+                )
+                writer.writeheader()
+                for row in candidate_rows:
+                    writer.writerow(row)
+            with ohlcv_path.open("w", newline="", encoding="utf-8") as fp:
+                writer = csv.DictWriter(fp, fieldnames=["timestamp_jst", "open", "high", "low", "close"])
+                writer.writeheader()
+                for row in ohlcv_rows:
+                    writer.writerow(row)
+            expected_ohlcv_summary = summarize_intraperiod_ohlcv_source_coverage(
+                pd.DataFrame(candidate_rows),
+                pd.DataFrame(ohlcv_rows),
+            )
             original_cwd = Path.cwd()
             try:
                 os.chdir(base_dir)
@@ -8060,8 +8120,11 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue(describe_stdout.startswith("{\n"))
             describe_data = json.loads(describe_stdout)
             self.assertEqual(describe_data["evidence_quality_summary"], expected_summary)
+            self.assertEqual(describe_data["ohlcv_source_coverage_summary"], expected_ohlcv_summary)
             self.assertIn("valid_sample_definition", describe_stdout)
             self.assertIn("safety_note", describe_stdout)
+            self.assertIn("ohlcv_source_coverage_summary", describe_stdout)
+            self.assertIn("candidate_rows", describe_stdout)
             self.assertNotIn("private_account_order_endpoint", describe_data)
             self.assertNotIn("runtime_execution_allowed", describe_data)
 
@@ -8070,6 +8133,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertTrue((export_dir / "app-contract.json").exists())
             contract_data = json.loads((export_dir / "app-contract.json").read_text(encoding="utf-8"))
             self.assertEqual(contract_data["evidence_quality_summary"], expected_summary)
+            self.assertEqual(contract_data["ohlcv_source_coverage_summary"], expected_ohlcv_summary)
             self.assertEqual(
                 contract_data["evidence_quality_summary"],
                 {
@@ -8084,6 +8148,24 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "potential_fakeout": 1,
                     "potential_missed_turn": 2,
                     "bad_entry_timing": 1,
+                    "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                },
+            )
+            self.assertEqual(
+                contract_data["ohlcv_source_coverage_summary"],
+                {
+                    "candidate_rows": 3,
+                    "ohlcv_input_rows": 2,
+                    "ohlcv_valid_rows": 2,
+                    "candidate_timestamp_rows": 3,
+                    "missing_candidate_timestamp_rows": 0,
+                    "window_covered_rows": 2,
+                    "window_missing_rows": 1,
+                    "no_global_ohlcv_risk_rows": 0,
+                    "window_missing_rate": 1 / 3,
+                    "ohlcv_start": "2026-06-30T00:30:00+00:00",
+                    "ohlcv_end": "2026-06-30T01:30:00+00:00",
+                    "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
                     "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 },
             )
@@ -8104,6 +8186,28 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "safety_note",
                 },
             )
+            self.assertEqual(
+                set(contract_data["ohlcv_source_coverage_summary"]),
+                {
+                    "candidate_rows",
+                    "ohlcv_input_rows",
+                    "ohlcv_valid_rows",
+                    "candidate_timestamp_rows",
+                    "missing_candidate_timestamp_rows",
+                    "window_covered_rows",
+                    "window_missing_rows",
+                    "no_global_ohlcv_risk_rows",
+                    "window_missing_rate",
+                    "ohlcv_start",
+                    "ohlcv_end",
+                    "coverage_note",
+                    "safety_note",
+                },
+            )
+            dashboard_html = (export_dir / "app-dashboard.html").read_text(encoding="utf-8")
+            self.assertIn("OHLCV Source Coverage Summary", dashboard_html)
+            self.assertIn("candidate_rows", dashboard_html)
+            self.assertIn("coverage_note", dashboard_html)
 
             self.assertEqual(check_code, 0, msg=check_stderr)
             self.assertTrue(check_stdout.startswith("{\n"))

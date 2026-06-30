@@ -37,6 +37,7 @@ from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_intraperiod_evidence_quality_summary,
     build_active_plan_intraperiod_outcome_rows,
+    summarize_intraperiod_ohlcv_source_coverage,
     write_active_plan_intraperiod_outcomes,
 )
 from src.trade.actionability_gate import (
@@ -13768,6 +13769,55 @@ def _manual_delivery_current_app_evidence_quality_summary_data(
     }
 
 
+def _manual_delivery_current_app_ohlcv_source_coverage_summary_data(
+    *,
+    candidates_path: Path | None = None,
+    ohlcv_path: Path | None = None,
+) -> dict[str, Any]:
+    candidates_path = candidates_path or BASE_DIR / "logs" / "csv" / "active_plan_paper_candidates.csv"
+    ohlcv_path = ohlcv_path or BASE_DIR / "logs" / "csv" / "active_plan_intraperiod_ohlcv.csv"
+    if candidates_path.exists() and ohlcv_path.exists():
+        candidates_df = pd.DataFrame(_load_csv_rows(candidates_path))
+        ohlcv_df = _load_active_plan_intraperiod_ohlcv_df(ohlcv_path)
+        if ohlcv_df is not None:
+            return summarize_intraperiod_ohlcv_source_coverage(candidates_df, ohlcv_df)
+    return {
+        "candidate_rows": 0,
+        "ohlcv_input_rows": 0,
+        "ohlcv_valid_rows": 0,
+        "candidate_timestamp_rows": 0,
+        "missing_candidate_timestamp_rows": 0,
+        "window_covered_rows": 0,
+        "window_missing_rows": 0,
+        "no_global_ohlcv_risk_rows": 0,
+        "window_missing_rate": 0.0,
+        "ohlcv_start": "",
+        "ohlcv_end": "",
+        "coverage_note": "candidate/OHLCV inputs unavailable; report-only fallback summary",
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
+def _manual_delivery_current_app_ohlcv_source_coverage_summary_rows(
+    ohlcv_source_coverage_summary: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    return [
+        ("candidate_rows", ohlcv_source_coverage_summary.get("candidate_rows")),
+        ("ohlcv_input_rows", ohlcv_source_coverage_summary.get("ohlcv_input_rows")),
+        ("ohlcv_valid_rows", ohlcv_source_coverage_summary.get("ohlcv_valid_rows")),
+        ("candidate_timestamp_rows", ohlcv_source_coverage_summary.get("candidate_timestamp_rows")),
+        ("missing_candidate_timestamp_rows", ohlcv_source_coverage_summary.get("missing_candidate_timestamp_rows")),
+        ("window_covered_rows", ohlcv_source_coverage_summary.get("window_covered_rows")),
+        ("window_missing_rows", ohlcv_source_coverage_summary.get("window_missing_rows")),
+        ("no_global_ohlcv_risk_rows", ohlcv_source_coverage_summary.get("no_global_ohlcv_risk_rows")),
+        ("window_missing_rate", ohlcv_source_coverage_summary.get("window_missing_rate")),
+        ("ohlcv_start", ohlcv_source_coverage_summary.get("ohlcv_start")),
+        ("ohlcv_end", ohlcv_source_coverage_summary.get("ohlcv_end")),
+        ("coverage_note", ohlcv_source_coverage_summary.get("coverage_note")),
+        ("safety_note", ohlcv_source_coverage_summary.get("safety_note")),
+    ]
+
+
 def _manual_delivery_current_app_major_turning_point_diagnostic_rows(
     major_turning_point_diagnostic: dict[str, Any],
 ) -> list[tuple[str, Any]]:
@@ -13989,6 +14039,12 @@ def _manual_delivery_current_app_dashboard_html(
     )
     major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
+    )
+    ohlcv_source_coverage_summary = (app_contract_data or {}).get("ohlcv_source_coverage_summary")
+    if not isinstance(ohlcv_source_coverage_summary, dict):
+        ohlcv_source_coverage_summary = _manual_delivery_current_app_ohlcv_source_coverage_summary_data()
+    ohlcv_source_coverage_rows = _manual_delivery_current_app_ohlcv_source_coverage_summary_rows(
+        ohlcv_source_coverage_summary
     )
     major_turning_point_diagnostic_rows = _manual_delivery_current_app_major_turning_point_diagnostic_rows(
         major_turning_point_diagnostic
@@ -14248,6 +14304,14 @@ def _manual_delivery_current_app_dashboard_html(
           {_table_rows(integrated_evidence_rows)}
         </table>
         <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / human decides manually. derived from existing app contract/status data only.</p>
+      </section>
+
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">OHLCV Source Coverage Summary</h2>
+        <table>
+          {_table_rows(ohlcv_source_coverage_rows)}
+        </table>
+        <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / human decides manually. derived from existing candidate/OHLCV data only.</p>
       </section>
 
       <section class=\"card full-width\">
@@ -14639,6 +14703,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "Manual Action Checklist",
         "Operator Triage Summary",
         "Integrated Evidence Overview",
+        "OHLCV Source Coverage Summary",
         "Major Turning Point Diagnostic",
         "Source Files / Generated At",
         "Safety Boundary",
@@ -14666,6 +14731,12 @@ def _manual_delivery_current_app_surface_validation_data(
         "does not authorize manual or automatic entry",
         "present=true / ready_or_valid=true / execution_required=false",
         "derived from existing app contract data only",
+        "candidate_rows",
+        "ohlcv_input_rows",
+        "ohlcv_valid_rows",
+        "coverage_note",
+        "safety_note",
+        "derived from existing candidate/OHLCV data only",
         "report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]:
         if expected_text not in app_dashboard_html_text:
@@ -14979,8 +15050,10 @@ def _manual_delivery_current_app_surface_validation_data(
 def _manual_delivery_current_app_integration_contract_markdown(
     *,
     evidence_quality_summary: dict[str, Any],
+    ohlcv_source_coverage_summary: dict[str, Any],
 ) -> str:
     eqs = evidence_quality_summary
+    ohlcv = ohlcv_source_coverage_summary
     lines = [
         "# Manual Delivery Current App Integration Contract",
         "",
@@ -15037,6 +15110,22 @@ def _manual_delivery_current_app_integration_contract_markdown(
         f"- bad_entry_timing: {eqs.get('bad_entry_timing', 0)}",
         f"- safety_note: {eqs.get('safety_note', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
         "",
+        "## OHLCV Source Coverage Summary",
+        "",
+        f"- candidate_rows: {ohlcv.get('candidate_rows', 0)}",
+        f"- ohlcv_input_rows: {ohlcv.get('ohlcv_input_rows', 0)}",
+        f"- ohlcv_valid_rows: {ohlcv.get('ohlcv_valid_rows', 0)}",
+        f"- candidate_timestamp_rows: {ohlcv.get('candidate_timestamp_rows', 0)}",
+        f"- missing_candidate_timestamp_rows: {ohlcv.get('missing_candidate_timestamp_rows', 0)}",
+        f"- window_covered_rows: {ohlcv.get('window_covered_rows', 0)}",
+        f"- window_missing_rows: {ohlcv.get('window_missing_rows', 0)}",
+        f"- no_global_ohlcv_risk_rows: {ohlcv.get('no_global_ohlcv_risk_rows', 0)}",
+        f"- window_missing_rate: {ohlcv.get('window_missing_rate', 0.0)}",
+        f"- ohlcv_start: {ohlcv.get('ohlcv_start', '')}",
+        f"- ohlcv_end: {ohlcv.get('ohlcv_end', '')}",
+        f"- coverage_note: {ohlcv.get('coverage_note', 'candidate/OHLCV inputs unavailable; report-only fallback summary')}",
+        f"- safety_note: {ohlcv.get('safety_note', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
+        "",
         "## Intraperiod Review JSON",
         "",
         "- entrypoint_command: build-active-plan-intraperiod-review --stdout-json",
@@ -15089,6 +15178,7 @@ def _manual_delivery_current_app_integration_contract_data(
     evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
+    ohlcv_source_coverage_summary = _manual_delivery_current_app_ohlcv_source_coverage_summary_data()
     return {
         "schema_version": "manual_delivery_app_integration_contract.v1",
         "contract_status": "stable_for_local_app_integration",
@@ -15158,6 +15248,7 @@ def _manual_delivery_current_app_integration_contract_data(
         ],
         "notes": "report-only; app may display/review, human decides manually",
         "evidence_quality_summary": evidence_quality_summary,
+        "ohlcv_source_coverage_summary": ohlcv_source_coverage_summary,
         "intraperiod_review_stdout_json": {
             "entrypoint_command": "build-active-plan-intraperiod-review --stdout-json",
             "schema_version": "active_plan_intraperiod_review.v1",
@@ -15250,8 +15341,10 @@ def _write_manual_delivery_current_app_integration_contract_outputs(
     evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
+    ohlcv_source_coverage_summary = _manual_delivery_current_app_ohlcv_source_coverage_summary_data()
     summary_text = _manual_delivery_current_app_integration_contract_markdown(
         evidence_quality_summary=evidence_quality_summary,
+        ohlcv_source_coverage_summary=ohlcv_source_coverage_summary,
     )
     contract_data = _manual_delivery_current_app_integration_contract_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,

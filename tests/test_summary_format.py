@@ -114,6 +114,24 @@ def _evidence_quality_summary_payload() -> dict[str, object]:
     }
 
 
+def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
+    return {
+        "candidate_rows": 3,
+        "ohlcv_input_rows": 2,
+        "ohlcv_valid_rows": 2,
+        "candidate_timestamp_rows": 3,
+        "missing_candidate_timestamp_rows": 0,
+        "window_covered_rows": 2,
+        "window_missing_rows": 1,
+        "no_global_ohlcv_risk_rows": 0,
+        "window_missing_rate": 1 / 3,
+        "ohlcv_start": "2026-06-30T00:30:00+00:00",
+        "ohlcv_end": "2026-06-30T01:30:00+00:00",
+        "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 class SummaryFormatTest(unittest.TestCase):
     def test_ready_case_separates_direction_and_execution(self) -> None:
         payload = {
@@ -715,6 +733,7 @@ class SummaryFormatTest(unittest.TestCase):
             "integrated_evidence_overview_missing_evidence_keys": [],
             "integrated_evidence_overview_not_ready_evidence_keys": [],
             "integrated_evidence_overview_execution_required_keys": [],
+            "ohlcv_source_coverage_summary": _ohlcv_source_coverage_summary_payload(),
         }
 
         body, _provider_used = build_summary_body(
@@ -768,6 +787,26 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("potential_fakeout: 39", body)
         self.assertIn("potential_missed_turn: 35", body)
         self.assertIn("bad_entry_timing: 2", body)
+        self.assertIn(
+            "safety_note: report-only / not FORMAL_GO / no automatic order / human decides manually",
+            body,
+        )
+        self.assertIn("【OHLCV source coverage summary】", body)
+        self.assertIn("candidate_rows: 3", body)
+        self.assertIn("ohlcv_input_rows: 2", body)
+        self.assertIn("ohlcv_valid_rows: 2", body)
+        self.assertIn("candidate_timestamp_rows: 3", body)
+        self.assertIn("missing_candidate_timestamp_rows: 0", body)
+        self.assertIn("window_covered_rows: 2", body)
+        self.assertIn("window_missing_rows: 1", body)
+        self.assertIn("no_global_ohlcv_risk_rows: 0", body)
+        self.assertIn("window_missing_rate: 0.3333333333333333", body)
+        self.assertIn("ohlcv_start: 2026-06-30T00:30:00+00:00", body)
+        self.assertIn("ohlcv_end: 2026-06-30T01:30:00+00:00", body)
+        self.assertIn(
+            "coverage_note: report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
+            body,
+        )
         self.assertIn(
             "safety_note: report-only / not FORMAL_GO / no automatic order / human decides manually",
             body,
