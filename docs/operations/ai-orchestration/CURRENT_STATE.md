@@ -31,6 +31,12 @@
 - checkpoint push only
 - runtime repo pull later
 
+## Procedure note
+
+- checkpoint push procedure is now documented
+- runtime pull handoff is separate and explicit
+- no routine push remains the default
+
 ## Default avoid list
 
 - `.venv312/`

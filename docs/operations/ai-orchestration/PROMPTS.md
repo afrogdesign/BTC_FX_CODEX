@@ -85,13 +85,33 @@ Do not push unless explicit `CHECKPOINT_PUSH`.
 CHECKPOINT_PUSH <WORK_ID>
 Goal: prepare and publish a meaningful checkpoint branch/push.
 Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Read: <files>
+Read: docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md, <files>
 Edit: <files>
 Test: <commands>
 Stop: if branch/remote target is ambiguous or push is not explicitly approved
 Report: compact
 Do not edit or run the old runtime execution repo.
 Push only after local checks pass and checkpoint target is explicit.
+```
+
+## RUNTIME_PULL_HANDOFF
+
+```text
+RUNTIME_PULL_HANDOFF <WORK_ID>
+Goal: define or execute the handoff from checkpoint push to old runtime repo pull.
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Read: docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md, <files>
+Edit: <files>
+Test: <commands>
+Stop: if the handoff target is ambiguous or human confirmation is missing
+Report: compact
+Use only when explicitly requested.
+Old runtime execution repo may be involved only in that task.
+No runtime restart.
+No execution.
+No secret reading.
+No trading behavior changes.
+Do not edit or run the old runtime execution repo by default.
 ```
 
 ## REVIEW_ONLY

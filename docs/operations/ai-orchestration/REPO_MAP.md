@@ -25,6 +25,8 @@
 | `docs/operations/ai-orchestration/TASK_LEDGER.md` | Work ledger, read only as needed |
 | `docs/operations/ai-orchestration/DECISIONS.md` | Durable decisions |
 | `docs/operations/ai-orchestration/PROMPTS.md` | Prompt templates |
+| `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` | Minimal checkpoint push procedure |
+| `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` | Runtime repo pull handoff procedure |
 | `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | Thread handoff |
 
 ## Directories to avoid by default

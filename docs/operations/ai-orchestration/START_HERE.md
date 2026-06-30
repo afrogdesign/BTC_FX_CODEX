@@ -36,9 +36,11 @@
 5. `docs/operations/ai-orchestration/NEXT_ACTION.md`
 6. `docs/operations/ai-orchestration/CONTROL.md`
 7. `docs/operations/ai-orchestration/PROMPTS.md`
-8. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
-9. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` when direction matters
-10. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, latest rows only
+8. `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` when checkpoint design matters
+9. `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` when runtime pull handoff matters
+10. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
+11. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` when direction matters
+12. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, latest rows only
 
 ## Quick rules
 
@@ -46,4 +48,5 @@
 - current branch は `git status --short --branch` と `CONTROL.md` から読む
 - runtime execution repo を通常 task で読みに行かない、走らせない、編集しない
 - runtime execution repo への変更反映は checkpoint branch/push と GitHub pull のあとで行う
+- 通常 work は push しない、runtime repo も触らない
 - product behavior, trading logic, runtime behavior を変える前に explicit task scope を確認する

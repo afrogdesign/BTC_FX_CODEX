@@ -1,6 +1,6 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-ORCHESTRATION-CONTROL-SPLIT-AND-CLEANUP`
+- current_work_id: `BTCFX-20260630-ORCHESTRATION-CHECKPOINT-PUSH-DESIGN`
 - mode: `LIGHT_CODEX`
 
 ## Current goal
@@ -19,5 +19,5 @@ MCP-primary / no-routine-push を repo-local default にし、軽い current-con
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-ORCHESTRATION-CHECKPOINT-PUSH-DESIGN`
-- Goal: define the minimal checkpoint branch/push procedure and old runtime repo pull handoff, without executing push or pull.
+- `BTCFX-20260630-ORCHESTRATION-CLEANUP-AUDIT-PASS`
+- Goal: review cleanup candidates and classify what can be archived later, without deleting files.
