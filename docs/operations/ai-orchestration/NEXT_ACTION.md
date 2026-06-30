@@ -5,17 +5,17 @@
 
 ## Current goal
 
-MCP-primary / no-routine-push を repo-local default にし、軽い current-control と legacy/reference の分離を進める。
+Define checkpoint push and runtime pull handoff procedures without executing push, pull, runtime actions, or product changes.
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `AGENTS.md`, `README.md`, `docs/operations/ai-orchestration/*` の指定ファイル、`docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` |
-| Edit | `AGENTS.md`, `chatgpt/README.md`, `CONTROL.md`, `MILESTONES.md`, `CLEANUP_CANDIDATES.md`, `START_HERE.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `README.md`, `RESUME.md`, `PROMPTS.md`, `REPO_MAP.md`, `legacy/chatgpt_AGENT_GITHUB_LEGACY.md` |
-| Do not | `src/`, `tools/`, `tests/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, `TASK_LEDGER.md`, `CURRENT_HANDOFF.md`, old runtime execution repo |
+| Read | `AGENTS.md`, `START_HERE.md`, `CONTROL.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md`, `PROMPTS.md`, `REPO_MAP.md`, `CLEANUP_CANDIDATES.md` |
+| Edit | `CHECKPOINT_RUNBOOK.md`, `RUNTIME_PULL_HANDOFF.md`, `START_HERE.md`, `PROMPTS.md`, `REPO_MAP.md`, `CURRENT_STATE.md`, `NEXT_ACTION.md` |
+| Do not | `src/`, `tools/`, `tests/`, `scripts/`, `logs/`, `local/`, `.venv312/`, generated outputs, `CONTROL.md`, `TASK_LEDGER.md`, `CURRENT_HANDOFF.md`, old runtime execution repo, push, pull, runtime actions |
 | Test | `git diff --check`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Stop | git repo でない、unexpected uncommitted changes、scope 外編集が必要、runtime/source/generated edit が必要、deletion が必要、test/check fail、push required |
+| Stop | git repo でない、unexpected uncommitted changes、scope 外編集が必要、runtime/source/generated edit が必要、push/pull/runtime action が必要、test/check fail |
 
 ## Next recommended follow-up
 
