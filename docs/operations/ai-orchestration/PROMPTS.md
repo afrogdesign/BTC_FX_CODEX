@@ -33,7 +33,7 @@
 ## MCP_PRIMARY_OPERATION
 
 - default working dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- do not edit the old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- do not edit the frozen old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 - do not run runtime execution during normal orchestration tasks
 - use AFROG_MCP as the primary repo inspection path
 - use GitHub for checkpoint/history/sync, not as the default read path for every review

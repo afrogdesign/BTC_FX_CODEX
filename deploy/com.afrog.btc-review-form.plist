@@ -7,14 +7,14 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/.venv312/bin/python</string>
+    <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/.venv312/bin/python</string>
     <string>-u</string>
-    <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/tools/log_feedback.py</string>
+    <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/tools/log_feedback.py</string>
     <string>serve-review-form</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor</string>
+  <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor</string>
 
   <key>EnvironmentVariables</key>
   <dict>
@@ -29,9 +29,9 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/logs/runtime/review_form.out</string>
+  <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/runtime/review_form.out</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor/logs/runtime/review_form.err</string>
+  <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/runtime/review_form.err</string>
 </dict>
 </plist>

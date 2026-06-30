@@ -3,7 +3,7 @@
 last_updated: 2026-06-30
 repo: `afrogdesign/BTC_FX_CODEX`
 primary_mcp_working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-old_runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+frozen_old_runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 branch_source_rule: `read from git status --short --branch and CONTROL.md, not from chat history`
 
 ## Current State

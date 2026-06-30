@@ -7,7 +7,7 @@
 | Label | Path | Rule |
 |---|---|---|
 | MCP/Codex primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | 通常の read / edit / test / git はここで行う |
-| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 今回の通常 orchestration task では edit/run しない |
+| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 今回の通常 orchestration task では edit/run しない |
 
 - runtime execution repo は current editing target ではない
 - runtime execution repo への反映は、MCP working repo で clean checkpoint branch/push を作ったあとに GitHub pull で行う

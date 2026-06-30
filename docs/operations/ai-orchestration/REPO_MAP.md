@@ -11,7 +11,7 @@
 | Label | Path | Rule |
 |---|---|---|
 | MCP primary repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | default read / edit / test / git |
-| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default; update later by GitHub pull after checkpoint push |
+| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default; update later by GitHub pull after checkpoint push |
 
 ## AI operation anchors
 

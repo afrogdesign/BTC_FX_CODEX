@@ -10,7 +10,7 @@ Do not take over planning unless explicitly asked.
 ## Machine roles and paths
 
 - Codex working directory for this orchestration flow: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- Old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- Frozen old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 - Read, edit, test, git, commit, and docs orchestration work for this flow must stay in the MCP working repo unless explicitly instructed otherwise.
 - Do not edit or run the old runtime execution repo unless explicitly instructed.
 - Runtime execution repo updates should happen later by GitHub pull after a clean checkpoint branch/push from the MCP working repo.

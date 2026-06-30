@@ -1,9 +1,9 @@
 You are working in repo `afrogdesign/BTC_FX_CODEX`.
 
-MCP/Codex working repo:
+MCP/Codex canonical working repo:
 `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 
-Old runtime execution repo:
+Frozen old runtime execution repo:
 `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
 
 Use repo-local `START_HERE.md` and `CONTROL.md` as source of truth.
@@ -23,8 +23,8 @@ Read, in this order:
 
 Rules:
 - do not start implementation until the user explicitly asks
-- old runtime execution repo is separate and is updated later by GitHub pull only
-- do not edit or run the old runtime execution repo during normal MCP orchestration tasks
+- frozen old runtime execution repo is separate and is updated later by user-managed GitHub pull only at clean checkpoints
+- do not edit or run the frozen old runtime execution repo during normal MCP orchestration tasks
 
 Then report one of:
 - `READY`

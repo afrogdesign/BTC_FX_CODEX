@@ -12,13 +12,13 @@
 | Label | Path | Use |
 |---|---|---|
 | MCP primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | 通常の inspection / edit / test / git |
-| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 後で GitHub pull 反映する実行側 |
+| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | frozen execution side; manual GitHub pull later at clean checkpoints only |
 
-- runtime execution repo は current editing target ではない
+- frozen old runtime repo は current editing target ではない
 - GitHub は checkpoint / history / sync 用であり、毎回の default read path ではない
 - GitHub push は meaningful checkpoint branch のときだけ行う
 - routine push は wasteful なので default では要求しない
-- old runtime repo への反映は checkpoint push 後の GitHub pull later で行う
+- frozen old runtime repo への反映は checkpoint push 後の GitHub pull later で行う
 
 ## Roles
 
