@@ -32,16 +32,24 @@
 
 ## Current repo-operation mode
 
-- MCP primary
-- no routine GitHub push
-- checkpoint push only
-- runtime repo pull later
+- MCP repo is source of truth
+- ChatGPT verifies via AFROG_MCP_Business
+- GitHub is not routine review path
+- Codex prompts should be compact and diff-based inside same thread
+- commit only at meaningful boundaries
+- TASK_LEDGER / handoff docs are not updated every task
 
 ## Procedure note
 
 - checkpoint push procedure is now documented
 - runtime pull handoff is closed unless explicitly reopened
 - no routine push remains the default
+
+## Minimal record policy
+
+- source/runtime/generated/logs/private/order boundaries stay explicit
+- response.txt は最小限の compact report にする
+- 大きな節目以外での逐次メモはしない
 
 ## Default avoid list
 
