@@ -1,5 +1,15 @@
 # MILESTONES
 
+## Dashboard parity and checkpoint push
+
+- dashboard parity smoke test result is `dashboard_parity_complete`
+- issues found are `none`
+- local dashboard parity now includes `Safety Flags`, `Surface Roles`, and `Ready Gate Copy`
+- single-source boundary is confirmed for public HTML / notification mail / local dashboard
+- checkpoint push was reported successful on branch `Ver03-v4`
+- upstream was reported as `origin/Ver03-v4`
+- runtime pull handoff remains separate and not executed
+
 ## Ver03-v4 surface alignment
 
 - public HTML / notification mail / local dashboard の manual action surface が Ver03-v4 で aligned

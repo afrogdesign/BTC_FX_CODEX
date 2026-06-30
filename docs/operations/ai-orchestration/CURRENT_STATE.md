@@ -11,8 +11,13 @@
 
 ## Current focus
 
-- まず MCP primary 前提の AI orchestration を軽く安全にする
-- その後、evidence-based accuracy diagnostics に戻る
+- MCP-primary orchestration baseline is established
+- app/product work has resumed
+- dashboard parity is complete
+- checkpoint push was reported successful
+- next operational phase is runtime pull handoff review, not runtime execution
+- next product-quality phase after handoff review is evidence / intraperiod / win-rate diagnostics
+- automatic trading remains out of scope
 
 ## Current known status
 
