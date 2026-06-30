@@ -144,6 +144,23 @@ def _write_current_manual_delivery_app_surface_fixture(
     )
 
 
+def _evidence_quality_summary_payload() -> dict[str, Any]:
+    return {
+        "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+        "total_rows": 1418,
+        "no_ohlcv_rows": 1330,
+        "valid_sample_rows": 88,
+        "entry_reached_rows": 76,
+        "win_like_rows": 35,
+        "loss_like_rows": 39,
+        "unresolved_entry_rows": 2,
+        "potential_fakeout": 39,
+        "potential_missed_turn": 35,
+        "bad_entry_timing": 2,
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 from tools.log_feedback import (
     DEFAULT_REVIEW_FORM,
     DEFAULT_REVIEW_NOTE,
@@ -1130,6 +1147,31 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("no load_config", contract_text)
             self.assertIn("no .env", contract_text)
             self.assertIn("no os.environ", contract_text)
+            self.assertIn("Evidence Quality Summary", markdown)
+            self.assertIn("valid_sample_definition", markdown)
+            self.assertIn("safety_note", markdown)
+            self.assertIn("evidence_quality_summary", contract_text)
+            self.assertIn("valid_sample_definition", contract_text)
+            self.assertIn("no_ohlcv_rows", contract_text)
+            self.assertIn("safety_note", contract_text)
+            self.assertEqual(parsed["evidence_quality_summary"], _evidence_quality_summary_payload())
+            self.assertEqual(
+                set(parsed["evidence_quality_summary"]),
+                {
+                    "valid_sample_definition",
+                    "total_rows",
+                    "no_ohlcv_rows",
+                    "valid_sample_rows",
+                    "entry_reached_rows",
+                    "win_like_rows",
+                    "loss_like_rows",
+                    "unresolved_entry_rows",
+                    "potential_fakeout",
+                    "potential_missed_turn",
+                    "bad_entry_timing",
+                    "safety_note",
+                },
+            )
 
             intraperiod = parsed["intraperiod_review_stdout_json"]
             self.assertEqual(intraperiod["entrypoint_command"], "build-active-plan-intraperiod-review --stdout-json")
