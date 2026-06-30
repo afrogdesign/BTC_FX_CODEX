@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-OHLCV-STALE-COVERAGE-OPERATOR-WARNING`
-- mode: `NORMAL_CODEX`
+- current_work_id: `BTCFX-20260630-OHLCV-STALE-COVERAGE-WARNING-E2E-SMOKE`
+- mode: `LIGHT_CODEX`
 
 ## Current goal
 
-`ohlcv_range_freshness_status == stale_before_latest_candidate` のとき、operator / manual surface 上で stale OHLCV coverage を見落とせない report-only warning として表示する。
+report-only export/check smoke を走らせ、stale OHLCV warning が exported artifacts に出ることを確認する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_active_plan_notification_formatting.py`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_CHECKPOINT_REVIEW.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_active_plan_notification_formatting.py`, `docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_OPERATOR_WARNING.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | stale OHLCV coverage を report-only warning として可視化する |
-| Tests | `./.venv312/bin/python -m unittest tests.test_summary_format tests.test_notification_detail_page tests.test_active_plan_notification_formatting`, `git diff --check -- src/ai/summary.py src/notification/detail_page.py tests/test_summary_format.py tests/test_notification_detail_page.py tests/test_active_plan_notification_formatting.py docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_OPERATOR_WARNING.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | source/test/docs の一区切りとして 1 commit |
-| Stop | OHLCV fetch が必要、trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、generated/logs を commit する必要がある、test 失敗、allowed 外 file が stage される |
+| Read | `docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_OPERATOR_WARNING.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_WARNING_E2E_SMOKE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | stale OHLCV warning の smoke 確認を記録する |
+| Tests | smoke commands, `git diff --check -- docs/operations/ai-orchestration/OHLCV_STALE_COVERAGE_WARNING_E2E_SMOKE.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | docs smoke record の区切りとして docs 2 files を 1 commit |
+| Stop | smoke command 失敗、stale warning 未確認、freshness fields 未確認、generated/logs を commit する必要、source/test 編集が必要、trading logic 変更が必要、OHLCV fetch が必要、runtime / old runtime / private / order / notification が必要、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-OHLCV-STALE-COVERAGE-WARNING-E2E-SMOKE`
-- Goal: run report-only export/check smoke and confirm stale OHLCV warning appears without committing generated files.
+- `BTCFX-20260630-OHLCV-STALE-COVERAGE-CHECKPOINT-REVIEW`
+- Goal: review completed stale OHLCV operator warning path and decide the next report-only product-quality task.
