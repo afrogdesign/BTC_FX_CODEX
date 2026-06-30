@@ -1,49 +1,49 @@
 # AI Orchestration
 
-This directory is the operating anchor for ChatGPT / Codex / future agents.
+新しい agent は最初に `START_HERE.md` を読みます。
 
 ## Purpose
 
-Reduce Codex cost and prevent context drift.
+- ChatGPT / Codex / future agents の resume cost を下げる
+- MCP primary workflow で repo confusion を防ぐ
 
-ChatGPT handles:
+## Two repo paths
 
-- repository review
-- planning
-- task decomposition
-- design decisions
-- final review
+| Label | Path | Use |
+|---|---|---|
+| MCP primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | 通常の inspection / edit / test / git |
+| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 後で GitHub pull 反映する実行側 |
 
-Codex handles:
+- runtime execution repo は current editing target ではない
+- GitHub は checkpoint / history / sync 用であり、毎回の default read path ではない
+- GitHub push は meaningful checkpoint branch のときに行い、小さい docs-only step ごとには必須ではない
 
-- editing specified files
-- running specified validation
-- commit / push
-- compact reporting
+## Roles
 
-## Files
+- ChatGPT: commander, planning, review
+- Codex: fixed-scope edit, validation, compact reporting
+
+## First files
+
+1. `START_HERE.md`
+2. `RESUME.md`
+3. `CURRENT_STATE.md`
+4. `NEXT_ACTION.md`
+5. `CONTROL.md`
+
+## Core files
 
 | File | Role |
 |---|---|
-| `CONTROL.md` | Current objective, constraints, next task |
-| `TASK_LEDGER.md` | Work ID ledger |
-| `DECISIONS.md` | Durable design decisions |
-| `REPO_MAP.md` | Repository map for AI readers |
-| `PROMPTS.md` | Short prompt templates |
-| `handoffs/CURRENT_HANDOFF.md` | Thread handoff anchor |
+| `START_HERE.md` | first-read entrypoint |
+| `CURRENT_STATE.md` | short current operating state |
+| `NEXT_ACTION.md` | current task frame and recommended next follow-up |
+| `CONTROL.md` | current objective, constraints, validation, next decision |
+| `TASK_LEDGER.md` | work ledger, read only as needed |
+| `REPO_MAP.md` | repo reading map |
+| `PROMPTS.md` | prompt templates |
+| `handoffs/CURRENT_HANDOFF.md` | active handoff anchor |
 
 ## Rule
 
-Do not put long project history in prompts.
-
-Use:
-
-```text
-NEXT <WORK_ID>
-Goal: ...
-Read: ...
-Edit: ...
-Test: ...
-Stop: ...
-Report: compact
-```
+長い履歴を prompt に詰め込まず、repo-local docs を source of truth に使う。

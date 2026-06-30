@@ -9,9 +9,12 @@ Do not take over planning unless explicitly asked.
 
 ## Machine roles and paths
 
-- Canonical working directory: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- All file reading and editing must use the local iMac repository path.
-- All tests, git commands, commit, push, and deployment/runtime operations must run on this iMac local repository.
+- Codex working directory for this orchestration flow: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- Old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- Read, edit, test, git, commit, and docs orchestration work for this flow must stay in the MCP working repo unless explicitly instructed otherwise.
+- Do not edit or run the old runtime execution repo unless explicitly instructed.
+- Runtime execution repo updates should happen later by GitHub pull after a clean checkpoint branch/push from the MCP working repo.
+- GitHub push is checkpoint-based and is not required for every small task.
 - Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
 - Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
 - Do not use `imac` or `imac.afrog.jp` as SSH targets.
@@ -30,11 +33,12 @@ Do not take over planning unless explicitly asked.
 
 Before doing non-trivial work, check:
 
+- `docs/operations/ai-orchestration/START_HERE.md`
 - `docs/operations/ai-orchestration/RESUME.md`
 - `docs/operations/ai-orchestration/CONTROL.md`
 - `docs/operations/ai-orchestration/TASK_LEDGER.md` when updating task status
 
-After starting in the repo root, read `docs/operations/ai-orchestration/RESUME.md` first as the low-cost fixed entrypoint, then rely on `CONTROL.md`, `PROMPTS.md`, and `CURRENT_HANDOFF.md` instead of chat history.
+After starting in the repo root, read `docs/operations/ai-orchestration/START_HERE.md` first as the low-cost fixed entrypoint, then rely on `RESUME.md`, `CONTROL.md`, `PROMPTS.md`, and `CURRENT_HANDOFF.md` instead of chat history.
 
 Use these files as the current operating context.
 Do not rely only on chat history.
@@ -42,7 +46,7 @@ Do not rely only on chat history.
 ## Context migration and overload
 
 - If the local orchestration context appears overloaded, unstable, contradictory, or likely to cause task confusion, stop and report `BLOCKED` rather than guessing or continuing.
-- If contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or other confused context appears, trust the repo正本 first, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`.
+- If contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or other confused context appears, trust the repo正本 first, especially `START_HERE.md`, `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`.
 - This rule applies before future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
 
 ## AI orchestration metadata
@@ -77,8 +81,9 @@ For each task:
 4. Run the specified validation command first.
 5. Run broader validation only when requested or clearly necessary.
 6. Check `git diff --check` before commit.
-7. Commit and push only when validation passes and the diff is intentional.
-8. Return the compact report format.
+7. Commit when validation passes and the diff is intentional.
+8. Push only when the branch/remote target is clear and the task explicitly permits or requests a checkpoint push.
+9. Return the compact report format.
 
 ## Stop conditions
 

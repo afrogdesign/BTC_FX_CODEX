@@ -3,53 +3,57 @@
 ## Repository
 
 - repo: `afrogdesign/BTC_FX_CODEX`
-- active branch: `Ver03-v2`
+- current branch: read from `git status --short --branch` and `CONTROL.md`
+- historical branch labels such as `Ver03-v2` are historical only and must not be treated as the current default
+
+## Repo paths
+
+| Label | Path | Rule |
+|---|---|---|
+| MCP primary repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | default read / edit / test / git |
+| Old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default |
 
 ## AI operation anchors
 
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` | Fixed Codex / agent rules |
+| `docs/operations/ai-orchestration/START_HERE.md` | First read entrypoint |
+| `docs/operations/ai-orchestration/CURRENT_STATE.md` | Short current operating state |
+| `docs/operations/ai-orchestration/NEXT_ACTION.md` | Current work frame |
 | `docs/operations/ai-orchestration/CONTROL.md` | Current AI operating state |
-| `docs/operations/ai-orchestration/TASK_LEDGER.md` | Work ledger |
+| `docs/operations/ai-orchestration/TASK_LEDGER.md` | Work ledger, read only as needed |
 | `docs/operations/ai-orchestration/DECISIONS.md` | Durable decisions |
 | `docs/operations/ai-orchestration/PROMPTS.md` | Prompt templates |
 | `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | Thread handoff |
 
-## Product planning
+## Directories to avoid by default
+
+- `.venv312/`
+- `logs/`
+- generated CSV / report / HTML outputs
+- large generated files under `local/`
+
+## Project source directories
 
 | Path | Purpose |
 |---|---|
-| `運用資料/計画/README.md` | Planning folder entry |
-| `運用資料/計画/00_Ver03-v1_統合再計画_20260608.md` | Integrated product plan |
-| `運用資料/計画/01_計画フォルダ再構成案_20260608.md` | Planning folder structure |
-| `運用資料/計画/02_Ver03-v1_実装ロードマップ_20260608.md` | Roadmap |
-| `運用資料/計画/03_AI参照ファイル設計_20260608.md` | AI file design |
-| `運用資料/計画/04_次にCodexへ渡す作業方針_20260608.md` | Next Codex policy |
+| `src/` | application and trading/report logic |
+| `tools/` | CLI and support tooling |
+| `tests/` | automated tests |
+| `scripts/` | operator entry scripts |
 
-## Runtime and trading code
+## Operational docs directories
 
 | Path | Purpose |
 |---|---|
-| `main.py` | Monitor entrypoint |
-| `src/trade/active_plan.py` | Active Plan logic |
-| `src/storage/csv_logger.py` | CSV logging |
-| `tools/log_feedback.py` | Report builders / CLI |
-| `tests/` | Tests |
-
-## Operational reports
-
-| Path | Purpose |
-|---|---|
-| `運用資料/reports/` | Human-readable reports |
-| `運用資料/reports/analysis/` | Analysis reports |
-| `logs/csv/` | Runtime CSV logs |
-| `logs/runtime/` | Runtime stdout / stderr |
+| `docs/operations/ai-orchestration/` | AI operation anchors and prompts |
+| `docs/operations/strategy/` | reviewed roadmap and product direction |
+| `運用資料/` | human-facing operational notes and reports |
+| `chatgpt/` | ChatGPT-side supporting material |
 
 ## Rule
 
-AI should start with:
-
-1. `docs/operations/ai-orchestration/CONTROL.md`
-2. `docs/operations/ai-orchestration/REPO_MAP.md`
-3. the files named in the current task
+- AI should start with `AGENTS.md` and `docs/operations/ai-orchestration/START_HERE.md`
+- do not full-scan the repo unless explicitly asked
+- read only the files named in the current task plus required nearby context

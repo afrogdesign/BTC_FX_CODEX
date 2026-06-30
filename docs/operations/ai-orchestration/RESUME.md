@@ -1,28 +1,38 @@
 # Resume Protocol
 
-last_updated: 2026-06-23
+last_updated: 2026-06-30
 repo: `afrogdesign/BTC_FX_CODEX`
-branch: `Ver03-v4`
-canonical_working_dir: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+primary_mcp_working_dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+branch_source: `read from repo state and CONTROL.md, not from old chat history`
 
 ## Purpose
 
-This is the low-cost, repo-local restart entrypoint for new ChatGPT or Codex threads.
-Use it before trusting chat history.
+これは new ChatGPT / Codex thread の low-cost, repo-local restart entrypoint です。
+chat history を信じる前に使います。
 
 ## Fixed Read Order
 
-After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-relative paths are valid and should be read in this order:
+After `cd /Users/marupro/CODEX/100_MCP_Server/btc_monitor`, these repo-relative paths are valid and should be read in this order:
 
 1. `AGENTS.md`
-2. `docs/operations/ai-orchestration/RESUME.md`
-3. `docs/operations/ai-orchestration/CONTROL.md`
-4. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`
-5. `docs/operations/ai-orchestration/PROMPTS.md`
-6. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
-7. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, preferably the latest rows
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. `docs/operations/ai-orchestration/RESUME.md`
+4. `docs/operations/ai-orchestration/CURRENT_STATE.md`
+5. `docs/operations/ai-orchestration/NEXT_ACTION.md`
+6. `docs/operations/ai-orchestration/CONTROL.md`
+7. `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md`
+8. `docs/operations/ai-orchestration/PROMPTS.md`
+9. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
+10. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, preferably the latest rows
 
 `docs/operations/ai-orchestration/INITIAL_PROMPT.md` is the stable paste-in prompt for a brand-new thread.
+
+## Repo split rule
+
+- MCP/Codex normal orchestration tasks use the MCP working repo
+- runtime execution repo exists separately and must not be edited or run during normal MCP orchestration tasks
+- runtime execution repo should receive updates later by GitHub pull after a clean checkpoint branch/push from the MCP working repo
 
 ## CONTROL.md Semantics
 
@@ -56,7 +66,6 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 ## Outbox Reporting
 
 - If Codex has local filesystem access, write the final compact report to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, `done`, `partial`, `failed`, resume checks, metadata checks, and no-commit checks.
-- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access.
 - If the thread is ChatGPT-only and does not have local filesystem access, this file write is not required.
 - Keep this rule even when the task only confirms repo state or reports `READY`, `BLOCKED`, or `NEEDS_REVIEW`.
 
@@ -64,7 +73,7 @@ After `cd /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`, these repo-r
 
 - Use Codex when the task has a fixed scope and explicit file list.
 - Use Codex when the work is local, repo-bound, and can be validated with narrow commands.
-- Use Codex when you need edits, tests, commit, or push.
+- Use Codex when you need edits, tests, commit, or checkpoint preparation.
 
 ## When Not to Use Codex
 

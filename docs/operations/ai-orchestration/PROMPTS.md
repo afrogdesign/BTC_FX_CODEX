@@ -13,6 +13,17 @@
 - `CURRENT_HANDOFF.md` should be updated only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
 - Keep the logical separation intact without physically splitting the repo: orchestration operations stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
 
+## MCP_PRIMARY_OPERATION
+
+- default working dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- do not edit the old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- do not run runtime execution during normal orchestration tasks
+- use AFROG_MCP as the primary repo inspection path
+- use GitHub for checkpoint/history/sync, not as the default read path for every review
+- do not automatically push to GitHub unless checkpoint/push is explicitly requested or clearly authorized
+- compact report is still written to `response.txt` exactly once
+- browser-side `AUTO_SEND` / `HUMAN_CHECK` concepts stay unchanged by these prompt rules
+
 ## Ver03-v4 Integrated Surface Guard
 
 - For future `NEXT` / `FIX` prompts, check whether the task affects the public HTML report, notification mail, or local dashboard / app surface.
@@ -25,11 +36,13 @@
 ```text
 RESUME <WORK_ID>
 Goal: restart from the repo-local baseline with minimal reading.
-Read: AGENTS.md, docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+Read: AGENTS.md, docs/operations/ai-orchestration/START_HERE.md, docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CURRENT_STATE.md, docs/operations/ai-orchestration/NEXT_ACTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
 Inspect: docs/operations/ai-orchestration/TASK_LEDGER.md only as needed, preferably the latest rows
 Report: READY | BLOCKED | NEEDS_REVIEW
 Stop: if repo正本 and chat history conflict, or if the scope is not fixed yet
 Do not start implementation until the user explicitly asks.
+Do not edit or run the old runtime execution repo.
 ```
 
 ## NEXT
@@ -37,11 +50,14 @@ Do not start implementation until the user explicitly asks.
 ```text
 NEXT <WORK_ID>
 Goal: <one sentence>
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Read: <files>
 Edit: <files>
 Test: <commands>
 Stop: <conditions>
 Report: compact
+Do not edit or run the old runtime execution repo.
+Do not push unless checkpoint/push is explicitly requested or clearly authorized.
 ```
 
 ## FIX
@@ -49,11 +65,14 @@ Report: compact
 ```text
 FIX <WORK_ID>
 Issue: <specific issue>
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Read: <files>
 Edit: <files>
 Test: <commands>
 Stop: if the fix requires design changes outside this scope
 Report: compact
+Do not edit or run the old runtime execution repo.
+Do not push unless checkpoint/push is explicitly requested or clearly authorized.
 ```
 
 ## REVIEW_ONLY
@@ -61,16 +80,19 @@ Report: compact
 ```text
 REVIEW_ONLY <WORK_ID>
 Goal: confirm <specific fact>
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Read: <files or commands>
 Edit: none
 Test: none
 Report: answer only the fact, max 10 lines
+Do not edit or run the old runtime execution repo.
 ```
 
 ## SYNC
 
 ```text
 SYNC <WORK_ID>
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Update only:
 - AGENTS.md
 - docs/operations/ai-orchestration/CONTROL.md
@@ -84,6 +106,7 @@ Codex should block only when the mismatch contradicts the specific task, the rep
 Codex must still verify branch/head status with `git status` and report the actual commit after push.
 Implementation tasks must not write their own final commit hash into CONTROL.md or TASK_LEDGER.md; use `pending_review` until ChatGPT review is complete and batch-update later in a SYNC task.
 No source code changes.
+Do not edit or run the old runtime execution repo.
 Test: git diff --check
 Report: compact
 ```
@@ -92,11 +115,13 @@ Report: compact
 
 ```text
 HANDOFF <WORK_ID>
+Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
 Create or update:
 - docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
 Include repo, branch, current commit, objective, constraints, completed work, open questions, and next task.
 Update `CURRENT_HANDOFF.md` only at thread migration, context overload, major milestone, or explicit handoff; do not update it for every task.
 No source code changes.
+Do not edit or run the old runtime execution repo.
 Test: git diff --check
 Report: compact
 ```
@@ -117,12 +142,14 @@ Recommendation: <A/B if obvious>
 - The final compact report must be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access.
 - This applies to every Codex task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, `READY`, `NEEDS_REVIEW`, resume checks, branch checks, metadata checks, docs-only work, no-commit review work, `done`, `partial`, `failed`, and `not run`.
 - If the thread is ChatGPT-only and does not have local filesystem access, this file write is not required.
+
 ```text
 Report: compact
 
 Also write the final compact report to:
 /Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt
 ```
+
 - The filename must be exactly `response.txt`.
 - Do not verify whether the file still exists after writing.
 - For implementation tasks, report the actual commit hash in the final report, but leave the current task's CONTROL/TASK_LEDGER commit fields as `pending_review` unless ChatGPT explicitly supplied a prior reviewed hash to record.
@@ -135,15 +162,6 @@ Also write the final compact report to:
 - If ChatGPT recommends moving to a new ChatGPT thread or a new Codex thread, ChatGPT must not output the next Codex work prompt until the user gives the next instruction.
 - When context migration is recommended, ChatGPT should first provide the reason for migration and wait for the user's direction.
 - If Codex sees contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or evidence that the task context is confused, Codex must stop and report `BLOCKED` rather than guessing or continuing.
-- Repo正本, especially `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`, takes priority over chat history.
+- Repo正本, especially `START_HERE.md`, `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`, takes priority over chat history.
 - A `current_commit` lag alone is not contradictory context.
 - The rule is universal and should apply before all future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
-
-## Execution rule note
-
-- Use only the local iMac repo path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
-- Run file reads, edits, tests, git, commit, push, and deployment/runtime operations on this iMac local repository.
-- Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
-- Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
-- Do not use `imac` or `imac.afrog.jp` as SSH targets.
-- Do not use `ssh marupro@192.168.50.51` for normal repo work unless the task explicitly requires confirming the current machine state.
