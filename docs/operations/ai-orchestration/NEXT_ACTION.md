@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260701-IMAC-RUNTIME-LAUNCHD-CANONICAL-SWITCH`
-- mode: `IMAC_RUNTIME_SWITCH`
+- current_work_id: `BTCFX-20260701-CANONICAL-REPO-CLEANUP-ARCHIVE`
+- mode: `CLEANUP_ARCHIVE`
 
 ## Current goal
 
-iMac 上の btc_monitor 系 runtime / launchd / 実行ファイル参照を canonical repo に統一する。
+canonical repo 内の不要・旧式・重複・実行不要になったファイルを安全に `_archive/cleanup_20260701/` へ移して整理する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `AGENTS.md`, `docs/operations/ai-orchestration/CANONICAL_REPO_SWITCH_20260701.md`, `docs/operations/ai-orchestration/CANONICAL_RUNTIME_SMOKE_CHECK_20260701.md`, `docs/operations/ai-orchestration/CANONICAL_CHECKPOINT_PUSH_PREP_20260701.md`, `docs/operations/ai-orchestration/CANONICAL_CHECKPOINT_PUSH_20260701.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `docs/operations/ai-orchestration/IMAC_RUNTIME_LAUNCHD_CANONICAL_SWITCH_20260701.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | iMac runtime launchd の 4 ラベルを canonical repo に統一し、必要なら `~/Library/LaunchAgents/` を更新する |
-| Tests | `pwd -P`, `git status --short --branch`, repo-owned deploy plist canonical path confirmation, launchctl list/print audit, installed LaunchAgents audit, `git diff --check`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | runtime switch の記録として docs 2ファイルのみ 1 commit |
-| Stop | current directory が違う、repo-owned deploy plist still points to frozen old runtime、installed LaunchAgent differs in non-path behavior from repo-owned plist、unrelated LaunchAgent would need editing、a running old-runtime process cannot be mapped to the four approved labels、frozen old runtime repo must be modified、source/test/trading files need changes、trading logic changes become necessary、OHLCV fetch becomes necessary、private/account/order endpoint access becomes necessary、unrelated runtime/live process must be started、generated/log/local artifacts would need to be committed、progress HTML or CURRENT_PROGRESS.md needs editing、validation fails、allowed外ファイルがstageされる |
+| Read | `AGENTS.md`, `README.md`, `docs/operations/ai-orchestration/START_HERE.md`, `docs/operations/ai-orchestration/RESUME.md`, `docs/operations/ai-orchestration/CONTROL.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md`, `docs/operations/ai-orchestration/REPO_MAP.md` |
+| Edit | `docs/operations/ai-orchestration/CANONICAL_REPO_CLEANUP_ARCHIVE_20260701.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | safe archive candidates を棚卸しし、明らかに安全な古い docs / reference material を `_archive/cleanup_20260701/` へ move する |
+| Tests | `pwd -P`, `git status --short --branch`, targeted reference checks, `git diff --check`, `git diff --name-only`, `git status --short --branch`, after staging docs only diff checks, smoke commands `describe-current-manual-delivery-app-contract --stdout-json` and `check-current-manual-delivery-app-surface --stdout-json`, deploy plist canonical path confirmation |
+| Commit policy | archive moves と docs を 1 checkpoint としてまとめる |
+| Stop | current directory が違う、candidate is ambiguous and important、moving a candidate would break current references、archive target conflict、frozen old runtime repo must be touched、active source/test/tools/scripts/deploy need edits、active orchestration entrypoints would need archiving、runtime process / launchctl / cron / external LaunchAgents are needed、trading logic changes become necessary、OHLCV fetch becomes necessary、private/account/order endpoint access becomes necessary、generated/log/local artifacts would need to be committed unexpectedly、progress HTML or CURRENT_PROGRESS.md needs editing、validation fails、untracked files cannot be safely classified、allowed外ファイルがstageされる |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260701-IMAC-RUNTIME-CANONICAL-VERIFY`
-- Goal: verify after one normal launchd cycle that iMac runtime outputs/logs are being produced from the canonical repo without touching frozen old runtime.
+- `BTCFX-20260701-CANONICAL-REPO-CLEANUP-VERIFY`
+- Goal: verify safe report-only checks after archived cleanup and decide whether any `needs_user_decision` files should be archived later.
