@@ -244,6 +244,12 @@ def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
         "window_missing_rate": 1 / 3,
         "ohlcv_start": "2026-06-30T00:30:00+00:00",
         "ohlcv_end": "2026-06-30T01:30:00+00:00",
+        "candidate_timestamp_min": "2026-06-30T00:00:00+00:00",
+        "candidate_timestamp_max": "2026-06-30T10:00:00+00:00",
+        "candidate_max_after_ohlcv_end_hours": 8.5,
+        "stale_threshold_hours": 24.0,
+        "ohlcv_range_freshness_status": "fresh_for_latest_candidate",
+        "freshness_note": "latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
         "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
         "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     }
@@ -485,6 +491,15 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("<strong>window_missing_rate:</strong> 0.3333333333333333", html)
         self.assertIn("<strong>ohlcv_start:</strong> 2026-06-30T00:30:00+00:00", html)
         self.assertIn("<strong>ohlcv_end:</strong> 2026-06-30T01:30:00+00:00", html)
+        self.assertIn("<strong>candidate_timestamp_min:</strong> 2026-06-30T00:00:00+00:00", html)
+        self.assertIn("<strong>candidate_timestamp_max:</strong> 2026-06-30T10:00:00+00:00", html)
+        self.assertIn("<strong>candidate_max_after_ohlcv_end_hours:</strong> 8.5", html)
+        self.assertIn("<strong>stale_threshold_hours:</strong> 24.0", html)
+        self.assertIn("<strong>ohlcv_range_freshness_status:</strong> fresh_for_latest_candidate", html)
+        self.assertIn(
+            "<strong>freshness_note:</strong> latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
+            html,
+        )
         self.assertIn(
             "<strong>coverage_note:</strong> report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
             html,

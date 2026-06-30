@@ -8124,6 +8124,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("valid_sample_definition", describe_stdout)
             self.assertIn("safety_note", describe_stdout)
             self.assertIn("ohlcv_source_coverage_summary", describe_stdout)
+            self.assertIn("ohlcv_range_freshness_status", describe_stdout)
             self.assertIn("candidate_rows", describe_stdout)
             self.assertNotIn("private_account_order_endpoint", describe_data)
             self.assertNotIn("runtime_execution_allowed", describe_data)
@@ -8165,6 +8166,12 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "window_missing_rate": 1 / 3,
                     "ohlcv_start": "2026-06-30T00:30:00+00:00",
                     "ohlcv_end": "2026-06-30T01:30:00+00:00",
+                    "candidate_timestamp_min": "2026-06-30T00:00:00+00:00",
+                    "candidate_timestamp_max": "2026-06-30T10:00:00+00:00",
+                    "candidate_max_after_ohlcv_end_hours": 8.5,
+                    "stale_threshold_hours": 24.0,
+                    "ohlcv_range_freshness_status": "fresh_for_latest_candidate",
+                    "freshness_note": "latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
                     "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
                     "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 },
@@ -8200,6 +8207,12 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "window_missing_rate",
                     "ohlcv_start",
                     "ohlcv_end",
+                    "candidate_timestamp_min",
+                    "candidate_timestamp_max",
+                    "candidate_max_after_ohlcv_end_hours",
+                    "stale_threshold_hours",
+                    "ohlcv_range_freshness_status",
+                    "freshness_note",
                     "coverage_note",
                     "safety_note",
                 },
@@ -8207,6 +8220,9 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             dashboard_html = (export_dir / "app-dashboard.html").read_text(encoding="utf-8")
             self.assertIn("OHLCV Source Coverage Summary", dashboard_html)
             self.assertIn("candidate_rows", dashboard_html)
+            self.assertIn("candidate_timestamp_min", dashboard_html)
+            self.assertIn("candidate_timestamp_max", dashboard_html)
+            self.assertIn("ohlcv_range_freshness_status", dashboard_html)
             self.assertIn("coverage_note", dashboard_html)
 
             self.assertEqual(check_code, 0, msg=check_stderr)

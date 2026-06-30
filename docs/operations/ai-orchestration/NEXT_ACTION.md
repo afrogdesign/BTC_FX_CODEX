@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-OHLCV-WINDOW-GAP-AUDIT`
-- mode: `LIGHT_CODEX`
+- current_work_id: `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-GUARD`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-`per_window_ohlcv_gap` の原因を report-only で監査し、candidate timestamp range と OHLCV coverage range のズレを確認する。
+old OHLCV coverage が silently `no_ohlcv` を支配しないように、report-only の OHLCV range freshness / staleness visibility を追加する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `docs/operations/ai-orchestration/NO_OHLCV_COVERAGE_ACTUAL_SNAPSHOT.md`, `docs/operations/ai-orchestration/NO_OHLCV_SOURCE_COVERAGE_CHECKPOINT_REVIEW.md`, `docs/operations/deploy/Ver03-v2_CANDIDATE_COVERAGE_WINDOW_REVIEW_20260610.md`, `docs/operations/deploy/Ver03-v2_OHLCV_INPUT_CONTRACT_20260609.md`, `docs/operations/deploy/Ver03-v2_CONTROLLED_BUILDER_RUN_20260610.md`, `docs/specs/active-plan-intraperiod-outcomes.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `docs/operations/ai-orchestration/OHLCV_WINDOW_GAP_AUDIT.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | `per_window_ohlcv_gap` の原因監査と次 task 決定 |
-| Tests | `git diff --check -- docs/operations/ai-orchestration/OHLCV_WINDOW_GAP_AUDIT.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | docs 2 files だけを 1 commit |
-| Stop | source/test 編集が必要、generated/logs 編集が必要、generated files commit が必要、trading logic 変更が必要、OHLCV fetch が必要、runtime / old runtime / private / order / notification が必要、allowed 外 file が stage される |
+| Read | `src/trade/active_plan_intraperiod.py`, `tools/log_feedback.py`, `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `tests/test_active_plan_notification_formatting.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_log_feedback.py`, `docs/operations/ai-orchestration/OHLCV_WINDOW_GAP_AUDIT.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `src/trade/active_plan_intraperiod.py`, `tools/log_feedback.py`, `src/ai/summary.py`, `src/notification/detail_page.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `tests/test_active_plan_notification_formatting.py`, `tests/test_summary_format.py`, `tests/test_notification_detail_page.py`, `tests/test_log_feedback.py`, `docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | OHLCV range freshness / staleness visibility を report-only で追加する |
+| Tests | `./.venv312/bin/python -m unittest tests.test_active_plan_candidate_intraperiod_outcomes tests.test_active_plan_notification_formatting tests.test_summary_format tests.test_notification_detail_page tests.test_log_feedback`, `git diff --check -- src/trade/active_plan_intraperiod.py tools/log_feedback.py src/ai/summary.py src/notification/detail_page.py tests/test_active_plan_candidate_intraperiod_outcomes.py tests/test_active_plan_notification_formatting.py tests/test_summary_format.py tests/test_notification_detail_page.py tests/test_log_feedback.py docs/operations/ai-orchestration/OHLCV_RANGE_FRESHNESS_GUARD.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | source/test/docs の一区切りとして 1 commit |
+| Stop | OHLCV fetch が必要、trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、generated/logs を commit する必要がある、test 失敗、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-GUARD`
-- Goal: add report-only OHLCV range freshness/staleness visibility so old OHLCV coverage cannot silently dominate `no_ohlcv`.
+- `BTCFX-20260630-OHLCV-RANGE-FRESHNESS-E2E-SMOKE`
+- Goal: run report-only export/check smoke and confirm OHLCV range freshness fields appear without committing generated files.

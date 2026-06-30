@@ -458,6 +458,7 @@ def summarize_intraperiod_ohlcv_source_coverage(
     ohlcv_df: pd.DataFrame | None,
     *,
     timeout_hours: float = 24.0,
+    stale_threshold_hours: float = 24.0,
 ) -> dict[str, Any]:
     coverage_note = (
         "report-only coverage summary from candidate timestamps and valid OHLCV bars; "
@@ -479,6 +480,12 @@ def summarize_intraperiod_ohlcv_source_coverage(
             "window_missing_rate": 0.0,
             "ohlcv_start": "",
             "ohlcv_end": "",
+            "candidate_timestamp_min": "",
+            "candidate_timestamp_max": "",
+            "candidate_max_after_ohlcv_end_hours": 0.0,
+            "stale_threshold_hours": float(stale_threshold_hours),
+            "ohlcv_range_freshness_status": "no_candidate_timestamps",
+            "freshness_note": "no candidate timestamps; freshness cannot be assessed",
             "coverage_note": coverage_note,
             "safety_note": safety_note,
         }
@@ -490,6 +497,8 @@ def summarize_intraperiod_ohlcv_source_coverage(
     missing_candidate_timestamp_rows = 0
     window_covered_rows = 0
     window_missing_rows = 0
+    candidate_timestamp_min: datetime | None = None
+    candidate_timestamp_max: datetime | None = None
     coverage_start = ohlcv_records[0]["dt"] if ohlcv_records else None
     coverage_end = ohlcv_records[-1]["dt"] if ohlcv_records else None
     if candidates_df is not None and not candidates_df.empty:
@@ -501,11 +510,40 @@ def summarize_intraperiod_ohlcv_source_coverage(
 
             candidate_timestamp_rows += 1
             candidate_ts = _normalize_dt(candidate_ts)
+            if candidate_timestamp_min is None or candidate_ts < candidate_timestamp_min:
+                candidate_timestamp_min = candidate_ts
+            if candidate_timestamp_max is None or candidate_ts > candidate_timestamp_max:
+                candidate_timestamp_max = candidate_ts
             window_end = candidate_ts + timedelta(hours=float(timeout_hours))
             if any(candidate_ts <= record["dt"] <= window_end for record in ohlcv_records):
                 window_covered_rows += 1
             else:
                 window_missing_rows += 1
+
+    candidate_max_after_ohlcv_end_hours = 0.0
+    freshness_status = "no_candidate_timestamps"
+    freshness_note = "no candidate timestamps; freshness cannot be assessed"
+    if candidate_timestamp_rows > 0:
+        if ohlcv_valid_rows == 0:
+            freshness_status = "no_valid_ohlcv"
+            freshness_note = "no valid OHLCV rows; freshness cannot be assessed"
+        elif candidate_timestamp_max is not None and coverage_end is not None and candidate_timestamp_max > coverage_end:
+            candidate_max_after_ohlcv_end_hours = float((candidate_timestamp_max - coverage_end).total_seconds() / 3600)
+            if candidate_max_after_ohlcv_end_hours > float(stale_threshold_hours):
+                freshness_status = "stale_before_latest_candidate"
+                freshness_note = (
+                    f"latest candidate is {candidate_max_after_ohlcv_end_hours:.1f}h after OHLCV end; "
+                    "old OHLCV coverage can silently dominate no_ohlcv"
+                )
+            else:
+                freshness_status = "fresh_for_latest_candidate"
+                freshness_note = (
+                    f"latest candidate is {candidate_max_after_ohlcv_end_hours:.1f}h after OHLCV end; "
+                    "OHLCV range is fresh enough for the latest candidate"
+                )
+        else:
+            freshness_status = "fresh_for_latest_candidate"
+            freshness_note = "OHLCV range covers the latest candidate timestamp"
 
     return {
         "candidate_rows": candidate_rows,
@@ -519,6 +557,12 @@ def summarize_intraperiod_ohlcv_source_coverage(
         "window_missing_rate": float(window_missing_rows / candidate_timestamp_rows) if candidate_timestamp_rows else 0.0,
         "ohlcv_start": coverage_start.isoformat() if coverage_start is not None else "",
         "ohlcv_end": coverage_end.isoformat() if coverage_end is not None else "",
+        "candidate_timestamp_min": candidate_timestamp_min.isoformat() if candidate_timestamp_min is not None else "",
+        "candidate_timestamp_max": candidate_timestamp_max.isoformat() if candidate_timestamp_max is not None else "",
+        "candidate_max_after_ohlcv_end_hours": candidate_max_after_ohlcv_end_hours,
+        "stale_threshold_hours": float(stale_threshold_hours),
+        "ohlcv_range_freshness_status": freshness_status,
+        "freshness_note": freshness_note,
         "coverage_note": coverage_note,
         "safety_note": safety_note,
     }

@@ -127,6 +127,12 @@ def _ohlcv_source_coverage_summary_payload() -> dict[str, object]:
         "window_missing_rate": 1 / 3,
         "ohlcv_start": "2026-06-30T00:30:00+00:00",
         "ohlcv_end": "2026-06-30T01:30:00+00:00",
+        "candidate_timestamp_min": "2026-06-30T00:00:00+00:00",
+        "candidate_timestamp_max": "2026-06-30T10:00:00+00:00",
+        "candidate_max_after_ohlcv_end_hours": 8.5,
+        "stale_threshold_hours": 24.0,
+        "ohlcv_range_freshness_status": "fresh_for_latest_candidate",
+        "freshness_note": "latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
         "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
         "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     }
@@ -803,6 +809,15 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("window_missing_rate: 0.3333333333333333", body)
         self.assertIn("ohlcv_start: 2026-06-30T00:30:00+00:00", body)
         self.assertIn("ohlcv_end: 2026-06-30T01:30:00+00:00", body)
+        self.assertIn("candidate_timestamp_min: 2026-06-30T00:00:00+00:00", body)
+        self.assertIn("candidate_timestamp_max: 2026-06-30T10:00:00+00:00", body)
+        self.assertIn("candidate_max_after_ohlcv_end_hours: 8.5", body)
+        self.assertIn("stale_threshold_hours: 24.0", body)
+        self.assertIn("ohlcv_range_freshness_status: fresh_for_latest_candidate", body)
+        self.assertIn(
+            "freshness_note: latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
+            body,
+        )
         self.assertIn(
             "coverage_note: report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
             body,

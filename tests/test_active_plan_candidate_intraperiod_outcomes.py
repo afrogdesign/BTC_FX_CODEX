@@ -562,6 +562,12 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
         self.assertAlmostEqual(summary["window_missing_rate"], 1 / 3)
         self.assertEqual(summary["ohlcv_start"], "2026-06-30T00:30:00+00:00")
         self.assertEqual(summary["ohlcv_end"], "2026-06-30T01:30:00+00:00")
+        self.assertEqual(summary["candidate_timestamp_min"], "2026-06-30T00:00:00+00:00")
+        self.assertEqual(summary["candidate_timestamp_max"], "2026-06-30T10:00:00+00:00")
+        self.assertAlmostEqual(summary["candidate_max_after_ohlcv_end_hours"], 8.5)
+        self.assertEqual(summary["stale_threshold_hours"], 24.0)
+        self.assertEqual(summary["ohlcv_range_freshness_status"], "fresh_for_latest_candidate")
+        self.assertIn("fresh enough for the latest candidate", summary["freshness_note"])
         self.assertIn("report-only coverage summary", summary["coverage_note"])
         self.assertEqual(
             summary["safety_note"],
@@ -582,6 +588,12 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
             self.assertEqual(item["window_missing_rate"], 0.0)
             self.assertEqual(item["ohlcv_start"], "")
             self.assertEqual(item["ohlcv_end"], "")
+            self.assertEqual(item["candidate_timestamp_min"], "")
+            self.assertEqual(item["candidate_timestamp_max"], "")
+            self.assertEqual(item["candidate_max_after_ohlcv_end_hours"], 0.0)
+            self.assertEqual(item["stale_threshold_hours"], 24.0)
+            self.assertEqual(item["ohlcv_range_freshness_status"], "no_candidate_timestamps")
+            self.assertIn("freshness cannot be assessed", item["freshness_note"])
             self.assertEqual(
                 item["safety_note"],
                 "report-only / not FORMAL_GO / no automatic order / human decides manually",
@@ -598,6 +610,9 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
         self.assertEqual(none_with_ohlcv_summary["window_covered_rows"], 0)
         self.assertEqual(none_with_ohlcv_summary["window_missing_rows"], 0)
         self.assertEqual(none_with_ohlcv_summary["no_global_ohlcv_risk_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["ohlcv_range_freshness_status"], "no_candidate_timestamps")
+        self.assertEqual(none_with_ohlcv_summary["candidate_timestamp_min"], "")
+        self.assertEqual(none_with_ohlcv_summary["candidate_timestamp_max"], "")
 
     def test_summarize_intraperiod_ohlcv_source_coverage_with_no_valid_ohlcv(self) -> None:
         candidates_df = pd.DataFrame(
@@ -617,6 +632,73 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
         self.assertEqual(summary["window_covered_rows"], 0)
         self.assertEqual(summary["window_missing_rows"], 2)
         self.assertEqual(summary["no_global_ohlcv_risk_rows"], 2)
+        self.assertEqual(summary["candidate_timestamp_min"], "2026-06-30T00:00:00+00:00")
+        self.assertEqual(summary["candidate_timestamp_max"], "2026-06-30T01:00:00+00:00")
+        self.assertEqual(summary["candidate_max_after_ohlcv_end_hours"], 0.0)
+        self.assertEqual(summary["ohlcv_range_freshness_status"], "no_valid_ohlcv")
+        self.assertIn("no valid OHLCV rows", summary["freshness_note"])
+
+    def test_summarize_intraperiod_ohlcv_source_coverage_marks_stale_range(self) -> None:
+        candidates_df = pd.DataFrame(
+            {
+                "candidate_id": ["cand-1", "cand-2"],
+                "timestamp_jst": [
+                    "2026-06-30T00:00:00+00:00",
+                    "2026-07-03T00:00:00+00:00",
+                ],
+            }
+        )
+        ohlcv_df = pd.DataFrame(
+            {
+                "timestamp_jst": ["2026-06-30T00:30:00+00:00"],
+                "open": ["100"],
+                "high": ["101"],
+                "low": ["99"],
+                "close": ["100.5"],
+            }
+        )
+
+        summary = summarize_intraperiod_ohlcv_source_coverage(
+            candidates_df,
+            ohlcv_df,
+            timeout_hours=2,
+            stale_threshold_hours=24.0,
+        )
+
+        self.assertEqual(summary["ohlcv_range_freshness_status"], "stale_before_latest_candidate")
+        self.assertGreater(summary["candidate_max_after_ohlcv_end_hours"], 24.0)
+        self.assertEqual(summary["candidate_timestamp_max"], "2026-07-03T00:00:00+00:00")
+        self.assertEqual(summary["ohlcv_end"], "2026-06-30T00:30:00+00:00")
+
+    def test_summarize_intraperiod_ohlcv_source_coverage_marks_fresh_range(self) -> None:
+        candidates_df = pd.DataFrame(
+            {
+                "candidate_id": ["cand-1", "cand-2"],
+                "timestamp_jst": [
+                    "2026-06-30T00:00:00+00:00",
+                    "2026-06-30T01:00:00+00:00",
+                ],
+            }
+        )
+        ohlcv_df = pd.DataFrame(
+            {
+                "timestamp_jst": ["2026-06-30T00:30:00+00:00"],
+                "open": ["100"],
+                "high": ["101"],
+                "low": ["99"],
+                "close": ["100.5"],
+            }
+        )
+
+        summary = summarize_intraperiod_ohlcv_source_coverage(
+            candidates_df,
+            ohlcv_df,
+            timeout_hours=2,
+            stale_threshold_hours=24.0,
+        )
+
+        self.assertEqual(summary["ohlcv_range_freshness_status"], "fresh_for_latest_candidate")
+        self.assertAlmostEqual(summary["candidate_max_after_ohlcv_end_hours"], 0.5)
 
 
 if __name__ == "__main__":

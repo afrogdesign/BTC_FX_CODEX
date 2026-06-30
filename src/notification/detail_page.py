@@ -1217,6 +1217,12 @@ def _ohlcv_source_coverage_summary_html(
         ("window_missing_rate", _value("window_missing_rate")),
         ("ohlcv_start", _value("ohlcv_start")),
         ("ohlcv_end", _value("ohlcv_end")),
+        ("candidate_timestamp_min", _value("candidate_timestamp_min")),
+        ("candidate_timestamp_max", _value("candidate_timestamp_max")),
+        ("candidate_max_after_ohlcv_end_hours", _value("candidate_max_after_ohlcv_end_hours")),
+        ("stale_threshold_hours", _value("stale_threshold_hours")),
+        ("ohlcv_range_freshness_status", _value("ohlcv_range_freshness_status")),
+        ("freshness_note", _value("freshness_note")),
         ("coverage_note", _value("coverage_note")),
         ("safety_note", _value("safety_note")),
     ]

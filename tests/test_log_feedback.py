@@ -1370,6 +1370,9 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("rows excluding outcome == no_ohlcv", markdown)
             self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
             self.assertIn("OHLCV Source Coverage Summary", markdown)
+            self.assertIn("candidate_timestamp_min", markdown)
+            self.assertIn("candidate_timestamp_max", markdown)
+            self.assertIn("ohlcv_range_freshness_status", markdown)
             parsed = json.loads(output_json.read_text(encoding="utf-8"))
             self.assertEqual(contract_data, parsed)
             self.assertEqual(parsed["evidence_quality_summary"], expected_summary)
@@ -1405,6 +1408,12 @@ class LogFeedbackTest(unittest.TestCase):
                     "window_missing_rate": 1 / 3,
                     "ohlcv_start": "2026-06-30T00:30:00+00:00",
                     "ohlcv_end": "2026-06-30T01:30:00+00:00",
+                    "candidate_timestamp_min": "2026-06-30T00:00:00+00:00",
+                    "candidate_timestamp_max": "2026-06-30T10:00:00+00:00",
+                    "candidate_max_after_ohlcv_end_hours": 8.5,
+                    "stale_threshold_hours": 24.0,
+                    "ohlcv_range_freshness_status": "fresh_for_latest_candidate",
+                    "freshness_note": "latest candidate is 8.5h after OHLCV end; OHLCV range is fresh enough for the latest candidate",
                     "coverage_note": "report-only coverage summary from candidate timestamps and valid OHLCV bars; missing windows indicate source coverage gaps, not trading logic",
                     "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
                 },
@@ -1440,6 +1449,12 @@ class LogFeedbackTest(unittest.TestCase):
                     "window_missing_rate",
                     "ohlcv_start",
                     "ohlcv_end",
+                    "candidate_timestamp_min",
+                    "candidate_timestamp_max",
+                    "candidate_max_after_ohlcv_end_hours",
+                    "stale_threshold_hours",
+                    "ohlcv_range_freshness_status",
+                    "freshness_note",
                     "coverage_note",
                     "safety_note",
                 },
@@ -1502,6 +1517,12 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>candidate_rows</section>",
                         "<section>ohlcv_input_rows</section>",
                         "<section>ohlcv_valid_rows</section>",
+                        "<section>candidate_timestamp_min</section>",
+                        "<section>candidate_timestamp_max</section>",
+                        "<section>candidate_max_after_ohlcv_end_hours</section>",
+                        "<section>stale_threshold_hours</section>",
+                        "<section>ohlcv_range_freshness_status</section>",
+                        "<section>freshness_note</section>",
                         "<section>coverage_note</section>",
                         "<section>safety_note</section>",
                         "<section>derived from existing candidate/OHLCV data only</section>",
@@ -2020,6 +2041,12 @@ class LogFeedbackTest(unittest.TestCase):
                         "<section>candidate_rows</section>",
                         "<section>ohlcv_input_rows</section>",
                         "<section>ohlcv_valid_rows</section>",
+                        "<section>candidate_timestamp_min</section>",
+                        "<section>candidate_timestamp_max</section>",
+                        "<section>candidate_max_after_ohlcv_end_hours</section>",
+                        "<section>stale_threshold_hours</section>",
+                        "<section>ohlcv_range_freshness_status</section>",
+                        "<section>freshness_note</section>",
                         "<section>coverage_note</section>",
                         "<section>safety_note</section>",
                         "<section>derived from existing candidate/OHLCV data only</section>",
