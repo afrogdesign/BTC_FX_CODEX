@@ -13,6 +13,7 @@ from src.trade.active_plan_intraperiod import (
     build_active_plan_intraperiod_outcome_rows,
     summarize_intraperiod_candidate_dimension_breakdowns,
     summarize_intraperiod_entry_reached_outcomes,
+    summarize_intraperiod_ohlcv_source_coverage,
     summarize_intraperiod_outcome_coverage,
     summarize_intraperiod_valid_sample_winrate,
     write_active_plan_intraperiod_outcomes,
@@ -523,6 +524,99 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
         none_summary = summarize_intraperiod_candidate_dimension_breakdowns(None)
         for item in (empty_summary, none_summary):
             self.assertEqual(item, {"candidate_type": {}, "side": {}, "active_primary_action": {}})
+
+    def test_summarize_intraperiod_ohlcv_source_coverage(self) -> None:
+        candidates_df = pd.DataFrame(
+            {
+                "candidate_id": ["cand-1", "cand-2", "cand-3"],
+                "timestamp_jst": [
+                    "2026-06-30T00:00:00+00:00",
+                    "2026-06-30T01:00:00+00:00",
+                    "2026-06-30T10:00:00+00:00",
+                ],
+            }
+        )
+        ohlcv_df = pd.DataFrame(
+            {
+                "timestamp_jst": [
+                    "2026-06-30T00:30:00+00:00",
+                    "2026-06-30T01:30:00+00:00",
+                ],
+                "open": ["100", "101"],
+                "high": ["105", "106"],
+                "low": ["99", "100"],
+                "close": ["104", "105"],
+            }
+        )
+
+        summary = summarize_intraperiod_ohlcv_source_coverage(candidates_df, ohlcv_df, timeout_hours=2)
+
+        self.assertEqual(summary["candidate_rows"], 3)
+        self.assertEqual(summary["ohlcv_input_rows"], 2)
+        self.assertEqual(summary["ohlcv_valid_rows"], 2)
+        self.assertEqual(summary["candidate_timestamp_rows"], 3)
+        self.assertEqual(summary["missing_candidate_timestamp_rows"], 0)
+        self.assertEqual(summary["window_covered_rows"], 2)
+        self.assertEqual(summary["window_missing_rows"], 1)
+        self.assertEqual(summary["no_global_ohlcv_risk_rows"], 0)
+        self.assertAlmostEqual(summary["window_missing_rate"], 1 / 3)
+        self.assertEqual(summary["ohlcv_start"], "2026-06-30T00:30:00+00:00")
+        self.assertEqual(summary["ohlcv_end"], "2026-06-30T01:30:00+00:00")
+        self.assertIn("report-only coverage summary", summary["coverage_note"])
+        self.assertEqual(
+            summary["safety_note"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+
+        empty_summary = summarize_intraperiod_ohlcv_source_coverage(pd.DataFrame(), pd.DataFrame(), timeout_hours=2)
+        none_summary = summarize_intraperiod_ohlcv_source_coverage(None, None, timeout_hours=2)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item["candidate_rows"], 0)
+            self.assertEqual(item["ohlcv_input_rows"], 0)
+            self.assertEqual(item["ohlcv_valid_rows"], 0)
+            self.assertEqual(item["candidate_timestamp_rows"], 0)
+            self.assertEqual(item["missing_candidate_timestamp_rows"], 0)
+            self.assertEqual(item["window_covered_rows"], 0)
+            self.assertEqual(item["window_missing_rows"], 0)
+            self.assertEqual(item["no_global_ohlcv_risk_rows"], 0)
+            self.assertEqual(item["window_missing_rate"], 0.0)
+            self.assertEqual(item["ohlcv_start"], "")
+            self.assertEqual(item["ohlcv_end"], "")
+            self.assertEqual(
+                item["safety_note"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+
+        none_with_ohlcv_summary = summarize_intraperiod_ohlcv_source_coverage(
+            None,
+            ohlcv_df,
+            timeout_hours=2,
+        )
+        self.assertEqual(none_with_ohlcv_summary["candidate_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["ohlcv_input_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["ohlcv_valid_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["window_covered_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["window_missing_rows"], 0)
+        self.assertEqual(none_with_ohlcv_summary["no_global_ohlcv_risk_rows"], 0)
+
+    def test_summarize_intraperiod_ohlcv_source_coverage_with_no_valid_ohlcv(self) -> None:
+        candidates_df = pd.DataFrame(
+            {
+                "candidate_id": ["cand-1", "cand-2"],
+                "timestamp_jst": [
+                    "2026-06-30T00:00:00+00:00",
+                    "2026-06-30T01:00:00+00:00",
+                ],
+            }
+        )
+
+        summary = summarize_intraperiod_ohlcv_source_coverage(candidates_df, pd.DataFrame(), timeout_hours=2)
+
+        self.assertEqual(summary["candidate_rows"], 2)
+        self.assertEqual(summary["ohlcv_valid_rows"], 0)
+        self.assertEqual(summary["window_covered_rows"], 0)
+        self.assertEqual(summary["window_missing_rows"], 2)
+        self.assertEqual(summary["no_global_ohlcv_risk_rows"], 2)
 
 
 if __name__ == "__main__":

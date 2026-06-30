@@ -1,24 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260630-EVIDENCE-QUALITY-SUMMARY-E2E-SMOKE`
-- mode: `LIGHT_CODEX`
+- current_work_id: `BTCFX-20260630-NO-OHLCV-SOURCE-COVERAGE-CAUSE-DIAGNOSTIC`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-manual surface export/check の smoke path を走らせ、generated `evidence_quality_summary` が exported artifacts に出ることを確認する。
+`no_ohlcv` が支配的になる原因を、candidate timestamp と OHLCV coverage の観点で report-only に診断する pure helper を追加する。
 
 ## Current summary
 
 | Field | Value |
 |---|---|
-| Read | `docs/operations/ai-orchestration/EVIDENCE_QUALITY_SUMMARY_SURFACE_WIRING.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Edit | `docs/operations/ai-orchestration/EVIDENCE_QUALITY_SUMMARY_E2E_SMOKE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
-| Do | manual surface export/check の smoke 結果を docs に記録する |
-| Tests | smoke commands above, `git diff --check -- docs/operations/ai-orchestration/EVIDENCE_QUALITY_SUMMARY_E2E_SMOKE.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
-| Commit policy | docs smoke record の区切りとして docs 2 files だけ 1 commit |
-| Stop | smoke command 失敗、generated `evidence_quality_summary` 未確認、runtime / old runtime / private / order / notification が必要、generated/logs commit が必要、allowed 外 file が stage される |
+| Read | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `docs/operations/ai-orchestration/EVIDENCE_QUALITY_SUMMARY_E2E_SMOKE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Edit | `src/trade/active_plan_intraperiod.py`, `tests/test_active_plan_candidate_intraperiod_outcomes.py`, `docs/operations/ai-orchestration/NO_OHLCV_SOURCE_COVERAGE_CAUSE_DIAGNOSTIC.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md` |
+| Do | report-only の OHLCV source coverage cause helper を追加する |
+| Tests | `./.venv312/bin/python -m unittest tests.test_active_plan_candidate_intraperiod_outcomes`, `git diff --check -- src/trade/active_plan_intraperiod.py tests/test_active_plan_candidate_intraperiod_outcomes.py docs/operations/ai-orchestration/NO_OHLCV_SOURCE_COVERAGE_CAUSE_DIAGNOSTIC.md docs/operations/ai-orchestration/NEXT_ACTION.md`, `git diff --name-only`, `git status --short --branch`, staged diff checks |
+| Commit policy | source/test/docs の一区切りとして 1 commit |
+| Stop | trading logic 変更が必要、runtime / old runtime / private / order / notification が必要、generated/logs commit が必要、test 失敗、allowed 外 file が stage される |
 
 ## Next recommended follow-up
 
-- `BTCFX-20260630-NO-OHLCV-SOURCE-COVERAGE-CAUSE-DIAGNOSTIC`
-- Goal: diagnose why `no_ohlcv` dominates and identify the next report-only coverage improvement without changing trading logic.
+- `BTCFX-20260630-NO-OHLCV-SOURCE-COVERAGE-SURFACE-WIRING`
+- Goal: surface the OHLCV source coverage cause summary on the manual/app report path without changing trading logic.

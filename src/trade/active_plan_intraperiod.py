@@ -453,6 +453,77 @@ def summarize_intraperiod_candidate_dimension_breakdowns(outcomes_df: pd.DataFra
     return breakdowns
 
 
+def summarize_intraperiod_ohlcv_source_coverage(
+    candidates_df: pd.DataFrame | None,
+    ohlcv_df: pd.DataFrame | None,
+    *,
+    timeout_hours: float = 24.0,
+) -> dict[str, Any]:
+    coverage_note = (
+        "report-only coverage summary from candidate timestamps and valid OHLCV bars; "
+        "missing windows indicate source coverage gaps, not trading logic"
+    )
+    safety_note = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+
+    candidate_rows = int(len(candidates_df)) if candidates_df is not None else 0
+    if candidates_df is None or candidates_df.empty:
+        return {
+            "candidate_rows": candidate_rows,
+            "ohlcv_input_rows": 0,
+            "ohlcv_valid_rows": 0,
+            "candidate_timestamp_rows": 0,
+            "missing_candidate_timestamp_rows": 0,
+            "window_covered_rows": 0,
+            "window_missing_rows": 0,
+            "no_global_ohlcv_risk_rows": 0,
+            "window_missing_rate": 0.0,
+            "ohlcv_start": "",
+            "ohlcv_end": "",
+            "coverage_note": coverage_note,
+            "safety_note": safety_note,
+        }
+
+    ohlcv_input_rows = int(len(ohlcv_df)) if ohlcv_df is not None else 0
+    ohlcv_records = _ohlcv_records(ohlcv_df)
+    ohlcv_valid_rows = int(len(ohlcv_records))
+    candidate_timestamp_rows = 0
+    missing_candidate_timestamp_rows = 0
+    window_covered_rows = 0
+    window_missing_rows = 0
+    coverage_start = ohlcv_records[0]["dt"] if ohlcv_records else None
+    coverage_end = ohlcv_records[-1]["dt"] if ohlcv_records else None
+    if candidates_df is not None and not candidates_df.empty:
+        for candidate in candidates_df.to_dict(orient="records"):
+            candidate_ts = _candidate_timestamp(candidate)
+            if candidate_ts is None:
+                missing_candidate_timestamp_rows += 1
+                continue
+
+            candidate_timestamp_rows += 1
+            candidate_ts = _normalize_dt(candidate_ts)
+            window_end = candidate_ts + timedelta(hours=float(timeout_hours))
+            if any(candidate_ts <= record["dt"] <= window_end for record in ohlcv_records):
+                window_covered_rows += 1
+            else:
+                window_missing_rows += 1
+
+    return {
+        "candidate_rows": candidate_rows,
+        "ohlcv_input_rows": ohlcv_input_rows,
+        "ohlcv_valid_rows": ohlcv_valid_rows,
+        "candidate_timestamp_rows": candidate_timestamp_rows,
+        "missing_candidate_timestamp_rows": missing_candidate_timestamp_rows,
+        "window_covered_rows": window_covered_rows,
+        "window_missing_rows": window_missing_rows,
+        "no_global_ohlcv_risk_rows": candidate_rows if ohlcv_valid_rows == 0 else 0,
+        "window_missing_rate": float(window_missing_rows / candidate_timestamp_rows) if candidate_timestamp_rows else 0.0,
+        "ohlcv_start": coverage_start.isoformat() if coverage_start is not None else "",
+        "ohlcv_end": coverage_end.isoformat() if coverage_end is not None else "",
+        "coverage_note": coverage_note,
+        "safety_note": safety_note,
+    }
+
+
 def evaluate_active_plan_intraperiod_candidate(
     candidate_row: Any,
     ohlcv_df: pd.DataFrame | None,
@@ -625,6 +696,7 @@ __all__ = [
     "summarize_intraperiod_candidate_dimension_breakdowns",
     "build_intraperiod_evidence_quality_summary",
     "summarize_intraperiod_entry_reached_outcomes",
+    "summarize_intraperiod_ohlcv_source_coverage",
     "summarize_intraperiod_outcome_coverage",
     "summarize_intraperiod_valid_sample_winrate",
     "write_active_plan_intraperiod_outcomes",
