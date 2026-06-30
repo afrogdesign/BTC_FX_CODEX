@@ -1104,6 +1104,69 @@ def _integrated_evidence_overview_html(
     """
 
 
+def _evidence_quality_summary_html(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> str:
+    evidence: dict[str, Any] | None = None
+    for container in (
+        result,
+        notification_context or {},
+        display_context or {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict) and isinstance(container.get("evidence_quality_summary"), dict):
+            evidence = container["evidence_quality_summary"]
+            break
+    if not isinstance(evidence, dict) or not evidence:
+        return ""
+
+    def _value(key: str) -> str:
+        value = evidence.get(key)
+        if value is None:
+            return "n/a"
+        if isinstance(value, bool):
+            return str(value).lower()
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+        if isinstance(value, (list, tuple)):
+            return "n/a" if not value else ", ".join(str(item) for item in value)
+        text = str(value).strip()
+        return text or "n/a"
+
+    rows = [
+        ("valid_sample_definition", _value("valid_sample_definition")),
+        ("total_rows", _value("total_rows")),
+        ("no_ohlcv_rows", _value("no_ohlcv_rows")),
+        ("valid_sample_rows", _value("valid_sample_rows")),
+        ("entry_reached_rows", _value("entry_reached_rows")),
+        ("win_like_rows", _value("win_like_rows")),
+        ("loss_like_rows", _value("loss_like_rows")),
+        ("unresolved_entry_rows", _value("unresolved_entry_rows")),
+        ("potential_fakeout", _value("potential_fakeout")),
+        ("potential_missed_turn", _value("potential_missed_turn")),
+        ("bad_entry_timing", _value("bad_entry_timing")),
+        ("safety_note", _value("safety_note")),
+    ]
+    rows_html = "".join(
+        f"<li><strong>{html.escape(label)}:</strong> {html.escape(value)}</li>" for label, value in rows
+    )
+    return f"""
+        <h3>Evidence quality summary</h3>
+        <p>local/report-only の表示です。既存の evidence quality 集計だけを使い、app surface はこの概要を実行しません。</p>
+        <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <ul>{rows_html}</ul>
+    """
+
+
 def _runtime_startup_status_path(base_dir: Path) -> Path:
     return base_dir / "logs" / "runtime" / "startup_status.json"
 
@@ -1289,6 +1352,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
     operator_triage_summary_html = _operator_triage_summary_html(result, notification_context, display_context)
     integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
+    evidence_quality_summary_html = _evidence_quality_summary_html(result, notification_context, display_context)
     major_turning_point_diagnostic_items, major_turning_point_diagnostic_rows, major_turning_point_diagnostic_rows_html = _major_turning_point_diagnostic_items(
         result,
         notification_context,
@@ -1997,6 +2061,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         {safe_config_schema_audit_html}
         {operator_triage_summary_html}
         {integrated_evidence_overview_html}
+        {evidence_quality_summary_html}
         {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>

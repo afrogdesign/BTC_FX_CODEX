@@ -214,6 +214,23 @@ def _major_turning_point_diagnostic_payload() -> dict[str, object]:
     }
 
 
+def _evidence_quality_summary_payload() -> dict[str, object]:
+    return {
+        "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+        "total_rows": 1418,
+        "no_ohlcv_rows": 1330,
+        "valid_sample_rows": 88,
+        "entry_reached_rows": 76,
+        "win_like_rows": 35,
+        "loss_like_rows": 39,
+        "unresolved_entry_rows": 2,
+        "potential_fakeout": 39,
+        "potential_missed_turn": 35,
+        "bad_entry_timing": 2,
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
@@ -297,6 +314,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             "integrated_evidence_overview_not_ready_evidence_keys": [],
             "integrated_evidence_overview_execution_required_keys": [],
             "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
+            "evidence_quality_summary": _evidence_quality_summary_payload(),
         }
 
         html = build_notification_detail_html(payload)
@@ -581,6 +599,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "note": "derived from existing app contract/status data only",
                 },
                 "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
+                "evidence_quality_summary": _evidence_quality_summary_payload(),
             },
             "integrated_evidence_overview_operator_hint_status": "ready_for_human_review",
             "integrated_evidence_overview_operator_hint_reason": "all integrated evidence is present and ready",
@@ -608,6 +627,23 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("safe_config_schema_audit ready_or_valid", html)
         self.assertIn("operator_triage_summary ready_or_valid", html)
         self.assertIn("manual_action_checklist_surface ready_or_valid", html)
+        self.assertIn("Evidence quality summary", html)
+        self.assertIn("<strong>valid_sample_definition:</strong>", html)
+        self.assertIn("rows excluding outcome == no_ohlcv", html)
+        self.assertIn("<strong>total_rows:</strong> 1418", html)
+        self.assertIn("<strong>no_ohlcv_rows:</strong> 1330", html)
+        self.assertIn("<strong>valid_sample_rows:</strong> 88", html)
+        self.assertIn("<strong>entry_reached_rows:</strong> 76", html)
+        self.assertIn("<strong>win_like_rows:</strong> 35", html)
+        self.assertIn("<strong>loss_like_rows:</strong> 39", html)
+        self.assertIn("<strong>unresolved_entry_rows:</strong> 2", html)
+        self.assertIn("<strong>potential_fakeout:</strong> 39", html)
+        self.assertIn("<strong>potential_missed_turn:</strong> 35", html)
+        self.assertIn("<strong>bad_entry_timing:</strong> 2", html)
+        self.assertIn(
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            html,
+        )
         self.assertIn("大転換チャンス診断", html)
         self.assertIn("Summary status", html)
         self.assertIn("ready_for_human_review", html)

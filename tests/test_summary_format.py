@@ -97,6 +97,23 @@ def _major_turning_point_diagnostic_payload() -> dict[str, object]:
     }
 
 
+def _evidence_quality_summary_payload() -> dict[str, object]:
+    return {
+        "valid_sample_definition": "rows excluding outcome == no_ohlcv",
+        "total_rows": 1418,
+        "no_ohlcv_rows": 1330,
+        "valid_sample_rows": 88,
+        "entry_reached_rows": 76,
+        "win_like_rows": 35,
+        "loss_like_rows": 39,
+        "unresolved_entry_rows": 2,
+        "potential_fakeout": 39,
+        "potential_missed_turn": 35,
+        "bad_entry_timing": 2,
+        "safety_note": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 class SummaryFormatTest(unittest.TestCase):
     def test_ready_case_separates_direction_and_execution(self) -> None:
         payload = {
@@ -235,6 +252,7 @@ class SummaryFormatTest(unittest.TestCase):
             "integrated_evidence_overview_not_ready_evidence_keys": [],
             "integrated_evidence_overview_execution_required_keys": [],
             "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
+            "evidence_quality_summary": _evidence_quality_summary_payload(),
         }
 
         subject = build_summary_subject(payload)
@@ -648,6 +666,7 @@ class SummaryFormatTest(unittest.TestCase):
                     "note": "derived from existing app contract data only",
                 },
                 "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
+                "evidence_quality_summary": _evidence_quality_summary_payload(),
                 "integrated_evidence_overview": {
                     "summary_status": "ready_for_human_review",
                     "all_evidence_present": True,
@@ -737,6 +756,22 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("safe_config_schema_audit ready_or_valid: true", body)
         self.assertIn("operator_triage_summary ready_or_valid: true", body)
         self.assertIn("manual_action_checklist_surface ready_or_valid: true", body)
+        self.assertIn("【Evidence quality summary】", body)
+        self.assertIn("valid_sample_definition: rows excluding outcome == no_ohlcv", body)
+        self.assertIn("total_rows: 1418", body)
+        self.assertIn("no_ohlcv_rows: 1330", body)
+        self.assertIn("valid_sample_rows: 88", body)
+        self.assertIn("entry_reached_rows: 76", body)
+        self.assertIn("win_like_rows: 35", body)
+        self.assertIn("loss_like_rows: 39", body)
+        self.assertIn("unresolved_entry_rows: 2", body)
+        self.assertIn("potential_fakeout: 39", body)
+        self.assertIn("potential_missed_turn: 35", body)
+        self.assertIn("bad_entry_timing: 2", body)
+        self.assertIn(
+            "safety_note: report-only / not FORMAL_GO / no automatic order / human decides manually",
+            body,
+        )
         self.assertIn("【大転換チャンス診断】", body)
         self.assertIn("summary_status: ready_for_human_review", body)
         self.assertIn("total_rows: 4", body)

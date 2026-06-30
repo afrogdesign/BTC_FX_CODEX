@@ -711,6 +711,89 @@ def _integrated_evidence_overview_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _evidence_quality_summary_evidence(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    direct_evidence = result.get("evidence_quality_summary")
+    if isinstance(direct_evidence, dict):
+        return direct_evidence
+    for container in (notification_context, display_context):
+        if not isinstance(container, dict):
+            continue
+        evidence = container.get("evidence_quality_summary")
+        if isinstance(evidence, dict):
+            return evidence
+    for container in (
+        result.get("app_contract_data") if isinstance(result.get("app_contract_data"), dict) else {},
+        result.get("app_contract") if isinstance(result.get("app_contract"), dict) else {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+        result.get("manual_delivery_app_surface_validation")
+        if isinstance(result.get("manual_delivery_app_surface_validation"), dict)
+        else {},
+        result.get("current_manual_delivery_app_surface_validation")
+        if isinstance(result.get("current_manual_delivery_app_surface_validation"), dict)
+        else {},
+    ):
+        if isinstance(container, dict):
+            evidence = container.get("evidence_quality_summary")
+            if isinstance(evidence, dict):
+                return evidence
+    return None
+
+
+def _evidence_quality_summary_value(value: Any) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "n/a"
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, str):
+        text = value.strip()
+        return text or "n/a"
+    return "n/a"
+
+
+def _evidence_quality_summary_lines(
+    result: dict[str, Any],
+    notification_context: dict[str, Any],
+    display_context: dict[str, Any],
+) -> list[str]:
+    evidence = _evidence_quality_summary_evidence(result, notification_context, display_context)
+    if not isinstance(evidence, dict):
+        return []
+
+    lines = [
+        "",
+        "【Evidence quality summary】",
+        "local/report-only の表示です。既存の evidence quality 集計だけを使い、実行はしません。",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
+    ]
+    for label, key in (
+        ("valid_sample_definition", "valid_sample_definition"),
+        ("total_rows", "total_rows"),
+        ("no_ohlcv_rows", "no_ohlcv_rows"),
+        ("valid_sample_rows", "valid_sample_rows"),
+        ("entry_reached_rows", "entry_reached_rows"),
+        ("win_like_rows", "win_like_rows"),
+        ("loss_like_rows", "loss_like_rows"),
+        ("unresolved_entry_rows", "unresolved_entry_rows"),
+        ("potential_fakeout", "potential_fakeout"),
+        ("potential_missed_turn", "potential_missed_turn"),
+        ("bad_entry_timing", "bad_entry_timing"),
+        ("safety_note", "safety_note"),
+    ):
+        lines.append(f"{label}: {_evidence_quality_summary_value(evidence.get(key))}")
+    return lines
+
+
 def _format_setup_levels(setup: dict[str, Any], side: str) -> str:
     status_mapping = {"ready": "条件付きで検討", "watch": "監視継続", "invalid": "現状は見送り", "none": "未形成"}
     raw_status = str(setup.get("status", "none")).lower()
@@ -761,6 +844,7 @@ def _root_summary_lines(
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
+    lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -859,6 +943,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
+    lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
