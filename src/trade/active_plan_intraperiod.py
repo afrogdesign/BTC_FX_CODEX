@@ -333,6 +333,24 @@ def summarize_intraperiod_valid_sample_winrate(outcomes_df: pd.DataFrame | None)
     }
 
 
+def build_intraperiod_evidence_quality_summary(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
+    valid_sample_summary = summarize_intraperiod_valid_sample_winrate(outcomes_df)
+    return {
+        "valid_sample_definition": valid_sample_summary["valid_sample_definition"],
+        "total_rows": valid_sample_summary["total_rows"],
+        "no_ohlcv_rows": valid_sample_summary["no_ohlcv_rows"],
+        "valid_sample_rows": valid_sample_summary["valid_sample_rows"],
+        "entry_reached_rows": valid_sample_summary["entry_reached_rows"],
+        "win_like_rows": valid_sample_summary["win_like_rows"],
+        "loss_like_rows": valid_sample_summary["loss_like_rows"],
+        "unresolved_entry_rows": valid_sample_summary["unresolved_entry_rows"],
+        "potential_fakeout": valid_sample_summary["loss_like_rows"],
+        "potential_missed_turn": valid_sample_summary["win_like_rows"],
+        "bad_entry_timing": valid_sample_summary["unresolved_entry_rows"],
+        "safety_note": valid_sample_summary["safety_note"],
+    }
+
+
 def summarize_intraperiod_entry_reached_outcomes(outcomes_df: pd.DataFrame | None) -> dict[str, Any]:
     entry_reached_definition = "tp1_first, tp2_first, sl_first, timeout, ambiguous, entry_reached"
     safety_note = "report-only / not FORMAL_GO / no automatic order / human decides manually"
@@ -605,6 +623,7 @@ __all__ = [
     "build_active_plan_intraperiod_outcome_rows",
     "evaluate_active_plan_intraperiod_candidate",
     "summarize_intraperiod_candidate_dimension_breakdowns",
+    "build_intraperiod_evidence_quality_summary",
     "summarize_intraperiod_entry_reached_outcomes",
     "summarize_intraperiod_outcome_coverage",
     "summarize_intraperiod_valid_sample_winrate",

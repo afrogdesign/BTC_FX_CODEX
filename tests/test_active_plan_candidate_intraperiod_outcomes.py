@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.trade.active_plan_intraperiod import (
+    build_intraperiod_evidence_quality_summary,
     MIN_OUTCOME_COLUMNS,
     build_active_plan_intraperiod_outcome_rows,
     summarize_intraperiod_candidate_dimension_breakdowns,
@@ -333,6 +334,56 @@ class ActivePlanIntraperiodOutcomeBuilderTests(unittest.TestCase):
                 item["winrate_definition"],
                 "win-like outcomes divided by entry-reached rows; report-only, not profitability",
             )
+            self.assertEqual(
+                item["safety_note"],
+                "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            )
+
+    def test_build_intraperiod_evidence_quality_summary(self) -> None:
+        outcomes_df = pd.DataFrame(
+            {
+                "outcome": [
+                    "no_ohlcv",
+                    "tp1_first",
+                    "tp2_first",
+                    "sl_first",
+                    "timeout",
+                ]
+            }
+        )
+
+        summary = build_intraperiod_evidence_quality_summary(outcomes_df)
+
+        self.assertEqual(summary["total_rows"], 5)
+        self.assertEqual(summary["no_ohlcv_rows"], 1)
+        self.assertEqual(summary["valid_sample_rows"], 4)
+        self.assertEqual(summary["entry_reached_rows"], 4)
+        self.assertEqual(summary["win_like_rows"], 2)
+        self.assertEqual(summary["loss_like_rows"], 1)
+        self.assertEqual(summary["unresolved_entry_rows"], 1)
+        self.assertEqual(summary["potential_missed_turn"], 2)
+        self.assertEqual(summary["potential_fakeout"], 1)
+        self.assertEqual(summary["bad_entry_timing"], 1)
+        self.assertEqual(summary["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
+        self.assertEqual(
+            summary["safety_note"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+
+        empty_summary = build_intraperiod_evidence_quality_summary(pd.DataFrame())
+        none_summary = build_intraperiod_evidence_quality_summary(None)
+        for item in (empty_summary, none_summary):
+            self.assertEqual(item["total_rows"], 0)
+            self.assertEqual(item["no_ohlcv_rows"], 0)
+            self.assertEqual(item["valid_sample_rows"], 0)
+            self.assertEqual(item["entry_reached_rows"], 0)
+            self.assertEqual(item["win_like_rows"], 0)
+            self.assertEqual(item["loss_like_rows"], 0)
+            self.assertEqual(item["unresolved_entry_rows"], 0)
+            self.assertEqual(item["potential_missed_turn"], 0)
+            self.assertEqual(item["potential_fakeout"], 0)
+            self.assertEqual(item["bad_entry_timing"], 0)
+            self.assertEqual(item["valid_sample_definition"], "rows excluding outcome == no_ohlcv")
             self.assertEqual(
                 item["safety_note"],
                 "report-only / not FORMAL_GO / no automatic order / human decides manually",
