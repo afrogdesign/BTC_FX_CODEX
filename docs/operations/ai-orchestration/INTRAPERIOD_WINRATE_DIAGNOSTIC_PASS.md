@@ -26,14 +26,14 @@
 | Date | Rows | Entry reached | TP1 first | TP2 first | SL first | Timeout | No OHLCV | Entry rate | No OHLCV rate | Avg MFE/R | Avg MAE/R | Turn diagnostic summary |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 2026-06-24 | 1067 | 76 | 35 | 0 | 39 | 2 | 979 | 7.1% | 91.8% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 991 |
-| 2026-06-25 | 1149 | 76 | 35 | 0 | 39 | 2 | 1061 | 6.6% | 92.3% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1010 |
+| 2026-06-25 | 1086 | 76 | 35 | 0 | 39 | 2 | 998 | 7.0% | 91.9% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1010 |
 | 2026-06-26 | 1215 | 76 | 35 | 0 | 39 | 2 | 1127 | 6.3% | 92.8% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1073 |
-| 2026-06-27 | 1277 | 76 | 35 | 0 | 39 | 2 | 1189 | 6.0% | 93.1% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1201 |
+| 2026-06-27 | 1215 | 76 | 35 | 0 | 39 | 2 | 1127 | 6.3% | 92.8% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1139 |
 | 2026-06-28 | 1277 | 76 | 35 | 0 | 39 | 2 | 1189 | 6.0% | 93.1% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1201 |
 | 2026-06-29 | 1348 | 76 | 35 | 0 | 39 | 2 | 1260 | 5.6% | 93.5% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1272 |
 | 2026-06-30 | 1418 | 76 | 35 | 0 | 39 | 2 | 1330 | 5.4% | 93.8% | 0.98 | 0.88 | `potential_missed_turn` 35, `potential_fakeout` 39, `bad_entry_timing` 2, `inconclusive` 1342 |
 
-Metric correction note: values were re-read from each dated source report and corrected where the previous table had shifted values.
+Metric correction note: values were corrected again after detecting a remaining 2026-06-27 shift; the final table now matches each dated source report from 20260624 through 20260630.
 
 ## Cross-report observations
 

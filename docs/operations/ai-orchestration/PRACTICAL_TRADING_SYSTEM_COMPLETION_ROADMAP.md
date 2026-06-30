@@ -67,21 +67,21 @@ practical trading system is now in the evidence-quality phase.
 
 ## Next 5 recommended tasks
 
-1. `BTCFX-20260630-EVIDENCE-ACCURACY-RESUME`
-   - Goal: evidence baseline を確認し、診断再開に必要な入口を整える。
-   - Stop condition: current source of truth と既存 evidence を整理できたら止める。
-2. `BTCFX-20260630-INTRAPERIOD-WINRATE-DIAGNOSTIC-PASS`
-   - Goal: intraperiod outcome reports から次に必要な metrics と tests を特定する。
-   - Stop condition: 変更せずに、次の診断項目が明確になったら止める。
-3. `BTCFX-20260630-EVIDENCE-QUALITY-BACKLOG`
-   - Goal: evidence 品質の改善 backlog を優先順に並べる。
-   - Stop condition: trading logic を変えずに優先度付き backlog ができたら止める。
-4. `BTCFX-20260630-MANUAL-SURFACE-QUALITY-BACKLOG`
-   - Goal: manual surface の品質改善 backlog を evidence 優先で並べる。
-   - Stop condition: 手動 surface の改善項目が evidence ベースで整理できたら止める。
-5. `BTCFX-20260630-SEMI-AUTO-APPROVAL-READINESS-REVIEW`
-   - Goal: semi-automatic approval path の前提条件を review-only で確認する。
-   - Stop condition: explicit safety gap と未解決の前提を一覧化したら止める。
+1. `BTCFX-20260630-NO-OHLCV-COVERAGE-DIAGNOSTIC`
+   - Goal: no_ohlcv が支配的な理由を見つけ、valid sample の分母を明確にする。
+   - Stop condition: report-only で no_ohlcv 率の扱いが固定されたら止める。
+2. `BTCFX-20260630-VALID-SAMPLE-WINRATE-REPORT`
+   - Goal: valid sample に限定した win-rate report を整える。
+   - Stop condition: no_ohlcv 除外の分母が明示されたら止める。
+3. `BTCFX-20260630-ENTRY-REACHED-OUTCOME-BREAKDOWN`
+   - Goal: entry-reached subset の outcome 分布を整理する。
+   - Stop condition: entry 後の outcome 分布が report-only で見えるようになったら止める。
+4. `BTCFX-20260630-CANDIDATE-TYPE-SIDE-BREAKDOWN`
+   - Goal: candidate_type / side / active_primary_action の分布を揃える。
+   - Stop condition: 3 軸の breakdown が一致した基準で出たら止める。
+5. `BTCFX-20260630-MAJOR-TURN-CANDIDATE-REVIEW`
+   - Goal: potential_fakeout / potential_missed_turn / bad_entry_timing を review-only で整理する。
+   - Stop condition: human review 用の候補一覧が揃ったら止める。
 
 ## Safety boundaries
 
