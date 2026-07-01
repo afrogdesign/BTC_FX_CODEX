@@ -9,6 +9,19 @@
 - automatic trading remains later-stage only
 - default next implementation task is `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
 
+## Daily Proxy Evaluator implemented
+
+- deterministic report-only Daily Proxy Evaluator was implemented in this thread
+- CLI entry is `build-daily-proxy-evaluator-report`
+- output path is `運用資料/reports/post_eval/daily_proxy_evaluator_YYYYMMDD.md`
+- safety boundary stays proxy-only / not `FORMAL_GO` / no automatic order / no private/account/order endpoints / human decides manually
+
+## Ver04-v1 implementation readiness package
+
+- implementation readiness package was created to hand off cleanly to the next implementation thread
+- it records the current source of truth, the MEXC export path, and the normalized output design
+- next implementation task pointer is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+
 ## Dashboard parity and checkpoint push
 
 - dashboard parity smoke test result is `dashboard_parity_complete`

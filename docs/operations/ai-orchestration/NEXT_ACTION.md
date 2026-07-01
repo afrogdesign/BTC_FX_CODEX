@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-DAILY-PROXY-EVALUATOR`
+- current_work_id: `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-既存 CSV / report 資産だけを使う deterministic な Daily Proxy Evaluator を実装する。
+MEXC actual trade export の local xlsx importer と normalized CSV 出力を実装する。
 
-MEXC 生データの import はまだやらない。まずは既存の proxy 資産から report-only の daily summary を安定生成する。
+API integration はまだやらない。raw export は local only で扱い、normalized CSV を作る。
 
 ## Product objective reminder
 
@@ -27,18 +27,18 @@ Automatic trading is later-stage only.
 - `docs/operations/ai-orchestration/CURRENT_STATE.md`
 - `docs/operations/ai-orchestration/CONTROL.md`
 - `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `docs/operations/ai-orchestration/VER04_V1_IMPLEMENTATION_READINESS_PACKAGE_20260702.md`
 - `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
 - `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
 - `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-- `docs/operations/ai-orchestration/POST_EVAL_ASSET_HEALTH_AUDIT_20260702.md`
 
 ## Narrow implementation scope
 
 Inspect only as needed and summarize, do not dump large files.
 
 - `tools/log_feedback.py`
-- `tests/test_log_feedback.py`
-- any narrow support docs needed for the daily proxy output contract
+- `tests/test_mexc_actual_trade_importer.py`
+- any narrow support docs needed for the MEXC import schema / normalization contract
 
 ## Do not
 
@@ -50,7 +50,7 @@ Inspect only as needed and summarize, do not dump large files.
 - Do not fetch OHLCV or exchange data.
 - Do not access private/account/order endpoints.
 - Do not edit trading logic.
-- Do not import MEXC raw exports yet.
+- Do not implement order execution or API integration.
 - Do not commit raw exchange exports.
 - Do not mix actual human trades into `paper_positions.csv`.
 - Do not touch `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
@@ -60,7 +60,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `pwd -P`
 - `git status --short --branch`
 - `git diff --check`
-- targeted unit tests for the new report builder / CLI path
+- targeted unit tests for the new importer / normalization path
 - `git diff --name-only`
 - `git status --short --branch`
 
@@ -68,11 +68,6 @@ Inspect only as needed and summarize, do not dump large files.
 
 - Commit docs/code only if validation passes.
 - No push.
-
-## Next recommended task
-
-- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORT-SCHEMA`
-- Goal: MEXC actual trade export の schema / import / normalization 設計を docs で固める。API integration はまだやらない。
 
 ## Stop conditions
 

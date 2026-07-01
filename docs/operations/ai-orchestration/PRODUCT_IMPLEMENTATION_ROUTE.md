@@ -120,17 +120,19 @@ Not allowed:
 
 ### Phase V1-2: Daily proxy evaluator
 
-Goal:
+Implemented.
 
-- 実取引Excelなしで daily proxy report を生成する。
-- mail usefulness / direction estimate / aggressive short-long proxy / over_suppression / turning risk candidate を出す。
+- `tools/log_feedback.py` now provides `build-daily-proxy-evaluator-report`
+- output path is `運用資料/reports/post_eval/daily_proxy_evaluator_YYYYMMDD.md`
+- report-only safety boundary is preserved
 
 ### Phase V1-3: Manual actual trade import schema
 
-Goal:
+Next active implementation phase.
 
-- 2週間に1回の futures Excel export を local import として扱える schema を作る。
-- raw export は commit しない。
+- local MEXC xlsx import schema
+- raw exports stay local only
+- normalize into generated CSVs for later linking / ground truth
 
 ### Phase V1-4: Actual trade to signal linking
 
