@@ -71,7 +71,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-DAILY-PROXY-EVALUATOR: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - required source-of-truth docs are missing

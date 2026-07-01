@@ -92,7 +92,7 @@ Layer 3: Biweekly Ground Truth Loop
 
 ### Phase V1-1: Post-eval asset health audit
 
-First Ver04-v1 implementation task.
+Completed history for Ver04-v1.
 
 Goal:
 
@@ -166,10 +166,10 @@ Goal:
 Unless the user says otherwise, the next implementation task is:
 
 ```text
-BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT
+BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER
 ```
 
-This should be a read-only / docs-only audit before any evaluator implementation.
+This is the first implementation task after the readiness package.
 
 ## Boundary reminders
 

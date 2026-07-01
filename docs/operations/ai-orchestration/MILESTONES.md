@@ -7,7 +7,9 @@
 - objective is unchanged in essence: notification mail -> 15m check -> aggressive-but-controlled manual trading support
 - self-improvement loop is daily proxy / weekly review / biweekly actual trade ground truth
 - automatic trading remains later-stage only
-- default next implementation task is `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
+- post-eval asset health audit is completed history
+- daily proxy evaluator is implemented and tested
+- default next implementation task is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
 
 ## Daily Proxy Evaluator implemented
 
