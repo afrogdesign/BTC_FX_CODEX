@@ -96,9 +96,15 @@
 
 ## Current implementation route
 
-- next default implementation task is `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
-- first task must audit existing post-evaluation assets before implementing new evaluator code
-- first task must be read-only / docs-only and must not call APIs, read secrets, restart runtime, change notification sending, change trading logic, fetch OHLCV, or touch private/order endpoints
+- post-eval asset health audit is completed history
+- daily proxy evaluator is implemented and tested
+- implementation readiness package is created
+- next default implementation task is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+- next task is local MEXC xlsx importer / normalized CSV output
+- no API integration
+- no raw MEXC export commit
+- no order execution
+- no trading logic change
 
 ## Current safety boundary
 
