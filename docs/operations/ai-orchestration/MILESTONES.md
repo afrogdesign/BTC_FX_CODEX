@@ -1,5 +1,14 @@
 # MILESTONES
 
+## Ver04-v1 branch opened for major product direction shift
+
+- branch `Ver04-v1` is the active product branch
+- `Ver03-v4` remains prior baseline / history
+- objective is unchanged in essence: notification mail -> 15m check -> aggressive-but-controlled manual trading support
+- self-improvement loop is daily proxy / weekly review / biweekly actual trade ground truth
+- automatic trading remains later-stage only
+- default next implementation task is `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
+
 ## Dashboard parity and checkpoint push
 
 - dashboard parity smoke test result is `dashboard_parity_complete`
@@ -54,6 +63,28 @@
 - accepted classification uses `potential_missed_turn`, `potential_fakeout`, `bad_entry_timing`, and `inconclusive`
 - diagnostic remains post-hoc support only and does not authorize manual or automatic entry
 
+## Manual 15m self-improvement direction
+
+- final product objective is now explicit: notification mail を受け取った人間が15分足を確認し、攻めの姿勢で勝てる manual trading support system を作る
+- active route is `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+- Ver04-v1 integrated product plan is the active high-level plan
+- final self-improvement design is `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
+- companion definition is `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
+- Ver03-v4 is prior baseline / history
+- accepted self-improvement structure:
+  - Daily Proxy Loop: runs without actual exchange export
+  - Weekly Review Loop: summarizes attack/defense/regime trends
+  - Biweekly Ground Truth Loop: imports actual futures Excel exports and calibrates proxy vs actual human trade results
+- actual human trade exports are local/generated inputs and must not be committed by default
+- actual human trades must not be mixed into `paper_positions.csv` unless explicitly approved
+- AI post review is optional qualitative enrichment, not the main evaluation layer
+
+## Current implementation route
+
+- next default implementation task is `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
+- first task must audit existing post-evaluation assets before implementing new evaluator code
+- first task must be read-only / docs-only and must not call APIs, read secrets, restart runtime, change notification sending, change trading logic, fetch OHLCV, or touch private/order endpoints
+
 ## Current safety boundary
 
 - report-only
@@ -61,4 +92,8 @@
 - no automatic order
 - no API keys
 - no private/account/order endpoints
+- no runtime restart during normal product work
+- no notification send behavior change without explicit approval
+- no raw exchange export commit
+- no `paper_positions.csv` integration unless explicitly approved
 - human decides manually
