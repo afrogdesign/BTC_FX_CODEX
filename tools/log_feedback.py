@@ -72,6 +72,7 @@ REVIEW_STATE_VERSION = 1
 AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
 AI_POST_REVIEW_TASK = "ai_post_review"
 REPORT_STALE_DAYS = 7
+DAILY_PROXY_EVALUATOR_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
 _HARD_QUALITY_GUARD_REASONS = (
     "require_execution_for_high_wait",
     "require_execution_for_high_wait+suppress_long_high_wait",
@@ -10643,6 +10644,425 @@ def build_actionability_shadow_decision_summary(
     return report
 
 
+def _load_daily_proxy_input_rows(path: Path) -> tuple[list[dict[str, str]], list[str], str, int]:
+    if not path.exists():
+        return [], [], "missing", 0
+    try:
+        with path.open("r", newline="", encoding="utf-8") as fp:
+            reader = csv.DictReader(fp)
+            fieldnames = list(reader.fieldnames or [])
+            if not fieldnames:
+                return [], [], "header_only", 0
+            rows: list[dict[str, str]] = []
+            parse_warning_rows = 0
+            for raw_row in reader:
+                if None in raw_row:
+                    parse_warning_rows += 1
+                row = {key: ("" if value is None else str(value)) for key, value in raw_row.items() if key is not None}
+                rows.append(row)
+            if not rows:
+                return [], fieldnames, "header_only", 0
+            status = "parse_warning" if parse_warning_rows else "read_ok"
+            return rows, fieldnames, status, parse_warning_rows
+    except csv.Error:
+        return [], [], "parse_warning", 0
+
+
+def _count_selected_proxy_rows(
+    rows: list[dict[str, str]],
+    *,
+    window_start: datetime,
+    window_end: datetime,
+) -> tuple[list[dict[str, str]], int]:
+    selected_rows: list[dict[str, str]] = []
+    parse_warning_rows = 0
+    for row in rows:
+        raw_timestamp = str(row.get("timestamp_jst", "")).strip()
+        dt = _parse_dt(raw_timestamp)
+        if dt is None:
+            if raw_timestamp:
+                parse_warning_rows += 1
+            continue
+        row_date = dt.astimezone(JST).date()
+        if window_start.date() <= row_date <= window_end.date():
+            selected_rows.append(row)
+    return selected_rows, parse_warning_rows
+
+
+def _counter_from_rows(rows: list[dict[str, Any]], field: str) -> Counter[str]:
+    counter: Counter[str] = Counter()
+    for row in rows:
+        value = str(row.get(field, "")).strip() or "blank"
+        counter[value] += 1
+    return counter
+
+
+def _counter_from_bool_rows(rows: list[dict[str, Any]], field: str) -> int:
+    return sum(1 for row in rows if _parse_bool(row.get(field, "")))
+
+
+def _mean_numeric_rows(rows: list[dict[str, Any]], field: str) -> float:
+    values = []
+    for row in rows:
+        raw_value = str(row.get(field, "")).strip()
+        if not raw_value:
+            continue
+        value = _parse_float(raw_value, default=float("nan"))
+        if value == value:
+            values.append(value)
+    return mean(values) if values else 0.0
+
+
+def _proxy_counter_line(counter: Counter[str], *, limit: int = 8) -> str:
+    return _format_counter(counter, limit=limit)
+
+
+def _daily_proxy_recommendations(
+    *,
+    signal_rows: list[dict[str, str]],
+    candidate_rows: list[dict[str, str]],
+    intraperiod_rows: list[dict[str, str]],
+    user_review_rows: list[dict[str, str]],
+    required_input_statuses: dict[str, str],
+) -> list[tuple[str, str]]:
+    recommendations: list[tuple[str, str]] = []
+    if any(status in {"missing", "header_only"} for status in required_input_statuses.values()):
+        recommendations.append(("INPUT_COVERAGE_REVIEW", "one or more required inputs are missing or header-only"))
+
+    signal_skip_too_strict = sum(1 for row in signal_rows if str(row.get("skip_outcome", "")).strip() == "skip_too_strict")
+    no_action_tp1_first = sum(
+        1
+        for row in intraperiod_rows
+        if str(row.get("active_primary_action", "")).strip() == "NO_ACTION"
+        and str(row.get("outcome", "")).strip() == "tp1_first"
+    )
+    if signal_skip_too_strict > 0 or no_action_tp1_first > 0:
+        reason_bits = []
+        if signal_skip_too_strict > 0:
+            reason_bits.append(f"skip_too_strict={signal_skip_too_strict}")
+        if no_action_tp1_first > 0:
+            reason_bits.append(f"NO_ACTION+tp1_first={no_action_tp1_first}")
+        recommendations.append(("NO_TRADE_SPLIT_CANDIDATE", ", ".join(reason_bits) or "proxy suppression candidates present"))
+
+    tp1_first_count = sum(1 for row in intraperiod_rows if str(row.get("outcome", "")).strip() == "tp1_first")
+    sl_first_count = sum(1 for row in intraperiod_rows if str(row.get("outcome", "")).strip() == "sl_first")
+    if sl_first_count > max(0, tp1_first_count):
+        recommendations.append(
+            (
+                "AGGRESSION_RISK_REVIEW",
+                f"sl_first={sl_first_count} exceeds tp1_first={tp1_first_count}",
+            )
+        )
+
+    side_counts = _counter_from_rows(candidate_rows, "side")
+    if candidate_rows:
+        dominant_side, dominant_count = side_counts.most_common(1)[0]
+        if dominant_count / len(candidate_rows) >= 0.65:
+            recommendations.append(
+                (
+                    "LONG_SHORT_BALANCE_REVIEW",
+                    f"{dominant_side} dominates {dominant_count}/{len(candidate_rows)} candidate rows",
+                )
+            )
+
+    defensive_terms = ("売買非推奨", "実行不可", "実弾不可", "注意報")
+    defensive_wording_count = sum(
+        1
+        for row in user_review_rows
+        if any(term in str(row.get("subject", "")) for term in defensive_terms)
+    )
+    if defensive_wording_count > 0:
+        recommendations.append(
+            (
+                "SUBJECT_TOO_DEFENSIVE_REVIEW",
+                f"defensive subject wording count={defensive_wording_count}",
+            )
+        )
+
+    if not recommendations:
+        recommendations.append(("KEEP_MONITORING", "no proxy warning threshold crossed"))
+    return recommendations
+
+
+def _build_daily_proxy_evaluator_report_data(
+    *,
+    base_dir: Path = BASE_DIR,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    lookback_days: int = 7,
+) -> tuple[str, dict[str, Any]]:
+    input_specs = [
+        ("signal_outcomes", base_dir / "logs" / "csv" / "signal_outcomes.csv"),
+        ("active_plan_candidate_outcomes", base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"),
+        ("active_plan_candidate_intraperiod_outcomes", base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"),
+        ("user_reviews", base_dir / "logs" / "csv" / "user_reviews.csv"),
+    ]
+    loaded_inputs: dict[str, dict[str, Any]] = {}
+    all_timestamps: list[datetime] = []
+    parse_warning_count = 0
+    for key, path in input_specs:
+        rows, fieldnames, status, malformed_rows = _load_daily_proxy_input_rows(path)
+        timestamp_parse_warnings = 0
+        for row in rows:
+            raw_timestamp = str(row.get("timestamp_jst", "")).strip()
+            if not raw_timestamp:
+                continue
+            dt = _parse_dt(raw_timestamp)
+            if dt is None:
+                timestamp_parse_warnings += 1
+            else:
+                all_timestamps.append(dt.astimezone(JST))
+        if status == "read_ok" and timestamp_parse_warnings > 0:
+            status = "parse_warning"
+        if timestamp_parse_warnings > 0:
+            parse_warning_count += timestamp_parse_warnings
+        if malformed_rows > 0:
+            parse_warning_count += malformed_rows
+            if status == "read_ok":
+                status = "parse_warning"
+        loaded_inputs[key] = {
+            "path": path,
+            "rows": rows,
+            "fieldnames": fieldnames,
+            "status": status,
+            "parse_warning_rows": malformed_rows + timestamp_parse_warnings,
+            "total_rows": len(rows),
+        }
+
+    resolved_report_date = (str(report_date or "").strip() if report_date else "")
+    if resolved_report_date:
+        report_dt = datetime.strptime(resolved_report_date, "%Y%m%d").replace(tzinfo=JST)
+    elif all_timestamps:
+        latest_dt = max(all_timestamps).astimezone(JST)
+        resolved_report_date = latest_dt.strftime("%Y%m%d")
+        report_dt = latest_dt
+    else:
+        report_dt = datetime.now(tz=JST)
+        resolved_report_date = report_dt.strftime("%Y%m%d")
+
+    window_days = max(1, int(lookback_days))
+    window_end = report_dt.astimezone(JST).date()
+    window_start = window_end - timedelta(days=window_days - 1)
+    window_start_dt = datetime.combine(window_start, datetime.min.time(), tzinfo=JST)
+    window_end_dt = datetime.combine(window_end, datetime.max.time(), tzinfo=JST)
+
+    for bundle in loaded_inputs.values():
+        selected_rows, extra_parse_warnings = _count_selected_proxy_rows(
+            bundle["rows"],
+            window_start=window_start_dt,
+            window_end=window_end_dt,
+        )
+        bundle["selected_rows"] = selected_rows
+        bundle["selected_row_count"] = len(selected_rows)
+        bundle["parse_warning_rows"] += extra_parse_warnings
+        if extra_parse_warnings > 0 and bundle["status"] == "read_ok":
+            bundle["status"] = "parse_warning"
+
+    signal_rows = loaded_inputs["signal_outcomes"]["selected_rows"]
+    candidate_rows = loaded_inputs["active_plan_candidate_outcomes"]["selected_rows"]
+    intraperiod_rows = loaded_inputs["active_plan_candidate_intraperiod_outcomes"]["selected_rows"]
+    user_review_rows = loaded_inputs["user_reviews"]["selected_rows"]
+
+    report_path = output_md or (
+        base_dir
+        / DAILY_PROXY_EVALUATOR_OUTPUT_DIR
+        / f"daily_proxy_evaluator_{resolved_report_date}.md"
+    )
+
+    signal_bias_counts = _counter_from_rows(signal_rows, "bias")
+    signal_prelabel_counts = _counter_from_rows(signal_rows, "prelabel")
+    signal_direction_counts = _counter_from_rows(signal_rows, "direction_outcome")
+    signal_entry_counts = _counter_from_rows(signal_rows, "entry_outcome")
+    signal_wait_counts = _counter_from_rows(signal_rows, "wait_outcome")
+    signal_skip_counts = _counter_from_rows(signal_rows, "skip_outcome")
+    signal_outcome_counts = _counter_from_rows(signal_rows, "outcome")
+    signal_skip_too_strict_count = signal_skip_counts.get("skip_too_strict", 0)
+    signal_good_entry_count = signal_entry_counts.get("good_entry", 0)
+
+    candidate_side_counts = _counter_from_rows(candidate_rows, "side")
+    candidate_type_counts = _counter_from_rows(candidate_rows, "candidate_type")
+    candidate_action_counts = _counter_from_rows(candidate_rows, "active_primary_action")
+    candidate_status_counts = _counter_from_rows(candidate_rows, "candidate_status")
+    candidate_direction_counts = _counter_from_rows(candidate_rows, "outcome_direction_outcome")
+    candidate_tp1_close_count = _counter_from_bool_rows(candidate_rows, "tp1_close_reached_24h")
+    candidate_sl_close_count = _counter_from_bool_rows(candidate_rows, "sl_close_reached_24h")
+
+    intraperiod_side_counts = _counter_from_rows(intraperiod_rows, "side")
+    intraperiod_type_counts = _counter_from_rows(intraperiod_rows, "candidate_type")
+    intraperiod_action_counts = _counter_from_rows(intraperiod_rows, "active_primary_action")
+    intraperiod_outcome_counts = _counter_from_rows(intraperiod_rows, "outcome")
+    intraperiod_exit_reason_counts = _counter_from_rows(intraperiod_rows, "first_exit_reason")
+    intraperiod_tp1_count = intraperiod_outcome_counts.get("tp1_first", 0)
+    intraperiod_sl_count = intraperiod_outcome_counts.get("sl_first", 0)
+    intraperiod_timeout_count = intraperiod_outcome_counts.get("timeout", 0)
+    intraperiod_no_ohlcv_count = intraperiod_outcome_counts.get("no_ohlcv", 0)
+    intraperiod_mfe_r_avg = _mean_numeric_rows(intraperiod_rows, "mfe_r")
+    intraperiod_mae_r_avg = _mean_numeric_rows(intraperiod_rows, "mae_r")
+
+    review_status_counts = _counter_from_rows(user_review_rows, "review_status")
+    review_verdict_counts = _counter_from_rows(user_review_rows, "user_verdict")
+    review_would_trade_counts = _counter_from_rows(user_review_rows, "would_trade")
+    review_source_counts = _counter_from_rows(user_review_rows, "review_source")
+    review_avg_usefulness = _mean_numeric_rows(user_review_rows, "usefulness_1to5")
+    review_defensive_terms = ("売買非推奨", "実行不可", "実弾不可", "注意報")
+    review_defensive_wording_count = sum(
+        1 for row in user_review_rows if any(term in str(row.get("subject", "")) for term in review_defensive_terms)
+    )
+
+    required_statuses = {key: str(bundle["status"]) for key, bundle in loaded_inputs.items()}
+    recommendation_pairs = _daily_proxy_recommendations(
+        signal_rows=signal_rows,
+        candidate_rows=candidate_rows,
+        intraperiod_rows=intraperiod_rows,
+        user_review_rows=user_review_rows,
+        required_input_statuses=required_statuses,
+    )
+    recommendation_codes = [code for code, _ in recommendation_pairs]
+
+    lines = [
+        "# Daily Proxy Evaluator",
+        "",
+        "## 1. Safety Boundary",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- no private/account/order endpoints",
+        "- human decides manually",
+        "- MEXC raw exports are not imported in this task",
+        "",
+        "## 2. Input Status",
+        f"- report_date: `{resolved_report_date}`",
+        f"- lookback_days: `{window_days}`",
+        f"- selected_window: `{window_start.isoformat()} -> {window_end.isoformat()}`",
+        f"- report_path: `{report_path}`",
+        "",
+    ]
+
+    for key, bundle in loaded_inputs.items():
+        latest_timestamp = ""
+        for row in bundle["rows"]:
+            raw_timestamp = str(row.get("timestamp_jst", "")).strip()
+            dt = _parse_dt(raw_timestamp)
+            if dt is None:
+                continue
+            normalized = dt.astimezone(JST).isoformat()
+            if not latest_timestamp or normalized > latest_timestamp:
+                latest_timestamp = normalized
+        lines.append(
+            f"- `{key}`: status={bundle['status']} / rows={bundle['total_rows']} / "
+            f"selected_rows={bundle['selected_row_count']} / parse_warning_rows={bundle['parse_warning_rows']}"
+            + (f" / latest_timestamp={latest_timestamp}" if latest_timestamp else "")
+        )
+    lines.append("")
+
+    lines.extend(
+        [
+            "## 3. Signal Outcome Proxy",
+            f"- selected rows: {len(signal_rows)}",
+            f"- bias: {_proxy_counter_line(signal_bias_counts)}",
+            f"- prelabel: {_proxy_counter_line(signal_prelabel_counts)}",
+            f"- direction_outcome: {_proxy_counter_line(signal_direction_counts)}",
+            f"- entry_outcome: {_proxy_counter_line(signal_entry_counts)}",
+            f"- wait_outcome: {_proxy_counter_line(signal_wait_counts)}",
+            f"- skip_outcome: {_proxy_counter_line(signal_skip_counts)}",
+            f"- outcome: {_proxy_counter_line(signal_outcome_counts)}",
+            f"- skip_too_strict count: {signal_skip_too_strict_count}",
+            f"- good_entry count: {signal_good_entry_count}",
+            "",
+            "## 4. Active Plan Candidate Proxy",
+            f"- selected rows: {len(candidate_rows)}",
+            f"- side: {_proxy_counter_line(candidate_side_counts)}",
+            f"- candidate_type: {_proxy_counter_line(candidate_type_counts)}",
+            f"- active_primary_action: {_proxy_counter_line(candidate_action_counts)}",
+            f"- candidate_status: {_proxy_counter_line(candidate_status_counts)}",
+            f"- outcome_direction_outcome: {_proxy_counter_line(candidate_direction_counts)}",
+            f"- tp1_close_reached_24h true count: {candidate_tp1_close_count}",
+            f"- sl_close_reached_24h true count: {candidate_sl_close_count}",
+            "",
+            "## 5. Intraperiod Proxy",
+            f"- selected rows: {len(intraperiod_rows)}",
+            f"- side: {_proxy_counter_line(intraperiod_side_counts)}",
+            f"- candidate_type: {_proxy_counter_line(intraperiod_type_counts)}",
+            f"- active_primary_action: {_proxy_counter_line(intraperiod_action_counts)}",
+            f"- outcome: {_proxy_counter_line(intraperiod_outcome_counts)}",
+            f"- first_exit_reason: {_proxy_counter_line(intraperiod_exit_reason_counts)}",
+            f"- tp1_first count: {intraperiod_tp1_count}",
+            f"- sl_first count: {intraperiod_sl_count}",
+            f"- timeout count: {intraperiod_timeout_count}",
+            f"- no_ohlcv count: {intraperiod_no_ohlcv_count}",
+            f"- average mfe_r: {intraperiod_mfe_r_avg:.2f}",
+            f"- average mae_r: {intraperiod_mae_r_avg:.2f}",
+            "",
+            "## 6. User Review Proxy",
+            f"- selected rows: {len(user_review_rows)}",
+            f"- review_status: {_proxy_counter_line(review_status_counts)}",
+            f"- user_verdict: {_proxy_counter_line(review_verdict_counts)}",
+            f"- would_trade: {_proxy_counter_line(review_would_trade_counts)}",
+            f"- review_source: {_proxy_counter_line(review_source_counts)}",
+            f"- average usefulness_1to5: {review_avg_usefulness:.2f}",
+            f"- defensive wording count: {review_defensive_wording_count}",
+            "",
+            "## 7. Daily Proxy Recommendations",
+        ]
+    )
+
+    if recommendation_pairs:
+        for code, reason in recommendation_pairs:
+            lines.append(f"- `{code}`: {reason} / proxy-only / not trading permission")
+    else:
+        lines.append("- なし")
+
+    lines.extend(
+        [
+            "",
+            "## 8. Limitations",
+            "- no actual human PnL yet",
+            "- MEXC raw exports are not imported in this task",
+            "- daily proxy is not ground truth",
+            "- biweekly actual trade import will calibrate proxy vs actual later",
+        ]
+    )
+
+    report = "\n".join(lines) + "\n"
+    _ensure_parent(report_path)
+    report_path.write_text(report, encoding="utf-8")
+
+    payload = {
+        "schema_version": "daily_proxy_evaluator.v1",
+        "report_date": resolved_report_date,
+        "report_path": str(report_path),
+        "generated_at_jst": datetime.now(tz=JST).isoformat(),
+        "input_counts": {
+            key: {
+                "status": bundle["status"],
+                "rows": bundle["total_rows"],
+                "selected_rows": bundle["selected_row_count"],
+                "parse_warning_rows": bundle["parse_warning_rows"],
+            }
+            for key, bundle in loaded_inputs.items()
+        },
+        "recommendation_codes": recommendation_codes,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually",
+    }
+    return report, payload
+
+
+def build_daily_proxy_evaluator_report(
+    *,
+    base_dir: Path = BASE_DIR,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    lookback_days: int = 7,
+) -> str:
+    report, _ = _build_daily_proxy_evaluator_report_data(
+        base_dir=base_dir,
+        output_md=output_md,
+        report_date=report_date,
+        lookback_days=lookback_days,
+    )
+    return report
+
+
 def _run_summarize_actionability_shadow_decisions_command(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser | None = None,
@@ -19472,6 +19892,12 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
 
+    daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
+    daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
+    daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
+    daily_proxy_evaluator_parser.add_argument("--output-md")
+    daily_proxy_evaluator_parser.add_argument("--stdout-json", action="store_true")
+
     sync_parser = subparsers.add_parser("daily-sync")
     sync_parser.add_argument("--review-note", default=str(DEFAULT_REVIEW_NOTE))
     sync_parser.add_argument("--output-md")
@@ -19952,6 +20378,22 @@ def main() -> None:
             print(output_md)
         else:
             print(base_dir / "運用資料" / "reports" / "report_hub_latest.md")
+            print(report)
+        return
+
+    if args.command == "build-daily-proxy-evaluator-report":
+        output_md = Path(args.output_md) if args.output_md else None
+        report, payload = _build_daily_proxy_evaluator_report_data(
+            base_dir=base_dir,
+            output_md=output_md,
+            report_date=str(args.report_date or "").strip() or None,
+            lookback_days=int(args.lookback_days),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        elif output_md:
+            print(output_md)
+        else:
             print(report)
         return
 

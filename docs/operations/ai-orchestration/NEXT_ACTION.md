@@ -5,7 +5,7 @@
 
 ## Current goal
 
-既存の CSV / report 資産だけを使う deterministic な Daily Proxy Evaluator を実装する。
+既存 CSV / report 資産だけを使う deterministic な Daily Proxy Evaluator を実装する。
 
 MEXC 生データの import はまだやらない。まずは既存の proxy 資産から report-only の daily summary を安定生成する。
 
@@ -68,6 +68,11 @@ Inspect only as needed and summarize, do not dump large files.
 
 - Commit docs/code only if validation passes.
 - No push.
+
+## Next recommended task
+
+- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORT-SCHEMA`
+- Goal: MEXC actual trade export の schema / import / normalization 設計を docs で固める。API integration はまだやらない。
 
 ## Stop conditions
 
