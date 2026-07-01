@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT`
-- mode: `REVIEW_ONLY`
+- current_work_id: `BTCFX-20260702-DAILY-PROXY-EVALUATOR`
+- mode: `NORMAL_CODEX`
 
 ## Current goal
 
-既存の事後評価資産を安全に棚卸しし、Ver04-v1 self-improvement loop の first implementation step を迷わず開始できる状態にする。
+既存の CSV / report 資産だけを使う deterministic な Daily Proxy Evaluator を実装する。
 
-この task は evaluator 実装ではない。まず、既存資産・ログ・CSV・レポート・AI post review health を read-only / docs-only で整理し、何を再利用し、何を主系から外すかを明確にする。Ver04-v1 の first implementation task である。
+MEXC 生データの import はまだやらない。まずは既存の proxy 資産から report-only の daily summary を安定生成する。
 
 ## Product objective reminder
 
@@ -17,7 +17,7 @@ notification mail を受け取った人間が、
 攻めの姿勢で勝てる manual trading support system を作る。
 ```
 
-Automatic trading is out of scope.
+Automatic trading is later-stage only.
 
 ## Required read
 
@@ -27,44 +27,18 @@ Automatic trading is out of scope.
 - `docs/operations/ai-orchestration/CURRENT_STATE.md`
 - `docs/operations/ai-orchestration/CONTROL.md`
 - `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
 - `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
 - `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-- `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
+- `docs/operations/ai-orchestration/POST_EVAL_ASSET_HEALTH_AUDIT_20260702.md`
 
-## Narrow audit targets
+## Narrow implementation scope
 
 Inspect only as needed and summarize, do not dump large files.
 
-- `tools/run_ai_post_reviews.sh`
-- `deploy/com.afrog.btc-ai-post-reviews.plist`
-- `config.py` AI post review related keys only
-- `logs/runtime/ai_post_reviews.out` summary only
-- `logs/runtime/feedback_daily_sync.out` summary only if needed
-- `logs/csv/user_reviews.csv` header/sample/schema only
-- `logs/csv/signal_outcomes.csv` header/sample/schema only
-- `logs/csv/active_plan_candidate_outcomes.csv` header/sample/schema only
-- `logs/csv/active_plan_candidate_intraperiod_outcomes.csv` header/sample/schema only
-- latest `運用資料/reports/feedback_daily_sync_*.md` relevant AI health / improvement sections only
-
-## Edit
-
-Create:
-
-```text
-docs/operations/ai-orchestration/POST_EVAL_ASSET_HEALTH_AUDIT_20260702.md
-```
-
-Do not edit source code in this task.
-
-## Required audit questions
-
-1. What existing assets can feed the Daily Proxy Loop?
-2. What existing assets can feed the Weekly Review Loop?
-3. What existing assets can later support Biweekly Ground Truth Loop?
-4. Which existing AI post review components are reusable as optional qualitative enrichment?
-5. Which components are stale, old-purpose, old-path, stopped, or unsafe for the new main route?
-6. What is the smallest next implementation task after the audit?
-7. What files should Codex touch next, and what files should it avoid?
+- `tools/log_feedback.py`
+- `tests/test_log_feedback.py`
+- any narrow support docs needed for the daily proxy output contract
 
 ## Do not
 
@@ -76,7 +50,7 @@ Do not edit source code in this task.
 - Do not fetch OHLCV or exchange data.
 - Do not access private/account/order endpoints.
 - Do not edit trading logic.
-- Do not edit source code.
+- Do not import MEXC raw exports yet.
 - Do not commit raw exchange exports.
 - Do not mix actual human trades into `paper_positions.csv`.
 - Do not touch `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
@@ -86,21 +60,23 @@ Do not edit source code in this task.
 - `pwd -P`
 - `git status --short --branch`
 - `git diff --check`
+- targeted unit tests for the new report builder / CLI path
 - `git diff --name-only`
 - `git status --short --branch`
 
 ## Commit policy
 
-- Commit docs-only audit if validation passes.
+- Commit docs/code only if validation passes.
 - No push.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-DAILY-PROXY-EVALUATOR: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - required source-of-truth docs are missing
-- audit would require API calls, secrets, runtime restart, notification sending changes, exchange fetch, private/account/order endpoints, trading logic changes, or old runtime repo access
+- implementation would require API calls, secrets, runtime restart, notification sending changes, exchange fetch, private/account/order endpoints, trading logic changes, or old runtime repo access
+- raw MEXC exports would need to be committed
 - generated/log/raw private data would need to be committed
 - validation fails
 
@@ -111,7 +87,7 @@ Compact report with:
 - WORK_ID
 - STATUS
 - CHANGED
-- AUDIT_SUMMARY
+- SUMMARY
 - REUSE_ASSETS
 - STALE_OR_RISKY_ASSETS
 - NEXT_RECOMMENDED_TASK
