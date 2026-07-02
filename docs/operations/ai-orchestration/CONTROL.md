@@ -13,6 +13,10 @@ branch_source_rule: `read from git status --short --branch and CONTROL.md, not f
 - routine GitHub push is wasteful and out of default scope
 - old runtime execution repo must not be edited, run, inspected, or synced in normal MCP tasks
 - product route has been consolidated into Ver04-v1 self-improvement loop docs
+- current operational posture is post-deployment observation
+- Ver04-v1 runtime deployment is complete and reflected active
+- notification sending behavior remains unchanged
+- no immediate implementation is required unless observation finds an issue
 
 ## Current Objective
 
@@ -28,11 +32,9 @@ notification mail を受け取った人間が、
 
 Immediate product objective:
 
-- establish deterministic post-evaluation / self-improvement loop
-- use daily proxy evaluation without requiring daily actual-trade import
-- use weekly review for trend/regime drift
-- use biweekly actual trade Excel import as ground truth calibration
 - keep public HTML / notification mail / local dashboard aligned under single-source doctrine
+- observe the reflected Ver04-v1 runtime without changing notification sending behavior
+- resume implementation only when observation is complete or the user explicitly requests it
 
 ## Safety Boundary
 
@@ -70,23 +72,21 @@ Immediate product objective:
 - local commit is allowed when checks pass
 - push is reserved for `CHECKPOINT_PUSH` tasks only
 - product docs should stay concise and route through `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- runtime repo remains off-limits during normal MCP tasks
 
 ## Next Decision
 
-Proceed to post-evaluation asset health audit before implementing new evaluator code.
-
-Default next task:
+Default next implementation candidate is:
 
 ```text
-BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT
+BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER
 ```
 
-This task must be read-only / docs-only and must not call APIs, read secrets, restart runtime, change notification sending, change trading logic, fetch OHLCV, or touch private/order endpoints.
+Current operational next posture remains post-deployment observation, not immediate implementation.
 
 ## Deferred Follow-up
 
-- Implement deterministic daily proxy evaluator after asset health audit.
-- Add manual actual trade import schema after daily proxy route is clear.
+- Add manual actual trade import schema after observation / explicit implementation request.
 - Add actual trade to signal linking after import schema is stable.
 - Add biweekly ground truth report after linking is stable.
 - Restore AI post review only as optional qualitative enrichment after deterministic loop is reliable.
@@ -97,3 +97,10 @@ This task must be read-only / docs-only and must not call APIs, read secrets, re
 - active product route: `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
 - active handoff context only: `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
 - latest reviewed workflow metadata as needed: `docs/operations/ai-orchestration/TASK_LEDGER.md`
+
+## Completed History
+
+- post-eval asset health audit completed
+- daily proxy evaluator implemented and tested
+- implementation readiness package created
+- Ver04-v1 runtime deployment complete

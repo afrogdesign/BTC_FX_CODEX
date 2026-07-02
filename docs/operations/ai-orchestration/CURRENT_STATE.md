@@ -30,6 +30,13 @@ Automatic trading remains out of scope and later-stage only.
 
 Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major product-direction shift.
 
+## Current operational posture
+
+- Ver04-v1 runtime deployment is complete and reflected active.
+- Immediate posture is post-deployment observation.
+- Notification sending behavior remains unchanged.
+- No immediate implementation is required unless observation finds an issue.
+
 ## Current source-of-truth route
 
 - `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
@@ -53,9 +60,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - local dashboard / app surface is confirmation and future automation foundation.
 - diagnostic and post-evaluation remain report-only support.
 - major turn / turning point diagnostics do not authorize manual or automatic entry.
-- Ver04-v1 runtime reflection is complete and active on the approved reflected commit.
 - No restart / launchd action is required for the completed deployment.
-- Notification sending behavior remains unchanged.
 
 ## Current operational blocker
 
@@ -71,15 +76,17 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - commit only at meaningful boundaries.
 - TASK_LEDGER / handoff docs are not updated every task.
 
-## Next implementation direction
+## Product backlog next candidate
 
-Post-deployment observation only unless the user requests further changes.
+- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+- Start this after observation or when the user explicitly requests implementation.
 
-Goal:
+## Completed history
 
-- Audit existing post-evaluation assets safely.
-- Identify reusable inputs for deterministic daily proxy evaluation.
-- Do not call API, read secrets, restart runtime, change notification sending, or change trading logic.
+- post-eval asset health audit completed
+- daily proxy evaluator implemented
+- implementation readiness package created
+- Ver04-v1 runtime deployment complete
 
 ## Default avoid list
 
