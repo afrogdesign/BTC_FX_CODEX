@@ -40,6 +40,15 @@ Codex 5.4-mini medium 向けの最小運用ルールです。
 - commit は `source/test変更`、`一区切りの docs 整理`、`人間に残すべき状態変更` のときだけ
 - `TASK_LEDGER` / `CURRENT_HANDOFF` の逐次更新は通常不要
 
+## Documentation minimalism
+
+- Normal implementation tasks should not update docs by default.
+- Source / test / UI fixes usually need no docs changes.
+- `NEXT_ACTION.md` is optional and only for next task, blocker, or operator posture changes.
+- `CURRENT_STATE.md` is for milestones only.
+- Dated docs are for runtime / rollback / launchd / notification sending behavior / major safety / handoff only.
+- Prefer the compact final report plus git commit as the normal evidence trail.
+
 ## Hard safety boundary
 
 - `CHECKPOINT_PUSH` 以外では push しない

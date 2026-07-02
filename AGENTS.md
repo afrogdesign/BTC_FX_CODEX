@@ -74,6 +74,17 @@ Do not rely only on chat history.
 - 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v4` を使う。新しい reviewed roadmap が出るまでこれを既定とする。
 - Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
+## Docs update policy
+
+- Default: normal implementation / source / test / UI / bugfix tasks do not update orchestration docs.
+- Do not update `CURRENT_STATE.md` for normal tasks.
+- Do not create dated plan / result docs for normal tasks.
+- Update `NEXT_ACTION.md` only when the next task, blocker, or operator posture actually changes.
+- Update `CURRENT_STATE.md` only for milestones such as runtime reflection complete, deployment complete, safety boundary change, or user-approved operational mode change.
+- Create or update plan / rollback / deployment docs only for runtime reflection, restart / launchd, rollback, notification sending behavior, API / secrets / private-endpoint-adjacent work, major handoff, or context migration.
+- Do not write docs only to repeat the compact report.
+- For normal tasks, git commit and the compact report are sufficient evidence.
+
 ## Standard workflow
 
 For each task:

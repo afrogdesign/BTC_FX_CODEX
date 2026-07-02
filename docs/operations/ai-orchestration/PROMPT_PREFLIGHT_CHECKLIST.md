@@ -40,6 +40,14 @@ ChatGPT が Codex prompt を出す前に、形と境界が崩れていないか�
 - Allowed inspection は current diff/status、nearby helpers、matching tests など task に必要な最小限に絞る
 - source、runtime、generated file は Edit に明示されている場合だけ触る
 
+## Docs update check
+
+- docs を Allowed edit に足す前に、runtime / deployment / rollback / launchd / mail sending / safety boundary / handoff の作業かを確認する
+- next operator action が実際に変わるかを確認する
+- `CURRENT_STATE.md` が milestone 変更のために本当に必要かを確認する
+- すべて no なら docs files を入れない
+- UI / source / test fixes は原則 docs update なしにする
+
 ## Push/Pull check
 
 - normal task は `Do not push` を明記する
