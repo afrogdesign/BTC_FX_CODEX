@@ -2,148 +2,120 @@
 
 ## Operation Modes
 
-- `CHATGPT_ONLY`: use when ChatGPT should handle repo review, scope selection, or design judgment without spending Codex credits.
-- `LIGHT_CODEX`: use when the scope is fixed and only a small local edit is needed; local commit optional, no push by default.
-- `NORMAL_CODEX`: use for fixed-scope edit/test work; local commit if checks pass, no push unless explicit checkpoint.
-- `CHECKPOINT_PUSH`: the only mode that pushes.
-- `SYNC`: use only at checkpoints to batch-update reviewed metadata; do not run after every task.
-- `HANDOFF`: use at thread migration, context overload, major milestone, or explicit handoff; do not update `CURRENT_HANDOFF.md` for every task.
-- Keep orchestration metadata lightweight: normal tasks should not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md`.
-- `CONTROL.md` should describe the current state, current objective, safety boundary, validation rules, and next action; it should not become a full task history.
-- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history; git/GitHub and compact reports remain the commit evidence.
-- `CURRENT_HANDOFF.md` should be updated only for active handoff conditions such as partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
-- Keep the logical separation intact without physically splitting the repo: orchestration operations stay under `docs/operations/ai-orchestration/`, while project source stays under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
+- `CHATGPT_ONLY`: ChatGPT が repo review、state整理、scope確定、design judgment を行う
+- `REVIEW_ONLY`: bounded read-only review で事実確認だけを行う
+- `LIGHT_CODEX`: 極小の local edit を行う
+- `BOUNDED_CODEX`: 既定の implementation mode。固定スコープの source / test / docs work に使う
+- `NORMAL_CODEX`: `BOUNDED_CODEX` より少し広い local implementation / validation が必要なときに使う
+- `CHECKPOINT_PUSH`: push を伴う唯一の mode
+- `RUNTIME_PULL_HANDOFF`: checkpoint から runtime pull handoff を扱う明示 task 専用
+- `SYNC`: reviewed metadata を checkpoint 単位で同期するときだけ使う
+- `HANDOFF`: thread migration、context overload、major milestone、明示 handoff で使う
 
-## MINI_CODEX_MEDIUM
+通常 task では orchestration metadata を重くしない。`CONTROL.md`、`TASK_LEDGER.md`、`CURRENT_HANDOFF.md` は毎回更新しない。
 
-- `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` を先に読む
-- smaller tasks を選ぶ
-- required changes を明示する
-- broad exploration を避ける
-- mechanical edits を優先する
-- ambiguity があれば `BLOCKED` にする
-
-## PROMPT_PREFLIGHT
-
-- `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` を先に読む
-- AUTO_SEND の前に毎回 checklist を通す
-- malformed または oversized な prompt は送る前に書き直す
-- push, pull, runtime repo, product judgment, safety judgment が unresolved なら `HUMAN_CHECK` を使う
-
-## MCP_PRIMARY_OPERATION
+## MCP Primary Operation
 
 - default working dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- do not edit the frozen old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- do not run runtime execution during normal orchestration tasks
-- use AFROG_MCP as the primary repo inspection path
-- use GitHub for checkpoint/history/sync, not as the default read path for every review
-- normal task default is local edit + local validation + local commit + compact report
-- do not automatically push to GitHub unless `CHECKPOINT_PUSH` is explicitly requested or clearly authorized
-- compact report is still written to `response.txt` exactly once
-- browser-side `AUTO_SEND` / `HUMAN_CHECK` concepts stay unchanged by these prompt rules
+- frozen old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- normal task では old runtime repo を edit / run / inspect しない
+- AFROG_MCP を ChatGPT の primary repo inspection path とする
+- normal task default は local edit + local validation + local commit + compact report
+- push は `CHECKPOINT_PUSH` だけ
+- compact report は Codex が local filesystem access を持つときだけ `response.txt` に 1 回だけ書く
 
-## Ver03-v4 Integrated Surface Guard
+## BOUNDED_CODEX
 
-- For future `NEXT` / `FIX` prompts, check whether the task affects the public HTML report, notification mail, or local dashboard / app surface.
-- Keep those three surfaces aligned to one source of truth; do not create a separate decision path for any one of them.
-- If a task changes trading meaning, safety wording, or actionability, verify the impact on all three surfaces together.
-- Prefer the authoritative roadmap at `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` when product direction needs to be explained.
+- `BOUNDED_CODEX` は default implementation mode
+- ChatGPT が product / safety / scope を先に固定する
+- Codex は次を範囲として local implementation を進めてよい:
+  - allowed read files
+  - allowed edit files
+  - current diff / status
+  - nearby helpers inside scoped files
+  - matching tests by function / CLI / module name
+- Codex は次の場合に止まる:
+  - broad repo exploration が必要
+  - product judgment が必要
+  - safety judgment が必要
+  - runtime repo / mail behavior / API / secrets / private endpoint / order execution 変更が必要
 
-## LOW_COST_RESUME
+## Compact Prompt Skeleton
 
 ```text
-RESUME <WORK_ID>
-Goal: restart from the repo-local baseline with minimal reading.
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Read: AGENTS.md, docs/operations/ai-orchestration/START_HERE.md, docs/operations/ai-orchestration/RESUME.md, docs/operations/ai-orchestration/CURRENT_STATE.md, docs/operations/ai-orchestration/NEXT_ACTION.md, docs/operations/ai-orchestration/CONTROL.md, docs/operations/ai-orchestration/PROMPTS.md, docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
-Inspect: docs/operations/ai-orchestration/TASK_LEDGER.md only as needed, preferably the latest rows
-Report: READY | BLOCKED | NEEDS_REVIEW
-Stop: if repo正本 and chat history conflict, or if the scope is not fixed yet
-Do not start implementation until the user explicitly asks.
-Do not edit or run the old runtime execution repo.
+AUTO_SEND
+
+WORK_ID: <task_id>
+MODEL_ASSUMPTION: gpt-5.4-mini medium
+MODE: BOUNDED_CODEX | LIGHT_CODEX | NORMAL_CODEX | REVIEW_ONLY | ...
+
+Repo:
+- cd /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+- Expected active branch: Ver04-v1
+- Do not touch /Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor
+- Do not push
+
+Goal:
+- <one short goal>
+
+Allowed read:
+- <files>
+
+Allowed edit:
+- <files or none>
+
+Allowed inspection:
+- current diff/status
+- nearby helpers inside allowed files
+- matching tests by function/CLI name
+
+Do:
+- <bounded actions only>
+
+Validation:
+- pwd -P
+- git status --short --branch
+- <targeted validation only if needed>
+- git diff --check
+- git diff --name-only
+- git status --short --branch
+
+Stop:
+- wrong cwd/branch
+- required file missing
+- edit outside allowed files would be needed
+- product/safety judgment would be needed
+- broad repo exploration would be needed
+- runtime/mail/API/order/private endpoint changes would be needed
+- validation fails and fix is not obvious
+
+Commit:
+- Commit only if validation passes.
+- Commit message: <message>
+- No push.
+
+Report:
+- compact final report
+- write the same compact report exactly once to response.txt when Codex has local filesystem access
 ```
 
-## NEXT
+## LIGHT_CODEX
 
 ```text
-NEXT <WORK_ID>
-Goal: <one sentence>
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Codex model constraint: intended for Codex 5.4-mini medium
-Do not make design judgments.
-Stop if task requires broad repo inspection or product judgment.
-Stop if task requires push, pull, or runtime repo access.
-Read: <files>
-Edit: <files>
-Test: <commands>
-Stop: <conditions>
-Report: compact
-Do not edit or run the old runtime execution repo.
-Local commit is optional.
-Do not push by default.
+Use the compact skeleton.
+Keep edit scope tiny.
+Prefer docs-only or single-purpose local changes.
+Targeted validation only.
+Local commit optional.
+No push.
 ```
 
-## FIX
+## NORMAL_CODEX
 
 ```text
-FIX <WORK_ID>
-Issue: <specific issue>
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Codex model constraint: intended for Codex 5.4-mini medium
-Do not make design judgments.
-Stop if task requires broad repo inspection or product judgment.
-Stop if task requires push, pull, or runtime repo access.
-Read: <files>
-Edit: <files>
-Test: <commands>
-Stop: if the fix requires design changes outside this scope
-Report: compact
-Do not edit or run the old runtime execution repo.
-Commit locally if checks pass.
-Do not push unless explicit `CHECKPOINT_PUSH`.
-```
-
-## CHECKPOINT_PUSH
-
-```text
-CHECKPOINT_PUSH <WORK_ID>
-Goal: prepare and publish a meaningful checkpoint branch/push.
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Codex model constraint: intended for Codex 5.4-mini medium
-Do not make design judgments.
-Stop if task requires broad repo inspection or product judgment.
-Stop if runtime repo access is required outside checkpoint scope.
-Read: docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md, <files>
-Edit: <files>
-Test: <commands>
-Stop: if branch/remote target is ambiguous or push is not explicitly approved
-Report: compact
-Do not edit or run the old runtime execution repo.
-Push only after local checks pass and checkpoint target is explicit.
-```
-
-## RUNTIME_PULL_HANDOFF
-
-```text
-RUNTIME_PULL_HANDOFF <WORK_ID>
-Goal: define or execute the handoff from checkpoint push to old runtime repo pull.
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Codex model constraint: intended for Codex 5.4-mini medium
-Do not make design judgments.
-Stop if task requires broad repo inspection or product judgment.
-Stop if push / pull target or runtime handoff target is ambiguous.
-Read: docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md, <files>
-Edit: <files>
-Test: <commands>
-Stop: if the handoff target is ambiguous or human confirmation is missing
-Report: compact
-Use only when explicitly requested.
-Old runtime execution repo may be involved only in that task.
-No runtime restart.
-No execution.
-No secret reading.
-No trading behavior changes.
-Do not edit or run the old runtime execution repo by default.
+Use the compact skeleton.
+Allow a slightly wider local implementation/validation scope than BOUNDED_CODEX.
+Still stop before broad repo exploration, product judgment, runtime repo work, or push.
 ```
 
 ## REVIEW_ONLY
@@ -151,31 +123,43 @@ Do not edit or run the old runtime execution repo by default.
 ```text
 REVIEW_ONLY <WORK_ID>
 Goal: confirm <specific fact>
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Read: <files or commands>
-Edit: none
-Test: none
+Allowed read: <files or commands>
+Allowed edit: none
+Allowed inspection: current diff/status if needed
+Do: answer the fact only
+Validation: none unless explicitly needed
+Stop: if implementation or product judgment would be required
+Commit: none
 Report: answer only the fact, max 10 lines
-Do not edit or run the old runtime execution repo.
+```
+
+## CHECKPOINT_PUSH
+
+```text
+CHECKPOINT_PUSH <WORK_ID>
+Goal: prepare and publish a meaningful checkpoint branch/push
+Read: `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` plus scoped files
+Stop: if branch, remote, push approval, or checkpoint target is ambiguous
+Push only after local checks pass and explicit approval
+Do not use this mode for normal tasks
+```
+
+## RUNTIME_PULL_HANDOFF
+
+```text
+RUNTIME_PULL_HANDOFF <WORK_ID>
+Goal: define or execute checkpoint-to-runtime pull handoff
+Read: `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` plus scoped files
+Stop: if pull target, runtime target, or human confirmation is ambiguous
+Use only when explicitly requested
+No runtime restart, no execution, no secret reading, no trading behavior changes
 ```
 
 ## SYNC
 
 ```text
 SYNC <WORK_ID>
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Update only:
-- AGENTS.md
-- docs/operations/ai-orchestration/CONTROL.md
-- docs/operations/ai-orchestration/TASK_LEDGER.md
-- docs/operations/ai-orchestration/PROMPTS.md
-- docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
-Reflect latest reviewed baseline, current objective, workflow rules, next task, and blockers.
-`CONTROL.md` current_commit means the latest ChatGPT-reviewed baseline and may intentionally lag branch HEAD or the latest pushed commit.
-A branch HEAD/current_commit mismatch is not by itself a BLOCK condition.
-Codex should block only when the mismatch contradicts the specific task, the repo正本, or the requested edit scope.
-Codex must still verify branch/head status with `git status` and report the actual commit after push.
-Implementation tasks must not write their own final commit hash into CONTROL.md or TASK_LEDGER.md; use `pending_review` until ChatGPT review is complete and batch-update later in a SYNC task.
+Update reviewed metadata only at checkpoints.
 No source code changes.
 Do not edit or run the old runtime execution repo.
 Test: git diff --check
@@ -186,53 +170,23 @@ Report: compact
 
 ```text
 HANDOFF <WORK_ID>
-Working dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
-Create or update:
-- docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md
-Include repo, branch, current commit, objective, constraints, completed work, open questions, and next task.
-Update `CURRENT_HANDOFF.md` only at thread migration, context overload, major milestone, or explicit handoff; do not update it for every task.
+Update `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` only for active handoff conditions.
 No source code changes.
 Do not edit or run the old runtime execution repo.
 Test: git diff --check
 Report: compact
 ```
 
-## BLOCKED
+## Output Rule
 
-```text
-BLOCKED <WORK_ID>: <one specific question>
-Evidence: <file/path or command>
-Options:
-- A: ...
-- B: ...
-Recommendation: <A/B if obvious>
-```
+- final compact report は Codex が local filesystem access を持つときだけ `response.txt` に書く
+- filename は必ず `response.txt`
+- 書き込みは 1 回だけ
+- write 後に read/check/retry/watch/recreate しない
 
-## Output rule
+## Context Migration Rule
 
-- The final compact report must be written to `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access.
-- This applies to every Codex task type and outcome, including `NEXT`, `FIX`, `SYNC`, `HANDOFF`, `REVIEW_ONLY`, `BLOCKED`, `READY`, `NEEDS_REVIEW`, resume checks, branch checks, metadata checks, docs-only work, no-commit review work, `done`, `partial`, `failed`, and `not run`.
-- If the thread is ChatGPT-only and does not have local filesystem access, this file write is not required.
-
-```text
-Report: compact
-
-Also write the final compact report to:
-/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt
-```
-
-- The filename must be exactly `response.txt`.
-- Do not verify whether the file still exists after writing.
-- For implementation tasks, report the actual commit hash in the final report, but leave the current task's CONTROL/TASK_LEDGER commit fields as `pending_review` unless ChatGPT explicitly supplied a prior reviewed hash to record.
-- ChatGPT ACCEPT can accept `pending_review` metadata when the commit is verified on GitHub; later `SYNC` tasks can batch-update reviewed commit metadata.
-- Temporary deploy/runtime-facing labels, report titles, and email subject prefixes for this branch should use `BTCFX Ver03-v4` unless superseded by a newer reviewed roadmap.
-
-## Context migration rule
-
-- If ChatGPT judges that ChatGPT context or Codex context has become overloaded, unstable, contradictory, or likely to cause task confusion, ChatGPT must say so at the beginning of the reply.
-- If ChatGPT recommends moving to a new ChatGPT thread or a new Codex thread, ChatGPT must not output the next Codex work prompt until the user gives the next instruction.
-- When context migration is recommended, ChatGPT should first provide the reason for migration and wait for the user's direction.
-- If Codex sees contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or evidence that the task context is confused, Codex must stop and report `BLOCKED` rather than guessing or continuing.
-- Repo正本, especially `START_HERE.md`, `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`, takes priority over chat history.
-- A `current_commit` lag alone is not contradictory context.
-- The rule is universal and should apply before all future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
+- context が overloaded、contradictory、unstable なら新しい thread を勧める
+- ChatGPT は migration を勧めた時点で次の Codex prompt を出さない
+- Codex は contradictory work IDs、stale metadata、scope confusion を見たら `BLOCKED`
+- repo正本を chat history より優先する
