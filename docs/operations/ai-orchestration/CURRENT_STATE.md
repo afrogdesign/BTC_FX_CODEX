@@ -74,6 +74,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - actual judgment time and post-judgment self-review must be connected in the next design step.
 - deterministic report-only judgment self-review link is now completed.
 - normal notifications / generated HTML can be reviewed against self-review evidence when generated intraperiod inputs are available.
+- controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
 
 ## Current operational blocker
 
