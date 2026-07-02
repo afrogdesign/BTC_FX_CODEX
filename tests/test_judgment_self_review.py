@@ -21,6 +21,7 @@ from src.trade.judgment_self_review import (  # noqa: E402
     SAFETY_BOUNDARY,
     build_judgment_self_review_report,
     build_judgment_self_review_rows,
+    build_judgment_self_review_queue,
     summarize_judgment_self_reviews,
 )
 import tools.log_feedback as log_feedback  # noqa: E402
@@ -130,6 +131,132 @@ def _signal_row(signal_id: str, *, favorable: bool = True, sensitive: bool = Fal
 
 
 class JudgmentSelfReviewTests(unittest.TestCase):
+    def test_human_review_queue_orders_rows_deterministically(self) -> None:
+        review_df = pd.DataFrame(
+            [
+                {
+                    "review_id": "r-good",
+                    "timestamp_jst": "2026-07-02T10:00:00+09:00",
+                    "source_signal_id": "sig-good",
+                    "candidate_id": "cand-good",
+                    "side": "long",
+                    "candidate_type": "type-a",
+                    "intraperiod_outcome": "tp1_first",
+                    "self_review_label": "good",
+                    "review_bucket": "confirmed_useful",
+                    "review_severity": "low",
+                    "human_review_required": "no",
+                    "improvement_focus": "keep_current_logic",
+                    "operator_review_hint": "good hint",
+                    "mfe_r": "1.0",
+                    "mae_r": "0.1",
+                    "reason_codes": "",
+                },
+                {
+                    "review_id": "r-wrong",
+                    "timestamp_jst": "2026-07-02T09:00:00+09:00",
+                    "source_signal_id": "sig-wrong",
+                    "candidate_id": "cand-wrong",
+                    "side": "short",
+                    "candidate_type": "type-b",
+                    "intraperiod_outcome": "sl_first",
+                    "self_review_label": "wrong",
+                    "review_bucket": "bad_entry_or_wrong_direction",
+                    "review_severity": "high",
+                    "human_review_required": "yes",
+                    "improvement_focus": "entry_filter_or_direction_check",
+                    "operator_review_hint": "wrong hint",
+                    "mfe_r": "2.0",
+                    "mae_r": "0.5",
+                    "reason_codes": "r1",
+                },
+                {
+                    "review_id": "r-false",
+                    "timestamp_jst": "2026-07-02T08:00:00+09:00",
+                    "source_signal_id": "sig-false",
+                    "candidate_id": "cand-false",
+                    "side": "long",
+                    "candidate_type": "type-c",
+                    "intraperiod_outcome": "not_entered",
+                    "self_review_label": "false_alarm",
+                    "review_bucket": "no_entry_after_alert",
+                    "review_severity": "medium",
+                    "human_review_required": "yes",
+                    "improvement_focus": "alert_threshold_or_entry_reach",
+                    "operator_review_hint": "false hint",
+                    "mfe_r": "0.2",
+                    "mae_r": "0.1",
+                    "reason_codes": "r2",
+                },
+                {
+                    "review_id": "r-missed",
+                    "timestamp_jst": "2026-07-02T07:00:00+09:00",
+                    "source_signal_id": "sig-missed",
+                    "candidate_id": "",
+                    "side": "short",
+                    "candidate_type": "missed_opportunity",
+                    "intraperiod_outcome": "tp2_first",
+                    "self_review_label": "missed",
+                    "review_bucket": "missed_opportunity",
+                    "review_severity": "high",
+                    "human_review_required": "yes",
+                    "improvement_focus": "missed_signal_detection",
+                    "operator_review_hint": "missed hint",
+                    "mfe_r": "3.0",
+                    "mae_r": "0.0",
+                    "reason_codes": "missed_without_candidate",
+                },
+                {
+                    "review_id": "r-no-data",
+                    "timestamp_jst": "2026-07-02T06:00:00+09:00",
+                    "source_signal_id": "sig-no-data",
+                    "candidate_id": "cand-no-data",
+                    "side": "long",
+                    "candidate_type": "type-d",
+                    "intraperiod_outcome": "no_ohlcv",
+                    "self_review_label": "no_data",
+                    "review_bucket": "data_gap",
+                    "review_severity": "medium",
+                    "human_review_required": "yes",
+                    "improvement_focus": "data_coverage",
+                    "operator_review_hint": "no data hint",
+                    "mfe_r": "",
+                    "mae_r": "",
+                    "reason_codes": "missing",
+                },
+                {
+                    "review_id": "r-invalid",
+                    "timestamp_jst": "2026-07-02T11:00:00+09:00",
+                    "source_signal_id": "sig-invalid",
+                    "candidate_id": "cand-invalid",
+                    "side": "long",
+                    "candidate_type": "type-e",
+                    "intraperiod_outcome": "",
+                    "self_review_label": "invalid",
+                    "review_bucket": "invalid_input",
+                    "review_severity": "high",
+                    "human_review_required": "yes",
+                    "improvement_focus": "input_schema_or_missing_fields",
+                    "operator_review_hint": "invalid hint",
+                    "mfe_r": "4.0",
+                    "mae_r": "1.0",
+                    "reason_codes": "missing_outcome",
+                },
+            ]
+        )
+        queue = build_judgment_self_review_queue(review_df, limit=10)
+        self.assertEqual([row["review_id"] for row in queue], [
+            "r-wrong",
+            "r-missed",
+            "r-invalid",
+            "r-false",
+            "r-no-data",
+            "r-good",
+        ])
+        self.assertEqual(queue[0]["review_severity"], "high")
+        self.assertEqual(queue[0]["human_review_required"], "yes")
+        self.assertEqual(queue[-1]["review_severity"], "low")
+
     def test_classifies_core_outcomes_deterministically(self) -> None:
         review_df = build_judgment_self_review_rows(
             pd.DataFrame(
@@ -370,10 +497,13 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             self.assertTrue(output_md.exists())
             csv_text = output_csv.read_text(encoding="utf-8")
             md_text = output_md.read_text(encoding="utf-8")
+            self.assertIn("Human Review Queue", md_text)
             self.assertIn("## Review Buckets", md_text)
             self.assertIn("## Review Severity", md_text)
             self.assertIn("## Human Review Required", md_text)
             self.assertIn("## Improvement Focus", md_text)
+            self.assertEqual(payload["review_queue_count"], len(payload["review_queue"]))
+            self.assertTrue(payload["review_queue"])
             for text in (report, json.dumps(payload, ensure_ascii=False), csv_text, md_text):
                 self.assertNotIn("uid_sensitive_12345", text)
                 self.assertNotIn("account-1234567890", text)

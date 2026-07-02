@@ -548,6 +548,115 @@ def _count_series(series: pd.Series, *, exclude_empty: bool = True) -> dict[str,
     return dict(counts)
 
 
+def _review_severity_rank(value: Any) -> int:
+    text = _normalize_text(value).lower()
+    return {"high": 0, "medium": 1, "low": 2}.get(text, 1)
+
+
+def _human_review_required_rank(value: Any) -> int:
+    text = _normalize_text(value).lower()
+    return {"yes": 0, "no": 1}.get(text, 1)
+
+
+def _review_bucket_rank(value: Any) -> int:
+    text = _normalize_text(value).lower()
+    return {
+        "bad_entry_or_wrong_direction": 0,
+        "missed_opportunity": 1,
+        "no_entry_after_alert": 2,
+        "invalid_input": 3,
+        "ambiguous_outcome": 4,
+        "unresolved_followup": 5,
+        "data_gap": 6,
+        "confirmed_useful": 7,
+    }.get(text, 5)
+
+
+def build_judgment_self_review_queue(review_df: pd.DataFrame | None, *, limit: int = 10) -> list[dict[str, Any]]:
+    df = _ensure_df(review_df)
+    if df.empty:
+        return []
+    for column in (
+        "review_id",
+        "timestamp_jst",
+        "source_signal_id",
+        "candidate_id",
+        "side",
+        "candidate_type",
+        "intraperiod_outcome",
+        "self_review_label",
+        "review_bucket",
+        "review_severity",
+        "human_review_required",
+        "improvement_focus",
+        "operator_review_hint",
+        "mfe_r",
+        "mae_r",
+        "reason_codes",
+    ):
+        if column not in df.columns:
+            df[column] = ""
+    work_df = df.loc[:, [
+        "review_id",
+        "timestamp_jst",
+        "source_signal_id",
+        "candidate_id",
+        "side",
+        "candidate_type",
+        "intraperiod_outcome",
+        "self_review_label",
+        "review_bucket",
+        "review_severity",
+        "human_review_required",
+        "improvement_focus",
+        "operator_review_hint",
+        "mfe_r",
+        "mae_r",
+        "reason_codes",
+    ]].copy()
+    work_df["_severity_rank"] = work_df["review_severity"].map(_review_severity_rank)
+    work_df["_human_review_required_rank"] = work_df["human_review_required"].map(_human_review_required_rank)
+    work_df["_bucket_rank"] = work_df["review_bucket"].map(_review_bucket_rank)
+    work_df["_timestamp_sort"] = work_df["timestamp_jst"].map(lambda value: _normalize_text(value, ""))
+    work_df["_review_id_sort"] = work_df["review_id"].map(lambda value: _normalize_text(value, ""))
+    work_df = work_df.sort_values(
+        by=[
+            "_severity_rank",
+            "_human_review_required_rank",
+            "_bucket_rank",
+            "_timestamp_sort",
+            "_review_id_sort",
+        ],
+        ascending=[True, True, True, True, True],
+        kind="mergesort",
+    )
+    if limit is not None:
+        work_df = work_df.head(max(int(limit), 0))
+    queue: list[dict[str, Any]] = []
+    for row in work_df.to_dict(orient="records"):
+        queue.append(
+            {
+                "review_id": _normalize_value(row.get("review_id"), ""),
+                "timestamp_jst": _normalize_value(row.get("timestamp_jst"), ""),
+                "source_signal_id": _normalize_value(row.get("source_signal_id"), ""),
+                "candidate_id": _normalize_value(row.get("candidate_id"), ""),
+                "side": _normalize_value(row.get("side"), ""),
+                "candidate_type": _normalize_value(row.get("candidate_type"), ""),
+                "intraperiod_outcome": _normalize_value(row.get("intraperiod_outcome"), ""),
+                "self_review_label": _normalize_value(row.get("self_review_label"), ""),
+                "review_bucket": _normalize_value(row.get("review_bucket"), ""),
+                "review_severity": _normalize_value(row.get("review_severity"), ""),
+                "human_review_required": _normalize_value(row.get("human_review_required"), ""),
+                "improvement_focus": _normalize_value(row.get("improvement_focus"), ""),
+                "operator_review_hint": _normalize_value(row.get("operator_review_hint"), ""),
+                "mfe_r": _normalize_value(row.get("mfe_r"), ""),
+                "mae_r": _normalize_value(row.get("mae_r"), ""),
+                "reason_codes": _normalize_value(row.get("reason_codes"), ""),
+            }
+        )
+    return queue
+
+
 def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str, Any]:
     df = _ensure_df(review_df)
     if df.empty:
@@ -659,6 +768,7 @@ def _sanitize_review_df(review_df: pd.DataFrame | None) -> pd.DataFrame:
 
 def _markdown_lines(
     review_df: pd.DataFrame,
+    review_queue: list[dict[str, Any]],
     summary: dict[str, Any],
     report_date: str,
     input_counts: dict[str, Any],
@@ -715,6 +825,22 @@ def _markdown_lines(
         "## Improvement Focus",
         f"- {json.dumps(summary['improvement_focus_counts'], ensure_ascii=False, sort_keys=True)}",
         "",
+        "## Human Review Queue",
+    ]
+    if not review_queue:
+        lines.append("- none")
+    else:
+        for item in review_queue:
+            lines.append(
+                "- "
+                f"{_normalize_value(item.get('review_severity'), '')} / "
+                f"{_normalize_value(item.get('self_review_label'), '')} / "
+                f"{_normalize_value(item.get('side'), '')} / "
+                f"{_normalize_value(item.get('timestamp_jst'), '')} / "
+                f"focus={_normalize_value(item.get('improvement_focus'), '')} / "
+                f"hint={_normalize_value(item.get('operator_review_hint'), '')}"
+            )
+    lines.extend([
         "## Side Counts",
         f"- {json.dumps(summary['side_counts'], ensure_ascii=False, sort_keys=True)}",
         "",
@@ -723,7 +849,7 @@ def _markdown_lines(
         "",
         "## Safety Boundary",
         f"- {summary['safety_boundary']}",
-    ]
+    ])
     if summary["missed_opportunity_rows"]:
         lines.extend(["", "## Missed Opportunity", f"- missed_opportunity_rows: {summary['missed_opportunity_rows']}"])
     return lines
@@ -741,6 +867,7 @@ def build_judgment_self_review_report(
     intraperiod_input_df = _ensure_df(intraperiod_outcomes_df)
     signal_input_df = _ensure_df(signal_outcomes_df)
     review_df = build_judgment_self_review_rows(intraperiod_input_df, signal_input_df if not signal_input_df.empty else signal_input_df)
+    review_queue = build_judgment_self_review_queue(review_df)
     summary = summarize_judgment_self_reviews(review_df)
     resolved_report_date = (report_date or datetime.now(tz=timezone(timedelta(hours=9))).strftime("%Y%m%d")).strip()
     input_counts = {
@@ -753,7 +880,7 @@ def build_judgment_self_review_report(
             "rows": int(len(signal_input_df)),
         },
     }
-    report = "\n".join(_markdown_lines(review_df, summary, resolved_report_date, input_counts)) + "\n"
+    report = "\n".join(_markdown_lines(review_df, review_queue, summary, resolved_report_date, input_counts)) + "\n"
 
     sanitized_df = _sanitize_review_df(review_df)
     if not dry_run:
@@ -771,6 +898,8 @@ def build_judgment_self_review_report(
         "output_csv_path": str(output_csv) if output_csv is not None else "",
         "input_counts": input_counts,
         "summary": summary,
+        "review_queue": review_queue,
+        "review_queue_count": len(review_queue),
         "report_only": True,
         "formal_go": False,
         "automatic_order_allowed": False,
