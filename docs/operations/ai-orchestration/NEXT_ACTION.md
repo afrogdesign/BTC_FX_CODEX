@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT`
+- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Ver04-v1 の runtime preflight を read-only で実施し、runtime target の branch / upstream / worktree 状態を確認して、reflection に進めるかを判定する。
+Runtime preflight の blocker を精密に分類し、Ver04-v1 runtime reflection に進めるための条件を docs-only で整える。
 
-この task では runtime access は read-only の確認に限り、pull / sync / restart / launchd / notification sending / order execution は行わない。
+この task では runtime access は read-only の確認と `.gitignore` の安全な保存のみを行い、pull / sync / restart / launchd / notification sending / order execution は行わない。
 
 ## Completed history
 
@@ -27,6 +27,7 @@ Ver04-v1 の runtime preflight を read-only で実施し、runtime target の b
 - Export wiring
 - Post-Eval surface smoke
 - Ver04-v1 runtime deployment plan
+- Runtime preflight
 
 ## Product objective reminder
 
@@ -90,7 +91,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - runtime deployment plan is missing
@@ -137,5 +138,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX`
-- Runtime reflection is blocked until the runtime target is on Ver04-v1 with a configured upstream and a clean or explainable worktree.
+- `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX-REVIEW`
+- Runtime reflection remains blocked until the runtime target has a Ver04-v1 branch and an unambiguous upstream; the runtime worktree is now clean after preserving `.gitignore`.

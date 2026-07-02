@@ -75,8 +75,13 @@ This document is planning only. It does not access the runtime repo, does not re
 ## Runtime preflight result
 
 - checked target path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- target branch: `Ver03-v4`
-- target upstream: not configured
-- target worktree: dirty (`.gitignore`)
+- `.gitignore` classification: safe_to_commit
+- action taken: committed runtime `.gitignore` only with `chore: preserve runtime gitignore state`
+- runtime branch before: `Ver03-v4`
+- runtime branch after: `Ver03-v4`
+- runtime upstream before: not configured
+- runtime upstream after: not configured
+- runtime worktree before: dirty (`.gitignore`)
+- runtime worktree after: clean
 - reflection readiness: no
-- blocker: runtime target is not on Ver04-v1 and does not have a configured upstream yet, so the controlled reflection task must wait for a dedicated preflight-fix step
+- blocker: runtime target still has no Ver04-v1 branch and no configured upstream, so Ver04-v1 reflection cannot proceed yet
