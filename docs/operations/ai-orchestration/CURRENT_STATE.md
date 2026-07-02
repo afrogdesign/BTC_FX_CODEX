@@ -72,6 +72,8 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - this gate is mandatory before any live extra 15-minute sending decision.
 - observation checklist: HTML/page usability, `15分足 早期注意` timing, MACD wording usefulness, actual chart movement match, counter-bias loss reduction, safety boundary visibility.
 - actual judgment time and post-judgment self-review must be connected in the next design step.
+- deterministic report-only judgment self-review link is now completed.
+- normal notifications / generated HTML can be reviewed against self-review evidence when generated intraperiod inputs are available.
 
 ## Current operational blocker
 

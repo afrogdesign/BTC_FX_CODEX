@@ -102,6 +102,12 @@
 - observation must compare system judgment against actual chart movement after the notification
 - judgment-to-self-review linkage is now a required next design concern
 
+## Judgment self-review link implemented
+
+- deterministic report-only judgment self-review link is implemented
+- it evaluates predicted position accuracy and TP accuracy from intraperiod outcomes
+- it does not enable trading or notification sending behavior changes
+
 ## Current implementation route
 
 - post-eval asset health audit is completed history

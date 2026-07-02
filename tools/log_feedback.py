@@ -36,6 +36,11 @@ from src.data.fetcher import FetchConfig, fetch_klines, get_server_time_ms
 from src.notification.detail_page import build_notification_detail_html
 from src.storage.csv_logger import OBSERVATION_PAPER_ORDER_HEADER, PAPER_POSITION_HEADER, PHASE1B_LITE_PAPER_ORDER_HEADER
 from src.storage.json_store import load_json
+from src.trade.judgment_self_review import (
+    build_judgment_self_review_report,
+    build_judgment_self_review_rows,
+    summarize_judgment_self_reviews,
+)
 from src.trade.active_plan_intraperiod import (
     MIN_OUTCOME_COLUMNS,
     build_intraperiod_evidence_quality_summary,
@@ -22489,6 +22494,15 @@ def _build_parser() -> argparse.ArgumentParser:
     post_eval_parser.add_argument("--stdout-json", action="store_true")
     post_eval_parser.add_argument("--dry-run", action="store_true")
 
+    judgment_self_review_parser = subparsers.add_parser("build-judgment-self-review-report")
+    judgment_self_review_parser.add_argument("--intraperiod-outcomes", required=True)
+    judgment_self_review_parser.add_argument("--signal-outcomes")
+    judgment_self_review_parser.add_argument("--output-csv")
+    judgment_self_review_parser.add_argument("--output-md")
+    judgment_self_review_parser.add_argument("--report-date")
+    judgment_self_review_parser.add_argument("--dry-run", action="store_true")
+    judgment_self_review_parser.add_argument("--stdout-json", action="store_true")
+
     daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
     daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
     daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
@@ -23235,6 +23249,35 @@ def main() -> None:
             sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n")
         elif args.output_md and not args.dry_run:
             print(Path(payload["report_path"]))
+        else:
+            print(report)
+        return
+
+    if args.command == "build-judgment-self-review-report":
+        intraperiod_outcomes_path = Path(args.intraperiod_outcomes)
+        signal_outcomes_path = Path(args.signal_outcomes) if args.signal_outcomes else None
+        if not intraperiod_outcomes_path.exists():
+            parser.error(f"intraperiod outcomes CSV does not exist: {intraperiod_outcomes_path}")
+        if signal_outcomes_path is not None and not signal_outcomes_path.exists():
+            parser.error(f"signal outcomes CSV does not exist: {signal_outcomes_path}")
+        intraperiod_outcomes_df = pd.read_csv(intraperiod_outcomes_path)
+        signal_outcomes_df = pd.read_csv(signal_outcomes_path) if signal_outcomes_path is not None else None
+        output_csv = Path(args.output_csv) if args.output_csv else None
+        output_md = Path(args.output_md) if args.output_md else None
+        report, payload = build_judgment_self_review_report(
+            intraperiod_outcomes_df,
+            signal_outcomes_df,
+            output_csv=output_csv,
+            output_md=output_md,
+            report_date=str(args.report_date).strip() or None,
+            dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n")
+        elif output_md and not args.dry_run:
+            print(output_md)
+        elif output_csv and not args.dry_run:
+            print(output_csv)
         else:
             print(report)
         return
