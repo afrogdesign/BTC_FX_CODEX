@@ -85,3 +85,16 @@ This document is planning only. It does not access the runtime repo, does not re
 - runtime worktree after: clean
 - reflection readiness: no
 - blocker: runtime target still has no Ver04-v1 branch and no configured upstream, so Ver04-v1 reflection cannot proceed yet
+
+## Preflight-fix review result
+
+- source repo path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- source branch: `Ver04-v1`
+- source commit: `c37e46ff948cda664b0ca3641ad922369d16b436`
+- runtime branch: `Ver03-v4`
+- runtime branch/upstream gap: Ver04-v1 branch is not present locally and no upstream is configured on the runtime target
+- runtime worktree: clean after preserving `.gitignore`
+- selected reflection method: explicit local source path/ref/commit handoff from `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` at `Ver04-v1` commit `c37e46ff948cda664b0ca3641ad922369d16b436`
+- next task boundaries: no fetch/pull/sync/branch switch/restart/launchd/notification sending/API/private endpoint/order execution in this review task
+- reflection_ready: yes
+- blocker: none for the next explicit reflection task when it uses the recorded source path/ref/commit method
