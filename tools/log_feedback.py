@@ -1412,6 +1412,36 @@ _MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY = (
 )
 _MEXC_GROUND_TRUTH_REPORT_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
 _MEXC_GROUND_TRUTH_REPORT_HEADER = "# Manual Trade Ground Truth Report"
+_POST_EVAL_RECOMMENDATION_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
+_POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY = (
+    "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually"
+)
+_POST_EVAL_RECOMMENDATION_HEADER = "# Post-Eval Recommendation Engine"
+_POST_EVAL_RECOMMENDATION_CODES = (
+    "NO_TRADE_SPLIT_REVIEW",
+    "SUBJECT_DEFENSIVE_WORDING_REVIEW",
+    "LONG_SHORT_BALANCE_REVIEW",
+    "TURNING_BRAKE_REVIEW",
+    "PROXY_TOO_AGGRESSIVE_REVIEW",
+    "PROXY_TOO_PESSIMISTIC_REVIEW",
+    "LINKAGE_COVERAGE_REVIEW",
+    "FEE_COVERAGE_REVIEW",
+    "AMBIGUOUS_LINK_MANUAL_REVIEW",
+    "INSUFFICIENT_EVIDENCE",
+)
+_POST_EVAL_RECOMMENDATION_CSV_HEADER = [
+    "recommendation_id",
+    "recommendation_code",
+    "rank",
+    "priority",
+    "confidence",
+    "evidence_score",
+    "affected_area",
+    "proposed_action",
+    "evidence_summary",
+    "required_human_approval",
+    "safety_note",
+]
 
 _MEXC_HISTORY_SPECS = (
     {
@@ -2421,6 +2451,786 @@ def build_manual_trade_ground_truth_report(
         "calibration_counts": calibration_summary["calibration_counts"],
         "recommendation_codes": recommendation_codes,
         "safety_boundary": _MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY,
+    }
+    return report, payload
+
+
+def _post_eval_normalize_text(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _post_eval_contains_any(value: Any, needles: tuple[str, ...]) -> bool:
+    haystack = _post_eval_normalize_text(value)
+    if not haystack:
+        return False
+    return any(needle in haystack for needle in needles)
+
+
+def _post_eval_watch_like(value: Any) -> bool:
+    haystack = str(value or "").strip().lower()
+    if not haystack:
+        return False
+    return any(
+        needle in haystack
+        for needle in (
+            "no_trade",
+            "no trade",
+            "watch",
+            "skip",
+            "wait",
+            "見送り",
+            "様子見",
+        )
+    )
+
+
+def _post_eval_defensive_subject(value: Any) -> bool:
+    haystack = str(value or "").strip().lower()
+    if not haystack:
+        return False
+    return any(
+        needle in haystack
+        for needle in (
+            "売買非推奨",
+            "実弾不可",
+            "見送り",
+            "no trade",
+            "no_trade",
+            "skip",
+            "様子見",
+            "慎重",
+            "defensive",
+        )
+    )
+
+
+def _post_eval_positive_proxy_outcome(row: dict[str, Any]) -> bool:
+    positive_string_tokens = (
+        "positive",
+        "profit",
+        "win",
+        "good",
+        "correct",
+        "success",
+        "entry_ok",
+        "tp1_hit_first",
+        "tp2_hit_first",
+        "target_hit",
+        "long_win",
+        "short_win",
+    )
+    for field in (
+        "outcome",
+        "direction_outcome",
+        "candidate_result_12h",
+        "candidate_result_24h",
+        "signal_based_outcome",
+        "user_verdict",
+        "prelabel",
+    ):
+        if _post_eval_contains_any(row.get(field, ""), positive_string_tokens):
+            return True
+    for field in (
+        "actual_pnl",
+        "gross_realized_pnl",
+        "net_pnl_after_fee",
+        "realized_pnl",
+        "candidate_delta_12h",
+        "candidate_delta_24h",
+        "signal_based_MFE_24h",
+    ):
+        value = _mexc_parse_decimal(row.get(field, ""))
+        if value is not None and value > 0:
+            return True
+    return False
+
+
+def _post_eval_row_side(row: dict[str, Any]) -> str:
+    side = str(row.get("side", "")).strip().lower()
+    if not side:
+        side = str(row.get("bias", "")).strip().lower()
+    if not side:
+        side = str(row.get("direction", "")).strip().lower()
+    if side in {"long", "buy"}:
+        return "long"
+    if side in {"short", "sell"}:
+        return "short"
+    return side or "unknown"
+
+
+def _post_eval_bool_like(value: Any) -> bool | None:
+    text = str(value or "").strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def _post_eval_input_coverage(path: Path, *, timestamp_keys: tuple[str, ...]) -> dict[str, Any]:
+    rows, fieldnames = _load_csv_rows_with_fieldnames(path)
+    exists = path.exists()
+    status = "missing" if not exists else ("header_only" if not rows else "ok")
+    latest_timestamp = _mexc_rows_latest_timestamp(rows, keys=timestamp_keys) if rows else ""
+    return {
+        "path": str(path),
+        "exists": exists,
+        "status": status,
+        "row_count": len(rows),
+        "field_count": len(fieldnames),
+        "fieldnames": fieldnames,
+        "latest_timestamp_jst": latest_timestamp,
+        "rows": rows,
+    }
+
+
+def _post_eval_candidate_id(report_date: str, code: str, evidence_summary: str, evidence_score: int, rank: int) -> str:
+    return f"rec_{_mexc_hash_text('post_eval', report_date, code, evidence_summary, str(evidence_score), str(rank))}"
+
+
+def _post_eval_candidate_row(
+    *,
+    report_date: str,
+    code: str,
+    evidence_score: int,
+    affected_area: str,
+    proposed_action: str,
+    evidence_summary: str,
+    required_human_approval: bool = True,
+    safety_note: str = _POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY,
+    confidence: str = "proxy_backed",
+    priority: str = "low",
+    proxy_evidence_count: int = 0,
+    actual_backed_count: int = 0,
+    high_link_count: int = 0,
+    medium_link_count: int = 0,
+) -> dict[str, Any]:
+    return {
+        "recommendation_code": code,
+        "evidence_score": int(evidence_score),
+        "affected_area": affected_area,
+        "proposed_action": proposed_action,
+        "evidence_summary": evidence_summary,
+        "required_human_approval": "true" if required_human_approval else "false",
+        "safety_note": safety_note,
+        "confidence": confidence,
+        "priority": priority,
+        "proxy_evidence_count": int(proxy_evidence_count),
+        "actual_backed_count": int(actual_backed_count),
+        "high_link_count": int(high_link_count),
+        "medium_link_count": int(medium_link_count),
+        "_report_date": report_date,
+    }
+
+
+def _post_eval_priority_from_score(score: int) -> str:
+    if score >= 8:
+        return "high"
+    if score >= 4:
+        return "medium"
+    return "low"
+
+
+def _post_eval_confidence_from_candidate(candidate: dict[str, Any]) -> str:
+    if candidate.get("confidence") == "insufficient":
+        return "insufficient"
+    if int(candidate.get("actual_backed_count", 0)) > 0:
+        return "actual_backed"
+    return "proxy_backed"
+
+
+def _post_eval_candidate_sort_key(row: dict[str, Any]) -> tuple[int, int, int, str]:
+    confidence_order = {"actual_backed": 0, "proxy_backed": 1, "insufficient": 2}
+    return (
+        -int(row.get("evidence_score", 0)),
+        confidence_order.get(str(row.get("confidence", "proxy_backed")), 9),
+        -int(row.get("actual_backed_count", 0)),
+        str(row.get("recommendation_code", "")).strip(),
+    )
+
+
+def build_post_eval_recommendation_candidates(
+    *,
+    base_dir: Path = BASE_DIR,
+    signal_outcomes: Path | None = None,
+    active_plan_candidate_outcomes: Path | None = None,
+    active_plan_candidate_intraperiod_outcomes: Path | None = None,
+    user_reviews: Path | None = None,
+    manual_trades: Path | None = None,
+    links: Path | None = None,
+    report_date: str | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    signal_outcomes_path = signal_outcomes or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+    active_plan_candidate_outcomes_path = active_plan_candidate_outcomes or base_dir / "logs" / "csv" / "active_plan_candidate_outcomes.csv"
+    active_plan_candidate_intraperiod_outcomes_path = active_plan_candidate_intraperiod_outcomes or base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
+    user_reviews_path = user_reviews or base_dir / "logs" / "csv" / "user_reviews.csv"
+    manual_trades_path = manual_trades or base_dir / "logs" / "csv" / "manual_actual_trades.csv"
+    links_path = links or base_dir / "logs" / "csv" / "manual_trade_signal_links.csv"
+
+    coverage = {
+        "signal_outcomes": _post_eval_input_coverage(signal_outcomes_path, timestamp_keys=("timestamp_jst", "mail_timestamp_jst")),
+        "active_plan_candidate_outcomes": _post_eval_input_coverage(active_plan_candidate_outcomes_path, timestamp_keys=("timestamp_jst",)),
+        "active_plan_candidate_intraperiod_outcomes": _post_eval_input_coverage(active_plan_candidate_intraperiod_outcomes_path, timestamp_keys=("timestamp_jst",)),
+        "user_reviews": _post_eval_input_coverage(user_reviews_path, timestamp_keys=("timestamp_jst",)),
+        "manual_trades": _post_eval_input_coverage(manual_trades_path, timestamp_keys=("timestamp_jst",)),
+        "links": _post_eval_input_coverage(links_path, timestamp_keys=("mail_timestamp_jst", "trade_opened_at_jst", "trade_closed_at_jst")),
+    }
+
+    all_latest_candidates: list[str] = []
+    for item in coverage.values():
+        latest = str(item.get("latest_timestamp_jst", "")).strip()
+        if latest:
+            all_latest_candidates.append(latest)
+    inferred_report_date = str(report_date or "").strip()
+    if not inferred_report_date and all_latest_candidates:
+        parsed_latest = [dt for dt in (_parse_dt(value) for value in all_latest_candidates) if dt is not None]
+        if parsed_latest:
+            latest_dt = max(
+                dt.astimezone(JST) if dt.tzinfo else dt.replace(tzinfo=JST)
+                for dt in parsed_latest
+            )
+            inferred_report_date = latest_dt.strftime("%Y%m%d")
+    if not inferred_report_date:
+        inferred_report_date = datetime.now(tz=JST).strftime("%Y%m%d")
+
+    signal_rows = coverage["signal_outcomes"]["rows"]
+    active_plan_candidate_outcomes_rows = coverage["active_plan_candidate_outcomes"]["rows"]
+    active_plan_candidate_intraperiod_outcomes_rows = coverage["active_plan_candidate_intraperiod_outcomes"]["rows"]
+    user_review_rows = coverage["user_reviews"]["rows"]
+    manual_trade_rows = coverage["manual_trades"]["rows"]
+    link_rows = coverage["links"]["rows"]
+
+    trade_summary = summarize_manual_actual_trade_performance(manual_trade_rows)
+    link_summary = summarize_manual_trade_link_quality(link_rows)
+    calibration_summary = calibrate_manual_trade_proxy_vs_actual(manual_trade_rows, link_rows, signal_rows)
+
+    signal_watch_positive_rows = [
+        row
+        for row in signal_rows
+        if _post_eval_watch_like(row.get("prelabel", "")) and _post_eval_positive_proxy_outcome(row)
+    ]
+    defensive_review_rows = [
+        row for row in user_review_rows if _post_eval_defensive_subject(" ".join(str(row.get(field, "")) for field in ("subject", "title", "body")))
+    ]
+    balance_rows = active_plan_candidate_outcomes_rows + active_plan_candidate_intraperiod_outcomes_rows
+    balance_long_count = sum(1 for row in balance_rows if _post_eval_row_side(row) == "long")
+    balance_short_count = sum(1 for row in balance_rows if _post_eval_row_side(row) == "short")
+    balance_total = balance_long_count + balance_short_count
+    balance_imbalance_rate = round((abs(balance_long_count - balance_short_count) / balance_total) if balance_total else 0.0, 4)
+
+    turning_rows = []
+    for row in active_plan_candidate_intraperiod_outcomes_rows:
+        row_text = " ".join(
+            str(row.get(field, "")).strip()
+            for field in (
+                "candidate_type",
+                "active_primary_action",
+                "prelabel",
+                "notes",
+                "first_exit_reason",
+            )
+        )
+        if not any(token in row_text.lower() for token in ("turn", "counter", "reversal", "反転", "反発", "戻し")):
+            continue
+        sl_first = _post_eval_bool_like(row.get("sl_first", ""))
+        mae_r = _mexc_parse_decimal(row.get("mae_r", ""))
+        if sl_first is True or (mae_r is not None and mae_r >= 1.0):
+            turning_rows.append(row)
+
+    high_link_count = sum(
+        1
+        for row in link_rows
+        if str(row.get("link_confidence", "")).strip() == "high" and str(row.get("signal_id", "")).strip()
+    )
+    medium_link_count = sum(
+        1
+        for row in link_rows
+        if str(row.get("link_confidence", "")).strip() == "medium" and str(row.get("signal_id", "")).strip()
+    )
+    positive_actual_link_count = sum(
+        1
+        for trade_row in manual_trade_rows
+        if (_mexc_parse_decimal(trade_row.get("realized_pnl", "")) or 0.0) > 0
+    )
+    actual_backed_link_count = sum(
+        1
+        for trade_row in manual_trade_rows
+        if str(trade_row.get("actual_trade_id", "")).strip()
+        and str(
+            next(
+                (row for row in link_rows if str(row.get("actual_trade_id", "")).strip() == str(trade_row.get("actual_trade_id", "")).strip()),
+                {},
+            ).get("link_confidence", "")
+        ).strip()
+        in {"high", "medium"}
+    )
+    actual_backed_trade_ids = {
+        str(trade_row.get("actual_trade_id", "")).strip()
+        for trade_row in manual_trade_rows
+        if str(trade_row.get("actual_trade_id", "")).strip()
+        and str(
+            next(
+                (row for row in link_rows if str(row.get("actual_trade_id", "")).strip() == str(trade_row.get("actual_trade_id", "")).strip()),
+                {},
+            ).get("link_confidence", "")
+        ).strip()
+        in {"high", "medium"}
+    }
+    coverage_complete = all(item["status"] == "ok" for item in coverage.values())
+
+    candidates: list[dict[str, Any]] = []
+
+    if coverage_complete and signal_watch_positive_rows:
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="NO_TRADE_SPLIT_REVIEW",
+                evidence_score=len(signal_watch_positive_rows),
+                affected_area="signal prelabel / no-trade split",
+                proposed_action="review NO_TRADE split candidate",
+                evidence_summary=(
+                    f"{len(signal_watch_positive_rows)} signal_outcomes rows had NO_TRADE/WATCH/SKIP-like wording with positive proxy evidence"
+                ),
+                confidence="proxy_backed",
+                proxy_evidence_count=len(signal_watch_positive_rows),
+            )
+        )
+
+    if coverage_complete and defensive_review_rows:
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="SUBJECT_DEFENSIVE_WORDING_REVIEW",
+                evidence_score=len(defensive_review_rows),
+                affected_area="user review subject wording",
+                proposed_action="review subject wording candidate",
+                evidence_summary=f"{len(defensive_review_rows)} user_reviews subjects looked defensive or skip-like",
+                confidence="proxy_backed",
+                proxy_evidence_count=len(defensive_review_rows),
+            )
+        )
+
+    if coverage_complete and balance_total >= 4 and balance_imbalance_rate >= 0.4:
+        imbalance_side = "long" if balance_long_count > balance_short_count else "short"
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="LONG_SHORT_BALANCE_REVIEW",
+                evidence_score=abs(balance_long_count - balance_short_count),
+                affected_area="active-plan long/short weighting",
+                proposed_action="review long/short display weighting candidate",
+                evidence_summary=(
+                    f"active plan rows show imbalance long={balance_long_count}, short={balance_short_count}, "
+                    f"dominant_side={imbalance_side}, imbalance_rate={balance_imbalance_rate:.2f}"
+                ),
+                confidence="proxy_backed",
+                proxy_evidence_count=abs(balance_long_count - balance_short_count),
+            )
+        )
+
+    if coverage_complete and turning_rows:
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="TURNING_BRAKE_REVIEW",
+                evidence_score=len(turning_rows),
+                affected_area="turning / counter wording and rank",
+                proposed_action="review turning brake wording/rank candidate",
+                evidence_summary=(
+                    f"{len(turning_rows)} intraperiod rows had turning/counter style wording with sl_first or high mae_r evidence"
+                ),
+                confidence="proxy_backed",
+                proxy_evidence_count=len(turning_rows),
+            )
+        )
+
+    if coverage_complete and calibration_summary["calibration_counts"].get("proxy_too_aggressive", 0) > 0:
+        aggressive_rows = []
+        link_map = {str(row.get("actual_trade_id", "")).strip(): row for row in link_rows if str(row.get("actual_trade_id", "")).strip()}
+        signal_map = {str(row.get("signal_id", "")).strip(): row for row in signal_rows if str(row.get("signal_id", "")).strip()}
+        for trade_row in manual_trade_rows:
+            actual_trade_id = str(trade_row.get("actual_trade_id", "")).strip()
+            pnl = _mexc_parse_decimal(trade_row.get("realized_pnl", ""))
+            if pnl is None or pnl >= 0:
+                continue
+            link_row = link_map.get(actual_trade_id, {})
+            if str(link_row.get("link_confidence", "")).strip() not in {"high", "medium"}:
+                continue
+            if str(link_row.get("side_match", "")).strip().lower() != "yes":
+                continue
+            aggressive_rows.append((trade_row, link_row, signal_map.get(str(link_row.get("signal_id", "")).strip(), {})))
+        if aggressive_rows:
+            candidates.append(
+                _post_eval_candidate_row(
+                    report_date=inferred_report_date,
+                    code="PROXY_TOO_AGGRESSIVE_REVIEW",
+                    evidence_score=len(aggressive_rows),
+                    affected_area="proxy label aggressiveness",
+                    proposed_action="review proxy aggressiveness candidate",
+                    evidence_summary=(
+                        f"{len(aggressive_rows)} high/medium linked actual losses with side_match=true suggest proxy is too aggressive"
+                    ),
+                    confidence="actual_backed",
+                    proxy_evidence_count=len(aggressive_rows),
+                    actual_backed_count=len(aggressive_rows),
+                    high_link_count=sum(1 for _, link_row, _ in aggressive_rows if str(link_row.get("link_confidence", "")).strip() == "high"),
+                    medium_link_count=sum(1 for _, link_row, _ in aggressive_rows if str(link_row.get("link_confidence", "")).strip() == "medium"),
+                )
+            )
+
+    if coverage_complete and calibration_summary["calibration_counts"].get("proxy_too_pessimistic", 0) > 0:
+        pessimistic_rows = []
+        link_map = {str(row.get("actual_trade_id", "")).strip(): row for row in link_rows if str(row.get("actual_trade_id", "")).strip()}
+        signal_map = {str(row.get("signal_id", "")).strip(): row for row in signal_rows if str(row.get("signal_id", "")).strip()}
+        for trade_row in manual_trade_rows:
+            actual_trade_id = str(trade_row.get("actual_trade_id", "")).strip()
+            pnl = _mexc_parse_decimal(trade_row.get("realized_pnl", ""))
+            if pnl is None or pnl <= 0:
+                continue
+            link_row = link_map.get(actual_trade_id, {})
+            if str(link_row.get("link_confidence", "")).strip() not in {"high", "medium"}:
+                continue
+            signal_row = signal_map.get(str(link_row.get("signal_id", "")).strip(), {})
+            if not _post_eval_watch_like(signal_row.get("prelabel", "")):
+                continue
+            pessimistic_rows.append((trade_row, link_row, signal_row))
+        if pessimistic_rows:
+            candidates.append(
+                _post_eval_candidate_row(
+                    report_date=inferred_report_date,
+                    code="PROXY_TOO_PESSIMISTIC_REVIEW",
+                    evidence_score=len(pessimistic_rows),
+                    affected_area="proxy label pessimism",
+                    proposed_action="review proxy pessimism candidate",
+                    evidence_summary=(
+                        f"{len(pessimistic_rows)} high/medium linked actual wins followed NO_TRADE/WATCH/SKIP-like proxy labels"
+                    ),
+                    confidence="actual_backed",
+                    proxy_evidence_count=len(pessimistic_rows),
+                    actual_backed_count=len(pessimistic_rows),
+                    high_link_count=sum(1 for _, link_row, _ in pessimistic_rows if str(link_row.get("link_confidence", "")).strip() == "high"),
+                    medium_link_count=sum(1 for _, link_row, _ in pessimistic_rows if str(link_row.get("link_confidence", "")).strip() == "medium"),
+                )
+            )
+
+    if coverage_complete and (
+        link_summary["high_or_medium_link_rate"] < 0.8
+        or link_summary["no_candidate_count"] > 0
+        or link_summary["competing_candidate_tie_count"] > 0
+        or link_summary["ambiguous_count"] > 0
+    ):
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="LINKAGE_COVERAGE_REVIEW",
+                evidence_score=(
+                    int(round((1.0 - link_summary["high_or_medium_link_rate"]) * 10))
+                    + link_summary["no_candidate_count"]
+                    + link_summary["competing_candidate_tie_count"]
+                    + link_summary["ambiguous_count"]
+                ),
+                affected_area="manual trade to signal linkage",
+                proposed_action="review ambiguous links manually",
+                evidence_summary=(
+                    f"high_or_medium_link_rate={link_summary['high_or_medium_link_rate']:.2f}, "
+                    f"no_candidate={link_summary['no_candidate_count']}, tie={link_summary['competing_candidate_tie_count']}, ambiguous={link_summary['ambiguous_count']}"
+                ),
+                confidence="actual_backed" if manual_trade_rows and link_rows else "proxy_backed",
+                proxy_evidence_count=(
+                    int(round((1.0 - link_summary["high_or_medium_link_rate"]) * 10))
+                    + link_summary["no_candidate_count"]
+                    + link_summary["competing_candidate_tie_count"]
+                    + link_summary["ambiguous_count"]
+                ),
+                actual_backed_count=1 if manual_trade_rows and link_rows else 0,
+            )
+        )
+
+    if coverage_complete and trade_summary["fee_missing_count"] > 0:
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="FEE_COVERAGE_REVIEW",
+                evidence_score=trade_summary["fee_missing_count"],
+                affected_area="fee coverage and net PnL calibration",
+                proposed_action="review fee coverage candidate",
+                evidence_summary=f"{trade_summary['fee_missing_count']} manual_actual_trades rows had missing or invalid fee values",
+                confidence="actual_backed",
+                proxy_evidence_count=trade_summary["fee_missing_count"],
+                actual_backed_count=1 if trade_summary["fee_missing_count"] else 0,
+            )
+        )
+
+    if coverage_complete and (
+        link_summary["ambiguous_count"] > 0
+        or link_summary["no_candidate_count"] > 0
+        or link_summary["competing_candidate_tie_count"] > 0
+        or not actual_backed_trade_ids
+    ):
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="AMBIGUOUS_LINK_MANUAL_REVIEW",
+                evidence_score=(
+                    link_summary["ambiguous_count"]
+                    + link_summary["no_candidate_count"]
+                    + link_summary["competing_candidate_tie_count"]
+                ),
+                affected_area="manual trade linking ambiguity",
+                proposed_action="review ambiguous links manually",
+                evidence_summary=(
+                    f"ambiguous={link_summary['ambiguous_count']}, no_candidate={link_summary['no_candidate_count']}, "
+                    f"tie={link_summary['competing_candidate_tie_count']}"
+                ),
+                confidence="actual_backed" if manual_trade_rows and link_rows else "proxy_backed",
+                proxy_evidence_count=(
+                    link_summary["ambiguous_count"]
+                    + link_summary["no_candidate_count"]
+                    + link_summary["competing_candidate_tie_count"]
+                ),
+                actual_backed_count=1 if manual_trade_rows and link_rows else 0,
+            )
+        )
+
+    input_statuses = [item["status"] for item in coverage.values()]
+    if any(status != "ok" for status in input_statuses) or not candidates:
+        candidates.append(
+            _post_eval_candidate_row(
+                report_date=inferred_report_date,
+                code="INSUFFICIENT_EVIDENCE",
+                evidence_score=0,
+                affected_area="evidence coverage",
+                proposed_action="collect more evidence before revisiting",
+                evidence_summary=(
+                    "some inputs are missing or header-only, or the available evidence is not yet strong enough for a ranked recommendation"
+                ),
+                confidence="insufficient",
+            )
+        )
+
+    summary = {
+        "report_date": inferred_report_date,
+        "input_counts": {
+            name: {"status": item["status"], "rows": item["row_count"], "fields": item["field_count"]}
+            for name, item in coverage.items()
+        },
+        "coverage": coverage,
+        "trade_summary": trade_summary,
+        "link_summary": link_summary,
+        "calibration_counts": calibration_summary["calibration_counts"],
+        "signal_watch_positive_count": len(signal_watch_positive_rows),
+        "defensive_review_count": len(defensive_review_rows),
+        "balance_long_count": balance_long_count,
+        "balance_short_count": balance_short_count,
+        "balance_total": balance_total,
+        "balance_imbalance_rate": balance_imbalance_rate,
+        "turning_review_count": len(turning_rows),
+        "actual_backed_trade_count": len(actual_backed_trade_ids),
+        "actual_backed_link_count": actual_backed_link_count,
+        "positive_actual_trade_count": positive_actual_link_count,
+        "recommendation_codes": [row["recommendation_code"] for row in candidates],
+        "safety_boundary": _POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY,
+    }
+    return candidates, summary
+
+
+def rank_post_eval_recommendation_candidates(
+    candidates: list[dict[str, Any]],
+    *,
+    report_date: str,
+    coverage_complete: bool,
+) -> list[dict[str, Any]]:
+    ranked_candidates: list[dict[str, Any]] = []
+    for candidate in candidates:
+        row = dict(candidate)
+        code = str(row.get("recommendation_code", "")).strip()
+        proxy_evidence_count = int(row.get("proxy_evidence_count", row.get("evidence_score", 0)))
+        actual_backed_count = int(row.get("actual_backed_count", 0))
+        high_link_count = int(row.get("high_link_count", 0))
+        medium_link_count = int(row.get("medium_link_count", 0))
+        actual_backed = actual_backed_count > 0 or str(row.get("confidence", "")).strip() == "actual_backed"
+        if code == "INSUFFICIENT_EVIDENCE":
+            evidence_score = 0
+            confidence = "insufficient"
+        else:
+            evidence_score = min(proxy_evidence_count, 5)
+            evidence_score += min(actual_backed_count * 4, 20)
+            evidence_score += min(high_link_count * 2, 10)
+            evidence_score += min(medium_link_count, 5)
+            confidence = "actual_backed" if actual_backed else "proxy_backed"
+            if not coverage_complete and confidence != "actual_backed":
+                confidence = "proxy_backed"
+        row["evidence_score"] = int(evidence_score)
+        row["priority"] = _post_eval_priority_from_score(int(evidence_score))
+        row["confidence"] = confidence
+        row["required_human_approval"] = "true"
+        row["safety_note"] = _POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY
+        ranked_candidates.append(row)
+
+    ranked_candidates.sort(key=_post_eval_candidate_sort_key)
+    for index, row in enumerate(ranked_candidates, start=1):
+        row["rank"] = index
+        row["recommendation_id"] = _post_eval_candidate_id(
+            report_date=report_date,
+            code=str(row.get("recommendation_code", "")).strip(),
+            evidence_summary=str(row.get("evidence_summary", "")).strip(),
+            evidence_score=int(row.get("evidence_score", 0)),
+            rank=index,
+        )
+    return ranked_candidates
+
+
+def build_post_eval_recommendation_report(
+    *,
+    base_dir: Path = BASE_DIR,
+    signal_outcomes: Path | None = None,
+    active_plan_candidate_outcomes: Path | None = None,
+    active_plan_candidate_intraperiod_outcomes: Path | None = None,
+    user_reviews: Path | None = None,
+    manual_trades: Path | None = None,
+    links: Path | None = None,
+    output_md: Path | None = None,
+    output_csv: Path | None = None,
+    report_date: str | None = None,
+    dry_run: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    candidates, summary = build_post_eval_recommendation_candidates(
+        base_dir=base_dir,
+        signal_outcomes=signal_outcomes,
+        active_plan_candidate_outcomes=active_plan_candidate_outcomes,
+        active_plan_candidate_intraperiod_outcomes=active_plan_candidate_intraperiod_outcomes,
+        user_reviews=user_reviews,
+        manual_trades=manual_trades,
+        links=links,
+        report_date=report_date,
+    )
+    coverage_complete = all(item["status"] == "ok" for item in summary["coverage"].values())
+    ranked_candidates = rank_post_eval_recommendation_candidates(
+        candidates,
+        report_date=summary["report_date"],
+        coverage_complete=coverage_complete,
+    )
+
+    report_path = output_md or (
+        base_dir / _POST_EVAL_RECOMMENDATION_OUTPUT_DIR / f"post_eval_recommendations_{summary['report_date']}.md"
+    )
+    output_csv_path = output_csv or base_dir / "logs" / "csv" / "post_eval_recommendation_candidates.csv"
+
+    lines = [
+        _POST_EVAL_RECOMMENDATION_HEADER,
+        "",
+        "## 1. Purpose Fit Summary",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- no private/account/order endpoints",
+        "- human decides manually",
+        "- ranked candidates are review-only and do not mutate thresholds, gates, labels, config, schedule, or notification text",
+        "- no profitability claim is made from this report",
+        "",
+        "## 2. Input Coverage",
+    ]
+    for name, item in summary["coverage"].items():
+        line = (
+            f"- {name}: status={item['status']} / rows={item['row_count']} / fields={item['field_count']}"
+            + (f" / latest_timestamp_jst={item['latest_timestamp_jst']}" if item["latest_timestamp_jst"] else "")
+        )
+        lines.append(line)
+
+    lines.extend(
+        [
+            "",
+            "## 3. Ranked Recommendation Candidates",
+        ]
+    )
+    if ranked_candidates:
+        for candidate in ranked_candidates:
+            lines.append(
+                f"- rank {candidate['rank']}: {candidate['recommendation_code']} / "
+                f"priority={candidate['priority']} / confidence={candidate['confidence']} / "
+                f"score={candidate['evidence_score']} / {candidate['proposed_action']}"
+            )
+            lines.append(f"  - evidence: {candidate['evidence_summary']}")
+    else:
+        lines.append("- INSUFFICIENT_EVIDENCE: evidence is not yet enough for a ranked recommendation")
+
+    lines.extend(
+        [
+            "",
+            "## 4. Evidence Summary",
+            f"- signal_outcomes rows: {summary['input_counts']['signal_outcomes']['rows']}",
+            f"- user_reviews rows: {summary['input_counts']['user_reviews']['rows']}",
+            f"- manual_actual_trades rows: {summary['input_counts']['manual_trades']['rows']}",
+            f"- manual_trade_signal_links rows: {summary['input_counts']['links']['rows']}",
+            f"- actual_backed_trade_count: {summary['actual_backed_trade_count']}",
+            f"- actual_backed_link_count: {summary['actual_backed_link_count']}",
+            f"- calibration proxy_too_aggressive: {summary['calibration_counts'].get('proxy_too_aggressive', 0)}",
+            f"- calibration proxy_too_pessimistic: {summary['calibration_counts'].get('proxy_too_pessimistic', 0)}",
+            f"- calibration ambiguous_needs_review: {summary['calibration_counts'].get('ambiguous_needs_review', 0)}",
+            "",
+            "## 5. Long/Short Balance Review",
+            f"- long_count: {summary['balance_long_count']}",
+            f"- short_count: {summary['balance_short_count']}",
+            f"- total_balance_rows: {summary['balance_total']}",
+            f"- imbalance_rate: {summary['balance_imbalance_rate']:.4f}",
+            "",
+            "## 6. Over-Suppression Review",
+            f"- NO_TRADE/watch positive proxy rows: {summary['signal_watch_positive_count']}",
+            f"- defensive subject rows: {summary['defensive_review_count']}",
+            "",
+            "## 7. Turning Brake Review",
+            f"- turning/counter rows with brake evidence: {summary['turning_review_count']}",
+            "",
+            "## 8. Linkage and Ground Truth Coverage",
+            f"- total_link_rows: {summary['link_summary']['total_link_rows']}",
+            f"- linked_rows: {summary['link_summary']['linked_rows']}",
+            f"- high_or_medium_link_rate: {summary['link_summary']['high_or_medium_link_rate']:.4f}",
+            f"- no_candidate_count: {summary['link_summary']['no_candidate_count']}",
+            f"- competing_candidate_tie_count: {summary['link_summary']['competing_candidate_tie_count']}",
+            f"- ambiguous_count: {summary['link_summary']['ambiguous_count']}",
+            f"- fee_missing_count: {summary['trade_summary']['fee_missing_count']}",
+            "",
+            "## 9. Human Approval Required",
+            "- Human approval is required before any production wording/config/threshold/gate/runtime changes.",
+            "- This report only proposes review candidates; it does not change behavior.",
+            "",
+            "## 10. Safety Boundary",
+            f"- {_POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY}",
+            "",
+            "## 11. Limitations",
+        ]
+    )
+    limitations: list[str] = []
+    if any(item["status"] != "ok" for item in summary["coverage"].values()):
+        limitations.append("some inputs are missing or header-only")
+    if not ranked_candidates or any(candidate["recommendation_code"] == "INSUFFICIENT_EVIDENCE" for candidate in ranked_candidates):
+        limitations.append("evidence is still insufficient for a strong recommendation")
+    if summary["trade_summary"]["fee_missing_count"]:
+        limitations.append("fee coverage is incomplete")
+    if summary["link_summary"]["ambiguous_count"] or summary["link_summary"]["no_candidate_count"] or summary["link_summary"]["competing_candidate_tie_count"]:
+        limitations.append("link ambiguity remains and requires manual review")
+    if not limitations:
+        limitations.append("no major structural limitation was detected, but this remains report-only evidence for human review")
+    for item in limitations:
+        lines.append(f"- {item}")
+
+    report = "\n".join(lines) + "\n"
+    if not dry_run:
+        _ensure_parent(report_path)
+        report_path.write_text(report, encoding="utf-8")
+        _write_csv_rows(output_csv_path, _POST_EVAL_RECOMMENDATION_CSV_HEADER, ranked_candidates)
+
+    payload = {
+        "schema_version": "post_eval_recommendations.v1",
+        "report_date": summary["report_date"],
+        "report_path": str(report_path),
+        "output_csv_path": str(output_csv_path),
+        "input_counts": summary["input_counts"],
+        "candidate_count": len(ranked_candidates),
+        "top_recommendation_codes": [row["recommendation_code"] for row in ranked_candidates[:3]],
+        "priority_counts": dict(Counter(str(row.get("priority", "low")).strip() for row in ranked_candidates)),
+        "confidence_counts": dict(Counter(str(row.get("confidence", "proxy_backed")).strip() for row in ranked_candidates)),
+        "safety_boundary": _POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY,
     }
     return report, payload
 
@@ -21002,6 +21812,22 @@ def _build_parser() -> argparse.ArgumentParser:
     ground_truth_parser.add_argument("--stdout-json", action="store_true")
     ground_truth_parser.add_argument("--dry-run", action="store_true")
 
+    post_eval_parser = subparsers.add_parser("build-post-eval-recommendations")
+    post_eval_parser.add_argument("--signal-outcomes", default="logs/csv/signal_outcomes.csv")
+    post_eval_parser.add_argument("--active-plan-candidate-outcomes", default="logs/csv/active_plan_candidate_outcomes.csv")
+    post_eval_parser.add_argument(
+        "--active-plan-candidate-intraperiod-outcomes",
+        default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
+    )
+    post_eval_parser.add_argument("--user-reviews", default="logs/csv/user_reviews.csv")
+    post_eval_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
+    post_eval_parser.add_argument("--links", default="logs/csv/manual_trade_signal_links.csv")
+    post_eval_parser.add_argument("--output-md")
+    post_eval_parser.add_argument("--output-csv", default="logs/csv/post_eval_recommendation_candidates.csv")
+    post_eval_parser.add_argument("--date", default="")
+    post_eval_parser.add_argument("--stdout-json", action="store_true")
+    post_eval_parser.add_argument("--dry-run", action="store_true")
+
     daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
     daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
     daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
@@ -21724,6 +22550,28 @@ def main() -> None:
         )
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        elif args.output_md and not args.dry_run:
+            print(Path(payload["report_path"]))
+        else:
+            print(report)
+        return
+
+    if args.command == "build-post-eval-recommendations":
+        report, payload = build_post_eval_recommendation_report(
+            base_dir=base_dir,
+            signal_outcomes=Path(args.signal_outcomes),
+            active_plan_candidate_outcomes=Path(args.active_plan_candidate_outcomes),
+            active_plan_candidate_intraperiod_outcomes=Path(args.active_plan_candidate_intraperiod_outcomes),
+            user_reviews=Path(args.user_reviews),
+            manual_trades=Path(args.manual_trades),
+            links=Path(args.links),
+            output_md=Path(args.output_md) if args.output_md else None,
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            report_date=str(args.date).strip() or None,
+            dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n")
         elif args.output_md and not args.dry_run:
             print(Path(payload["report_path"]))
         else:
