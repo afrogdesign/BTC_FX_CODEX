@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260703-VER04-V1-HUMAN-UI-SUBJECT-CHART-CLEANUP`
-- mode: `BOUNDED_CODEX`
+- current_work_id: `BTCFX-20260703-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
+- mode: `REVIEW_ONLY`
 
 ## Current goal
 
-human-facing subject / chart / support block を current-code へ整えたうえで、runtime 反映後の live process は controlled restart が必要。次の normal notification から observation を再開する。
+human-facing subject / chart / support block の cleanup は反映済みで、controlled restart も完了。次の normal notification から observation を再開する。
 
 ## Product backlog next candidate
 
@@ -24,7 +24,7 @@ human-facing subject / chart / support block を current-code へ整えたうえ
 - required post-deployment observation gate for intraperiod / MACD buildout
 - judgment self-review link complete
 - controlled runtime restart for stale-process issue complete
-- human UI subject / chart cleanup in progress
+- human UI subject / chart cleanup complete
 
 ## Hard boundary
 
@@ -40,7 +40,7 @@ human-facing subject / chart / support block を current-code へ整えたうえ
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- next normal notification should confirm the simplified subject and current-price label in the live process after a controlled restart.
+- next normal notification should confirm the simplified subject, current-price label, and internal diagnostics demotion in the live process.
 
 ## Resume rule
 

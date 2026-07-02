@@ -64,6 +64,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
 - post-deployment observation surfaced a readability issue in the public detail page, and a bounded UI readability pass was applied to human-facing labels and chart marker spacing.
 - current human-facing cleanup simplifies the mail subject, current-price label, and internal support block; the live launchd process still needs a controlled restart before it can render those current-code changes.
+- controlled runtime restart after the human UI / subject / chart cleanup is complete, and the live launchd process now loads the current Ver04-v1 code path.
 - breakout / inversion zones now have a report-only momentum confirmation layer for continuation / counter-bias risk visibility.
 - report-only MACD indicator/scoring support is implemented, and report-only intraperiod breakout/breakdown alert candidate generation is implemented.
 - live extra intraperiod mail sending is not enabled.
