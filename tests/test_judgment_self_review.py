@@ -180,6 +180,85 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             "unresolved",
             "unresolved",
         ])
+        self.assertEqual(list(review_df["review_bucket"]), [
+            "confirmed_useful",
+            "confirmed_useful",
+            "bad_entry_or_wrong_direction",
+            "no_entry_after_alert",
+            "unresolved_followup",
+            "ambiguous_outcome",
+            "data_gap",
+            "unresolved_followup",
+            "invalid_input",
+        ])
+        self.assertEqual(list(review_df["review_severity"]), [
+            "low",
+            "low",
+            "high",
+            "medium",
+            "medium",
+            "medium",
+            "medium",
+            "medium",
+            "high",
+        ])
+        self.assertEqual(list(review_df["human_review_required"]), [
+            "no",
+            "no",
+            "yes",
+            "yes",
+            "yes",
+            "yes",
+            "yes",
+            "yes",
+            "yes",
+        ])
+        self.assertEqual(list(review_df["improvement_focus"]), [
+            "keep_current_logic",
+            "keep_current_logic",
+            "entry_filter_or_direction_check",
+            "alert_threshold_or_entry_reach",
+            "wait_for_outcome_or_timeout_rule",
+            "outcome_disambiguation",
+            "data_coverage",
+            "wait_for_outcome_or_timeout_rule",
+            "input_schema_or_missing_fields",
+        ])
+        self.assertEqual(list(review_df["operator_review_hint"]), [
+            "方向とTP到達は良好。大きな調整は不要。",
+            "方向とTP到達は良好。大きな調整は不要。",
+            "SL先行。方向、エントリー位置、SL幅を見直す。",
+            "通知後にentry到達なし。早すぎる警告や価格距離を確認する。",
+            "結果未確定。追加足またはtimeout条件を確認する。",
+            "TP/SL順序が曖昧。足内判定またはデータ粒度を確認する。",
+            "OHLCV不足。データ取得範囲と生成タイミングを確認する。",
+            "結果未確定。追加足またはtimeout条件を確認する。",
+            "入力欠損または未知値。reason_codesを確認する。",
+        ])
+
+    def test_summary_includes_new_review_support_counts(self) -> None:
+        review_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-good", "sig-good", "tp1_first"),
+                    _candidate_row("cand-wrong", "sig-wrong", "sl_first"),
+                    _candidate_row("cand-no", "sig-no", "not_entered"),
+                ]
+            ),
+            pd.DataFrame([_signal_row("sig-missed", favorable=True)]),
+        )
+        summary = summarize_judgment_self_reviews(review_df)
+        self.assertEqual(summary["review_bucket_counts"]["confirmed_useful"], 1)
+        self.assertEqual(summary["review_bucket_counts"]["bad_entry_or_wrong_direction"], 1)
+        self.assertEqual(summary["review_bucket_counts"]["no_entry_after_alert"], 1)
+        self.assertEqual(summary["review_bucket_counts"]["missed_opportunity"], 1)
+        self.assertEqual(summary["review_severity_counts"]["high"], 2)
+        self.assertEqual(summary["human_review_required_counts"]["yes"], 3)
+        self.assertEqual(summary["human_review_required_counts"]["no"], 1)
+        self.assertEqual(summary["high_severity_rows"], 2)
+        self.assertEqual(summary["human_review_required_rows"], 3)
+        self.assertIn("entry_filter_or_direction_check", summary["improvement_focus_counts"])
+        self.assertIn("missed_signal_detection", summary["improvement_focus_counts"])
 
     def test_missed_opportunity_detection_adds_row_for_favorable_signal_without_candidate(self) -> None:
         review_df = build_judgment_self_review_rows(
@@ -237,6 +316,11 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(review_df.loc[0, "position_accuracy_result"], "unresolved")
         self.assertEqual(review_df.loc[0, "tp_accuracy_result"], "unresolved")
         self.assertIn("missing_outcome", review_df.loc[0, "reason_codes"])
+        self.assertEqual(review_df.loc[0, "review_bucket"], "invalid_input")
+        self.assertEqual(review_df.loc[0, "review_severity"], "high")
+        self.assertEqual(review_df.loc[0, "human_review_required"], "yes")
+        self.assertEqual(review_df.loc[0, "improvement_focus"], "input_schema_or_missing_fields")
+        self.assertEqual(review_df.loc[0, "operator_review_hint"], "入力欠損または未知値。reason_codesを確認する。")
 
     def test_report_and_cli_outputs_do_not_leak_sensitive_strings(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -286,6 +370,10 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             self.assertTrue(output_md.exists())
             csv_text = output_csv.read_text(encoding="utf-8")
             md_text = output_md.read_text(encoding="utf-8")
+            self.assertIn("## Review Buckets", md_text)
+            self.assertIn("## Review Severity", md_text)
+            self.assertIn("## Human Review Required", md_text)
+            self.assertIn("## Improvement Focus", md_text)
             for text in (report, json.dumps(payload, ensure_ascii=False), csv_text, md_text):
                 self.assertNotIn("uid_sensitive_12345", text)
                 self.assertNotIn("account-1234567890", text)

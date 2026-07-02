@@ -5,7 +5,7 @@
 
 ## Current goal
 
-human-facing subject / chart / support block の cleanup は反映済みで、controlled restart も完了。次の normal notification から observation を再開する。
+self-review stability buildout は反映済みで、controlled restart も完了。次の normal notification から observation / review を再開する。
 
 ## Product backlog next candidate
 
@@ -25,6 +25,7 @@ human-facing subject / chart / support block の cleanup は反映済みで、co
 - judgment self-review link complete
 - controlled runtime restart for stale-process issue complete
 - human UI subject / chart cleanup complete
+- judgment self-review stability buildout complete
 
 ## Hard boundary
 
@@ -40,7 +41,7 @@ human-facing subject / chart / support block の cleanup は反映済みで、co
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- next normal notification should confirm the simplified subject, current-price label, and internal diagnostics demotion in the live process.
+- next normal notification should confirm the simplified subject, current-price label, internal diagnostics demotion, and self-review evidence alignment in the live process.
 
 ## Resume rule
 

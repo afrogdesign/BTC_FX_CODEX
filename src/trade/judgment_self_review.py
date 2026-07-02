@@ -37,6 +37,11 @@ OUTPUT_COLUMNS = [
     "mae_r",
     "reason_codes",
     "safety_boundary",
+    "review_bucket",
+    "review_severity",
+    "human_review_required",
+    "improvement_focus",
+    "operator_review_hint",
 ]
 
 _KNOWN_OUTCOMES = {
@@ -293,6 +298,81 @@ def _reason_codes_text(reason_codes: list[str]) -> str:
     return "|".join(code for code in reason_codes if code)
 
 
+def _review_support_fields(self_review_label: str) -> dict[str, str]:
+    normalized_label = _normalize_text(self_review_label).lower()
+    if normalized_label == "good":
+        return {
+            "review_bucket": "confirmed_useful",
+            "review_severity": "low",
+            "human_review_required": "no",
+            "improvement_focus": "keep_current_logic",
+            "operator_review_hint": "方向とTP到達は良好。大きな調整は不要。",
+        }
+    if normalized_label == "wrong":
+        return {
+            "review_bucket": "bad_entry_or_wrong_direction",
+            "review_severity": "high",
+            "human_review_required": "yes",
+            "improvement_focus": "entry_filter_or_direction_check",
+            "operator_review_hint": "SL先行。方向、エントリー位置、SL幅を見直す。",
+        }
+    if normalized_label == "false_alarm":
+        return {
+            "review_bucket": "no_entry_after_alert",
+            "review_severity": "medium",
+            "human_review_required": "yes",
+            "improvement_focus": "alert_threshold_or_entry_reach",
+            "operator_review_hint": "通知後にentry到達なし。早すぎる警告や価格距離を確認する。",
+        }
+    if normalized_label == "missed":
+        return {
+            "review_bucket": "missed_opportunity",
+            "review_severity": "high",
+            "human_review_required": "yes",
+            "improvement_focus": "missed_signal_detection",
+            "operator_review_hint": "候補なしで有利な値動き。拾えなかった条件を確認する。",
+        }
+    if normalized_label == "unresolved":
+        return {
+            "review_bucket": "unresolved_followup",
+            "review_severity": "medium",
+            "human_review_required": "yes",
+            "improvement_focus": "wait_for_outcome_or_timeout_rule",
+            "operator_review_hint": "結果未確定。追加足またはtimeout条件を確認する。",
+        }
+    if normalized_label == "ambiguous":
+        return {
+            "review_bucket": "ambiguous_outcome",
+            "review_severity": "medium",
+            "human_review_required": "yes",
+            "improvement_focus": "outcome_disambiguation",
+            "operator_review_hint": "TP/SL順序が曖昧。足内判定またはデータ粒度を確認する。",
+        }
+    if normalized_label == "no_data":
+        return {
+            "review_bucket": "data_gap",
+            "review_severity": "medium",
+            "human_review_required": "yes",
+            "improvement_focus": "data_coverage",
+            "operator_review_hint": "OHLCV不足。データ取得範囲と生成タイミングを確認する。",
+        }
+    if normalized_label == "invalid":
+        return {
+            "review_bucket": "invalid_input",
+            "review_severity": "high",
+            "human_review_required": "yes",
+            "improvement_focus": "input_schema_or_missing_fields",
+            "operator_review_hint": "入力欠損または未知値。reason_codesを確認する。",
+        }
+    return {
+        "review_bucket": "unresolved_followup",
+        "review_severity": "medium",
+        "human_review_required": "yes",
+        "improvement_focus": "manual_review",
+        "operator_review_hint": "分類不能。入力値とreason_codesを確認する。",
+    }
+
+
 def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
     source_signal_id = _pick_text(row, "source_signal_id", "signal_id")
     candidate_id = _pick_text(row, "candidate_id")
@@ -332,6 +412,7 @@ def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
         position_accuracy_result = "unresolved"
         tp_accuracy_result = "unresolved"
     timing_review = _timing_review_for_label(self_review_label)
+    support_fields = _review_support_fields(self_review_label)
     return {
         "review_id": _review_id(source_signal_id, candidate_id, timestamp_jst, outcome, candidate_type, side),
         "source_signal_id": source_signal_id,
@@ -357,6 +438,7 @@ def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "mae_r": _pick_text(row, "mae_r"),
         "reason_codes": _reason_codes_text(reason_codes),
         "safety_boundary": SAFETY_BOUNDARY,
+        **support_fields,
     }
 
 
@@ -417,6 +499,7 @@ def _build_missed_row(row: dict[str, Any]) -> dict[str, Any]:
         "mae_r": _pick_text(row, "signal_based_MAE_4h", "signal_based_MAE_12h", "signal_based_MAE_24h"),
         "reason_codes": _reason_codes_text(reason_codes),
         "safety_boundary": SAFETY_BOUNDARY,
+        **_review_support_fields("missed"),
     }
 
 
@@ -484,9 +567,15 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
             "position_accuracy_counts": {},
             "tp_accuracy_counts": {},
             "self_review_label_counts": {},
+            "review_bucket_counts": {},
+            "review_severity_counts": {},
+            "human_review_required_counts": {},
+            "improvement_focus_counts": {},
             "side_counts": {},
             "candidate_type_counts": {},
             "missed_opportunity_rows": 0,
+            "high_severity_rows": 0,
+            "human_review_required_rows": 0,
             "safety_boundary": SAFETY_BOUNDARY,
         }
 
@@ -500,10 +589,17 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
         df["side"] = ""
     if "candidate_type" not in df.columns:
         df["candidate_type"] = ""
+    for column in ("review_bucket", "review_severity", "human_review_required", "improvement_focus"):
+        if column not in df.columns:
+            df[column] = ""
 
     self_review_counts = _count_series(df["self_review_label"])
     position_counts = _count_series(df["position_accuracy_result"])
     tp_counts = _count_series(df["tp_accuracy_result"])
+    review_bucket_counts = _count_series(df["review_bucket"])
+    review_severity_counts = _count_series(df["review_severity"])
+    human_review_required_counts = _count_series(df["human_review_required"])
+    improvement_focus_counts = _count_series(df["improvement_focus"])
     side_counts = _count_series(df["side"])
     candidate_type_counts = _count_series(df["candidate_type"])
 
@@ -519,6 +615,8 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
     tp1_hit_rows = int((df["tp_accuracy_result"].astype("object").astype(str).str.lower() == "tp1_hit").sum())
     tp2_hit_rows = int((df["tp_accuracy_result"].astype("object").astype(str).str.lower() == "tp2_hit").sum())
     sl_before_tp_rows = int((df["tp_accuracy_result"].astype("object").astype(str).str.lower() == "sl_before_tp").sum())
+    high_severity_rows = int((df["review_severity"].astype("object").astype(str).str.lower() == "high").sum())
+    human_review_required_rows = int((df["human_review_required"].astype("object").astype(str).str.lower() == "yes").sum())
 
     return {
         "total_review_rows": total_rows,
@@ -536,9 +634,15 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
         "position_accuracy_counts": position_counts,
         "tp_accuracy_counts": tp_counts,
         "self_review_label_counts": self_review_counts,
+        "review_bucket_counts": review_bucket_counts,
+        "review_severity_counts": review_severity_counts,
+        "human_review_required_counts": human_review_required_counts,
+        "improvement_focus_counts": improvement_focus_counts,
         "side_counts": side_counts,
         "candidate_type_counts": candidate_type_counts,
         "missed_opportunity_rows": missed_rows,
+        "high_severity_rows": high_severity_rows,
+        "human_review_required_rows": human_review_required_rows,
         "safety_boundary": SAFETY_BOUNDARY,
     }
 
@@ -598,6 +702,18 @@ def _markdown_lines(
         "",
         "## Self-Review Labels",
         f"- {json.dumps(summary['self_review_label_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Review Buckets",
+        f"- {json.dumps(summary['review_bucket_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Review Severity",
+        f"- {json.dumps(summary['review_severity_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Human Review Required",
+        f"- {json.dumps(summary['human_review_required_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Improvement Focus",
+        f"- {json.dumps(summary['improvement_focus_counts'], ensure_ascii=False, sort_keys=True)}",
         "",
         "## Side Counts",
         f"- {json.dumps(summary['side_counts'], ensure_ascii=False, sort_keys=True)}",
