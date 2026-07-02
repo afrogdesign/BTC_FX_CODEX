@@ -764,6 +764,104 @@ def build_judgment_self_review_digest(
     return digest
 
 
+def build_judgment_self_review_change_readiness(
+    summary: dict[str, Any] | None,
+    review_digest: dict[str, Any] | None = None,
+    review_queue: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    summary_data = summary or {}
+    digest_data = review_digest or {}
+    queue = review_queue or []
+
+    total_review_rows = int(summary_data.get("total_review_rows", 0) or 0)
+    human_review_required_rows = int(summary_data.get("human_review_required_rows", 0) or 0)
+    high_severity_rows = int(summary_data.get("high_severity_rows", 0) or 0)
+    good_rows = int(summary_data.get("good_rows", 0) or 0)
+    improvement_focus_counts = summary_data.get("improvement_focus_counts") or {}
+
+    repeated_issue_focus = ""
+    repeated_issue_count = 0
+    if queue:
+        focus_counts = Counter(
+            _normalize_value(item.get("improvement_focus"), "")
+            for item in queue
+            if _normalize_value(item.get("improvement_focus"), "")
+        )
+        if focus_counts:
+            repeated_issue_focus, repeated_issue_count = sorted(
+                focus_counts.items(),
+                key=lambda item: (-int(item[1]), str(item[0])),
+            )[0]
+    if not repeated_issue_focus:
+        top_focuses = _top_count_items(improvement_focus_counts, limit=1, key_name="focus")
+        if top_focuses:
+            repeated_issue_focus = top_focuses[0]["focus"]
+            repeated_issue_count = int(top_focuses[0]["count"])
+
+    evidence_gate = "review_required"
+    if total_review_rows == 0:
+        evidence_gate = "no_rows"
+    elif total_review_rows < 5:
+        evidence_gate = "insufficient_sample"
+    elif repeated_issue_count >= 3:
+        evidence_gate = "repeated_issue_detected"
+    elif total_review_rows >= 5 and repeated_issue_count > 0:
+        evidence_gate = "single_or_mixed_issue"
+
+    if total_review_rows == 0:
+        change_readiness_status = "no_evidence"
+    elif total_review_rows < 5:
+        change_readiness_status = "observe_more"
+    elif human_review_required_rows == 0 and good_rows >= 5:
+        change_readiness_status = "stable_observation"
+    elif human_review_required_rows > 0 and high_severity_rows < 3:
+        change_readiness_status = "human_review_first"
+    elif repeated_issue_count >= 3 and total_review_rows >= 5:
+        change_readiness_status = "tuning_review_candidate"
+    else:
+        change_readiness_status = "observe_more"
+
+    change_readiness_level = {
+        "no_evidence": "none",
+        "observe_more": "low",
+        "human_review_first": "medium",
+        "tuning_review_candidate": "high",
+        "stable_observation": "low",
+    }.get(change_readiness_status, "low")
+
+    if total_review_rows == 0:
+        minimum_next_observations = 5
+    elif total_review_rows < 5:
+        minimum_next_observations = 5 - total_review_rows
+    elif evidence_gate == "single_or_mixed_issue":
+        minimum_next_observations = 2
+    else:
+        minimum_next_observations = 0
+
+    operator_change_guidance = {
+        "no_evidence": "まだ変更判断はしない。通常通知後の自己判定を最低5件蓄積する。",
+        "observe_more": "まだサンプル不足。変更せず、次の通常通知を観察する。",
+        "human_review_first": "高優先行を人間が確認する。変更判断はレビュー後に限定する。",
+        "tuning_review_candidate": "同じ改善焦点が複数回出ている。自動変更せず、別タスクで人間承認付きの調整レビューを切る。",
+        "stable_observation": "大きな変更は不要。現行ロジックを維持して観察を続ける。",
+    }.get(change_readiness_status, "変更せず、human review queue を確認する。")
+
+    return {
+        "change_readiness_status": change_readiness_status,
+        "change_readiness_level": change_readiness_level,
+        "tuning_review_candidate": "yes" if change_readiness_status == "tuning_review_candidate" else "no",
+        "tuning_review_allowed": "no",
+        "human_approval_required": "yes",
+        "evidence_gate": evidence_gate,
+        "evidence_reason": _normalize_value(digest_data.get("primary_condition"), "") or _normalize_value(digest_data.get("evidence_state"), ""),
+        "repeated_issue_focus": repeated_issue_focus,
+        "repeated_issue_count": repeated_issue_count,
+        "minimum_next_observations": minimum_next_observations,
+        "operator_change_guidance": operator_change_guidance,
+        "safety_boundary": SAFETY_BOUNDARY,
+    }
+
+
 def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str, Any]:
     df = _ensure_df(review_df)
     if df.empty:
@@ -877,6 +975,7 @@ def _markdown_lines(
     review_df: pd.DataFrame,
     review_queue: list[dict[str, Any]],
     review_digest: dict[str, Any],
+    change_readiness: dict[str, Any],
     summary: dict[str, Any],
     report_date: str,
     input_counts: dict[str, Any],
@@ -942,6 +1041,18 @@ def _markdown_lines(
         f"- human_review_required_count: {_normalize_value(review_digest.get('human_review_required_count'), '')}",
         f"- operator_next_action: {_normalize_value(review_digest.get('operator_next_action'), '')}",
         "",
+        "## Change Readiness Gate",
+        f"- change_readiness_status: {_normalize_value(change_readiness.get('change_readiness_status'), '')}",
+        f"- change_readiness_level: {_normalize_value(change_readiness.get('change_readiness_level'), '')}",
+        f"- tuning_review_candidate: {_normalize_value(change_readiness.get('tuning_review_candidate'), '')}",
+        f"- tuning_review_allowed: {_normalize_value(change_readiness.get('tuning_review_allowed'), '')}",
+        f"- evidence_gate: {_normalize_value(change_readiness.get('evidence_gate'), '')}",
+        f"- evidence_reason: {_normalize_value(change_readiness.get('evidence_reason'), '')}",
+        f"- repeated_issue_focus: {_normalize_value(change_readiness.get('repeated_issue_focus'), '')}",
+        f"- repeated_issue_count: {_normalize_value(change_readiness.get('repeated_issue_count'), '')}",
+        f"- minimum_next_observations: {_normalize_value(change_readiness.get('minimum_next_observations'), '')}",
+        f"- operator_change_guidance: {_normalize_value(change_readiness.get('operator_change_guidance'), '')}",
+        "",
         "## Human Review Queue",
     ]
     if not review_queue:
@@ -987,6 +1098,7 @@ def build_judgment_self_review_report(
     review_queue = build_judgment_self_review_queue(review_df)
     summary = summarize_judgment_self_reviews(review_df)
     review_digest = build_judgment_self_review_digest(review_df, summary, review_queue)
+    change_readiness = build_judgment_self_review_change_readiness(summary, review_digest, review_queue)
     resolved_report_date = (report_date or datetime.now(tz=timezone(timedelta(hours=9))).strftime("%Y%m%d")).strip()
     input_counts = {
         "intraperiod_outcomes": {
@@ -998,7 +1110,7 @@ def build_judgment_self_review_report(
             "rows": int(len(signal_input_df)),
         },
     }
-    report = "\n".join(_markdown_lines(review_df, review_queue, review_digest, summary, resolved_report_date, input_counts)) + "\n"
+    report = "\n".join(_markdown_lines(review_df, review_queue, review_digest, change_readiness, summary, resolved_report_date, input_counts)) + "\n"
 
     sanitized_df = _sanitize_review_df(review_df)
     if not dry_run:
@@ -1017,6 +1129,7 @@ def build_judgment_self_review_report(
         "input_counts": input_counts,
         "summary": summary,
         "review_digest": review_digest,
+        "change_readiness": change_readiness,
         "review_queue": review_queue,
         "review_queue_count": len(review_queue),
         "report_only": True,

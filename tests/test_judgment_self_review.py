@@ -19,6 +19,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.trade.judgment_self_review import (  # noqa: E402
     SAFETY_BOUNDARY,
+    build_judgment_self_review_change_readiness,
     build_judgment_self_review_digest,
     build_judgment_self_review_report,
     build_judgment_self_review_rows,
@@ -132,6 +133,69 @@ def _signal_row(signal_id: str, *, favorable: bool = True, sensitive: bool = Fal
 
 
 class JudgmentSelfReviewTests(unittest.TestCase):
+    def test_change_readiness_gate_blocks_premature_tuning(self) -> None:
+        empty_gate = build_judgment_self_review_change_readiness(None, None, None)
+        self.assertEqual(empty_gate["change_readiness_status"], "no_evidence")
+        self.assertEqual(empty_gate["change_readiness_level"], "none")
+        self.assertEqual(empty_gate["tuning_review_allowed"], "no")
+        self.assertEqual(empty_gate["human_approval_required"], "yes")
+        self.assertEqual(empty_gate["minimum_next_observations"], 5)
+
+        small_df = build_judgment_self_review_rows(
+            pd.DataFrame([_candidate_row("cand-small", "sig-small", "tp1_first")]),
+            None,
+        )
+        small_summary = summarize_judgment_self_reviews(small_df)
+        small_queue = build_judgment_self_review_queue(small_df)
+        small_digest = build_judgment_self_review_digest(small_df, small_summary, small_queue)
+        small_gate = build_judgment_self_review_change_readiness(small_summary, small_digest, small_queue)
+        self.assertEqual(small_gate["change_readiness_status"], "observe_more")
+        self.assertEqual(small_gate["change_readiness_level"], "low")
+        self.assertEqual(small_gate["minimum_next_observations"], 4)
+
+        repeated_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-r1", "sig-r1", "sl_first"),
+                    _candidate_row("cand-r2", "sig-r2", "sl_first"),
+                    _candidate_row("cand-r3", "sig-r3", "sl_first"),
+                    _candidate_row("cand-g1", "sig-g1", "tp1_first"),
+                    _candidate_row("cand-g2", "sig-g2", "tp2_first"),
+                ]
+            ),
+            None,
+        )
+        repeated_summary = summarize_judgment_self_reviews(repeated_df)
+        repeated_queue = build_judgment_self_review_queue(repeated_df)
+        repeated_digest = build_judgment_self_review_digest(repeated_df, repeated_summary, repeated_queue)
+        repeated_gate = build_judgment_self_review_change_readiness(repeated_summary, repeated_digest, repeated_queue)
+        self.assertEqual(repeated_gate["change_readiness_status"], "tuning_review_candidate")
+        self.assertEqual(repeated_gate["change_readiness_level"], "high")
+        self.assertEqual(repeated_gate["tuning_review_candidate"], "yes")
+        self.assertEqual(repeated_gate["tuning_review_allowed"], "no")
+        self.assertEqual(repeated_gate["repeated_issue_focus"], "entry_filter_or_direction_check")
+        self.assertEqual(repeated_gate["repeated_issue_count"], 3)
+
+        good_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-good-1", "sig-good-1", "tp1_first"),
+                    _candidate_row("cand-good-2", "sig-good-2", "tp2_first"),
+                    _candidate_row("cand-good-3", "sig-good-3", "tp1_first"),
+                    _candidate_row("cand-good-4", "sig-good-4", "tp2_first"),
+                    _candidate_row("cand-good-5", "sig-good-5", "tp1_first"),
+                ]
+            ),
+            None,
+        )
+        good_summary = summarize_judgment_self_reviews(good_df)
+        good_queue = build_judgment_self_review_queue(good_df)
+        good_digest = build_judgment_self_review_digest(good_df, good_summary, good_queue)
+        good_gate = build_judgment_self_review_change_readiness(good_summary, good_digest, good_queue)
+        self.assertEqual(good_gate["change_readiness_status"], "stable_observation")
+        self.assertEqual(good_gate["change_readiness_level"], "low")
+        self.assertEqual(good_gate["operator_change_guidance"], "大きな変更は不要。現行ロジックを維持して観察を続ける。")
+
     def test_self_review_digest_prioritizes_error_classes_deterministically(self) -> None:
         empty_digest = build_judgment_self_review_digest(None)
         self.assertEqual(empty_digest["digest_status"], "no_evidence")
@@ -440,6 +504,9 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         digest = build_judgment_self_review_digest(review_df, summary, build_judgment_self_review_queue(review_df))
         self.assertEqual(digest["primary_condition"], "bad_entry_or_wrong_direction")
         self.assertEqual(digest["primary_improvement_focus"], "entry_filter_or_direction_check")
+        gate = build_judgment_self_review_change_readiness(summary, digest, build_judgment_self_review_queue(review_df))
+        self.assertEqual(gate["change_readiness_status"], "observe_more")
+        self.assertEqual(gate["tuning_review_allowed"], "no")
 
     def test_missed_opportunity_detection_adds_row_for_favorable_signal_without_candidate(self) -> None:
         review_df = build_judgment_self_review_rows(
@@ -553,11 +620,13 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             md_text = output_md.read_text(encoding="utf-8")
             self.assertIn("Human Review Queue", md_text)
             self.assertIn("Self-Review Digest", md_text)
+            self.assertIn("Change Readiness Gate", md_text)
             self.assertIn("## Review Buckets", md_text)
             self.assertIn("## Review Severity", md_text)
             self.assertIn("## Human Review Required", md_text)
             self.assertIn("## Improvement Focus", md_text)
             self.assertIn("review_digest", json.dumps(payload, ensure_ascii=False))
+            self.assertIn("change_readiness", json.dumps(payload, ensure_ascii=False))
             self.assertEqual(payload["review_queue_count"], len(payload["review_queue"]))
             self.assertTrue(payload["review_queue"])
             for text in (report, json.dumps(payload, ensure_ascii=False), csv_text, md_text):
