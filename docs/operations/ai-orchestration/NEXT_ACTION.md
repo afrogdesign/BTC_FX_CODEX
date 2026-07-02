@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-SURFACE-SMOKE`
+- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-DEPLOYMENT-PLAN`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-compact post_eval_recommendations payload の cross-surface smoke coverage を追加し、public HTML / dashboard / app-ready-check / mail body が同じ安全な payload を使うことを確認する。
+Ver04-v1 の runtime deployment and notification-operation plan を docs-only で整備し、開発 repo から runtime target への安全な橋渡し手順を定義する。
 
-mail body changes は compact reflection 以外 deferred で、explicit approval 後の別タスクで扱う。
+この task では runtime access / restart / launchd / notification sending / order execution は行わない。次の explicit preflight task でのみ runtime access を許可する。
 
 ## Completed history
 
@@ -25,6 +25,7 @@ mail body changes は compact reflection 以外 deferred で、explicit approval
 - End-to-end wiring plan
 - Payload handoff contract
 - Export wiring
+- Post-Eval surface smoke
 
 ## Product objective reminder
 
@@ -53,9 +54,8 @@ Automatic trading is later-stage only.
 
 Inspect only as needed and summarize, do not dump large files.
 
-- `docs/operations/ai-orchestration/POST_EVAL_SURFACE_ALIGNMENT_PLAN_20260702.md`
-- `docs/operations/ai-orchestration/POST_EVAL_MAIL_SURFACE_PLAN_20260702.md`
-- `docs/operations/ai-orchestration/POST_EVAL_END_TO_END_WIRING_PLAN_20260702.md`
+- `docs/operations/ai-orchestration/VER04_V1_RUNTIME_DEPLOYMENT_PLAN_20260702.md`
+- `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF_PLAN.md`
 - `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
 ## Do not
@@ -89,10 +89,10 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-POST-EVAL-SURFACE-SMOKE: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-DEPLOYMENT-PLAN: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- mail surface plan is missing
+- runtime deployment plan is missing
 - required source-of-truth docs are missing
 - implementation would require API calls, secrets, runtime restart, notification sending changes, exchange fetch, private/account/order endpoints, trading logic changes, or old runtime repo access
 - raw MEXC exports would need to be committed
@@ -133,5 +133,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-POST-EVAL-FINAL-DOCS-SYNC`
-- Mail body changes remain deferred and require explicit approval.
+- `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT`
+- Runtime access is allowed only in that next explicit preflight task.
