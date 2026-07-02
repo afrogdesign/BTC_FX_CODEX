@@ -22,6 +22,7 @@ from src.trade.judgment_self_review import (  # noqa: E402
     build_judgment_self_review_change_readiness,
     build_judgment_self_review_digest,
     build_judgment_self_review_report,
+    build_judgment_self_review_run_metadata,
     build_judgment_self_review_rows,
     build_judgment_self_review_queue,
     summarize_judgment_self_reviews,
@@ -593,6 +594,61 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         late_gate = build_judgment_self_review_change_readiness(late_summary, late_digest, late_queue)
         self.assertEqual(late_gate["change_readiness_status"], "human_review_first")
 
+    def test_run_metadata_produces_stable_fingerprints(self) -> None:
+        empty_metadata = build_judgment_self_review_run_metadata(None, None, None, None, None)
+        self.assertEqual(empty_metadata["observation_start_jst"], "")
+        self.assertEqual(empty_metadata["observation_end_jst"], "")
+        self.assertEqual(empty_metadata["observation_row_count"], 0)
+        self.assertTrue(str(empty_metadata["report_fingerprint"]).startswith("jsr_"))
+        self.assertTrue(str(empty_metadata["digest_fingerprint"]).startswith("jsd_"))
+        self.assertTrue(str(empty_metadata["change_readiness_fingerprint"]).startswith("jsc_"))
+        self.assertTrue(str(empty_metadata["queue_fingerprint"]).startswith("jsq_"))
+        self.assertEqual(empty_metadata["fingerprint_version"], "judgment_self_review_fingerprint.v1")
+        self.assertEqual(empty_metadata["safety_boundary"], SAFETY_BOUNDARY)
+
+        review_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-a", "sig-a", "tp1_first"),
+                    _candidate_row("cand-b", "sig-b", "tp2_first"),
+                ]
+            ),
+            None,
+        )
+        review_df.loc[0, "timestamp_jst"] = "2026-07-02T08:30:00+09:00"
+        review_df.loc[1, "timestamp_jst"] = "2026-07-02T09:45:00+09:00"
+        summary = summarize_judgment_self_reviews(review_df)
+        queue = build_judgment_self_review_queue(review_df)
+        digest = build_judgment_self_review_digest(review_df, summary, queue)
+        gate = build_judgment_self_review_change_readiness(summary, digest, queue)
+        metadata = build_judgment_self_review_run_metadata(review_df, summary, digest, gate, queue)
+        self.assertEqual(metadata["observation_start_jst"], "2026-07-02T08:30:00+09:00")
+        self.assertEqual(metadata["observation_end_jst"], "2026-07-02T09:45:00+09:00")
+        self.assertEqual(metadata["observation_row_count"], 2)
+        self.assertEqual(metadata["candidate_review_rows"], 2)
+        self.assertEqual(metadata["missed_rows"], 0)
+
+        metadata_again = build_judgment_self_review_run_metadata(review_df, summary, digest, gate, queue)
+        self.assertEqual(metadata["report_fingerprint"], metadata_again["report_fingerprint"])
+
+        changed_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-a", "sig-a", "tp1_first"),
+                    _candidate_row("cand-b", "sig-b", "sl_first"),
+                ]
+            ),
+            None,
+        )
+        changed_df.loc[0, "timestamp_jst"] = "2026-07-02T08:30:00+09:00"
+        changed_df.loc[1, "timestamp_jst"] = "2026-07-02T09:45:00+09:00"
+        changed_summary = summarize_judgment_self_reviews(changed_df)
+        changed_queue = build_judgment_self_review_queue(changed_df)
+        changed_digest = build_judgment_self_review_digest(changed_df, changed_summary, changed_queue)
+        changed_gate = build_judgment_self_review_change_readiness(changed_summary, changed_digest, changed_queue)
+        changed_metadata = build_judgment_self_review_run_metadata(changed_df, changed_summary, changed_digest, changed_gate, changed_queue)
+        self.assertNotEqual(metadata["report_fingerprint"], changed_metadata["report_fingerprint"])
+
     def test_missed_opportunity_detection_adds_row_for_favorable_signal_without_candidate(self) -> None:
         review_df = build_judgment_self_review_rows(
             pd.DataFrame([_candidate_row("cand-good", "sig-good", "tp1_first")]),
@@ -706,12 +762,15 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             self.assertIn("Human Review Queue", md_text)
             self.assertIn("Self-Review Digest", md_text)
             self.assertIn("Change Readiness Gate", md_text)
+            self.assertIn("Run Metadata", md_text)
             self.assertIn("## Review Buckets", md_text)
             self.assertIn("## Review Severity", md_text)
             self.assertIn("## Human Review Required", md_text)
             self.assertIn("## Improvement Focus", md_text)
             self.assertIn("review_digest", json.dumps(payload, ensure_ascii=False))
             self.assertIn("change_readiness", json.dumps(payload, ensure_ascii=False))
+            self.assertIn("run_metadata", json.dumps(payload, ensure_ascii=False))
+            self.assertIn("report_fingerprint", json.dumps(payload, ensure_ascii=False))
             self.assertEqual(payload["review_queue_count"], len(payload["review_queue"]))
             self.assertTrue(payload["review_queue"])
             for text in (report, json.dumps(payload, ensure_ascii=False), csv_text, md_text):

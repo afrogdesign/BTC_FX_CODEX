@@ -81,6 +81,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - judgment self-review now also exposes a deterministic rollup digest for operator next-action review.
 - judgment self-review now also exposes a deterministic change-readiness gate to avoid premature tuning.
 - judgment self-review now supports explicit `late` classification when late evidence is present.
+- judgment self-review now includes deterministic run metadata and fingerprints for later report comparison.
 - controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
 
 ## Current operational blocker

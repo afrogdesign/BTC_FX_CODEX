@@ -691,6 +691,99 @@ def _top_count_items(counts: dict[str, Any], *, limit: int = 5, key_name: str = 
     return items[: max(int(limit), 0)]
 
 
+def _sanitize_fingerprint_object(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, dict):
+        return {str(_normalize_value(key, "")): _sanitize_fingerprint_object(val) for key, val in sorted(value.items(), key=lambda item: str(_normalize_value(item[0], "")))}
+    if isinstance(value, list):
+        return [_sanitize_fingerprint_object(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_fingerprint_object(item) for item in value]
+    if isinstance(value, set):
+        return [_sanitize_fingerprint_object(item) for item in sorted(value, key=lambda item: _normalize_value(item, ""))]
+    if isinstance(value, pd.DataFrame):
+        return _sanitize_review_df(value).to_dict(orient="records")
+    if isinstance(value, (bool, int)) and not isinstance(value, bool):
+        return int(value)
+    if isinstance(value, float):
+        if pd.isna(value):
+            return ""
+        return value
+    if isinstance(value, pd.Timestamp):
+        if pd.isna(value):
+            return ""
+        return _normalize_value(value.isoformat(), "")
+    return _normalize_value(value, "")
+
+
+def _fingerprint_text(value: Any) -> str:
+    payload = json.dumps(_sanitize_fingerprint_object(value), ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _prefixed_fingerprint(prefix: str, value: Any) -> str:
+    return f"{prefix}{_fingerprint_text(value)}"
+
+
+def build_judgment_self_review_run_metadata(
+    review_df: pd.DataFrame | None,
+    summary: dict[str, Any] | None = None,
+    review_digest: dict[str, Any] | None = None,
+    change_readiness: dict[str, Any] | None = None,
+    review_queue: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    df = _ensure_df(review_df)
+    sanitized_df = _sanitize_review_df(df)
+    summary_data = summary or summarize_judgment_self_reviews(df)
+    digest_data = review_digest or build_judgment_self_review_digest(df, summary_data, review_queue)
+    readiness_data = change_readiness or build_judgment_self_review_change_readiness(summary_data, digest_data, review_queue)
+    queue_data = review_queue if review_queue is not None else build_judgment_self_review_queue(df)
+
+    timestamp_series = sanitized_df["timestamp_jst"] if "timestamp_jst" in sanitized_df.columns else pd.Series(dtype="object")
+    timestamps = [text for text in (_normalize_value(value, "") for value in timestamp_series.tolist()) if text]
+    observation_start_jst = min(timestamps) if timestamps else ""
+    observation_end_jst = max(timestamps) if timestamps else ""
+
+    observation_row_count = int(summary_data.get("total_review_rows", len(df)) or 0)
+    candidate_review_rows = int(summary_data.get("candidate_review_rows", 0) or 0)
+    missed_rows = int(summary_data.get("missed_rows", 0) or 0)
+
+    sanitized_summary = _sanitize_fingerprint_object(summary_data)
+    sanitized_digest = _sanitize_fingerprint_object(digest_data)
+    sanitized_readiness = _sanitize_fingerprint_object(readiness_data)
+    sanitized_queue = _sanitize_fingerprint_object(queue_data)
+
+    report_fingerprint = _prefixed_fingerprint(
+        "jsr_",
+        {
+            "observation_start_jst": observation_start_jst,
+            "observation_end_jst": observation_end_jst,
+            "summary": sanitized_summary,
+            "review_digest": sanitized_digest,
+            "change_readiness": sanitized_readiness,
+            "review_queue": sanitized_queue,
+        },
+    )
+    digest_fingerprint = _prefixed_fingerprint("jsd_", sanitized_digest)
+    change_readiness_fingerprint = _prefixed_fingerprint("jsc_", sanitized_readiness)
+    queue_fingerprint = _prefixed_fingerprint("jsq_", sanitized_queue)
+
+    return {
+        "observation_start_jst": observation_start_jst,
+        "observation_end_jst": observation_end_jst,
+        "observation_row_count": observation_row_count,
+        "candidate_review_rows": candidate_review_rows,
+        "missed_rows": missed_rows,
+        "report_fingerprint": report_fingerprint,
+        "digest_fingerprint": digest_fingerprint,
+        "change_readiness_fingerprint": change_readiness_fingerprint,
+        "queue_fingerprint": queue_fingerprint,
+        "fingerprint_version": "judgment_self_review_fingerprint.v1",
+        "safety_boundary": SAFETY_BOUNDARY,
+    }
+
+
 def build_judgment_self_review_digest(
     review_df: pd.DataFrame | None,
     summary: dict[str, Any] | None = None,
@@ -1002,6 +1095,7 @@ def _markdown_lines(
     review_queue: list[dict[str, Any]],
     review_digest: dict[str, Any],
     change_readiness: dict[str, Any],
+    run_metadata: dict[str, Any],
     summary: dict[str, Any],
     report_date: str,
     input_counts: dict[str, Any],
@@ -1018,6 +1112,17 @@ def _markdown_lines(
         "",
         "## Report Date",
         f"- {report_date}",
+        "",
+        "## Run Metadata",
+        f"- observation_start_jst: {_normalize_value(run_metadata.get('observation_start_jst'), '')}",
+        f"- observation_end_jst: {_normalize_value(run_metadata.get('observation_end_jst'), '')}",
+        f"- observation_row_count: {_normalize_value(run_metadata.get('observation_row_count'), '')}",
+        f"- candidate_review_rows: {_normalize_value(run_metadata.get('candidate_review_rows'), '')}",
+        f"- missed_rows: {_normalize_value(run_metadata.get('missed_rows'), '')}",
+        f"- report_fingerprint: {_normalize_value(run_metadata.get('report_fingerprint'), '')}",
+        f"- digest_fingerprint: {_normalize_value(run_metadata.get('digest_fingerprint'), '')}",
+        f"- change_readiness_fingerprint: {_normalize_value(run_metadata.get('change_readiness_fingerprint'), '')}",
+        f"- queue_fingerprint: {_normalize_value(run_metadata.get('queue_fingerprint'), '')}",
         "",
         "## Input Status",
         f"- intraperiod_outcomes: status={input_counts['intraperiod_outcomes']['status']} / rows={input_counts['intraperiod_outcomes']['rows']}",
@@ -1126,6 +1231,7 @@ def build_judgment_self_review_report(
     summary = summarize_judgment_self_reviews(review_df)
     review_digest = build_judgment_self_review_digest(review_df, summary, review_queue)
     change_readiness = build_judgment_self_review_change_readiness(summary, review_digest, review_queue)
+    run_metadata = build_judgment_self_review_run_metadata(review_df, summary, review_digest, change_readiness, review_queue)
     resolved_report_date = (report_date or datetime.now(tz=timezone(timedelta(hours=9))).strftime("%Y%m%d")).strip()
     input_counts = {
         "intraperiod_outcomes": {
@@ -1137,7 +1243,7 @@ def build_judgment_self_review_report(
             "rows": int(len(signal_input_df)),
         },
     }
-    report = "\n".join(_markdown_lines(review_df, review_queue, review_digest, change_readiness, summary, resolved_report_date, input_counts)) + "\n"
+    report = "\n".join(_markdown_lines(review_df, review_queue, review_digest, change_readiness, run_metadata, summary, resolved_report_date, input_counts)) + "\n"
 
     sanitized_df = _sanitize_review_df(review_df)
     if not dry_run:
@@ -1157,6 +1263,8 @@ def build_judgment_self_review_report(
         "summary": summary,
         "review_digest": review_digest,
         "change_readiness": change_readiness,
+        "run_metadata": run_metadata,
+        "report_fingerprint": run_metadata["report_fingerprint"],
         "review_queue": review_queue,
         "review_queue_count": len(review_queue),
         "report_only": True,
