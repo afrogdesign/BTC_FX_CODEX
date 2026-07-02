@@ -1407,6 +1407,11 @@ _MEXC_TRADE_SIGNAL_LINK_HEADER = [
     "link_confidence",
     "link_note",
 ]
+_MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY = (
+    "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually"
+)
+_MEXC_GROUND_TRUTH_REPORT_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
+_MEXC_GROUND_TRUTH_REPORT_HEADER = "# Manual Trade Ground Truth Report"
 
 _MEXC_HISTORY_SPECS = (
     {
@@ -1960,6 +1965,464 @@ def link_manual_trades_to_signals(
         "output_written": not dry_run,
     }
     return summary
+
+
+def _mexc_trade_side(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"long", "buy"}:
+        return "long"
+    if normalized in {"short", "sell"}:
+        return "short"
+    if normalized in {"unknown", "other"}:
+        return "unknown"
+    return normalized or "unknown"
+
+
+def _mexc_parse_decimal(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _mexc_trade_row_timestamp(row: dict[str, Any]) -> str:
+    return str(row.get("timestamp_jst", "")).strip()
+
+
+def _mexc_rows_latest_timestamp(rows: list[dict[str, Any]], *, keys: tuple[str, ...]) -> str:
+    latest: datetime | None = None
+    latest_text = ""
+    for row in rows:
+        for key in keys:
+            raw_value = str(row.get(key, "")).strip()
+            if not raw_value:
+                continue
+            parsed = _parse_dt(raw_value)
+            if parsed is None:
+                continue
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=JST)
+            else:
+                parsed = parsed.astimezone(JST)
+            if latest is None or parsed > latest:
+                latest = parsed
+                latest_text = raw_value
+    return latest_text
+
+
+def _mexc_csv_coverage(path: Path) -> dict[str, Any]:
+    rows, fieldnames = _load_csv_rows_with_fieldnames(path)
+    exists = path.exists()
+    status = "missing" if not exists else ("header_only" if not rows else "ok")
+    latest_timestamp = _mexc_rows_latest_timestamp(rows, keys=("timestamp_jst", "trade_opened_at_jst", "mail_timestamp_jst"))
+    return {
+        "path": str(path),
+        "exists": exists,
+        "status": status,
+        "row_count": len(rows),
+        "field_count": len(fieldnames),
+        "fieldnames": fieldnames,
+        "latest_timestamp_jst": latest_timestamp,
+    }
+
+
+def summarize_manual_actual_trade_performance(manual_trade_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    side_summaries = {
+        "long": {"trade_count": 0, "gross_realized_pnl": 0.0, "net_pnl_after_fee": 0.0, "wins": 0, "losses": 0, "breakeven": 0},
+        "short": {"trade_count": 0, "gross_realized_pnl": 0.0, "net_pnl_after_fee": 0.0, "wins": 0, "losses": 0, "breakeven": 0},
+        "unknown": {"trade_count": 0, "gross_realized_pnl": 0.0, "net_pnl_after_fee": 0.0, "wins": 0, "losses": 0, "breakeven": 0},
+    }
+    fee_missing_count = 0
+    realized_missing_count = 0
+    wins = losses = breakeven = 0
+    gross_realized_pnl = 0.0
+    net_pnl_after_fee = 0.0
+    fee_total = 0.0
+    fee_numeric_count = 0
+    known_side_count = 0
+    for row in manual_trade_rows:
+        side = _mexc_trade_side(row.get("side", ""))
+        if side in side_summaries:
+            side_summaries[side]["trade_count"] += 1
+        if side in {"long", "short"}:
+            known_side_count += 1
+        pnl = _mexc_parse_decimal(row.get("realized_pnl", ""))
+        fee = _mexc_parse_decimal(row.get("fee", ""))
+        if pnl is None:
+            realized_missing_count += 1
+            continue
+        gross_realized_pnl += pnl
+        if fee is None:
+            fee_missing_count += 1
+            net_pnl_after_fee += pnl
+        else:
+            fee_numeric_count += 1
+            fee_total += fee
+            net_pnl_after_fee += pnl - abs(fee)
+        if pnl > 0:
+            wins += 1
+            side_summaries[side]["wins"] += 1
+        elif pnl < 0:
+            losses += 1
+            side_summaries[side]["losses"] += 1
+        else:
+            breakeven += 1
+            side_summaries[side]["breakeven"] += 1
+        side_summaries[side]["gross_realized_pnl"] += pnl
+        side_summaries[side]["net_pnl_after_fee"] += pnl - abs(fee) if fee is not None else pnl
+
+    total_numeric = wins + losses + breakeven
+    win_rate = round((wins / total_numeric) if total_numeric else 0.0, 4)
+    side_output = {}
+    for side, data in side_summaries.items():
+        side_total = data["wins"] + data["losses"] + data["breakeven"]
+        side_output[side] = {
+            "trade_count": data["trade_count"],
+            "gross_realized_pnl": round(data["gross_realized_pnl"], 8),
+            "net_pnl_after_fee": round(data["net_pnl_after_fee"], 8),
+            "wins": data["wins"],
+            "losses": data["losses"],
+            "breakeven": data["breakeven"],
+            "win_rate": round((data["wins"] / side_total) if side_total else 0.0, 4),
+        }
+    return {
+        "total_actual_trades": len(manual_trade_rows),
+        "known_side_trade_count": known_side_count,
+        "side_counts": {side: data["trade_count"] for side, data in side_output.items()},
+        "gross_realized_pnl": round(gross_realized_pnl, 8),
+        "net_pnl_after_fee": round(net_pnl_after_fee, 8),
+        "fee_total": round(fee_total, 8),
+        "fee_numeric_count": fee_numeric_count,
+        "fee_missing_count": fee_missing_count,
+        "realized_missing_count": realized_missing_count,
+        "wins": wins,
+        "losses": losses,
+        "breakeven": breakeven,
+        "win_rate": win_rate,
+        "side_summaries": side_output,
+    }
+
+
+def summarize_manual_trade_link_quality(link_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    confidence_counts = Counter(str(row.get("link_confidence", "")).strip() or "unknown" for row in link_rows)
+    note_counts = Counter(str(row.get("link_note", "")).strip() or "unknown" for row in link_rows)
+    side_match_counts = Counter(
+        "unknown"
+        if str(row.get("side_match", "")).strip() not in {"yes", "no"}
+        else ("true" if str(row.get("side_match", "")).strip() == "yes" else "false")
+        for row in link_rows
+    )
+    high_or_medium = confidence_counts.get("high", 0) + confidence_counts.get("medium", 0)
+    total = len(link_rows)
+    return {
+        "total_link_rows": total,
+        "linked_rows": sum(1 for row in link_rows if str(row.get("signal_id", "")).strip()),
+        "confidence_counts": dict(confidence_counts),
+        "note_counts": dict(note_counts),
+        "side_match_counts": dict(side_match_counts),
+        "high_or_medium_link_rate": round((high_or_medium / total) if total else 0.0, 4),
+        "no_candidate_count": note_counts.get("no_candidate", 0),
+        "competing_candidate_tie_count": note_counts.get("competing_candidate_tie", 0),
+        "ambiguous_count": confidence_counts.get("ambiguous", 0),
+    }
+
+
+def calibrate_manual_trade_proxy_vs_actual(
+    manual_trade_rows: list[dict[str, Any]],
+    link_rows: list[dict[str, Any]],
+    signal_outcome_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    trade_map = {str(row.get("actual_trade_id", "")).strip(): row for row in manual_trade_rows if str(row.get("actual_trade_id", "")).strip()}
+    link_map = {str(row.get("actual_trade_id", "")).strip(): row for row in link_rows if str(row.get("actual_trade_id", "")).strip()}
+    outcome_map = {str(row.get("signal_id", "")).strip(): row for row in signal_outcome_rows if str(row.get("signal_id", "")).strip()}
+    buckets = Counter(
+        {
+            "manual_edge_confirmed": 0,
+            "proxy_too_aggressive": 0,
+            "proxy_too_pessimistic": 0,
+            "direction_mismatch_loss": 0,
+            "ambiguous_needs_review": 0,
+            "insufficient_data": 0,
+        }
+    )
+    details: list[dict[str, str]] = []
+
+    def _is_watch_like(text: str) -> bool:
+        normalized = text.upper()
+        return any(term in normalized for term in ("NO_TRADE", "WATCH", "SKIP", "WAIT"))
+
+    for actual_trade_id, trade_row in trade_map.items():
+        link_row = link_map.get(actual_trade_id)
+        pnl = _mexc_parse_decimal(trade_row.get("realized_pnl", ""))
+        if pnl is None or link_row is None or not str(link_row.get("actual_trade_id", "")).strip():
+            buckets["insufficient_data"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "insufficient_data"})
+            continue
+        signal_id = str(link_row.get("signal_id", "")).strip()
+        confidence = str(link_row.get("link_confidence", "")).strip()
+        side_match = str(link_row.get("side_match", "")).strip().lower() == "yes"
+        if confidence == "ambiguous" or not signal_id:
+            buckets["ambiguous_needs_review"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "ambiguous_needs_review"})
+            continue
+        if confidence not in {"high", "medium"}:
+            buckets["ambiguous_needs_review"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "ambiguous_needs_review"})
+            continue
+
+        outcome_row = outcome_map.get(signal_id, {})
+        prelabel_text = " ".join(
+            str(outcome_row.get(field, "")).strip()
+            for field in ("prelabel", "prelabel_primary_reason", "signal_tier")
+        ).strip()
+        if side_match and pnl > 0:
+            if _is_watch_like(prelabel_text):
+                buckets["proxy_too_pessimistic"] += 1
+                details.append({"actual_trade_id": actual_trade_id, "bucket": "proxy_too_pessimistic"})
+            else:
+                buckets["manual_edge_confirmed"] += 1
+                details.append({"actual_trade_id": actual_trade_id, "bucket": "manual_edge_confirmed"})
+            continue
+        if side_match and pnl < 0:
+            buckets["proxy_too_aggressive"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "proxy_too_aggressive"})
+            continue
+        if not side_match and pnl < 0:
+            buckets["direction_mismatch_loss"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "direction_mismatch_loss"})
+            continue
+        if _is_watch_like(prelabel_text) and pnl > 0:
+            buckets["proxy_too_pessimistic"] += 1
+            details.append({"actual_trade_id": actual_trade_id, "bucket": "proxy_too_pessimistic"})
+            continue
+        buckets["ambiguous_needs_review"] += 1
+        details.append({"actual_trade_id": actual_trade_id, "bucket": "ambiguous_needs_review"})
+
+    return {
+        "calibration_counts": dict(buckets),
+        "calibration_details": details,
+    }
+
+
+def _manual_trade_ground_truth_recommendation_codes(
+    *,
+    trade_summary: dict[str, Any],
+    link_summary: dict[str, Any],
+    calibration_summary: dict[str, Any],
+) -> list[str]:
+    codes: list[str] = []
+    total_trades = int(trade_summary.get("total_actual_trades", 0))
+    if total_trades <= 0 or trade_summary.get("realized_missing_count", 0):
+        codes.append("INSUFFICIENT_GROUND_TRUTH_DATA")
+    if trade_summary.get("fee_missing_count", 0) > 0:
+        codes.append("FEE_COVERAGE_REVIEW")
+    if link_summary.get("high_or_medium_link_rate", 0.0) < 0.8 or link_summary.get("ambiguous_count", 0) > 0:
+        codes.append("LINKAGE_COVERAGE_REVIEW")
+    if link_summary.get("ambiguous_count", 0) > 0 or link_summary.get("no_candidate_count", 0) > 0 or link_summary.get("competing_candidate_tie_count", 0) > 0:
+        codes.append("AMBIGUOUS_LINK_MANUAL_REVIEW")
+    if trade_summary.get("side_counts", {}).get("long", 0) > 0 and trade_summary.get("side_counts", {}).get("short", 0) > 0:
+        long_net = trade_summary["side_summaries"]["long"]["net_pnl_after_fee"]
+        short_net = trade_summary["side_summaries"]["short"]["net_pnl_after_fee"]
+        long_count = trade_summary["side_summaries"]["long"]["trade_count"]
+        short_count = trade_summary["side_summaries"]["short"]["trade_count"]
+        if long_count and short_count and abs(long_net - short_net) >= 5:
+            codes.append("LONG_SHORT_ACTUAL_BALANCE_REVIEW")
+    calibration_counts = calibration_summary.get("calibration_counts", {})
+    if calibration_counts.get("proxy_too_aggressive", 0) > calibration_counts.get("proxy_too_pessimistic", 0) and calibration_counts.get("proxy_too_aggressive", 0) > 0:
+        codes.append("PROXY_TOO_AGGRESSIVE_REVIEW")
+    elif calibration_counts.get("proxy_too_pessimistic", 0) > calibration_counts.get("proxy_too_aggressive", 0) and calibration_counts.get("proxy_too_pessimistic", 0) > 0:
+        codes.append("PROXY_TOO_PESSIMISTIC_REVIEW")
+    if not codes:
+        codes.append("INSUFFICIENT_GROUND_TRUTH_DATA")
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for code in codes:
+        if code not in seen:
+            seen.add(code)
+            deduped.append(code)
+    return deduped
+
+
+def build_manual_trade_ground_truth_report(
+    *,
+    base_dir: Path = BASE_DIR,
+    manual_trades: Path | None = None,
+    links: Path | None = None,
+    signal_outcomes: Path | None = None,
+    output_md: Path | None = None,
+    report_date: str | None = None,
+    dry_run: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    manual_trades_path = manual_trades or base_dir / "logs" / "csv" / "manual_actual_trades.csv"
+    links_path = links or base_dir / "logs" / "csv" / "manual_trade_signal_links.csv"
+    signal_outcomes_path = signal_outcomes or base_dir / "logs" / "csv" / "signal_outcomes.csv"
+
+    manual_trade_rows = _load_csv_rows(manual_trades_path)
+    link_rows = _load_csv_rows(links_path)
+    signal_outcome_rows = _load_csv_rows(signal_outcomes_path)
+
+    trade_summary = summarize_manual_actual_trade_performance(manual_trade_rows)
+    link_summary = summarize_manual_trade_link_quality(link_rows)
+    calibration_summary = calibrate_manual_trade_proxy_vs_actual(manual_trade_rows, link_rows, signal_outcome_rows)
+
+    inferred_report_date = str(report_date or "").strip()
+    if not inferred_report_date:
+        latest_timestamp = _mexc_rows_latest_timestamp(manual_trade_rows, keys=("timestamp_jst",))
+        if latest_timestamp:
+            parsed = _parse_dt(latest_timestamp)
+            if parsed is not None:
+                inferred_report_date = (parsed.astimezone(JST) if parsed.tzinfo else parsed.replace(tzinfo=JST)).strftime("%Y%m%d")
+    if not inferred_report_date:
+        inferred_report_date = datetime.now(tz=JST).strftime("%Y%m%d")
+
+    report_path = output_md or (base_dir / _MEXC_GROUND_TRUTH_REPORT_OUTPUT_DIR / f"manual_trade_ground_truth_{inferred_report_date}.md")
+    coverage = {
+        "manual_trades": _mexc_csv_coverage(manual_trades_path),
+        "links": _mexc_csv_coverage(links_path),
+        "signal_outcomes": _mexc_csv_coverage(signal_outcomes_path),
+    }
+    recommendation_codes = _manual_trade_ground_truth_recommendation_codes(
+        trade_summary=trade_summary,
+        link_summary=link_summary,
+        calibration_summary=calibration_summary,
+    )
+
+    lines = [
+        _MEXC_GROUND_TRUTH_REPORT_HEADER,
+        "",
+        "## 1. Purpose Fit Summary",
+        "- report-only",
+        "- not FORMAL_GO",
+        "- no automatic order",
+        "- no private/account/order endpoints",
+        "- human decides manually",
+        "- MEXC actual trade history is treated as local calibration evidence, not as strategy proof",
+        "",
+        "## 2. Input Coverage",
+    ]
+    for name, item in coverage.items():
+        lines.append(
+            f"- {name}: status={item['status']} / rows={item['row_count']} / fields={item['field_count']}"
+            + (f" / latest_timestamp_jst={item['latest_timestamp_jst']}" if item["latest_timestamp_jst"] else "")
+        )
+    lines.append("")
+    lines.extend(
+        [
+            "## 3. Actual Trade Summary",
+            f"- total_actual_trades: {trade_summary['total_actual_trades']}",
+            f"- side_counts: long={trade_summary['side_counts']['long']}, short={trade_summary['side_counts']['short']}, unknown={trade_summary['side_counts']['unknown']}",
+            f"- gross_realized_pnl: {trade_summary['gross_realized_pnl']:.4f}",
+            f"- fee_total: {trade_summary['fee_total']:.4f}",
+            f"- net_pnl_after_fee: {trade_summary['net_pnl_after_fee']:.4f}",
+            f"- wins={trade_summary['wins']}, losses={trade_summary['losses']}, breakeven={trade_summary['breakeven']}, win_rate={trade_summary['win_rate']:.4f}",
+            f"- fee_coverage: {trade_summary['fee_numeric_count']}/{trade_summary['total_actual_trades']} numeric",
+        ]
+    )
+    if trade_summary["fee_missing_count"]:
+        lines.append(f"- fee coverage is incomplete: missing_or_invalid_fee_rows={trade_summary['fee_missing_count']}")
+    if trade_summary["realized_missing_count"]:
+        lines.append(f"- realized_pnl coverage is incomplete: missing_or_invalid_rows={trade_summary['realized_missing_count']}")
+    lines.append("")
+    lines.extend(
+        [
+            "## 4. Actual Manual Short Performance",
+            f"- trade_count: {trade_summary['side_summaries']['short']['trade_count']}",
+            f"- gross_realized_pnl: {trade_summary['side_summaries']['short']['gross_realized_pnl']:.4f}",
+            f"- net_pnl_after_fee: {trade_summary['side_summaries']['short']['net_pnl_after_fee']:.4f}",
+            f"- wins={trade_summary['side_summaries']['short']['wins']}, losses={trade_summary['side_summaries']['short']['losses']}, breakeven={trade_summary['side_summaries']['short']['breakeven']}, win_rate={trade_summary['side_summaries']['short']['win_rate']:.4f}",
+            "",
+            "## 5. Actual Manual Long Performance",
+            f"- trade_count: {trade_summary['side_summaries']['long']['trade_count']}",
+            f"- gross_realized_pnl: {trade_summary['side_summaries']['long']['gross_realized_pnl']:.4f}",
+            f"- net_pnl_after_fee: {trade_summary['side_summaries']['long']['net_pnl_after_fee']:.4f}",
+            f"- wins={trade_summary['side_summaries']['long']['wins']}, losses={trade_summary['side_summaries']['long']['losses']}, breakeven={trade_summary['side_summaries']['long']['breakeven']}, win_rate={trade_summary['side_summaries']['long']['win_rate']:.4f}",
+            "",
+            "## 6. Signal Linkage Quality",
+            f"- total_link_rows: {link_summary['total_link_rows']}",
+            f"- linked_rows: {link_summary['linked_rows']}",
+            f"- confidence_counts: high={link_summary['confidence_counts'].get('high', 0)}, medium={link_summary['confidence_counts'].get('medium', 0)}, low={link_summary['confidence_counts'].get('low', 0)}, ambiguous={link_summary['confidence_counts'].get('ambiguous', 0)}",
+            f"- no_candidate_count: {link_summary['no_candidate_count']}",
+            f"- competing_candidate_tie_count: {link_summary['competing_candidate_tie_count']}",
+            f"- side_match_counts: true={link_summary['side_match_counts'].get('true', 0)}, false={link_summary['side_match_counts'].get('false', 0)}, unknown={link_summary['side_match_counts'].get('unknown', 0)}",
+            f"- high_or_medium_link_rate: {link_summary['high_or_medium_link_rate']:.4f}",
+            "",
+            "## 7. Proxy-vs-Actual Calibration",
+        ]
+    )
+    for key in (
+        "manual_edge_confirmed",
+        "proxy_too_aggressive",
+        "proxy_too_pessimistic",
+        "direction_mismatch_loss",
+        "ambiguous_needs_review",
+        "insufficient_data",
+    ):
+        lines.append(f"- {key}: {calibration_summary['calibration_counts'].get(key, 0)}")
+    lines.extend(
+        [
+            "",
+            "## 8. Confirmed Improvement Candidates",
+        ]
+    )
+    if recommendation_codes:
+        for code in recommendation_codes:
+            lines.append(f"- {code}: candidate for review, evidence so far only, manual confirmation required")
+    else:
+        lines.append("- INSUFFICIENT_GROUND_TRUTH_DATA: candidate for review, evidence so far only, manual confirmation required")
+    lines.extend(
+        [
+            "",
+            "## 9. Next 2-Week Action Plan",
+            "- Review ambiguous links first, then compare high/medium linked trades against proxy labels.",
+            "- Separate long and short evidence before adjusting any proxy thresholds.",
+            "- Re-run this report after the next importer/linker batch to check whether calibration moves in a stable direction.",
+            "",
+            "## 10. Safety Boundary",
+            f"- {_MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY}",
+            "",
+            "## 11. Limitations",
+        ]
+    )
+    limitations: list[str] = []
+    if coverage["manual_trades"]["status"] != "ok":
+        limitations.append("manual_actual_trades input is missing or header-only")
+    if coverage["links"]["status"] != "ok":
+        limitations.append("manual_trade_signal_links input is missing or header-only")
+    if coverage["signal_outcomes"]["status"] != "ok":
+        limitations.append("signal_outcomes input is missing or header-only")
+    if trade_summary["realized_missing_count"]:
+        limitations.append("some realized_pnl values are missing or invalid")
+    if trade_summary["fee_missing_count"]:
+        limitations.append("fee coverage is incomplete")
+    if link_summary["ambiguous_count"] or link_summary["no_candidate_count"] or link_summary["competing_candidate_tie_count"]:
+        limitations.append("ambiguous links remain and require manual review")
+    if not limitations:
+        limitations.append("no major structural limitation was detected, but this remains descriptive historical evidence only")
+    for item in limitations:
+        lines.append(f"- {item}")
+
+    report = "\n".join(lines) + "\n"
+    if not dry_run:
+        _ensure_parent(report_path)
+        report_path.write_text(report, encoding="utf-8")
+    payload = {
+        "schema_version": "manual_trade_ground_truth.v1",
+        "report_date": inferred_report_date,
+        "report_path": str(report_path),
+        "input_counts": {name: {"status": item["status"], "rows": item["row_count"], "fields": item["field_count"]} for name, item in coverage.items()},
+        "total_actual_trades": trade_summary["total_actual_trades"],
+        "gross_realized_pnl": trade_summary["gross_realized_pnl"],
+        "net_pnl_after_fee": trade_summary["net_pnl_after_fee"],
+        "win_rate": trade_summary["win_rate"],
+        "link_confidence_counts": link_summary["confidence_counts"],
+        "calibration_counts": calibration_summary["calibration_counts"],
+        "recommendation_codes": recommendation_codes,
+        "safety_boundary": _MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY,
+    }
+    return report, payload
 
 
 def _user_reviews_archive_path(base_dir: Path) -> Path:
@@ -20530,6 +20993,15 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_trade_link_parser.add_argument("--dry-run", action="store_true")
     manual_trade_link_parser.add_argument("--max-after-minutes", type=_non_negative_int_arg, default=240)
 
+    ground_truth_parser = subparsers.add_parser("build-manual-trade-ground-truth-report")
+    ground_truth_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
+    ground_truth_parser.add_argument("--links", default="logs/csv/manual_trade_signal_links.csv")
+    ground_truth_parser.add_argument("--signal-outcomes", default="logs/csv/signal_outcomes.csv")
+    ground_truth_parser.add_argument("--output-md")
+    ground_truth_parser.add_argument("--date", default="")
+    ground_truth_parser.add_argument("--stdout-json", action="store_true")
+    ground_truth_parser.add_argument("--dry-run", action="store_true")
+
     daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
     daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
     daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
@@ -21238,6 +21710,24 @@ def main() -> None:
             print(f"manual_trade_count={summary['manual_trade_count']}")
             print(f"linked_trade_count={summary['linked_trade_count']}")
             print(f"ambiguous_count={summary['ambiguous_count']}")
+        return
+
+    if args.command == "build-manual-trade-ground-truth-report":
+        report, payload = build_manual_trade_ground_truth_report(
+            base_dir=base_dir,
+            manual_trades=Path(args.manual_trades),
+            links=Path(args.links),
+            signal_outcomes=Path(args.signal_outcomes),
+            output_md=Path(args.output_md) if args.output_md else None,
+            report_date=str(args.date).strip() or None,
+            dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        elif args.output_md and not args.dry_run:
+            print(Path(payload["report_path"]))
+        else:
+            print(report)
         return
 
     if args.command == "serve-review-form":

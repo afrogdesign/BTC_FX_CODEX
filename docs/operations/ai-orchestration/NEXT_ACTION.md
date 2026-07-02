@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-ACTUAL-TRADE-SIGNAL-LINKER`
+- current_work_id: `BTCFX-20260702-BIWEEKLY-GROUND-TRUTH-REPORT`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MEXC actual trade importer は completed history とし、normalized actual trade を signal に安全にリンクする local/report-only linker を実装する。
+MEXC actual trade importer/linker は completed history とし、normalized actual trade と link quality から biweekly ground truth report を作る。
 
 API integration はまだやらない。raw export は local only で扱い、normalized CSV を作る。
 
@@ -39,6 +39,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `tools/log_feedback.py`
 - `tests/test_mexc_actual_trade_importer.py`
 - `tests/test_manual_trade_signal_linker.py`
+- `tests/test_manual_trade_ground_truth_report.py`
 - any narrow support docs needed for the MEXC import schema / normalization contract
 
 ## Do not
@@ -72,7 +73,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-BIWEEKLY-GROUND-TRUTH-REPORT: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - required source-of-truth docs are missing
