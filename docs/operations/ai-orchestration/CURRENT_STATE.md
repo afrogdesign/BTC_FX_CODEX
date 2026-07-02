@@ -64,7 +64,10 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
 - post-deployment observation surfaced a readability issue in the public detail page, and a bounded UI readability pass was applied to human-facing labels and chart marker spacing.
 - breakout / inversion zones now have a report-only momentum confirmation layer for continuation / counter-bias risk visibility.
-- MACD is not currently integrated in the live data pipeline; any MACD work needs a separate scoped task.
+- report-only MACD indicator/scoring support is implemented, and report-only intraperiod breakout/breakdown alert candidate generation is implemented.
+- live extra intraperiod mail sending is not enabled.
+- notification sending behavior remains unchanged.
+- executable Codex prompts emitted by ChatGPT should start with `AUTO_SEND`; `HUMAN_CHECK` means stop before emitting an executable prompt and consult the human.
 
 ## Current operational blocker
 
@@ -84,6 +87,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
 - Start this after observation or when the user explicitly requests implementation.
+- `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION` only if the user explicitly approves live extra notification sending behavior.
 
 ## Completed history
 
