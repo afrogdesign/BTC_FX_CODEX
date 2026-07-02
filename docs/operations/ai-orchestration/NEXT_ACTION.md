@@ -29,6 +29,7 @@ self-review stability buildout は反映済みで、controlled restart も完了
 - judgment self-review queue surface complete
 - judgment self-review rollup digest complete
 - judgment self-review change-readiness gate complete
+- judgment self-review explicit late label pass complete
 
 ## Hard boundary
 

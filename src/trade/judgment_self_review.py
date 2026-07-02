@@ -48,6 +48,7 @@ _KNOWN_OUTCOMES = {
     "tp1_first",
     "tp2_first",
     "sl_first",
+    "late",
     "ambiguous",
     "timeout",
     "entry_reached",
@@ -145,6 +146,8 @@ def _normalize_outcome(value: Any) -> str:
     text = text.replace(" ", "_")
     if text in _KNOWN_OUTCOMES:
         return text
+    if text in {"too_late", "delayed", "late_entry", "entry_late", "after_move", "missed_move_after_alert"}:
+        return "late"
     if "tp2" in text and "first" in text:
         return "tp2_first"
     if "tp1" in text and "first" in text:
@@ -215,6 +218,8 @@ def _tp_accuracy_for_outcome(outcome: str) -> str:
         return "tp1_hit"
     if outcome == "sl_first":
         return "sl_before_tp"
+    if outcome == "late":
+        return "late"
     if outcome == "not_entered":
         return "not_reached"
     if outcome in {"timeout", "entry_reached", "ambiguous", "pending"}:
@@ -229,6 +234,8 @@ def _position_accuracy_for_outcome(outcome: str) -> str:
         return "good"
     if outcome == "sl_first":
         return "wrong"
+    if outcome == "late":
+        return "late"
     if outcome == "not_entered":
         return "false_alarm"
     if outcome in {"timeout", "entry_reached"}:
@@ -247,6 +254,8 @@ def _self_review_label_for_outcome(outcome: str) -> str:
         return "good"
     if outcome == "sl_first":
         return "wrong"
+    if outcome == "late":
+        return "late"
     if outcome == "not_entered":
         return "false_alarm"
     if outcome in {"timeout", "entry_reached", "pending"}:
@@ -261,6 +270,7 @@ def _self_review_label_for_outcome(outcome: str) -> str:
 def _timing_review_for_label(label: str) -> str:
     return {
         "good": "on_time",
+        "late": "late",
         "wrong": "late_or_wrong",
         "false_alarm": "not_entered",
         "unresolved": "unresolved",
@@ -315,6 +325,14 @@ def _review_support_fields(self_review_label: str) -> dict[str, str]:
             "human_review_required": "yes",
             "improvement_focus": "entry_filter_or_direction_check",
             "operator_review_hint": "SL先行。方向、エントリー位置、SL幅を見直す。",
+        }
+    if normalized_label == "late":
+        return {
+            "review_bucket": "late_signal",
+            "review_severity": "high",
+            "human_review_required": "yes",
+            "improvement_focus": "timing_or_alert_delay",
+            "operator_review_hint": "通知または判定が遅い可能性。15分足で初動後になっていないか確認する。",
         }
     if normalized_label == "false_alarm":
         return {
@@ -562,13 +580,14 @@ def _review_bucket_rank(value: Any) -> int:
     text = _normalize_text(value).lower()
     return {
         "bad_entry_or_wrong_direction": 0,
-        "missed_opportunity": 1,
-        "no_entry_after_alert": 2,
-        "invalid_input": 3,
-        "ambiguous_outcome": 4,
-        "unresolved_followup": 5,
-        "data_gap": 6,
-        "confirmed_useful": 7,
+        "late_signal": 1,
+        "missed_opportunity": 2,
+        "no_entry_after_alert": 3,
+        "invalid_input": 4,
+        "ambiguous_outcome": 5,
+        "unresolved_followup": 6,
+        "data_gap": 7,
+        "confirmed_useful": 8,
     }.get(text, 5)
 
 
@@ -697,6 +716,8 @@ def build_judgment_self_review_digest(
     primary_condition = "insufficient_evidence"
     if int(summary_data.get("wrong_rows", 0) or 0) > 0:
         primary_condition = "bad_entry_or_wrong_direction"
+    elif int(summary_data.get("late_rows", 0) or 0) > 0:
+        primary_condition = "late_signal"
     elif int(summary_data.get("missed_rows", 0) or 0) > 0:
         primary_condition = "missed_opportunity"
     elif int(summary_data.get("false_alarm_rows", 0) or 0) > 0:
@@ -732,6 +753,8 @@ def build_judgment_self_review_digest(
         operator_next_action = "まず通常通知後のintraperiod結果を蓄積する。"
     elif primary_condition == "bad_entry_or_wrong_direction":
         operator_next_action = "SL先行の高優先行から、方向・entry位置・SL幅を確認する。"
+    elif primary_condition == "late_signal":
+        operator_next_action = "遅れ判定の行を確認し、通知時点で15分足の初動後になっていないかを見る。"
     elif primary_condition == "missed_opportunity":
         operator_next_action = "候補なしで有利に動いた行を確認し、拾えなかった条件を整理する。"
     elif primary_condition == "no_entry_after_alert":
@@ -870,6 +893,7 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
             "candidate_review_rows": 0,
             "missed_rows": 0,
             "good_rows": 0,
+            "late_rows": 0,
             "wrong_rows": 0,
             "false_alarm_rows": 0,
             "unresolved_rows": 0,
@@ -921,6 +945,7 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
     missed_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "missed").sum())
     candidate_review_rows = int(total_rows - missed_rows)
     good_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "good").sum())
+    late_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "late").sum())
     wrong_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "wrong").sum())
     false_alarm_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "false_alarm").sum())
     unresolved_rows = int((df["self_review_label"].astype("object").astype(str).str.lower() == "unresolved").sum())
@@ -937,6 +962,7 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
         "candidate_review_rows": candidate_review_rows,
         "missed_rows": missed_rows,
         "good_rows": good_rows,
+        "late_rows": late_rows,
         "wrong_rows": wrong_rows,
         "false_alarm_rows": false_alarm_rows,
         "unresolved_rows": unresolved_rows,
@@ -1002,6 +1028,7 @@ def _markdown_lines(
         f"- candidate_review_rows: {summary['candidate_review_rows']}",
         f"- missed_rows: {summary['missed_rows']}",
         f"- good_rows: {summary['good_rows']}",
+        f"- late_rows: {summary['late_rows']}",
         f"- wrong_rows: {summary['wrong_rows']}",
         f"- false_alarm_rows: {summary['false_alarm_rows']}",
         f"- unresolved_rows: {summary['unresolved_rows']}",

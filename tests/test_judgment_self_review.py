@@ -196,6 +196,51 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(good_gate["change_readiness_level"], "low")
         self.assertEqual(good_gate["operator_change_guidance"], "大きな変更は不要。現行ロジックを維持して観察を続ける。")
 
+    def test_explicit_late_outcome_is_classified_as_late(self) -> None:
+        review_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    {
+                        "candidate_id": "cand-late",
+                        "source_signal_id": "sig-late",
+                        "timestamp_jst": "2026-07-02T09:00:00+09:00",
+                        "active_primary_action": "ACTIVE_LIMIT_RETEST",
+                        "candidate_type": "active_limit_retest",
+                        "candidate_status": "ready",
+                        "side": "long",
+                        "entry_mode": "limit_zone_mid",
+                        "entry_price": "100",
+                        "stop_price": "95",
+                        "tp1_price": "110",
+                        "tp2_price": "120",
+                        "outcome": "too_late",
+                        "entry_reached_time": "2026-07-02T09:15:00+09:00",
+                        "first_exit_time": "2026-07-02T09:30:00+09:00",
+                        "first_exit_reason": "too_late",
+                        "mfe_price": "5",
+                        "mae_price": "1",
+                        "mfe_r": "1.2500",
+                        "mae_r": "0.2500",
+                    }
+                ]
+            ),
+            None,
+        )
+        self.assertEqual(review_df.loc[0, "intraperiod_outcome"], "late")
+        self.assertEqual(review_df.loc[0, "self_review_label"], "late")
+        self.assertEqual(review_df.loc[0, "timing_review"], "late")
+        self.assertEqual(review_df.loc[0, "review_bucket"], "late_signal")
+        self.assertEqual(review_df.loc[0, "review_severity"], "high")
+        self.assertEqual(review_df.loc[0, "human_review_required"], "yes")
+        self.assertEqual(review_df.loc[0, "improvement_focus"], "timing_or_alert_delay")
+        self.assertEqual(review_df.loc[0, "operator_review_hint"], "通知または判定が遅い可能性。15分足で初動後になっていないか確認する。")
+
+        summary = summarize_judgment_self_reviews(review_df)
+        self.assertEqual(summary["late_rows"], 1)
+        digest = build_judgment_self_review_digest(review_df, summary, build_judgment_self_review_queue(review_df))
+        self.assertEqual(digest["primary_condition"], "late_signal")
+        self.assertEqual(digest["operator_next_action"], "遅れ判定の行を確認し、通知時点で15分足の初動後になっていないかを見る。")
+
     def test_self_review_digest_prioritizes_error_classes_deterministically(self) -> None:
         empty_digest = build_judgment_self_review_digest(None)
         self.assertEqual(empty_digest["digest_status"], "no_evidence")
@@ -286,6 +331,24 @@ class JudgmentSelfReviewTests(unittest.TestCase):
                     "reason_codes": "r1",
                 },
                 {
+                    "review_id": "r-late",
+                    "timestamp_jst": "2026-07-02T08:30:00+09:00",
+                    "source_signal_id": "sig-late",
+                    "candidate_id": "cand-late",
+                    "side": "long",
+                    "candidate_type": "type-b2",
+                    "intraperiod_outcome": "late",
+                    "self_review_label": "late",
+                    "review_bucket": "late_signal",
+                    "review_severity": "high",
+                    "human_review_required": "yes",
+                    "improvement_focus": "timing_or_alert_delay",
+                    "operator_review_hint": "late hint",
+                    "mfe_r": "1.5",
+                    "mae_r": "0.2",
+                    "reason_codes": "r1b",
+                },
+                {
                     "review_id": "r-false",
                     "timestamp_jst": "2026-07-02T08:00:00+09:00",
                     "source_signal_id": "sig-false",
@@ -362,6 +425,7 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         queue = build_judgment_self_review_queue(review_df, limit=10)
         self.assertEqual([row["review_id"] for row in queue], [
             "r-wrong",
+            "r-late",
             "r-missed",
             "r-invalid",
             "r-false",
@@ -494,6 +558,7 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(summary["review_bucket_counts"]["bad_entry_or_wrong_direction"], 1)
         self.assertEqual(summary["review_bucket_counts"]["no_entry_after_alert"], 1)
         self.assertEqual(summary["review_bucket_counts"]["missed_opportunity"], 1)
+        self.assertEqual(summary["late_rows"], 0)
         self.assertEqual(summary["review_severity_counts"]["high"], 2)
         self.assertEqual(summary["human_review_required_counts"]["yes"], 3)
         self.assertEqual(summary["human_review_required_counts"]["no"], 1)
@@ -507,6 +572,26 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         gate = build_judgment_self_review_change_readiness(summary, digest, build_judgment_self_review_queue(review_df))
         self.assertEqual(gate["change_readiness_status"], "observe_more")
         self.assertEqual(gate["tuning_review_allowed"], "no")
+
+        late_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-late-1", "sig-late-1", "too_late"),
+                    _candidate_row("cand-good-1", "sig-good-1", "tp1_first"),
+                    _candidate_row("cand-good-2", "sig-good-2", "tp2_first"),
+                    _candidate_row("cand-good-3", "sig-good-3", "tp1_first"),
+                    _candidate_row("cand-good-4", "sig-good-4", "tp2_first"),
+                ]
+            ),
+            None,
+        )
+        late_summary = summarize_judgment_self_reviews(late_df)
+        late_queue = build_judgment_self_review_queue(late_df)
+        late_digest = build_judgment_self_review_digest(late_df, late_summary, late_queue)
+        self.assertEqual(late_digest["primary_condition"], "late_signal")
+        self.assertEqual(late_summary["late_rows"], 1)
+        late_gate = build_judgment_self_review_change_readiness(late_summary, late_digest, late_queue)
+        self.assertEqual(late_gate["change_readiness_status"], "human_review_first")
 
     def test_missed_opportunity_detection_adds_row_for_favorable_signal_without_candidate(self) -> None:
         review_df = build_judgment_self_review_rows(
