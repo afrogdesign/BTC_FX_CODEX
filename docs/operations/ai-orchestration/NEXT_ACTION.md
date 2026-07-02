@@ -27,6 +27,7 @@ self-review stability buildout は反映済みで、controlled restart も完了
 - human UI subject / chart cleanup complete
 - judgment self-review stability buildout complete
 - judgment self-review queue surface complete
+- judgment self-review rollup digest complete
 
 ## Hard boundary
 

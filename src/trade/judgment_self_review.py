@@ -657,6 +657,113 @@ def build_judgment_self_review_queue(review_df: pd.DataFrame | None, *, limit: i
     return queue
 
 
+def _top_count_items(counts: dict[str, Any], *, limit: int = 5, key_name: str = "bucket") -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for key, value in counts.items():
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        text = _normalize_value(key, "")
+        if not text:
+            continue
+        items.append({key_name: text, "count": count})
+    items.sort(key=lambda item: (-int(item["count"]), str(item[key_name])))
+    return items[: max(int(limit), 0)]
+
+
+def build_judgment_self_review_digest(
+    review_df: pd.DataFrame | None,
+    summary: dict[str, Any] | None = None,
+    review_queue: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    df = _ensure_df(review_df)
+    summary_data = summary or summarize_judgment_self_reviews(df)
+    queue = review_queue if review_queue is not None else build_judgment_self_review_queue(df)
+
+    total_review_rows = int(summary_data.get("total_review_rows", len(df)) or 0)
+    high_priority_count = int(summary_data.get("high_severity_rows", 0) or 0)
+    human_review_required_count = int(summary_data.get("human_review_required_rows", 0) or 0)
+    evidence_state = "reviewable"
+    if total_review_rows == 0:
+        evidence_state = "no_rows"
+    else:
+        review_bucket_counts = summary_data.get("review_bucket_counts") or {}
+        if int(summary_data.get("no_data_rows", 0) or 0) > 0 or int(review_bucket_counts.get("data_gap", 0) or 0) > 0:
+            evidence_state = "data_gap"
+        elif high_priority_count > 0:
+            evidence_state = "high_priority_review"
+
+    primary_condition = "insufficient_evidence"
+    if int(summary_data.get("wrong_rows", 0) or 0) > 0:
+        primary_condition = "bad_entry_or_wrong_direction"
+    elif int(summary_data.get("missed_rows", 0) or 0) > 0:
+        primary_condition = "missed_opportunity"
+    elif int(summary_data.get("false_alarm_rows", 0) or 0) > 0:
+        primary_condition = "no_entry_after_alert"
+    elif int(summary_data.get("no_data_rows", 0) or 0) > 0:
+        primary_condition = "data_gap"
+    elif int(summary_data.get("ambiguous_rows", 0) or 0) > 0:
+        primary_condition = "ambiguous_outcome"
+    elif int(summary_data.get("unresolved_rows", 0) or 0) > 0:
+        primary_condition = "unresolved_followup"
+    elif int(summary_data.get("good_rows", 0) or 0) > 0 and human_review_required_count == 0:
+        primary_condition = "confirmed_useful"
+
+    if total_review_rows == 0:
+        digest_status = "no_evidence"
+    elif human_review_required_count > 0:
+        digest_status = "needs_human_review"
+    elif total_review_rows > 0:
+        digest_status = "stable"
+    else:
+        digest_status = "review_required"
+
+    primary_improvement_focus = "collect_more_evidence"
+    if queue:
+        primary_improvement_focus = _normalize_value(queue[0].get("improvement_focus"), "") or "collect_more_evidence"
+    else:
+        focus_counts = summary_data.get("improvement_focus_counts") or {}
+        top_focuses = _top_count_items(focus_counts, limit=1, key_name="focus")
+        if top_focuses:
+            primary_improvement_focus = top_focuses[0]["focus"]
+
+    if digest_status == "no_evidence":
+        operator_next_action = "まず通常通知後のintraperiod結果を蓄積する。"
+    elif primary_condition == "bad_entry_or_wrong_direction":
+        operator_next_action = "SL先行の高優先行から、方向・entry位置・SL幅を確認する。"
+    elif primary_condition == "missed_opportunity":
+        operator_next_action = "候補なしで有利に動いた行を確認し、拾えなかった条件を整理する。"
+    elif primary_condition == "no_entry_after_alert":
+        operator_next_action = "entry未到達の警告を確認し、通知が早すぎるか価格距離が遠すぎるかを見る。"
+    elif primary_condition == "data_gap":
+        operator_next_action = "OHLCVや生成タイミングの欠損を確認し、判定より先にデータ品質を直す。"
+    elif primary_condition == "ambiguous_outcome":
+        operator_next_action = "TP/SL順序が曖昧な行を確認し、足内判定の粒度を見直す。"
+    elif primary_condition == "unresolved_followup":
+        operator_next_action = "結果未確定のため、追加足またはtimeout後に再確認する。"
+    elif primary_condition == "confirmed_useful":
+        operator_next_action = "現行ロジックは維持し、次の通知でも同傾向が続くか観察する。"
+    else:
+        operator_next_action = "human review queue を上から確認する。"
+
+    review_bucket_counts = summary_data.get("review_bucket_counts") or {}
+    improvement_focus_counts = summary_data.get("improvement_focus_counts") or {}
+    digest = {
+        "digest_status": digest_status,
+        "primary_condition": primary_condition,
+        "primary_improvement_focus": primary_improvement_focus,
+        "high_priority_count": high_priority_count,
+        "human_review_required_count": human_review_required_count,
+        "evidence_state": evidence_state,
+        "top_review_buckets": _top_count_items(review_bucket_counts, limit=5, key_name="bucket"),
+        "top_improvement_focuses": _top_count_items(improvement_focus_counts, limit=5, key_name="focus"),
+        "operator_next_action": operator_next_action,
+        "safety_boundary": SAFETY_BOUNDARY,
+    }
+    return digest
+
+
 def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str, Any]:
     df = _ensure_df(review_df)
     if df.empty:
@@ -769,6 +876,7 @@ def _sanitize_review_df(review_df: pd.DataFrame | None) -> pd.DataFrame:
 def _markdown_lines(
     review_df: pd.DataFrame,
     review_queue: list[dict[str, Any]],
+    review_digest: dict[str, Any],
     summary: dict[str, Any],
     report_date: str,
     input_counts: dict[str, Any],
@@ -825,6 +933,15 @@ def _markdown_lines(
         "## Improvement Focus",
         f"- {json.dumps(summary['improvement_focus_counts'], ensure_ascii=False, sort_keys=True)}",
         "",
+        "## Self-Review Digest",
+        f"- digest_status: {_normalize_value(review_digest.get('digest_status'), '')}",
+        f"- primary_condition: {_normalize_value(review_digest.get('primary_condition'), '')}",
+        f"- primary_improvement_focus: {_normalize_value(review_digest.get('primary_improvement_focus'), '')}",
+        f"- evidence_state: {_normalize_value(review_digest.get('evidence_state'), '')}",
+        f"- high_priority_count: {_normalize_value(review_digest.get('high_priority_count'), '')}",
+        f"- human_review_required_count: {_normalize_value(review_digest.get('human_review_required_count'), '')}",
+        f"- operator_next_action: {_normalize_value(review_digest.get('operator_next_action'), '')}",
+        "",
         "## Human Review Queue",
     ]
     if not review_queue:
@@ -869,6 +986,7 @@ def build_judgment_self_review_report(
     review_df = build_judgment_self_review_rows(intraperiod_input_df, signal_input_df if not signal_input_df.empty else signal_input_df)
     review_queue = build_judgment_self_review_queue(review_df)
     summary = summarize_judgment_self_reviews(review_df)
+    review_digest = build_judgment_self_review_digest(review_df, summary, review_queue)
     resolved_report_date = (report_date or datetime.now(tz=timezone(timedelta(hours=9))).strftime("%Y%m%d")).strip()
     input_counts = {
         "intraperiod_outcomes": {
@@ -880,7 +998,7 @@ def build_judgment_self_review_report(
             "rows": int(len(signal_input_df)),
         },
     }
-    report = "\n".join(_markdown_lines(review_df, review_queue, summary, resolved_report_date, input_counts)) + "\n"
+    report = "\n".join(_markdown_lines(review_df, review_queue, review_digest, summary, resolved_report_date, input_counts)) + "\n"
 
     sanitized_df = _sanitize_review_df(review_df)
     if not dry_run:
@@ -898,6 +1016,7 @@ def build_judgment_self_review_report(
         "output_csv_path": str(output_csv) if output_csv is not None else "",
         "input_counts": input_counts,
         "summary": summary,
+        "review_digest": review_digest,
         "review_queue": review_queue,
         "review_queue_count": len(review_queue),
         "report_only": True,

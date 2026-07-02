@@ -78,6 +78,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - normal notifications / generated HTML can be reviewed against self-review evidence when generated intraperiod inputs are available.
 - judgment self-review now also carries deterministic review bucket / severity / human-review-required / improvement-focus fields for later human review.
 - judgment self-review now also exposes a deterministic sanitized human review queue for quick row-level follow-up.
+- judgment self-review now also exposes a deterministic rollup digest for operator next-action review.
 - controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
 
 ## Current operational blocker

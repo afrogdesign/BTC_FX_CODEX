@@ -19,6 +19,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.trade.judgment_self_review import (  # noqa: E402
     SAFETY_BOUNDARY,
+    build_judgment_self_review_digest,
     build_judgment_self_review_report,
     build_judgment_self_review_rows,
     build_judgment_self_review_queue,
@@ -131,6 +132,56 @@ def _signal_row(signal_id: str, *, favorable: bool = True, sensitive: bool = Fal
 
 
 class JudgmentSelfReviewTests(unittest.TestCase):
+    def test_self_review_digest_prioritizes_error_classes_deterministically(self) -> None:
+        empty_digest = build_judgment_self_review_digest(None)
+        self.assertEqual(empty_digest["digest_status"], "no_evidence")
+        self.assertEqual(empty_digest["primary_condition"], "insufficient_evidence")
+        self.assertEqual(empty_digest["primary_improvement_focus"], "collect_more_evidence")
+        self.assertEqual(empty_digest["operator_next_action"], "まず通常通知後のintraperiod結果を蓄積する。")
+
+        wrong_df = build_judgment_self_review_rows(
+            pd.DataFrame([_candidate_row("cand-wrong", "sig-wrong", "sl_first")]),
+            None,
+        )
+        wrong_summary = summarize_judgment_self_reviews(wrong_df)
+        wrong_queue = build_judgment_self_review_queue(wrong_df)
+        wrong_digest = build_judgment_self_review_digest(wrong_df, wrong_summary, wrong_queue)
+        self.assertEqual(wrong_digest["digest_status"], "needs_human_review")
+        self.assertEqual(wrong_digest["primary_condition"], "bad_entry_or_wrong_direction")
+        self.assertEqual(wrong_digest["primary_improvement_focus"], "entry_filter_or_direction_check")
+        self.assertEqual(wrong_digest["operator_next_action"], "SL先行の高優先行から、方向・entry位置・SL幅を確認する。")
+        self.assertEqual(wrong_digest["evidence_state"], "high_priority_review")
+        self.assertGreaterEqual(wrong_digest["high_priority_count"], 1)
+        self.assertGreaterEqual(wrong_digest["human_review_required_count"], 1)
+
+        missed_df = build_judgment_self_review_rows(
+            pd.DataFrame([_candidate_row("cand-good", "sig-good", "tp1_first")]),
+            pd.DataFrame([_signal_row("sig-missed", favorable=True)]),
+        )
+        missed_summary = summarize_judgment_self_reviews(missed_df)
+        missed_queue = build_judgment_self_review_queue(missed_df)
+        missed_digest = build_judgment_self_review_digest(missed_df, missed_summary, missed_queue)
+        self.assertEqual(missed_digest["primary_condition"], "missed_opportunity")
+        self.assertEqual(missed_digest["primary_improvement_focus"], "missed_signal_detection")
+        self.assertEqual(missed_digest["operator_next_action"], "候補なしで有利に動いた行を確認し、拾えなかった条件を整理する。")
+
+        good_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    _candidate_row("cand-good-1", "sig-good-1", "tp1_first"),
+                    _candidate_row("cand-good-2", "sig-good-2", "tp2_first"),
+                ]
+            ),
+            None,
+        )
+        good_summary = summarize_judgment_self_reviews(good_df)
+        good_queue = build_judgment_self_review_queue(good_df)
+        good_digest = build_judgment_self_review_digest(good_df, good_summary, good_queue)
+        self.assertEqual(good_digest["digest_status"], "stable")
+        self.assertEqual(good_digest["primary_condition"], "confirmed_useful")
+        self.assertEqual(good_digest["primary_improvement_focus"], "keep_current_logic")
+        self.assertEqual(good_digest["operator_next_action"], "現行ロジックは維持し、次の通知でも同傾向が続くか観察する。")
+
     def test_human_review_queue_orders_rows_deterministically(self) -> None:
         review_df = pd.DataFrame(
             [
@@ -386,6 +437,9 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(summary["human_review_required_rows"], 3)
         self.assertIn("entry_filter_or_direction_check", summary["improvement_focus_counts"])
         self.assertIn("missed_signal_detection", summary["improvement_focus_counts"])
+        digest = build_judgment_self_review_digest(review_df, summary, build_judgment_self_review_queue(review_df))
+        self.assertEqual(digest["primary_condition"], "bad_entry_or_wrong_direction")
+        self.assertEqual(digest["primary_improvement_focus"], "entry_filter_or_direction_check")
 
     def test_missed_opportunity_detection_adds_row_for_favorable_signal_without_candidate(self) -> None:
         review_df = build_judgment_self_review_rows(
@@ -498,10 +552,12 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             csv_text = output_csv.read_text(encoding="utf-8")
             md_text = output_md.read_text(encoding="utf-8")
             self.assertIn("Human Review Queue", md_text)
+            self.assertIn("Self-Review Digest", md_text)
             self.assertIn("## Review Buckets", md_text)
             self.assertIn("## Review Severity", md_text)
             self.assertIn("## Human Review Required", md_text)
             self.assertIn("## Improvement Focus", md_text)
+            self.assertIn("review_digest", json.dumps(payload, ensure_ascii=False))
             self.assertEqual(payload["review_queue_count"], len(payload["review_queue"]))
             self.assertTrue(payload["review_queue"])
             for text in (report, json.dumps(payload, ensure_ascii=False), csv_text, md_text):
