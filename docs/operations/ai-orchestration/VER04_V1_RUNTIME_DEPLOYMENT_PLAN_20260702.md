@@ -110,3 +110,13 @@ This document is planning only. It does not access the runtime repo, does not re
 - restart/launchd/notification sending: not performed
 - notification-operation smoke: can proceed in the next explicit task
 - no secrets/private data were recorded
+
+## Notification-operation smoke result
+
+- runtime branch/HEAD checked: `Ver04-v1` / `c37e46ff948cda664b0ca3641ad922369d16b436`
+- smoke commands run: `./.venv312/bin/python -m unittest tests.test_summary_format`, `./.venv312/bin/python -m unittest tests.test_notification_detail_page`, `./.venv312/bin/python -m unittest tests.test_active_plan_notification_formatting`, `./.venv312/bin/python -m unittest tests.test_post_eval_surface_smoke`
+- documented no-send / dry-run / render-only notification smoke command exists: no
+- validation summary: notification rendering tests passed and report-only / human-decided safety text remained present; no real mail sending was performed
+- restart/launchd: not performed
+- controlled restart decision readiness: no, because a documented no-send notification smoke command is not yet defined
+- no secrets/private data were recorded
