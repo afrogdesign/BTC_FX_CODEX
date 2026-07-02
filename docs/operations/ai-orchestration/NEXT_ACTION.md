@@ -1,12 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+- current_work_id: `BTCFX-20260702-ACTUAL-TRADE-SIGNAL-LINKER`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MEXC actual trade export の local xlsx importer と normalized CSV 出力は実装済み。
-次は actual trade の linker 側を詰める。
+MEXC actual trade importer は completed history とし、normalized actual trade を signal に安全にリンクする local/report-only linker を実装する。
 
 API integration はまだやらない。raw export は local only で扱い、normalized CSV を作る。
 
@@ -39,6 +38,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 - `tools/log_feedback.py`
 - `tests/test_mexc_actual_trade_importer.py`
+- `tests/test_manual_trade_signal_linker.py`
 - any narrow support docs needed for the MEXC import schema / normalization contract
 
 ## Do not

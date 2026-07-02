@@ -1392,6 +1392,21 @@ _MEXC_POSITION_HEADER = [
     "status",
     "import_status",
 ]
+_MEXC_TRADE_SIGNAL_LINK_HEADER = [
+    "actual_trade_id",
+    "signal_id",
+    "mail_timestamp_jst",
+    "trade_opened_at_jst",
+    "trade_closed_at_jst",
+    "actual_side",
+    "priority_direction",
+    "side_match",
+    "time_delta_minutes",
+    "price_context_match",
+    "link_score",
+    "link_confidence",
+    "link_note",
+]
 
 _MEXC_HISTORY_SPECS = (
     {
@@ -1698,6 +1713,252 @@ def import_mexc_actual_trades(
             "output_file": output_path.name,
         }
     summary["total_rows"] = sum(category_info["row_count"] for category_info in summary["categories"].values())
+    return summary
+
+
+def _mexc_link_normalize_side(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"buy", "long"}:
+        return "long"
+    if normalized in {"sell", "short"}:
+        return "short"
+    if normalized in {"long", "short"}:
+        return normalized
+    return normalized
+
+
+def _mexc_link_btc_context(symbol: Any) -> bool:
+    normalized = str(symbol or "").strip().replace(" ", "").replace("-", "_").lower()
+    if not normalized:
+        return True
+    return normalized in {"btc", "btc_usdt", "btcusdt"}
+
+
+def _mexc_link_time_delta_minutes(mail_timestamp: str, trade_opened_at: str) -> float | None:
+    mail_dt = _parse_dt(mail_timestamp)
+    trade_dt = _parse_dt(trade_opened_at)
+    if mail_dt is None or trade_dt is None:
+        return None
+    if mail_dt.tzinfo is None:
+        mail_dt = mail_dt.replace(tzinfo=JST)
+    else:
+        mail_dt = mail_dt.astimezone(JST)
+    if trade_dt.tzinfo is None:
+        trade_dt = trade_dt.replace(tzinfo=JST)
+    else:
+        trade_dt = trade_dt.astimezone(JST)
+    return (trade_dt - mail_dt).total_seconds() / 60.0
+
+
+def _mexc_link_confidence(score: int | None, *, ambiguous: bool = False) -> str:
+    if ambiguous or score is None:
+        return "ambiguous"
+    if score >= 8:
+        return "high"
+    if score >= 5:
+        return "medium"
+    if score >= 2:
+        return "low"
+    return "low"
+
+
+def _mexc_merge_signal_rows(
+    signal_rows: list[dict[str, Any]],
+    signal_outcome_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged_by_id: dict[str, dict[str, Any]] = {}
+    for row in signal_outcome_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        merged_by_id[signal_id] = dict(row)
+    for row in signal_rows:
+        signal_id = str(row.get("signal_id", "")).strip()
+        if not signal_id:
+            continue
+        merged = dict(merged_by_id.get(signal_id, {}))
+        merged.update(row)
+        merged_by_id[signal_id] = merged
+    return list(merged_by_id.values())
+
+
+def score_manual_trade_signal_link(
+    trade_row: dict[str, Any],
+    signal_row: dict[str, Any],
+    *,
+    max_after_minutes: int = 240,
+) -> dict[str, Any]:
+    trade_opened_at = str(trade_row.get("trade_opened_at_jst") or trade_row.get("timestamp_jst", "")).strip()
+    mail_timestamp = str(signal_row.get("mail_timestamp_jst") or signal_row.get("timestamp_jst", "")).strip()
+    delta_minutes = _mexc_link_time_delta_minutes(mail_timestamp, trade_opened_at)
+    actual_side = _mexc_link_normalize_side(trade_row.get("actual_side", trade_row.get("side", "")))
+    priority_direction = _mexc_link_normalize_side(signal_row.get("priority_direction", signal_row.get("bias", "")))
+    symbol_match = _mexc_link_btc_context(signal_row.get("symbol", ""))
+    side_match = bool(actual_side and priority_direction and actual_side == priority_direction)
+    if delta_minutes is None or delta_minutes < 0 or delta_minutes > float(max_after_minutes):
+        return {
+            "eligible": False,
+            "actual_side": actual_side,
+            "priority_direction": priority_direction,
+            "side_match": side_match,
+            "time_delta_minutes": delta_minutes,
+            "price_context_match": "unknown",
+            "link_score": 0,
+            "base_score": 0,
+            "link_confidence": "ambiguous",
+            "link_note": "no_candidate",
+            "mail_timestamp_jst": mail_timestamp,
+            "trade_opened_at_jst": trade_opened_at,
+        }
+
+    time_score = 3 if delta_minutes <= 90 else 1
+    link_score = time_score
+    if side_match:
+        link_score += 3
+    if symbol_match:
+        link_score += 2
+    return {
+        "eligible": True,
+        "actual_side": actual_side,
+        "priority_direction": priority_direction,
+        "side_match": side_match,
+        "time_delta_minutes": round(delta_minutes, 1),
+        "price_context_match": "unknown",
+        "link_score": int(link_score),
+        "base_score": int(link_score),
+        "link_confidence": _mexc_link_confidence(int(link_score)),
+        "link_note": "candidate",
+        "mail_timestamp_jst": mail_timestamp,
+        "trade_opened_at_jst": trade_opened_at,
+    }
+
+
+def build_manual_trade_signal_link_rows(
+    *,
+    manual_trade_rows: list[dict[str, Any]],
+    signal_rows: list[dict[str, Any]],
+    signal_outcome_rows: list[dict[str, Any]],
+    max_after_minutes: int = 240,
+) -> list[dict[str, str]]:
+    merged_signals = _mexc_merge_signal_rows(signal_rows, signal_outcome_rows)
+    link_rows: list[dict[str, str]] = []
+    for trade_row in manual_trade_rows:
+        actual_trade_id = str(trade_row.get("actual_trade_id", "")).strip()
+        trade_opened_at = str(trade_row.get("trade_opened_at_jst") or trade_row.get("timestamp_jst", "")).strip()
+        actual_side = _mexc_link_normalize_side(trade_row.get("actual_side", trade_row.get("side", "")))
+        candidates: list[dict[str, Any]] = []
+        for signal_row in merged_signals:
+            candidate = score_manual_trade_signal_link(trade_row, signal_row, max_after_minutes=max_after_minutes)
+            if candidate.get("eligible"):
+                candidate = dict(candidate)
+                candidate["signal_id"] = str(signal_row.get("signal_id", "")).strip()
+                candidates.append(candidate)
+
+        if not candidates:
+            link_rows.append(
+                {
+                    "actual_trade_id": actual_trade_id,
+                    "signal_id": "",
+                    "mail_timestamp_jst": "",
+                    "trade_opened_at_jst": trade_opened_at,
+                    "trade_closed_at_jst": "",
+                    "actual_side": actual_side,
+                    "priority_direction": "",
+                    "side_match": "no",
+                    "time_delta_minutes": "",
+                    "price_context_match": "unknown",
+                    "link_score": "0",
+                    "link_confidence": "ambiguous",
+                    "link_note": "no_candidate",
+                }
+            )
+            continue
+
+        top_score = max(int(candidate["link_score"]) for candidate in candidates)
+        top_candidates = [candidate for candidate in candidates if int(candidate["link_score"]) == top_score]
+        if len(top_candidates) != 1:
+            link_rows.append(
+                {
+                    "actual_trade_id": actual_trade_id,
+                    "signal_id": "",
+                    "mail_timestamp_jst": "",
+                    "trade_opened_at_jst": trade_opened_at,
+                    "trade_closed_at_jst": "",
+                    "actual_side": actual_side,
+                    "priority_direction": "",
+                    "side_match": "no",
+                    "time_delta_minutes": "",
+                    "price_context_match": "unknown",
+                    "link_score": str(top_score),
+                    "link_confidence": "ambiguous",
+                    "link_note": "competing_candidate_tie",
+                }
+            )
+            continue
+
+        winner = dict(top_candidates[0])
+        winner["link_score"] = int(winner["link_score"]) + 1
+        winner["link_confidence"] = _mexc_link_confidence(int(winner["link_score"]))
+        winner["link_note"] = "matched_unique_top_candidate"
+        link_rows.append(
+            {
+                "actual_trade_id": actual_trade_id,
+                "signal_id": str(winner.get("signal_id", "")).strip(),
+                "mail_timestamp_jst": str(winner.get("mail_timestamp_jst", "")).strip(),
+                "trade_opened_at_jst": trade_opened_at,
+                "trade_closed_at_jst": str(trade_row.get("trade_closed_at_jst", "")).strip(),
+                "actual_side": actual_side,
+                "priority_direction": str(winner.get("priority_direction", "")).strip(),
+                "side_match": "yes" if winner.get("side_match") else "no",
+                "time_delta_minutes": str(winner.get("time_delta_minutes", "")),
+                "price_context_match": str(winner.get("price_context_match", "unknown")).strip() or "unknown",
+                "link_score": str(winner["link_score"]),
+                "link_confidence": str(winner["link_confidence"]),
+                "link_note": str(winner["link_note"]),
+            }
+        )
+    return link_rows
+
+
+def link_manual_trades_to_signals(
+    *,
+    manual_trades: Path,
+    signals: Path,
+    signal_outcomes: Path,
+    output_csv: Path | None = None,
+    dry_run: bool = False,
+    max_after_minutes: int = 240,
+) -> dict[str, Any]:
+    output_path = output_csv or (BASE_DIR / "logs" / "csv" / "manual_trade_signal_links.csv")
+    manual_trade_rows = _load_csv_rows(manual_trades)
+    signal_rows = _load_csv_rows(signals)
+    signal_outcome_rows = _load_csv_rows(signal_outcomes)
+    link_rows = build_manual_trade_signal_link_rows(
+        manual_trade_rows=manual_trade_rows,
+        signal_rows=signal_rows,
+        signal_outcome_rows=signal_outcome_rows,
+        max_after_minutes=max_after_minutes,
+    )
+    if not dry_run:
+        _write_csv_rows(output_path, _MEXC_TRADE_SIGNAL_LINK_HEADER, link_rows)
+
+    confidence_counts = Counter(row["link_confidence"] for row in link_rows)
+    note_counts = Counter(row["link_note"] for row in link_rows)
+    summary = {
+        "manual_trades_path": str(manual_trades),
+        "signals_path": str(signals),
+        "signal_outcomes_path": str(signal_outcomes),
+        "output_csv": str(output_path),
+        "dry_run": bool(dry_run),
+        "max_after_minutes": int(max_after_minutes),
+        "manual_trade_count": len(manual_trade_rows),
+        "linked_trade_count": sum(1 for row in link_rows if row.get("signal_id")),
+        "ambiguous_count": sum(1 for row in link_rows if not row.get("signal_id")),
+        "confidence_counts": dict(confidence_counts),
+        "note_counts": dict(note_counts),
+        "output_row_count": len(link_rows),
+        "output_written": not dry_run,
+    }
     return summary
 
 
@@ -20260,6 +20521,15 @@ def _build_parser() -> argparse.ArgumentParser:
     mexc_import_parser.add_argument("--stdout-json", action="store_true")
     mexc_import_parser.add_argument("--dry-run", action="store_true")
 
+    manual_trade_link_parser = subparsers.add_parser("link-manual-trades-to-signals")
+    manual_trade_link_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
+    manual_trade_link_parser.add_argument("--signals", default="logs/csv/user_reviews.csv")
+    manual_trade_link_parser.add_argument("--signal-outcomes", default="logs/csv/signal_outcomes.csv")
+    manual_trade_link_parser.add_argument("--output-csv", default="logs/csv/manual_trade_signal_links.csv")
+    manual_trade_link_parser.add_argument("--stdout-json", action="store_true")
+    manual_trade_link_parser.add_argument("--dry-run", action="store_true")
+    manual_trade_link_parser.add_argument("--max-after-minutes", type=_non_negative_int_arg, default=240)
+
     daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
     daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
     daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
@@ -20946,6 +21216,28 @@ def main() -> None:
                 "missing_categories="
                 + (",".join(summary["missing_categories"]) if summary["missing_categories"] else "none")
             )
+        return
+
+    if args.command == "link-manual-trades-to-signals":
+        summary = link_manual_trades_to_signals(
+            manual_trades=Path(args.manual_trades),
+            signals=Path(args.signals),
+            signal_outcomes=Path(args.signal_outcomes),
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            dry_run=bool(args.dry_run),
+            max_after_minutes=int(args.max_after_minutes),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        else:
+            print(f"manual_trades={summary['manual_trades_path']}")
+            print(f"signals={summary['signals_path']}")
+            print(f"signal_outcomes={summary['signal_outcomes_path']}")
+            print(f"output_csv={summary['output_csv']}")
+            print(f"dry_run={summary['dry_run']}")
+            print(f"manual_trade_count={summary['manual_trade_count']}")
+            print(f"linked_trade_count={summary['linked_trade_count']}")
+            print(f"ambiguous_count={summary['ambiguous_count']}")
         return
 
     if args.command == "serve-review-form":
