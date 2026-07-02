@@ -67,7 +67,7 @@ Not allowed in surface renderers:
 
 ### 4. Surface Smoke Tests
 
-- Smoke-test public HTML, dashboard/app surface, app-ready, and mail body against the already-provided payload.
+- Implemented as focused smoke coverage across public HTML, dashboard/app surface, app-ready/check, and mail body against the already-provided payload.
 - Keep tests focused on display-only reflection and privacy-safe degradation.
 
 ### 5. Docs Update
@@ -107,5 +107,5 @@ Not allowed in surface renderers:
 
 ## Next Hand-off
 
-- `BTCFX-20260702-POST-EVAL-SURFACE-SMOKE`
-- Goal: smoke-test the already wired public HTML, dashboard/app surface, app-ready, and mail body reflections against approved compact payload data only.
+- `BTCFX-20260702-POST-EVAL-FINAL-DOCS-SYNC`
+- Goal: sync the remaining docs after the smoke coverage is in place, without changing runtime, notification, or payload behavior.
