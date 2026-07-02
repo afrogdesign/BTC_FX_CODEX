@@ -15544,6 +15544,12 @@ def _manual_delivery_current_handoff_app_ready_check_data(
         "human_action": status_data["human_action"],
         "shadow_decision_enabled": status_data["shadow_decision_enabled"],
         "safety_boundary": status_data["safety_boundary"],
+        "post_eval_recommendations_present": status_data["post_eval_recommendations_present"],
+        "post_eval_recommendations_ready": status_data["post_eval_recommendations_ready"],
+        "post_eval_recommendations_status": status_data["post_eval_recommendations_status"],
+        "post_eval_recommendations_schema_version": status_data["post_eval_recommendations_schema_version"],
+        "post_eval_recommendations_candidate_count": status_data["post_eval_recommendations_candidate_count"],
+        "post_eval_recommendations_reason_codes": status_data["post_eval_recommendations_reason_codes"],
     }
 
 
@@ -15584,6 +15590,12 @@ def _write_manual_delivery_current_handoff_app_ready_check_outputs(
         "human_action",
         "shadow_decision_enabled",
         "safety_boundary",
+        "post_eval_recommendations_present",
+        "post_eval_recommendations_ready",
+        "post_eval_recommendations_status",
+        "post_eval_recommendations_schema_version",
+        "post_eval_recommendations_candidate_count",
+        "post_eval_recommendations_reason_codes",
     ]
     missing_keys = [key for key in required_keys if key not in status_data]
     if missing_keys:
@@ -15605,6 +15617,8 @@ def _write_manual_delivery_current_handoff_app_ready_check_outputs(
         "actionability_label",
         "human_action",
         "safety_boundary",
+        "post_eval_recommendations_status",
+        "post_eval_recommendations_schema_version",
     ]
     for key in string_keys:
         if not isinstance(status_data[key], str):
@@ -15669,6 +15683,38 @@ def _write_manual_delivery_current_handoff_app_ready_check_outputs(
             if parser is None:
                 raise ValueError(message)
             parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_present"], bool):
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_present must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_ready"], bool):
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_ready must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_status"], str):
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_status must be a string"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_schema_version"], str):
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_schema_version must be a string"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_candidate_count"], int) or status_data["post_eval_recommendations_candidate_count"] < 0:
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_candidate_count must be a non-negative integer"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(status_data["post_eval_recommendations_reason_codes"], list) or any(
+        not isinstance(item, str) for item in status_data["post_eval_recommendations_reason_codes"]
+    ):
+        message = "current handoff app-snapshot status JSON post_eval_recommendations_reason_codes must be a list of strings"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
     app_snapshot_json_path = Path(str(status_data["app_snapshot_json"]))
     if not app_snapshot_json_path.exists():
         message = f"current handoff app-snapshot status app-snapshot JSON does not exist: {app_snapshot_json_path}"
@@ -15819,6 +15865,86 @@ def _manual_delivery_post_eval_recommendation_payload_like(value: Any) -> bool:
     return indicator_hits >= 1 and (indicator_hits + supporting_hits) >= 2
 
 
+def summarize_post_eval_recommendations_ready_gate(payload: Any) -> dict[str, Any]:
+    summary = {
+        "post_eval_recommendations_present": False,
+        "post_eval_recommendations_ready": True,
+        "post_eval_recommendations_status": "optional_not_present",
+        "post_eval_recommendations_schema_version": "",
+        "post_eval_recommendations_candidate_count": 0,
+        "post_eval_recommendations_reason_codes": [],
+    }
+    if payload is None:
+        return summary
+
+    summary["post_eval_recommendations_present"] = True
+    if not isinstance(payload, dict) or payload.get("_malformed"):
+        summary["post_eval_recommendations_ready"] = False
+        summary["post_eval_recommendations_status"] = "invalid_not_ready"
+        summary["post_eval_recommendations_reason_codes"] = ["malformed_payload"]
+        return summary
+
+    def _as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y"}
+        return bool(value)
+
+    reason_codes: list[str] = []
+    schema_version = str(payload.get("schema_version", "")).strip()
+    summary["post_eval_recommendations_schema_version"] = schema_version
+    if schema_version != "post_eval_recommendations.v1":
+        reason_codes.append("schema_version_mismatch")
+
+    candidate_count_value = payload.get("candidate_count")
+    if isinstance(candidate_count_value, bool) or not isinstance(candidate_count_value, int) or candidate_count_value < 0:
+        reason_codes.append("candidate_count_invalid")
+    else:
+        summary["post_eval_recommendations_candidate_count"] = candidate_count_value
+
+    top_recommendation_codes = payload.get("top_recommendation_codes")
+    if top_recommendation_codes not in (None, []):
+        if not isinstance(top_recommendation_codes, list) or any(
+            not isinstance(code, str) or not code.strip() for code in top_recommendation_codes
+        ):
+            reason_codes.append("top_recommendation_codes_invalid")
+
+    priority_counts = payload.get("priority_counts")
+    if priority_counts not in (None, {}):
+        if not isinstance(priority_counts, dict):
+            reason_codes.append("priority_counts_invalid")
+
+    confidence_counts = payload.get("confidence_counts")
+    if confidence_counts not in (None, {}):
+        if not isinstance(confidence_counts, dict):
+            reason_codes.append("confidence_counts_invalid")
+
+    safety_boundary = str(payload.get("safety_boundary", "")).strip().lower()
+    if "report-only" not in safety_boundary or "no automatic order" not in safety_boundary:
+        reason_codes.append("safety_boundary_invalid")
+
+    human_approval_required = _as_bool(payload.get("human_approval_required"))
+    required_human_approval = _as_bool(payload.get("required_human_approval"))
+    if not (human_approval_required or required_human_approval):
+        reason_codes.append("human_approval_required_false")
+
+    if reason_codes:
+        summary["post_eval_recommendations_ready"] = False
+        summary["post_eval_recommendations_status"] = "invalid_not_ready"
+        summary["post_eval_recommendations_reason_codes"] = reason_codes
+        return summary
+
+    summary["post_eval_recommendations_ready"] = True
+    summary["post_eval_recommendations_status"] = "ready"
+    summary["post_eval_recommendations_reason_codes"] = []
+    return summary
+
+
+def validate_post_eval_recommendations_contract(payload: Any) -> dict[str, Any]:
+    return summarize_post_eval_recommendations_ready_gate(payload)
+
+
 def _manual_delivery_extract_post_eval_recommendation_payload(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -15885,13 +16011,13 @@ def _manual_delivery_normalize_post_eval_recommendation_payload(payload: dict[st
             return value
         if isinstance(value, float) and value.is_integer():
             return int(value)
-        try:
-            return int(str(value).strip())
-        except Exception:
-            return _manual_delivery_post_eval_recommendation_display_value(value)
+        return _manual_delivery_post_eval_recommendation_display_value(value)
 
     normalized: dict[str, Any] = {
-        "schema_version": "post_eval_recommendations.v1",
+        "schema_version": _manual_delivery_post_eval_recommendation_display_value(
+            payload.get("schema_version"),
+            "post_eval_recommendations.v1",
+        ),
     }
     for key in ("report_date", "report_path", "output_csv_path", "safety_boundary", "note"):
         value = payload.get(key)
@@ -17737,6 +17863,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "external_notification_allowed": False,
         "paper_positions_integration": False,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        **summarize_post_eval_recommendations_ready_gate(post_eval_recommendation_payload),
         **({"post_eval_recommendations": post_eval_recommendation_payload} if post_eval_recommendation_payload is not None else {}),
         "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
         "operator_status_diagnostic_contract": True,
@@ -17818,7 +17945,7 @@ def _manual_delivery_current_app_integration_contract_markdown(
         "- surface_manifest_schema_version: manual_delivery_app_surface_manifest.v1",
         "- surface_mode: static_html_and_json_only",
         "- stdout_mode: json_only",
-        "- required_ready_keys: schema_version, current_manual_delivery_app_ready, readiness_status, allowed_next_action, app_snapshot_status_json, app_snapshot_status, snapshot_status, current_manual_delivery_ready, display_mode, primary_action, human_review_required, trade_execution_allowed, automatic_order_allowed, external_notification_allowed, paper_positions_integration, source_readiness, actionability_label, human_action, shadow_decision_enabled, safety_boundary",
+        "- required_ready_keys: schema_version, current_manual_delivery_app_ready, readiness_status, allowed_next_action, app_snapshot_status_json, app_snapshot_status, snapshot_status, current_manual_delivery_ready, display_mode, primary_action, human_review_required, trade_execution_allowed, automatic_order_allowed, external_notification_allowed, paper_positions_integration, source_readiness, actionability_label, human_action, shadow_decision_enabled, safety_boundary, post_eval_recommendations_present, post_eval_recommendations_ready, post_eval_recommendations_status, post_eval_recommendations_schema_version, post_eval_recommendations_candidate_count, post_eval_recommendations_reason_codes",
         "- required_safety_values:",
         "  - readiness_status: ready_for_human_review",
         "  - allowed_next_action: human_review_only",
@@ -17969,6 +18096,12 @@ def _manual_delivery_current_app_integration_contract_data(
             "human_action",
             "shadow_decision_enabled",
             "safety_boundary",
+            "post_eval_recommendations_present",
+            "post_eval_recommendations_ready",
+            "post_eval_recommendations_status",
+            "post_eval_recommendations_schema_version",
+            "post_eval_recommendations_candidate_count",
+            "post_eval_recommendations_reason_codes",
         ],
         "required_safety_values": {
             "readiness_status": "ready_for_human_review",
@@ -18075,6 +18208,7 @@ def _manual_delivery_current_app_integration_contract_data(
     }
     if post_eval_recommendations is not None:
         contract_data["post_eval_recommendations"] = post_eval_recommendations
+    contract_data.update(validate_post_eval_recommendations_contract(post_eval_recommendations))
     return contract_data
 
 
@@ -18262,6 +18396,7 @@ def _manual_delivery_current_handoff_app_snapshot_data(
     post_eval_recommendations = app_state_data.get("post_eval_recommendations")
     if post_eval_recommendations is not None:
         snapshot_data["post_eval_recommendations"] = post_eval_recommendations
+    snapshot_data.update(summarize_post_eval_recommendations_ready_gate(post_eval_recommendations))
     return snapshot_data
 
 
@@ -18817,6 +18952,8 @@ def _manual_delivery_current_handoff_app_snapshot_status_data(
     app_snapshot_json: Path,
     snapshot_data: dict[str, Any],
 ) -> dict[str, Any]:
+    post_eval_recommendations = snapshot_data.get("post_eval_recommendations")
+    post_eval_recommendations_ready_gate = summarize_post_eval_recommendations_ready_gate(post_eval_recommendations)
     return {
         "schema_version": "manual_delivery_app_snapshot_status.v1",
         "app_snapshot_status": "valid_ready_for_human_review",
@@ -18842,6 +18979,7 @@ def _manual_delivery_current_handoff_app_snapshot_status_data(
         "human_action": snapshot_data["human_action"],
         "shadow_decision_enabled": snapshot_data["shadow_decision_enabled"],
         "safety_boundary": snapshot_data["safety_boundary"],
+        **post_eval_recommendations_ready_gate,
     }
 
 
@@ -18878,6 +19016,12 @@ def _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
         "human_action",
         "shadow_decision_enabled",
         "safety_boundary",
+        "post_eval_recommendations_present",
+        "post_eval_recommendations_ready",
+        "post_eval_recommendations_status",
+        "post_eval_recommendations_schema_version",
+        "post_eval_recommendations_candidate_count",
+        "post_eval_recommendations_reason_codes",
     ]
     missing_keys = [key for key in required_keys if key not in snapshot_data]
     if missing_keys:
@@ -18898,6 +19042,8 @@ def _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
         "actionability_label",
         "human_action",
         "safety_boundary",
+        "post_eval_recommendations_status",
+        "post_eval_recommendations_schema_version",
     ]
     for key in string_keys:
         if not isinstance(snapshot_data[key], str):
@@ -18953,6 +19099,38 @@ def _write_manual_delivery_current_handoff_app_snapshot_status_outputs(
             if parser is None:
                 raise ValueError(message)
             parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_present"], bool):
+        message = "current handoff app-snapshot JSON post_eval_recommendations_present must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_ready"], bool):
+        message = "current handoff app-snapshot JSON post_eval_recommendations_ready must be a boolean"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_status"], str):
+        message = "current handoff app-snapshot JSON post_eval_recommendations_status must be a string"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_schema_version"], str):
+        message = "current handoff app-snapshot JSON post_eval_recommendations_schema_version must be a string"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_candidate_count"], int) or snapshot_data["post_eval_recommendations_candidate_count"] < 0:
+        message = "current handoff app-snapshot JSON post_eval_recommendations_candidate_count must be a non-negative integer"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
+    if not isinstance(snapshot_data["post_eval_recommendations_reason_codes"], list) or any(
+        not isinstance(item, str) for item in snapshot_data["post_eval_recommendations_reason_codes"]
+    ):
+        message = "current handoff app-snapshot JSON post_eval_recommendations_reason_codes must be a list of strings"
+        if parser is None:
+            raise ValueError(message)
+        parser.error(message)
     ready_check_json = Path(str(snapshot_data["ready_check_json"]))
     app_state_json = Path(str(snapshot_data["app_state_json"]))
     if not ready_check_json.exists():

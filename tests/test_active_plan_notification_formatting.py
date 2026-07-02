@@ -8391,6 +8391,328 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertFalse((base_dir / "paper_positions.csv").exists())
             self.assertFalse((base_dir / "logs" / "csv" / "paper_positions.csv").exists())
 
+    def test_export_current_manual_delivery_app_surface_ready_gate_contract_tracks_valid_absent_and_sanitized_post_eval_payloads(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = _bootstrap_manual_delivery_handoff_fixtures(base_dir)
+            export_dir = base_dir / "local" / "manual_delivery_app_surface"
+            payload = _post_eval_recommendation_payload()
+            payload.update(
+                {
+                    "report_path": "uid-ABC123/account_test/<script>post_eval.md",
+                    "output_csv_path": "logs/csv/uid-ABC123-account_test.csv",
+                    "top_recommendation_codes": [
+                        "PROXY_TOO_AGGRESSIVE_REVIEW",
+                        "uid-ABC123",
+                        "fetch(",
+                    ],
+                    "note": (
+                        "report-only status <script> fetch( send_email Gmail smtp "
+                        "private/order automatic_order_allowed=true OPENAI_API_KEY "
+                        "SMTP_PASSWORD source_uid_hash uid-ABC123 account_test"
+                    ),
+                }
+            )
+            payload_path = _write_json_fixture(base_dir / "fixtures" / "post-eval-recommendations.json", payload)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                with mock.patch.object(
+                    log_feedback,
+                    "build_post_eval_recommendation_report",
+                    side_effect=AssertionError("recommendation engine must not run during dashboard export"),
+                ):
+                    refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                        [
+                            "--handoff-dir",
+                            str(handoff_dir),
+                            "--self-check-json",
+                            str(handoff_dir / "self-check.json"),
+                            "--app-state-json",
+                            str(handoff_dir / "app-state.json"),
+                            "--app-state-md",
+                            str(handoff_dir / "app-state.md"),
+                            "--app-state-status-json",
+                            str(handoff_dir / "app-state-status.json"),
+                            "--app-state-status-md",
+                            str(handoff_dir / "app-state-status.md"),
+                            "--ready-check-json",
+                            str(handoff_dir / "ready-check.json"),
+                            "--ready-check-md",
+                            str(handoff_dir / "ready-check.md"),
+                            "--app-snapshot-json",
+                            str(handoff_dir / "app-snapshot.json"),
+                            "--app-snapshot-md",
+                            str(handoff_dir / "app-snapshot.md"),
+                            "--app-snapshot-status-json",
+                            str(handoff_dir / "app-snapshot-status.json"),
+                            "--app-snapshot-status-md",
+                            str(handoff_dir / "app-snapshot-status.md"),
+                            "--post-eval-recommendations-json",
+                            str(payload_path),
+                        ],
+                        base_dir=base_dir,
+                    )
+                    export_code, export_stdout, export_stderr = self._run_export_current_manual_delivery_app_surface_main_with_argv(
+                        [
+                            "--handoff-dir",
+                            str(handoff_dir),
+                            "--post-eval-recommendations-json",
+                            str(payload_path),
+                        ],
+                        base_dir=base_dir,
+                    )
+                    check_code, check_stdout, check_stderr = self._run_check_current_manual_delivery_app_surface_main_with_argv(
+                        [
+                            "--stdout-json",
+                            "--app-surface-dir",
+                            str(export_dir),
+                        ],
+                        base_dir=base_dir,
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(export_code, 0, msg=export_stderr)
+            self.assertEqual(export_stdout, "current_manual_delivery_app_surface_dir=local/manual_delivery_app_surface\n")
+            self.assertEqual(check_code, 0, msg=check_stderr)
+
+            app_ready_data = json.loads((export_dir / "app-ready.json").read_text(encoding="utf-8"))
+            app_contract_data = json.loads((export_dir / "app-contract.json").read_text(encoding="utf-8"))
+            app_snapshot_data = json.loads((export_dir / "app-snapshot.json").read_text(encoding="utf-8"))
+            check_data = json.loads(check_stdout)
+
+            for output_data in (app_ready_data, app_contract_data, app_snapshot_data, check_data):
+                self.assertTrue(output_data["post_eval_recommendations_present"])
+                self.assertTrue(output_data["post_eval_recommendations_ready"])
+                self.assertEqual(output_data["post_eval_recommendations_status"], "ready")
+                self.assertEqual(output_data["post_eval_recommendations_schema_version"], "post_eval_recommendations.v1")
+                self.assertEqual(output_data["post_eval_recommendations_candidate_count"], 3)
+                self.assertEqual(output_data["post_eval_recommendations_reason_codes"], [])
+
+            self.assertIn("post_eval_recommendations", app_contract_data)
+            self.assertIn("post_eval_recommendations", app_snapshot_data)
+            self.assertEqual(app_contract_data["post_eval_recommendations"]["candidate_count"], 3)
+            self.assertEqual(app_snapshot_data["post_eval_recommendations"]["candidate_count"], 3)
+            self.assertEqual(app_contract_data["post_eval_recommendations"]["human_approval_required"], True)
+            self.assertEqual(app_snapshot_data["post_eval_recommendations"]["human_approval_required"], True)
+
+            combined_text = "\n".join(
+                [
+                    json.dumps(app_ready_data, ensure_ascii=False),
+                    json.dumps(app_contract_data, ensure_ascii=False),
+                    json.dumps(app_snapshot_data, ensure_ascii=False),
+                    check_stdout,
+                ]
+            )
+            self.assertNotIn("source_uid_hash", combined_text)
+            self.assertNotIn("uid-ABC123", combined_text)
+            self.assertNotIn("account_test", combined_text)
+            self.assertNotIn("<script", combined_text.lower())
+            self.assertNotIn("fetch(", combined_text)
+            self.assertNotIn("send_email", combined_text)
+            self.assertNotIn("Gmail", combined_text)
+            self.assertNotIn("smtp", combined_text.lower())
+            self.assertNotIn("private/order", combined_text)
+            self.assertNotIn("automatic_order_allowed=true", combined_text)
+            self.assertNotIn("OPENAI_API_KEY", combined_text)
+            self.assertNotIn("SMTP_PASSWORD", combined_text)
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = _bootstrap_manual_delivery_handoff_fixtures(base_dir)
+            export_dir = base_dir / "local" / "manual_delivery_app_surface"
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                with mock.patch.object(
+                    log_feedback,
+                    "build_post_eval_recommendation_report",
+                    side_effect=AssertionError("recommendation engine must not run during dashboard export"),
+                ):
+                    refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                        [
+                            "--handoff-dir",
+                            str(handoff_dir),
+                            "--self-check-json",
+                            str(handoff_dir / "self-check.json"),
+                            "--app-state-json",
+                            str(handoff_dir / "app-state.json"),
+                            "--app-state-md",
+                            str(handoff_dir / "app-state.md"),
+                            "--app-state-status-json",
+                            str(handoff_dir / "app-state-status.json"),
+                            "--app-state-status-md",
+                            str(handoff_dir / "app-state-status.md"),
+                            "--ready-check-json",
+                            str(handoff_dir / "ready-check.json"),
+                            "--ready-check-md",
+                            str(handoff_dir / "ready-check.md"),
+                            "--app-snapshot-json",
+                            str(handoff_dir / "app-snapshot.json"),
+                            "--app-snapshot-md",
+                            str(handoff_dir / "app-snapshot.md"),
+                            "--app-snapshot-status-json",
+                            str(handoff_dir / "app-snapshot-status.json"),
+                            "--app-snapshot-status-md",
+                            str(handoff_dir / "app-snapshot-status.md"),
+                        ],
+                        base_dir=base_dir,
+                    )
+                    export_code, export_stdout, export_stderr = self._run_export_current_manual_delivery_app_surface_main_with_argv(
+                        [
+                            "--handoff-dir",
+                            str(handoff_dir),
+                        ],
+                        base_dir=base_dir,
+                    )
+                    check_code, check_stdout, check_stderr = self._run_check_current_manual_delivery_app_surface_main_with_argv(
+                        [
+                            "--stdout-json",
+                            "--app-surface-dir",
+                            str(export_dir),
+                        ],
+                        base_dir=base_dir,
+                    )
+            finally:
+                os.chdir(original_cwd)
+
+            self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+            self.assertEqual(export_code, 0, msg=export_stderr)
+            self.assertEqual(check_code, 0, msg=check_stderr)
+            absent_ready_data = json.loads((export_dir / "app-ready.json").read_text(encoding="utf-8"))
+            absent_check_data = json.loads(check_stdout)
+            self.assertFalse(absent_ready_data["post_eval_recommendations_present"])
+            self.assertTrue(absent_ready_data["post_eval_recommendations_ready"])
+            self.assertEqual(absent_ready_data["post_eval_recommendations_status"], "optional_not_present")
+            self.assertEqual(absent_ready_data["post_eval_recommendations_reason_codes"], [])
+            self.assertFalse(absent_check_data["post_eval_recommendations_present"])
+            self.assertTrue(absent_check_data["post_eval_recommendations_ready"])
+            self.assertEqual(absent_check_data["post_eval_recommendations_status"], "optional_not_present")
+
+    def test_export_current_manual_delivery_app_surface_marks_invalid_post_eval_payloads_not_ready(self) -> None:
+        cases = [
+            (
+                "malformed",
+                {
+                    "app_surface_validation_data": {
+                        "post_eval_recommendations": "not-a-dict",
+                    }
+                },
+                "malformed_payload",
+            ),
+            (
+                "wrong_schema",
+                {
+                    **_post_eval_recommendation_payload(),
+                    "schema_version": "post_eval_recommendations.v0",
+                },
+                "schema_version_mismatch",
+            ),
+            (
+                "approval_false",
+                {
+                    **_post_eval_recommendation_payload(),
+                    "human_approval_required": False,
+                },
+                "human_approval_required_false",
+            ),
+            (
+                "negative_count",
+                {
+                    **_post_eval_recommendation_payload(),
+                    "candidate_count": -1,
+                },
+                "candidate_count_invalid",
+            ),
+            (
+                "bad_safety",
+                {
+                    **_post_eval_recommendation_payload(),
+                    "safety_boundary": "manual review only",
+                },
+                "safety_boundary_invalid",
+            ),
+        ]
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            handoff_dir = _bootstrap_manual_delivery_handoff_fixtures(base_dir)
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(base_dir)
+                for case_name, payload, expected_reason_code in cases:
+                    export_dir = base_dir / "local" / f"{case_name}-manual_delivery_app_surface"
+                    payload_path = _write_json_fixture(base_dir / "fixtures" / f"{case_name}-post-eval.json", payload)
+                    with mock.patch.object(
+                        log_feedback,
+                        "build_post_eval_recommendation_report",
+                        side_effect=AssertionError("recommendation engine must not run during dashboard export"),
+                    ):
+                        refresh_code, refresh_stdout, refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
+                            [
+                                "--handoff-dir",
+                                str(handoff_dir),
+                                "--self-check-json",
+                                str(handoff_dir / "self-check.json"),
+                                "--app-state-json",
+                                str(handoff_dir / "app-state.json"),
+                                "--app-state-md",
+                                str(handoff_dir / "app-state.md"),
+                                "--app-state-status-json",
+                                str(handoff_dir / "app-state-status.json"),
+                                "--app-state-status-md",
+                                str(handoff_dir / "app-state-status.md"),
+                                "--ready-check-json",
+                                str(handoff_dir / "ready-check.json"),
+                                "--ready-check-md",
+                                str(handoff_dir / "ready-check.md"),
+                                "--app-snapshot-json",
+                                str(handoff_dir / "app-snapshot.json"),
+                                "--app-snapshot-md",
+                                str(handoff_dir / "app-snapshot.md"),
+                                "--app-snapshot-status-json",
+                                str(handoff_dir / "app-snapshot-status.json"),
+                                "--app-snapshot-status-md",
+                                str(handoff_dir / "app-snapshot-status.md"),
+                                "--post-eval-recommendations-json",
+                                str(payload_path),
+                            ],
+                            base_dir=base_dir,
+                        )
+                        export_code, export_stdout, export_stderr = self._run_export_current_manual_delivery_app_surface_main_with_argv(
+                            [
+                                "--handoff-dir",
+                                str(handoff_dir),
+                                "--app-surface-dir",
+                                str(export_dir),
+                                "--post-eval-recommendations-json",
+                                str(payload_path),
+                            ],
+                            base_dir=base_dir,
+                        )
+                        check_code, check_stdout, check_stderr = self._run_check_current_manual_delivery_app_surface_main_with_argv(
+                            [
+                                "--stdout-json",
+                                "--app-surface-dir",
+                                str(export_dir),
+                            ],
+                            base_dir=base_dir,
+                        )
+                    self.assertEqual(refresh_code, 0, msg=refresh_stderr)
+                    self.assertEqual(export_code, 0, msg=export_stderr)
+                    self.assertEqual(check_code, 0, msg=check_stderr)
+                    ready_data = json.loads((export_dir / "app-ready.json").read_text(encoding="utf-8"))
+                    check_data = json.loads(check_stdout)
+                    self.assertFalse(ready_data["post_eval_recommendations_ready"], msg=case_name)
+                    self.assertEqual(ready_data["post_eval_recommendations_status"], "invalid_not_ready")
+                    self.assertIn(expected_reason_code, ready_data["post_eval_recommendations_reason_codes"])
+                    self.assertFalse(check_data["post_eval_recommendations_ready"], msg=case_name)
+                    self.assertEqual(check_data["post_eval_recommendations_status"], "invalid_not_ready")
+                    self.assertIn(expected_reason_code, check_data["post_eval_recommendations_reason_codes"])
+            finally:
+                os.chdir(original_cwd)
+
     def test_refresh_and_check_current_manual_delivery_app_surface_cli_supports_help_default_and_stdout_json_modes(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
@@ -9304,6 +9626,12 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "human_action",
                     "shadow_decision_enabled",
                     "safety_boundary",
+                    "post_eval_recommendations_present",
+                    "post_eval_recommendations_ready",
+                    "post_eval_recommendations_status",
+                    "post_eval_recommendations_schema_version",
+                    "post_eval_recommendations_candidate_count",
+                    "post_eval_recommendations_reason_codes",
                 ],
             )
             self.assertEqual(
