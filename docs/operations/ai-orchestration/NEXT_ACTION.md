@@ -1,13 +1,22 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-SURFACE-ALIGNMENT-PLAN`
+- current_work_id: `BTCFX-20260702-DASHBOARD-POST-EVAL-STATUS`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MEXC importer/linker/biweekly ground truth/recommendation engine/public HTML post-eval status は completed history とし、post-eval status の dashboard/mail alignment を report-only で計画する。
+Local dashboard/app-surface に、既に受け入れ済みの compact post-eval recommendation status を report-only で反映する。
 
-実装はまだやらない。今回の scope は docs-only で、mail body changes は明示 approval 後に別タスクで扱う。
+mail body changes は deferred で、explicit approval 後の別タスクで扱う。
+
+## Completed history
+
+- MEXC actual trade importer
+- Actual trade to signal linker
+- Biweekly ground truth report
+- Post-eval recommendation engine
+- Public HTML Post-Eval Recommendation Status section
+- Surface alignment plan
 
 ## Product objective reminder
 
@@ -37,12 +46,8 @@ Automatic trading is later-stage only.
 Inspect only as needed and summarize, do not dump large files.
 
 - `tools/log_feedback.py`
-- `tests/test_mexc_actual_trade_importer.py`
-- `tests/test_manual_trade_signal_linker.py`
-- `tests/test_manual_trade_ground_truth_report.py`
-- `tests/test_post_eval_recommendation_engine.py`
-- `tests/test_notification_detail_page.py`
-- `docs/operations/ai-orchestration/POST_EVAL_SURFACE_ALIGNMENT_PLAN_20260702.md`
+- `tests/test_active_plan_notification_formatting.py`
+- `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
 ## Do not
 
@@ -64,8 +69,9 @@ Inspect only as needed and summarize, do not dump large files.
 
 - `pwd -P`
 - `git status --short --branch`
+- `./.venv312/bin/python -m unittest tests.test_active_plan_notification_formatting`
+- `./.venv312/bin/python -m unittest tests.test_notification_detail_page`
 - `git diff --check`
-- no unit tests required for this docs-only task
 - `git diff --name-only`
 - `git status --short --branch`
 
@@ -79,6 +85,7 @@ Inspect only as needed and summarize, do not dump large files.
 Stop with `BLOCKED BTCFX-20260702-POST-EVAL-SURFACE-ALIGNMENT-PLAN: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- public HTML post-eval status implementation is missing
 - required source-of-truth docs are missing
 - implementation would require API calls, secrets, runtime restart, notification sending changes, exchange fetch, private/account/order endpoints, trading logic changes, or old runtime repo access
 - raw MEXC exports would need to be committed

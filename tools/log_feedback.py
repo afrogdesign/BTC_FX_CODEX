@@ -14803,8 +14803,9 @@ def _manual_delivery_current_handoff_app_state_data(
     self_check_json: Path,
     handoff_dir: Path,
     self_check_status_data: dict[str, Any],
+    post_eval_recommendations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    app_state_data = {
         "schema_version": "manual_delivery_app_state.v1",
         "app_state": "ready_for_human_review",
         "display_mode": "manual_delivery_review",
@@ -14824,6 +14825,9 @@ def _manual_delivery_current_handoff_app_state_data(
         "handoff_status": self_check_status_data["handoff_status"],
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     }
+    if post_eval_recommendations is not None:
+        app_state_data["post_eval_recommendations"] = post_eval_recommendations
+    return app_state_data
 
 
 def _write_current_manual_delivery_app_state_outputs(
@@ -14831,6 +14835,7 @@ def _write_current_manual_delivery_app_state_outputs(
     self_check_json: Path,
     app_state_json: Path | None = None,
     app_state_md: Path | None = None,
+    post_eval_recommendations: dict[str, Any] | None = None,
     parser: argparse.ArgumentParser | None = None,
 ) -> tuple[dict[str, Any], Path, str]:
     summary_text, self_check_status_data, handoff_dir = _write_manual_delivery_current_handoff_self_check_status_outputs(
@@ -14849,6 +14854,7 @@ def _write_current_manual_delivery_app_state_outputs(
         self_check_json=self_check_json,
         handoff_dir=handoff_dir,
         self_check_status_data=self_check_status_data,
+        post_eval_recommendations=post_eval_recommendations,
     )
     _ensure_parent(resolved_app_state_md)
     _ensure_parent(resolved_app_state_json)
@@ -15188,12 +15194,17 @@ def _run_write_current_manual_delivery_app_state_command(
     self_check_json = Path(getattr(args, "self_check_json", "local/manual_delivery_handoff/self-check.json"))
     app_state_json_arg = getattr(args, "app_state_json", None)
     app_state_md_arg = getattr(args, "app_state_md", None)
+    post_eval_recommendations = _manual_delivery_load_post_eval_recommendation_payload(
+        Path(getattr(args, "post_eval_recommendations_json", "")) if getattr(args, "post_eval_recommendations_json", None) else None,
+        parser,
+    )
     app_state_json_path = Path(app_state_json_arg) if app_state_json_arg else None
     app_state_md_path = Path(app_state_md_arg) if app_state_md_arg else None
     app_state_data, _handoff_dir, _app_state_text = _write_current_manual_delivery_app_state_outputs(
         self_check_json=self_check_json,
         app_state_json=app_state_json_path,
         app_state_md=app_state_md_path,
+        post_eval_recommendations=post_eval_recommendations,
         parser=parser,
     )
     resolved_app_state_json = app_state_json_path or Path(app_state_data["handoff_dir"]) / "app-state.json"
@@ -15753,6 +15764,317 @@ def _manual_delivery_current_app_dashboard_list_value(value: Any) -> str:
     if not value:
         return "none"
     return ", ".join(_manual_delivery_current_app_dashboard_value(item) for item in value)
+
+
+_MANUAL_DELIVERY_POST_EVAL_RECOMMENDATION_ACCEPTED_FIELDS = {
+    "schema_version",
+    "report_date",
+    "report_path",
+    "output_csv_path",
+    "candidate_count",
+    "top_recommendation_codes",
+    "priority_counts",
+    "confidence_counts",
+    "safety_boundary",
+    "note",
+    "human_approval_required",
+    "required_human_approval",
+}
+_MANUAL_DELIVERY_POST_EVAL_RECOMMENDATION_CONTAINER_KEYS = (
+    "app_surface_validation_data",
+    "app_surface_validation",
+    "current_manual_delivery_app_surface_validation",
+    "manual_delivery_app_surface_validation",
+    "display_context",
+    "notification_context",
+)
+_MANUAL_DELIVERY_POST_EVAL_RECOMMENDATION_ALIAS_KEYS = (
+    "post_eval_recommendations",
+    "post_eval_recommendation_summary",
+)
+
+
+def _manual_delivery_post_eval_recommendation_payload_like(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    if str(value.get("schema_version", "")).strip() == "post_eval_recommendations.v1":
+        return True
+    indicator_keys = {
+        "candidate_count",
+        "top_recommendation_codes",
+        "priority_counts",
+        "confidence_counts",
+        "human_approval_required",
+        "required_human_approval",
+    }
+    supporting_keys = {
+        "report_date",
+        "report_path",
+        "output_csv_path",
+        "safety_boundary",
+        "note",
+    }
+    indicator_hits = sum(1 for key in indicator_keys if key in value)
+    supporting_hits = sum(1 for key in supporting_keys if key in value)
+    return indicator_hits >= 1 and (indicator_hits + supporting_hits) >= 2
+
+
+def _manual_delivery_extract_post_eval_recommendation_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    for key in _MANUAL_DELIVERY_POST_EVAL_RECOMMENDATION_ALIAS_KEYS:
+        payload = value.get(key)
+        if payload is None:
+            continue
+        if isinstance(payload, dict):
+            return payload
+        return {"_malformed": True}
+    for key in _MANUAL_DELIVERY_POST_EVAL_RECOMMENDATION_CONTAINER_KEYS:
+        nested = value.get(key)
+        if isinstance(nested, dict):
+            payload = _manual_delivery_extract_post_eval_recommendation_payload(nested)
+            if payload is not None:
+                return payload
+    if _manual_delivery_post_eval_recommendation_payload_like(value):
+        return _manual_delivery_normalize_post_eval_recommendation_payload(value)
+    return None
+
+
+def _manual_delivery_load_post_eval_recommendation_payload(
+    post_eval_recommendations_json: Path | None,
+    parser: argparse.ArgumentParser | None = None,
+) -> dict[str, Any] | None:
+    if post_eval_recommendations_json is None:
+        return None
+    if not post_eval_recommendations_json.exists():
+        message = f"post-eval recommendation JSON does not exist: {post_eval_recommendations_json}"
+        if parser is None:
+            raise FileNotFoundError(message)
+        parser.error(message)
+    try:
+        loaded_value = json.loads(post_eval_recommendations_json.read_text(encoding="utf-8"))
+    except Exception:
+        return {"_malformed": True}
+    payload = _manual_delivery_extract_post_eval_recommendation_payload(loaded_value)
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        return {"_malformed": True}
+    if payload.get("_malformed"):
+        return {"_malformed": True}
+    return _manual_delivery_normalize_post_eval_recommendation_payload(payload)
+
+
+def _manual_delivery_normalize_post_eval_recommendation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"_malformed": True}
+    if payload.get("_malformed"):
+        return {"_malformed": True}
+
+    def _as_bool(value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y"}
+        return bool(value)
+
+    def _as_int_or_value(value: Any) -> int | str:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        try:
+            return int(str(value).strip())
+        except Exception:
+            return _manual_delivery_post_eval_recommendation_display_value(value)
+
+    normalized: dict[str, Any] = {
+        "schema_version": "post_eval_recommendations.v1",
+    }
+    for key in ("report_date", "report_path", "output_csv_path", "safety_boundary", "note"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        normalized[key] = _manual_delivery_post_eval_recommendation_display_value(value, "")
+    if "candidate_count" in payload and payload.get("candidate_count") is not None:
+        normalized["candidate_count"] = _as_int_or_value(payload.get("candidate_count"))
+    if "top_recommendation_codes" in payload:
+        codes = payload.get("top_recommendation_codes")
+        if isinstance(codes, list):
+            normalized["top_recommendation_codes"] = [
+                _manual_delivery_post_eval_recommendation_display_value(item)
+                for item in codes
+                if str(item).strip()
+            ]
+        elif codes is not None:
+            normalized["top_recommendation_codes"] = [
+                _manual_delivery_post_eval_recommendation_display_value(codes)
+            ]
+    for key in ("priority_counts", "confidence_counts"):
+        counts = payload.get(key)
+        if isinstance(counts, dict):
+            normalized[key] = {
+                str(count_key): _as_int_or_value(count_value)
+                for count_key, count_value in counts.items()
+                if str(count_key).strip()
+            }
+    if "human_approval_required" in payload:
+        normalized["human_approval_required"] = _as_bool(payload.get("human_approval_required"))
+    if "required_human_approval" in payload:
+        normalized["required_human_approval"] = _as_bool(payload.get("required_human_approval"))
+    return normalized
+
+
+def _manual_delivery_post_eval_recommendation_display_value(value: Any, default: str = "not available") -> str:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        if not value:
+            return "none"
+        return ", ".join(_manual_delivery_post_eval_recommendation_display_value(item) for item in value)
+    if isinstance(value, dict):
+        if not value:
+            return "none"
+        formatted_items: list[str] = []
+        preferred_order = (
+            "high",
+            "medium",
+            "low",
+            "unknown",
+            "actual_backed",
+            "proxy_backed",
+            "insufficient",
+            "ambiguous",
+        )
+        seen_keys: set[str] = set()
+        for dict_key in preferred_order:
+            if dict_key not in value:
+                continue
+            formatted_items.append(
+                f"{_manual_delivery_post_eval_recommendation_display_value(dict_key)}="
+                f"{_manual_delivery_post_eval_recommendation_display_value(value[dict_key])}"
+            )
+            seen_keys.add(dict_key)
+        for dict_key in sorted(k for k in value.keys() if k not in seen_keys):
+            formatted_items.append(
+                f"{_manual_delivery_post_eval_recommendation_display_value(dict_key)}="
+                f"{_manual_delivery_post_eval_recommendation_display_value(value[dict_key])}"
+            )
+        return ", ".join(formatted_items)
+    text = str(value).strip()
+    if not text:
+        return default
+    for pattern in (
+        r"\bsource_uid_hash\b",
+        r"uid_[A-Za-z0-9][A-Za-z0-9_-]*",
+        r"\buid[-_][A-Za-z0-9][A-Za-z0-9_-]*\b",
+        r"\baccount[-_][A-Za-z0-9][A-Za-z0-9_-]*\b",
+        r"<\s*script\b",
+        r"fetch\(",
+        r"OPENAI_API_KEY",
+        r"SMTP_PASSWORD",
+        r"automatic_order_allowed=true",
+        r"send_email",
+        r"Gmail",
+        r"private/order",
+        r"smtp",
+    ):
+        text = re.sub(pattern, "[redacted]", text, flags=re.IGNORECASE)
+    return text
+
+
+def _manual_delivery_post_eval_recommendation_rows(
+    payload: dict[str, Any],
+) -> list[tuple[str, Any]]:
+    def _value(*keys: str, default: Any = "not available") -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value is None:
+                continue
+            if isinstance(value, list):
+                if not value:
+                    return "none"
+                return ", ".join(_manual_delivery_post_eval_recommendation_display_value(item) for item in value)
+            if isinstance(value, dict):
+                if not value:
+                    return "none"
+                preferred_order = {
+                    "priority_counts": ("high", "medium", "low", "unknown"),
+                    "confidence_counts": ("actual_backed", "proxy_backed", "insufficient", "unknown"),
+                }.get(key, ())
+                formatted_items: list[str] = []
+                seen_keys: set[str] = set()
+                for ordered_key in preferred_order:
+                    if ordered_key in value:
+                        formatted_items.append(
+                            f"{ordered_key}={_manual_delivery_post_eval_recommendation_display_value(value[ordered_key])}"
+                        )
+                        seen_keys.add(ordered_key)
+                for dict_key in sorted(k for k in value.keys() if k not in seen_keys):
+                    formatted_items.append(
+                        f"{dict_key}={_manual_delivery_post_eval_recommendation_display_value(value[dict_key])}"
+                    )
+                return ", ".join(formatted_items)
+            text = _manual_delivery_post_eval_recommendation_display_value(value).strip()
+            if text:
+                return text
+        if isinstance(default, bool):
+            return str(default).lower()
+        if isinstance(default, list):
+            return "none" if not default else ", ".join(str(item) for item in default)
+        return _manual_delivery_post_eval_recommendation_display_value(default)
+
+    return [
+        ("schema_version", _value("schema_version", default="post_eval_recommendations.v1")),
+        ("report_date", _value("report_date")),
+        ("candidate_count", _value("candidate_count", default="0")),
+        ("top_recommendation_codes", _value("top_recommendation_codes", default="none")),
+        ("priority_counts", _value("priority_counts", default="none")),
+        ("confidence_counts", _value("confidence_counts", default="none")),
+        ("report_path", _value("report_path")),
+        ("output_csv_path", _value("output_csv_path")),
+        ("safety_boundary", _value("safety_boundary")),
+        ("human approval required", _value("human_approval_required", "required_human_approval", default="true")),
+    ]
+
+
+def _manual_delivery_post_eval_recommendation_rows_html(payload: dict[str, Any]) -> str:
+    return "\n".join(
+        f"          <tr><th>{html.escape(str(label))}</th><td>{html.escape(_manual_delivery_current_app_dashboard_list_value(value))}</td></tr>"
+        for label, value in _manual_delivery_post_eval_recommendation_rows(payload)
+    )
+
+
+def _manual_delivery_post_eval_recommendation_section_html(
+    payload: dict[str, Any],
+) -> str:
+    if payload.get("_malformed"):
+        return """
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Post-Eval Recommendation Status</h2>
+        <p>post-eval recommendation payload is unavailable or malformed.</p>
+        <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually</p>
+      </section>
+"""
+    return f"""
+      <section class=\"card full-width\">
+        <h2 class=\"section-title\">Post-Eval Recommendation Status</h2>
+        <p>report-only recommendation status</p>
+        <p><strong>human approval is required before production wording/config/threshold/gate/runtime changes.</strong></p>
+        <p>does not authorize manual or automatic entry</p>
+        <p>does not change notification sending behavior</p>
+        <table>
+{_manual_delivery_post_eval_recommendation_rows_html(payload)}
+        </table>
+        <p class=\"muted\">{html.escape(_manual_delivery_post_eval_recommendation_display_value(payload.get("note"), ""))}</p>
+      </section>
+"""
 
 
 def _manual_delivery_current_app_operator_triage_summary_data(
@@ -16365,6 +16687,16 @@ def _manual_delivery_current_app_dashboard_html(
     integrated_evidence_rows = _manual_delivery_current_app_integrated_evidence_overview_rows(
         integrated_evidence_overview
     )
+    post_eval_recommendation_payload = None
+    for source_data in (status_data, snapshot_data, app_contract_data or {}):
+        post_eval_recommendation_payload = _manual_delivery_extract_post_eval_recommendation_payload(source_data)
+        if post_eval_recommendation_payload is not None:
+            break
+    post_eval_recommendation_section_html = ""
+    if post_eval_recommendation_payload is not None:
+        post_eval_recommendation_section_html = _manual_delivery_post_eval_recommendation_section_html(
+            post_eval_recommendation_payload
+        )
     major_turning_point_diagnostic = _manual_delivery_current_app_major_turning_point_diagnostic_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
@@ -16634,6 +16966,8 @@ def _manual_delivery_current_app_dashboard_html(
         <p class=\"muted\">report-only / not FORMAL_GO / no automatic order / human decides manually. derived from existing app contract/status data only.</p>
       </section>
 
+{post_eval_recommendation_section_html}
+
       <section class=\"card full-width\">
         <h2 class=\"section-title\">OHLCV Source Coverage Summary</h2>
         <table>
@@ -16889,14 +17223,28 @@ def _write_current_manual_delivery_app_surface_outputs(
     handoff_dir: Path,
     output_dir: Path,
     intraperiod_outcomes_path: Path | None = None,
+    post_eval_recommendations_json: Path | None = None,
     parser: argparse.ArgumentParser | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
+    post_eval_recommendations = _manual_delivery_load_post_eval_recommendation_payload(
+        post_eval_recommendations_json,
+        parser,
+    )
+    if post_eval_recommendations is not None:
+        _write_current_manual_delivery_app_state_outputs(
+            self_check_json=handoff_dir / "self-check.json",
+            app_state_json=handoff_dir / "app-state.json",
+            app_state_md=handoff_dir / "app-state.md",
+            post_eval_recommendations=post_eval_recommendations,
+            parser=parser,
+        )
 
     app_contract_json_path = output_dir / "app-contract.json"
     _contract_markdown, _contract_data = _write_manual_delivery_current_app_integration_contract_outputs(
         output_json=app_contract_json_path,
         intraperiod_outcomes_path=intraperiod_outcomes_path,
+        post_eval_recommendations=post_eval_recommendations,
     )
 
     app_snapshot_json_path = output_dir / "app-snapshot.json"
@@ -16930,6 +17278,7 @@ def _write_current_manual_delivery_app_surface_outputs(
         snapshot_data=_snapshot_data,
         status_data=_snapshot_status_data,
         app_contract_data=_contract_data,
+        intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
     app_dashboard_html_path.write_text(app_dashboard_html, encoding="utf-8")
 
@@ -17090,8 +17439,14 @@ def _manual_delivery_current_app_surface_validation_data(
     app_snapshot_data = _load_json_object(app_snapshot_json_path, parser)
     app_snapshot_status_data = _load_json_object(app_snapshot_status_json_path, parser)
     app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
+    post_eval_recommendation_payload = None
+    for source_data in (app_contract_data, app_snapshot_data, app_snapshot_status_data):
+        post_eval_recommendation_payload = _manual_delivery_extract_post_eval_recommendation_payload(source_data)
+        if post_eval_recommendation_payload is not None:
+            break
     expected_contract_data = _manual_delivery_current_app_integration_contract_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
+        post_eval_recommendations=post_eval_recommendation_payload,
     )
     expected_intraperiod_review_stdout_json = expected_contract_data["intraperiod_review_stdout_json"]
     expected_operator_status_diagnostic = expected_contract_data["operator_status_diagnostic"]
@@ -17214,6 +17569,58 @@ def _manual_delivery_current_app_surface_validation_data(
         _manual_delivery_current_app_integrated_evidence_overview_hint_data(integrated_evidence_overview)
     )
 
+    if post_eval_recommendation_payload is not None:
+        if post_eval_recommendation_payload.get("_malformed"):
+            for expected_text in [
+                "Post-Eval Recommendation Status",
+                "post-eval recommendation payload is unavailable or malformed.",
+                "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually",
+            ]:
+                if expected_text not in app_dashboard_html_text:
+                    message = f"current manual delivery app surface app-dashboard.html missing malformed post-eval text: {expected_text}"
+                    if parser is None:
+                        raise ValueError(message)
+                    parser.error(message)
+        else:
+            for expected_text in [
+                "Post-Eval Recommendation Status",
+                "report-only recommendation status",
+                "human approval is required before production wording/config/threshold/gate/runtime changes.",
+                "does not authorize manual or automatic entry",
+                "does not change notification sending behavior",
+                "schema_version",
+                "report_date",
+                "candidate_count",
+                "top_recommendation_codes",
+                "priority_counts",
+                "confidence_counts",
+                "report_path",
+                "output_csv_path",
+                "safety_boundary",
+                "human approval required",
+            ]:
+                if expected_text not in app_dashboard_html_text:
+                    message = f"current manual delivery app surface app-dashboard.html missing required post-eval text: {expected_text}"
+                    if parser is None:
+                        raise ValueError(message)
+                    parser.error(message)
+            for prohibited_text in [
+                "source_uid_hash",
+                "uid_",
+                "account_",
+                "automatic_order_allowed=true",
+                "send_email",
+                "Gmail",
+                "smtp",
+                "OPENAI_API_KEY",
+                "SMTP_PASSWORD",
+            ]:
+                if prohibited_text.lower() in app_dashboard_html_text.lower():
+                    message = f"current manual delivery app surface app-dashboard.html contains prohibited post-eval text: {prohibited_text}"
+                    if parser is None:
+                        raise ValueError(message)
+                    parser.error(message)
+
     if str(app_surface_manifest_data.get("schema_version", "")).strip() != "manual_delivery_app_surface_manifest.v1":
         message = f"current manual delivery app surface app-surface-manifest JSON schema_version must be manual_delivery_app_surface_manifest.v1: {app_surface_manifest_data.get('schema_version')}"
         if parser is None:
@@ -17330,6 +17737,7 @@ def _manual_delivery_current_app_surface_validation_data(
         "external_notification_allowed": False,
         "paper_positions_integration": False,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        **({"post_eval_recommendations": post_eval_recommendation_payload} if post_eval_recommendation_payload is not None else {}),
         "surface_manifest_schema_version": "manual_delivery_app_surface_manifest.v1",
         "operator_status_diagnostic_contract": True,
         "operator_status_wrapper_command": expected_operator_status_diagnostic["wrapper_command"],
@@ -17508,12 +17916,13 @@ def _manual_delivery_current_app_integration_contract_markdown(
 def _manual_delivery_current_app_integration_contract_data(
     *,
     intraperiod_outcomes_path: Path | None = None,
+    post_eval_recommendations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
     ohlcv_source_coverage_summary = _manual_delivery_current_app_ohlcv_source_coverage_summary_data()
-    return {
+    contract_data = {
         "schema_version": "manual_delivery_app_integration_contract.v1",
         "contract_status": "stable_for_local_app_integration",
         "integration_command": "refresh-current-manual-delivery-app --stdout-json",
@@ -17664,6 +18073,9 @@ def _manual_delivery_current_app_integration_contract_data(
             "safety_boundary": "static config schema audit only / no load_config / no .env / no os.environ / no secrets / no private/account/order endpoints / no live trading",
         },
     }
+    if post_eval_recommendations is not None:
+        contract_data["post_eval_recommendations"] = post_eval_recommendations
+    return contract_data
 
 
 def _write_manual_delivery_current_app_integration_contract_outputs(
@@ -17671,6 +18083,7 @@ def _write_manual_delivery_current_app_integration_contract_outputs(
     output_md: Path | None = None,
     output_json: Path | None = None,
     intraperiod_outcomes_path: Path | None = None,
+    post_eval_recommendations: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
@@ -17682,6 +18095,7 @@ def _write_manual_delivery_current_app_integration_contract_outputs(
     )
     contract_data = _manual_delivery_current_app_integration_contract_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
+        post_eval_recommendations=post_eval_recommendations,
     )
     if output_md is not None:
         _ensure_parent(output_md)
@@ -17724,10 +18138,16 @@ def _run_export_current_manual_delivery_app_surface_command(
     handoff_dir = Path(getattr(args, "handoff_dir", "local/manual_delivery_handoff"))
     output_dir = Path(getattr(args, "app_surface_dir", "local/manual_delivery_app_surface"))
     intraperiod_outcomes_path_arg = getattr(args, "intraperiod_outcomes_path", None)
+    post_eval_recommendations_json = (
+        Path(getattr(args, "post_eval_recommendations_json"))
+        if getattr(args, "post_eval_recommendations_json", None)
+        else None
+    )
     _surface_dir = _write_current_manual_delivery_app_surface_outputs(
         handoff_dir=handoff_dir,
         output_dir=output_dir,
         intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
+        post_eval_recommendations_json=post_eval_recommendations_json,
         parser=parser,
     )
     sys.stdout.write(f"current_manual_delivery_app_surface_dir={_surface_dir}\n")
@@ -17815,9 +18235,10 @@ def _manual_delivery_current_handoff_app_snapshot_data(
     app_state_json: Path,
     handoff_dir: Path,
     ready_check_data: dict[str, Any],
+    app_state_data: dict[str, Any],
     app_state_status_data: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
+    snapshot_data = {
         "schema_version": "manual_delivery_app_snapshot.v1",
         "snapshot_status": "ready_for_human_review",
         "current_manual_delivery_ready": True,
@@ -17838,6 +18259,10 @@ def _manual_delivery_current_handoff_app_snapshot_data(
         "shadow_decision_enabled": app_state_status_data["shadow_decision_enabled"],
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     }
+    post_eval_recommendations = app_state_data.get("post_eval_recommendations")
+    if post_eval_recommendations is not None:
+        snapshot_data["post_eval_recommendations"] = post_eval_recommendations
+    return snapshot_data
 
 
 def _write_current_manual_delivery_app_snapshot_outputs(
@@ -17991,6 +18416,7 @@ def _write_current_manual_delivery_app_snapshot_outputs(
         app_state_json=app_state_json,
         handoff_dir=handoff_dir,
         ready_check_data=ready_check_data,
+        app_state_data=app_state_data,
         app_state_status_data=app_state_status_data,
     )
     if output_md is not None:
@@ -18010,6 +18436,18 @@ def _run_write_current_manual_delivery_app_snapshot_command(
     output_json_arg = getattr(args, "app_snapshot_json", None)
     ready_check_json = Path(getattr(args, "ready_check_json", "local/manual_delivery_handoff/ready-check.json"))
     app_state_json = Path(getattr(args, "app_state_json", "local/manual_delivery_handoff/app-state.json"))
+    post_eval_recommendations = _manual_delivery_load_post_eval_recommendation_payload(
+        Path(getattr(args, "post_eval_recommendations_json", "")) if getattr(args, "post_eval_recommendations_json", None) else None,
+        parser,
+    )
+    if post_eval_recommendations is not None:
+        _write_current_manual_delivery_app_state_outputs(
+            self_check_json=Path(getattr(args, "self_check_json", "local/manual_delivery_handoff/self-check.json")),
+            app_state_json=app_state_json,
+            app_state_md=Path(getattr(args, "app_state_md", "local/manual_delivery_handoff/app-state.md")),
+            post_eval_recommendations=post_eval_recommendations,
+            parser=parser,
+        )
     _summary_text, _snapshot_data = _write_current_manual_delivery_app_snapshot_outputs(
         ready_check_json=ready_check_json,
         app_state_json=app_state_json,
@@ -18297,6 +18735,7 @@ def _run_refresh_current_manual_delivery_app_command(
                 handoff_dir=handoff_dir,
                 output_dir=Path(app_surface_dir_arg),
                 intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
+                post_eval_recommendations_json=Path(getattr(args, "post_eval_recommendations_json")) if getattr(args, "post_eval_recommendations_json", None) else None,
                 parser=parser,
             )
         sys.stdout.write(json.dumps(ready_check_data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
@@ -18324,6 +18763,7 @@ def _run_refresh_current_manual_delivery_app_command(
             handoff_dir=handoff_dir,
             output_dir=Path(app_surface_dir_arg),
             intraperiod_outcomes_path=Path(intraperiod_outcomes_path_arg) if intraperiod_outcomes_path_arg else None,
+            post_eval_recommendations_json=Path(getattr(args, "post_eval_recommendations_json")) if getattr(args, "post_eval_recommendations_json", None) else None,
             parser=parser,
         )
         surface_output_line = f"current_manual_delivery_app_surface_dir={_surface_dir}\n"
@@ -21516,6 +21956,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-state-md",
         default="local/manual_delivery_handoff/app-state.md",
     )
+    current_manual_delivery_app_state_parser.add_argument("--post-eval-recommendations-json")
 
     current_manual_delivery_app_state_status_parser = subparsers.add_parser("summarize-current-manual-delivery-app-state")
     current_manual_delivery_app_state_status_parser.add_argument(
@@ -21552,6 +21993,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--app-snapshot-md",
         default="local/manual_delivery_handoff/app-snapshot.md",
     )
+    current_manual_delivery_app_snapshot_parser.add_argument("--post-eval-recommendations-json")
 
     current_manual_delivery_app_snapshot_status_parser = subparsers.add_parser("summarize-current-manual-delivery-app-snapshot")
     current_manual_delivery_app_snapshot_status_parser.add_argument(
@@ -21596,6 +22038,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_state_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     current_manual_delivery_app_state_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     current_manual_delivery_app_state_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_state_refresh_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_state_refresh_parser.add_argument(
         "--actionability-shadow-output-csv",
         default="logs/csv/active_plan_shadow_decisions.csv",
@@ -21622,6 +22065,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_state_refresh_ready_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     current_manual_delivery_app_state_refresh_ready_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     current_manual_delivery_app_state_refresh_ready_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_state_refresh_ready_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_state_refresh_ready_parser.add_argument(
         "--actionability-shadow-output-csv",
         default="logs/csv/active_plan_shadow_decisions.csv",
@@ -21653,6 +22097,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     current_manual_delivery_app_snapshot_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_snapshot_refresh_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_snapshot_refresh_parser.add_argument(
         "--actionability-shadow-output-csv",
         default="logs/csv/active_plan_shadow_decisions.csv",
@@ -21689,6 +22134,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_refresh_parser.add_argument("--source-stale-after-hours", type=_non_negative_float_arg, default=24.0)
     current_manual_delivery_app_refresh_parser.add_argument("--include-manual-delivery-checklist", action="store_true")
     current_manual_delivery_app_refresh_parser.add_argument("--write-actionability-shadow-decision", action="store_true")
+    current_manual_delivery_app_refresh_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_refresh_parser.add_argument(
         "--actionability-shadow-output-csv",
         default="logs/csv/active_plan_shadow_decisions.csv",
@@ -21714,6 +22160,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_surface_export_parser = subparsers.add_parser("export-current-manual-delivery-app-surface")
     current_manual_delivery_app_surface_export_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_surface_export_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
+    current_manual_delivery_app_surface_export_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_surface_export_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
@@ -21731,6 +22178,7 @@ def _build_parser() -> argparse.ArgumentParser:
     current_manual_delivery_app_surface_refresh_check_parser.add_argument("--handoff-dir", default="local/manual_delivery_handoff")
     current_manual_delivery_app_surface_refresh_check_parser.add_argument("--app-surface-dir", default="local/manual_delivery_app_surface")
     current_manual_delivery_app_surface_refresh_check_parser.add_argument("--stdout-json", action="store_true")
+    current_manual_delivery_app_surface_refresh_check_parser.add_argument("--post-eval-recommendations-json")
     current_manual_delivery_app_surface_refresh_check_parser.add_argument(
         "--intraperiod-outcomes-path",
         default="logs/csv/active_plan_candidate_intraperiod_outcomes.csv",
