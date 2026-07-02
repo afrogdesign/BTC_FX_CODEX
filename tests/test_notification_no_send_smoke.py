@@ -16,6 +16,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 import tools.render_notification_no_send_smoke as render_no_send_smoke  # noqa: E402
+from src.ai.summary import build_summary_subject  # noqa: E402
 
 
 def _unsafe_post_eval_payload() -> dict[str, object]:
@@ -70,6 +71,9 @@ class NotificationNoSendSmokeTest(unittest.TestCase):
         self.assertTrue(report["detail_html_rendered"])
         self.assertEqual(report["current_version_label"], "Ver04-v1")
         self.assertFalse(report["legacy_version_label_detected"])
+        subject = build_summary_subject(render_no_send_smoke._synthetic_result_payload())
+        self.assertNotIn("[CLI]", subject)
+        self.assertNotIn("[機械判定のみ]", subject)
         self.assertTrue(report["post_eval_recommendations_present"])
         self.assertFalse(report["sensitive_leak_detected"])
 

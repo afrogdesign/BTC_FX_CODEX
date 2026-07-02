@@ -1,15 +1,15 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-CONTROLLED-RUNTIME-RESTART-FOR-STALE-PROCESS`
-- mode: `REVIEW_ONLY`
+- current_work_id: `BTCFX-20260703-VER04-V1-HUMAN-UI-SUBJECT-CHART-CLEANUP`
+- mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Stale runtime process を controlled restart で切り替え済みかを確認し、次の normal notification から observation gate を再開する。
+human-facing subject / chart / support block を current-code へ整えたうえで、runtime 反映後の live process は controlled restart が必要。次の normal notification から observation を再開する。
 
 ## Product backlog next candidate
 
-- `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
+- `BTCFX-20260703-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
 - `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION` only if the user explicitly approves live extra notification sending behavior.
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
 
@@ -24,10 +24,11 @@ Stale runtime process を controlled restart で切り替え済みかを確認�
 - required post-deployment observation gate for intraperiod / MACD buildout
 - judgment self-review link complete
 - controlled runtime restart for stale-process issue complete
+- human UI subject / chart cleanup in progress
 
 ## Hard boundary
 
-- no runtime restart
+- no runtime restart during normal product work
 - no launchd modification
 - no real mail sending test
 - no API / secrets / private / account / order endpoints
@@ -39,7 +40,7 @@ Stale runtime process を controlled restart で切り替え済みかを確認�
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- next normal notification should confirm runtime-rendered labels are current after the restart.
+- next normal notification should confirm the simplified subject and current-price label in the live process after a controlled restart.
 
 ## Resume rule
 

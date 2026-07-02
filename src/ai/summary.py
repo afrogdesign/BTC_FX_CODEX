@@ -270,6 +270,15 @@ def _is_version_like_label(value: Any) -> bool:
     return bool(_ANY_VERSION_PATTERN.match(normalized))
 
 
+def _should_include_subject_mode_label(value: Any) -> bool:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return False
+    if normalized.lower() == "cli":
+        return False
+    return not _is_version_like_label(normalized)
+
+
 def _apply_current_email_subject_prefix(subject: str) -> str:
     normalized = str(subject or "").strip()
     if normalized.startswith(CURRENT_EMAIL_SUBJECT_PREFIX):
@@ -396,14 +405,14 @@ def _manual_action_checklist_lines(
     return [
         "",
         "【手動アクション確認】",
-        f"Entry mode: {entry_mode}",
-        f"Entry condition: {' / '.join(entry_condition_parts)}",
+        f"今の扱い: {entry_mode}",
+        f"確認条件: {' / '.join(entry_condition_parts)}",
         "TP / SL",
         f"- {_format_setup_levels(result.get('long_setup', {}), 'long')}",
         f"- {_format_setup_levels(result.get('short_setup', {}), 'short')}",
-        f"Invalidation / wait: {' / '.join(invalidation_parts)}",
-        f"Timeout / validity: {validity}",
-        f"Safety: {safety}",
+        f"見送り・無効化条件: {' / '.join(invalidation_parts)}",
+        f"有効期限: {validity}",
+        f"安全境界: {safety}",
     ]
 
 
@@ -419,22 +428,22 @@ def _major_turning_point_opportunity_lines(
         "大転換は「方向」だけではなく、4h→1h→15m の順に根拠を確認します。15分足だけの反応で大転換と決めません。",
         "スコア差が小さいときは大転換候補とダマシを取り違えやすいので、決め打ちしません。",
         "主要サポート / レジスタンス付近では、反転・ブレイク・失敗の3択を確認します。",
-        "entry condition / invalidation / next condition を満たすまでは、転換を決め打ちしません。",
+        "確認条件 / 見送り・無効化条件 / 次の確認条件を満たすまでは、転換を決め打ちしません。",
         "大転換候補 / 転換確認 / ダマシ注意 / 決め打ち禁止 / 条件成立まで人間確認",
-        f"market_regime: {_label_regime(result.get('market_regime'))}",
-        f"phase: {_label_phase(result.get('phase'))}",
+        f"相場の状態: {_label_regime(result.get('market_regime'))}",
+        f"局面: {_label_phase(result.get('phase'))}",
         f"4時間足: {_label_signal(result.get('signals_4h'))}",
         f"1時間足: {_label_signal(result.get('signals_1h'))}",
         f"15分足: {_label_signal(result.get('signals_15m'))}",
-        f"スコア差: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
-        f"Entry condition: {notification_context.get('entry_window_label', '未記録')} / {display_context.get('entry_quality_label', '未記録')} / {str(notification_context.get('execution_label', '')).strip() or '未記録'}",
-        f"Invalidation / wait: {notification_context.get('invalidation_label', '未記録')} / {notification_context.get('next_condition_label', '未記録')} / {', '.join(wait_reasons) or '未記録'}",
-        f"Price context: 現在価格 {_format_price(result.get('current_price'))}",
-        f"Price context: {_format_zone_summary('近いサポート帯', result.get('support_zones', []))}",
-        f"Price context: {_format_zone_summary('近いレジスタンス帯', result.get('resistance_zones', []))}",
-        f"Price context: {_format_setup_levels(result.get('long_setup', {}), 'long')}",
-        f"Price context: {_format_setup_levels(result.get('short_setup', {}), 'short')}",
-        "Safety: report-only / not FORMAL_GO / no automatic order / human decides manually",
+        f"ロング/ショートの強さ: ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
+        f"確認条件: {notification_context.get('entry_window_label', '未記録')} / {display_context.get('entry_quality_label', '未記録')} / {str(notification_context.get('execution_label', '')).strip() or '未記録'}",
+        f"見送り・無効化条件: {notification_context.get('invalidation_label', '未記録')} / {notification_context.get('next_condition_label', '未記録')} / {', '.join(wait_reasons) or '未記録'}",
+        f"価格位置: 現在価格 {_format_price(result.get('current_price'))}",
+        f"価格位置: {_format_zone_summary('近いサポート帯', result.get('support_zones', []))}",
+        f"価格位置: {_format_zone_summary('近いレジスタンス帯', result.get('resistance_zones', []))}",
+        f"価格位置: {_format_setup_levels(result.get('long_setup', {}), 'long')}",
+        f"価格位置: {_format_setup_levels(result.get('short_setup', {}), 'short')}",
+        "安全境界: report-only / not FORMAL_GO / no automatic order / human decides manually",
     ]
 
 
@@ -1243,7 +1252,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     label = _normalize_product_version_label(result.get("system_label", ""))
     mode_label = str(result.get("system_mode_label", "")).strip()
     labels: list[str] = [f"[{label}]"]
-    if mode_label and not _is_version_like_label(mode_label):
+    if _should_include_subject_mode_label(mode_label):
         labels.append(f"[{mode_label}]")
     suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
@@ -1275,8 +1284,6 @@ def build_summary_subject(result: dict[str, Any]) -> str:
             f"{active_label} / 実弾不可・行動計画 | {active_detail} "
             f"【BTC:{price_text}】 {jst_ts}{suffix}"
     ).strip()
-    if result.get("ai_advice") is None:
-        subject = f"[機械判定のみ] {subject}"
     return _apply_current_email_subject_prefix(subject)
 
 

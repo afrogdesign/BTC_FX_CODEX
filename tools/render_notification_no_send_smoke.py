@@ -29,6 +29,8 @@ _FORBIDDEN_PATTERNS = (
     "send_email",
     "<script",
     "fetch(",
+    "[cli]",
+    "[機械判定のみ]",
 )
 _LEGACY_VERSION_PATTERNS = (
     "Ver02.6-v2",

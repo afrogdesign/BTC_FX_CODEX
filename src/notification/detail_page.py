@@ -47,7 +47,7 @@ _SIGNAL_LABELS = {
     "wait": "様子見",
 }
 
-CURRENT_MANUAL_SUPPORT_HEADER = "Ver04-v1 手動確認サポート"
+CURRENT_MANUAL_SUPPORT_HEADER = "内部確認・検証情報"
 
 _VISIBLE_STATUS_LABELS = {
     "blocked": "見送り",
@@ -549,15 +549,10 @@ def _panel_price_map_svg(
             )
 
     current_y = y_for_price(current_price)
-    current_box_w = 96
-    current_box_h = 36
-    current_box_x = right + 6
-    current_box_y = max(top - 2, min(bottom - current_box_h + 2, current_y - current_box_h / 2))
+    current_label_y = max(top + 10, min(bottom - 4, current_y + 4))
     emphasis_lines: list[str] = [
         f'<line x1="{left}" y1="{current_y:.1f}" x2="{right}" y2="{current_y:.1f}" class="current-price-line" />',
-        f'<rect x="{current_box_x:.1f}" y="{current_box_y:.1f}" width="{current_box_w:.1f}" height="{current_box_h:.1f}" rx="10" class="current-price-box" />',
-        f'<text x="{current_box_x + 10:.1f}" y="{current_box_y + 22:.1f}" class="current-price-box-label">現在値</text>',
-        f'<text x="{current_box_x + current_box_w - 10:.1f}" y="{current_box_y + 22:.1f}" text-anchor="end" class="current-price-box-value">{_format_price_int(current_price)}</text>',
+        f'<text x="{left - 8:.1f}" y="{current_label_y:.1f}" text-anchor="end" class="current-price-label">現在値 {_format_price_int(current_price)}</text>',
     ]
 
     markers: list[str] = []
@@ -2352,24 +2347,12 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       stroke-dasharray: 5 5;
     }}
     .current-price-label {{
-      fill: #bfdbfe;
+      fill: #dbeafe;
       font-size: 13px;
-      font-weight: 600;
-    }}
-    .current-price-box {{
-      fill: #1d4ed8;
-      stroke: #60a5fa;
-      stroke-width: 1;
-    }}
-    .current-price-box-label {{
-      fill: #eff6ff;
-      font-size: 12px;
-      font-weight: 600;
-    }}
-    .current-price-box-value {{
-      fill: #bfdbfe;
-      font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
+      paint-order: stroke fill;
+      stroke: rgba(15, 23, 42, 0.9);
+      stroke-width: 3;
     }}
     .marker-line {{
       stroke-width: 2;
@@ -2545,14 +2528,13 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       <ul>{wait_reason_html}</ul>
     </section>
 
-    <section class="section">
-      <h2>{CURRENT_MANUAL_SUPPORT_HEADER}</h2>
+    <details class="section internal-diagnostics">
+      <summary><strong>{CURRENT_MANUAL_SUPPORT_HEADER}</strong> - 検証 / 運用確認だけに使うブロック</summary>
       <div class="panel">
-        <p>この公開HTMLレポートは現在の手動取引判断のmain UI。</p>
-        <p>通知メールは入口。</p>
-        <p>local dashboard / app surface は確認と将来の承認・自動化の土台。</p>
-        <p>3つは同じ判断ソースから出します。別判断系にしません。</p>
+        <p>このブロックは検証と運用確認用です。売買判断の主導線には置きません。</p>
         <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <p>local dashboard / app surface / runtime contract / manual delivery reference をまとめて確認します。</p>
+        <p>通知メールと公開HTMLは同じ判断ソースから出しますが、ここは内部確認だけに使います。</p>
         <h3>Intraperiod JSON 契約</h3>
         <p>local/report-only の手動確認向けに、<code>build-active-plan-intraperiod-review --stdout-json</code> と <code>active_plan_intraperiod_review.v1</code> の app contract exposure を案内します。</p>
         <p>app surface / ready gate validation は <code>intraperiod_review_stdout_json</code> の契約露出を確認し、<strong>app contract</strong> と <strong>ready gate</strong> の整合だけを見ます。</p>
@@ -2567,7 +2549,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>
-    </section>
+    </details>
 
     {(
       f'''
