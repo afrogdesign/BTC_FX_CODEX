@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX-REVIEW`
+- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-REFLECTION`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Runtime preflight の blocker を review し、明示的な source path/ref/commit を使う Ver04-v1 runtime reflection method を docs-only で確定する。
+Ver04-v1 の runtime reflection を実施し、approved source commit を runtime target に反映した後の read-only validation を確認する。
 
-この task では runtime access は read-only の確認と分類のみを行い、pull / sync / branch switch / restart / launchd / notification sending / order execution は行わない。
+この task では runtime access は反映と read-only validation に限り、restart / launchd / notification sending / order execution は行わない。
 
 ## Completed history
 
@@ -29,6 +29,7 @@ Runtime preflight の blocker を review し、明示的な source path/ref/comm
 - Ver04-v1 runtime deployment plan
 - Runtime preflight
 - Runtime preflight fix
+- Runtime preflight fix review
 
 ## Product objective reminder
 
@@ -92,7 +93,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-PREFLIGHT-FIX-REVIEW: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-REFLECTION: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - runtime deployment plan is missing
@@ -139,5 +140,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-VER04-V1-RUNTIME-REFLECTION`
-- Use the recorded explicit source path/ref/commit handoff method from the Ver04-v1 source repo; runtime upstream is not required for this method because the target worktree is now clean and the source ref is unambiguous.
+- `BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE`
+- Runtime reflection is complete; proceed only with the explicit notification-operation smoke task and keep it report-only / human-decided.
