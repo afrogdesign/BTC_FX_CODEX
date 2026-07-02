@@ -326,6 +326,120 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertIn("missed_downside_breakdown_watch", result["breakout_inversion_flags"])
         self.assertNotIn("FORMAL_GO", str(result))
 
+    def test_macd_constructive_supports_upside_momentum_confirmation(self) -> None:
+        result = compute_scores(
+            {
+                "market_regime": "uptrend",
+                "ema_alignment_4h": "bullish",
+                "ema20_slope_4h": "up",
+                "structure_4h": "hh_hl",
+                "structure_1h": "hh_hl",
+                "price": 100.0,
+                "ema50_4h": 95.0,
+                "rsi_15m": 61.0,
+                "volume_ratio": 1.30,
+                "atr_ratio": 1.0,
+                "funding_rate": 0.0,
+                "rr_long": 1.5,
+                "rr_short": 1.5,
+                "near_support": False,
+                "near_resistance": False,
+                "breakout_up": True,
+                "breakout_down": False,
+                "in_range_center": False,
+                "transition_direction": "up",
+                "signals_15m": "long",
+                "market_map": {"flags": ["trend_flip_confirmed_up"]},
+                "macd_15m_state": "constructive_up",
+                "macd_15m_histogram": 1.2,
+                "macd_15m_histogram_prev": 0.8,
+                "macd_15m_above_signal": True,
+                "macd_15m_below_signal": False,
+            },
+            self.cfg,
+        )
+
+        self.assertIn("upside_macd_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("upside_macd_histogram_improving", result["momentum_confirmation_flags"])
+        self.assertIn("upside_momentum_confirmed", result["momentum_confirmation_flags"])
+        self.assertNotIn("FORMAL_GO", str(result))
+        self.assertNotIn("automatic_order", str(result))
+
+    def test_macd_constructive_supports_downside_momentum_confirmation(self) -> None:
+        result = compute_scores(
+            {
+                "market_regime": "downtrend",
+                "ema_alignment_4h": "bearish",
+                "ema20_slope_4h": "down",
+                "structure_4h": "lh_ll",
+                "structure_1h": "lh_ll",
+                "price": 100.0,
+                "ema50_4h": 105.0,
+                "rsi_15m": 42.0,
+                "volume_ratio": 1.30,
+                "atr_ratio": 1.0,
+                "funding_rate": 0.0,
+                "rr_long": 1.5,
+                "rr_short": 1.5,
+                "near_support": True,
+                "near_resistance": False,
+                "breakout_up": False,
+                "breakout_down": True,
+                "in_range_center": False,
+                "transition_direction": "down",
+                "signals_15m": "short",
+                "market_map": {"flags": ["trend_flip_confirmed_down"]},
+                "macd_15m_state": "constructive_down",
+                "macd_15m_histogram": -1.2,
+                "macd_15m_histogram_prev": -0.8,
+                "macd_15m_above_signal": False,
+                "macd_15m_below_signal": True,
+            },
+            self.cfg,
+        )
+
+        self.assertIn("downside_macd_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("downside_macd_histogram_weakening", result["momentum_confirmation_flags"])
+        self.assertIn("downside_momentum_confirmed", result["momentum_confirmation_flags"])
+        self.assertNotIn("FORMAL_GO", str(result))
+        self.assertNotIn("automatic_order", str(result))
+
+    def test_macd_alone_does_not_trigger_momentum_confirmation(self) -> None:
+        result = compute_scores(
+            {
+                "market_regime": "transition",
+                "ema_alignment_4h": "mixed",
+                "ema20_slope_4h": "flat",
+                "structure_4h": "hh_hl",
+                "structure_1h": "hh_hl",
+                "price": 100.0,
+                "ema50_4h": 100.0,
+                "rsi_15m": 80.0,
+                "volume_ratio": 1.0,
+                "atr_ratio": 1.0,
+                "funding_rate": 0.0,
+                "rr_long": 1.5,
+                "rr_short": 1.5,
+                "near_support": False,
+                "near_resistance": False,
+                "breakout_up": True,
+                "breakout_down": False,
+                "in_range_center": False,
+                "transition_direction": "up",
+                "signals_15m": "wait",
+                "market_map": {"flags": []},
+                "macd_15m_state": "constructive_up",
+                "macd_15m_histogram": 0.8,
+                "macd_15m_histogram_prev": 0.4,
+                "macd_15m_above_signal": True,
+                "macd_15m_below_signal": False,
+            },
+            self.cfg,
+        )
+
+        self.assertIn("upside_macd_confirmed", result["momentum_confirmation_flags"])
+        self.assertNotIn("upside_momentum_confirmed", result["momentum_confirmation_flags"])
+
     def test_weak_momentum_does_not_confirm_upside_or_downside(self) -> None:
         upside = compute_scores(
             {

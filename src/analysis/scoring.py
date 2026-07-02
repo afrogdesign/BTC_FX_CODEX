@@ -298,6 +298,38 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         cfg.SHORT_LONG_DIFF_THRESHOLD,
     )
 
+    def _float_or_none(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    macd_15m_state = str(inputs.get("macd_15m_state", "")).strip().lower()
+    macd_15m_histogram = _float_or_none(inputs.get("macd_15m_histogram"))
+    macd_15m_histogram_prev = _float_or_none(inputs.get("macd_15m_histogram_prev"))
+    macd_15m_above_signal = bool(inputs.get("macd_15m_above_signal", False))
+    macd_15m_below_signal = bool(inputs.get("macd_15m_below_signal", False))
+    macd_upside_support = (
+        macd_15m_above_signal
+        or (macd_15m_histogram is not None and macd_15m_histogram > 0)
+        or macd_15m_state in {"constructive_up", "upward"}
+    )
+    macd_downside_support = (
+        macd_15m_below_signal
+        or (macd_15m_histogram is not None and macd_15m_histogram < 0)
+        or macd_15m_state in {"constructive_down", "downward"}
+    )
+    macd_upside_histogram_improving = (
+        macd_15m_histogram is not None
+        and macd_15m_histogram_prev is not None
+        and macd_15m_histogram > macd_15m_histogram_prev
+    )
+    macd_downside_histogram_weakening = (
+        macd_15m_histogram is not None
+        and macd_15m_histogram_prev is not None
+        and macd_15m_histogram < macd_15m_histogram_prev
+    )
+
     momentum_confirmation_flags: list[str] = []
     upside_ema_supportive = ema_alignment == "bullish" or ema20_slope == "up" or price > ema50_4h
     upside_rsi_has_room = 48.0 <= rsi_15m <= 72.0
@@ -315,6 +347,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
             upside_rsi_has_room,
             upside_volume_confirmed,
             upside_market_map_flip,
+            macd_upside_support,
         )
         if present
     )
@@ -325,6 +358,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
             downside_rsi_has_room,
             downside_volume_confirmed,
             downside_market_map_flip,
+            macd_downside_support,
         )
         if present
     )
@@ -338,11 +372,17 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
             momentum_confirmation_flags.append("upside_volume_confirmed")
         if upside_market_map_flip:
             momentum_confirmation_flags.append("upside_market_map_flip")
+        if macd_upside_support:
+            momentum_confirmation_flags.append("upside_macd_confirmed")
+        if macd_upside_histogram_improving:
+            momentum_confirmation_flags.append("upside_macd_histogram_improving")
         if upside_support_count >= 2:
             momentum_confirmation_flags.append("upside_momentum_confirmed")
             if bias == "short" or short_display >= long_display - 5:
                 momentum_confirmation_flags.append("short_countertrend_risk")
                 warning_flags.append("short_countertrend_risk")
+        elif macd_upside_support and bias == "short":
+            warning_flags.append("macd_upside_countertrend_risk")
 
     if breakout_down:
         if downside_ema_supportive:
@@ -353,11 +393,17 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
             momentum_confirmation_flags.append("downside_volume_confirmed")
         if downside_market_map_flip:
             momentum_confirmation_flags.append("downside_market_map_flip")
+        if macd_downside_support:
+            momentum_confirmation_flags.append("downside_macd_confirmed")
+        if macd_downside_histogram_weakening:
+            momentum_confirmation_flags.append("downside_macd_histogram_weakening")
         if downside_support_count >= 2:
             momentum_confirmation_flags.append("downside_momentum_confirmed")
             if bias == "long" or long_display >= short_display - 5:
                 momentum_confirmation_flags.append("long_countertrend_risk")
                 warning_flags.append("long_countertrend_risk")
+        elif macd_downside_support and bias == "long":
+            warning_flags.append("macd_downside_countertrend_risk")
 
     upside_breakout_confirmation = breakout_up and (
         bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)

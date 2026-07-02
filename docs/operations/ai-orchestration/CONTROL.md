@@ -72,6 +72,8 @@ Immediate product objective:
 
 - default implementation mode for fixed-scope work: `BOUNDED_CODEX`
 - `LIGHT_CODEX`, `NORMAL_CODEX`, or `REVIEW_ONLY` only when task scope warrants it
+- ChatGPT が実行用 Codex prompt を出すときは `AUTO_SEND` で始める
+- `HUMAN_CHECK` は送信前停止の合図で、実行用 prompt を出す前に人間へ相談する
 - local commit is allowed when checks pass
 - push is reserved for `CHECKPOINT_PUSH` tasks only
 - product docs should stay concise and route through `PRODUCT_IMPLEMENTATION_ROUTE.md`

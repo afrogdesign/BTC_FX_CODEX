@@ -169,11 +169,15 @@ def _sample_momentum_payload() -> dict[str, object]:
         "upside_ema_supportive",
         "upside_rsi_has_room",
         "upside_volume_confirmed",
+        "upside_macd_confirmed",
+        "upside_macd_histogram_improving",
         "short_countertrend_risk",
         "downside_momentum_confirmed",
         "downside_ema_supportive",
         "downside_rsi_has_room",
         "downside_volume_confirmed",
+        "downside_macd_confirmed",
+        "downside_macd_histogram_weakening",
         "long_countertrend_risk",
     ]
     return payload
@@ -743,6 +747,24 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("15分足で下に維持できるか確認", html)
         self.assertIn("human decides manually", html)
         self.assertNotIn("FORMAL_GO", section_html)
+        self.assertNotIn("automatic order allowed", section_html)
+        self.assertNotIn("send_email", section_html)
+        self.assertNotIn("private/account/order", section_html)
+
+    def test_build_notification_detail_html_renders_intraperiod_early_warning_section(self) -> None:
+        html = build_notification_detail_html(_sample_momentum_payload())
+        match = re.search(r'<section class="section">\s*<h2>15分足 早期注意</h2>(.*?)</section>', html, re.S)
+        self.assertIsNotNone(match)
+        section_html = match.group(1) if match else ""
+
+        self.assertIn("15分足 早期注意", html)
+        self.assertIn("上抜け初動の可能性", html)
+        self.assertIn("ショート方向は損失リスク", html)
+        self.assertIn("下抜け初動の可能性", html)
+        self.assertIn("ロング方向は損失リスク", html)
+        self.assertIn("MACD", html)
+        self.assertIn("report-only", section_html)
+        self.assertIn("human decides manually", section_html)
         self.assertNotIn("automatic order allowed", section_html)
         self.assertNotIn("send_email", section_html)
         self.assertNotIn("private/account/order", section_html)

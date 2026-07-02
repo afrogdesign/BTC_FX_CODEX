@@ -75,6 +75,7 @@ Do not rely only on chat history.
 - `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
 - `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
 - 一時的な deploy / runtime 向けラベル、report title、email subject prefix は古い版で固定しない。表示ラベルを触る task だけ、その task のスコープにある source / docs / tests から current label を決める。
+- ChatGPT が実行用 Codex prompt を出すときは `AUTO_SEND` で始める。`HUMAN_CHECK` は送信前停止の合図であり、実行用 prompt を出す前に人間へ相談する。
 - Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
 ## Docs update policy

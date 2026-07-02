@@ -83,6 +83,34 @@ def _synthetic_result_payload(post_eval_payload: dict[str, Any] | None = None) -
         "warning_flags": ["Critical_zone_warning"],
         "risk_flags": ["upper_liquidity_close"],
         "no_trade_flags": ["sweep_incomplete"],
+        "momentum_confirmation_flags": [
+            "upside_momentum_confirmed",
+            "upside_macd_confirmed",
+            "upside_macd_histogram_improving",
+            "short_countertrend_risk",
+        ],
+        "breakout_inversion_flags": [
+            "upside_breakout_follow_watch",
+            "short_invalidation_watch",
+            "missed_upside_breakout_watch",
+        ],
+        "intraperiod_breakout_alert_candidate": {
+            "status": "candidate",
+            "side": "upside",
+            "severity": "warning",
+            "reason_codes": [
+                "upside_macd_confirmed",
+                "upside_momentum_confirmed",
+                "upside_breakout_follow_watch",
+                "short_countertrend_risk",
+                "short_invalidation_watch",
+                "missed_upside_breakout_watch",
+            ],
+            "human_summary": "上抜け初動の可能性があります。ショート方向の逆風を優先して、15分足で上に維持できるか確認します。MACDは上方向の勢いを補強します。",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+            "real_mail_sent": False,
+            "automatic_order": False,
+        },
         "post_eval_recommendations": post_eval_payload or _synthetic_post_eval_payload(),
     }
     return payload

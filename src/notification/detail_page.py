@@ -15,6 +15,7 @@ from src.presentation.sanitize import (
     sanitize_flag_list,
     sanitize_user_text,
 )
+from src.notification.intraperiod_breakout import build_intraperiod_breakout_alert_candidate
 
 
 _SETUP_STATUS_LABELS = {
@@ -906,6 +907,39 @@ def _breakout_inversion_items(result: dict[str, Any]) -> list[tuple[str, str]]:
                 ),
             )
         )
+    return items
+
+
+def _intraperiod_breakout_items(result: dict[str, Any]) -> list[tuple[str, str]]:
+    candidate = result.get("intraperiod_breakout_alert_candidate")
+    if not isinstance(candidate, dict):
+        candidate = build_intraperiod_breakout_alert_candidate(result)
+    if str(candidate.get("status", "")).strip() != "candidate":
+        return []
+
+    side = str(candidate.get("side", "none")).strip()
+    reason_codes = {str(code).strip() for code in candidate.get("reason_codes", []) if str(code).strip()}
+    items: list[tuple[str, str]] = []
+
+    if side in {"upside", "both"}:
+        value_parts = [
+            "ショート方向は損失リスクが高いので、15分足で上に維持できるか確認",
+            "すぐ下に戻るならダマシ注意",
+        ]
+        if "upside_macd_confirmed" in reason_codes:
+            value_parts.append("MACDは上方向の勢いを補強")
+        items.append(("上抜け初動の可能性", _sentence_join(value_parts)))
+
+    if side in {"downside", "both"}:
+        value_parts = [
+            "ロング方向は損失リスクが高いので、15分足で下に維持できるか確認",
+            "すぐ上に戻るならダマシ注意",
+        ]
+        if "downside_macd_confirmed" in reason_codes:
+            value_parts.append("MACDは下方向の勢いを補強")
+        items.append(("下抜け初動の可能性", _sentence_join(value_parts)))
+
+    items.append(("安全境界", str(candidate.get("safety_boundary", "report-only / not FORMAL_GO / no automatic order / human decides manually"))))
     return items
 
 
@@ -1828,6 +1862,14 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         "</div>"
         for label, value in breakout_inversion_items
     )
+    intraperiod_breakout_items = _intraperiod_breakout_items(result)
+    intraperiod_breakout_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">⏱ <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in intraperiod_breakout_items
+    )
     momentum_confirmation_items = _momentum_confirmation_items(result)
     momentum_confirmation_html = "".join(
         '<div class="checklist-item">'
@@ -2407,6 +2449,16 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       </div>
     </section>
     ''' if breakout_inversion_items else ''}
+
+    {f'''
+    <section class="section">
+      <h2>15分足 早期注意</h2>
+      <div class="panel">
+        <p class="muted">report-only / not FORMAL_GO / no automatic order / human decides manually の候補表示です。</p>
+        <div class="checklist">{intraperiod_breakout_html}</div>
+      </div>
+    </section>
+    ''' if intraperiod_breakout_items else ''}
 
     {f'''
     <section class="section">

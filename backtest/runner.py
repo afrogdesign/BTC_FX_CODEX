@@ -30,6 +30,7 @@ from src.analysis.support_resistance import (
 )
 from src.indicators.atr import calculate_atr, calculate_atr_ratio
 from src.indicators.ema import calculate_ema, get_ema20_slope, get_ema_alignment
+from src.indicators.macd import calculate_macd, classify_macd_momentum
 from src.indicators.rsi import calculate_rsi
 from src.indicators.volume import calculate_volume_ratio
 
@@ -54,6 +55,13 @@ def _prepare_tf(df: pd.DataFrame, cfg: Any, swing_n: int) -> dict[str, Any]:
     ema_fast = calculate_ema(df["close"], cfg.EMA_FAST)
     ema_mid = calculate_ema(df["close"], cfg.EMA_MID)
     ema_slow = calculate_ema(df["close"], cfg.EMA_SLOW)
+    macd = calculate_macd(df["close"])
+    macd_state = classify_macd_momentum(
+        macd["macd"],
+        macd["signal"],
+        macd["histogram"],
+        float(macd["histogram"].iloc[-2]) if len(macd["histogram"]) >= 2 else None,
+    )
     rsi = calculate_rsi(df["close"], cfg.RSI_LENGTH)
     atr = calculate_atr(df["high"], df["low"], df["close"], cfg.ATR_LENGTH)
     volume_ratio = calculate_volume_ratio(df["volume"], 20)
@@ -70,6 +78,8 @@ def _prepare_tf(df: pd.DataFrame, cfg: Any, swing_n: int) -> dict[str, Any]:
         "ema_mid": ema_mid,
         "ema_slow": ema_slow,
         "ema20_slope": get_ema20_slope(ema_fast),
+        "macd": macd,
+        "macd_state": macd_state,
         "rsi": rsi,
         "atr": atr,
         "volume_ratio": volume_ratio,
@@ -225,6 +235,11 @@ def run_backtest(input_data: BacktestInput, cfg: Any | None = None, profile: str
                 "ema50_4h": float(tf_4h["ema_mid"].iloc[-1]),
                 "rsi_15m": float(tf_15m["rsi"].iloc[-1]),
                 "volume_ratio": float(tf_15m["volume_ratio"].iloc[-1]),
+                "macd_15m_state": tf_15m["macd_state"]["state"],
+                "macd_15m_histogram": float(tf_15m["macd"]["histogram"].iloc[-1]),
+                "macd_15m_histogram_prev": float(tf_15m["macd"]["histogram"].iloc[-2]) if len(tf_15m["macd"]["histogram"]) >= 2 else float(tf_15m["macd"]["histogram"].iloc[-1]),
+                "macd_15m_above_signal": bool(tf_15m["macd_state"]["above_signal"]),
+                "macd_15m_below_signal": bool(tf_15m["macd_state"]["below_signal"]),
                 "atr_ratio": atr_ratio,
                 "funding_rate": funding_rate_pct,
                 "rr_long": pre_long["rr_estimate"],

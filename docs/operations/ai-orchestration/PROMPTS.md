@@ -103,6 +103,9 @@ Report:
 - write the same compact report exactly once to response.txt when Codex has local filesystem access
 ```
 
+- `AUTO_SEND` は実行用 prompt の既定先頭
+- `HUMAN_CHECK` は送信前停止の合図で、実行用 prompt を出す前に人間へ相談する
+
 ## LIGHT_CODEX
 
 ```text

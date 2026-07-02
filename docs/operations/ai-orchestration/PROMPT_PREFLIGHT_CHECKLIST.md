@@ -74,6 +74,8 @@ ChatGPT が Codex prompt を出す前に、形と境界が崩れていないか�
 - product / trading / safety judgment が残っていないか確認する
 - runtime judgment が残っていないか確認する
 - unresolved judgment があるなら、送る前に ChatGPT が解決する
+- 実行用 prompt は `AUTO_SEND` で始める
+- `HUMAN_CHECK` は送信前停止の合図で、実行用 prompt を出す前に止める
 - full safety boilerplate は避ける
 - current task に関係する safety stop だけを書く
 
