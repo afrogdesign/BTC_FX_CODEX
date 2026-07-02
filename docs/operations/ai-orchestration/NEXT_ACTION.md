@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE-FIX`
+- current_work_id: `BTCFX-20260702-VER04-V1-CONTROLLED-RESTART-DECISION`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Ver04-v1 の notification-operation no-send smoke command を追加し、report-only / human-decided のまま real mail sending なしで安全に扱えるかを確定する。
+Ver04-v1 の反映済み runtime について、controlled restart や launchd action が実際に必要かを report-only で判断し、次の安全な手順を確定する。
 
-この task では runtime access は read-only smoke と dry-run/render-only 確認に限り、real mail sending / restart / launchd / order execution は行わない。
+この task では runtime access は read-only 状態確認と no-send smoke 確認に限り、real mail sending / restart / launchd / order execution は行わない。
 
 ## Completed history
 
@@ -142,5 +142,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-VER04-V1-CONTROLLED-RESTART-DECISION`
-- The no-send / dry-run / render-only notification smoke command is now defined; proceed only with a report-only controlled restart decision task and keep notification sending unchanged.
+- `BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE`
+- Controlled restart is not required; keep the reflected Ver04-v1 runtime as-is and record rollback notes only, with notification sending unchanged.

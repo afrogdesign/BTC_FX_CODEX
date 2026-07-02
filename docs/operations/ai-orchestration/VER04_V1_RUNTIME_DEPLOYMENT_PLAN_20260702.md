@@ -120,3 +120,15 @@ This document is planning only. It does not access the runtime repo, does not re
 - restart/launchd: not performed
 - controlled restart decision readiness: yes, after runtime reflection and the no-send smoke validation
 - no secrets/private data were recorded
+
+## Controlled restart decision result
+
+- runtime branch/HEAD checked: `Ver04-v1` / `c37e46ff948cda664b0ca3641ad922369d16b436`
+- no-send smoke result: `pass`
+- operation style found: launchd-managed runtime target with safe no-send CLI smoke support
+- restart_required: no
+- launchd_action_required: no
+- real mail sending: not performed
+- restart/launchd: not performed
+- reason: the runtime is already reflected to the approved commit, the worktree is clean, and the no-send/render-only notification smoke passed; no runtime code, scheduler, or launchd change was introduced in this task
+- next task: `BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE`
