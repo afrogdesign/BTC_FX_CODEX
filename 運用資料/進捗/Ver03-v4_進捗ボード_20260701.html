@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>BTC_FX_CODEX Ver03-v4 進捗ボード 20260701</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: #374151;
+      --done: #22c55e;
+      --current: #f59e0b;
+      --next: #38bdf8;
+      --todo: #94a3b8;
+      --paused: #a78bfa;
+      --risk: #ef4444;
+      --warn: #f97316;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; }
+    header { padding: 32px 24px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, #111827, #172554); }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin-top: 40px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    .meta { color: var(--muted); font-size: 14px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
+    .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+    .metric .num { font-size: 24px; font-weight: 700; }
+    .metric .label { color: var(--muted); font-size: 13px; }
+    .notice { background: #1e293b; border: 1px solid var(--line); border-left: 5px solid var(--current); border-radius: 12px; padding: 16px; margin: 20px 0; }
+    .notice.good { border-left-color: var(--done); }
+    .notice.risk { border-left-color: var(--risk); }
+    .notice.next { border-left-color: var(--next); }
+    .phase { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; margin: 18px 0; overflow: hidden; }
+    .phase-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+    .phase-body { padding: 8px 18px 18px; }
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .02em; color: #020617; white-space: nowrap; }
+    .done { background: var(--done); }
+    .current { background: var(--current); }
+    .next { background: var(--next); }
+    .todo { background: var(--todo); }
+    .paused { background: var(--paused); }
+    .risk-badge { background: var(--risk); color: white; }
+    .warn { background: var(--warn); color: #111827; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; vertical-align: top; text-align: left; }
+    th { color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    code { background: #020617; border: 1px solid #1f2937; padding: 1px 5px; border-radius: 5px; color: #bae6fd; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .small { color: var(--muted); font-size: 13px; }
+    .progress-bar { height: 12px; background: #020617; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+    .progress-fill { height: 100%; width: 82%; background: linear-gradient(90deg, var(--done), var(--next)); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .update-rule { background: #020617; border: 1px dashed var(--line); border-radius: 12px; padding: 14px; }
+    @media (max-width: 900px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cards { grid-template-columns: 1fr; } .phase-header { align-items: flex-start; flex-direction: column; } table { font-size: 13px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>BTC_FX_CODEX / btc_monitor Ver03-v4 進捗ボード</h1>
+    <div class="meta">
+      workspace: <code>/Users/marupro/CODEX/100_MCP_Server/btc_monitor</code> /
+      更新日: 2026-07-01 JST /
+      現在地: <code>BTCFX-20260630-OHLCV-STALE-COVERAGE-CHECKPOINT-REVIEW 完了</code>
+    </div>
+    <div class="progress-bar" aria-label="overall progress"><div class="progress-fill"></div></div>
+    <div class="legend">
+      <span class="badge done">DONE</span>
+      <span class="badge current">CURRENT</span>
+      <span class="badge next">NEXT</span>
+      <span class="badge todo">TODO</span>
+      <span class="badge paused">PAUSED</span>
+      <span class="badge risk-badge">RISK</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="summary-grid">
+      <div class="metric"><div class="num">013146f</div><div class="label">latest accepted commit</div></div>
+      <div class="metric"><div class="num">Phase F 後半</div><div class="label">前の進行表での位置</div></div>
+      <div class="metric"><div class="num">Phase G 未着手</div><div class="label">entry / score / gate redesign</div></div>
+      <div class="metric"><div class="num">1418</div><div class="label">candidate rows</div></div>
+      <div class="metric"><div class="num">1330</div><div class="label">window missing rows</div></div>
+      <div class="metric"><div class="num">report-only</div><div class="label">safety boundary</div></div>
+    </section>
+
+    <section>
+      <h2>現在地を一言で</h2>
+      <div class="notice good">
+        <p><strong>前の進行表で言うと、Phase F「Active Plan intraperiod 再開」の後半まで進んでいる。</strong></p>
+        <p>特に <code>066 Active Plan intraperiod 実データ確認</code> を、単なる実績確認ではなく、<code>no_ohlcv</code> の原因分解、OHLCV coverage の可視化、OHLCV stale 判定、operator warning まで深掘りした。</p>
+      </div>
+      <div class="notice risk">
+        <p><strong>Phase G「転換専用 entry / score / gate 再設計」にはまだ入っていない。</strong> 現在は Phase G に進む前の証拠品質 checkpoint 段階。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>前の進行表との対応</h2>
+      <div class="phase">
+        <div class="phase-header"><h3>Phase E: P0/P1 取り込み・土台修正</h3><span class="badge done">DONE / BASELINE</span></div>
+        <div class="phase-body">
+          <table>
+            <thead><tr><th>作業番号</th><th>状態</th><th>内容</th><th>現在の扱い</th></tr></thead>
+            <tbody>
+              <tr><td>054</td><td><span class="badge done">DONE</span></td><td>P0/P1 取り込み計画</td><td>既存 baseline。</td></tr>
+              <tr><td>055</td><td><span class="badge done">DONE</span></td><td>P0-1 counter watch paper position 修正</td><td>既存 baseline。</td></tr>
+              <tr><td>056</td><td><span class="badge done">DONE</span></td><td>P0-2 filled-only 集計分離</td><td>既存 baseline。</td></tr>
+              <tr><td>057</td><td><span class="badge done">DONE</span></td><td>P0 実データ確認</td><td>既存 baseline。</td></tr>
+              <tr><td>058</td><td><span class="badge done">DONE</span></td><td>P1-1 formal candidate hard quality blocker 化</td><td>既存 baseline。</td></tr>
+              <tr><td>059</td><td><span class="badge done">DONE</span></td><td>進捗ボード作成</td><td>旧ボード。今後はこの <code>Ver03-v4_進捗ボード_20260701.html</code> を更新。</td></tr>
+              <tr><td>060</td><td><span class="badge done">DONE</span></td><td>P1-2 出来高 trigger 方向付き化</td><td>既存 baseline。</td></tr>
+              <tr><td>061</td><td><span class="badge paused">PAUSED</span></td><td>P1-3 short_reversal_risk 追加</td><td>今回の主作業では未再開。</td></tr>
+              <tr><td>062</td><td><span class="badge todo">TODO</span></td><td>P1 実データ確認 report</td><td>Phase F の evidence quality 確認で一部観点を吸収。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header"><h3>Phase F: Active Plan intraperiod 再開</h3><span class="badge current">CURRENT / 後半</span></div>
+        <div class="phase-body">
+          <table>
+            <thead><tr><th>作業番号</th><th>状態</th><th>内容</th><th>現在の進捗</th></tr></thead>
+            <tbody>
+              <tr><td>063</td><td><span class="badge done">DONE</span></td><td>intraperiod outcomes report builder</td><td>report-only outcome / evidence summary の基礎は利用可能。</td></tr>
+              <tr><td>064</td><td><span class="badge done">DONE</span></td><td>intraperiod outcomes daily-sync 接続</td><td>現在の手動 surface / export / check path に evidence fields を露出。</td></tr>
+              <tr><td>065</td><td><span class="badge done">DONE</span></td><td>intraperiod report family registry 固定</td><td>app contract / stdout-json / exported artifacts で surface fields を確認済み。</td></tr>
+              <tr><td>066</td><td><span class="badge current">CURRENT</span></td><td>Active Plan intraperiod 実データ確認</td><td><code>no_ohlcv</code> 原因分解、OHLCV stale 判定、operator warning まで完了。次は phase checkpoint。</td></tr>
+            </tbody>
+          </table>
+          <p class="small">注: Phase F は「売買ロジックを改善した」ではなく、「実データ評価の証拠品質を見える化した」という進捗。</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-header"><h3>Phase G: 転換専用 entry / score / gate 再設計</h3><span class="badge todo">TODO</span></div>
+        <div class="phase-body">
+          <table>
+            <thead><tr><th>作業番号</th><th>状態</th><th>内容</th><th>現在の扱い</th></tr></thead>
+            <tbody>
+              <tr><td>067</td><td><span class="badge todo">TODO</span></td><td>転換専用 entry / follow 設計</td><td>まだ未着手。Phase F checkpoint 後に判断。</td></tr>
+              <tr><td>068</td><td><span class="badge todo">TODO</span></td><td>転換専用 entry 最小実装</td><td>まだ未着手。</td></tr>
+              <tr><td>069</td><td><span class="badge todo">TODO</span></td><td>score / gate 緩和検討</td><td>OHLCV が stale のため、現時点で成績根拠としては弱い。</td></tr>
+              <tr><td>070</td><td><span class="badge todo">TODO</span></td><td>Ver03-v1 統合レビュー</td><td>まだ未着手。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>今回進んだ evidence quality / OHLCV visibility</h2>
+      <div class="phase">
+        <div class="phase-header"><h3>2026-06-30 以降の主な完了タスク</h3><span class="badge done">DONE</span></div>
+        <div class="phase-body">
+          <table>
+            <thead><tr><th>順</th><th>Work ID</th><th>できるようになったこと</th><th>Commit</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td><code>BTCFX-20260630-MANUAL-SURFACE-EVIDENCE-SUMMARY</code></td><td><code>evidence_quality_summary</code> を summary / detail HTML に表示。</td><td><code>06bf0d7</code></td></tr>
+              <tr><td>2</td><td><code>BTCFX-20260630-AUTO-EVIDENCE-QUALITY-SUMMARY-BUILDER</code></td><td>intraperiod outcomes から evidence quality summary を安定生成。</td><td><code>558a402</code></td></tr>
+              <tr><td>3</td><td><code>BTCFX-20260630-EVIDENCE-QUALITY-SUMMARY-SURFACE-WIRING</code></td><td>生成済み summary を manual surface / app contract / stdout-json に配線。</td><td><code>6e967b4</code></td></tr>
+              <tr><td>4</td><td><code>BTCFX-20260630-NO-OHLCV-SOURCE-COVERAGE-CAUSE-DIAGNOSTIC</code></td><td><code>no_ohlcv</code> の原因を candidate timestamp と OHLCV window coverage で診断。</td><td><code>4f5d2d9</code></td></tr>
+              <tr><td>5</td><td><code>BTCFX-20260630-NO-OHLCV-SOURCE-COVERAGE-SURFACE-WIRING</code></td><td><code>ohlcv_source_coverage_summary</code> を summary / HTML / app contract / export に表示。</td><td><code>edb9282</code></td></tr>
+              <tr><td>6</td><td><code>BTCFX-20260630-NO-OHLCV-COVERAGE-ACTUAL-SNAPSHOT</code></td><td>実値を記録し、blocker を <code>per_window_ohlcv_gap</code> に分類。</td><td><code>62482f9</code></td></tr>
+              <tr><td>7</td><td><code>BTCFX-20260630-OHLCV-WINDOW-GAP-AUDIT</code></td><td>OHLCV 範囲が candidate に対して古いと確認。</td><td><code>3d003e9</code></td></tr>
+              <tr><td>8</td><td><code>BTCFX-20260630-OHLCV-RANGE-FRESHNESS-GUARD</code></td><td>OHLCV freshness fields と <code>ohlcv_range_freshness_status</code> を追加。</td><td><code>1d27359</code></td></tr>
+              <tr><td>9</td><td><code>BTCFX-20260630-OHLCV-RANGE-FRESHNESS-E2E-SMOKE</code></td><td>freshness fields の export/check/artifacts 露出を確認。</td><td><code>1a53a6e</code></td></tr>
+              <tr><td>10</td><td><code>BTCFX-20260630-OHLCV-STALE-COVERAGE-OPERATOR-WARNING</code></td><td>stale OHLCV の operator warning を実装。</td><td><code>fd01b24</code></td></tr>
+              <tr><td>11</td><td><code>BTCFX-20260630-OHLCV-STALE-COVERAGE-WARNING-E2E-SMOKE</code></td><td>warning text と freshness fields を smoke で確認。</td><td><code>72392e3</code></td></tr>
+              <tr><td>12</td><td><code>BTCFX-20260630-OHLCV-STALE-COVERAGE-CHECKPOINT-REVIEW</code></td><td>stale OHLCV warning path を一区切りとして review。</td><td><code>013146f</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>現在できるようになったこと</h2>
+      <div class="cards">
+        <div class="card"><h3>1. 証拠品質の集計</h3><ul><li><code>evidence_quality_summary</code> を生成・表示できる。</li><li>有効サンプル、win-like / loss-like / unresolved を report-only で見られる。</li><li>fakeout / missed turn / bad entry timing 候補を見られる。</li></ul></div>
+        <div class="card"><h3>2. no_ohlcv 原因の分解</h3><ul><li>candidate timestamp が読めているかを確認できる。</li><li>OHLCV 有効行があるかを確認できる。</li><li>候補 window を OHLCV がカバーしているかを確認できる。</li></ul></div>
+        <div class="card"><h3>3. OHLCV 鮮度チェック</h3><ul><li><code>candidate_timestamp_min/max</code> を見られる。</li><li><code>candidate_max_after_ohlcv_end_hours</code> を見られる。</li><li><code>ohlcv_range_freshness_status</code> で stale 判定できる。</li></ul></div>
+        <div class="card"><h3>4. operator warning</h3><ul><li><code>stale_before_latest_candidate</code> のとき警告を出す。</li><li>古い OHLCV を「使える証拠」と誤認しにくくする。</li><li>warning は report-only で、売買許可ではない。</li></ul></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>現在の重要な実値</h2>
+      <table>
+        <thead><tr><th>項目</th><th>値</th><th>読み方</th></tr></thead>
+        <tbody>
+          <tr><td><code>candidate_rows</code></td><td>1418</td><td>検証対象候補の総数。</td></tr>
+          <tr><td><code>ohlcv_valid_rows</code></td><td>499</td><td>有効な OHLCV 行数。0 ではない。</td></tr>
+          <tr><td><code>window_covered_rows</code></td><td>88</td><td>候補 window に OHLCV がある件数。</td></tr>
+          <tr><td><code>window_missing_rows</code></td><td>1330</td><td>候補 window に OHLCV がない件数。</td></tr>
+          <tr><td><code>window_missing_rate</code></td><td>約 93.8%</td><td>現在の大きな blocker。</td></tr>
+          <tr><td><code>ohlcv_end</code></td><td>2026-06-10T03:15:00+09:00</td><td>OHLCV coverage 終了。</td></tr>
+          <tr><td><code>candidate_timestamp_max</code></td><td>2026-06-30T03:05:00.923983+09:00</td><td>最新 candidate は OHLCV end よりかなり後。</td></tr>
+          <tr><td><code>candidate_max_after_ohlcv_end_hours</code></td><td>約 479.8h</td><td>OHLCV が約20日分古い。</td></tr>
+          <tr><td><code>ohlcv_range_freshness_status</code></td><td><code>stale_before_latest_candidate</code></td><td>古い OHLCV が no_ohlcv を支配しうる状態。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>今の状態で誤解してはいけないこと</h2>
+      <div class="notice risk">
+        <ul>
+          <li>これは利益が出るという意味ではない。</li>
+          <li>これは <code>FORMAL_GO</code> ではない。</li>
+          <li>これは自動売買開始ではない。</li>
+          <li>OHLCV fetch は追加していない。</li>
+          <li>trading logic は変更していない。</li>
+          <li>今できるようになったのは、証拠が古い・足りない・信用しづらい状態を見落としにくくすること。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>次の作業</h2>
+      <div class="notice next">
+        <p><strong>NEXT:</strong> <code>BTCFX-20260630-EVIDENCE-QUALITY-PHASE-CHECKPOINT</code></p>
+        <p>completed evidence-quality / OHLCV coverage visibility phase をまとめ、fetch / trading logic / execution affordance を追加せず、次の product-quality direction を決める。</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>安全境界</h2>
+      <ul>
+        <li>report-only</li>
+        <li>not FORMAL_GO</li>
+        <li>no automatic order</li>
+        <li>human decides manually</li>
+        <li>no send/notify/trade/runtime/API/private/account/order behavior</li>
+        <li>no OHLCV fetch added</li>
+        <li>no profitability claim</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>更新ルール</h2>
+      <div class="update-rule">
+        <p>今後の進捗HTMLは、この日付付きファイル名のボードを更新する。</p>
+        <ul>
+          <li>正本: <code>運用資料/進捗/Ver03-v4_進捗ボード_20260701.html</code></li>
+          <li>完了した作業は <span class="badge done">DONE</span> にする。</li>
+          <li>現在作業は <span class="badge current">CURRENT</span> にする。</li>
+          <li>次に着手する作業は <span class="badge next">NEXT</span> にする。</li>
+          <li>重要な実データが出た場合は「現在の重要な実値」に追記する。</li>
+          <li>安全境界が変わった場合は必ず明記する。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

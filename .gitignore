@@ -19,3 +19,17 @@ local/manual_delivery_handoff/
 
 # Ver03-v4 local branch helper commands
 Branch_Command/
+node_modules/
+dist/
+build/
+cache/
+data/
+datasets/
+outputs/
+exports/
+*.log
+*.mp4
+*.mov
+*.wav
+*.psd
+*.ai
