@@ -73,12 +73,14 @@ Do:
 - <bounded actions only>
 
 Validation:
-- pwd -P
-- git status --short --branch
-- <targeted validation only if needed>
-- git diff --check
-- git diff --name-only
-- git status --short --branch
+- task-specific minimal validation only
+- docs-only: `git diff --check`
+- Python changed files: `py_compile` changed files + targeted `unittest`
+- CLI/report builder: one targeted command only
+- REVIEW_ONLY: no validation unless explicitly needed
+- run `git status --short --branch` once at the start for edit/commit tasks
+- run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists
+- run `git diff --check` before commit when files changed
 
 Stop:
 - wrong cwd/branch

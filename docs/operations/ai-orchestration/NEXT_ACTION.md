@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-DETAIL-UI-READABILITY-PASS`
-- mode: `BOUNDED_CODEX`
+- current_work_id: `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
+- mode: `REVIEW_ONLY`
 
 ## Current goal
 
-公開 detail page の人向けラベルと chart label 配置を見やすくし、notification sending behavior を変えずに Ver04-v1 の操作画面として読みやすくする。
+Ver04-v1 runtime deployment reflected active の観測を続け、notification sending behavior を変えずに post-deployment observation を続ける。
 
 Next normal generated HTML should confirm labels read naturally and chart labels do not overlap.
 
@@ -30,12 +30,12 @@ Next normal generated HTML should confirm labels read naturally and chart labels
 
 ## Validation
 
-- `pwd -P`
-- `git status --short --branch`
-- `git diff --check`
-- `git diff --name-only`
-- `git status --short --branch`
+- task-specific minimal validation only
+- docs-only: `git diff --check`
+- source/test: changed-file compile/test only
 
 ## Resume rule
 
-After this fix, the next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`.
+After this observation, the next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`.
+
+Future Codex prompts should use task-specific minimal validation, not the old full validation bundle.

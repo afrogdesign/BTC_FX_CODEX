@@ -48,6 +48,14 @@ ChatGPT が Codex prompt を出す前に、形と境界が崩れていないか�
 - すべて no なら docs files を入れない
 - UI / source / test fixes は原則 docs update なしにする
 
+## Validation minimization
+
+- generic validation bundles は入れない
+- `git diff --name-only` は file list confirmation が task に必要なときだけにする
+- repeated `git status` は commit 時か dirty-tree ambiguity があるときだけにする
+- docs-only task は通常 `git diff --check` だけでよい
+- source / test task は changed-file compile/test だけでよい
+
 ## Push/Pull check
 
 - normal task は `Do not push` を明記する

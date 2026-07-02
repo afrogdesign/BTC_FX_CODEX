@@ -60,19 +60,22 @@ Immediate product objective:
 
 ## Validation Rules
 
+- Task-specific minimal validation only.
 - Docs-only changes: `git diff --check`.
 - Python code changes: targeted `./.venv312/bin/python -m unittest <tests>`.
 - CLI/report builder changes: relevant CLI/report validation only.
-- Every task: `git status --short --branch`.
+- Repeated status checks are not implied; use `git status --short --branch` when starting edit/commit tasks and again only when committing or when dirty-tree ambiguity exists.
 - Exchange export import work must be local-file only and must not call exchange APIs.
 
 ## Operation Mode
 
-- default: `LIGHT_CODEX`, `NORMAL_CODEX`, or `REVIEW_ONLY` depending on task scope
+- default implementation mode for fixed-scope work: `BOUNDED_CODEX`
+- `LIGHT_CODEX`, `NORMAL_CODEX`, or `REVIEW_ONLY` only when task scope warrants it
 - local commit is allowed when checks pass
 - push is reserved for `CHECKPOINT_PUSH` tasks only
 - product docs should stay concise and route through `PRODUCT_IMPLEMENTATION_ROUTE.md`
 - runtime repo remains off-limits during normal MCP tasks
+- normal tasks should avoid orchestration doc updates unless posture, next action, safety, or runtime actually changes
 
 ## Next Decision
 

@@ -34,14 +34,17 @@ Do not take over planning unless explicitly asked.
 
 ## Source of truth
 
-Before doing non-trivial work, check:
+Before doing non-trivial work, check `docs/operations/ai-orchestration/START_HERE.md` after `AGENTS.md`.
 
-- `docs/operations/ai-orchestration/START_HERE.md`
-- `docs/operations/ai-orchestration/RESUME.md`
-- `docs/operations/ai-orchestration/CONTROL.md`
-- `docs/operations/ai-orchestration/TASK_LEDGER.md` when updating task status
+Tiered read model:
 
-After starting in the repo root, read `docs/operations/ai-orchestration/START_HERE.md` first as the low-cost fixed entrypoint, then rely on `RESUME.md`, `CONTROL.md`, `PROMPTS.md`, and `CURRENT_HANDOFF.md` instead of chat history.
+- Tier 0 default: `AGENTS.md`, `docs/operations/ai-orchestration/START_HERE.md`
+- Tier 1 only when state is needed: `docs/operations/ai-orchestration/CURRENT_STATE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md`, `docs/operations/ai-orchestration/CONTROL.md`
+- Tier 2 only by task type: `docs/operations/ai-orchestration/PROMPTS.md`, `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`, `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`, `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`, strategy docs, `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md`, `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md`
+
+`docs/operations/ai-orchestration/RESUME.md` is restart/reference only, not default read.
+`docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` is handoff-only, not default read.
+`docs/operations/ai-orchestration/TASK_LEDGER.md` is historical/search-only, not default read and not updated in normal tasks.
 
 Use these files as the current operating context.
 Do not rely only on chat history.
@@ -71,7 +74,7 @@ Do not rely only on chat history.
 - ChatGPT は Codex の報告後に GitHub を確認し、後続の `SYNC` task で reviewed metadata をまとめて更新する。
 - `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
 - `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
-- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は `BTCFX Ver03-v4` を使う。新しい reviewed roadmap が出るまでこれを既定とする。
+- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は古い版で固定しない。表示ラベルを触る task だけ、その task のスコープにある source / docs / tests から current label を決める。
 - Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
 
 ## Docs update policy
@@ -89,12 +92,12 @@ Do not rely only on chat history.
 
 For each task:
 
-1. Run `git status --short --branch`.
+1. Run one initial `git status --short --branch` for edit/commit tasks.
 2. Read only the files named in the task, plus necessary nearby files.
 3. Modify only the files required by the task.
-4. Run the specified validation command first.
-5. Run broader validation only when requested or clearly necessary.
-6. Check `git diff --check` before commit.
+4. Run task-specific minimal validation only.
+5. Run `git diff --check` before commit when files changed.
+6. Run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists.
 7. Commit locally when validation passes and the diff is intentional.
 8. Push only when the task explicitly permits or requests `CHECKPOINT_PUSH` and the branch/remote target is clear.
 9. Return the compact report format.
