@@ -25,3 +25,7 @@ This note records the post-reflection runtime state and a future human-approved 
 
 If a rollback is ever approved by a human, it should be planned as a separate runtime operation with explicit approval and a clean target state. This note does not provide executable rollback steps.
 
+## Completion reference
+
+- completion note path: `docs/operations/ai-orchestration/VER04_V1_RUNTIME_DEPLOYMENT_COMPLETE_20260702.md`
+- current runtime state is reflected_active and does not require rollback

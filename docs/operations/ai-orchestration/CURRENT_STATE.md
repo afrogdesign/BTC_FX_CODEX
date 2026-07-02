@@ -53,6 +53,9 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - local dashboard / app surface is confirmation and future automation foundation.
 - diagnostic and post-evaluation remain report-only support.
 - major turn / turning point diagnostics do not authorize manual or automatic entry.
+- Ver04-v1 runtime reflection is complete and active on the approved reflected commit.
+- No restart / launchd action is required for the completed deployment.
+- Notification sending behavior remains unchanged.
 
 ## Current operational blocker
 
@@ -70,11 +73,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 
 ## Next implementation direction
 
-Default next task:
-
-```text
-BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT
-```
+Post-deployment observation only unless the user requests further changes.
 
 Goal:
 
