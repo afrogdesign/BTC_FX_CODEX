@@ -97,10 +97,11 @@ For each task:
 3. Modify only the files required by the task.
 4. Run task-specific minimal validation only.
 5. Run `git diff --check` before commit when files changed.
-6. Run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists.
-7. Commit locally when validation passes and the diff is intentional.
-8. Push only when the task explicitly permits or requests `CHECKPOINT_PUSH` and the branch/remote target is clear.
-9. Return the compact report format.
+6. Run `git diff --name-only` only when the changed-file list is ambiguous or when the task explicitly asks for file-list confirmation.
+7. Run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists.
+8. Commit locally when validation passes and the diff is intentional.
+9. Push only when the task explicitly permits or requests `CHECKPOINT_PUSH` and the branch/remote target is clear.
+10. Return the compact report format.
 
 ## Stop conditions
 

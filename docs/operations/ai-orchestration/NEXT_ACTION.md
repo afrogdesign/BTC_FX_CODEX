@@ -38,4 +38,4 @@ Next normal generated HTML should confirm labels read naturally and chart labels
 
 After this observation, the next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`.
 
-Future Codex prompts should use task-specific minimal validation, not the old full validation bundle.
+Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.

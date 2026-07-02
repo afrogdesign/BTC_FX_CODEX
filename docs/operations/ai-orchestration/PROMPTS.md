@@ -79,6 +79,8 @@ Validation:
 - CLI/report builder: one targeted command only
 - REVIEW_ONLY: no validation unless explicitly needed
 - run `git status --short --branch` once at the start for edit/commit tasks
+- do not include `git diff --name-only` in default validation
+- add `git diff --name-only` only when changed-file confirmation is needed
 - run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists
 - run `git diff --check` before commit when files changed
 

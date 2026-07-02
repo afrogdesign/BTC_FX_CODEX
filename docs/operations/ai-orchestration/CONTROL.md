@@ -64,6 +64,7 @@ Immediate product objective:
 - Docs-only changes: `git diff --check`.
 - Python code changes: targeted `./.venv312/bin/python -m unittest <tests>`.
 - CLI/report builder changes: relevant CLI/report validation only.
+- `git diff --name-only` is not default; use it only when changed-file confirmation is needed or ambiguity remains.
 - Repeated status checks are not implied; use `git status --short --branch` when starting edit/commit tasks and again only when committing or when dirty-tree ambiguity exists.
 - Exchange export import work must be local-file only and must not call exchange APIs.
 

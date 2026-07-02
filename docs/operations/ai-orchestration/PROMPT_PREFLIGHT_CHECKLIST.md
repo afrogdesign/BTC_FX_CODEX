@@ -51,7 +51,8 @@ ChatGPT が Codex prompt を出す前に、形と境界が崩れていないか�
 ## Validation minimization
 
 - generic validation bundles は入れない
-- `git diff --name-only` は file list confirmation が task に必要なときだけにする
+- `git diff --name-only` は既定では入れない
+- changed-file list confirmation が task に必要なときだけ `git diff --name-only` を入れる
 - repeated `git status` は commit 時か dirty-tree ambiguity があるときだけにする
 - docs-only task は通常 `git diff --check` だけでよい
 - source / test task は changed-file compile/test だけでよい
