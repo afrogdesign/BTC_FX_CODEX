@@ -72,3 +72,11 @@ This document is planning only. It does not access the runtime repo, does not re
 - This plan does not mention any execution commands that would touch the runtime repo yet.
 - The notification path remains report-only until a later explicit task.
 
+## Runtime preflight result
+
+- checked target path: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- target branch: `Ver03-v4`
+- target upstream: not configured
+- target worktree: dirty (`.gitignore`)
+- reflection readiness: no
+- blocker: runtime target is not on Ver04-v1 and does not have a configured upstream yet, so the controlled reflection task must wait for a dedicated preflight-fix step
