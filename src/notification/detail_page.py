@@ -909,6 +909,52 @@ def _breakout_inversion_items(result: dict[str, Any]) -> list[tuple[str, str]]:
     return items
 
 
+def _momentum_confirmation_items(result: dict[str, Any]) -> list[tuple[str, str]]:
+    flags = {str(flag).strip() for flag in result.get("momentum_confirmation_flags", []) if str(flag).strip()}
+    items: list[tuple[str, str]] = []
+    upside_flags = {
+        "upside_momentum_confirmed",
+        "upside_ema_supportive",
+        "upside_rsi_has_room",
+        "upside_volume_confirmed",
+        "short_countertrend_risk",
+    }
+    downside_flags = {
+        "downside_momentum_confirmed",
+        "downside_ema_supportive",
+        "downside_rsi_has_room",
+        "downside_volume_confirmed",
+        "long_countertrend_risk",
+    }
+    if flags & upside_flags:
+        items.append(
+            (
+                "上抜け後の勢い確認",
+                _sentence_join(
+                    [
+                        "ショート方向は危険",
+                        "15分足で上に維持できるか確認",
+                        "すぐ下に戻るならダマシ注意",
+                    ]
+                ),
+            )
+        )
+    if flags & downside_flags:
+        items.append(
+            (
+                "下抜け後の勢い確認",
+                _sentence_join(
+                    [
+                        "ロング方向は危険",
+                        "15分足で下に維持できるか確認",
+                        "すぐ上に戻るならダマシ注意",
+                    ]
+                ),
+            )
+        )
+    return items
+
+
 def _major_turning_point_diagnostic_evidence(
     result: dict[str, Any],
     notification_context: dict[str, Any] | None = None,
@@ -1782,6 +1828,14 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         "</div>"
         for label, value in breakout_inversion_items
     )
+    momentum_confirmation_items = _momentum_confirmation_items(result)
+    momentum_confirmation_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">⚡ <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in momentum_confirmation_items
+    )
     major_turning_point_diagnostic_html = (
         '<div class="checklist">'
         + "".join(
@@ -2353,6 +2407,16 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       </div>
     </section>
     ''' if breakout_inversion_items else ''}
+
+    {f'''
+    <section class="section">
+      <h2>勢い確認</h2>
+      <div class="panel">
+        <p class="muted">report-only / human decides manually の補助確認です。ブレイク後の勢いだけを見ます。</p>
+        <div class="checklist">{momentum_confirmation_html}</div>
+      </div>
+    </section>
+    ''' if momentum_confirmation_items else ''}
 
     <section class="section">
       <h2>大転換チャンス確認</h2>

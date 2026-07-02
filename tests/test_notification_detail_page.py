@@ -162,6 +162,23 @@ def _sample_breakout_inversion_payload() -> dict[str, object]:
     return payload
 
 
+def _sample_momentum_payload() -> dict[str, object]:
+    payload = _sample_breakout_inversion_payload()
+    payload["momentum_confirmation_flags"] = [
+        "upside_momentum_confirmed",
+        "upside_ema_supportive",
+        "upside_rsi_has_room",
+        "upside_volume_confirmed",
+        "short_countertrend_risk",
+        "downside_momentum_confirmed",
+        "downside_ema_supportive",
+        "downside_rsi_has_room",
+        "downside_volume_confirmed",
+        "long_countertrend_risk",
+    ]
+    return payload
+
+
 def _sample_marker_overlap_payload() -> dict[str, object]:
     payload = _sample_detail_payload()
     payload["long_setup"] = {
@@ -725,6 +742,24 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("ロング根拠は弱まりつつあります", html)
         self.assertIn("15分足で下に維持できるか確認", html)
         self.assertIn("human decides manually", html)
+        self.assertNotIn("FORMAL_GO", section_html)
+        self.assertNotIn("automatic order allowed", section_html)
+        self.assertNotIn("send_email", section_html)
+        self.assertNotIn("private/account/order", section_html)
+
+    def test_build_notification_detail_html_renders_momentum_confirmation_section(self) -> None:
+        html = build_notification_detail_html(_sample_momentum_payload())
+        match = re.search(r'<section class="section">\s*<h2>勢い確認</h2>(.*?)</section>', html, re.S)
+        self.assertIsNotNone(match)
+        section_html = match.group(1) if match else ""
+
+        self.assertIn("勢い確認", html)
+        self.assertIn("上抜け後の勢い確認", html)
+        self.assertIn("ショート方向は危険", html)
+        self.assertIn("下抜け後の勢い確認", html)
+        self.assertIn("ロング方向は危険", html)
+        self.assertIn("report-only", section_html)
+        self.assertIn("human decides manually", section_html)
         self.assertNotIn("FORMAL_GO", section_html)
         self.assertNotIn("automatic order allowed", section_html)
         self.assertNotIn("send_email", section_html)

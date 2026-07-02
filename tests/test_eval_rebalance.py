@@ -251,12 +251,12 @@ class EvalRebalanceTest(unittest.TestCase):
     def test_breakout_up_marks_upside_follow_and_short_invalidation_watch(self) -> None:
         base_inputs = {
             "market_regime": "downtrend",
-            "ema_alignment_4h": "bearish",
-            "ema20_slope_4h": "down",
+            "ema_alignment_4h": "bullish",
+            "ema20_slope_4h": "up",
             "structure_4h": "lh_ll",
             "structure_1h": "lh_ll",
             "price": 100.0,
-            "ema50_4h": 105.0,
+            "ema50_4h": 95.0,
             "rsi_15m": 48.0,
             "volume_ratio": 1.30,
             "atr_ratio": 1.0,
@@ -275,6 +275,13 @@ class EvalRebalanceTest(unittest.TestCase):
         result = compute_scores(base_inputs, self.cfg)
 
         self.assertGreaterEqual(result["short_display_score"], result["long_display_score"])
+        self.assertIn("upside_momentum_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("upside_ema_supportive", result["momentum_confirmation_flags"])
+        self.assertIn("upside_rsi_has_room", result["momentum_confirmation_flags"])
+        self.assertIn("upside_volume_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("upside_market_map_flip", result["momentum_confirmation_flags"])
+        self.assertIn("short_countertrend_risk", result["momentum_confirmation_flags"])
+        self.assertIn("short_countertrend_risk", result["warning_flags"])
         self.assertIn("upside_breakout_follow_watch", result["breakout_inversion_flags"])
         self.assertIn("short_invalidation_watch", result["breakout_inversion_flags"])
         self.assertIn("missed_upside_breakout_watch", result["breakout_inversion_flags"])
@@ -283,12 +290,12 @@ class EvalRebalanceTest(unittest.TestCase):
     def test_breakout_down_marks_downside_follow_and_long_invalidation_watch(self) -> None:
         base_inputs = {
             "market_regime": "uptrend",
-            "ema_alignment_4h": "bullish",
-            "ema20_slope_4h": "up",
+            "ema_alignment_4h": "bearish",
+            "ema20_slope_4h": "down",
             "structure_4h": "hh_hl",
             "structure_1h": "hh_hl",
             "price": 100.0,
-            "ema50_4h": 95.0,
+            "ema50_4h": 105.0,
             "rsi_15m": 52.0,
             "volume_ratio": 1.30,
             "atr_ratio": 1.0,
@@ -307,10 +314,76 @@ class EvalRebalanceTest(unittest.TestCase):
         result = compute_scores(base_inputs, self.cfg)
 
         self.assertGreaterEqual(result["long_display_score"], result["short_display_score"])
+        self.assertIn("downside_momentum_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("downside_ema_supportive", result["momentum_confirmation_flags"])
+        self.assertIn("downside_rsi_has_room", result["momentum_confirmation_flags"])
+        self.assertIn("downside_volume_confirmed", result["momentum_confirmation_flags"])
+        self.assertIn("downside_market_map_flip", result["momentum_confirmation_flags"])
+        self.assertIn("long_countertrend_risk", result["momentum_confirmation_flags"])
+        self.assertIn("long_countertrend_risk", result["warning_flags"])
         self.assertIn("downside_breakdown_follow_watch", result["breakout_inversion_flags"])
         self.assertIn("long_invalidation_watch", result["breakout_inversion_flags"])
         self.assertIn("missed_downside_breakdown_watch", result["breakout_inversion_flags"])
         self.assertNotIn("FORMAL_GO", str(result))
+
+    def test_weak_momentum_does_not_confirm_upside_or_downside(self) -> None:
+        upside = compute_scores(
+            {
+                "market_regime": "uptrend",
+                "ema_alignment_4h": "bullish",
+                "ema20_slope_4h": "up",
+                "structure_4h": "hh_hl",
+                "structure_1h": "hh_hl",
+                "price": 100.0,
+                "ema50_4h": 95.0,
+                "rsi_15m": 78.0,
+                "volume_ratio": 1.0,
+                "atr_ratio": 1.0,
+                "funding_rate": 0.0,
+                "rr_long": 1.5,
+                "rr_short": 1.5,
+                "near_support": False,
+                "near_resistance": False,
+                "breakout_up": True,
+                "breakout_down": False,
+                "in_range_center": False,
+                "transition_direction": "up",
+                "signals_15m": "long",
+                "market_map": {"flags": []},
+            },
+            self.cfg,
+        )
+        downside = compute_scores(
+            {
+                "market_regime": "downtrend",
+                "ema_alignment_4h": "bearish",
+                "ema20_slope_4h": "down",
+                "structure_4h": "lh_ll",
+                "structure_1h": "lh_ll",
+                "price": 100.0,
+                "ema50_4h": 105.0,
+                "rsi_15m": 20.0,
+                "volume_ratio": 1.0,
+                "atr_ratio": 1.0,
+                "funding_rate": 0.0,
+                "rr_long": 1.5,
+                "rr_short": 1.5,
+                "near_support": False,
+                "near_resistance": False,
+                "breakout_up": False,
+                "breakout_down": True,
+                "in_range_center": False,
+                "transition_direction": "down",
+                "signals_15m": "short",
+                "market_map": {"flags": []},
+            },
+            self.cfg,
+        )
+
+        self.assertNotIn("upside_momentum_confirmed", upside["momentum_confirmation_flags"])
+        self.assertNotIn("downside_momentum_confirmed", downside["momentum_confirmation_flags"])
+        self.assertNotIn("short_countertrend_risk", upside["warning_flags"])
+        self.assertNotIn("long_countertrend_risk", downside["warning_flags"])
 
     def test_execution_precision_downgrades_ready_short_at_major_support(self) -> None:
         setup = {"status": "ready", "status_reason_code": "inside_entry_zone_with_trigger", "blocking_flags": []}

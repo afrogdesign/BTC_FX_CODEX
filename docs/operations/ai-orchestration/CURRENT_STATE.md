@@ -63,6 +63,8 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - No restart / launchd action is required for the completed deployment.
 - notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
 - post-deployment observation surfaced a readability issue in the public detail page, and a bounded UI readability pass was applied to human-facing labels and chart marker spacing.
+- breakout / inversion zones now have a report-only momentum confirmation layer for continuation / counter-bias risk visibility.
+- MACD is not currently integrated in the live data pipeline; any MACD work needs a separate scoped task.
 
 ## Current operational blocker
 

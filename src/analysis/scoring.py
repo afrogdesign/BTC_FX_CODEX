@@ -298,6 +298,67 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         cfg.SHORT_LONG_DIFF_THRESHOLD,
     )
 
+    momentum_confirmation_flags: list[str] = []
+    upside_ema_supportive = ema_alignment == "bullish" or ema20_slope == "up" or price > ema50_4h
+    upside_rsi_has_room = 48.0 <= rsi_15m <= 72.0
+    upside_volume_confirmed = volume_ratio >= cfg.TRIGGER_VOLUME_RATIO
+    upside_market_map_flip = bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)
+    downside_ema_supportive = ema_alignment == "bearish" or ema20_slope == "down" or price < ema50_4h
+    downside_rsi_has_room = 28.0 <= rsi_15m <= 52.0
+    downside_volume_confirmed = volume_ratio >= cfg.TRIGGER_VOLUME_RATIO
+    downside_market_map_flip = bool({"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_map_flags)
+
+    upside_support_count = sum(
+        1
+        for present in (
+            upside_ema_supportive,
+            upside_rsi_has_room,
+            upside_volume_confirmed,
+            upside_market_map_flip,
+        )
+        if present
+    )
+    downside_support_count = sum(
+        1
+        for present in (
+            downside_ema_supportive,
+            downside_rsi_has_room,
+            downside_volume_confirmed,
+            downside_market_map_flip,
+        )
+        if present
+    )
+
+    if breakout_up:
+        if upside_ema_supportive:
+            momentum_confirmation_flags.append("upside_ema_supportive")
+        if upside_rsi_has_room:
+            momentum_confirmation_flags.append("upside_rsi_has_room")
+        if upside_volume_confirmed:
+            momentum_confirmation_flags.append("upside_volume_confirmed")
+        if upside_market_map_flip:
+            momentum_confirmation_flags.append("upside_market_map_flip")
+        if upside_support_count >= 2:
+            momentum_confirmation_flags.append("upside_momentum_confirmed")
+            if bias == "short" or short_display >= long_display - 5:
+                momentum_confirmation_flags.append("short_countertrend_risk")
+                warning_flags.append("short_countertrend_risk")
+
+    if breakout_down:
+        if downside_ema_supportive:
+            momentum_confirmation_flags.append("downside_ema_supportive")
+        if downside_rsi_has_room:
+            momentum_confirmation_flags.append("downside_rsi_has_room")
+        if downside_volume_confirmed:
+            momentum_confirmation_flags.append("downside_volume_confirmed")
+        if downside_market_map_flip:
+            momentum_confirmation_flags.append("downside_market_map_flip")
+        if downside_support_count >= 2:
+            momentum_confirmation_flags.append("downside_momentum_confirmed")
+            if bias == "long" or long_display >= short_display - 5:
+                momentum_confirmation_flags.append("long_countertrend_risk")
+                warning_flags.append("long_countertrend_risk")
+
     upside_breakout_confirmation = breakout_up and (
         bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)
         or (near_resistance and volume_ratio >= cfg.TRIGGER_VOLUME_RATIO)
@@ -311,10 +372,20 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         breakout_inversion_flags.append("short_invalidation_watch")
         if short_display >= long_display or short_raw >= long_raw:
             breakout_inversion_flags.append("missed_upside_breakout_watch")
+    if "upside_momentum_confirmed" in momentum_confirmation_flags:
+        breakout_inversion_flags.append("upside_breakout_follow_watch")
+        if bias == "short" or short_display >= long_display - 5:
+            breakout_inversion_flags.append("short_invalidation_watch")
+            breakout_inversion_flags.append("missed_upside_breakout_watch")
     if downside_breakdown_confirmation:
         breakout_inversion_flags.append("downside_breakdown_follow_watch")
         breakout_inversion_flags.append("long_invalidation_watch")
         if long_display >= short_display or long_raw >= short_raw:
+            breakout_inversion_flags.append("missed_downside_breakdown_watch")
+    if "downside_momentum_confirmed" in momentum_confirmation_flags:
+        breakout_inversion_flags.append("downside_breakdown_follow_watch")
+        if bias == "long" or long_display >= short_display - 5:
+            breakout_inversion_flags.append("long_invalidation_watch")
             breakout_inversion_flags.append("missed_downside_breakdown_watch")
 
     selected_factors = long_factors if bias != "short" else short_factors
@@ -395,6 +466,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         "no_trade_flags": sorted(set(no_trade_flags)),
         "warning_flags": sorted(set(warning_flags)),
         "breakout_inversion_flags": sorted(set(breakout_inversion_flags)),
+        "momentum_confirmation_flags": sorted(set(momentum_confirmation_flags)),
         "direction_score_shadow": _bucket_display(selected_direction_shadow),
         "activity_score_shadow": _bucket_display(selected_activity_shadow),
         "entry_quality_score_shadow": _bucket_display(selected_entry_shadow),

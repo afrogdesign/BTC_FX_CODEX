@@ -264,7 +264,7 @@ def refine_execution_precision(
             flags.add("short_invalidation_watch")
             flags.add("short_invalidated_by_up_break")
             action = "wait_only"
-            _add_reason("上抜けが出ているため、ショート根拠は弱まりました。15分足で上方向の維持を確認します")
+            _add_reason("上抜けと勢い確認があり、ショートは追わず15分足維持を確認")
         if downward_break_evidence:
             flags.add("downside_breakdown_follow_watch")
             flags.add("breakout_follow_candidate")
@@ -281,7 +281,7 @@ def refine_execution_precision(
             flags.add("long_invalidation_watch")
             flags.add("long_invalidated_by_down_break")
             action = "wait_only"
-            _add_reason("下抜けが出ているため、ロング根拠は弱まりました。15分足で下方向の維持を確認します")
+            _add_reason("下抜けと勢い確認があり、ロングは追わず15分足維持を確認")
         if upward_break_evidence:
             flags.add("upside_breakout_follow_watch")
             flags.add("breakout_follow_candidate")
