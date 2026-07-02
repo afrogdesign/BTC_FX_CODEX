@@ -151,3 +151,4 @@ This document is planning only. It does not access the runtime repo, does not re
 - restart/launchd/rollback/mail sending: not performed
 - deployment state: complete
 - no secrets/private data were recorded
+- version label fix result: follow-up required for stale display labels only; no notification sending behavior change

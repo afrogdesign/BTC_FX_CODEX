@@ -61,6 +61,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - diagnostic and post-evaluation remain report-only support.
 - major turn / turning point diagnostics do not authorize manual or automatic entry.
 - No restart / launchd action is required for the completed deployment.
+- notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
 
 ## Current operational blocker
 

@@ -46,6 +46,8 @@ _SIGNAL_LABELS = {
     "wait": "様子見",
 }
 
+CURRENT_MANUAL_SUPPORT_HEADER = "Ver04-v1 手動確認サポート"
+
 
 def _format_price(value: Any) -> str:
     try:
@@ -2269,7 +2271,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     </section>
 
     <section class="section">
-      <h2>Ver03-v4 手動確認サポート</h2>
+      <h2>{CURRENT_MANUAL_SUPPORT_HEADER}</h2>
       <div class="panel">
         <p>この公開HTMLレポートは現在の手動取引判断のmain UI。</p>
         <p>通知メールは入口。</p>

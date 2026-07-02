@@ -1,17 +1,22 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
-- mode: `CHATGPT_ONLY`
+- current_work_id: `BTCFX-20260702-VER04-V1-NOTIFICATION-VERSION-LABEL-FIX-DETAIL-PAGE`
+- mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Ver04-v1 の反映済み runtime を post-deployment observation として監視し、notification sending behavior を変えずに reflected state を確認する。
+Ver04-v1 の通知 subject/header 表示ラベルを修正し、notification sending behavior を変えずに Ver04-v1 表示へ揃える。
 
-No immediate implementation is required unless observation finds an issue.
+Next normal notification cycle should confirm subject/header labels show Ver04-v1.
 
 ## Product backlog next candidate
 
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+
+## Completed history
+
+- Ver04-v1 runtime deployment complete
+- blocked version-label fix attempt requiring detail-page scope expansion
 
 ## Hard boundary
 
@@ -32,4 +37,4 @@ No immediate implementation is required unless observation finds an issue.
 
 ## Resume rule
 
-If the user asks to resume implementation after observation, the next implementation candidate is local MEXC actual trade importer.
+After this fix, the next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`.

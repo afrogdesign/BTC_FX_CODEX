@@ -13,7 +13,11 @@ from src.presentation.sanitize import (
 )
 
 
-VER03_V4_EMAIL_SUBJECT_PREFIX = "[BTCFX Ver03-v4]"
+CURRENT_PRODUCT_VERSION_LABEL = "Ver04-v1"
+CURRENT_EMAIL_SUBJECT_PREFIX = f"[BTCFX {CURRENT_PRODUCT_VERSION_LABEL}]"
+VER03_V4_EMAIL_SUBJECT_PREFIX = CURRENT_EMAIL_SUBJECT_PREFIX
+_LEGACY_PRODUCT_VERSION_PATTERN = re.compile(r"^ver0(?:2|3)", re.IGNORECASE)
+_ANY_VERSION_PATTERN = re.compile(r"^ver\d", re.IGNORECASE)
 
 
 def _format_price(value: Any) -> str:
@@ -252,13 +256,31 @@ def _active_subject_detail(notification_context: dict[str, Any]) -> str:
     return str(reasons[0])
 
 
-def _apply_ver03_v4_subject_prefix(subject: str) -> str:
+def _normalize_product_version_label(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized or _LEGACY_PRODUCT_VERSION_PATTERN.match(normalized):
+        return CURRENT_PRODUCT_VERSION_LABEL
+    return normalized
+
+
+def _is_version_like_label(value: Any) -> bool:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return False
+    return bool(_ANY_VERSION_PATTERN.match(normalized))
+
+
+def _apply_current_email_subject_prefix(subject: str) -> str:
     normalized = str(subject or "").strip()
-    if normalized.startswith(VER03_V4_EMAIL_SUBJECT_PREFIX):
+    if normalized.startswith(CURRENT_EMAIL_SUBJECT_PREFIX):
         return normalized
     if not normalized:
-        return VER03_V4_EMAIL_SUBJECT_PREFIX
-    return f"{VER03_V4_EMAIL_SUBJECT_PREFIX} {normalized}"
+        return CURRENT_EMAIL_SUBJECT_PREFIX
+    return f"{CURRENT_EMAIL_SUBJECT_PREFIX} {normalized}"
+
+
+def _apply_ver03_v4_subject_prefix(subject: str) -> str:
+    return _apply_current_email_subject_prefix(subject)
 
 
 def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
@@ -1218,12 +1240,10 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
     notification_context = build_notification_context(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
-    label = str(result.get("system_label", "")).strip()
+    label = _normalize_product_version_label(result.get("system_label", ""))
     mode_label = str(result.get("system_mode_label", "")).strip()
-    labels: list[str] = []
-    if label:
-        labels.append(f"[{label}]")
-    if mode_label:
+    labels: list[str] = [f"[{label}]"]
+    if mode_label and not _is_version_like_label(mode_label):
         labels.append(f"[{mode_label}]")
     suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
@@ -1254,10 +1274,10 @@ def build_summary_subject(result: dict[str, Any]) -> str:
             f"{rank_emoji} [{rank_label}] "
             f"{active_label} / 実弾不可・行動計画 | {active_detail} "
             f"【BTC:{price_text}】 {jst_ts}{suffix}"
-        ).strip()
+    ).strip()
     if result.get("ai_advice") is None:
         subject = f"[機械判定のみ] {subject}"
-    return _apply_ver03_v4_subject_prefix(subject)
+    return _apply_current_email_subject_prefix(subject)
 
 
 def build_summary_body(

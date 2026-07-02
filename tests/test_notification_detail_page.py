@@ -19,6 +19,7 @@ if str(BASE_DIR) not in sys.path:
 
 from config import load_config
 from main import run_cycle
+from src.ai.summary import build_summary_subject
 from src.data.exchange_fetcher import MarketStructureSnapshot
 from src.notification.detail_page import (
     build_notification_detail_html,
@@ -59,11 +60,12 @@ def _sample_df(length: int = 260, *, trend: float = 1.0) -> pd.DataFrame:
 
 
 def _sample_detail_payload() -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "signal_id": "20260331_010500",
         "timestamp_jst": "2026-03-31T01:05:00+09:00",
-        "summary_subject": "下方向バイアス / 上側流動性回収待ち",
-        "system_label": "Ver02.3v3-OBS",
+        "summary_subject": "",
+        "system_label": "Ver02.6-v2",
+        "system_mode_label": "CLI",
         "notification_kind": "main",
         "signal_tier": "normal",
         "bias": "short",
@@ -132,6 +134,8 @@ def _sample_detail_payload() -> dict[str, object]:
             ],
         },
     }
+    payload["summary_subject"] = build_summary_subject(payload)
+    return payload
 
 
 def _major_turning_point_diagnostic_payload() -> dict[str, object]:
@@ -398,7 +402,10 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("11:45", html)
         self.assertNotIn("AI補足の読み解き", html)
         self.assertNotIn("&lt;強い下方向&gt;", html)
-        self.assertIn("Ver03-v4 手動確認サポート", html)
+        self.assertIn("Ver04-v1 手動確認サポート", html)
+        self.assertNotIn("Ver03-v4 手動確認サポート", html)
+        self.assertNotIn("Ver02.6-v2", html)
+        self.assertNotIn("[BTCFX Ver03-v4]", html)
         self.assertIn("この公開HTMLレポートは現在の手動取引判断のmain UI。", html)
         self.assertIn("通知メールは入口。", html)
         self.assertIn("local dashboard / app surface は確認と将来の承認・自動化の土台。", html)
@@ -551,7 +558,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("手動アクション確認", attention_html)
         self.assertIn("Entry mode", attention_html)
         self.assertIn("Safety", attention_html)
-        self.assertIn("Ver03-v4 手動確認サポート", attention_html)
+        self.assertIn("Ver04-v1 手動確認サポート", attention_html)
+        self.assertNotIn("Ver03-v4 手動確認サポート", attention_html)
         self.assertIn("Intraperiod JSON 契約", attention_html)
         self.assertIn("build-active-plan-intraperiod-review --stdout-json", attention_html)
         self.assertIn("active_plan_intraperiod_review.v1", attention_html)
@@ -800,11 +808,23 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("safe_config_schema_audit.v1", html)
         self.assertNotIn("Integrated Evidence Overview", html)
         self.assertNotIn("operator_hint_status", html)
-        self.assertIn("Ver03-v4 手動確認サポート", html)
+        self.assertIn("Ver04-v1 手動確認サポート", html)
+        self.assertNotIn("Ver03-v4 手動確認サポート", html)
         self.assertNotIn("OPENAI_API_KEY", html)
         self.assertNotIn("SMTP_PASSWORD", html)
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_build_notification_detail_html_uses_ver04_v1_subject_and_header(self) -> None:
+        payload = _sample_detail_payload()
+
+        html = build_notification_detail_html(payload)
+
+        self.assertIn("[BTCFX Ver04-v1]", html)
+        self.assertIn("Ver04-v1 手動確認サポート", html)
+        self.assertNotIn("Ver02.6-v2", html)
+        self.assertNotIn("[BTCFX Ver03-v4]", html)
+        self.assertNotIn("Ver03-v4 手動確認サポート", html)
 
     def test_build_notification_detail_html_shows_runtime_startup_status_section(self) -> None:
         payload = _sample_detail_payload()

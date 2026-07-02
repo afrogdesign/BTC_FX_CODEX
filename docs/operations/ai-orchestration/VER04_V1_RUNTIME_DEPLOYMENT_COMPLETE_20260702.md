@@ -29,3 +29,8 @@ This note records that the Ver04-v1 runtime deployment is complete and active at
 
 Keep the reflected Ver04-v1 runtime as-is and monitor the next normal notification cycle without changing notification sending behavior.
 
+## Follow-up display note
+
+- the first observed normal notification after deployment exposed stale display labels in the subject/header
+- follow-up scope is display labels only
+- notification sending mechanics remain unchanged

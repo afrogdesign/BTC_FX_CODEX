@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.ai.summary import build_summary_body  # noqa: E402
+from src.ai.summary import CURRENT_PRODUCT_VERSION_LABEL, build_summary_body, build_summary_subject  # noqa: E402
 from src.notification.detail_page import build_notification_detail_html  # noqa: E402
 
 
@@ -29,6 +29,11 @@ _FORBIDDEN_PATTERNS = (
     "send_email",
     "<script",
     "fetch(",
+)
+_LEGACY_VERSION_PATTERNS = (
+    "Ver02.6-v2",
+    "[BTCFX Ver03-v4]",
+    "Ver03-v4 手動確認サポート",
 )
 
 
@@ -57,7 +62,7 @@ def _synthetic_result_payload(post_eval_payload: dict[str, Any] | None = None) -
         "timestamp_jst": "2026-03-15T06:05:00+09:00",
         "signal_id": "20260315_060500",
         "summary_subject": "notification no-send smoke",
-        "system_label": "Ver02.3",
+        "system_label": "Ver02.6-v2",
         "system_mode_label": "CLI",
         "notification_kind": "attention",
         "bias": "short",
@@ -88,8 +93,14 @@ def _find_forbidden_tokens(text: str) -> list[str]:
     return [token for token in _FORBIDDEN_PATTERNS if token in lowered]
 
 
+def _find_legacy_version_tokens(text: str) -> list[str]:
+    return [token for token in _LEGACY_VERSION_PATTERNS if token in text]
+
+
 def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = _synthetic_result_payload(result_payload)
+    summary_subject = build_summary_subject(payload)
+    payload["summary_subject"] = summary_subject
     summary_body, _provider = build_summary_body(
         provider="api",
         api_key="",
@@ -101,10 +112,12 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         result_payload=payload,
     )
     detail_html = build_notification_detail_html(payload, base_dir=BASE_DIR)
-    combined = "\n".join([summary_body, detail_html])
+    combined = "\n".join([summary_subject, summary_body, detail_html])
     leaks = _find_forbidden_tokens(combined)
+    legacy_version_tokens = _find_legacy_version_tokens(combined)
     sensitive_leak_detected = bool(leaks)
-    status = "fail" if sensitive_leak_detected else "pass"
+    legacy_version_label_detected = bool(legacy_version_tokens)
+    status = "fail" if sensitive_leak_detected or legacy_version_label_detected else "pass"
     return {
         "status": status,
         "mode": "no_send_render_only",
@@ -113,8 +126,12 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         "not_formal_go": True,
         "no_automatic_order": True,
         "human_decides_manually": True,
+        "summary_subject_rendered": bool(summary_subject),
         "summary_body_rendered": bool(summary_body),
         "detail_html_rendered": bool(detail_html),
+        "current_version_label": CURRENT_PRODUCT_VERSION_LABEL,
+        "legacy_version_label_detected": legacy_version_label_detected,
+        "legacy_version_tokens": legacy_version_tokens,
         "post_eval_recommendations_present": True,
         "sensitive_leak_detected": sensitive_leak_detected,
         "forbidden_tokens": leaks,
