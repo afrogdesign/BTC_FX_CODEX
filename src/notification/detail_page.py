@@ -1249,6 +1249,145 @@ def _ohlcv_source_coverage_summary_html(
     """
 
 
+def _post_eval_recommendation_payload(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    malformed_seen = False
+    for container in (
+        result,
+        notification_context or {},
+        display_context or {},
+        result.get("app_surface_validation") if isinstance(result.get("app_surface_validation"), dict) else {},
+        result.get("app_surface_validation_data") if isinstance(result.get("app_surface_validation_data"), dict) else {},
+    ):
+        if not isinstance(container, dict):
+            continue
+        for key in ("post_eval_recommendations", "post_eval_recommendation_summary"):
+            value = container.get(key)
+            if value is None:
+                continue
+            if isinstance(value, dict):
+                return value
+            malformed_seen = True
+    if malformed_seen:
+        return {"_malformed": True}
+    return None
+
+
+def _post_eval_recommendation_status_html(
+    result: dict[str, Any],
+    notification_context: dict[str, Any] | None = None,
+    display_context: dict[str, Any] | None = None,
+) -> str:
+    payload = _post_eval_recommendation_payload(result, notification_context, display_context)
+    if payload is None:
+        return ""
+    if not isinstance(payload, dict) or payload.get("_malformed"):
+        return """
+    <section class="section">
+      <h2>Post-Eval Recommendation Status</h2>
+      <div class="panel">
+        <p>post-eval recommendation payload is unavailable or malformed.</p>
+        <p class="muted">report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually</p>
+      </div>
+    </section>
+    """
+
+    def _scrub_sensitive_text(value: Any) -> str:
+        text = str(value or "")
+        patterns = (
+            r"uid_[A-Za-z0-9][A-Za-z0-9_-]*",
+            r"\baccount[-_][A-Za-z0-9][A-Za-z0-9_-]*\b",
+            r"OPENAI_API_KEY",
+            r"SMTP_PASSWORD",
+            r"automatic_order_allowed=true",
+            r"send_email",
+            r"Gmail",
+            r"private/order",
+            r"smtp",
+        )
+        for pattern in patterns:
+            text = re.sub(pattern, "[redacted]", text, flags=re.IGNORECASE)
+        return text
+
+    def _value(*keys: str, default: Any = "未記録") -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, (list, tuple)):
+                if not value:
+                    return "none"
+                return ", ".join(_scrub_sensitive_text(item) for item in value)
+            if isinstance(value, dict):
+                if not value:
+                    return "none"
+                order = {
+                    "priority_counts": ("high", "medium", "low", "unknown"),
+                    "confidence_counts": ("actual_backed", "proxy_backed", "insufficient", "unknown"),
+                }.get(key, ())
+                formatted_items: list[str] = []
+                seen: set[str] = set()
+                if order:
+                    for ordered_key in order:
+                        if ordered_key in value:
+                            formatted_items.append(f"{ordered_key}={_scrub_sensitive_text(value[ordered_key])}")
+                            seen.add(ordered_key)
+                for dict_key in sorted(k for k in value.keys() if k not in seen):
+                    formatted_items.append(f"{dict_key}={_scrub_sensitive_text(value[dict_key])}")
+                items = ", ".join(formatted_items)
+                return items
+            text = _scrub_sensitive_text(value).strip()
+            if text:
+                return text
+        if isinstance(default, bool):
+            return str(default).lower()
+        if isinstance(default, (list, tuple)):
+            return "none" if not default else ", ".join(str(item) for item in default)
+        return _scrub_sensitive_text(default)
+
+    schema_version = _value("schema_version", default="post_eval_recommendations.v1")
+    report_date = _value("report_date")
+    candidate_count = _value("candidate_count", default="0")
+    top_recommendation_codes = _value("top_recommendation_codes", default="none")
+    priority_counts = _value("priority_counts", default="none")
+    confidence_counts = _value("confidence_counts", default="none")
+    report_path = _value("report_path")
+    output_csv_path = _value("output_csv_path")
+    safety_boundary = _value("safety_boundary")
+    note = _value("note", default="")
+    human_approval_required = _value("human_approval_required", "required_human_approval", default="true")
+
+    return f"""
+    <section class="section">
+      <h2>Post-Eval Recommendation Status</h2>
+      <div class="panel">
+        <p>report-only recommendation status</p>
+        <p><strong>human approval is required before production wording/config/threshold/gate/runtime changes.</strong></p>
+        <p>does not authorize manual or automatic entry</p>
+        <p>does not change notification sending behavior</p>
+        <ul>
+          <li><strong>schema_version:</strong> {html.escape(schema_version)}</li>
+          <li><strong>report_date:</strong> {html.escape(report_date)}</li>
+          <li><strong>candidate_count:</strong> {html.escape(candidate_count)}</li>
+          <li><strong>top_recommendation_codes:</strong> {html.escape(top_recommendation_codes)}</li>
+          <li><strong>priority_counts:</strong> {html.escape(priority_counts)}</li>
+          <li><strong>confidence_counts:</strong> {html.escape(confidence_counts)}</li>
+          <li><strong>report_path:</strong> {html.escape(report_path)}</li>
+          <li><strong>output_csv_path:</strong> {html.escape(output_csv_path)}</li>
+          <li><strong>safety_boundary:</strong> {html.escape(safety_boundary)}</li>
+          <li><strong>human_approval_required:</strong> {html.escape(human_approval_required)}</li>
+        </ul>
+        {f'<p class="muted">{html.escape(note)}</p>' if str(note).strip() else ''}
+      </div>
+    </section>
+    """
+
+
 def _runtime_startup_status_path(base_dir: Path) -> Path:
     return base_dir / "logs" / "runtime" / "startup_status.json"
 
@@ -1436,6 +1575,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
     evidence_quality_summary_html = _evidence_quality_summary_html(result, notification_context, display_context)
     ohlcv_source_coverage_summary_html = _ohlcv_source_coverage_summary_html(result, notification_context, display_context)
+    post_eval_recommendation_status_html = _post_eval_recommendation_status_html(result, notification_context, display_context)
     major_turning_point_diagnostic_items, major_turning_point_diagnostic_rows, major_turning_point_diagnostic_rows_html = _major_turning_point_diagnostic_items(
         result,
         notification_context,
@@ -2146,6 +2286,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         {integrated_evidence_overview_html}
         {evidence_quality_summary_html}
         {ohlcv_source_coverage_summary_html}
+        {post_eval_recommendation_status_html}
         {runtime_startup_status_html}
         <ul>{manual_support_reference_list_html}</ul>
       </div>

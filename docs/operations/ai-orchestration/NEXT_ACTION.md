@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-RECOMMENDATION-ENGINE`
+- current_work_id: `BTCFX-20260702-PUBLIC-HTML-POST-EVAL-STATUS`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MEXC importer/linker/biweekly ground truth は completed history とし、existing daily proxy evidence と actual calibration evidence から report-only の ranked post-eval recommendation candidates を作る。
+MEXC importer/linker/biweekly ground truth/recommendation engine は completed history とし、public HTML で post-eval recommendation status を report-only に反映する。
 
-API integration はまだやらない。raw export は local only で扱い、normalized CSV と review-only report を作る。
+API integration はまだやらない。raw export は local only で扱い、表示用の HTML surface を整える。
 
 ## Product objective reminder
 
@@ -41,6 +41,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `tests/test_manual_trade_signal_linker.py`
 - `tests/test_manual_trade_ground_truth_report.py`
 - `tests/test_post_eval_recommendation_engine.py`
+- `tests/test_notification_detail_page.py`
 - any narrow support docs needed for the MEXC import schema / normalization contract
 
 ## Do not
@@ -63,7 +64,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `pwd -P`
 - `git status --short --branch`
 - `git diff --check`
-- targeted unit tests for importer / linker / ground truth / post-eval recommendation path
+- targeted unit tests for importer / linker / ground truth / recommendation engine / public HTML surface path
 - `git diff --name-only`
 - `git status --short --branch`
 
@@ -74,7 +75,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-POST-EVAL-RECOMMENDATION-ENGINE: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-PUBLIC-HTML-POST-EVAL-STATUS: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - required source-of-truth docs are missing

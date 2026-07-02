@@ -267,6 +267,26 @@ def _ohlcv_source_coverage_summary_stale_payload() -> dict[str, object]:
     return payload
 
 
+def _post_eval_recommendation_payload() -> dict[str, object]:
+    return {
+        "schema_version": "post_eval_recommendations.v1",
+        "report_date": "20260702",
+        "report_path": "運用資料/reports/post_eval/post_eval_recommendations_20260702.md",
+        "output_csv_path": "logs/csv/post_eval_recommendation_candidates.csv",
+        "candidate_count": 3,
+        "top_recommendation_codes": [
+            "PROXY_TOO_AGGRESSIVE_REVIEW",
+            "SUBJECT_DEFENSIVE_WORDING_REVIEW",
+            "TURNING_BRAKE_REVIEW",
+        ],
+        "priority_counts": {"high": 1, "medium": 1, "low": 1},
+        "confidence_counts": {"actual_backed": 1, "proxy_backed": 2},
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually",
+        "note": 'report-only note with <script>alert("x")</script> and UID-like text uid_1234567890abcdef',
+        "human_approval_required": True,
+    }
+
+
 class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
@@ -1081,6 +1101,76 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertNotIn("<script", html.lower())
         self.assertNotIn("fetch(", html.lower())
+
+    def test_build_notification_detail_html_renders_post_eval_status_from_direct_payload(self) -> None:
+        payload = {
+            **_sample_detail_payload(),
+            "post_eval_recommendations": _post_eval_recommendation_payload(),
+        }
+
+        html = build_notification_detail_html(payload)
+
+        self.assertIn("Post-Eval Recommendation Status", html)
+        self.assertIn("report-only recommendation status", html)
+        self.assertIn("human approval is required before production wording/config/threshold/gate/runtime changes.", html)
+        self.assertIn("does not authorize manual or automatic entry", html)
+        self.assertIn("does not change notification sending behavior", html)
+        self.assertIn("<strong>schema_version:</strong> post_eval_recommendations.v1", html)
+        self.assertIn("<strong>report_date:</strong> 20260702", html)
+        self.assertIn("<strong>candidate_count:</strong> 3", html)
+        self.assertIn(
+            "<strong>top_recommendation_codes:</strong> PROXY_TOO_AGGRESSIVE_REVIEW, SUBJECT_DEFENSIVE_WORDING_REVIEW, TURNING_BRAKE_REVIEW",
+            html,
+        )
+        self.assertIn("<strong>priority_counts:</strong> high=1, medium=1, low=1", html)
+        self.assertIn("<strong>confidence_counts:</strong> actual_backed=1, proxy_backed=2", html)
+        self.assertIn("<strong>report_path:</strong> 運用資料/reports/post_eval/post_eval_recommendations_20260702.md", html)
+        self.assertIn("<strong>output_csv_path:</strong> logs/csv/post_eval_recommendation_candidates.csv", html)
+        self.assertIn(
+            "<strong>safety_boundary:</strong> report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually",
+            html,
+        )
+        self.assertIn("<strong>human_approval_required:</strong> true", html)
+        self.assertIn("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", html)
+        self.assertNotIn("<script", html.lower())
+        self.assertNotIn("fetch(", html.lower())
+        self.assertNotIn("send_email", html)
+        self.assertNotIn("Gmail", html)
+        self.assertNotIn("smtp", html.lower())
+        self.assertNotIn("OPENAI_API_KEY", html)
+        self.assertNotIn("SMTP_PASSWORD", html)
+        self.assertNotIn("private/order", html)
+        self.assertNotIn("automatic_order_allowed=true", html)
+
+    def test_build_notification_detail_html_renders_post_eval_status_from_nested_validation_data(self) -> None:
+        payload = {
+            **_sample_detail_payload(),
+            "app_surface_validation_data": {
+                "post_eval_recommendation_summary": _post_eval_recommendation_payload(),
+            },
+        }
+
+        html = build_notification_detail_html(payload)
+
+        self.assertIn("Post-Eval Recommendation Status", html)
+        self.assertIn("post_eval_recommendations.v1", html)
+        self.assertIn("logs/csv/post_eval_recommendation_candidates.csv", html)
+        self.assertIn("report-only recommendation status", html)
+        self.assertNotIn("uid_1234567890abcdef", html)
+
+    def test_build_notification_detail_html_hides_post_eval_status_when_absent_and_handles_malformed_payload(self) -> None:
+        absent_html = build_notification_detail_html(_sample_detail_payload())
+        malformed_html = build_notification_detail_html(
+            {
+                **_sample_detail_payload(),
+                "post_eval_recommendation_summary": "not-a-dict",
+            }
+        )
+
+        self.assertNotIn("Post-Eval Recommendation Status", absent_html)
+        self.assertIn("post-eval recommendation payload is unavailable or malformed.", malformed_html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually", malformed_html)
+        self.assertNotIn("<script", malformed_html.lower())
 
 
 if __name__ == "__main__":
