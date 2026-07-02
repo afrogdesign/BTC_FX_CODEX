@@ -36,14 +36,19 @@ Automatic trading is later-stage only.
 - ChatGPT: commander, planning, review, scope selection, Codex prompt creation
 - Codex: fixed-scope edit, validation, local commit, compact reporting
 
-## First files
+## Active anchors
 
-1. `START_HERE.md`
-2. `RESUME.md`
-3. `CURRENT_STATE.md`
-4. `NEXT_ACTION.md`
-5. `CONTROL.md`
-6. `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `START_HERE.md`
+- `CURRENT_STATE.md`
+- `NEXT_ACTION.md`
+- `CONTROL.md`
+- `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `MILESTONES.md`
+- `PROMPTS.md`
+- `MINI_CODEX_RULES.md`
+- `PROMPT_PREFLIGHT_CHECKLIST.md`
+- `CHECKPOINT_RUNBOOK.md`
+- `RUNTIME_PULL_HANDOFF.md`
 
 ## Product source-of-truth files
 
@@ -54,15 +59,17 @@ Automatic trading is later-stage only.
 | `../strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md` | final self-improvement loop design |
 | `../strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md` | definition of “manual 15m win” |
 
-## Default next implementation route
+## Current posture and next candidate
 
-Unless the user overrides it, the next implementation route starts with:
+- current operational posture: post-deployment observation
+- product backlog next candidate: `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+- no immediate implementation is required unless observation finds an issue
 
-```text
-BTCFX-20260702-POST-EVAL-ASSET-HEALTH-AUDIT
-```
+## Historical / non-default files
 
-This is a read-only / docs-only audit before implementing evaluator code.
+- `TASK_LEDGER.md` is historical archive / specific lookup only
+- `handoffs/CURRENT_HANDOFF.md` is handoff-only, not default startup
+- older task notes and canonical/runtime/evidence docs are not current source of truth unless explicitly named
 
 ## Default operation
 
@@ -77,16 +84,15 @@ This is a read-only / docs-only audit before implementing evaluator code.
 | File | Role |
 |---|---|
 | `START_HERE.md` | first-read entrypoint |
-| `RESUME.md` | restart protocol and current product guard |
 | `CURRENT_STATE.md` | short current operating state |
 | `NEXT_ACTION.md` | current narrow task frame |
 | `CONTROL.md` | current objective, constraints, validation, next decision |
 | `PRODUCT_IMPLEMENTATION_ROUTE.md` | product route for future AI work |
 | `MILESTONES.md` | durable accepted history |
-| `TASK_LEDGER.md` | work ledger, read only as needed |
 | `REPO_MAP.md` | repo reading map |
 | `PROMPTS.md` | prompt templates |
-| `handoffs/CURRENT_HANDOFF.md` | active handoff anchor |
+| `MINI_CODEX_RULES.md` | bounded Codex operation rules |
+| `PROMPT_PREFLIGHT_CHECKLIST.md` | ChatGPT prompt preflight |
 
 ## Rule
 

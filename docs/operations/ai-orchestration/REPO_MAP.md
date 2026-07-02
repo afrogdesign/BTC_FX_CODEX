@@ -13,7 +13,7 @@
 | MCP primary repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | default read / edit / test / git |
 | Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default; update later by GitHub pull after checkpoint push |
 
-## AI operation anchors
+## Active anchors
 
 | Path | Purpose |
 |---|---|
@@ -22,13 +22,21 @@
 | `docs/operations/ai-orchestration/CURRENT_STATE.md` | Short current operating state |
 | `docs/operations/ai-orchestration/NEXT_ACTION.md` | Current work frame |
 | `docs/operations/ai-orchestration/CONTROL.md` | Current AI operating state |
-| `docs/operations/ai-orchestration/TASK_LEDGER.md` | Work ledger, read only as needed |
-| `docs/operations/ai-orchestration/DECISIONS.md` | Durable decisions |
+| `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md` | Active product route |
+| `docs/operations/ai-orchestration/MILESTONES.md` | Accepted history |
 | `docs/operations/ai-orchestration/PROMPTS.md` | Prompt templates |
 | `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` | Mini Codex operating rules |
+| `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` | Prompt preflight |
 | `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` | Minimal checkpoint push procedure |
 | `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` | Runtime repo pull handoff procedure |
-| `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | Thread handoff |
+
+## Historical / lookup-only docs
+
+| Path | Purpose |
+|---|---|
+| `docs/operations/ai-orchestration/TASK_LEDGER.md` | Historical archive / search-only by default |
+| `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | Handoff-only |
+| `docs/operations/ai-orchestration/` root task notes | Historical notes; do not scan wholesale |
 
 ## Directories to avoid by default
 
@@ -37,6 +45,7 @@
 - generated CSV / report / HTML outputs
 - large generated files under `local/`
 - full `TASK_LEDGER.md`
+- historical task notes under `docs/operations/ai-orchestration/` root unless explicitly named
 
 ## Project source directories
 
@@ -62,3 +71,4 @@
 - do not full-scan the repo unless explicitly asked
 - read only the files named in the current task plus required nearby context
 - normal MCP task should end with local commit or `PUSH: none`, not routine push
+- treat `docs/operations/ai-orchestration/` root as mixed active + historical docs; do not scan it wholesale

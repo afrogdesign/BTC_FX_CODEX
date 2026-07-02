@@ -11,7 +11,7 @@
 
 - runtime execution repo は current editing target ではない。
 - runtime execution repo への反映は、MCP working repo で clean checkpoint branch/push を作ったあとに GitHub pull で行う。
-- ChatGPT は AFROG_MCP_Business を primary repo inspection path として使う。
+- ChatGPT は AFROG_MCP_Business を primary repo inspection path として使う。会話内では `AFROG_MCP` と呼ぶ。
 - GitHub は checkpoint / history / sync 用であり、毎回の review の default read path ではない。
 - Codex は明示指示がない限り MCP working repo だけを編集する。
 - normal Codex task は local edit + local validation + local commit + compact report が基本。
@@ -30,26 +30,43 @@ notification mail を受け取った人間が、
 
 Ver03-v4 は prior baseline / history、Ver04-v1 が active product branch です。
 
-## Fixed low-cost read order
+## Tiered read order
+
+### Tier 0 / always
 
 1. `AGENTS.md`
 2. `docs/operations/ai-orchestration/START_HERE.md`
-3. `docs/operations/ai-orchestration/RESUME.md`
-4. `docs/operations/ai-orchestration/CURRENT_STATE.md`
-5. `docs/operations/ai-orchestration/NEXT_ACTION.md`
-6. `docs/operations/ai-orchestration/CONTROL.md`
-7. `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
-8. `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
-9. `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
-10. `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-11. `docs/operations/ai-orchestration/MILESTONES.md`
-12. `docs/operations/ai-orchestration/PROMPTS.md`
-13. `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` when checkpoint design matters
-14. `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` when runtime pull handoff matters
-15. `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` when handoff context matters
-16. `docs/operations/ai-orchestration/TASK_LEDGER.md` only as needed, latest rows only
-17. `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` when Codex is used
-18. `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` when ChatGPT is preparing a Codex prompt
+
+### Tier 1 / state needed
+
+1. `docs/operations/ai-orchestration/CURRENT_STATE.md`
+2. `docs/operations/ai-orchestration/NEXT_ACTION.md`
+3. `docs/operations/ai-orchestration/CONTROL.md`
+
+### Tier 2 / by task type only
+
+- product route:
+  - `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+  - `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
+  - `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
+  - `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
+- Codex prompt work:
+  - `docs/operations/ai-orchestration/PROMPTS.md`
+  - `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`
+  - `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`
+- checkpoint:
+  - `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md`
+- runtime pull handoff:
+  - `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md`
+- accepted history:
+  - `docs/operations/ai-orchestration/MILESTONES.md`
+- handoff only:
+  - `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
+- specific historical lookup only:
+  - `docs/operations/ai-orchestration/TASK_LEDGER.md` by search / latest rows only
+
+`TASK_LEDGER.md` と `handoffs/CURRENT_HANDOFF.md` は default startup read ではない。
+`docs/operations/ai-orchestration/` 直下の historical task notes は、task で明示されたときだけ読む。
 
 ## Product source-of-truth shortcut
 
@@ -67,6 +84,7 @@ When the task is about product direction, post-evaluation, manual trading suppor
 - generated CSV / report / HTML
 - raw exchange exports under `local/manual_trade_imports/`
 - full `docs/operations/ai-orchestration/TASK_LEDGER.md`
+- historical task notes in `docs/operations/ai-orchestration/` root unless explicitly named
 
 必要な task で明示されたときだけ開くこと。
 
