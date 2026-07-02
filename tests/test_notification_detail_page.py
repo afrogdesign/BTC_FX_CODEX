@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -135,6 +136,46 @@ def _sample_detail_payload() -> dict[str, object]:
         },
     }
     payload["summary_subject"] = build_summary_subject(payload)
+    return payload
+
+
+def _sample_breakout_inversion_payload() -> dict[str, object]:
+    payload = _sample_detail_payload()
+    payload["breakout_inversion_flags"] = [
+        "upside_breakout_follow_watch",
+        "short_invalidation_watch",
+        "missed_upside_breakout_watch",
+        "downside_breakdown_follow_watch",
+        "long_invalidation_watch",
+        "missed_downside_breakdown_watch",
+    ]
+    payload["short_setup"] = {
+        **payload["short_setup"],
+        "execution_precision_flags": ["short_invalidated_by_up_break", "upside_breakout_follow_watch"],
+        "execution_precision_reason": "上抜けが出ているため、ショート根拠は弱まりました。15分足で上方向の維持を確認します",
+    }
+    payload["long_setup"] = {
+        **payload["long_setup"],
+        "execution_precision_flags": ["long_invalidated_by_down_break", "downside_breakdown_follow_watch"],
+        "execution_precision_reason": "下抜けが出ているため、ロング根拠は弱まりました。15分足で下方向の維持を確認します",
+    }
+    return payload
+
+
+def _sample_marker_overlap_payload() -> dict[str, object]:
+    payload = _sample_detail_payload()
+    payload["long_setup"] = {
+        **payload["long_setup"],
+        "stop_loss": 65710.0,
+        "tp1": 65710.8,
+        "tp2": 65711.2,
+    }
+    payload["short_setup"] = {
+        **payload["short_setup"],
+        "stop_loss": 65860.0,
+        "tp1": 65859.7,
+        "tp2": 65859.2,
+    }
     return payload
 
 
@@ -664,6 +705,54 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("send_email", attention_html)
         self.assertNotIn("private/order", attention_html)
         self.assertNotIn("automatic_order_allowed=true", attention_html)
+
+    def test_build_notification_detail_html_renders_breakout_inversion_section(self) -> None:
+        html = build_notification_detail_html(_sample_breakout_inversion_payload())
+        match = re.search(
+            r'<section class="section">\s*<h2>上抜け・下抜けの見落とし確認</h2>(.*?)</section>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(match)
+        section_html = match.group(1) if match else ""
+
+        self.assertIn("上抜け・下抜けの見落とし確認", html)
+        self.assertIn("上抜け追随候補", html)
+        self.assertIn("ショート根拠は弱まりつつあります", html)
+        self.assertIn("15分足で上に維持できるか確認", html)
+        self.assertIn("すぐ下に戻るならダマシ注意", html)
+        self.assertIn("下抜け追随候補", html)
+        self.assertIn("ロング根拠は弱まりつつあります", html)
+        self.assertIn("15分足で下に維持できるか確認", html)
+        self.assertIn("human decides manually", html)
+        self.assertNotIn("FORMAL_GO", section_html)
+        self.assertNotIn("automatic order allowed", section_html)
+        self.assertNotIn("send_email", section_html)
+        self.assertNotIn("private/account/order", section_html)
+
+    def test_build_notification_detail_html_staggers_close_marker_labels(self) -> None:
+        html = build_notification_detail_html(_sample_marker_overlap_payload())
+        long_marker_ys = sorted(
+            float(value)
+            for value in re.findall(
+                r'<text x="[^"]+" y="([0-9.]+)" text-anchor="start" class="marker-label marker-long">',
+                html,
+            )
+        )
+        short_marker_ys = sorted(
+            float(value)
+            for value in re.findall(
+                r'<text x="[^"]+" y="([0-9.]+)" text-anchor="end" class="marker-label marker-short">',
+                html,
+            )
+        )
+
+        self.assertGreaterEqual(len(long_marker_ys), 3)
+        self.assertGreaterEqual(len(short_marker_ys), 3)
+        self.assertGreaterEqual(long_marker_ys[1] - long_marker_ys[0], 17.5)
+        self.assertGreaterEqual(long_marker_ys[2] - long_marker_ys[1], 17.5)
+        self.assertGreaterEqual(short_marker_ys[1] - short_marker_ys[0], 17.5)
+        self.assertGreaterEqual(short_marker_ys[2] - short_marker_ys[1], 17.5)
 
     def test_build_notification_detail_html_renders_operator_triage_summary_from_app_surface_validation_data(self) -> None:
         payload = {

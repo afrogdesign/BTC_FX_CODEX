@@ -415,7 +415,7 @@ def _panel_price_map_svg(
     top = origin_y + 26
     bottom = origin_y + height - 38
     left = 30
-    right = width - 112
+    right = width - 162
     usable_h = max(bottom - top, 1)
     chart_width = right - left
     candles = _trim_candles(candles, panel_mode)
@@ -582,7 +582,7 @@ def _panel_price_map_svg(
             *,
             top_limit: float,
             bottom_limit: float,
-            min_gap: float = 16.0,
+            min_gap: float = 18.0,
         ) -> list[dict[str, Any]]:
             if not specs:
                 return []
@@ -856,6 +856,57 @@ def _major_turning_point_opportunity_items(
         ),
         ("安全境界", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
     ]
+
+
+def _breakout_inversion_items(result: dict[str, Any]) -> list[tuple[str, str]]:
+    flags = {str(flag).strip() for flag in result.get("breakout_inversion_flags", []) if str(flag).strip()}
+    for setup_key in ("short_setup", "long_setup"):
+        setup = result.get(setup_key, {})
+        if isinstance(setup, dict):
+            flags.update(
+                str(flag).strip()
+                for flag in setup.get("execution_precision_flags", [])
+                if str(flag).strip()
+            )
+
+    items: list[tuple[str, str]] = []
+    upside_flags = {
+        "upside_breakout_follow_watch",
+        "short_invalidation_watch",
+        "short_invalidated_by_up_break",
+    }
+    downside_flags = {
+        "downside_breakdown_follow_watch",
+        "long_invalidation_watch",
+        "long_invalidated_by_down_break",
+    }
+    if flags & upside_flags:
+        items.append(
+            (
+                "上抜け追随候補",
+                _sentence_join(
+                    [
+                        "ショート根拠は弱まりつつあります",
+                        "15分足で上に維持できるか確認",
+                        "すぐ下に戻るならダマシ注意",
+                    ]
+                ),
+            )
+        )
+    if flags & downside_flags:
+        items.append(
+            (
+                "下抜け追随候補",
+                _sentence_join(
+                    [
+                        "ロング根拠は弱まりつつあります",
+                        "15分足で下に維持できるか確認",
+                        "すぐ上に戻るならダマシ注意",
+                    ]
+                ),
+            )
+        )
+    return items
 
 
 def _major_turning_point_diagnostic_evidence(
@@ -1723,6 +1774,14 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         "</div>"
         for label, value in major_turning_point_items
     )
+    breakout_inversion_items = _breakout_inversion_items(result)
+    breakout_inversion_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">🧭 <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in breakout_inversion_items
+    )
     major_turning_point_diagnostic_html = (
         '<div class="checklist">'
         + "".join(
@@ -2284,6 +2343,16 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <div class="checklist-note">この確認は、判断ソースを見やすくまとめるだけで、売買ロジックは変更しません。</div>
       </div>
     </section>
+
+    {f'''
+    <section class="section">
+      <h2>上抜け・下抜けの見落とし確認</h2>
+      <div class="panel">
+        <p class="muted">ブレイクが出たあとに、反対側の根拠がまだ残っていないかだけを見ます。</p>
+        <div class="checklist">{breakout_inversion_html}</div>
+      </div>
+    </section>
+    ''' if breakout_inversion_items else ''}
 
     <section class="section">
       <h2>大転換チャンス確認</h2>

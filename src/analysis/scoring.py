@@ -46,6 +46,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     short_factors: dict[str, float] = {}
     no_trade_flags: list[str] = []
     warning_flags: list[str] = []
+    breakout_inversion_flags: list[str] = []
 
     regime = inputs["market_regime"]
     ema_alignment = inputs["ema_alignment_4h"]
@@ -296,6 +297,26 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         cfg.LONG_SHORT_DIFF_THRESHOLD,
         cfg.SHORT_LONG_DIFF_THRESHOLD,
     )
+
+    upside_breakout_confirmation = breakout_up and (
+        bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)
+        or (near_resistance and volume_ratio >= cfg.TRIGGER_VOLUME_RATIO)
+    )
+    downside_breakdown_confirmation = breakout_down and (
+        bool({"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_map_flags)
+        or (near_support and volume_ratio >= cfg.TRIGGER_VOLUME_RATIO)
+    )
+    if upside_breakout_confirmation:
+        breakout_inversion_flags.append("upside_breakout_follow_watch")
+        breakout_inversion_flags.append("short_invalidation_watch")
+        if short_display >= long_display or short_raw >= long_raw:
+            breakout_inversion_flags.append("missed_upside_breakout_watch")
+    if downside_breakdown_confirmation:
+        breakout_inversion_flags.append("downside_breakdown_follow_watch")
+        breakout_inversion_flags.append("long_invalidation_watch")
+        if long_display >= short_display or long_raw >= short_raw:
+            breakout_inversion_flags.append("missed_downside_breakdown_watch")
+
     selected_factors = long_factors if bias != "short" else short_factors
     direction_shadow_long = 0.0
     direction_shadow_short = 0.0
@@ -373,6 +394,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         "top_negative_factors": _top_factors(selected_factors, positive=False),
         "no_trade_flags": sorted(set(no_trade_flags)),
         "warning_flags": sorted(set(warning_flags)),
+        "breakout_inversion_flags": sorted(set(breakout_inversion_flags)),
         "direction_score_shadow": _bucket_display(selected_direction_shadow),
         "activity_score_shadow": _bucket_display(selected_activity_shadow),
         "entry_quality_score_shadow": _bucket_display(selected_entry_shadow),

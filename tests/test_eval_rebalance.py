@@ -248,6 +248,70 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertIn("market_map_trend_flip_confirmed_up_weak", result["long_factor_breakdown"])
         self.assertIn("market_map_trend_flip_confirmed_up_weak", result["short_factor_breakdown"])
 
+    def test_breakout_up_marks_upside_follow_and_short_invalidation_watch(self) -> None:
+        base_inputs = {
+            "market_regime": "downtrend",
+            "ema_alignment_4h": "bearish",
+            "ema20_slope_4h": "down",
+            "structure_4h": "lh_ll",
+            "structure_1h": "lh_ll",
+            "price": 100.0,
+            "ema50_4h": 105.0,
+            "rsi_15m": 48.0,
+            "volume_ratio": 1.30,
+            "atr_ratio": 1.0,
+            "funding_rate": 0.0,
+            "rr_long": 1.5,
+            "rr_short": 1.5,
+            "near_support": False,
+            "near_resistance": True,
+            "breakout_up": True,
+            "breakout_down": False,
+            "in_range_center": False,
+            "transition_direction": "up",
+            "signals_15m": "short",
+            "market_map": {"flags": ["trend_flip_confirmed_up"]},
+        }
+        result = compute_scores(base_inputs, self.cfg)
+
+        self.assertGreaterEqual(result["short_display_score"], result["long_display_score"])
+        self.assertIn("upside_breakout_follow_watch", result["breakout_inversion_flags"])
+        self.assertIn("short_invalidation_watch", result["breakout_inversion_flags"])
+        self.assertIn("missed_upside_breakout_watch", result["breakout_inversion_flags"])
+        self.assertNotIn("FORMAL_GO", str(result))
+
+    def test_breakout_down_marks_downside_follow_and_long_invalidation_watch(self) -> None:
+        base_inputs = {
+            "market_regime": "uptrend",
+            "ema_alignment_4h": "bullish",
+            "ema20_slope_4h": "up",
+            "structure_4h": "hh_hl",
+            "structure_1h": "hh_hl",
+            "price": 100.0,
+            "ema50_4h": 95.0,
+            "rsi_15m": 52.0,
+            "volume_ratio": 1.30,
+            "atr_ratio": 1.0,
+            "funding_rate": 0.0,
+            "rr_long": 1.5,
+            "rr_short": 1.5,
+            "near_support": True,
+            "near_resistance": False,
+            "breakout_up": False,
+            "breakout_down": True,
+            "in_range_center": False,
+            "transition_direction": "down",
+            "signals_15m": "long",
+            "market_map": {"flags": ["trend_flip_confirmed_down"]},
+        }
+        result = compute_scores(base_inputs, self.cfg)
+
+        self.assertGreaterEqual(result["long_display_score"], result["short_display_score"])
+        self.assertIn("downside_breakdown_follow_watch", result["breakout_inversion_flags"])
+        self.assertIn("long_invalidation_watch", result["breakout_inversion_flags"])
+        self.assertIn("missed_downside_breakdown_watch", result["breakout_inversion_flags"])
+        self.assertNotIn("FORMAL_GO", str(result))
+
     def test_execution_precision_downgrades_ready_short_at_major_support(self) -> None:
         setup = {"status": "ready", "status_reason_code": "inside_entry_zone_with_trigger", "blocking_flags": []}
         refined, flags = refine_execution_precision(
@@ -268,6 +332,44 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertIn("short_at_major_support_wait_only", flags)
         self.assertIn("execution_precision_wait_only", refined["blocking_flags"])
 
+    def test_execution_precision_downgrades_ready_short_on_upside_break(self) -> None:
+        setup = {"status": "ready", "status_reason_code": "inside_entry_zone_with_trigger", "blocking_flags": []}
+        refined, flags = refine_execution_precision(
+            setup,
+            side="short",
+            market_map={"flags": ["trend_flip_confirmed_up"]},
+            signal_15m="long",
+            breakout_up=True,
+            breakout_down=False,
+        )
+
+        self.assertEqual(refined["status"], "watch")
+        self.assertEqual(refined["execution_precision_action"], "wait_only")
+        self.assertIn("short_invalidated_by_up_break", flags)
+        self.assertIn("short_invalidation_watch", flags)
+        self.assertIn("upside_breakout_follow_watch", flags)
+        self.assertIn("execution_precision_wait_only", refined["blocking_flags"])
+        self.assertIn("上抜け", refined["execution_precision_reason"])
+
+    def test_execution_precision_downgrades_ready_long_on_downside_break(self) -> None:
+        setup = {"status": "ready", "status_reason_code": "inside_entry_zone_with_trigger", "blocking_flags": []}
+        refined, flags = refine_execution_precision(
+            setup,
+            side="long",
+            market_map={"flags": ["trend_flip_confirmed_down"]},
+            signal_15m="short",
+            breakout_up=False,
+            breakout_down=True,
+        )
+
+        self.assertEqual(refined["status"], "watch")
+        self.assertEqual(refined["execution_precision_action"], "wait_only")
+        self.assertIn("long_invalidated_by_down_break", flags)
+        self.assertIn("long_invalidation_watch", flags)
+        self.assertIn("downside_breakdown_follow_watch", flags)
+        self.assertIn("execution_precision_wait_only", refined["blocking_flags"])
+        self.assertIn("下抜け", refined["execution_precision_reason"])
+
     def test_execution_precision_marks_breakout_follow_without_ready_upgrade(self) -> None:
         setup = {"status": "watch", "status_reason_code": "entry_zone_not_reached", "blocking_flags": []}
         refined, flags = refine_execution_precision(
@@ -282,6 +384,7 @@ class EvalRebalanceTest(unittest.TestCase):
         self.assertEqual(refined["status"], "watch")
         self.assertEqual(refined["execution_precision_action"], "keep")
         self.assertIn("breakout_follow_candidate", flags)
+        self.assertIn("upside_breakout_follow_watch", flags)
 
     def test_confidence_uses_major_minor_warning_budget(self) -> None:
         base_inputs = {
