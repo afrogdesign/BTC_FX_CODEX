@@ -8300,6 +8300,14 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     ],
                     base_dir=base_dir,
                 )
+                nested_check_code, nested_check_stdout, nested_check_stderr = self._run_check_current_manual_delivery_app_surface_main_with_argv(
+                    [
+                        "--stdout-json",
+                        "--app-surface-dir",
+                        str(nested_export_dir),
+                    ],
+                    base_dir=base_dir,
+                )
                 malformed_refresh_code, malformed_refresh_stdout, malformed_refresh_stderr = self._run_refresh_current_manual_delivery_app_main_with_argv(
                     [
                         "--handoff-dir",
@@ -8385,7 +8393,18 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
 
             self.assertEqual(nested_refresh_code, 0, msg=nested_refresh_stderr)
             self.assertEqual(nested_code, 0, msg=nested_stderr)
+            self.assertEqual(nested_check_code, 0, msg=nested_check_stderr)
             nested_dashboard_text = (nested_export_dir / "app-dashboard.html").read_text(encoding="utf-8")
+            nested_ready_data = json.loads((nested_export_dir / "app-ready.json").read_text(encoding="utf-8"))
+            nested_contract_data = json.loads((nested_export_dir / "app-contract.json").read_text(encoding="utf-8"))
+            nested_snapshot_data = json.loads((nested_export_dir / "app-snapshot.json").read_text(encoding="utf-8"))
+            nested_check_data = json.loads(nested_check_stdout)
+            self.assertTrue(nested_ready_data["post_eval_recommendations_present"])
+            self.assertTrue(nested_ready_data["post_eval_recommendations_ready"])
+            self.assertEqual(nested_ready_data["post_eval_recommendations_status"], "ready")
+            self.assertEqual(nested_check_data["post_eval_recommendations_status"], "ready")
+            self.assertEqual(nested_contract_data["post_eval_recommendations"]["schema_version"], "post_eval_recommendations.v1")
+            self.assertEqual(nested_snapshot_data["post_eval_recommendations"]["candidate_count"], 3)
             self.assertIn("Post-Eval Recommendation Status", nested_dashboard_text)
             self.assertIn("report-only recommendation status", nested_dashboard_text)
             self.assertIn("human approval required", nested_dashboard_text)

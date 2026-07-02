@@ -56,7 +56,7 @@ Not allowed in surface renderers:
 
 ### 2. CLI / Export Wiring
 
-- Approved refresh/export/check steps carry the compact payload into app surface artifacts.
+- Approved refresh/export/check steps now carry the compact payload into app surface artifacts.
 - No renderer should trigger generation on demand.
 - No renderer should read generated post-eval markdown/CSV directly.
 
@@ -107,5 +107,5 @@ Not allowed in surface renderers:
 
 ## Next Hand-off
 
-- `BTCFX-20260702-POST-EVAL-EXPORT-WIRING`
-- Goal: wire the approved compact payload into export/check paths so app-surface artifacts carry only sanitized metadata without renderer-side generation.
+- `BTCFX-20260702-POST-EVAL-SURFACE-SMOKE`
+- Goal: smoke-test the already wired public HTML, dashboard/app surface, app-ready, and mail body reflections against approved compact payload data only.

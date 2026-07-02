@@ -17597,7 +17597,9 @@ def _manual_delivery_current_app_surface_validation_data(
     app_surface_manifest_data = _load_json_object(app_surface_manifest_json_path, parser)
     post_eval_recommendation_payload = None
     for source_data in (app_contract_data, app_snapshot_data, app_snapshot_status_data):
-        post_eval_recommendation_payload = _manual_delivery_extract_post_eval_recommendation_payload(source_data)
+        post_eval_recommendation_payload = build_post_eval_recommendations_handoff_contract(
+            _manual_delivery_extract_post_eval_recommendation_payload(source_data)
+        )
         if post_eval_recommendation_payload is not None:
             break
     expected_contract_data = _manual_delivery_current_app_integration_contract_data(
@@ -18075,6 +18077,7 @@ def _manual_delivery_current_app_integration_contract_data(
     intraperiod_outcomes_path: Path | None = None,
     post_eval_recommendations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    post_eval_recommendations = build_post_eval_recommendations_handoff_contract(post_eval_recommendations)
     evidence_quality_summary = _manual_delivery_current_app_evidence_quality_summary_data(
         intraperiod_outcomes_path=intraperiod_outcomes_path,
     )
@@ -18423,7 +18426,9 @@ def _manual_delivery_current_handoff_app_snapshot_data(
         "shadow_decision_enabled": app_state_status_data["shadow_decision_enabled"],
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     }
-    post_eval_recommendations = app_state_data.get("post_eval_recommendations")
+    post_eval_recommendations = build_post_eval_recommendations_handoff_contract(
+        app_state_data.get("post_eval_recommendations")
+    )
     if post_eval_recommendations is not None:
         snapshot_data["post_eval_recommendations"] = post_eval_recommendations
     snapshot_data.update(summarize_post_eval_recommendations_ready_gate(post_eval_recommendations))
@@ -18982,7 +18987,7 @@ def _manual_delivery_current_handoff_app_snapshot_status_data(
     app_snapshot_json: Path,
     snapshot_data: dict[str, Any],
 ) -> dict[str, Any]:
-    post_eval_recommendations = snapshot_data.get("post_eval_recommendations")
+    post_eval_recommendations = build_post_eval_recommendations_handoff_contract(snapshot_data.get("post_eval_recommendations"))
     post_eval_recommendations_ready_gate = summarize_post_eval_recommendations_ready_gate(post_eval_recommendations)
     return {
         "schema_version": "manual_delivery_app_snapshot_status.v1",

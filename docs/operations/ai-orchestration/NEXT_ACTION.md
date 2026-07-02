@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-PAYLOAD-HANDOFF-CONTRACT`
+- current_work_id: `BTCFX-20260702-POST-EVAL-EXPORT-WIRING`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-compact post_eval_recommendations payload handoff contract を固め、approved export/check paths が sanitized payload を surface に渡せる状態を確定する。
+approved export/check paths へ compact post_eval_recommendations payload を配線し、sanitized metadata を app-ready / app-contract / app-snapshot / check へ渡す。
 
 mail body changes は compact reflection 以外 deferred で、explicit approval 後の別タスクで扱う。
 
@@ -23,6 +23,7 @@ mail body changes は compact reflection 以外 deferred で、explicit approval
 - Mail surface plan
 - Compact Post-Eval mail surface reflection
 - End-to-end wiring plan
+- Payload handoff contract
 
 ## Product objective reminder
 
@@ -87,7 +88,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-POST-EVAL-PAYLOAD-HANDOFF-CONTRACT: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-POST-EVAL-EXPORT-WIRING: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - mail surface plan is missing
@@ -131,5 +132,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-POST-EVAL-EXPORT-WIRING`
+- `BTCFX-20260702-POST-EVAL-SURFACE-SMOKE`
 - Mail body changes remain deferred and require explicit approval.
