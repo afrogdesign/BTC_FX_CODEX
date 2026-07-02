@@ -11,6 +11,7 @@ This plan does not implement mail body changes or send-behavior changes.
 - Public HTML Post-Eval Recommendation Status is implemented.
 - Local dashboard/app-surface Post-Eval Recommendation Status is implemented.
 - App-ready ready-gate contract validation is implemented.
+- Compact mail-surface reflection for `post_eval_recommendations` is implemented in the summary body.
 - Compact `post_eval_recommendations` remains report-only and human-approved.
 
 ## Current Contract Reference
@@ -72,6 +73,6 @@ The same compact payload contract remains the source of truth:
 
 ## Recommended Next Implementation
 
-- `BTCFX-20260702-POST-EVAL-MAIL-SURFACE-IMPLEMENTATION`
-- Goal: reflect the same compact post-eval status in mail with approval gating, only after explicit approval, and without changing send behavior or production wording in the planning phase.
-- Keep the mail body deferred until that approval-gated task starts.
+- `BTCFX-20260702-POST-EVAL-END-TO-END-WIRING-PLAN`
+- Goal: define the next approval-gated wiring step after compact mail reflection is in place, without changing send behavior or production wording yet.
+- Keep mail-surface evolution report-only and human-approved.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest import mock
 import unittest
 
 
@@ -148,6 +149,26 @@ def _ohlcv_source_coverage_summary_stale_payload() -> dict[str, object]:
         }
     )
     return payload
+
+
+def _post_eval_recommendations_payload() -> dict[str, object]:
+    return {
+        "schema_version": "post_eval_recommendations.v1",
+        "report_date": "20260702",
+        "report_path": "運用資料/reports/post_eval/post_eval_recommendations_20260702.md",
+        "output_csv_path": "logs/csv/post_eval_recommendation_candidates.csv",
+        "candidate_count": 3,
+        "top_recommendation_codes": [
+            "NO_TRADE_SPLIT_REVIEW",
+            "SUBJECT_DEFENSIVE_WORDING_REVIEW",
+            "SAFE_CODE_SHOULD_NOT_APPEAR",
+        ],
+        "priority_counts": {"high": 1, "medium": 1, "low": 1},
+        "confidence_counts": {"actual_backed": 1, "proxy_backed": 2},
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        "note": "compact report-only mail surface status",
+        "human_approval_required": True,
+    }
 
 
 class SummaryFormatTest(unittest.TestCase):
@@ -1382,3 +1403,246 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("自動発注はしません", body)
         self.assertIn("最終判断は人間が行います", body)
         self.assertLess(body.index("【行動判定】"), body.index("【実行ゲート】"))
+
+    def test_summary_body_renders_post_eval_mail_line_for_direct_payload(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-11T09:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "API",
+            "prelabel": "ENTRY_OK",
+            "signal_tier": "strong_machine",
+            "bias": "long",
+            "current_price": 70356.3,
+            "confidence": 79,
+            "trade_execution_gate": "pass",
+            "paper_order_status": "draft",
+            "notification_kind": "main",
+            "post_eval_recommendations": _post_eval_recommendations_payload(),
+        }
+
+        with mock.patch("src.ai.summary.build_post_eval_recommendations", create=True, side_effect=AssertionError("must not run")):
+            body, _provider_used = build_summary_body(
+                provider="api",
+                api_key="",
+                model="",
+                cli_command="",
+                timeout_sec=1,
+                retry_count=1,
+                base_dir=BASE_DIR,
+                result_payload=payload,
+            )
+
+        self.assertEqual(body.count("【Post-Eval】"), 1)
+        self.assertIn("20260702", body)
+        self.assertIn("候補: 3件", body)
+        self.assertIn("NO_TRADE_SPLIT_REVIEW, SUBJECT_DEFENSIVE_WORDING_REVIEW", body)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually / human approval required", body)
+        self.assertIn("report: post_eval_recommendations_20260702.md", body)
+
+    def test_summary_body_renders_post_eval_mail_line_from_nested_app_surface_payload(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-15T06:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "bias": "short",
+            "current_price": 70765.2,
+            "long_display_score": 38,
+            "short_display_score": 59,
+            "score_gap": -21,
+            "signals_4h": "wait",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "prelabel": "SWEEP_WAIT",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence": 41,
+            "confidence_direction_shadow": 62.0,
+            "confidence_execution_shadow": 28.0,
+            "confidence_wait_shadow": 64.0,
+            "warning_flags": ["Critical_zone_warning"],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
+            "app_surface_validation_data": {
+                "post_eval_recommendations": _post_eval_recommendations_payload(),
+            },
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(body.count("【Post-Eval】"), 1)
+        self.assertIn("候補: 3件", body)
+        self.assertIn("report: post_eval_recommendations_20260702.md", body)
+        self.assertNotIn("SAFE_CODE_SHOULD_NOT_APPEAR", body)
+
+    def test_summary_body_hides_post_eval_text_when_payload_absent(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-15T06:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "bias": "short",
+            "current_price": 70765.2,
+            "long_display_score": 38,
+            "short_display_score": 59,
+            "score_gap": -21,
+            "signals_4h": "wait",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "prelabel": "SWEEP_WAIT",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence": 41,
+            "confidence_direction_shadow": 62.0,
+            "confidence_execution_shadow": 28.0,
+            "confidence_wait_shadow": 64.0,
+            "warning_flags": ["Critical_zone_warning"],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertNotIn("【Post-Eval】", body)
+        self.assertNotIn("post_eval_recommendations", body)
+
+    def test_summary_body_rejects_or_sanitizes_malformed_post_eval_payload(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-15T06:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "CLI",
+            "notification_kind": "attention",
+            "bias": "short",
+            "current_price": 70765.2,
+            "long_display_score": 38,
+            "short_display_score": 59,
+            "score_gap": -21,
+            "signals_4h": "wait",
+            "signals_1h": "short",
+            "signals_15m": "wait",
+            "prelabel": "SWEEP_WAIT",
+            "primary_setup_status": "watch",
+            "primary_setup_reason": "near_entry_zone_waiting_trigger",
+            "confidence": 41,
+            "confidence_direction_shadow": 62.0,
+            "confidence_execution_shadow": 28.0,
+            "confidence_wait_shadow": 64.0,
+            "warning_flags": ["Critical_zone_warning"],
+            "risk_flags": ["upper_liquidity_close"],
+            "no_trade_flags": ["sweep_incomplete"],
+            "post_eval_recommendation_summary": {
+                "schema_version": "wrong.schema",
+                "candidate_count": -1,
+                "report_path": "../../secrets/<script>/smtp/Gmail/send_email/uid-ABC123/account_test",
+                "top_recommendation_codes": [
+                    "uid-ABC123",
+                    "account_test",
+                    "private/order",
+                    "OPENAI_API_KEY",
+                    "SMTP_PASSWORD",
+                    "smtp",
+                    "Gmail",
+                    "send_email",
+                    "<script",
+                    "fetch(",
+                ],
+                "safety_boundary": "private/order / smtp / Gmail / send_email",
+                "human_approval_required": False,
+            },
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Post-Eval】not ready", body)
+        self.assertNotIn("uid-ABC123", body)
+        self.assertNotIn("account_test", body)
+        self.assertNotIn("private/order", body)
+        self.assertNotIn("OPENAI_API_KEY", body)
+        self.assertNotIn("SMTP_PASSWORD", body)
+        self.assertNotIn("smtp", body.lower())
+        self.assertNotIn("Gmail", body)
+        self.assertNotIn("send_email", body)
+        self.assertNotIn("<script", body)
+        self.assertNotIn("fetch(", body)
+
+    def test_summary_body_treats_false_human_approval_as_not_ready(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-11T09:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "API",
+            "notification_kind": "main",
+            "post_eval_recommendations": {
+                "schema_version": "post_eval_recommendations.v1",
+                "report_date": "20260702",
+                "report_path": "運用資料/reports/post_eval/post_eval_recommendations_20260702.md",
+                "candidate_count": 3,
+                "top_recommendation_codes": ["NO_TRADE_SPLIT_REVIEW"],
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "human_approval_required": False,
+            },
+        }
+
+        body, _provider_used = build_summary_body(
+            provider="api",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertIn("【Post-Eval】not ready", body)
+        self.assertNotIn("human approval required", body)
+
+    def test_summary_body_does_not_execute_post_eval_engine_when_rendering(self) -> None:
+        payload = {
+            "timestamp_jst": "2026-03-11T09:05:00+09:00",
+            "system_label": "Ver02.3",
+            "system_mode_label": "API",
+            "notification_kind": "main",
+            "post_eval_recommendations": _post_eval_recommendations_payload(),
+        }
+
+        with mock.patch("src.ai.summary.build_post_eval_recommendations", create=True, side_effect=AssertionError("must not run")):
+            body, _provider_used = build_summary_body(
+                provider="api",
+                api_key="",
+                model="",
+                cli_command="",
+                timeout_sec=1,
+                retry_count=1,
+                base_dir=BASE_DIR,
+                result_payload=payload,
+            )
+
+        self.assertIn("【Post-Eval】", body)
+        self.assertNotIn("must not run", body)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+import re
 
 from src.presentation.sanitize import (
     CONFIDENCE_METRIC_LABELS,
@@ -97,6 +99,149 @@ def _normalize_text_list(value: Any) -> list[str]:
     if not text:
         return []
     return [part.strip() for part in text.split(",") if part.strip()]
+
+
+_POST_EVAL_PAYLOAD_KEYS = ("post_eval_recommendations", "post_eval_recommendation_summary")
+_POST_EVAL_CONTAINER_KEYS = (
+    "app_surface_validation_data",
+    "app_surface_validation",
+    "current_manual_delivery_app_surface_validation",
+    "manual_delivery_app_surface_validation",
+)
+_POST_EVAL_SAFE_BOUNDARY_MARKERS = ("report-only", "no automatic order")
+_POST_EVAL_UNSAFE_SUBSTRINGS = (
+    "<script",
+    "fetch(",
+    "smtp",
+    "gmail",
+    "send_email",
+    "openai_api_key",
+    "smtp_password",
+    "private/order",
+    "uid",
+    "account",
+    "password",
+)
+_POST_EVAL_SAFE_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
+
+
+def _post_eval_payload_from_node(node: Any, seen: set[int]) -> dict[str, Any] | None:
+    if isinstance(node, list):
+        for item in node:
+            found = _post_eval_payload_from_node(item, seen)
+            if found is not None:
+                return found
+        return None
+    if not isinstance(node, dict):
+        return None
+    node_id = id(node)
+    if node_id in seen:
+        return None
+    seen.add(node_id)
+    for key in _POST_EVAL_PAYLOAD_KEYS:
+        value = node.get(key)
+        if isinstance(value, dict):
+            return value
+    for key in _POST_EVAL_CONTAINER_KEYS:
+        found = _post_eval_payload_from_node(node.get(key), seen)
+        if found is not None:
+            return found
+    for value in node.values():
+        found = _post_eval_payload_from_node(value, seen)
+        if found is not None:
+            return found
+    return None
+
+
+def _resolve_post_eval_payload(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    for container in (result, display_context, notification_context):
+        found = _post_eval_payload_from_node(container, set())
+        if found is not None:
+            return found
+    return None
+
+
+def _is_truthy_post_eval_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+    return False
+
+
+def _safe_post_eval_reference(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    name = Path(text).name.strip()
+    if not name or any(marker in name.lower() for marker in _POST_EVAL_UNSAFE_SUBSTRINGS):
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", name):
+        return ""
+    return name
+
+
+def _safe_post_eval_codes(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    codes: list[str] = []
+    for item in value:
+        code = str(item or "").strip()
+        if not code:
+            continue
+        lowered = code.lower()
+        if any(marker in lowered for marker in _POST_EVAL_UNSAFE_SUBSTRINGS):
+            continue
+        if not _POST_EVAL_SAFE_CODE_PATTERN.fullmatch(code):
+            continue
+        codes.append(code)
+    return codes[:2]
+
+
+def _post_eval_contract_is_ready(payload: dict[str, Any]) -> bool:
+    schema_version = str(payload.get("schema_version", "")).strip()
+    candidate_count = payload.get("candidate_count")
+    safety_boundary = str(payload.get("safety_boundary", "")).strip().lower()
+    human_approved = _is_truthy_post_eval_flag(payload.get("human_approval_required")) or _is_truthy_post_eval_flag(
+        payload.get("required_human_approval")
+    )
+    if schema_version != "post_eval_recommendations.v1":
+        return False
+    if not isinstance(candidate_count, int) or isinstance(candidate_count, bool) or candidate_count < 0:
+        return False
+    if not human_approved:
+        return False
+    return all(marker in safety_boundary for marker in _POST_EVAL_SAFE_BOUNDARY_MARKERS)
+
+
+def _post_eval_mail_line(
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> list[str]:
+    payload = _resolve_post_eval_payload(result, display_context, notification_context)
+    if payload is None:
+        return []
+    if not _post_eval_contract_is_ready(payload):
+        return ["【Post-Eval】not ready / report-only / not FORMAL_GO / no automatic order / human decides manually"]
+    candidate_count = int(payload.get("candidate_count", 0))
+    pieces: list[str] = []
+    report_date = str(payload.get("report_date", "")).strip()
+    if report_date:
+        pieces.append(sanitize_user_text(report_date))
+    pieces.append(f"候補: {candidate_count}件")
+    top_codes = _safe_post_eval_codes(payload.get("top_recommendation_codes"))
+    if top_codes:
+        pieces.append(f"top: {', '.join(top_codes)}")
+    pieces.extend(["report-only", "not FORMAL_GO", "no automatic order", "human decides manually", "human approval required"])
+    report_ref = _safe_post_eval_reference(payload.get("report_path"))
+    if report_ref:
+        pieces.append(f"report: {report_ref}")
+    return [f"【Post-Eval】{' / '.join(pieces)}"]
 
 
 def _active_subject_detail(notification_context: dict[str, Any]) -> str:
@@ -925,6 +1070,7 @@ def _root_summary_lines(
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))
+    lines.extend(_post_eval_mail_line(result, display_context, notification_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
@@ -1025,6 +1171,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))
+    lines.extend(_post_eval_mail_line(result, display_context, notification_context))
     _extend_gate_lines(lines, result)
     lines.extend(
         [
