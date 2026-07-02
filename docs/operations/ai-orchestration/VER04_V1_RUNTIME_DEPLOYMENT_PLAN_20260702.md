@@ -132,3 +132,13 @@ This document is planning only. It does not access the runtime repo, does not re
 - restart/launchd: not performed
 - reason: the runtime is already reflected to the approved commit, the worktree is clean, and the no-send/render-only notification smoke passed; no runtime code, scheduler, or launchd change was introduced in this task
 - next task: `BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE`
+
+## Rollback note result
+
+- rollback note path: `docs/operations/ai-orchestration/VER04_V1_RUNTIME_ROLLBACK_NOTE_20260702.md`
+- runtime branch/HEAD: `Ver04-v1` / `9c07c0fe75f69c5c849426a9bf64518eba2f54df`
+- previous runtime branch/head: `Ver03-v4` / `7a5ccee01bce36cdd2a7be2d16520296e090ba62`
+- rollback executed: no
+- restart/launchd/mail sending: not performed
+- deployment state: reflected Ver04-v1 active, no controlled restart required
+- no secrets/private data were recorded

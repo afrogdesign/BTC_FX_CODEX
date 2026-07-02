@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-CONTROLLED-RESTART-DECISION`
+- current_work_id: `BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Ver04-v1 の反映済み runtime について、controlled restart や launchd action が実際に必要かを report-only で判断し、次の安全な手順を確定する。
+Ver04-v1 の反映済み runtime について、rollback note を report-only で記録し、次の安全な手順を確定する。
 
-この task では runtime access は read-only 状態確認と no-send smoke 確認に限り、real mail sending / restart / launchd / order execution は行わない。
+この task では runtime access は read-only 状態確認に限り、rollback / real mail sending / restart / launchd / order execution は行わない。
 
 ## Completed history
 
@@ -32,6 +32,7 @@ Ver04-v1 の反映済み runtime について、controlled restart や launchd a
 - Runtime preflight fix review
 - Runtime reflection
 - Notification-operation smoke
+- Controlled restart decision
 
 ## Product objective reminder
 
@@ -95,7 +96,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE-FIX: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - runtime deployment plan is missing
@@ -142,5 +143,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-VER04-V1-RUNTIME-ROLLBACK-NOTE`
-- Controlled restart is not required; keep the reflected Ver04-v1 runtime as-is and record rollback notes only, with notification sending unchanged.
+- `BTCFX-20260702-VER04-V1-RUNTIME-DEPLOYMENT-COMPLETE`
+- Rollback is not required; keep the reflected Ver04-v1 runtime as-is and treat deployment as complete, with notification sending unchanged.
