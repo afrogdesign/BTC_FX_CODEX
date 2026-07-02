@@ -100,3 +100,4 @@ The compact payload contract already used by the public HTML surface is the refe
 - App-ready ready-gate contract validation is implemented.
 - Compact `post_eval_recommendations` remains report-only and human-approved.
 - Mail body changes remain deferred and require explicit approval.
+- End-to-end payload handoff is the next planning target.

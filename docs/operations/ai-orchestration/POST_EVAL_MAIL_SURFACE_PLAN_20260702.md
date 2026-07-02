@@ -74,5 +74,5 @@ The same compact payload contract remains the source of truth:
 ## Recommended Next Implementation
 
 - `BTCFX-20260702-POST-EVAL-END-TO-END-WIRING-PLAN`
-- Goal: define the next approval-gated wiring step after compact mail reflection is in place, without changing send behavior or production wording yet.
-- Keep mail-surface evolution report-only and human-approved.
+- Goal: define the compact payload flow end-to-end so the same already-provided payload can reach app surface, ready gate, public HTML, and mail body without renderer-side generation.
+- Keep all surfaces report-only and human-approved.

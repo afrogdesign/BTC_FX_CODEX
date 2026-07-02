@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-POST-EVAL-MAIL-SURFACE-IMPLEMENTATION`
+- current_work_id: `BTCFX-20260702-POST-EVAL-END-TO-END-WIRING-PLAN`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Post-eval compact mail surface を summary body に反映し、sending behavior は変えない。
+Post-eval compact payload flow を end-to-end で整理し、surface renderers は既存 payload のみを読む。
 
 mail body changes は compact reflection 以外 deferred で、explicit approval 後の別タスクで扱う。
 
@@ -21,6 +21,7 @@ mail body changes は compact reflection 以外 deferred で、explicit approval
 - App-ready ready-gate contract validation
 - Surface docs sync
 - Mail surface plan
+- Compact Post-Eval mail surface reflection
 
 ## Product objective reminder
 
@@ -51,6 +52,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 - `docs/operations/ai-orchestration/POST_EVAL_SURFACE_ALIGNMENT_PLAN_20260702.md`
 - `docs/operations/ai-orchestration/POST_EVAL_MAIL_SURFACE_PLAN_20260702.md`
+- `docs/operations/ai-orchestration/POST_EVAL_END_TO_END_WIRING_PLAN_20260702.md`
 - `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
 ## Do not
@@ -128,5 +130,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-POST-EVAL-END-TO-END-WIRING-PLAN`
+- `BTCFX-20260702-POST-EVAL-PAYLOAD-HANDOFF-CONTRACT`
 - Mail body changes remain deferred and require explicit approval.
