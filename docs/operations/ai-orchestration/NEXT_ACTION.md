@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE`
+- current_work_id: `BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE-FIX`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-Ver04-v1 の notification-operation smoke を確認し、report-only / human-decided のまま real mail sending なしで安全に扱えるかを判定する。
+Ver04-v1 の notification-operation no-send smoke command を追加し、report-only / human-decided のまま real mail sending なしで安全に扱えるかを確定する。
 
 この task では runtime access は read-only smoke と dry-run/render-only 確認に限り、real mail sending / restart / launchd / order execution は行わない。
 
@@ -31,6 +31,7 @@ Ver04-v1 の notification-operation smoke を確認し、report-only / human-dec
 - Runtime preflight fix
 - Runtime preflight fix review
 - Runtime reflection
+- Notification-operation smoke
 
 ## Product objective reminder
 
@@ -94,7 +95,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE-FIX: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - runtime deployment plan is missing
@@ -141,5 +142,5 @@ response.txt rules:
 
 ## Next recommended task
 
-- `BTCFX-20260702-VER04-V1-NOTIFICATION-OPERATION-SMOKE-FIX`
-- The runtime has no documented no-send / dry-run / render-only notification smoke command yet, so the next step is to define or surface that safe path before any controlled restart decision.
+- `BTCFX-20260702-VER04-V1-CONTROLLED-RESTART-DECISION`
+- The no-send / dry-run / render-only notification smoke command is now defined; proceed only with a report-only controlled restart decision task and keep notification sending unchanged.

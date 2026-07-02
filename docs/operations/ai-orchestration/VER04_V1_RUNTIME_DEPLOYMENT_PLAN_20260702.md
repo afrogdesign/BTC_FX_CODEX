@@ -114,9 +114,9 @@ This document is planning only. It does not access the runtime repo, does not re
 ## Notification-operation smoke result
 
 - runtime branch/HEAD checked: `Ver04-v1` / `c37e46ff948cda664b0ca3641ad922369d16b436`
-- smoke commands run: `./.venv312/bin/python -m unittest tests.test_summary_format`, `./.venv312/bin/python -m unittest tests.test_notification_detail_page`, `./.venv312/bin/python -m unittest tests.test_active_plan_notification_formatting`, `./.venv312/bin/python -m unittest tests.test_post_eval_surface_smoke`
-- documented no-send / dry-run / render-only notification smoke command exists: no
-- validation summary: notification rendering tests passed and report-only / human-decided safety text remained present; no real mail sending was performed
+- smoke commands run: `./.venv312/bin/python -m unittest tests.test_summary_format`, `./.venv312/bin/python -m unittest tests.test_notification_detail_page`, `./.venv312/bin/python -m unittest tests.test_active_plan_notification_formatting`, `./.venv312/bin/python -m unittest tests.test_post_eval_surface_smoke`, `./.venv312/bin/python tools/render_notification_no_send_smoke.py --stdout-json`
+- documented no-send / dry-run / render-only notification smoke command exists: yes
+- validation summary: notification rendering tests passed, report-only / human-decided safety text remained present, and the new no-send/render-only smoke command reported `status=pass` without real mail sending
 - restart/launchd: not performed
-- controlled restart decision readiness: no, because a documented no-send notification smoke command is not yet defined
+- controlled restart decision readiness: yes, after runtime reflection and the no-send smoke validation
 - no secrets/private data were recorded
