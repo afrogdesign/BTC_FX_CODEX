@@ -15945,6 +15945,31 @@ def validate_post_eval_recommendations_contract(payload: Any) -> dict[str, Any]:
     return summarize_post_eval_recommendations_ready_gate(payload)
 
 
+def build_post_eval_recommendations_handoff_contract(payload: Any) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        return {"_malformed": True}
+    if payload.get("_malformed"):
+        return {"_malformed": True}
+    extracted_payload = _manual_delivery_extract_post_eval_recommendation_payload(payload)
+    if extracted_payload is None:
+        return None
+    if not isinstance(extracted_payload, dict):
+        return {"_malformed": True}
+    if extracted_payload.get("_malformed"):
+        return {"_malformed": True}
+    return _manual_delivery_normalize_post_eval_recommendation_payload(extracted_payload)
+
+
+def normalize_post_eval_recommendations_handoff(payload: Any) -> dict[str, Any] | None:
+    return build_post_eval_recommendations_handoff_contract(payload)
+
+
+def validate_post_eval_recommendations_handoff_contract(payload: Any) -> dict[str, Any]:
+    return summarize_post_eval_recommendations_ready_gate(payload)
+
+
 def _manual_delivery_extract_post_eval_recommendation_payload(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None
@@ -15988,7 +16013,10 @@ def _manual_delivery_load_post_eval_recommendation_payload(
         return {"_malformed": True}
     if payload.get("_malformed"):
         return {"_malformed": True}
-    return _manual_delivery_normalize_post_eval_recommendation_payload(payload)
+    handoff_payload = build_post_eval_recommendations_handoff_contract(payload)
+    if handoff_payload is None:
+        return None
+    return handoff_payload
 
 
 def _manual_delivery_normalize_post_eval_recommendation_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -16041,11 +16069,13 @@ def _manual_delivery_normalize_post_eval_recommendation_payload(payload: dict[st
     for key in ("priority_counts", "confidence_counts"):
         counts = payload.get(key)
         if isinstance(counts, dict):
-            normalized[key] = {
-                str(count_key): _as_int_or_value(count_value)
-                for count_key, count_value in counts.items()
-                if str(count_key).strip()
-            }
+            sanitized_counts: dict[str, int | str] = {}
+            for count_key, count_value in counts.items():
+                sanitized_key = _manual_delivery_post_eval_recommendation_display_value(count_key, "").strip()
+                if not sanitized_key:
+                    continue
+                sanitized_counts[sanitized_key] = _as_int_or_value(count_value)
+            normalized[key] = sanitized_counts
     if "human_approval_required" in payload:
         normalized["human_approval_required"] = _as_bool(payload.get("human_approval_required"))
     if "required_human_approval" in payload:

@@ -4,6 +4,7 @@
 
 Define the end-to-end compact `post_eval_recommendations` payload flow without changing code, runtime behavior, or mail sending behavior.
 The recommendation engine produces the compact payload once, and approved handoff steps carry that payload into the app surface, ready gate, public HTML, and mail body.
+The payload handoff contract is now implemented; this document keeps the remaining safe sequence explicit.
 Surface renderers must consume already-provided compact payload only.
 They must not execute the recommendation engine.
 They must not read generated post-eval markdown/CSV directly.
@@ -49,7 +50,7 @@ Not allowed in surface renderers:
 
 ### 1. Payload Source Handoff Contract
 
-- Define one compact payload source and one safe handoff shape.
+- Implemented as a compact, sanitized handoff shape.
 - Keep the engine output separate from all surface renderers.
 - The handoff must be report-only, not FORMAL_GO, no automatic order, human decides manually.
 
@@ -106,5 +107,5 @@ Not allowed in surface renderers:
 
 ## Next Hand-off
 
-- `BTCFX-20260702-POST-EVAL-PAYLOAD-HANDOFF-CONTRACT`
-- Goal: define the compact payload handoff contract that connects engine output to approved app-surface/export/check steps without changing runtime behavior.
+- `BTCFX-20260702-POST-EVAL-EXPORT-WIRING`
+- Goal: wire the approved compact payload into export/check paths so app-surface artifacts carry only sanitized metadata without renderer-side generation.

@@ -8194,6 +8194,22 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertEqual(app_snapshot_data["post_eval_recommendations"]["candidate_count"], 3)
             self.assertEqual(app_contract_data["post_eval_recommendations"]["human_approval_required"], True)
             self.assertEqual(app_snapshot_data["post_eval_recommendations"]["human_approval_required"], True)
+            allowed_post_eval_keys = {
+                "schema_version",
+                "report_date",
+                "report_path",
+                "output_csv_path",
+                "candidate_count",
+                "top_recommendation_codes",
+                "priority_counts",
+                "confidence_counts",
+                "safety_boundary",
+                "note",
+                "human_approval_required",
+                "required_human_approval",
+            }
+            self.assertLessEqual(set(app_contract_data["post_eval_recommendations"].keys()), allowed_post_eval_keys)
+            self.assertLessEqual(set(app_snapshot_data["post_eval_recommendations"].keys()), allowed_post_eval_keys)
             self.assertNotIn("source_uid_hash", json.dumps(app_contract_data["post_eval_recommendations"], ensure_ascii=False))
             self.assertNotIn("source_uid_hash", json.dumps(app_snapshot_data["post_eval_recommendations"], ensure_ascii=False))
             self.assertNotIn("uid-ABC123", json.dumps(app_contract_data["post_eval_recommendations"], ensure_ascii=False))

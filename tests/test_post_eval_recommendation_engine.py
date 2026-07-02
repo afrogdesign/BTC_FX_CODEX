@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from unittest import mock
 
 import unittest
 
@@ -16,10 +17,15 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from tools.log_feedback import (  # noqa: E402
+    build_post_eval_recommendations_handoff_contract,
     build_post_eval_recommendation_candidates,
     build_post_eval_recommendation_report,
     rank_post_eval_recommendation_candidates,
+    normalize_post_eval_recommendations_handoff,
+    validate_post_eval_recommendations_contract,
+    validate_post_eval_recommendations_handoff_contract,
 )
+import tools.log_feedback as log_feedback  # noqa: E402
 
 
 MANUAL_TRADE_HEADERS = [
@@ -456,6 +462,108 @@ class PostEvalRecommendationEngineTest(unittest.TestCase):
             self.assertIn("safety_boundary", payload)
             self.assertEqual(payload["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually")
             self.assertNotIn("uid_sensitive_12345", result.stdout)
+
+    def test_post_eval_recommendations_handoff_contract_sanitizes_and_uses_no_engine_generation(self) -> None:
+        payload = {
+            "schema_version": "post_eval_recommendations.v1",
+            "report_date": "20260702",
+            "report_path": "uid-ABC123/account_test/<script>post_eval.md",
+            "output_csv_path": "logs/csv/uid-ABC123-account_test.csv",
+            "candidate_count": 3,
+            "top_recommendation_codes": [
+                "PROXY_TOO_AGGRESSIVE_REVIEW",
+                "uid-ABC123",
+                "fetch(",
+            ],
+            "priority_counts": {"high": 2, "medium": 1, "uid-ABC123": 9},
+            "confidence_counts": {"actual_backed": 1, "proxy_backed": 2},
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually / private/order",
+            "note": "report-only status <script> fetch( send_email Gmail smtp OPENAI_API_KEY SMTP_PASSWORD source_uid_hash uid-ABC123 account_test",
+            "human_approval_required": True,
+        }
+
+        with mock.patch.object(
+            log_feedback,
+            "build_post_eval_recommendation_report",
+            side_effect=AssertionError("recommendation engine must not run while building handoff contracts"),
+        ):
+            handoff_payload = build_post_eval_recommendations_handoff_contract(payload)
+            alias_payload = normalize_post_eval_recommendations_handoff(payload)
+            ready_gate = validate_post_eval_recommendations_handoff_contract(payload)
+            contract_gate = validate_post_eval_recommendations_contract(payload)
+
+        self.assertEqual(handoff_payload, alias_payload)
+        self.assertEqual(ready_gate, contract_gate)
+        self.assertIsInstance(handoff_payload, dict)
+        self.assertEqual(handoff_payload["schema_version"], "post_eval_recommendations.v1")
+        self.assertEqual(handoff_payload["report_date"], "20260702")
+        self.assertEqual(handoff_payload["candidate_count"], 3)
+        self.assertEqual(handoff_payload["human_approval_required"], True)
+        self.assertNotIn("source_uid_hash", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("uid-ABC123", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("account_test", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("<script", json.dumps(handoff_payload, ensure_ascii=False).lower())
+        self.assertNotIn("fetch(", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("send_email", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("Gmail", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("smtp", json.dumps(handoff_payload, ensure_ascii=False).lower())
+        self.assertNotIn("private/order", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("OPENAI_API_KEY", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertNotIn("SMTP_PASSWORD", json.dumps(handoff_payload, ensure_ascii=False))
+        self.assertTrue(ready_gate["post_eval_recommendations_present"])
+        self.assertTrue(ready_gate["post_eval_recommendations_ready"])
+        self.assertEqual(ready_gate["post_eval_recommendations_status"], "ready")
+
+    def test_post_eval_recommendations_handoff_contract_handles_absent_and_invalid_states(self) -> None:
+        absent_gate = validate_post_eval_recommendations_handoff_contract(None)
+        absent_payload = build_post_eval_recommendations_handoff_contract(None)
+        malformed_gate = validate_post_eval_recommendations_handoff_contract({"_malformed": True})
+        wrong_schema_gate = validate_post_eval_recommendations_handoff_contract(
+            {
+                "schema_version": "post_eval_recommendations.v0",
+                "candidate_count": 1,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "human_approval_required": True,
+            }
+        )
+        false_approval_gate = validate_post_eval_recommendations_handoff_contract(
+            {
+                "schema_version": "post_eval_recommendations.v1",
+                "candidate_count": 1,
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "human_approval_required": False,
+            }
+        )
+        missing_boundary_gate = validate_post_eval_recommendations_handoff_contract(
+            {
+                "schema_version": "post_eval_recommendations.v1",
+                "candidate_count": 1,
+                "human_approval_required": True,
+            }
+        )
+        invalid_count_gate = validate_post_eval_recommendations_handoff_contract(
+            {
+                "schema_version": "post_eval_recommendations.v1",
+                "candidate_count": "three",
+                "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+                "human_approval_required": True,
+            }
+        )
+
+        self.assertIsNone(absent_payload)
+        self.assertTrue(absent_gate["post_eval_recommendations_ready"])
+        self.assertEqual(absent_gate["post_eval_recommendations_status"], "optional_not_present")
+        self.assertFalse(absent_gate["post_eval_recommendations_present"])
+        self.assertEqual(malformed_gate["post_eval_recommendations_status"], "invalid_not_ready")
+        self.assertIn("malformed_payload", malformed_gate["post_eval_recommendations_reason_codes"])
+        self.assertEqual(wrong_schema_gate["post_eval_recommendations_status"], "invalid_not_ready")
+        self.assertIn("schema_version_mismatch", wrong_schema_gate["post_eval_recommendations_reason_codes"])
+        self.assertEqual(false_approval_gate["post_eval_recommendations_status"], "invalid_not_ready")
+        self.assertIn("human_approval_required_false", false_approval_gate["post_eval_recommendations_reason_codes"])
+        self.assertEqual(missing_boundary_gate["post_eval_recommendations_status"], "invalid_not_ready")
+        self.assertIn("safety_boundary_invalid", missing_boundary_gate["post_eval_recommendations_reason_codes"])
+        self.assertEqual(invalid_count_gate["post_eval_recommendations_status"], "invalid_not_ready")
+        self.assertIn("candidate_count_invalid", invalid_count_gate["post_eval_recommendations_reason_codes"])
 
 
 if __name__ == "__main__":
