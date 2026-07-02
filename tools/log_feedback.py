@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import argparse
 import csv
+import hashlib
 import io
 import html
 import json
@@ -11,12 +12,14 @@ import re
 import shutil
 import sys
 import tempfile
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from statistics import mean
 from typing import Any
+import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -1337,6 +1340,365 @@ def _append_csv_row(path: Path, fieldnames: list[str], row: dict[str, Any]) -> P
             writer.writeheader()
         writer.writerow({field: row.get(field, "") for field in fieldnames})
     return path
+
+
+_MEXC_TRADE_HISTORY_FILENAME_FRAGMENT = "Trade History"
+_MEXC_ORDER_HISTORY_FILENAME_FRAGMENT = "Order History"
+_MEXC_POSITION_HISTORY_FILENAME_FRAGMENT = "Position History"
+
+_MEXC_TRADE_HEADER = [
+    "actual_trade_id",
+    "source_uid_hash",
+    "source_file",
+    "timestamp_jst",
+    "symbol",
+    "side",
+    "order_type",
+    "fill_qty_contract",
+    "fill_qty_token",
+    "fill_qty_value",
+    "fill_price",
+    "fee",
+    "fee_asset",
+    "role",
+    "realized_pnl",
+    "import_status",
+]
+_MEXC_ORDER_HEADER = [
+    "actual_order_id",
+    "source_uid_hash",
+    "source_file",
+    "timestamp_jst",
+    "symbol",
+    "side",
+    "leverage",
+    "order_type",
+    "filled_qty",
+    "avg_fill_price",
+    "realized_pnl",
+    "fee",
+    "status",
+    "import_status",
+]
+_MEXC_POSITION_HEADER = [
+    "actual_position_id",
+    "source_uid_hash",
+    "source_file",
+    "opened_at_jst",
+    "closed_at_jst",
+    "symbol",
+    "side",
+    "realized_pnl",
+    "status",
+    "import_status",
+]
+
+_MEXC_HISTORY_SPECS = (
+    {
+        "category": "trade_history",
+        "filename_fragment": _MEXC_TRADE_HISTORY_FILENAME_FRAGMENT,
+        "output_filename": "manual_actual_trades.csv",
+        "headers": _MEXC_TRADE_HEADER,
+        "normalizer": "normalize_mexc_trade_history",
+    },
+    {
+        "category": "order_history",
+        "filename_fragment": _MEXC_ORDER_HISTORY_FILENAME_FRAGMENT,
+        "output_filename": "manual_actual_orders.csv",
+        "headers": _MEXC_ORDER_HEADER,
+        "normalizer": "normalize_mexc_order_history",
+    },
+    {
+        "category": "position_history",
+        "filename_fragment": _MEXC_POSITION_HISTORY_FILENAME_FRAGMENT,
+        "output_filename": "manual_actual_positions.csv",
+        "headers": _MEXC_POSITION_HEADER,
+        "normalizer": "normalize_mexc_position_history",
+    },
+)
+
+_MEXC_XLSX_NS = {
+    "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    "rel": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+    "pkgrel": "http://schemas.openxmlformats.org/package/2006/relationships",
+}
+
+_MEXC_TRADE_FIELD_MAP = {
+    "timestamp_jst": "時間(UTC+09:00)",
+    "symbol": "先物取引ペア",
+    "side": "方向",
+    "order_type": "注文の種類",
+    "fill_qty_contract": "約定数量 (枚)",
+    "fill_qty_token": "約定数量 (トークン)",
+    "fill_qty_value": "約定数量 (金額)",
+    "fill_price": "約定価格",
+    "fee": "取引手数料",
+    "fee_asset": "手数料支払い暗号資産",
+    "role": "役割",
+    "realized_pnl": "決済損益",
+}
+_MEXC_ORDER_FIELD_MAP = {
+    "timestamp_jst": "時間(UTC+09:00)",
+    "symbol": "先物取引ペア",
+    "side": "方向",
+    "leverage": "レバレッジ",
+    "order_type": "注文の種類",
+    "filled_qty": "約定数量",
+    "avg_fill_price": "平均約定価格",
+    "realized_pnl": "決済損益",
+    "fee": "手数料",
+    "status": "ステータス",
+}
+_MEXC_POSITION_FIELD_MAP = {
+    "opened_at_jst": "オープン時間(UTC+09:00)",
+    "closed_at_jst": "決済時刻",
+    "symbol": "取引ペア",
+    "side": "方向",
+    "realized_pnl": "実現損益",
+    "status": "ステータス",
+}
+
+
+def _mexc_hash_text(*parts: str) -> str:
+    payload = "|".join(str(part) for part in parts)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _mexc_uid_hash(uid: str) -> str:
+    return f"uid_{_mexc_hash_text('btc_monitor', 'mexc', uid.strip())}"
+
+
+def _mexc_actual_id(category: str, timestamp: str, symbol: str, side: str, source_uid_hash: str, row_index: int) -> str:
+    return f"{category[:3]}_{_mexc_hash_text(category, timestamp, symbol, side, source_uid_hash, str(row_index))}"
+
+
+def _xlsx_column_index(cell_ref: str) -> int:
+    index = 0
+    for char in cell_ref:
+        if not char.isalpha():
+            break
+        index = index * 26 + (ord(char.upper()) - ord("A") + 1)
+    return index
+
+
+def _xlsx_cell_text(cell: ET.Element, shared_strings: list[str]) -> str:
+    cell_type = cell.attrib.get("t", "")
+    if cell_type == "inlineStr":
+        texts = [text_el.text or "" for text_el in cell.findall("main:is/main:t", _MEXC_XLSX_NS)]
+        return "".join(texts).strip()
+    value_el = cell.find("main:v", _MEXC_XLSX_NS)
+    if value_el is None or value_el.text is None:
+        return ""
+    raw_value = value_el.text.strip()
+    if cell_type == "s":
+        try:
+            return shared_strings[int(raw_value)].strip()
+        except (ValueError, IndexError):
+            return raw_value
+    return raw_value
+
+
+def _xlsx_load_shared_strings(zf: zipfile.ZipFile) -> list[str]:
+    try:
+        with zf.open("xl/sharedStrings.xml") as fp:
+            tree = ET.parse(fp)
+    except KeyError:
+        return []
+    root = tree.getroot()
+    strings: list[str] = []
+    for item in root.findall("main:si", _MEXC_XLSX_NS):
+        texts = [text_el.text or "" for text_el in item.findall(".//main:t", _MEXC_XLSX_NS)]
+        strings.append("".join(texts))
+    return strings
+
+
+def _xlsx_read_sheet1_rows(path: Path) -> list[dict[str, str]]:
+    with zipfile.ZipFile(path) as zf:
+        shared_strings = _xlsx_load_shared_strings(zf)
+        with zf.open("xl/worksheets/sheet1.xml") as fp:
+            tree = ET.parse(fp)
+    root = tree.getroot()
+    sheet_data = root.find("main:sheetData", _MEXC_XLSX_NS)
+    if sheet_data is None:
+        return []
+    rows: list[list[str]] = []
+    for row_el in sheet_data.findall("main:row", _MEXC_XLSX_NS):
+        cells: dict[int, str] = {}
+        max_index = 0
+        for cell_el in row_el.findall("main:c", _MEXC_XLSX_NS):
+            cell_ref = cell_el.attrib.get("r", "")
+            if not cell_ref:
+                continue
+            col_index = _xlsx_column_index(cell_ref)
+            if col_index <= 0:
+                continue
+            cells[col_index] = _xlsx_cell_text(cell_el, shared_strings)
+            max_index = max(max_index, col_index)
+        if not cells:
+            continue
+        rows.append([cells.get(index, "") for index in range(1, max_index + 1)])
+    if not rows:
+        return []
+    headers = [str(value).strip() for value in rows[0]]
+    normalized_rows: list[dict[str, str]] = []
+    for values in rows[1:]:
+        row = {}
+        for index, header in enumerate(headers):
+            if not header:
+                continue
+            row[header] = str(values[index]).strip() if index < len(values) else ""
+        if any(value for value in row.values()):
+            normalized_rows.append(row)
+    return normalized_rows
+
+
+def _mexc_normalize_rows(
+    rows: list[dict[str, Any]],
+    *,
+    category: str,
+    source_file: str,
+    field_map: dict[str, str],
+    output_headers: list[str],
+    id_field: str,
+    timestamp_field: str,
+) -> list[dict[str, str]]:
+    normalized_rows: list[dict[str, str]] = []
+    for row_index, row in enumerate(rows, start=1):
+        source_uid_hash = _mexc_uid_hash(str(row.get("UID", "")).strip())
+        normalized: dict[str, str] = {
+            id_field: _mexc_actual_id(
+                category,
+                str(row.get(timestamp_field, "")).strip(),
+                str(row.get(field_map.get("symbol", ""), "")).strip(),
+                str(row.get(field_map.get("side", ""), "")).strip(),
+                source_uid_hash,
+                row_index,
+            ),
+            "source_uid_hash": source_uid_hash,
+            "source_file": source_file,
+            "import_status": f"imported:{category}",
+        }
+        for normalized_key, source_key in field_map.items():
+            normalized[normalized_key] = str(row.get(source_key, "")).strip()
+        normalized_rows.append({field: normalized.get(field, "") for field in output_headers})
+    return normalized_rows
+
+
+def normalize_mexc_trade_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+    return _mexc_normalize_rows(
+        rows,
+        category="trade_history",
+        source_file=source_file,
+        field_map=_MEXC_TRADE_FIELD_MAP,
+        output_headers=_MEXC_TRADE_HEADER,
+        id_field="actual_trade_id",
+        timestamp_field=_MEXC_TRADE_FIELD_MAP["timestamp_jst"],
+    )
+
+
+def normalize_mexc_order_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+    return _mexc_normalize_rows(
+        rows,
+        category="order_history",
+        source_file=source_file,
+        field_map=_MEXC_ORDER_FIELD_MAP,
+        output_headers=_MEXC_ORDER_HEADER,
+        id_field="actual_order_id",
+        timestamp_field=_MEXC_ORDER_FIELD_MAP["timestamp_jst"],
+    )
+
+
+def normalize_mexc_position_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+    return _mexc_normalize_rows(
+        rows,
+        category="position_history",
+        source_file=source_file,
+        field_map=_MEXC_POSITION_FIELD_MAP,
+        output_headers=_MEXC_POSITION_HEADER,
+        id_field="actual_position_id",
+        timestamp_field=_MEXC_POSITION_FIELD_MAP["opened_at_jst"],
+    )
+
+
+def _mexc_history_matches(filename: str, fragment: str) -> bool:
+    return fragment.casefold() in filename.casefold() and filename.lower().endswith(".xlsx")
+
+
+def _mexc_collect_source_files(input_dir: Path) -> dict[str, list[Path]]:
+    files_by_category = {spec["category"]: [] for spec in _MEXC_HISTORY_SPECS}
+    if not input_dir.exists():
+        return files_by_category
+    for path in sorted(input_dir.rglob("*.xlsx")):
+        filename = path.name
+        for spec in _MEXC_HISTORY_SPECS:
+            if _mexc_history_matches(filename, spec["filename_fragment"]):
+                files_by_category[spec["category"]].append(path)
+                break
+    return files_by_category
+
+
+def import_mexc_actual_trades(
+    *,
+    input_dir: Path,
+    output_dir: Path | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    output_root = output_dir or (BASE_DIR / "logs" / "csv")
+    files_by_category = _mexc_collect_source_files(input_dir)
+    summary: dict[str, Any] = {
+        "input_dir": str(input_dir),
+        "output_dir": str(output_root),
+        "dry_run": bool(dry_run),
+        "categories": {},
+        "missing_categories": [],
+        "written_files": [],
+    }
+    normalizers = {
+        "trade_history": normalize_mexc_trade_history,
+        "order_history": normalize_mexc_order_history,
+        "position_history": normalize_mexc_position_history,
+    }
+    for spec in _MEXC_HISTORY_SPECS:
+        category = spec["category"]
+        matched_files = files_by_category.get(category, [])
+        rows: list[dict[str, str]] = []
+        file_summaries: list[dict[str, Any]] = []
+        for source_path in matched_files:
+            try:
+                raw_rows = _xlsx_read_sheet1_rows(source_path)
+                normalized_rows = normalizers[category](raw_rows, source_file=source_path.name)
+                rows.extend(normalized_rows)
+                file_summaries.append(
+                    {
+                        "source_file": source_path.name,
+                        "row_count": len(normalized_rows),
+                        "status": "ok",
+                    }
+                )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                file_summaries.append(
+                    {
+                        "source_file": source_path.name,
+                        "row_count": 0,
+                        "status": f"error:{type(exc).__name__}",
+                    }
+                )
+        output_path = output_root / spec["output_filename"]
+        if not dry_run:
+            _write_csv_rows(output_path, spec["headers"], rows)
+            summary["written_files"].append(output_path.name)
+        if not matched_files:
+            summary["missing_categories"].append(category)
+        summary["categories"][category] = {
+            "matched_file_count": len(matched_files),
+            "matched_files": [path.name for path in matched_files],
+            "row_count": len(rows),
+            "status": "missing" if not matched_files else "ok",
+            "files": file_summaries,
+            "output_file": output_path.name,
+        }
+    summary["total_rows"] = sum(category_info["row_count"] for category_info in summary["categories"].values())
+    return summary
 
 
 def _user_reviews_archive_path(base_dir: Path) -> Path:
@@ -19892,6 +20254,12 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
 
+    mexc_import_parser = subparsers.add_parser("import-mexc-actual-trades")
+    mexc_import_parser.add_argument("--input-dir", required=True)
+    mexc_import_parser.add_argument("--output-dir", default="logs/csv")
+    mexc_import_parser.add_argument("--stdout-json", action="store_true")
+    mexc_import_parser.add_argument("--dry-run", action="store_true")
+
     daily_proxy_evaluator_parser = subparsers.add_parser("build-daily-proxy-evaluator-report")
     daily_proxy_evaluator_parser.add_argument("--date", dest="report_date")
     daily_proxy_evaluator_parser.add_argument("--lookback-days", type=_non_negative_int_arg, default=7)
@@ -20559,6 +20927,25 @@ def main() -> None:
             output_path=Path(args.output_csv) if args.output_csv else None,
         )
         print(path)
+        return
+
+    if args.command == "import-mexc-actual-trades":
+        summary = import_mexc_actual_trades(
+            input_dir=Path(args.input_dir),
+            output_dir=Path(args.output_dir) if args.output_dir else None,
+            dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        else:
+            print(f"input_dir={summary['input_dir']}")
+            print(f"output_dir={summary['output_dir']}")
+            print(f"dry_run={summary['dry_run']}")
+            print(f"total_rows={summary['total_rows']}")
+            print(
+                "missing_categories="
+                + (",".join(summary["missing_categories"]) if summary["missing_categories"] else "none")
+            )
         return
 
     if args.command == "serve-review-form":

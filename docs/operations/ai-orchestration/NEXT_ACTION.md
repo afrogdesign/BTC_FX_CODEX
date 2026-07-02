@@ -5,7 +5,8 @@
 
 ## Current goal
 
-MEXC actual trade export の local xlsx importer と normalized CSV 出力を実装する。
+MEXC actual trade export の local xlsx importer と normalized CSV 出力は実装済み。
+次は actual trade の linker 側を詰める。
 
 API integration はまだやらない。raw export は local only で扱い、normalized CSV を作る。
 
