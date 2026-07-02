@@ -48,6 +48,17 @@ _SIGNAL_LABELS = {
 
 CURRENT_MANUAL_SUPPORT_HEADER = "Ver04-v1 手動確認サポート"
 
+_VISIBLE_STATUS_LABELS = {
+    "blocked": "見送り",
+    "allowed": "監視可",
+    "conditional": "条件付き",
+    "pass": "通過",
+    "ready": "準備済み",
+    "watch": "監視継続",
+    "invalid": "無効",
+    "none": "なし",
+}
+
 
 def _format_price(value: Any) -> str:
     try:
@@ -84,6 +95,22 @@ def _label_phase(value: Any) -> str:
 
 def _label_signal(value: Any) -> str:
     return _SIGNAL_LABELS.get(str(value or "").lower(), str(value or "未記録"))
+
+
+def _humanize_visible_status_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "未記録"
+    for raw, label in _VISIBLE_STATUS_LABELS.items():
+        text = re.sub(rf"(?<![A-Za-z0-9_]){re.escape(raw)}(?![A-Za-z0-9_])", label, text, flags=re.IGNORECASE)
+    return text
+
+
+def _sentence_join(parts: list[str]) -> str:
+    sentences = [str(part).strip().strip("。") for part in parts if str(part).strip()]
+    if not sentences:
+        return "未記録"
+    return "。".join(sentences) + "。"
 
 
 def _metric_hint(metric_key: str, value: Any) -> str:
@@ -306,10 +333,22 @@ def _active_plan_status_rows(notification_context: dict[str, Any]) -> list[tuple
     position = notification_context.get("active_position_management", {}) or {}
 
     return [
-        ("成行", f"long: {market.get('long', 'blocked')} / short: {market.get('short', 'blocked')}"),
-        ("指値・戻り待ち", f"long: {limit.get('long', 'blocked')} / short: {limit.get('short', 'blocked')}"),
-        ("ブレイク追随", f"long: {breakout.get('long', 'blocked')} / short: {breakout.get('short', 'blocked')}"),
-        ("逆方向短期", f"long: {counter.get('long', 'blocked')} / short: {counter.get('short', 'blocked')}"),
+        (
+            "成行",
+            f"ロング: {_humanize_visible_status_text(market.get('long', 'blocked'))} / ショート: {_humanize_visible_status_text(market.get('short', 'blocked'))}",
+        ),
+        (
+            "指値・戻り待ち",
+            f"ロング: {_humanize_visible_status_text(limit.get('long', 'blocked'))} / ショート: {_humanize_visible_status_text(limit.get('short', 'blocked'))}",
+        ),
+        (
+            "ブレイク追随",
+            f"ロング: {_humanize_visible_status_text(breakout.get('long', 'blocked'))} / ショート: {_humanize_visible_status_text(breakout.get('short', 'blocked'))}",
+        ),
+        (
+            "逆方向短期",
+            f"ロング: {_humanize_visible_status_text(counter.get('long', 'blocked'))} / ショート: {_humanize_visible_status_text(counter.get('short', 'blocked'))}",
+        ),
         (
             "保有中処理",
             str(
@@ -509,35 +548,81 @@ def _panel_price_map_svg(
             )
 
     current_y = y_for_price(current_price)
+    current_box_w = 96
+    current_box_h = 36
+    current_box_x = right + 6
+    current_box_y = max(top - 2, min(bottom - current_box_h + 2, current_y - current_box_h / 2))
     emphasis_lines: list[str] = [
         f'<line x1="{left}" y1="{current_y:.1f}" x2="{right}" y2="{current_y:.1f}" class="current-price-line" />',
-        f'<text x="{right - 6:.1f}" y="{current_y - 6:.1f}" text-anchor="end" class="current-price-box-label">現在値 {_format_price_int(current_price)}</text>',
+        f'<rect x="{current_box_x:.1f}" y="{current_box_y:.1f}" width="{current_box_w:.1f}" height="{current_box_h:.1f}" rx="10" class="current-price-box" />',
+        f'<text x="{current_box_x + 10:.1f}" y="{current_box_y + 22:.1f}" class="current-price-box-label">現在値</text>',
+        f'<text x="{current_box_x + current_box_w - 10:.1f}" y="{current_box_y + 22:.1f}" text-anchor="end" class="current-price-box-value">{_format_price_int(current_price)}</text>',
     ]
 
     markers: list[str] = []
     if show_markers:
-        def marker_line(price: Any, label: str, tone: str, x1_ratio: float, x2_ratio: float, anchor: str) -> str:
+        def marker_spec(price: Any, label: str, tone: str, x1_ratio: float, x2_ratio: float, anchor: str) -> dict[str, Any] | None:
             value = _safe_float(price)
             if value <= 0:
-                return ""
+                return None
             y = y_for_price(value)
             x1 = left + chart_width * x1_ratio
             x2 = left + chart_width * x2_ratio
-            label_x = x2 + 8 if anchor == "start" else x1 - 8
-            return (
-                f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="marker-line {tone}" />'
-                f'<text x="{label_x:.1f}" y="{y + 4:.1f}" text-anchor="{anchor}" class="marker-label {tone}">{html.escape(label)} {_format_price_int(value)}</text>'
-            )
+            return {
+                "line": f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="marker-line {tone}" />',
+                "y": y,
+                "label_x": x2 + 10 if anchor == "start" else x1 - 10,
+                "anchor": anchor,
+                "tone": tone,
+                "text": f"{label} {_format_price_int(value)}",
+            }
 
+        def stack_marker_specs(
+            specs: list[dict[str, Any]],
+            *,
+            top_limit: float,
+            bottom_limit: float,
+            min_gap: float = 16.0,
+        ) -> list[dict[str, Any]]:
+            if not specs:
+                return []
+            ordered = sorted(specs, key=lambda item: float(item["y"]))
+            adjusted: list[dict[str, Any]] = []
+            for spec in ordered:
+                y = float(spec["y"])
+                if adjusted and y < adjusted[-1]["y"] + min_gap:
+                    y = adjusted[-1]["y"] + min_gap
+                adjusted.append({**spec, "y": y})
+            overflow = adjusted[-1]["y"] - bottom_limit
+            if overflow > 0:
+                adjusted = [{**spec, "y": float(spec["y"]) - overflow} for spec in adjusted]
+            underflow = top_limit - adjusted[0]["y"]
+            if underflow > 0:
+                adjusted = [{**spec, "y": float(spec["y"]) + underflow} for spec in adjusted]
+            return adjusted
+
+        long_specs = [
+            spec
+            for spec in (
+                marker_spec(long_setup.get("stop_loss"), "Long SL", "marker-long", 0.03, 0.16, "start"),
+                marker_spec(long_setup.get("tp1"), "Long TP1", "marker-long", 0.03, 0.16, "start"),
+                marker_spec(long_setup.get("tp2"), "Long TP2", "marker-long", 0.03, 0.16, "start"),
+            )
+            if spec is not None
+        ]
+        short_specs = [
+            spec
+            for spec in (
+                marker_spec(short_setup.get("stop_loss"), "Short SL", "marker-short", 0.84, 0.97, "end"),
+                marker_spec(short_setup.get("tp1"), "Short TP1", "marker-short", 0.84, 0.97, "end"),
+                marker_spec(short_setup.get("tp2"), "Short TP2", "marker-short", 0.84, 0.97, "end"),
+            )
+            if spec is not None
+        ]
         markers.extend(
-            [
-                marker_line(long_setup.get("stop_loss"), "Long SL", "marker-long", 0.03, 0.16, "start"),
-                marker_line(long_setup.get("tp1"), "Long TP1", "marker-long", 0.03, 0.16, "start"),
-                marker_line(long_setup.get("tp2"), "Long TP2", "marker-long", 0.03, 0.16, "start"),
-                marker_line(short_setup.get("stop_loss"), "Short SL", "marker-short", 0.84, 0.97, "end"),
-                marker_line(short_setup.get("tp1"), "Short TP1", "marker-short", 0.84, 0.97, "end"),
-                marker_line(short_setup.get("tp2"), "Short TP2", "marker-short", 0.84, 0.97, "end"),
-            ]
+            f'{spec["line"]}<text x="{float(spec["label_x"]):.1f}" y="{float(spec["y"]) + 4:.1f}" text-anchor="{spec["anchor"]}" class="marker-label {spec["tone"]}">{html.escape(str(spec["text"]))}</text>'
+            for spec in stack_marker_specs(long_specs, top_limit=top + 8, bottom_limit=bottom - 8)
+            + stack_marker_specs(short_specs, top_limit=top + 8, bottom_limit=bottom - 8)
         )
 
     return (
@@ -583,7 +668,7 @@ def _price_map_svg(result: dict[str, Any]) -> str:
         ),
         _panel_price_map_svg(
             title="1時間足: 帯の妥当性",
-            subtitle="再検討帯が押し目 / 戻りとして自然かを見る段です。TP / SL はここでは見ません",
+            subtitle="再検討帯が押し目 / 戻りとして自然かを見る段です。利確 / 損切りはここでは見ません",
             candles=_snapshot_candles(chart_snapshot, "candles_1h"),
             current_price=current_price,
             long_setup=long_setup,
@@ -708,11 +793,11 @@ def _major_turning_point_opportunity_items(
 ) -> list[tuple[str, str]]:
     wait_reasons = [str(reason).strip() for reason in display_reasons if str(reason).strip()]
     return [
-        ("Market regime", _label_regime(result.get("market_regime"))),
-        ("Phase", _label_phase(result.get("phase"))),
+        ("相場環境", _label_regime(result.get("market_regime"))),
+        ("今の局面", _label_phase(result.get("phase"))),
         (
-            "4h / 1h / 15m",
-            " / ".join(
+            "時間軸の揃い方",
+            _sentence_join(
                 [
                     f"4時間足 {_label_signal(result.get('signals_4h'))}",
                     f"1時間足 {_label_signal(result.get('signals_1h'))}",
@@ -721,14 +806,20 @@ def _major_turning_point_opportunity_items(
             ),
         ),
         (
-            "Score balance",
-            f"ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / スコア差 {result.get('score_gap')}",
+            "ロング/ショートの傾き",
+            _sentence_join(
+                [
+                    f"ロング {result.get('long_display_score')}",
+                    f"ショート {result.get('short_display_score')}",
+                    f"スコア差 {result.get('score_gap')}",
+                ]
+            ),
         ),
         (
-            "Entry / execution context",
-            " / ".join(
+            "入る条件の確認",
+            _sentence_join(
                 [
-                    str(notification_context.get("execution_label", "")).strip() or "未記録",
+                    _humanize_visible_status_text(notification_context.get("execution_label", "")).strip() or "未記録",
                     str(notification_context.get("entry_window_label", "")).strip() or "未記録",
                     str(display_context.get("entry_quality_label", "")).strip() or "未記録",
                     active_hero_summary or "未記録",
@@ -736,18 +827,18 @@ def _major_turning_point_opportunity_items(
             ),
         ),
         (
-            "Reversal / invalidation context",
-            " / ".join(
+            "無効化・待機理由",
+            _sentence_join(
                 [
                     str(notification_context.get("invalidation_label", "")).strip() or "未記録",
                     str(notification_context.get("next_condition_label", "")).strip() or "未記録",
-                    ", ".join(wait_reasons) or "未記録",
+                    "、".join(wait_reasons) or "未記録",
                 ]
             ),
         ),
         (
-            "Price context",
-            " / ".join(
+            "価格帯の確認",
+            _sentence_join(
                 [
                     f"現在価格 {_format_price(result.get('current_price'))}",
                     _zone_summary("近いサポート帯", result.get("support_zones", [])),
@@ -758,12 +849,12 @@ def _major_turning_point_opportunity_items(
             ),
         ),
         (
-            "Operator note",
-            "大転換は方向だけではなく、4h→1h→15m の順に根拠を確認する / 15分足だけの反応で大転換と決めない / "
-            "スコア差が小さいときは大転換候補とダマシ注意を取り違えやすい / 主要サポート・レジスタンス付近では反転・ブレイク・失敗の3択を確認する / "
-            "entry condition / invalidation / next condition を満たすまでは、決め打ち禁止",
+            "見る順番",
+            "大転換は 4h → 1h → 15m の順で根拠を確認します。15分足だけの反応で決め打ちしません。"
+            "スコア差が小さいときは大転換候補とダマシ注意を取り違えやすいので、主要サポート・レジスタンス付近では反転・ブレイク・失敗の3択を確認します。"
+            "入る条件・無効化条件・次の確認点がそろうまでは、決め打ちしません。",
         ),
-        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+        ("安全境界", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
     ]
 
 
@@ -1584,20 +1675,19 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         display_context,
     )
     checklist_items = [
-        ("Entry mode", str(notification_context.get("execution_label", "")).strip() or "未記録"),
+        ("行動種別", _humanize_visible_status_text(notification_context.get("execution_label", "")).strip() or "未記録"),
         (
-            "Entry condition",
-            " / ".join(
+            "入る条件",
+            _sentence_join(
                 [
                     str(notification_context.get("entry_window_label", "")).strip(),
                     str(display_context.get("entry_quality_label", "")).strip(),
                     active_hero_summary,
                 ]
-            ).strip(" /")
-            or "未記録",
+            ),
         ),
         (
-            "TP / SL",
+            "利確 / 損切り",
             "\n".join(
                 [
                     _setup_line(result, "long"),
@@ -1606,11 +1696,11 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
             ),
         ),
         (
-            "Invalidation / wait",
-            " / ".join(str(reason).strip() for reason in display_reasons if str(reason).strip()) or "未記録",
+            "無効化 / 待機理由",
+            _sentence_join(str(reason).strip() for reason in display_reasons if str(reason).strip()),
         ),
-        ("Timeout / validity", str(notification_context.get("validity_label", "")).strip() or "未記録"),
-        ("Safety", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
+        ("有効期限", _humanize_visible_status_text(notification_context.get("validity_label", "")).strip() or "未記録"),
+        ("安全境界", "report-only / not FORMAL_GO / no automatic order / human decides manually"),
     ]
     checklist_html = "".join(
         '<div class="checklist-item">'

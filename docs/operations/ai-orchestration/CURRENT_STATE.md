@@ -62,6 +62,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - major turn / turning point diagnostics do not authorize manual or automatic entry.
 - No restart / launchd action is required for the completed deployment.
 - notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
+- post-deployment observation surfaced a readability issue in the public detail page, and a bounded UI readability pass was applied to human-facing labels and chart marker spacing.
 
 ## Current operational blocker
 

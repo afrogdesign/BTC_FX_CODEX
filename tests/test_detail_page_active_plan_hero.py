@@ -89,11 +89,11 @@ class DetailPageActivePlanHeroTests(unittest.TestCase):
         self.assertIn("下方向優勢。ただし成行ショート不可。戻り売り待ち。現値は短期反発帯。", html)
         self.assertIn("<strong>Active Plan:</strong>", html)
         self.assertIn("<strong>成行:</strong>", html)
-        self.assertIn("long: blocked / short: blocked", html)
+        self.assertIn("ロング: 見送り / ショート: 見送り", html)
         self.assertIn("<strong>指値・戻り待ち:</strong>", html)
-        self.assertIn("long: allowed / short: allowed", html)
+        self.assertIn("ロング: 監視可 / ショート: 監視可", html)
         self.assertIn("<strong>逆方向短期:</strong>", html)
-        self.assertIn("long: conditional / short: blocked", html)
+        self.assertIn("ロング: 条件付き / ショート: 見送り", html)
         self.assertIn("まず方向ではなく、実際に取れる行動を確認します。", html)
 
     def test_detail_page_hero_keeps_formal_go_message_for_gate_pass(self) -> None:

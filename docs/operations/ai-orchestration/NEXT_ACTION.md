@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-NOTIFICATION-VERSION-LABEL-FIX-DETAIL-PAGE`
+- current_work_id: `BTCFX-20260702-VER04-V1-DETAIL-UI-READABILITY-PASS`
 - mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Ver04-v1 の通知 subject/header 表示ラベルを修正し、notification sending behavior を変えずに Ver04-v1 表示へ揃える。
+公開 detail page の人向けラベルと chart label 配置を見やすくし、notification sending behavior を変えずに Ver04-v1 の操作画面として読みやすくする。
 
-Next normal notification cycle should confirm subject/header labels show Ver04-v1.
+Next normal generated HTML should confirm labels read naturally and chart labels do not overlap.
 
 ## Product backlog next candidate
 
@@ -17,6 +17,7 @@ Next normal notification cycle should confirm subject/header labels show Ver04-v
 
 - Ver04-v1 runtime deployment complete
 - blocked version-label fix attempt requiring detail-page scope expansion
+- notification version-label fix complete
 
 ## Hard boundary
 
