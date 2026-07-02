@@ -74,14 +74,14 @@ The compact payload contract already used by the public HTML surface is the refe
 
 ## Recommended Next Implementation
 
-- `BTCFX-20260702-DASHBOARD-POST-EVAL-STATUS`
-- Goal: add local dashboard/app-surface display-only compact post-eval status from an already-provided payload/contract, without running the recommendation engine and without editing mail behavior.
-- Touch candidates may be app surface/dashboard files and tests only after repo inspection.
-- Explicitly defer mail body changes to a later approval-gated task.
+- `BTCFX-20260702-POST-EVAL-MAIL-SURFACE-PLAN`
+- Goal: define the approval-gated mail-surface direction for compact post-eval reflection without implementing mail body changes.
+- Keep mail as an entry point, not a full report, and defer any body/sending changes to a later explicit-approval task.
 
 ## Deferred Tasks
 
 - Mail summary compact status reflection
+- Mail body implementation after explicit approval
 - End-to-end generated report wiring
 - Any production wording changes
 
@@ -99,3 +99,4 @@ The compact payload contract already used by the public HTML surface is the refe
 - Local dashboard/app-surface Post-Eval Recommendation Status is implemented.
 - App-ready ready-gate contract validation is implemented.
 - Compact `post_eval_recommendations` remains report-only and human-approved.
+- Mail body changes remain deferred and require explicit approval.
