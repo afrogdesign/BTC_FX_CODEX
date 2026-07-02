@@ -1,13 +1,13 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-PUBLIC-HTML-POST-EVAL-STATUS`
+- current_work_id: `BTCFX-20260702-POST-EVAL-SURFACE-ALIGNMENT-PLAN`
 - mode: `NORMAL_CODEX`
 
 ## Current goal
 
-MEXC importer/linker/biweekly ground truth/recommendation engine は completed history とし、public HTML で post-eval recommendation status を report-only に反映する。
+MEXC importer/linker/biweekly ground truth/recommendation engine/public HTML post-eval status は completed history とし、post-eval status の dashboard/mail alignment を report-only で計画する。
 
-API integration はまだやらない。raw export は local only で扱い、表示用の HTML surface を整える。
+実装はまだやらない。今回の scope は docs-only で、mail body changes は明示 approval 後に別タスクで扱う。
 
 ## Product objective reminder
 
@@ -42,7 +42,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `tests/test_manual_trade_ground_truth_report.py`
 - `tests/test_post_eval_recommendation_engine.py`
 - `tests/test_notification_detail_page.py`
-- any narrow support docs needed for the MEXC import schema / normalization contract
+- `docs/operations/ai-orchestration/POST_EVAL_SURFACE_ALIGNMENT_PLAN_20260702.md`
 
 ## Do not
 
@@ -51,6 +51,7 @@ Inspect only as needed and summarize, do not dump large files.
 - Do not restart runtime.
 - Do not modify launchd state.
 - Do not change notification sending behavior.
+- Do not change mail body implementation.
 - Do not fetch OHLCV or exchange data.
 - Do not access private/account/order endpoints.
 - Do not edit trading logic.
@@ -64,7 +65,7 @@ Inspect only as needed and summarize, do not dump large files.
 - `pwd -P`
 - `git status --short --branch`
 - `git diff --check`
-- targeted unit tests for importer / linker / ground truth / recommendation engine / public HTML surface path
+- no unit tests required for this docs-only task
 - `git diff --name-only`
 - `git status --short --branch`
 
@@ -75,7 +76,7 @@ Inspect only as needed and summarize, do not dump large files.
 
 ## Stop conditions
 
-Stop with `BLOCKED BTCFX-20260702-PUBLIC-HTML-POST-EVAL-STATUS: <one specific question>` if:
+Stop with `BLOCKED BTCFX-20260702-POST-EVAL-SURFACE-ALIGNMENT-PLAN: <one specific question>` if:
 
 - current directory is not `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - required source-of-truth docs are missing
