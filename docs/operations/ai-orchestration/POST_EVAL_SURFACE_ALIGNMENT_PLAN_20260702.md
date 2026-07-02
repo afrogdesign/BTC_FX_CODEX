@@ -13,6 +13,8 @@ Public HTML already has the first display-only reflection, so this plan treats t
 - Biweekly ground truth report
 - Post-eval recommendation engine
 - Public HTML Post-Eval Recommendation Status section
+- Local dashboard/app-surface Post-Eval Recommendation Status
+- App-ready ready-gate contract validation
 
 ## Current Accepted Payload Contract
 
@@ -40,9 +42,9 @@ The compact payload contract already used by the public HTML surface is the refe
 
 ### Local Dashboard / App Surface
 
-- Next implementation should expose the same compact status, not raw candidate rows.
-- It should not execute `tools/log_feedback.py` from dashboard rendering.
-- It should not read private/generated CSV unless an existing refresh/export command explicitly provides compact data.
+- Implemented as the same compact status, not raw candidate rows.
+- It does not execute `tools/log_feedback.py` from dashboard rendering.
+- It does not read private/generated CSV unless an existing refresh/export command explicitly provides compact data.
 
 ### Notification Mail
 
@@ -50,6 +52,7 @@ The compact payload contract already used by the public HTML surface is the refe
 - Future implementation may add one compact status line or link/reference only after human approval.
 - No sending behavior change in this planning phase.
 - No production wording change in this task.
+- Mail body changes remain deferred and require explicit approval.
 
 ## Single-Source Doctrine
 
@@ -79,8 +82,6 @@ The compact payload contract already used by the public HTML surface is the refe
 ## Deferred Tasks
 
 - Mail summary compact status reflection
-- App ready-gate post-eval contract validation
-- Surface docs sync
 - End-to-end generated report wiring
 - Any production wording changes
 
@@ -91,3 +92,10 @@ The compact payload contract already used by the public HTML surface is the refe
 - If it requires sending mail or changing send behavior.
 - If it requires secrets/private endpoints/runtime changes.
 - If generated/private data would need to be committed.
+
+## Updated Baseline
+
+- Public HTML Post-Eval Recommendation Status is implemented.
+- Local dashboard/app-surface Post-Eval Recommendation Status is implemented.
+- App-ready ready-gate contract validation is implemented.
+- Compact `post_eval_recommendations` remains report-only and human-approved.
