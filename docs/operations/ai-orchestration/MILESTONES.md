@@ -94,6 +94,14 @@
 - actual human trades must not be mixed into `paper_positions.csv` unless explicitly approved
 - AI post review is optional qualitative enrichment, not the main evaluation layer
 
+## Ver04-v1 intraperiod / MACD observation gate
+
+- report-only MACD / intraperiod early-warning support is implemented
+- live extra 15-minute mail sending is not enabled
+- before any live extra sending decision, several normal hourly notifications / generated HTML pages must be observed
+- observation must compare system judgment against actual chart movement after the notification
+- judgment-to-self-review linkage is now a required next design concern
+
 ## Current implementation route
 
 - post-eval asset health audit is completed history

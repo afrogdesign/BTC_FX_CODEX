@@ -68,6 +68,10 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - live extra intraperiod mail sending is not enabled.
 - notification sending behavior remains unchanged.
 - executable Codex prompts emitted by ChatGPT should start with `AUTO_SEND`; `HUMAN_CHECK` means stop before emitting an executable prompt and consult the human.
+- the project is now in a required post-deployment observation gate for the intraperiod / MACD buildout.
+- this gate is mandatory before any live extra 15-minute sending decision.
+- observation checklist: HTML/page usability, `15分足 早期注意` timing, MACD wording usefulness, actual chart movement match, counter-bias loss reduction, safety boundary visibility.
+- actual judgment time and post-judgment self-review must be connected in the next design step.
 
 ## Current operational blocker
 

@@ -1,16 +1,15 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260702-VER04-V1-INTRAPERIOD-MACD-BUILDOUT`
+- current_work_id: `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Completed intraperiod MACD / early-warning buildout の state を観察し、次の generated HTML で `15分足 早期注意` と MACD 文言が自然に見えるか確認する。
-
-Next normal generated HTML should confirm the early-warning card reads naturally and still keeps safety boundaries visible.
+Several normal hourly notifications / generated HTML pages を review し、notification time ごとの system judgment が実際の chart movement に対して useful / late / wrong / missing だったかを確認する。
 
 ## Product backlog next candidate
 
+- `BTCFX-20260702-VER04-V1-JUDGMENT-SELF-REVIEW-LINK`
 - `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION` only if the user explicitly approves live extra notification sending behavior.
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
 
@@ -22,6 +21,7 @@ Next normal generated HTML should confirm the early-warning card reads naturally
 - breakout / inversion warning layer complete
 - momentum confirmation layer complete
 - intraperiod MACD buildout complete
+- required post-deployment observation gate for intraperiod / MACD buildout
 
 ## Hard boundary
 
@@ -37,10 +37,12 @@ Next normal generated HTML should confirm the early-warning card reads naturally
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- MACD support is now implemented in the report-only pipeline; live extra mail sending is still not enabled.
+- observation fields to capture: notification time, price at notification, displayed bias / active plan, early-warning card presence, MACD wording presence, actual 15m/30m/60m chart outcome, whether warning would have prevented a bad manual entry, and whether self-review should mark it as good / late / false alarm / missed.
 
 ## Resume rule
 
-After this buildout, the next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION` unless the user explicitly approves live extra notification sending behavior.
+After observation, the next recommended implementation is `BTCFX-20260702-VER04-V1-JUDGMENT-SELF-REVIEW-LINK`.
+
+Live extra 15-minute sending remains later as `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION`, and only after explicit user approval.
 
 Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.
