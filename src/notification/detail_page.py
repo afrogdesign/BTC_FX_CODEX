@@ -929,12 +929,26 @@ def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
 
     side_label = "ロング" if side == "long" else "ショート"
     tone = "long" if side == "long" else "short"
+
+    def _card_price_text(value: Any) -> str:
+        if isinstance(value, dict):
+            low = _safe_float(value.get("low"))
+            high = _safe_float(value.get("high"))
+            if min(low, high) <= 0:
+                return "抽出なし"
+            return f"{_format_price_int(low)} - {_format_price_int(high)}"
+        number = _safe_float(value)
+        if number > 0:
+            return _format_price_int(number)
+        text = str(value).strip()
+        return text or "未記録"
+
     items = [
-        ("浅い再検討帯", _value_defense_entry_layer_zone_text(layer.get("shallow_retest_zone"))),
-        ("本命防衛ゾーン", _value_defense_entry_layer_zone_text(layer.get("value_defense_zone"))),
-        ("無効化", _value_defense_entry_layer_zone_text(layer.get("invalidation_zone"))),
-        ("回収条件", _format_price(layer.get("reclaim_trigger"))),
-        ("継続条件", _format_price(layer.get("continuation_trigger"))),
+        ("浅い再検討帯", _card_price_text(layer.get("shallow_retest_zone"))),
+        ("本命防衛ゾーン", _card_price_text(layer.get("value_defense_zone"))),
+        ("無効化", _card_price_text(layer.get("invalidation_zone"))),
+        ("回収条件", _card_price_text(layer.get("reclaim_trigger"))),
+        ("継続条件", _card_price_text(layer.get("continuation_trigger"))),
     ]
     rows_html = "".join(
         '<div class="value-defense-card-row">'
@@ -2602,10 +2616,12 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       background: linear-gradient(180deg, rgba(10, 16, 28, 0.96) 0%, rgba(12, 20, 34, 0.96) 100%);
     }}
     .value-defense-chart-card.long {{
-      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.09);
+      border-color: rgba(34, 197, 94, 0.42);
+      box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.08);
     }}
     .value-defense-chart-card.short {{
-      box-shadow: inset 0 0 0 1px rgba(253, 224, 71, 0.08);
+      border-color: rgba(248, 113, 113, 0.4);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
     }}
     .value-defense-card-head {{
       display: flex;
@@ -2629,12 +2645,12 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       letter-spacing: 0.04em;
     }}
     .value-defense-card-pill.long {{
-      background: rgba(14, 165, 233, 0.16);
-      color: #dbeafe;
+      background: rgba(34, 197, 94, 0.16);
+      color: #dcfce7;
     }}
     .value-defense-card-pill.short {{
-      background: rgba(245, 158, 11, 0.14);
-      color: #fef3c7;
+      background: rgba(248, 113, 113, 0.16);
+      color: #fee2e2;
     }}
     .value-defense-card-row {{
       display: grid;
@@ -2653,11 +2669,24 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       font-size: 11px;
       font-weight: 700;
     }}
+    .value-defense-chart-card.long .value-defense-card-key {{
+      color: #86efac;
+    }}
+    .value-defense-chart-card.short .value-defense-card-key {{
+      color: #fca5a5;
+    }}
     .value-defense-card-value {{
       color: #eef6ff;
-      font-size: 12px;
-      font-weight: 800;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.01em;
       text-align: right;
+    }}
+    .value-defense-chart-card.long .value-defense-card-value {{
+      color: #bbf7d0;
+    }}
+    .value-defense-chart-card.short .value-defense-card-value {{
+      color: #fecaca;
     }}
     .setup-callout-long, .setup-callout-short {{
       stroke-width: 1;

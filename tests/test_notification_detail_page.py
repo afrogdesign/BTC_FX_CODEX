@@ -529,6 +529,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("value-defense-chart-card long", html)
         self.assertIn("value-defense-chart-card short", html)
         self.assertIn("value-defense-card-row", html)
+        self.assertIn("65,480 - 65,518", html)
+        self.assertIn("66,790 - 66,840", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertNotIn("automatic_order_allowed=true", html.lower())
         self.assertNotIn("send_email", html)
