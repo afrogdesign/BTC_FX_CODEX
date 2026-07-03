@@ -1,16 +1,16 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260703-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
+- current_work_id: `BTCFX-20260703-VER04-V2-BRANCH-UP`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-self-review stability buildout は反映済みで、controlled restart も完了。次の normal notification から observation / review を再開する。
+Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working branch has moved to Ver04-v2. Implementation has not started yet; next work is design-only.
 
 ## Product backlog next candidate
 
-- `BTCFX-20260703-VER04-V1-POST-DEPLOYMENT-OBSERVATION`
-- `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION` only if the user explicitly approves live extra notification sending behavior.
+- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`
+- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-IMPLEMENTATION` only after design approval.
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
 
 ## Completed history
@@ -31,6 +31,8 @@ self-review stability buildout は反映済みで、controlled restart も完了
 - judgment self-review change-readiness gate complete
 - judgment self-review explicit late label pass complete
 - judgment self-review run metadata / fingerprint complete
+- Ver04-v1 self-review / run-fingerprint checkpoint complete
+- source working branch moved to Ver04-v2
 
 ## Hard boundary
 
@@ -46,12 +48,10 @@ self-review stability buildout は反映済みで、controlled restart も完了
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- next normal notification should confirm the simplified subject, current-price label, internal diagnostics demotion, and self-review evidence alignment in the live process.
+- implementation has not started yet.
 
 ## Resume rule
 
-Next recommended task is `BTCFX-20260702-VER04-V1-POST-DEPLOYMENT-OBSERVATION`.
+Next recommended task is `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`.
 
-Live extra 15-minute sending remains later as `BTCFX-20260702-VER04-V1-INTRAPERIOD-LIVE-SEND-DECISION`, and only after explicit user approval.
-
-Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.
+Ver04-v2 is the new source working branch. Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.

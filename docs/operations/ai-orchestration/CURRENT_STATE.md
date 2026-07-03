@@ -17,6 +17,7 @@ last_updated: 2026-07-02
 ## Current product focus
 
 Current focus has moved from generic evidence / intraperiod / win-rate diagnostics to the Ver04-v1 manual-trading self-improvement loop.
+Ver04-v1 self-review / run-fingerprint checkpoint is complete, and the source working branch has moved to Ver04-v2 for the next design step.
 
 Primary objective:
 
@@ -29,6 +30,7 @@ notification mail を受け取った人間が、
 Automatic trading remains out of scope and later-stage only.
 
 Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major product-direction shift.
+Ver04-v2 is now the next source working branch for follow-on design work.
 
 ## Current operational posture
 
@@ -36,6 +38,7 @@ Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major 
 - Immediate posture is post-deployment observation.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
+- Next major design target is VALUE-DEFENSE-ENTRY-LAYER.
 
 ## Current source-of-truth route
 

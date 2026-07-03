@@ -11,6 +11,13 @@
 - daily proxy evaluator is implemented and tested
 - default next implementation task is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
 
+## Ver04-v2 branch-up checkpoint
+
+- Ver04-v1 self-review / run-fingerprint checkpoint was completed
+- source working branch moved from Ver04-v1 to Ver04-v2
+- next major design target is `VALUE-DEFENSE-ENTRY-LAYER`
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
 ## Daily Proxy Evaluator implemented
 
 - deterministic report-only Daily Proxy Evaluator was implemented in this thread
