@@ -43,6 +43,11 @@ MCP primary ワークフローでの最小 checkpoint push 手順を定義しま
 - generated files, secrets, runtime files, logs, `.venv312/`, unrelated files を含めない
 - old runtime execution repo は触らない
 
+## Checkpoint hash fidelity note
+
+- checkpoint push report では branch 名と commit hash を必ず正確に残す
+- runtime handoff 側で GitHub が一時的に unreachable でも、local fallback で同じ commit を apply できるようにするため
+
 ## After push
 
 - 実際の commit hash を compact report に書く

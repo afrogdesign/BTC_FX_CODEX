@@ -1,16 +1,20 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DOC-SYNC`
+- current_work_id: `BTCFX-20260703-VER04-V2-OPS-FOLLOWUP-DNS-FALLBACK-OBSERVATION-QUEUE`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working branch has moved to Ver04-v2. VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete; next posture is observation / review only.
+Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is implemented and runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
 
-## Product backlog next candidate
+## Observation queue
 
-- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` only after observation evidence exists and the human explicitly approves tuning review.
-- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
+- verify detail HTML shows `Value Defense Entry Layer`
+- verify shallow retest and value defense zone are separated
+- verify operator guidance is readable
+- verify judgment self-review outputs `direction_quality`, `entry_depth_quality`, `value_defense_result`
+- verify no unintended mail sending behavior / subject / frequency change
+- collect at least one normal generated notification / detail HTML example before Phase4
 
 ## Completed history
 
@@ -36,6 +40,7 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 - VALUE-DEFENSE-ENTRY-LAYER Phase1 complete
 - VALUE-DEFENSE-ENTRY-LAYER Phase2 complete
 - VALUE-DEFENSE-ENTRY-LAYER Phase3 complete
+- VALUE-DEFENSE-ENTRY-LAYER runtime apply complete via local MCP source fallback after GitHub DNS/SSH reachability issue
 
 ## Hard boundary
 
@@ -45,6 +50,12 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 - no API / secrets / private / account / order endpoints
 - no trading logic change
 - no raw export commit
+
+## Later candidates
+
+- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` only after observation evidence exists and the human explicitly approves tuning review.
+- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
+- live extra intraperiod sending decision remains explicit-approval-only.
 
 ## Validation
 

@@ -42,6 +42,16 @@ MCP working repo の checkpoint push から old runtime execution repo の pull 
 - secret を読まない
 - runtime repo を通常 task で編集しない
 
+## GitHub / SSH DNS failure fallback
+
+- まず `origin/Ver04-v2` を使う
+- ただし `origin` の fetch が DNS / SSH 到達性だけで失敗し、checkpoint push がすでに成功報告済みなら、MCP source repo の local fallback を許可する
+- local fallback は MCP source repo 側の `Ver04-v2` が意図した checkpoint commit に **exactly** 解決する場合のみ許可する
+- runtime repo は clean であることが前提
+- apply 後の runtime HEAD は対象 commit と一致しなければならない
+- secrets / API / mail send test / launchd plist / raw exports / generated logs / order endpoints は触らない
+- 既知の成功例: runtime_head `114bd2361b0b149f0a0b935b621b8a2a3bca9af6`
+
 ## Stop conditions
 
 - pull target が曖昧

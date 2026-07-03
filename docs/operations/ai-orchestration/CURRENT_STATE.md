@@ -91,6 +91,8 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - judgment self-review now includes deterministic run metadata and fingerprints for later report comparison.
 - controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
 - Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete; next posture is observation / review only.
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `114bd2361b0b149f0a0b935b621b8a2a3bca9af6`.
+- GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
 - Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
