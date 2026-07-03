@@ -536,7 +536,7 @@ def _panel_price_map_svg(
                 continue
             band_class = "setup-band-long" if side == "long" else "setup-band-short"
             axis_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
-            opacity = "0.24" if emphasize_setup else "0.12"
+            opacity = "0.3" if emphasize_setup else "0.14"
             y1 = y_for_price(high)
             y2 = y_for_price(low)
             setup_elements.append(
@@ -2539,46 +2539,46 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       fill: rgba(248, 113, 113, 0.14);
     }}
     .setup-band-long {{
-      fill: rgba(34, 197, 94, 0.18);
-      stroke: rgba(74, 222, 128, 0.82);
-      stroke-width: 1.35;
+      fill: rgba(34, 197, 94, 0.24);
+      stroke: rgba(74, 222, 128, 0.98);
+      stroke-width: 1.6;
     }}
     .setup-band-short {{
-      fill: rgba(248, 113, 113, 0.18);
-      stroke: rgba(248, 113, 113, 0.82);
-      stroke-width: 1.35;
+      fill: rgba(248, 113, 113, 0.24);
+      stroke: rgba(248, 113, 113, 0.98);
+      stroke-width: 1.6;
     }}
     .setup-band-text-long {{
       fill: #dcfce7;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
     }}
     .setup-band-text-short {{
       fill: #fee2e2;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
     }}
     .value-defense-band-long {{
-      fill: rgba(14, 165, 233, 0.1);
-      stroke: rgba(125, 211, 252, 0.72);
-      stroke-width: 1.15;
-      stroke-dasharray: 4 4;
+      fill: rgba(6, 182, 212, 0.18);
+      stroke: rgba(103, 232, 249, 0.96);
+      stroke-width: 1.7;
+      stroke-dasharray: 5 4;
     }}
     .value-defense-band-short {{
-      fill: rgba(251, 191, 36, 0.1);
-      stroke: rgba(253, 224, 71, 0.72);
-      stroke-width: 1.15;
-      stroke-dasharray: 4 4;
+      fill: rgba(249, 115, 22, 0.18);
+      stroke: rgba(253, 186, 116, 0.96);
+      stroke-width: 1.7;
+      stroke-dasharray: 5 4;
     }}
     .invalidation-band-long {{
-      fill: rgba(220, 38, 38, 0.09);
-      stroke: rgba(252, 165, 165, 0.78);
-      stroke-width: 1.05;
+      fill: rgba(0, 0, 0, 0);
+      stroke: rgba(252, 165, 165, 0.52);
+      stroke-width: 0.85;
     }}
     .invalidation-band-short {{
-      fill: rgba(29, 78, 216, 0.09);
-      stroke: rgba(147, 197, 253, 0.78);
-      stroke-width: 1.05;
+      fill: rgba(0, 0, 0, 0);
+      stroke: rgba(147, 197, 253, 0.52);
+      stroke-width: 0.85;
     }}
     .value-defense-band-text-long, .value-defense-band-text-short,
     .invalidation-band-text-long, .invalidation-band-text-short {{
@@ -2599,14 +2599,14 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       fill: #bfdbfe;
     }}
     .value-defense-trigger-long, .value-defense-trigger-short {{
-      stroke-width: 1.1;
-      stroke-dasharray: 6 5;
+      stroke-width: 0.9;
+      stroke-dasharray: 4 6;
     }}
     .value-defense-trigger-long {{
-      stroke: rgba(186, 230, 253, 0.92);
+      stroke: rgba(186, 230, 253, 0.62);
     }}
     .value-defense-trigger-short {{
-      stroke: rgba(253, 230, 138, 0.92);
+      stroke: rgba(253, 230, 138, 0.62);
     }}
     .value-defense-trigger-text-long, .value-defense-trigger-text-short {{
       font-size: 11px;
@@ -2659,7 +2659,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       text-transform: uppercase;
     }}
     .value-defense-group-label.primary {{
-      color: #dbeafe;
+      color: #eef6ff;
     }}
     .value-defense-group-label.secondary {{
       color: #94a3b8;
@@ -2720,16 +2720,16 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       border: 1px solid rgba(255, 255, 255, 0.2);
     }}
     .value-defense-row-chip.long.shallow {{
-      background: rgba(34, 197, 94, 0.9);
+      background: rgba(34, 197, 94, 0.98);
     }}
     .value-defense-row-chip.short.shallow {{
-      background: rgba(248, 113, 113, 0.9);
+      background: rgba(248, 113, 113, 0.98);
     }}
     .value-defense-row-chip.long.defense {{
-      background: rgba(125, 211, 252, 0.9);
+      background: rgba(103, 232, 249, 0.98);
     }}
     .value-defense-row-chip.short.defense {{
-      background: rgba(253, 224, 71, 0.9);
+      background: rgba(253, 186, 116, 0.98);
     }}
     .value-defense-row-chip.long.invalidation {{
       background: rgba(252, 165, 165, 0.78);
@@ -2759,9 +2759,9 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       text-align: right;
     }}
     .value-defense-card-value.secondary {{
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      color: #cbd5e1;
+      color: #94a3b8;
     }}
     .value-defense-chart-card.long .value-defense-card-value {{
       color: #bbf7d0;
