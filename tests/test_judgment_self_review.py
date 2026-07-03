@@ -567,6 +567,11 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(summary["human_review_required_rows"], 3)
         self.assertIn("entry_filter_or_direction_check", summary["improvement_focus_counts"])
         self.assertIn("missed_signal_detection", summary["improvement_focus_counts"])
+        self.assertIn("good", summary["direction_quality_counts"])
+        self.assertIn("weak", summary["execution_gate_quality_counts"])
+        self.assertIn("too_shallow", summary["entry_depth_quality_counts"])
+        self.assertIn("scenario_invalidated", summary["scenario_lifecycle_result_counts"])
+        self.assertIn("not_touched", summary["value_defense_result_counts"])
         digest = build_judgment_self_review_digest(review_df, summary, build_judgment_self_review_queue(review_df))
         self.assertEqual(digest["primary_condition"], "bad_entry_or_wrong_direction")
         self.assertEqual(digest["primary_improvement_focus"], "entry_filter_or_direction_check")
@@ -593,6 +598,85 @@ class JudgmentSelfReviewTests(unittest.TestCase):
         self.assertEqual(late_summary["late_rows"], 1)
         late_gate = build_judgment_self_review_change_readiness(late_summary, late_digest, late_queue)
         self.assertEqual(late_gate["change_readiness_status"], "human_review_first")
+
+    def test_sl_first_with_shallow_context_marks_entry_depth_too_shallow(self) -> None:
+        review_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    {
+                        **_candidate_row("cand-shallow", "sig-shallow", "sl_first"),
+                        "candidate_type": "active_limit_retest",
+                        "entry_mode": "limit_zone_mid",
+                        "shallow_retest_zone_low": "61467",
+                        "shallow_retest_zone_high": "61555",
+                        "value_defense_zone_low": "61280",
+                        "value_defense_zone_high": "61350",
+                        "lifecycle_state": "shallow_retest_risk",
+                    }
+                ]
+            ),
+            None,
+        )
+        self.assertEqual(review_df.loc[0, "self_review_label"], "wrong")
+        self.assertEqual(review_df.loc[0, "entry_depth_quality"], "too_shallow")
+        self.assertEqual(review_df.loc[0, "direction_quality"], "wrong")
+        self.assertEqual(review_df.loc[0, "scenario_lifecycle_result"], "scenario_invalidated")
+        self.assertEqual(review_df.loc[0, "value_defense_result"], "unresolved")
+
+    def test_explicit_value_defense_fields_are_preserved_and_sanitized(self) -> None:
+        review_df = build_judgment_self_review_rows(
+            pd.DataFrame(
+                [
+                    {
+                        **_candidate_row("cand-vd", "sig-vd", "tp1_first"),
+                        "direction_quality": "weak",
+                        "execution_gate_quality": "good",
+                        "entry_depth_quality": "too_deep",
+                        "scenario_lifecycle_result": "reclaim_pending",
+                        "value_defense_touched": "yes",
+                        "value_defense_zone_low": "61280",
+                        "value_defense_zone_high": "61350",
+                        "shallow_retest_zone_low": "61467",
+                        "shallow_retest_zone_high": "61555",
+                        "value_defense_result": "value_entry_validated",
+                        "value_defense_review_hint": "OPENAI_API_KEY Gmail smtp send_email <script> fetch( private/order automatic_order_allowed=true",
+                    }
+                ]
+            ),
+            None,
+        )
+        self.assertEqual(review_df.loc[0, "direction_quality"], "weak")
+        self.assertEqual(review_df.loc[0, "execution_gate_quality"], "good")
+        self.assertEqual(review_df.loc[0, "entry_depth_quality"], "too_deep")
+        self.assertEqual(review_df.loc[0, "scenario_lifecycle_result"], "reclaim_pending")
+        self.assertEqual(review_df.loc[0, "value_defense_result"], "value_entry_validated")
+        self.assertNotIn("OPENAI_API_KEY", review_df.loc[0, "value_defense_review_hint"])
+
+        summary = summarize_judgment_self_reviews(review_df)
+        queue = build_judgment_self_review_queue(review_df)
+        digest = build_judgment_self_review_digest(review_df, summary, queue)
+        gate = build_judgment_self_review_change_readiness(summary, digest, queue)
+        metadata = build_judgment_self_review_run_metadata(review_df, summary, digest, gate, queue)
+        report, payload = build_judgment_self_review_report(review_df, None, dry_run=True)
+        self.assertEqual(queue[0]["direction_quality"], "weak")
+        self.assertEqual(queue[0]["entry_depth_quality"], "too_deep")
+        self.assertEqual(queue[0]["value_defense_result"], "value_entry_validated")
+        self.assertEqual(payload["review_queue"][0]["direction_quality"], "weak")
+        self.assertEqual(payload["review_queue"][0]["value_defense_result"], "value_entry_validated")
+        self.assertIn("review_queue", payload)
+        self.assertIn("review_digest", payload)
+        self.assertIn("change_readiness", payload)
+        self.assertIn("run_metadata", payload)
+        self.assertEqual(payload["report_fingerprint"], payload["run_metadata"]["report_fingerprint"])
+        self.assertTrue(str(payload["report_fingerprint"]).startswith("jsr_"))
+        self.assertNotIn("OPENAI_API_KEY", report)
+        self.assertNotIn("send_email", report)
+        self.assertNotIn("Gmail", report)
+        self.assertNotIn("smtp", report.lower())
+        self.assertNotIn("<script", report.lower())
+        self.assertNotIn("fetch(", report.lower())
+        self.assertNotIn("private/order", report.lower())
+        self.assertNotIn("automatic_order_allowed=true", report.lower())
 
     def test_run_metadata_produces_stable_fingerprints(self) -> None:
         empty_metadata = build_judgment_self_review_run_metadata(None, None, None, None, None)
@@ -767,6 +851,11 @@ class JudgmentSelfReviewTests(unittest.TestCase):
             self.assertIn("## Review Severity", md_text)
             self.assertIn("## Human Review Required", md_text)
             self.assertIn("## Improvement Focus", md_text)
+            self.assertIn("## Direction Quality", md_text)
+            self.assertIn("## Execution Gate Quality", md_text)
+            self.assertIn("## Entry Depth Quality", md_text)
+            self.assertIn("## Scenario Lifecycle Result", md_text)
+            self.assertIn("## Value Defense Result", md_text)
             self.assertIn("review_digest", json.dumps(payload, ensure_ascii=False))
             self.assertIn("change_readiness", json.dumps(payload, ensure_ascii=False))
             self.assertIn("run_metadata", json.dumps(payload, ensure_ascii=False))
@@ -785,6 +874,7 @@ class JudgmentSelfReviewTests(unittest.TestCase):
                 self.assertNotIn("<script", text.lower())
                 self.assertNotIn("fetch(", text.lower())
                 self.assertNotIn("private/order", text.lower())
+                self.assertNotIn("automatic_order_allowed=true", text.lower())
 
     def test_cli_dry_run_stdout_json_does_not_write_files(self) -> None:
         with TemporaryDirectory() as tmpdir:

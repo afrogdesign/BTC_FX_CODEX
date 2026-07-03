@@ -42,6 +42,12 @@ OUTPUT_COLUMNS = [
     "human_review_required",
     "improvement_focus",
     "operator_review_hint",
+    "direction_quality",
+    "execution_gate_quality",
+    "entry_depth_quality",
+    "scenario_lifecycle_result",
+    "value_defense_result",
+    "value_defense_review_hint",
 ]
 
 _KNOWN_OUTCOMES = {
@@ -69,6 +75,19 @@ _WRONG_OUTCOMES = {"sl_first"}
 _FALSE_ALARM_OUTCOMES = {"not_entered"}
 _UNRESOLVED_OUTCOMES = {"ambiguous", "timeout", "entry_reached", "pending"}
 _NO_DATA_OUTCOMES = {"no_ohlcv"}
+
+_DIRECTION_QUALITY_VALUES = {"good", "weak", "wrong", "unresolved"}
+_EXECUTION_GATE_QUALITY_VALUES = {"good", "weak", "wrong", "unresolved"}
+_ENTRY_DEPTH_QUALITY_VALUES = {"good", "too_shallow", "too_deep", "missed_value_entry", "unresolved"}
+_SCENARIO_LIFECYCLE_RESULT_VALUES = {
+    "support_defended",
+    "reclaim_pending",
+    "scenario_validated",
+    "scenario_invalidated",
+    "not_touched",
+    "unresolved",
+}
+_VALUE_DEFENSE_RESULT_VALUES = {"value_entry_validated", "defense_failed", "not_touched", "unresolved"}
 
 _SENSITIVE_PATTERNS = [
     r"\bsource_uid_hash\b",
@@ -391,6 +410,194 @@ def _review_support_fields(self_review_label: str) -> dict[str, str]:
     }
 
 
+def _dimension_value(value: Any, allowed: set[str], default: str) -> str:
+    text = _normalize_text(value).lower()
+    return text if text in allowed else default
+
+
+def _zone_present(row: dict[str, Any], prefix: str) -> bool:
+    low = _normalize_value(row.get(f"{prefix}_low"), "")
+    high = _normalize_value(row.get(f"{prefix}_high"), "")
+    if low and high:
+        return True
+    zone = row.get(prefix)
+    return isinstance(zone, dict) and bool(_normalize_value(zone.get("low"), "") or _normalize_value(zone.get("high"), ""))
+
+
+def _value_defense_context_present(row: dict[str, Any]) -> bool:
+    return any(
+        [
+            _truthy(row.get("value_defense_touched")),
+            _zone_present(row, "value_defense_zone"),
+            _zone_present(row, "shallow_retest_zone"),
+            _normalize_value(row.get("lifecycle_state"), ""),
+            _normalize_value(row.get("value_defense_result"), ""),
+            _normalize_value(row.get("value_defense_review_hint"), ""),
+        ]
+    )
+
+
+def _value_defense_review_hint_for_row(
+    row: dict[str, Any],
+    *,
+    direction_quality: str,
+    execution_gate_quality: str,
+    entry_depth_quality: str,
+    scenario_lifecycle_result: str,
+    value_defense_result: str,
+) -> str:
+    explicit = _normalize_value(row.get("value_defense_review_hint"), "")
+    if explicit:
+        return explicit
+    if value_defense_result == "value_entry_validated":
+        return "本命防衛ゾーンが機能しました。"
+    if value_defense_result == "defense_failed":
+        return "本命防衛ゾーンが崩れました。"
+    if value_defense_result == "not_touched":
+        return "本命防衛ゾーンには到達していません。"
+    if entry_depth_quality == "too_shallow":
+        return "浅い再検討帯だけで入らず、本命防衛ゾーンを確認する。"
+    if entry_depth_quality == "too_deep":
+        return "入りが深すぎる可能性があります。本命防衛ゾーンを待つ。"
+    if entry_depth_quality == "missed_value_entry":
+        return "本命防衛ゾーンを見逃した可能性があります。"
+    if scenario_lifecycle_result == "reclaim_pending":
+        return "回収条件待ちです。再浮上の確認を優先する。"
+    if scenario_lifecycle_result == "scenario_invalidated":
+        return "シナリオは崩れました。方向と深さの両方を見直す。"
+    if direction_quality == "wrong":
+        return "方向が逆でした。再検討帯の選び方を見直す。"
+    if execution_gate_quality == "weak":
+        return "執行条件が弱いので、今は飛びつかない。"
+    return "結果未確定。追加足で確認する。"
+
+
+def _review_dimensions_for_row(row: dict[str, Any], outcome: str, self_review_label: str) -> dict[str, str]:
+    normalized_label = _normalize_text(self_review_label).lower()
+    normalized_outcome = _normalize_text(outcome).lower()
+    explicit_direction = _dimension_value(row.get("direction_quality"), _DIRECTION_QUALITY_VALUES, "")
+    explicit_execution = _dimension_value(row.get("execution_gate_quality"), _EXECUTION_GATE_QUALITY_VALUES, "")
+    explicit_entry_depth = _dimension_value(row.get("entry_depth_quality"), _ENTRY_DEPTH_QUALITY_VALUES, "")
+    explicit_scenario = _dimension_value(row.get("scenario_lifecycle_result"), _SCENARIO_LIFECYCLE_RESULT_VALUES, "")
+    explicit_value_defense = _dimension_value(row.get("value_defense_result"), _VALUE_DEFENSE_RESULT_VALUES, "")
+    explicit_hint = _normalize_value(row.get("value_defense_review_hint"), "")
+    shallow_context = _zone_present(row, "shallow_retest_zone") or any(
+        token in _normalize_text(row.get(key), "").lower()
+        for key in ("entry_mode", "candidate_type", "first_exit_reason")
+        for token in ("retest", "shallow", "limit")
+    )
+    value_defense_present = _value_defense_context_present(row)
+    value_defense_touched = _truthy(row.get("value_defense_touched")) or _normalize_value(row.get("lifecycle_state"), "").lower() in {
+        "defense_zone_touched",
+        "support_defended",
+        "resistance_defended",
+    }
+    lifecycle_state = _normalize_value(row.get("lifecycle_state"), "").lower()
+
+    if explicit_direction:
+        direction_quality = explicit_direction
+    elif normalized_label in {"good", "missed"} or normalized_outcome in _TP_HIT_OUTCOMES:
+        direction_quality = "good"
+    elif normalized_label == "wrong" or normalized_outcome == "sl_first":
+        direction_quality = "weak" if value_defense_touched or lifecycle_state in {"defense_zone_touched", "support_defended", "resistance_defended"} else "wrong"
+    elif normalized_label == "late":
+        direction_quality = "weak"
+    elif normalized_label == "false_alarm":
+        direction_quality = "unresolved"
+    elif normalized_label == "no_data":
+        direction_quality = "unresolved"
+    else:
+        direction_quality = "unresolved"
+
+    if explicit_execution:
+        execution_gate_quality = explicit_execution
+    elif normalized_label in {"good"} or normalized_outcome in _TP_HIT_OUTCOMES:
+        execution_gate_quality = "good"
+    elif normalized_label in {"wrong", "late", "missed", "false_alarm"} or normalized_outcome in {"sl_first", "not_entered"}:
+        execution_gate_quality = "weak"
+    elif normalized_label in {"unresolved", "ambiguous"} or normalized_outcome in {"timeout", "entry_reached", "pending", "ambiguous"}:
+        execution_gate_quality = "unresolved"
+    elif normalized_label == "no_data" or normalized_outcome == "no_ohlcv":
+        execution_gate_quality = "unresolved"
+    else:
+        execution_gate_quality = "unresolved"
+
+    if explicit_entry_depth:
+        entry_depth_quality = explicit_entry_depth
+    elif normalized_label in {"good"} or normalized_outcome in _TP_HIT_OUTCOMES:
+        entry_depth_quality = "good"
+    elif normalized_label == "missed":
+        entry_depth_quality = "missed_value_entry"
+    elif normalized_label == "wrong" or normalized_outcome == "sl_first":
+        entry_depth_quality = "too_shallow" if (shallow_context or value_defense_present) else "unresolved"
+    elif normalized_label == "late":
+        entry_depth_quality = "missed_value_entry" if (shallow_context or value_defense_present) else "unresolved"
+    elif normalized_label == "missed" or normalized_outcome == "missed":
+        entry_depth_quality = "missed_value_entry"
+    elif normalized_label == "false_alarm" or normalized_outcome == "not_entered":
+        entry_depth_quality = "too_deep" if (shallow_context or value_defense_present) else "unresolved"
+    elif normalized_label in {"unresolved", "ambiguous"} or normalized_outcome in {"timeout", "entry_reached", "pending", "ambiguous"}:
+        entry_depth_quality = "unresolved"
+    elif normalized_label == "no_data" or normalized_outcome == "no_ohlcv":
+        entry_depth_quality = "unresolved"
+    else:
+        entry_depth_quality = "unresolved"
+
+    if explicit_scenario:
+        scenario_lifecycle_result = explicit_scenario
+    elif normalized_label in {"good", "missed"} or normalized_outcome in _TP_HIT_OUTCOMES:
+        scenario_lifecycle_result = "scenario_validated"
+    elif normalized_label == "wrong" or normalized_outcome == "sl_first":
+        scenario_lifecycle_result = "scenario_invalidated"
+    elif normalized_label == "late":
+        scenario_lifecycle_result = "reclaim_pending" if (shallow_context or value_defense_present) else "unresolved"
+    elif normalized_label == "false_alarm" or normalized_outcome == "not_entered":
+        scenario_lifecycle_result = "not_touched"
+    elif normalized_label in {"unresolved", "ambiguous"} or normalized_outcome in {"timeout", "entry_reached", "pending", "ambiguous"}:
+        scenario_lifecycle_result = "unresolved"
+    elif normalized_label == "no_data" or normalized_outcome == "no_ohlcv":
+        scenario_lifecycle_result = "unresolved"
+    else:
+        scenario_lifecycle_result = "unresolved"
+
+    if explicit_value_defense:
+        value_defense_result = explicit_value_defense
+    elif value_defense_touched and (normalized_label in {"good", "missed"} or normalized_outcome in _TP_HIT_OUTCOMES):
+        value_defense_result = "value_entry_validated"
+    elif value_defense_touched and (normalized_label == "wrong" or normalized_outcome == "sl_first"):
+        value_defense_result = "defense_failed"
+    elif normalized_label == "false_alarm" or normalized_outcome == "not_entered":
+        value_defense_result = "not_touched"
+    elif normalized_label == "missed" or normalized_outcome == "missed":
+        value_defense_result = "not_touched"
+    elif normalized_label in {"unresolved", "ambiguous"} or normalized_outcome in {"timeout", "entry_reached", "pending", "ambiguous"}:
+        value_defense_result = "unresolved"
+    elif normalized_label == "no_data" or normalized_outcome == "no_ohlcv":
+        value_defense_result = "unresolved"
+    elif scenario_lifecycle_result in {"support_defended", "scenario_validated"} and value_defense_touched:
+        value_defense_result = "value_entry_validated"
+    else:
+        value_defense_result = "unresolved"
+
+    value_defense_review_hint = _value_defense_review_hint_for_row(
+        row,
+        direction_quality=direction_quality,
+        execution_gate_quality=execution_gate_quality,
+        entry_depth_quality=entry_depth_quality,
+        scenario_lifecycle_result=scenario_lifecycle_result,
+        value_defense_result=value_defense_result,
+    )
+
+    return {
+        "direction_quality": direction_quality,
+        "execution_gate_quality": execution_gate_quality,
+        "entry_depth_quality": entry_depth_quality,
+        "scenario_lifecycle_result": scenario_lifecycle_result,
+        "value_defense_result": value_defense_result,
+        "value_defense_review_hint": value_defense_review_hint,
+    }
+
+
 def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
     source_signal_id = _pick_text(row, "source_signal_id", "signal_id")
     candidate_id = _pick_text(row, "candidate_id")
@@ -431,6 +638,7 @@ def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
         tp_accuracy_result = "unresolved"
     timing_review = _timing_review_for_label(self_review_label)
     support_fields = _review_support_fields(self_review_label)
+    value_defense_fields = _review_dimensions_for_row(row, outcome, self_review_label)
     return {
         "review_id": _review_id(source_signal_id, candidate_id, timestamp_jst, outcome, candidate_type, side),
         "source_signal_id": source_signal_id,
@@ -457,6 +665,7 @@ def _build_review_row_from_candidate(row: dict[str, Any]) -> dict[str, Any]:
         "reason_codes": _reason_codes_text(reason_codes),
         "safety_boundary": SAFETY_BOUNDARY,
         **support_fields,
+        **value_defense_fields,
     }
 
 
@@ -518,6 +727,7 @@ def _build_missed_row(row: dict[str, Any]) -> dict[str, Any]:
         "reason_codes": _reason_codes_text(reason_codes),
         "safety_boundary": SAFETY_BOUNDARY,
         **_review_support_fields("missed"),
+        **_review_dimensions_for_row(row, "missed", "missed"),
     }
 
 
@@ -609,6 +819,12 @@ def build_judgment_self_review_queue(review_df: pd.DataFrame | None, *, limit: i
         "human_review_required",
         "improvement_focus",
         "operator_review_hint",
+        "direction_quality",
+        "execution_gate_quality",
+        "entry_depth_quality",
+        "scenario_lifecycle_result",
+        "value_defense_result",
+        "value_defense_review_hint",
         "mfe_r",
         "mae_r",
         "reason_codes",
@@ -629,6 +845,12 @@ def build_judgment_self_review_queue(review_df: pd.DataFrame | None, *, limit: i
         "human_review_required",
         "improvement_focus",
         "operator_review_hint",
+        "direction_quality",
+        "execution_gate_quality",
+        "entry_depth_quality",
+        "scenario_lifecycle_result",
+        "value_defense_result",
+        "value_defense_review_hint",
         "mfe_r",
         "mae_r",
         "reason_codes",
@@ -668,6 +890,12 @@ def build_judgment_self_review_queue(review_df: pd.DataFrame | None, *, limit: i
                 "human_review_required": _normalize_value(row.get("human_review_required"), ""),
                 "improvement_focus": _normalize_value(row.get("improvement_focus"), ""),
                 "operator_review_hint": _normalize_value(row.get("operator_review_hint"), ""),
+                "direction_quality": _normalize_value(row.get("direction_quality"), ""),
+                "execution_gate_quality": _normalize_value(row.get("execution_gate_quality"), ""),
+                "entry_depth_quality": _normalize_value(row.get("entry_depth_quality"), ""),
+                "scenario_lifecycle_result": _normalize_value(row.get("scenario_lifecycle_result"), ""),
+                "value_defense_result": _normalize_value(row.get("value_defense_result"), ""),
+                "value_defense_review_hint": _normalize_value(row.get("value_defense_review_hint"), ""),
                 "mfe_r": _normalize_value(row.get("mfe_r"), ""),
                 "mae_r": _normalize_value(row.get("mae_r"), ""),
                 "reason_codes": _normalize_value(row.get("reason_codes"), ""),
@@ -865,6 +1093,11 @@ def build_judgment_self_review_digest(
 
     review_bucket_counts = summary_data.get("review_bucket_counts") or {}
     improvement_focus_counts = summary_data.get("improvement_focus_counts") or {}
+    direction_quality_counts = summary_data.get("direction_quality_counts") or {}
+    execution_gate_quality_counts = summary_data.get("execution_gate_quality_counts") or {}
+    entry_depth_quality_counts = summary_data.get("entry_depth_quality_counts") or {}
+    scenario_lifecycle_result_counts = summary_data.get("scenario_lifecycle_result_counts") or {}
+    value_defense_result_counts = summary_data.get("value_defense_result_counts") or {}
     digest = {
         "digest_status": digest_status,
         "primary_condition": primary_condition,
@@ -874,6 +1107,11 @@ def build_judgment_self_review_digest(
         "evidence_state": evidence_state,
         "top_review_buckets": _top_count_items(review_bucket_counts, limit=5, key_name="bucket"),
         "top_improvement_focuses": _top_count_items(improvement_focus_counts, limit=5, key_name="focus"),
+        "top_direction_qualities": _top_count_items(direction_quality_counts, limit=5, key_name="direction_quality"),
+        "top_execution_gate_qualities": _top_count_items(execution_gate_quality_counts, limit=5, key_name="execution_gate_quality"),
+        "top_entry_depth_qualities": _top_count_items(entry_depth_quality_counts, limit=5, key_name="entry_depth_quality"),
+        "top_scenario_lifecycle_results": _top_count_items(scenario_lifecycle_result_counts, limit=5, key_name="scenario_lifecycle_result"),
+        "top_value_defense_results": _top_count_items(value_defense_result_counts, limit=5, key_name="value_defense_result"),
         "operator_next_action": operator_next_action,
         "safety_boundary": SAFETY_BOUNDARY,
     }
@@ -1002,6 +1240,11 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
             "review_severity_counts": {},
             "human_review_required_counts": {},
             "improvement_focus_counts": {},
+            "direction_quality_counts": {},
+            "execution_gate_quality_counts": {},
+            "entry_depth_quality_counts": {},
+            "scenario_lifecycle_result_counts": {},
+            "value_defense_result_counts": {},
             "side_counts": {},
             "candidate_type_counts": {},
             "missed_opportunity_rows": 0,
@@ -1020,7 +1263,18 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
         df["side"] = ""
     if "candidate_type" not in df.columns:
         df["candidate_type"] = ""
-    for column in ("review_bucket", "review_severity", "human_review_required", "improvement_focus"):
+    for column in (
+        "review_bucket",
+        "review_severity",
+        "human_review_required",
+        "improvement_focus",
+        "direction_quality",
+        "execution_gate_quality",
+        "entry_depth_quality",
+        "scenario_lifecycle_result",
+        "value_defense_result",
+        "value_defense_review_hint",
+    ):
         if column not in df.columns:
             df[column] = ""
 
@@ -1031,6 +1285,11 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
     review_severity_counts = _count_series(df["review_severity"])
     human_review_required_counts = _count_series(df["human_review_required"])
     improvement_focus_counts = _count_series(df["improvement_focus"])
+    direction_quality_counts = _count_series(df["direction_quality"])
+    execution_gate_quality_counts = _count_series(df["execution_gate_quality"])
+    entry_depth_quality_counts = _count_series(df["entry_depth_quality"])
+    scenario_lifecycle_result_counts = _count_series(df["scenario_lifecycle_result"])
+    value_defense_result_counts = _count_series(df["value_defense_result"])
     side_counts = _count_series(df["side"])
     candidate_type_counts = _count_series(df["candidate_type"])
 
@@ -1071,6 +1330,11 @@ def summarize_judgment_self_reviews(review_df: pd.DataFrame | None) -> dict[str,
         "review_severity_counts": review_severity_counts,
         "human_review_required_counts": human_review_required_counts,
         "improvement_focus_counts": improvement_focus_counts,
+        "direction_quality_counts": direction_quality_counts,
+        "execution_gate_quality_counts": execution_gate_quality_counts,
+        "entry_depth_quality_counts": entry_depth_quality_counts,
+        "scenario_lifecycle_result_counts": scenario_lifecycle_result_counts,
+        "value_defense_result_counts": value_defense_result_counts,
         "side_counts": side_counts,
         "candidate_type_counts": candidate_type_counts,
         "missed_opportunity_rows": missed_rows,
@@ -1163,6 +1427,21 @@ def _markdown_lines(
         "",
         "## Improvement Focus",
         f"- {json.dumps(summary['improvement_focus_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Direction Quality",
+        f"- {json.dumps(summary['direction_quality_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Execution Gate Quality",
+        f"- {json.dumps(summary['execution_gate_quality_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Entry Depth Quality",
+        f"- {json.dumps(summary['entry_depth_quality_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Scenario Lifecycle Result",
+        f"- {json.dumps(summary['scenario_lifecycle_result_counts'], ensure_ascii=False, sort_keys=True)}",
+        "",
+        "## Value Defense Result",
+        f"- {json.dumps(summary['value_defense_result_counts'], ensure_ascii=False, sort_keys=True)}",
         "",
         "## Self-Review Digest",
         f"- digest_status: {_normalize_value(review_digest.get('digest_status'), '')}",
