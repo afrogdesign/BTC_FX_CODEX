@@ -39,6 +39,7 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
 - Next major design target is VALUE-DEFENSE-ENTRY-LAYER.
+- Ver04-v2 is design-only at this point; implementation has not started yet.
 
 ## Current source-of-truth route
 

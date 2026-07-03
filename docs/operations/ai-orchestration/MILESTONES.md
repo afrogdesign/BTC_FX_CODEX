@@ -18,6 +18,13 @@
 - next major design target is `VALUE-DEFENSE-ENTRY-LAYER`
 - safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
 
+## Ver04-v2 value-defense entry layer design
+
+- design-only document created for entry-depth realism
+- scope separates market entry, shallow retest entry, and value defense entry
+- implementation is not started yet
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
 ## Daily Proxy Evaluator implemented
 
 - deterministic report-only Daily Proxy Evaluator was implemented in this thread

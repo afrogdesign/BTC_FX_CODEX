@@ -10,7 +10,7 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 ## Product backlog next candidate
 
 - `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`
-- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-IMPLEMENTATION` only after design approval.
+- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE1` only after the design is reviewed and accepted.
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
 
 ## Completed history
@@ -33,6 +33,7 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 - judgment self-review run metadata / fingerprint complete
 - Ver04-v1 self-review / run-fingerprint checkpoint complete
 - source working branch moved to Ver04-v2
+- VALUE-DEFENSE-ENTRY-LAYER design doc created
 
 ## Hard boundary
 
@@ -53,5 +54,7 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 ## Resume rule
 
 Next recommended task is `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`.
+
+Implementation has not started yet. Wait for design review / acceptance before Phase 1.
 
 Ver04-v2 is the new source working branch. Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.
