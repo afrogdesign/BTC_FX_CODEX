@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.analysis.value_defense_entry_layer import build_value_defense_entry_layer
+
 
 def _round2(value: float) -> float:
     return round(float(value), 2)
@@ -12,7 +14,7 @@ _TP2_MIN_RR = 2.4
 
 
 def _empty_setup(reason: str = "") -> dict[str, Any]:
-    return {
+    setup = {
         "status": "invalid",
         "status_reason_code": "invalid_empty_setup",
         "entry_zone": {"low": 0.0, "high": 0.0},
@@ -25,6 +27,15 @@ def _empty_setup(reason: str = "") -> dict[str, Any]:
         "entry_to_target_pct": 0.0,
         "invalid_reason": reason,
     }
+    setup["value_defense_entry_layer"] = build_value_defense_entry_layer(
+        side="",
+        price=None,
+        atr=None,
+        setup=setup,
+        support_zones=[],
+        resistance_zones=[],
+    )
+    return setup
 
 
 def _normalize_take_profits(side: str, entry_mid: float, tp1: float, tp2: float) -> tuple[float, float]:
@@ -209,6 +220,14 @@ def build_setup(
         "invalid_reason_codes": invalid_reason_codes,
         "blocking_flags": sorted(set(no_trade_flags)),
     }
+    setup["value_defense_entry_layer"] = build_value_defense_entry_layer(
+        side=side,
+        price=price,
+        atr=atr,
+        setup=setup,
+        support_zones=support_zones,
+        resistance_zones=resistance_zones,
+    )
     return setup, sorted(set(no_trade_flags))
 
 
