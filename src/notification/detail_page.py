@@ -525,6 +525,7 @@ def _panel_price_map_svg(
 
     setup_elements: list[str] = []
     overlay_elements: list[str] = []
+    overlay_notes: list[str] = []
     if show_setup_bands:
         setup_x = left + chart_width * (0.12 if panel_mode == "zone" else 0.16)
         setup_w = chart_width * (0.84 if panel_mode == "zone" else 0.8)
@@ -536,7 +537,7 @@ def _panel_price_map_svg(
                 continue
             band_class = "setup-band-long" if side == "long" else "setup-band-short"
             axis_class = "setup-axis-value-long" if side == "long" else "setup-axis-value-short"
-            opacity = "0.34" if emphasize_setup else "0.18"
+            opacity = "0.24" if emphasize_setup else "0.12"
             y1 = y_for_price(high)
             y2 = y_for_price(low)
             setup_elements.append(
@@ -552,9 +553,10 @@ def _panel_price_map_svg(
             text_x = setup_x + 10 if side == "long" else setup_x + setup_w - 10
             text_anchor = "start" if side == "long" else "end"
             text_y = max(top + 18, min(bottom - 8, y1 + 16))
-            setup_elements.append(
-                f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{text_class}">浅い再検討帯</text>'
-            )
+            if panel_mode == "execution":
+                setup_elements.append(
+                    f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{text_class}">浅い再検討帯</text>'
+                )
 
         if panel_mode in {"zone", "execution"}:
             lane_x_map = {
@@ -582,6 +584,7 @@ def _panel_price_map_svg(
                 label: str,
                 text_anchor: str,
                 text_x: float,
+                show_label: bool,
             ) -> None:
                 if zone is None:
                     return
@@ -591,9 +594,10 @@ def _panel_price_map_svg(
                 overlay_elements.append(
                     f'<rect x="{x:.1f}" y="{y1:.1f}" width="{width_value:.1f}" height="{max(y2 - y1, 10):.1f}" rx="9" class="{rect_class}" />'
                 )
-                overlay_elements.append(
-                    f'<text x="{text_x:.1f}" y="{max(top + 18, min(bottom - 8, y1 + 16)):.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)}</text>'
-                )
+                if show_label:
+                    overlay_elements.append(
+                        f'<text x="{text_x:.1f}" y="{max(top + 18, min(bottom - 8, y1 + 16)):.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)}</text>'
+                    )
 
             def _overlay_trigger_line(
                 *,
@@ -606,6 +610,7 @@ def _panel_price_map_svg(
                 text_anchor: str,
                 text_x: float,
                 text_y: float,
+                show_label: bool,
             ) -> None:
                 value = _safe_float(price)
                 if value <= 0:
@@ -614,9 +619,10 @@ def _panel_price_map_svg(
                 overlay_elements.append(
                     f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="{line_class}" />'
                 )
-                overlay_elements.append(
-                    f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)} {_format_price_int(value)}</text>'
-                )
+                if show_label:
+                    overlay_elements.append(
+                        f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)} {_format_price_int(value)}</text>'
+                    )
 
             for side, setup in (("long", long_setup), ("short", short_setup)):
                 layer = setup.get("value_defense_entry_layer")
@@ -631,6 +637,8 @@ def _panel_price_map_svg(
                 invalidation_text_class = "invalidation-band-text-long" if side == "long" else "invalidation-band-text-short"
                 trigger_class = "value-defense-trigger-long" if side == "long" else "value-defense-trigger-short"
                 trigger_text_class = "value-defense-trigger-text-long" if side == "long" else "value-defense-trigger-text-short"
+                show_band_labels = panel_mode == "zone"
+                show_trigger_labels = False
 
                 _overlay_zone_rect(
                     zone=_layer_zone(layer.get("value_defense_zone")),
@@ -641,6 +649,7 @@ def _panel_price_map_svg(
                     label="本命防衛ゾーン",
                     text_anchor=lane_anchor,
                     text_x=lane_text_x,
+                    show_label=show_band_labels,
                 )
                 _overlay_zone_rect(
                     zone=_layer_zone(layer.get("invalidation_zone")),
@@ -651,6 +660,7 @@ def _panel_price_map_svg(
                     label="無効化",
                     text_anchor=lane_anchor,
                     text_x=lane_text_x,
+                    show_label=show_band_labels,
                 )
 
                 trigger_specs = [
@@ -668,6 +678,35 @@ def _panel_price_map_svg(
                         text_anchor=lane_anchor,
                         text_x=lane_text_x,
                         text_y=text_y,
+                        show_label=show_trigger_labels,
+                    )
+
+                if panel_mode == "execution":
+                    side_label = "ロング" if side == "long" else "ショート"
+                    note_x = left + 12 if side == "long" else right - 194
+                    note_y = top + 18
+                    shallow_zone = _value_defense_entry_layer_zone_text(layer.get("shallow_retest_zone"))
+                    defense_zone = _value_defense_entry_layer_zone_text(layer.get("value_defense_zone"))
+                    invalidation_zone = _value_defense_entry_layer_zone_text(layer.get("invalidation_zone"))
+                    reclaim_value = _format_price(layer.get("reclaim_trigger"))
+                    continuation_value = _format_price(layer.get("continuation_trigger"))
+                    note_lines = [
+                        ("浅い再検討帯", shallow_zone),
+                        ("本命防衛ゾーン", defense_zone),
+                        ("無効化", invalidation_zone),
+                        ("回収条件", reclaim_value),
+                        ("継続条件", continuation_value),
+                    ]
+                    line_html = "".join(
+                        f'<text x="{note_x + 12:.1f}" y="{note_y + 38 + idx * 16:.1f}" class="value-defense-note-line {"long" if side == "long" else "short"}">{html.escape(label)} {html.escape(value)}</text>'
+                        for idx, (label, value) in enumerate(note_lines)
+                    )
+                    overlay_notes.append(
+                        f'<g class="value-defense-note value-defense-note-{"long" if side == "long" else "short"}">'
+                        f'<rect x="{note_x:.1f}" y="{note_y:.1f}" width="182" height="124" rx="14" class="value-defense-note-box {"long" if side == "long" else "short"}" />'
+                        f'<text x="{note_x + 12:.1f}" y="{note_y + 20:.1f}" class="value-defense-note-title {"long" if side == "long" else "short"}">{side_label} / Value Defense</text>'
+                        f"{line_html}"
+                        "</g>"
                     )
 
     current_y = y_for_price(current_price)
@@ -754,6 +793,7 @@ def _panel_price_map_svg(
         f"{''.join(overlay_elements)}"
         f"{''.join(candle_elements)}"
         f"{''.join(setup_elements)}"
+        f"{''.join(overlay_notes)}"
         f"{''.join(marker for marker in markers if marker)}"
         f"{''.join(emphasis_lines)}"
         f"{''.join(axis_labels)}"
@@ -2457,46 +2497,46 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       fill: rgba(248, 113, 113, 0.14);
     }}
     .setup-band-long {{
-      fill: rgba(34, 197, 94, 0.26);
-      stroke: #4ade80;
-      stroke-width: 1.7;
+      fill: rgba(34, 197, 94, 0.18);
+      stroke: rgba(74, 222, 128, 0.82);
+      stroke-width: 1.35;
     }}
     .setup-band-short {{
-      fill: rgba(248, 113, 113, 0.26);
-      stroke: #f87171;
-      stroke-width: 1.7;
+      fill: rgba(248, 113, 113, 0.18);
+      stroke: rgba(248, 113, 113, 0.82);
+      stroke-width: 1.35;
     }}
     .setup-band-text-long {{
       fill: #dcfce7;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
     }}
     .setup-band-text-short {{
       fill: #fee2e2;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 700;
     }}
     .value-defense-band-long {{
-      fill: rgba(14, 165, 233, 0.16);
-      stroke: rgba(125, 211, 252, 0.94);
-      stroke-width: 1.4;
-      stroke-dasharray: 5 4;
+      fill: rgba(14, 165, 233, 0.1);
+      stroke: rgba(125, 211, 252, 0.72);
+      stroke-width: 1.15;
+      stroke-dasharray: 4 4;
     }}
     .value-defense-band-short {{
-      fill: rgba(251, 191, 36, 0.14);
-      stroke: rgba(253, 224, 71, 0.92);
-      stroke-width: 1.4;
-      stroke-dasharray: 5 4;
+      fill: rgba(251, 191, 36, 0.1);
+      stroke: rgba(253, 224, 71, 0.72);
+      stroke-width: 1.15;
+      stroke-dasharray: 4 4;
     }}
     .invalidation-band-long {{
-      fill: rgba(220, 38, 38, 0.12);
-      stroke: rgba(252, 165, 165, 0.9);
-      stroke-width: 1.2;
+      fill: rgba(220, 38, 38, 0.09);
+      stroke: rgba(252, 165, 165, 0.78);
+      stroke-width: 1.05;
     }}
     .invalidation-band-short {{
-      fill: rgba(29, 78, 216, 0.12);
-      stroke: rgba(147, 197, 253, 0.9);
-      stroke-width: 1.2;
+      fill: rgba(29, 78, 216, 0.09);
+      stroke: rgba(147, 197, 253, 0.78);
+      stroke-width: 1.05;
     }}
     .value-defense-band-text-long, .value-defense-band-text-short,
     .invalidation-band-text-long, .invalidation-band-text-short {{
@@ -2517,8 +2557,8 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       fill: #bfdbfe;
     }}
     .value-defense-trigger-long, .value-defense-trigger-short {{
-      stroke-width: 1.3;
-      stroke-dasharray: 6 4;
+      stroke-width: 1.1;
+      stroke-dasharray: 6 5;
     }}
     .value-defense-trigger-long {{
       stroke: rgba(186, 230, 253, 0.92);
@@ -2535,6 +2575,37 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     }}
     .value-defense-trigger-text-short {{
       fill: #fef3c7;
+    }}
+    .value-defense-note-box {{
+      fill: rgba(8, 14, 24, 0.78);
+      stroke-width: 1;
+    }}
+    .value-defense-note-box.long {{
+      stroke: rgba(125, 211, 252, 0.48);
+    }}
+    .value-defense-note-box.short {{
+      stroke: rgba(253, 224, 71, 0.42);
+    }}
+    .value-defense-note-title {{
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }}
+    .value-defense-note-title.long {{
+      fill: #dbeafe;
+    }}
+    .value-defense-note-title.short {{
+      fill: #fef3c7;
+    }}
+    .value-defense-note-line {{
+      font-size: 10.5px;
+      font-weight: 700;
+    }}
+    .value-defense-note-line.long {{
+      fill: #cbd5e1;
+    }}
+    .value-defense-note-line.short {{
+      fill: #d6d3d1;
     }}
     .setup-callout-long, .setup-callout-short {{
       stroke-width: 1;
