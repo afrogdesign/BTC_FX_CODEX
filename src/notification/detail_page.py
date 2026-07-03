@@ -780,6 +780,13 @@ def _price_map_svg(result: dict[str, Any]) -> str:
     resistance_zones = result.get("resistance_zones", [])[:3]
     chart_snapshot = result.get("chart_snapshot", {}) if isinstance(result.get("chart_snapshot"), dict) else {}
     width = 860
+    panel_gap = 54
+    panel_one_height = 309
+    panel_two_height = 309
+    panel_three_height = 429
+    panel_two_origin = panel_one_height + panel_gap
+    panel_three_origin = panel_two_origin + panel_two_height + panel_gap
+    total_height = panel_three_origin + panel_three_height
     panels = [
         _panel_price_map_svg(
             title="4時間足: 大局方向",
@@ -791,7 +798,7 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=309,
+            height=panel_one_height,
             origin_y=0,
             panel_mode="context",
         ),
@@ -805,8 +812,8 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=309,
-            origin_y=347,
+            height=panel_two_height,
+            origin_y=panel_two_origin,
             panel_mode="zone",
         ),
         _panel_price_map_svg(
@@ -819,14 +826,29 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             support_zones=support_zones,
             resistance_zones=resistance_zones,
             width=width,
-            height=429,
-            origin_y=694,
+            height=panel_three_height,
+            origin_y=panel_three_origin,
             panel_mode="execution",
+        ),
+    ]
+    separators = [
+        (
+            f'<g class="price-map-separator-wrap">'
+            f'<rect x="0" y="{panel_one_height + 10}" width="{width}" height="{panel_gap - 20}" class="price-map-separator" rx="18" />'
+            f'<line x1="24" y1="{panel_one_height + (panel_gap / 2):.1f}" x2="{width - 24}" y2="{panel_one_height + (panel_gap / 2):.1f}" class="price-map-separator-line" />'
+            "</g>"
+        ),
+        (
+            f'<g class="price-map-separator-wrap">'
+            f'<rect x="0" y="{panel_two_origin + panel_two_height + 10}" width="{width}" height="{panel_gap - 20}" class="price-map-separator" rx="18" />'
+            f'<line x1="24" y1="{panel_two_origin + panel_two_height + (panel_gap / 2):.1f}" x2="{width - 24}" y2="{panel_two_origin + panel_two_height + (panel_gap / 2):.1f}" class="price-map-separator-line" />'
+            "</g>"
         ),
     ]
 
     return (
-        f'<svg viewBox="0 0 {width} 1133" class="price-map" aria-label="再検討ラインチャート">'
+        f'<svg viewBox="0 0 {width} {total_height}" class="price-map" aria-label="再検討ラインチャート">'
+        f"{''.join(separators)}"
         f"{''.join(panels)}"
         "</svg>"
     )
@@ -929,6 +951,13 @@ def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
 
     side_label = "ロング" if side == "long" else "ショート"
     tone = "long" if side == "long" else "short"
+    descriptions = {
+        "浅い再検討帯": "最初に反応しやすい近い押し目/戻り",
+        "本命防衛ゾーン": "本命として待ちたい深い押し目/戻り",
+        "無効化": "この目線が崩れやすい価格帯",
+        "回収条件": "深く刺したあとに戻してほしい水準",
+        "継続条件": "方向継続を確認する目安",
+    }
 
     def _card_price_text(value: Any) -> str:
         if isinstance(value, dict):
@@ -952,7 +981,10 @@ def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
     ]
     primary_rows = "".join(
         f'<div class="value-defense-card-row primary {tone}">'
+        '<div class="value-defense-card-main">'
         f'<span class="value-defense-card-key"><span class="value-defense-row-chip {tone} {chip}"></span>{html.escape(label)}</span>'
+        f'<span class="value-defense-card-desc">{html.escape(descriptions.get(label, ""))}</span>'
+        "</div>"
         f'<span class="value-defense-card-value">{html.escape(value)}</span>'
         "</div>"
         for label, value, tier, chip in items
@@ -960,7 +992,10 @@ def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
     )
     secondary_rows = "".join(
         f'<div class="value-defense-card-row secondary {tone}">'
+        '<div class="value-defense-card-main">'
         f'<span class="value-defense-card-key"><span class="value-defense-row-chip {tone} {chip}"></span>{html.escape(label)}</span>'
+        f'<span class="value-defense-card-desc">{html.escape(descriptions.get(label, ""))}</span>'
+        "</div>"
         f'<span class="value-defense-card-value secondary">{html.escape(value)}</span>'
         "</div>"
         for label, value, tier, chip in items
@@ -2486,17 +2521,21 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       width: 100%;
       height: auto;
       display: block;
+      background: linear-gradient(180deg, rgba(205, 216, 232, 0.05) 0%, rgba(205, 216, 232, 0.05) 100%);
+      border-top: 1px solid rgba(148, 163, 184, 0.12);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
     }}
     .price-map-bg {{
       fill: #0f1728;
       stroke: #263148;
-      stroke-width: 1;
+      stroke-width: 1.2;
     }}
     .price-map-panel {{
-      filter: drop-shadow(0 10px 18px rgba(2, 6, 23, 0.14));
+      filter: drop-shadow(0 12px 22px rgba(2, 6, 23, 0.16));
     }}
     .price-map-panel-focus .price-map-bg {{
-      stroke: #385072;
+      stroke: #456489;
+      stroke-width: 1.4;
     }}
     .chart-title {{
       fill: #eff6ff;
@@ -2509,11 +2548,18 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       font-weight: 500;
     }}
     .price-grid-h {{
-      stroke: rgba(148, 163, 184, 0.24);
-      stroke-width: 1;
+      stroke: rgba(148, 163, 184, 0.32);
+      stroke-width: 1.1;
     }}
     .price-grid-v {{
-      stroke: rgba(148, 163, 184, 0.16);
+      stroke: rgba(148, 163, 184, 0.22);
+      stroke-width: 1;
+    }}
+    .price-map-separator {{
+      fill: rgba(207, 216, 228, 0.06);
+    }}
+    .price-map-separator-line {{
+      stroke: rgba(148, 163, 184, 0.22);
       stroke-width: 1;
     }}
     .candle-wick {{
@@ -2687,7 +2733,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       display: grid;
       grid-template-columns: 92px 1fr;
       gap: 10px;
-      align-items: baseline;
+      align-items: center;
       padding: 6px 0;
       border-top: 1px solid rgba(71, 85, 105, 0.28);
     }}
@@ -2711,6 +2757,17 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       color: #9fb0c8;
       font-size: 11px;
       font-weight: 700;
+    }}
+    .value-defense-card-main {{
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }}
+    .value-defense-card-desc {{
+      color: #8fa2bf;
+      font-size: 10px;
+      line-height: 1.35;
     }}
     .value-defense-row-chip {{
       width: 10px;
