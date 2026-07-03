@@ -525,7 +525,6 @@ def _panel_price_map_svg(
 
     setup_elements: list[str] = []
     overlay_elements: list[str] = []
-    overlay_notes: list[str] = []
     if show_setup_bands:
         setup_x = left + chart_width * (0.12 if panel_mode == "zone" else 0.16)
         setup_w = chart_width * (0.84 if panel_mode == "zone" else 0.8)
@@ -637,7 +636,7 @@ def _panel_price_map_svg(
                 invalidation_text_class = "invalidation-band-text-long" if side == "long" else "invalidation-band-text-short"
                 trigger_class = "value-defense-trigger-long" if side == "long" else "value-defense-trigger-short"
                 trigger_text_class = "value-defense-trigger-text-long" if side == "long" else "value-defense-trigger-text-short"
-                show_band_labels = panel_mode == "zone"
+                show_band_labels = False
                 show_trigger_labels = False
 
                 _overlay_zone_rect(
@@ -679,34 +678,6 @@ def _panel_price_map_svg(
                         text_x=lane_text_x,
                         text_y=text_y,
                         show_label=show_trigger_labels,
-                    )
-
-                if panel_mode == "execution":
-                    side_label = "ロング" if side == "long" else "ショート"
-                    note_x = left + 12 if side == "long" else right - 194
-                    note_y = top + 18
-                    shallow_zone = _value_defense_entry_layer_zone_text(layer.get("shallow_retest_zone"))
-                    defense_zone = _value_defense_entry_layer_zone_text(layer.get("value_defense_zone"))
-                    invalidation_zone = _value_defense_entry_layer_zone_text(layer.get("invalidation_zone"))
-                    reclaim_value = _format_price(layer.get("reclaim_trigger"))
-                    continuation_value = _format_price(layer.get("continuation_trigger"))
-                    note_lines = [
-                        ("浅い再検討帯", shallow_zone),
-                        ("本命防衛ゾーン", defense_zone),
-                        ("無効化", invalidation_zone),
-                        ("回収条件", reclaim_value),
-                        ("継続条件", continuation_value),
-                    ]
-                    line_html = "".join(
-                        f'<text x="{note_x + 12:.1f}" y="{note_y + 38 + idx * 16:.1f}" class="value-defense-note-line {"long" if side == "long" else "short"}">{html.escape(label)} {html.escape(value)}</text>'
-                        for idx, (label, value) in enumerate(note_lines)
-                    )
-                    overlay_notes.append(
-                        f'<g class="value-defense-note value-defense-note-{"long" if side == "long" else "short"}">'
-                        f'<rect x="{note_x:.1f}" y="{note_y:.1f}" width="182" height="124" rx="14" class="value-defense-note-box {"long" if side == "long" else "short"}" />'
-                        f'<text x="{note_x + 12:.1f}" y="{note_y + 20:.1f}" class="value-defense-note-title {"long" if side == "long" else "short"}">{side_label} / Value Defense</text>'
-                        f"{line_html}"
-                        "</g>"
                     )
 
     current_y = y_for_price(current_price)
@@ -793,7 +764,6 @@ def _panel_price_map_svg(
         f"{''.join(overlay_elements)}"
         f"{''.join(candle_elements)}"
         f"{''.join(setup_elements)}"
-        f"{''.join(overlay_notes)}"
         f"{''.join(marker for marker in markers if marker)}"
         f"{''.join(emphasis_lines)}"
         f"{''.join(axis_labels)}"
@@ -949,6 +919,48 @@ def _value_defense_entry_layer_block(result: dict[str, Any], side: str) -> str:
         f"<ul>{list_html}</ul>"
         "</div>"
     )
+
+
+def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
+    setup = result.get("long_setup", {}) if side == "long" else result.get("short_setup", {})
+    layer = setup.get("value_defense_entry_layer")
+    if not isinstance(layer, dict) or not layer or layer.get("schema_version") != "value_defense_entry_layer.v1":
+        return ""
+
+    side_label = "ロング" if side == "long" else "ショート"
+    tone = "long" if side == "long" else "short"
+    items = [
+        ("浅い再検討帯", _value_defense_entry_layer_zone_text(layer.get("shallow_retest_zone"))),
+        ("本命防衛ゾーン", _value_defense_entry_layer_zone_text(layer.get("value_defense_zone"))),
+        ("無効化", _value_defense_entry_layer_zone_text(layer.get("invalidation_zone"))),
+        ("回収条件", _format_price(layer.get("reclaim_trigger"))),
+        ("継続条件", _format_price(layer.get("continuation_trigger"))),
+    ]
+    rows_html = "".join(
+        '<div class="value-defense-card-row">'
+        f'<span class="value-defense-card-key">{html.escape(label)}</span>'
+        f'<span class="value-defense-card-value">{html.escape(value)}</span>'
+        "</div>"
+        for label, value in items
+    )
+    return (
+        f'<div class="value-defense-chart-card {tone}">'
+        f'<div class="value-defense-card-head"><span class="value-defense-card-pill {tone}">{side_label}</span><strong>Value Defense</strong></div>'
+        f"{rows_html}"
+        "</div>"
+    )
+
+
+def _value_defense_chart_dashboard(result: dict[str, Any]) -> str:
+    cards = "".join(
+        card for card in (
+            _value_defense_chart_card(result, "long"),
+            _value_defense_chart_card(result, "short"),
+        ) if card
+    )
+    if not cards:
+        return ""
+    return f'<div class="value-defense-dashboard">{cards}</div>'
 
 
 def _build_wait_reasons(display_context: dict[str, Any], result: dict[str, Any]) -> list[str]:
@@ -1989,6 +2001,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     raw_mail = _raw_mail_text(result, display_context)
     score_compare_html = _score_compare_rows(result)
     price_map_svg = _price_map_svg(result)
+    value_defense_chart_dashboard_html = _value_defense_chart_dashboard(result)
     show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
     ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
@@ -2576,36 +2589,75 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     .value-defense-trigger-text-short {{
       fill: #fef3c7;
     }}
-    .value-defense-note-box {{
-      fill: rgba(8, 14, 24, 0.78);
-      stroke-width: 1;
+    .value-defense-dashboard {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 12px 18px 4px;
     }}
-    .value-defense-note-box.long {{
-      stroke: rgba(125, 211, 252, 0.48);
+    .value-defense-chart-card {{
+      border: 1px solid rgba(71, 85, 105, 0.66);
+      border-radius: 16px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, rgba(10, 16, 28, 0.96) 0%, rgba(12, 20, 34, 0.96) 100%);
     }}
-    .value-defense-note-box.short {{
-      stroke: rgba(253, 224, 71, 0.42);
+    .value-defense-chart-card.long {{
+      box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.09);
     }}
-    .value-defense-note-title {{
-      font-size: 12px;
+    .value-defense-chart-card.short {{
+      box-shadow: inset 0 0 0 1px rgba(253, 224, 71, 0.08);
+    }}
+    .value-defense-card-head {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #eff6ff;
+      font-size: 13px;
       font-weight: 800;
-      letter-spacing: 0.03em;
     }}
-    .value-defense-note-title.long {{
-      fill: #dbeafe;
+    .value-defense-card-pill {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      height: 24px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
     }}
-    .value-defense-note-title.short {{
-      fill: #fef3c7;
+    .value-defense-card-pill.long {{
+      background: rgba(14, 165, 233, 0.16);
+      color: #dbeafe;
     }}
-    .value-defense-note-line {{
-      font-size: 10.5px;
+    .value-defense-card-pill.short {{
+      background: rgba(245, 158, 11, 0.14);
+      color: #fef3c7;
+    }}
+    .value-defense-card-row {{
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 10px;
+      align-items: baseline;
+      padding: 6px 0;
+      border-top: 1px solid rgba(71, 85, 105, 0.28);
+    }}
+    .value-defense-card-row:first-of-type {{
+      border-top: 0;
+      padding-top: 0;
+    }}
+    .value-defense-card-key {{
+      color: #9fb0c8;
+      font-size: 11px;
       font-weight: 700;
     }}
-    .value-defense-note-line.long {{
-      fill: #cbd5e1;
-    }}
-    .value-defense-note-line.short {{
-      fill: #d6d3d1;
+    .value-defense-card-value {{
+      color: #eef6ff;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: right;
     }}
     .setup-callout-long, .setup-callout-short {{
       stroke-width: 1;
@@ -2697,6 +2749,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       .hero, .section {{ border-radius: 18px; }}
       .price-map-wrap {{ padding: 12px 0 10px; }}
       .panel.price-map-wrap {{ padding-left: 0; padding-right: 0; }}
+      .value-defense-dashboard {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -2803,6 +2856,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         <h3>4時間足 → 1時間足 → 15分足 の順で見ます</h3>
         <p>上段は大きな流れ、中段は再検討帯の妥当性、下段は実際に入る価格と SL / TP の精度を見る段です。いちばん重要なのは下段の 15 分足です。</p>
         {price_map_svg}
+        {value_defense_chart_dashboard_html}
       </div>
       <div class="two-col" style="margin-top:14px;">
         <div class="panel price-list">
@@ -2815,8 +2869,10 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
           <ul>
             <li>青い横線が現在価格です。</li>
             <li>緑帯がロング再検討帯、赤帯がショート再検討帯です。</li>
+            <li>水色 / 金色の細い帯が本命防衛ゾーン、淡い危険帯が無効化です。</li>
             <li>上段と中段は「その帯が自然か」を見る段、下段は「その価格で実際に入れるか」を見る段です。</li>
             <li>点線は SL と TP で、15分足ではどこで切るか・利確するかを直接確認できます。</li>
+            <li>Value Defense の詳しい数字は、チャート下のカードでまとめて確認します。</li>
           </ul>
         </div>
       </div>
