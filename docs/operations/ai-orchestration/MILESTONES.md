@@ -22,7 +22,8 @@
 
 - design-only document created for entry-depth realism
 - scope separates market entry, shallow retest entry, and value defense entry
-- implementation is not started yet
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete
+- Phase4 tuning remains observation-gated and requires explicit human approval
 - safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
 
 ## Ver04-v2 value-defense entry layer implementation
