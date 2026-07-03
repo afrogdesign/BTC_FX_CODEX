@@ -182,19 +182,22 @@ The key distinction is:
 - derive report-only value defense fields from existing setup / support / resistance / current price data
 - no scoring change
 - no notification sending change
+- completed: `438be7fe7f48885d130141b9fd4d3ec765b036fa`
 
 ### Phase 2
 
 - surface fields in detail HTML and operator guidance
 - keep shallow / current entry visible but label it correctly
+- completed: `e472eb6f42f7193a773d10b0d89d962134c3658a`
 
 ### Phase 3
 
 - update self-review to score entry depth separately from direction
+- completed: `0e035c1b58629834d0fea9a1269635f658e997f6`
 
 ### Phase 4
 
-- only after observations, consider scoring / gate tuning
+- deferred until observation evidence exists and the human explicitly approves tuning review
 
 ## Non-Goals
 

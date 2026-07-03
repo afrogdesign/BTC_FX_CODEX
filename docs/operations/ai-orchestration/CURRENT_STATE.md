@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-02
+last_updated: 2026-07-03
 
 ## Safety boundary
 
@@ -39,7 +39,10 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
 - Next major design target is VALUE-DEFENSE-ENTRY-LAYER.
-- Ver04-v2 is design-only at this point; implementation has not started yet.
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete:
+  - Phase1: report-only payload attached to `build_setup`
+  - Phase2: detail HTML surface added
+  - Phase3: judgment self-review dimensions added
 
 ## Current source-of-truth route
 
@@ -87,6 +90,9 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - judgment self-review now supports explicit `late` classification when late evidence is present.
 - judgment self-review now includes deterministic run metadata and fingerprints for later report comparison.
 - controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete; next posture is observation / review only.
+- Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
+- safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
 ## Current operational blocker
 

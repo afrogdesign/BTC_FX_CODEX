@@ -1,16 +1,15 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260703-VER04-V2-BRANCH-UP`
+- current_work_id: `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DOC-SYNC`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working branch has moved to Ver04-v2. Implementation has not started yet; next work is design-only.
+Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working branch has moved to Ver04-v2. VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete; next posture is observation / review only.
 
 ## Product backlog next candidate
 
-- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`
-- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE1` only after the design is reviewed and accepted.
+- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` only after observation evidence exists and the human explicitly approves tuning review.
 - `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
 
 ## Completed history
@@ -34,6 +33,9 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 - Ver04-v1 self-review / run-fingerprint checkpoint complete
 - source working branch moved to Ver04-v2
 - VALUE-DEFENSE-ENTRY-LAYER design doc created
+- VALUE-DEFENSE-ENTRY-LAYER Phase1 complete
+- VALUE-DEFENSE-ENTRY-LAYER Phase2 complete
+- VALUE-DEFENSE-ENTRY-LAYER Phase3 complete
 
 ## Hard boundary
 
@@ -49,12 +51,15 @@ Ver04-v1 self-review / run-fingerprint checkpoint is complete. Source working br
 - task-specific minimal validation only
 - docs-only: `git diff --check`
 - source/test: changed-file compile/test only
-- implementation has not started yet.
 
 ## Resume rule
 
-Next recommended task is `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-DESIGN`.
+Next recommended task is observation / review only:
 
-Implementation has not started yet. Wait for design review / acceptance before Phase 1.
+- observe generated notifications / detail HTML / self-review rows
+- do not tune scores or gates yet
+
+`BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the later ground-truth candidate.
+`BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` stays gated behind observation evidence and explicit human approval.
 
 Ver04-v2 is the new source working branch. Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.

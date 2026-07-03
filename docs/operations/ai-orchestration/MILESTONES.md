@@ -25,6 +25,16 @@
 - implementation is not started yet
 - safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
 
+## Ver04-v2 value-defense entry layer implementation
+
+- Phase1 attached report-only value defense payloads to `build_setup`
+- Phase2 surfaced value defense fields in public detail HTML
+- Phase3 extended deterministic judgment self-review with value-defense-aware dimensions
+- commits: `438be7fe7f48885d130141b9fd4d3ec765b036fa`, `e472eb6f42f7193a773d10b0d89d962134c3658a`, `0e035c1b58629834d0fea9a1269635f658e997f6`
+- Phase4 tuning remains observation-gated and requires explicit human approval
+- notification sending behavior remains unchanged
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
 ## Daily Proxy Evaluator implemented
 
 - deterministic report-only Daily Proxy Evaluator was implemented in this thread
