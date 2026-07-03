@@ -806,7 +806,7 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             resistance_zones=resistance_zones,
             width=width,
             height=309,
-            origin_y=329,
+            origin_y=347,
             panel_mode="zone",
         ),
         _panel_price_map_svg(
@@ -820,13 +820,13 @@ def _price_map_svg(result: dict[str, Any]) -> str:
             resistance_zones=resistance_zones,
             width=width,
             height=429,
-            origin_y=658,
+            origin_y=694,
             panel_mode="execution",
         ),
     ]
 
     return (
-        f'<svg viewBox="0 0 {width} 1097" class="price-map" aria-label="再検討ラインチャート">'
+        f'<svg viewBox="0 0 {width} 1133" class="price-map" aria-label="再検討ラインチャート">'
         f"{''.join(panels)}"
         "</svg>"
     )
@@ -944,23 +944,35 @@ def _value_defense_chart_card(result: dict[str, Any], side: str) -> str:
         return text or "未記録"
 
     items = [
-        ("浅い再検討帯", _card_price_text(layer.get("shallow_retest_zone"))),
-        ("本命防衛ゾーン", _card_price_text(layer.get("value_defense_zone"))),
-        ("無効化", _card_price_text(layer.get("invalidation_zone"))),
-        ("回収条件", _card_price_text(layer.get("reclaim_trigger"))),
-        ("継続条件", _card_price_text(layer.get("continuation_trigger"))),
+        ("浅い再検討帯", _card_price_text(layer.get("shallow_retest_zone")), "primary", "shallow"),
+        ("本命防衛ゾーン", _card_price_text(layer.get("value_defense_zone")), "primary", "defense"),
+        ("無効化", _card_price_text(layer.get("invalidation_zone")), "secondary", "invalidation"),
+        ("回収条件", _card_price_text(layer.get("reclaim_trigger")), "secondary", "reclaim"),
+        ("継続条件", _card_price_text(layer.get("continuation_trigger")), "secondary", "continuation"),
     ]
-    rows_html = "".join(
-        '<div class="value-defense-card-row">'
-        f'<span class="value-defense-card-key">{html.escape(label)}</span>'
+    primary_rows = "".join(
+        f'<div class="value-defense-card-row primary {tone}">'
+        f'<span class="value-defense-card-key"><span class="value-defense-row-chip {tone} {chip}"></span>{html.escape(label)}</span>'
         f'<span class="value-defense-card-value">{html.escape(value)}</span>'
         "</div>"
-        for label, value in items
+        for label, value, tier, chip in items
+        if tier == "primary"
+    )
+    secondary_rows = "".join(
+        f'<div class="value-defense-card-row secondary {tone}">'
+        f'<span class="value-defense-card-key"><span class="value-defense-row-chip {tone} {chip}"></span>{html.escape(label)}</span>'
+        f'<span class="value-defense-card-value secondary">{html.escape(value)}</span>'
+        "</div>"
+        for label, value, tier, chip in items
+        if tier == "secondary"
     )
     return (
         f'<div class="value-defense-chart-card {tone}">'
         f'<div class="value-defense-card-head"><span class="value-defense-card-pill {tone}">{side_label}</span><strong>Value Defense</strong></div>'
-        f"{rows_html}"
+        '<div class="value-defense-group-label primary">主情報</div>'
+        f"{primary_rows}"
+        '<div class="value-defense-group-label secondary">補助情報</div>'
+        f"{secondary_rows}"
         "</div>"
     )
 
@@ -2480,6 +2492,9 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       stroke: #263148;
       stroke-width: 1;
     }}
+    .price-map-panel {{
+      filter: drop-shadow(0 10px 18px rgba(2, 6, 23, 0.14));
+    }}
     .price-map-panel-focus .price-map-bg {{
       stroke: #385072;
     }}
@@ -2607,12 +2622,14 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
-      margin: 12px 18px 4px;
+      margin: 18px 18px 8px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(71, 85, 105, 0.38);
     }}
     .value-defense-chart-card {{
       border: 1px solid rgba(71, 85, 105, 0.66);
       border-radius: 16px;
-      padding: 12px 14px;
+      padding: 12px 14px 14px;
       background: linear-gradient(180deg, rgba(10, 16, 28, 0.96) 0%, rgba(12, 20, 34, 0.96) 100%);
     }}
     .value-defense-chart-card.long {{
@@ -2628,10 +2645,24 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       color: #eff6ff;
       font-size: 13px;
       font-weight: 800;
+    }}
+    .value-defense-group-label {{
+      margin-top: 10px;
+      margin-bottom: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }}
+    .value-defense-group-label.primary {{
+      color: #dbeafe;
+    }}
+    .value-defense-group-label.secondary {{
+      color: #94a3b8;
     }}
     .value-defense-card-pill {{
       display: inline-flex;
@@ -2660,14 +2691,59 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       padding: 6px 0;
       border-top: 1px solid rgba(71, 85, 105, 0.28);
     }}
+    .value-defense-card-row.primary {{
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }}
+    .value-defense-card-row.secondary {{
+      border-top-color: rgba(71, 85, 105, 0.18);
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }}
     .value-defense-card-row:first-of-type {{
       border-top: 0;
       padding-top: 0;
     }}
     .value-defense-card-key {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       color: #9fb0c8;
       font-size: 11px;
       font-weight: 700;
+    }}
+    .value-defense-row-chip {{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }}
+    .value-defense-row-chip.long.shallow {{
+      background: rgba(34, 197, 94, 0.9);
+    }}
+    .value-defense-row-chip.short.shallow {{
+      background: rgba(248, 113, 113, 0.9);
+    }}
+    .value-defense-row-chip.long.defense {{
+      background: rgba(125, 211, 252, 0.9);
+    }}
+    .value-defense-row-chip.short.defense {{
+      background: rgba(253, 224, 71, 0.9);
+    }}
+    .value-defense-row-chip.long.invalidation {{
+      background: rgba(252, 165, 165, 0.78);
+    }}
+    .value-defense-row-chip.short.invalidation {{
+      background: rgba(147, 197, 253, 0.78);
+    }}
+    .value-defense-row-chip.long.reclaim,
+    .value-defense-row-chip.long.continuation {{
+      background: rgba(186, 230, 253, 0.82);
+    }}
+    .value-defense-row-chip.short.reclaim,
+    .value-defense-row-chip.short.continuation {{
+      background: rgba(253, 230, 138, 0.82);
     }}
     .value-defense-chart-card.long .value-defense-card-key {{
       color: #86efac;
@@ -2681,6 +2757,11 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       font-weight: 900;
       letter-spacing: 0.01em;
       text-align: right;
+    }}
+    .value-defense-card-value.secondary {{
+      font-size: 13px;
+      font-weight: 700;
+      color: #cbd5e1;
     }}
     .value-defense-chart-card.long .value-defense-card-value {{
       color: #bbf7d0;
@@ -2901,7 +2982,8 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
             <li>水色 / 金色の細い帯が本命防衛ゾーン、淡い危険帯が無効化です。</li>
             <li>上段と中段は「その帯が自然か」を見る段、下段は「その価格で実際に入れるか」を見る段です。</li>
             <li>点線は SL と TP で、15分足ではどこで切るか・利確するかを直接確認できます。</li>
-            <li>Value Defense の詳しい数字は、チャート下のカードでまとめて確認します。</li>
+            <li>主情報は「浅い再検討帯 / 本命防衛ゾーン」、補助情報は「無効化 / 回収条件 / 継続条件」です。</li>
+            <li>Value Defense の詳しい数字は、チャート下のカードで色チップと一緒に確認します。</li>
           </ul>
         </div>
       </div>
