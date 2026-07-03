@@ -524,6 +524,7 @@ def _panel_price_map_svg(
             )
 
     setup_elements: list[str] = []
+    overlay_elements: list[str] = []
     if show_setup_bands:
         setup_x = left + chart_width * (0.12 if panel_mode == "zone" else 0.16)
         setup_w = chart_width * (0.84 if panel_mode == "zone" else 0.8)
@@ -547,6 +548,127 @@ def _panel_price_map_svg(
             setup_elements.append(
                 f'<text x="{right + 6:.1f}" y="{y2 + 5:.1f}" class="{axis_class}">{_format_price_int(low)}</text>'
             )
+            text_class = "setup-band-text-long" if side == "long" else "setup-band-text-short"
+            text_x = setup_x + 10 if side == "long" else setup_x + setup_w - 10
+            text_anchor = "start" if side == "long" else "end"
+            text_y = max(top + 18, min(bottom - 8, y1 + 16))
+            setup_elements.append(
+                f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{text_class}">浅い再検討帯</text>'
+            )
+
+        if panel_mode in {"zone", "execution"}:
+            lane_x_map = {
+                "long": left + chart_width * 0.08,
+                "short": left + chart_width * 0.58,
+            }
+            lane_w = chart_width * 0.34
+
+            def _layer_zone(value: Any) -> tuple[float, float] | None:
+                if not isinstance(value, dict):
+                    return None
+                low = _safe_float(value.get("low"))
+                high = _safe_float(value.get("high"))
+                if min(low, high) <= 0:
+                    return None
+                return low, high
+
+            def _overlay_zone_rect(
+                *,
+                zone: tuple[float, float] | None,
+                x: float,
+                width_value: float,
+                rect_class: str,
+                label_class: str,
+                label: str,
+                text_anchor: str,
+                text_x: float,
+            ) -> None:
+                if zone is None:
+                    return
+                low, high = zone
+                y1 = y_for_price(high)
+                y2 = y_for_price(low)
+                overlay_elements.append(
+                    f'<rect x="{x:.1f}" y="{y1:.1f}" width="{width_value:.1f}" height="{max(y2 - y1, 10):.1f}" rx="9" class="{rect_class}" />'
+                )
+                overlay_elements.append(
+                    f'<text x="{text_x:.1f}" y="{max(top + 18, min(bottom - 8, y1 + 16)):.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)}</text>'
+                )
+
+            def _overlay_trigger_line(
+                *,
+                price: Any,
+                x1: float,
+                x2: float,
+                line_class: str,
+                label_class: str,
+                label: str,
+                text_anchor: str,
+                text_x: float,
+                text_y: float,
+            ) -> None:
+                value = _safe_float(price)
+                if value <= 0:
+                    return
+                y = y_for_price(value)
+                overlay_elements.append(
+                    f'<line x1="{x1:.1f}" y1="{y:.1f}" x2="{x2:.1f}" y2="{y:.1f}" class="{line_class}" />'
+                )
+                overlay_elements.append(
+                    f'<text x="{text_x:.1f}" y="{text_y:.1f}" text-anchor="{text_anchor}" class="{label_class}">{html.escape(label)} {_format_price_int(value)}</text>'
+                )
+
+            for side, setup in (("long", long_setup), ("short", short_setup)):
+                layer = setup.get("value_defense_entry_layer")
+                if not isinstance(layer, dict) or layer.get("schema_version") != "value_defense_entry_layer.v1":
+                    continue
+                lane_x = lane_x_map[side]
+                lane_text_x = lane_x + 8 if side == "long" else lane_x + lane_w - 8
+                lane_anchor = "start" if side == "long" else "end"
+                value_class = "value-defense-band-long" if side == "long" else "value-defense-band-short"
+                value_text_class = "value-defense-band-text-long" if side == "long" else "value-defense-band-text-short"
+                invalidation_class = "invalidation-band-long" if side == "long" else "invalidation-band-short"
+                invalidation_text_class = "invalidation-band-text-long" if side == "long" else "invalidation-band-text-short"
+                trigger_class = "value-defense-trigger-long" if side == "long" else "value-defense-trigger-short"
+                trigger_text_class = "value-defense-trigger-text-long" if side == "long" else "value-defense-trigger-text-short"
+
+                _overlay_zone_rect(
+                    zone=_layer_zone(layer.get("value_defense_zone")),
+                    x=lane_x,
+                    width_value=lane_w,
+                    rect_class=value_class,
+                    label_class=value_text_class,
+                    label="本命防衛ゾーン",
+                    text_anchor=lane_anchor,
+                    text_x=lane_text_x,
+                )
+                _overlay_zone_rect(
+                    zone=_layer_zone(layer.get("invalidation_zone")),
+                    x=lane_x,
+                    width_value=lane_w,
+                    rect_class=invalidation_class,
+                    label_class=invalidation_text_class,
+                    label="無効化",
+                    text_anchor=lane_anchor,
+                    text_x=lane_text_x,
+                )
+
+                trigger_specs = [
+                    ("回収条件", layer.get("reclaim_trigger"), max(top + 28, min(bottom - 24, top + 44))),
+                    ("継続条件", layer.get("continuation_trigger"), max(top + 44, min(bottom - 10, top + 60))),
+                ]
+                for label, price, text_y in trigger_specs:
+                    _overlay_trigger_line(
+                        price=price,
+                        x1=lane_x,
+                        x2=lane_x + lane_w,
+                        line_class=trigger_class,
+                        label_class=trigger_text_class,
+                        label=label,
+                        text_anchor=lane_anchor,
+                        text_x=lane_text_x,
+                        text_y=text_y,
+                    )
 
     current_y = y_for_price(current_price)
     current_label_y = max(top + 10, min(bottom - 4, current_y + 4))
@@ -629,6 +751,7 @@ def _panel_price_map_svg(
         f"{''.join(grid_lines)}"
         f"{''.join(vertical_grid)}"
         f"{''.join(background_bands)}"
+        f"{''.join(overlay_elements)}"
         f"{''.join(candle_elements)}"
         f"{''.join(setup_elements)}"
         f"{''.join(marker for marker in markers if marker)}"
@@ -2352,6 +2475,66 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
       fill: #fee2e2;
       font-size: 14px;
       font-weight: 700;
+    }}
+    .value-defense-band-long {{
+      fill: rgba(14, 165, 233, 0.16);
+      stroke: rgba(125, 211, 252, 0.94);
+      stroke-width: 1.4;
+      stroke-dasharray: 5 4;
+    }}
+    .value-defense-band-short {{
+      fill: rgba(251, 191, 36, 0.14);
+      stroke: rgba(253, 224, 71, 0.92);
+      stroke-width: 1.4;
+      stroke-dasharray: 5 4;
+    }}
+    .invalidation-band-long {{
+      fill: rgba(220, 38, 38, 0.12);
+      stroke: rgba(252, 165, 165, 0.9);
+      stroke-width: 1.2;
+    }}
+    .invalidation-band-short {{
+      fill: rgba(29, 78, 216, 0.12);
+      stroke: rgba(147, 197, 253, 0.9);
+      stroke-width: 1.2;
+    }}
+    .value-defense-band-text-long, .value-defense-band-text-short,
+    .invalidation-band-text-long, .invalidation-band-text-short {{
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }}
+    .value-defense-band-text-long {{
+      fill: #dbeafe;
+    }}
+    .value-defense-band-text-short {{
+      fill: #fef3c7;
+    }}
+    .invalidation-band-text-long {{
+      fill: #fecaca;
+    }}
+    .invalidation-band-text-short {{
+      fill: #bfdbfe;
+    }}
+    .value-defense-trigger-long, .value-defense-trigger-short {{
+      stroke-width: 1.3;
+      stroke-dasharray: 6 4;
+    }}
+    .value-defense-trigger-long {{
+      stroke: rgba(186, 230, 253, 0.92);
+    }}
+    .value-defense-trigger-short {{
+      stroke: rgba(253, 230, 138, 0.92);
+    }}
+    .value-defense-trigger-text-long, .value-defense-trigger-text-short {{
+      font-size: 11px;
+      font-weight: 700;
+    }}
+    .value-defense-trigger-text-long {{
+      fill: #e0f2fe;
+    }}
+    .value-defense-trigger-text-short {{
+      fill: #fef3c7;
     }}
     .setup-callout-long, .setup-callout-short {{
       stroke-width: 1;
