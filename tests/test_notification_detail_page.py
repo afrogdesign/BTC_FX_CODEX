@@ -22,6 +22,7 @@ from config import load_config
 from main import run_cycle
 from src.ai.summary import build_summary_subject
 from src.data.exchange_fetcher import MarketStructureSnapshot
+from src.analysis.value_defense_entry_layer import build_value_defense_entry_layer
 from src.notification.detail_page import (
     build_notification_detail_html,
     detail_page_enabled,
@@ -135,6 +136,45 @@ def _sample_detail_payload() -> dict[str, object]:
             ],
         },
     }
+    payload["long_setup"]["value_defense_entry_layer"] = build_value_defense_entry_layer(
+        side="long",
+        price=payload["current_price"],
+        atr=100.0,
+        setup={
+            "status": payload["long_setup"]["status"],
+            "entry_zone": payload["long_setup"]["entry_zone"],
+            "entry_mid": 65682.9,
+            "stop_loss": payload["long_setup"]["stop_loss"],
+        },
+        support_zones=[
+            {"low": 65629.02, "high": 65736.78, "strength": 4},
+            {"low": 65480.0, "high": 65518.0, "strength": 7},
+        ],
+        resistance_zones=[
+            {"low": 66418.52, "high": 66587.78, "strength": 5},
+            {"low": 66790.0, "high": 66840.0, "strength": 4},
+        ],
+    )
+    payload["short_setup"]["value_defense_entry_layer"] = build_value_defense_entry_layer(
+        side="short",
+        price=payload["current_price"],
+        atr=100.0,
+        setup={
+            "status": payload["short_setup"]["status"],
+            "entry_zone": payload["short_setup"]["entry_zone"],
+            "entry_mid": 66503.15,
+            "stop_loss": payload["short_setup"]["stop_loss"],
+        },
+        support_zones=[
+            {"low": 65629.02, "high": 65736.78, "strength": 4},
+            {"low": 65480.0, "high": 65518.0, "strength": 7},
+        ],
+        resistance_zones=[
+            {"low": 66418.52, "high": 66587.78, "strength": 5},
+            {"low": 66790.0, "high": 66840.0, "strength": 4},
+            {"low": 66980.0, "high": 67010.0, "strength": 3},
+        ],
+    )
     payload["summary_subject"] = build_summary_subject(payload)
     return payload
 
@@ -472,6 +512,16 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("[BTCFX Ver03-v4]", html)
         self.assertIn("現在値", html)
         self.assertNotIn("current-price-box", html)
+        self.assertIn("Value Defense Entry Layer", html)
+        self.assertIn("浅い再検討帯", html)
+        self.assertIn("本命防衛ゾーン", html)
+        self.assertIn("無効化", html)
+        self.assertIn("回収条件", html)
+        self.assertIn("継続条件", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertNotIn("automatic_order_allowed=true", html.lower())
+        self.assertNotIn("send_email", html)
+        self.assertNotIn("private/order", html)
         self.assertIn("相場環境", html)
         self.assertIn("今の局面", html)
         self.assertIn("時間軸の揃い方", html)

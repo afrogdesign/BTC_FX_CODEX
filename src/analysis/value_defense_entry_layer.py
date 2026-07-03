@@ -176,8 +176,24 @@ def build_value_defense_entry_layer(
     resistance_zones = resistance_zones or []
 
     shallow_zone = _normalize_zone(setup_data.get("entry_zone"))
-    value_zone = _next_deeper_zone(normalized_side, shallow_zone, support_zones, resistance_zones)
     market_entry_status = _market_entry_status(setup_data)
+    if normalized_side not in {"long", "short"}:
+        return {
+            "schema_version": "value_defense_entry_layer.v1",
+            "side": "",
+            "lifecycle_state": "unresolved",
+            "market_entry_status": market_entry_status,
+            "shallow_retest_zone": shallow_zone,
+            "shallow_retest_risk": "unresolved",
+            "value_defense_zone": None,
+            "defense_zone_basis": "side_unknown",
+            "invalidation_zone": None,
+            "reclaim_trigger": None,
+            "continuation_trigger": _round2(setup_data.get("entry_mid") or (None if shallow_zone is None else (float(shallow_zone["low"]) + float(shallow_zone["high"])) / 2)),
+            "operator_guidance": "side が不明なため value defense entry は未確定です。",
+            "safety_boundary": _SAFETY_BOUNDARY,
+        }
+    value_zone = _next_deeper_zone(normalized_side, shallow_zone, support_zones, resistance_zones)
     continuation_trigger = _round2(setup_data.get("entry_mid") or (None if shallow_zone is None else (float(shallow_zone["low"]) + float(shallow_zone["high"])) / 2))
     invalidation_zone = None
     if current_price is not None and atr_value is not None:

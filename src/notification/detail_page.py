@@ -747,6 +747,47 @@ def _execution_precision_line(result: dict[str, Any], side: str) -> str:
     return f"{action_labels.get(action, action)}（{flag_text}）"
 
 
+def _value_defense_entry_layer_zone_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return "抽出なし"
+    low = _format_price(value.get("low"))
+    high = _format_price(value.get("high"))
+    if low == "未記録" or high == "未記録":
+        return "抽出なし"
+    return f"{low} - {high}"
+
+
+def _value_defense_entry_layer_block(result: dict[str, Any], side: str) -> str:
+    setup = result.get("long_setup", {}) if side == "long" else result.get("short_setup", {})
+    layer = setup.get("value_defense_entry_layer")
+    if not isinstance(layer, dict) or not layer or layer.get("schema_version") != "value_defense_entry_layer.v1":
+        return ""
+
+    side_label = "ロング" if side == "long" else "ショート"
+    lines = [
+        ("浅い再検討帯", _value_defense_entry_layer_zone_text(layer.get("shallow_retest_zone"))),
+        ("浅い再検討リスク", str(layer.get("shallow_retest_risk") or "未記録")),
+        ("本命防衛ゾーン", _value_defense_entry_layer_zone_text(layer.get("value_defense_zone"))),
+        ("無効化", _value_defense_entry_layer_zone_text(layer.get("invalidation_zone"))),
+        ("回収条件", _format_price(layer.get("reclaim_trigger"))),
+        ("継続条件", _format_price(layer.get("continuation_trigger"))),
+        ("局面", str(layer.get("lifecycle_state") or "未記録")),
+        ("運用メモ", str(layer.get("operator_guidance") or "未記録")),
+        ("安全境界", str(layer.get("safety_boundary") or "report-only / not FORMAL_GO / no automatic order / human decides manually")),
+    ]
+    list_html = "".join(
+        f"<li><strong>{html.escape(str(label))}:</strong> {html.escape(str(value))}</li>"
+        for label, value in lines
+    )
+    return (
+        '<div class="panel">'
+        f"<h3>{html.escape(side_label)} / 本命防衛ゾーン</h3>"
+        "<p>浅い再検討帯と本命防衛ゾーンを分けて見る補助欄です。売買指示ではありません。</p>"
+        f"<ul>{list_html}</ul>"
+        "</div>"
+    )
+
+
 def _build_wait_reasons(display_context: dict[str, Any], result: dict[str, Any]) -> list[str]:
     reasons = [str(item) for item in display_context.get("wait_reason_labels", []) if str(item).strip()]
     if reasons:
@@ -1873,6 +1914,27 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         "</div>"
         for label, value in momentum_confirmation_items
     )
+    value_defense_entry_layer_html = "".join(
+        block
+        for block in (
+            _value_defense_entry_layer_block(result, "long"),
+            _value_defense_entry_layer_block(result, "short"),
+        )
+        if block
+    )
+    value_defense_entry_layer_section_html = (
+        f"""
+    <section class="section">
+      <h2>Value Defense Entry Layer</h2>
+      <p>既存の再検討帯は浅い再検討帯、本命は本命防衛ゾーンとして分けて見ます。ここは売買指示ではなく、どの深さを本命に置くかを見る補助欄です。</p>
+      <div class="two-col">
+        {value_defense_entry_layer_html}
+      </div>
+    </section>
+    """
+        if value_defense_entry_layer_html
+        else ""
+    )
     major_turning_point_diagnostic_html = (
         '<div class="checklist">'
         + "".join(
@@ -2521,6 +2583,8 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         </div>
       </div>
     </section>
+
+    {value_defense_entry_layer_section_html}
 
     <section class="section">
       <h2>待機理由または注意点</h2>

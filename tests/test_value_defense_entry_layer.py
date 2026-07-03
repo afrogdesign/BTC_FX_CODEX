@@ -84,6 +84,37 @@ class ValueDefenseEntryLayerTests(unittest.TestCase):
         self.assertEqual(payload["lifecycle_state"], "defense_zone_touched")
         self.assertEqual(payload["shallow_retest_risk"], "high")
 
+    def test_unknown_side_returns_unresolved_payload(self) -> None:
+        payload = build_value_defense_entry_layer(
+            side="",
+            price=61330.0,
+            atr=100.0,
+            setup={
+                "status": "watch",
+                "entry_zone": {"low": 61467.0, "high": 61555.0},
+                "entry_mid": 61511.0,
+                "stop_loss": 61209.0,
+            },
+            support_zones=[
+                {"low": 61467.0, "high": 61555.0, "strength": 4},
+                {"low": 61280.0, "high": 61350.0, "strength": 7},
+            ],
+            resistance_zones=[
+                {"low": 61864.0, "high": 61920.0, "strength": 5},
+            ],
+        )
+
+        self.assertEqual(payload["side"], "")
+        self.assertEqual(payload["lifecycle_state"], "unresolved")
+        self.assertEqual(payload["defense_zone_basis"], "side_unknown")
+        self.assertEqual(payload["shallow_retest_risk"], "unresolved")
+        self.assertIsNone(payload["value_defense_zone"])
+        self.assertIsNone(payload["invalidation_zone"])
+        self.assertIsNone(payload["reclaim_trigger"])
+        self.assertEqual(payload["continuation_trigger"], 61511.0)
+        self.assertIn("report-only", payload["safety_boundary"])
+        self.assertIn("未確定", payload["operator_guidance"])
+
     def test_build_setup_includes_value_defense_entry_layer_without_status_change(self) -> None:
         setup, flags = build_setup(
             side="long",
