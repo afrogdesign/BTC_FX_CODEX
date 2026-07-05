@@ -1,20 +1,22 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260703-VER04-V2-OPS-FOLLOWUP-DNS-FALLBACK-OBSERVATION-QUEUE`
+- current_work_id: `BTCFX-20260705-POST-DEPLOY-OBSERVATION-REVIEW`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is implemented and runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
-Operator-facing subject/title/path is moving to stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
+Ver04-v2 is production-applied. The next posture is observation / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
+Operator-facing subject/title/path now use stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
 
 ## Observation queue
 
-- verify detail HTML shows `Value Defense Entry Layer`
-- verify shallow retest and value defense zone are separated
-- verify operator guidance is readable
-- verify judgment self-review outputs `direction_quality`, `entry_depth_quality`, `value_defense_result`
-- verify no unintended mail sending behavior / subject / frequency change
+- verify latest HTML is generated under `manual-trading`
+- verify title is `BTCFX Manual Trading Report`
+- verify `VerXX` / `[CLI]` / `[API]` no longer leak into operator-facing output
+- verify Value Defense UI renders with real data
+- verify shallow retest zone and value defense zone are readable
+- verify notification sending behavior / subject / frequency did not change unintentionally
+- verify self-review current artifact / readiness remains available
 - collect at least one normal generated notification / detail HTML example before Phase4
 
 ## Completed history

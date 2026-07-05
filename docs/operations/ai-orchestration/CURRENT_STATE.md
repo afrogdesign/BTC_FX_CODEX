@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-03
+last_updated: 2026-07-05
 
 ## Safety boundary
 
@@ -16,8 +16,8 @@ last_updated: 2026-07-03
 
 ## Current product focus
 
-Current focus has moved from generic evidence / intraperiod / win-rate diagnostics to the Ver04-v1 manual-trading self-improvement loop.
-Ver04-v1 self-review / run-fingerprint checkpoint is complete, and the source working branch has moved to Ver04-v2 for the next design step.
+Current focus has moved from generic evidence / intraperiod / win-rate diagnostics to the Ver04-v2 manual-trading observation loop.
+Ver04-v1 self-review / run-fingerprint checkpoint is complete, and Ver04-v2 is the active source working branch.
 
 Primary objective:
 
@@ -29,17 +29,17 @@ notification mail を受け取った人間が、
 
 Automatic trading remains out of scope and later-stage only.
 
-Ver03-v4 is prior baseline/history; Ver04-v1 is the active branch for the major product-direction shift.
-Ver04-v2 is now the next source working branch for follow-on design work.
+Ver03-v4 is prior baseline/history; Ver04-v1 is the prior active product branch.
+Ver04-v2 is the current active source working branch for follow-on observation/review work.
 
 ## Current operational posture
 
-- Ver04-v1 runtime deployment is complete and reflected active.
-- Immediate posture is post-deployment observation.
+- Ver04-v2 runtime deployment is complete and reflected active.
+- Immediate posture is post-deployment observation / review only.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
 - Next major design target is VALUE-DEFENSE-ENTRY-LAYER.
-- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete:
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete and production-applied:
   - Phase1: report-only payload attached to `build_setup`
   - Phase2: detail HTML surface added
   - Phase3: judgment self-review dimensions added
@@ -68,10 +68,10 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - diagnostic and post-evaluation remain report-only support.
 - major turn / turning point diagnostics do not authorize manual or automatic entry.
 - No restart / launchd action is required for the completed deployment.
-- notification version labels are expected to display Ver04-v1 after the display-label follow-up fix.
-- post-deployment observation surfaced a readability issue in the public detail page, and a bounded UI readability pass was applied to human-facing labels and chart marker spacing.
-- current human-facing cleanup simplifies the mail subject, current-price label, and internal support block; the live launchd process still needs a controlled restart before it can render those current-code changes.
-- controlled runtime restart after the human UI / subject / chart cleanup is complete, and the live launchd process now loads the current Ver04-v1 code path.
+- operator-facing version/mode labels are retired.
+- public label is `BTCFX Manual Trading Report`.
+- path slug is `manual-trading`.
+- future verification should use commit hash, process path, generated_at, and report_fingerprint, not VerXX labels or SYSTEM_LABEL.
 - breakout / inversion zones now have a report-only momentum confirmation layer for continuation / counter-bias risk visibility.
 - report-only MACD indicator/scoring support is implemented, and report-only intraperiod breakout/breakdown alert candidate generation is implemented.
 - live extra intraperiod mail sending is not enabled.
@@ -89,12 +89,12 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - judgment self-review now also exposes a deterministic change-readiness gate to avoid premature tuning.
 - judgment self-review now supports explicit `late` classification when late evidence is present.
 - judgment self-review now includes deterministic run metadata and fingerprints for later report comparison.
-- controlled runtime restart was performed to clear a stale running process so the active launchd job can load current Ver04-v1 code.
-- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete; next posture is observation / review only.
-- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `114bd2361b0b149f0a0b935b621b8a2a3bca9af6`.
+- controlled runtime restart completed for the current Ver04-v2 production apply.
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `1099a1ae8169f9b1d39d501e46597349a7c13475`.
+- active process path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/main.py` and the deployed process after restart was pid `73939` started `2026-07-05 11:40:20 JST`.
 - GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
 - Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
-- operator-facing version/mode labels are being retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
+- operator-facing version/mode labels are retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
 ## Current operational blocker
@@ -122,7 +122,7 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - post-eval asset health audit completed
 - daily proxy evaluator implemented
 - implementation readiness package created
-- Ver04-v1 runtime deployment complete
+- Ver04-v2 runtime deployment complete
 
 ## Default avoid list
 
