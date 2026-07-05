@@ -48,6 +48,8 @@ _SIGNAL_LABELS = {
 }
 
 CURRENT_MANUAL_SUPPORT_HEADER = "内部確認・検証情報"
+STABLE_DETAIL_PAGE_PRODUCT_LABEL = "BTCFX Manual Trading Report"
+STABLE_NOTIFICATION_SYSTEM_SLUG = "manual-trading"
 
 _VISIBLE_STATUS_LABELS = {
     "blocked": "見送り",
@@ -1952,10 +1954,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     notification_context = build_notification_context(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
-    subject = str(result.get("summary_subject", "")).strip() or (
-        f"{notification_context.get('final_rank_emoji', '')} [{notification_context.get('final_rank_label', '送信なし')}] / "
-        f"{display_context.get('direction_compact_label', '中立')}"
-    )
+    public_title = STABLE_DETAIL_PAGE_PRODUCT_LABEL
     wait_reasons = _build_wait_reasons(display_context, result)
     ai_audit = result.get("ai_audit") if isinstance(result.get("ai_audit"), dict) else {}
     audit_agreement = str(ai_audit.get("agreement", "")).strip().lower()
@@ -2190,7 +2189,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{esc(subject)}</title>
+  <title>{esc(public_title)}</title>
   <style>
     :root {{
       color-scheme: light;
@@ -2925,7 +2924,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     <section class="hero">
       <p class="muted">{esc(timestamp_jst)} / signal_id {esc(result.get('signal_id', ''))}</p>
       <div class="hero-kicker">{esc(notification_context.get('final_rank_emoji', ''))} {esc(notification_context.get('final_rank_label', '送信なし'))} / {esc(notification_context.get('status_label', '中立'))}</div>
-      <h1>{esc(subject)}</h1>
+      <h1>{esc(public_title)}</h1>
       <p class="hero-summary">{esc(active_hero_label)}</p>
       <p class="hero-sub">{esc(active_hero_summary)}</p>
       <div>{chips_html(summary_chips)}</div>
@@ -3150,7 +3149,7 @@ def detail_page_paths(base_dir: Path, cfg: Any, result: dict[str, Any]) -> tuple
     local_root = Path(local_dir_raw)
     if not local_root.is_absolute():
         local_root = base_dir / local_root
-    system_slug = slugify_label(result.get("system_label"))
+    system_slug = STABLE_NOTIFICATION_SYSTEM_SLUG
     notification_kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
     signal_id = str(result.get("signal_id", "")).strip() or datetime.now(tz=timezone.utc).strftime("%Y%m%d_%H%M%S")
     local_path = local_root / system_slug / notification_kind / f"{signal_id}.html"
@@ -3192,7 +3191,7 @@ def publish_notification_detail(base_dir: Path, cfg: Any, result: dict[str, Any]
     local_path.write_text(build_notification_detail_html(result, base_dir=base_dir), encoding="utf-8")
 
     remote_root = str(getattr(cfg, "NOTIFICATION_HTML_REMOTE_DIR", "/Volumes/Server_HD2/site/btc-monitor/notifications")).strip()
-    system_slug = slugify_label(result.get("system_label"))
+    system_slug = STABLE_NOTIFICATION_SYSTEM_SLUG
     notification_kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
     remote_dir = f"{remote_root.rstrip('/')}/{system_slug}/{notification_kind}"
     publish_errors: list[str] = []

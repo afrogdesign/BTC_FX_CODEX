@@ -6,6 +6,7 @@
 ## Current goal
 
 Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is implemented and runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
+Operator-facing detail-page title/path is moving to stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
 
 ## Observation queue
 

@@ -94,6 +94,7 @@ Ver04-v2 is now the next source working branch for follow-on design work.
 - Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `114bd2361b0b149f0a0b935b621b8a2a3bca9af6`.
 - GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
 - Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
+- operator-facing version labels are being retired; detail-page title/path no longer needs VerXX updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
 ## Current operational blocker

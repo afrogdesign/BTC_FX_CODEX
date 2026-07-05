@@ -1060,14 +1060,17 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
 
-    def test_build_notification_detail_html_uses_ver04_v2_subject_and_header(self) -> None:
+    def test_build_notification_detail_html_uses_stable_product_title_and_hides_version_labels(self) -> None:
         payload = _sample_detail_payload()
 
         html = build_notification_detail_html(payload)
 
-        self.assertIn("[BTCFX Ver04-v2]", html)
+        self.assertIn("BTCFX Manual Trading Report", html)
         self.assertIn("内部確認・検証情報", html)
         self.assertNotIn("Ver02.6-v2", html)
+        self.assertNotIn("Ver04-v1", html)
+        self.assertNotIn("Ver04-v2", html)
+        self.assertNotIn("[CLI]", html)
         self.assertNotIn("[BTCFX Ver03-v4]", html)
         self.assertNotIn("Ver03-v4 手動確認サポート", html)
 
@@ -1153,8 +1156,10 @@ class NotificationDetailPageTests(unittest.TestCase):
 
         local_path, public_url = detail_page_paths(base_dir, cfg, result)
 
-        self.assertIn("ver02-3v3-obs/attention/20260331_020500.html", str(local_path))
-        self.assertTrue(public_url.endswith("/ver02-3v3-obs/attention/20260331_020500.html"))
+        self.assertIn("manual-trading/attention/20260331_020500.html", str(local_path))
+        self.assertTrue(public_url.endswith("/manual-trading/attention/20260331_020500.html"))
+        self.assertNotIn("ver02-3v3-obs", str(local_path))
+        self.assertNotIn("ver04-v2", str(local_path))
 
     def test_detail_page_enabled_includes_attention_when_html_is_enabled(self) -> None:
         required_env = {
@@ -1347,7 +1352,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "maruPro@192.168.50.5",
                 "mkdir",
                 "-p",
-                "/Volumes/Server_HD2/site/btc-monitor/notifications/ver02-4-v1/main",
+                "/Volumes/Server_HD2/site/btc-monitor/notifications/manual-trading/main",
             ],
             calls,
         )
