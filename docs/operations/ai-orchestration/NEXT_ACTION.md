@@ -1,15 +1,18 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260705-POST-DEPLOY-OBSERVATION-REVIEW`
+- current_work_id: `BTCFX-20260705-VALUE-DEFENSE-OBSERVATION-COLLECTION`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v2 is production-applied. The next posture is observation / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
-Operator-facing subject/title/path now use stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
+Ver04-v2 is production-applied. The next posture is observation collection / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
+Operator-facing subject/title/path use stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
 
 ## Observation queue
 
+- after each normal notification, run the Value Defense observation snapshot builder against `logs/last_result.json`
+- review the latest snapshot plus HTML manually
+- accumulate enough observations before any Phase4 tuning proposal
 - verify latest HTML is generated under `manual-trading`
 - verify title is `BTCFX Manual Trading Report`
 - verify `VerXX` / `[CLI]` / `[API]` no longer leak into operator-facing output
@@ -17,7 +20,10 @@ Operator-facing subject/title/path now use stable product labeling, so future br
 - verify shallow retest zone and value defense zone are readable
 - verify notification sending behavior / subject / frequency did not change unintentionally
 - verify self-review current artifact / readiness remains available
-- collect at least one normal generated notification / detail HTML example before Phase4
+- run snapshot builder:
+  `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --out-dir local/value_defense_observation --signal-id <signal_id>`
+- dry-run check:
+  `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --signal-id <signal_id> --dry-run --stdout-json`
 
 ## Completed history
 

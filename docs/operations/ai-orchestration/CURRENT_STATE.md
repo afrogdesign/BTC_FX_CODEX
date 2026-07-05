@@ -35,6 +35,8 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 ## Current operational posture
 
 - Ver04-v2 runtime deployment is complete and reflected active.
+- First post-deploy normal notification observation passed for signal `20260705_050500`.
+- Value Defense observation snapshot exists as a local ignored artifact for the observed signal.
 - Immediate posture is post-deployment observation / review only.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
@@ -71,6 +73,8 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - operator-facing version/mode labels are retired.
 - public label is `BTCFX Manual Trading Report`.
 - path slug is `manual-trading`.
+- first observed notification/detail HTML used `logs/notifications_html/manual-trading/attention/20260705_050500.html` and `/manual-trading/attention/20260705_050500.html`.
+- public/operator label check passed with no visible VerXX / `[CLI]` / `[API]` leakage in the subject/path surface.
 - future verification should use commit hash, process path, generated_at, and report_fingerprint, not VerXX labels or SYSTEM_LABEL.
 - breakout / inversion zones now have a report-only momentum confirmation layer for continuation / counter-bias risk visibility.
 - report-only MACD indicator/scoring support is implemented, and report-only intraperiod breakout/breakdown alert candidate generation is implemented.
@@ -92,6 +96,8 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - controlled runtime restart completed for the current Ver04-v2 production apply.
 - Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `1099a1ae8169f9b1d39d501e46597349a7c13475`.
 - active process path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/main.py` and the deployed process after restart was pid `73939` started `2026-07-05 11:40:20 JST`.
+- Value Defense UI rendered with real data and the reusable local observation snapshot tool was added as a report-only helper.
+- `tools/build_value_defense_observation_snapshot.py` was added in commit `fb7a32f12deb94e699a9f57636c7c8ebc7137faa`.
 - GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
 - Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
 - operator-facing version/mode labels are retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
