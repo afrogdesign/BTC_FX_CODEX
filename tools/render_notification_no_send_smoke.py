@@ -11,8 +11,11 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.ai.summary import CURRENT_PRODUCT_VERSION_LABEL, build_summary_body, build_summary_subject  # noqa: E402
-from src.notification.detail_page import build_notification_detail_html  # noqa: E402
+from src.ai.summary import STABLE_PUBLIC_PRODUCT_LABEL, build_summary_body, build_summary_subject  # noqa: E402
+from src.notification.detail_page import (  # noqa: E402
+    STABLE_NOTIFICATION_SYSTEM_SLUG,
+    build_notification_detail_html,
+)
 
 
 _FORBIDDEN_PATTERNS = (
@@ -30,10 +33,15 @@ _FORBIDDEN_PATTERNS = (
     "<script",
     "fetch(",
     "[cli]",
+    "[api]",
     "[機械判定のみ]",
 )
 _LEGACY_VERSION_PATTERNS = (
     "Ver02.6-v2",
+    "Ver04-v1",
+    "Ver04-v2",
+    "ver02-6-v2",
+    "ver04-v2",
     "[BTCFX Ver03-v4]",
     "Ver03-v4 手動確認サポート",
 )
@@ -64,7 +72,7 @@ def _synthetic_result_payload(post_eval_payload: dict[str, Any] | None = None) -
         "timestamp_jst": "2026-03-15T06:05:00+09:00",
         "signal_id": "20260315_060500",
         "summary_subject": "notification no-send smoke",
-        "system_label": CURRENT_PRODUCT_VERSION_LABEL,
+        "system_label": STABLE_PUBLIC_PRODUCT_LABEL,
         "system_mode_label": "",
         "notification_kind": "attention",
         "bias": "short",
@@ -146,8 +154,8 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
     leaks = _find_forbidden_tokens(combined)
     legacy_version_tokens = _find_legacy_version_tokens(combined)
     sensitive_leak_detected = bool(leaks)
-    legacy_version_label_detected = bool(legacy_version_tokens)
-    status = "fail" if sensitive_leak_detected or legacy_version_label_detected else "pass"
+    legacy_label_leak_detected = bool(legacy_version_tokens)
+    status = "fail" if sensitive_leak_detected or legacy_label_leak_detected else "pass"
     return {
         "status": status,
         "mode": "no_send_render_only",
@@ -159,9 +167,10 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         "summary_subject_rendered": bool(summary_subject),
         "summary_body_rendered": bool(summary_body),
         "detail_html_rendered": bool(detail_html),
-        "current_version_label": CURRENT_PRODUCT_VERSION_LABEL,
-        "legacy_version_label_detected": legacy_version_label_detected,
-        "legacy_version_tokens": legacy_version_tokens,
+        "public_product_label": STABLE_PUBLIC_PRODUCT_LABEL,
+        "output_path_slug": STABLE_NOTIFICATION_SYSTEM_SLUG,
+        "legacy_label_leak_detected": legacy_label_leak_detected,
+        "legacy_label_tokens": legacy_version_tokens,
         "post_eval_recommendations_present": True,
         "sensitive_leak_detected": sensitive_leak_detected,
         "forbidden_tokens": leaks,

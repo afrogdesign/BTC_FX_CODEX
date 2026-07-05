@@ -13,8 +13,9 @@ from src.presentation.sanitize import (
 )
 
 
-CURRENT_PRODUCT_VERSION_LABEL = "Ver04-v2"
-CURRENT_EMAIL_SUBJECT_PREFIX = f"[BTCFX {CURRENT_PRODUCT_VERSION_LABEL}]"
+STABLE_PUBLIC_PRODUCT_LABEL = "BTCFX Manual Trading Report"
+CURRENT_PRODUCT_VERSION_LABEL = STABLE_PUBLIC_PRODUCT_LABEL
+CURRENT_EMAIL_SUBJECT_PREFIX = f"[{STABLE_PUBLIC_PRODUCT_LABEL}]"
 VER03_V4_EMAIL_SUBJECT_PREFIX = CURRENT_EMAIL_SUBJECT_PREFIX
 _LEGACY_PRODUCT_VERSION_PATTERN = re.compile(r"^ver0(?:2|3)", re.IGNORECASE)
 _ANY_VERSION_PATTERN = re.compile(r"^ver\d", re.IGNORECASE)
@@ -1249,12 +1250,6 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
     notification_context = build_notification_context(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
-    label = _normalize_product_version_label(result.get("system_label", ""))
-    mode_label = str(result.get("system_mode_label", "")).strip()
-    labels: list[str] = [f"[{label}]"]
-    if _should_include_subject_mode_label(mode_label):
-        labels.append(f"[{mode_label}]")
-    suffix = f" {' '.join(labels)}" if labels else ""
     price_text = _format_subject_price(result.get("current_price"))
     headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
     rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
@@ -1272,7 +1267,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     legacy_subject = (
         f"{rank_emoji} [{rank_label}] "
         f"{display_context['direction_compact_label']} | {headline_reason} "
-        f"【BTC:{price_text}】 {jst_ts}{suffix}"
+        f"【BTC:{price_text}】 {jst_ts}"
     ).strip()
     active_label = str(notification_context.get("active_subject_label", "")).strip()
     active_detail = _active_subject_detail(notification_context)
@@ -1282,7 +1277,7 @@ def build_summary_subject(result: dict[str, Any]) -> str:
         subject = (
             f"{rank_emoji} [{rank_label}] "
             f"{active_label} / 実弾不可・行動計画 | {active_detail} "
-            f"【BTC:{price_text}】 {jst_ts}{suffix}"
+            f"【BTC:{price_text}】 {jst_ts}"
     ).strip()
     return _apply_current_email_subject_prefix(subject)
 

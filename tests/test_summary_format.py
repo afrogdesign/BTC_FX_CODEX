@@ -12,7 +12,6 @@ if str(BASE_DIR) not in sys.path:
 
 from src.ai.summary import (
     CURRENT_EMAIL_SUBJECT_PREFIX,
-    CURRENT_PRODUCT_VERSION_LABEL,
     VER03_V4_EMAIL_SUBJECT_PREFIX,
     _apply_current_email_subject_prefix,
     _apply_ver03_v4_subject_prefix,
@@ -332,7 +331,10 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertNotIn("[BTCFX Ver03-v2]", subject)
         self.assertNotIn("[BTCFX Ver03-v4]", subject)
         self.assertIn("上方向バイアス", subject)
-        self.assertIn(f"【BTC:70,356】 2026-03-11 09:05 [{CURRENT_PRODUCT_VERSION_LABEL}] [API]", subject)
+        self.assertIn("【BTC:70,356】 2026-03-11 09:05", subject)
+        self.assertNotIn("[API]", subject)
+        self.assertNotIn("[CLI]", subject)
+        self.assertNotIn("Ver04-v2", subject)
         self.assertNotIn("条件付きで検討 |", subject)
         self.assertNotIn("総合強度", subject)
         self.assertIn("これは執行候補です。", body)
@@ -550,7 +552,10 @@ class SummaryFormatTest(unittest.TestCase):
 
         self.assertTrue(subject.startswith(f"{CURRENT_EMAIL_SUBJECT_PREFIX} 📊 [通常監視・実行不可] "))
         self.assertIn("押し目買い待ち / 実弾不可・行動計画 | 押し目待ちで監視", subject)
-        self.assertIn(f"【BTC:70,356】 2026-03-11 09:05 [{CURRENT_PRODUCT_VERSION_LABEL}] [API]", subject)
+        self.assertIn("【BTC:70,356】 2026-03-11 09:05", subject)
+        self.assertNotIn("[API]", subject)
+        self.assertNotIn("[CLI]", subject)
+        self.assertNotIn("Ver04-v2", subject)
 
     def test_attention_subject_and_body_are_wait_first(self) -> None:
         payload = {
@@ -1170,7 +1175,7 @@ class SummaryFormatTest(unittest.TestCase):
             f"{CURRENT_EMAIL_SUBJECT_PREFIX} 既存件名",
         )
 
-    def test_build_summary_subject_normalizes_legacy_version_labels_to_ver04_v2(self) -> None:
+    def test_build_summary_subject_retires_legacy_operator_version_labels(self) -> None:
         payload = {
             "timestamp_jst": "2026-07-02T10:05:00+09:00",
             "system_label": "Ver02.6-v2",
@@ -1192,10 +1197,13 @@ class SummaryFormatTest(unittest.TestCase):
         subject = build_summary_subject(payload)
 
         self.assertIn(CURRENT_EMAIL_SUBJECT_PREFIX, subject)
-        self.assertIn(f"[{CURRENT_PRODUCT_VERSION_LABEL}]", subject)
+        self.assertIn(CURRENT_EMAIL_SUBJECT_PREFIX, subject)
         self.assertNotIn("[CLI]", subject)
+        self.assertNotIn("[API]", subject)
         self.assertNotIn("[機械判定のみ]", subject)
         self.assertNotIn("Ver02.6-v2", subject)
+        self.assertNotIn("Ver04-v1", subject)
+        self.assertNotIn("Ver04-v2", subject)
         self.assertNotIn("[BTCFX Ver03-v4]", subject)
 
     def test_entry_ok_invalid_is_not_presented_as_strong_entry(self) -> None:

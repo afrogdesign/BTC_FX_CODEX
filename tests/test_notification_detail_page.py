@@ -1071,6 +1071,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("Ver04-v1", html)
         self.assertNotIn("Ver04-v2", html)
         self.assertNotIn("[CLI]", html)
+        self.assertNotIn("[API]", html)
         self.assertNotIn("[BTCFX Ver03-v4]", html)
         self.assertNotIn("Ver03-v4 手動確認サポート", html)
 
