@@ -22,20 +22,28 @@ def _fixture_result(
     *,
     summary_subject: str = "[BTCFX Manual Trading Report] 👀 [注意報・売買非推奨] 下方向監視 | 下方向への転換を確認 【BTC:62,789】 2026-07-05 14:05",
     system_label: str = "Ver04-v2",
+    signal_id: str = "20260705_050500",
+    timestamp_jst: str = "2026-07-05T14:05:00.553234+09:00",
+    notification_kind: str = "attention",
+    detail_page_status: str = "published",
+    was_notified: bool = True,
+    detail_page_url: str = "https://server.afrog.jp/btc-monitor/notifications/manual-trading/attention/20260705_050500.html",
+    detail_page_local_path: str = "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/attention/20260705_050500.html",
 ) -> dict[str, object]:
     return {
-        "signal_id": "20260705_050500",
-        "timestamp_jst": "2026-07-05T14:05:00.553234+09:00",
-        "notification_kind": "attention",
-        "detail_page_status": "published",
-        "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/attention/20260705_050500.html",
-        "detail_page_local_path": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/attention/20260705_050500.html",
+        "signal_id": signal_id,
+        "timestamp_jst": timestamp_jst,
+        "notification_kind": notification_kind,
+        "detail_page_status": detail_page_status,
+        "detail_page_url": detail_page_url,
+        "detail_page_local_path": detail_page_local_path,
         "summary_subject": summary_subject,
         "current_price": 62789.0,
         "bias": "short",
         "primary_setup_side": "short",
         "primary_setup_status": "watch",
         "primary_setup_reason": "confidence_below_min",
+        "was_notified": was_notified,
         "system_label": system_label,
         "system_mode_label": "CLI",
         "long_setup": {
@@ -127,6 +135,94 @@ class ValueDefenseObservationSnapshotTest(unittest.TestCase):
             self.assertEqual(payload["current_price_position_long"], "inside_shallow_retest_zone")
             self.assertEqual(payload["current_price_position_short"], "below_zones")
             self.assertFalse(out_dir.exists())
+
+    def test_dry_run_no_send_input_still_emits_json_without_files(self) -> None:
+        result = _fixture_result(
+            was_notified=False,
+            notification_kind="none",
+            detail_page_status="disabled",
+            detail_page_url="",
+            detail_page_local_path="",
+            summary_subject="notification no-send smoke",
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "result.json"
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            out_dir = Path(tmp_dir) / "snapshot"
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = snapshot_tool.main(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--out-dir",
+                        str(out_dir),
+                        "--dry-run",
+                        "--stdout-json",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["notification_kind"], "none")
+        self.assertEqual(payload["detail_page_status"], "disabled")
+        self.assertFalse(out_dir.exists())
+
+    def test_non_dry_run_no_send_input_refuses_to_write_by_default(self) -> None:
+        result = _fixture_result(
+            was_notified=False,
+            notification_kind="none",
+            detail_page_status="disabled",
+            detail_page_url="",
+            detail_page_local_path="",
+            summary_subject="notification no-send smoke",
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "result.json"
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            out_dir = Path(tmp_dir) / "snapshot"
+            with self.assertRaises(SystemExit) as exc, contextlib.redirect_stderr(io.StringIO()):
+                snapshot_tool.main(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--out-dir",
+                        str(out_dir),
+                    ]
+                )
+
+        self.assertNotEqual(exc.exception.code, 0)
+        self.assertFalse(out_dir.exists())
+
+    def test_allow_non_notified_permits_writing_no_send_input(self) -> None:
+        result = _fixture_result(
+            was_notified=False,
+            notification_kind="none",
+            detail_page_status="disabled",
+            detail_page_url="",
+            detail_page_local_path="",
+            summary_subject="notification no-send smoke",
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = Path(tmp_dir) / "result.json"
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            out_dir = Path(tmp_dir) / "snapshot"
+            exit_code = snapshot_tool.main(
+                [
+                    "--input",
+                    str(input_path),
+                    "--out-dir",
+                    str(out_dir),
+                    "--allow-non-notified",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((out_dir / "20260705_050500.json").exists())
+            self.assertTrue((out_dir / "latest.json").exists())
+            snapshot = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(snapshot["notification_kind"], "none")
+            self.assertEqual(snapshot["detail_page_status"], "disabled")
 
     def test_non_dry_run_writes_all_expected_files(self) -> None:
         result = _fixture_result()

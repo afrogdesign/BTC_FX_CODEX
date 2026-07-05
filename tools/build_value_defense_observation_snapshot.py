@@ -140,6 +140,13 @@ def _operator_label_status(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _notification_observation_is_eligible(result: dict[str, Any]) -> bool:
+    was_notified = result.get("was_notified") is True
+    notification_kind = str(result.get("notification_kind", "")).strip().lower()
+    detail_page_status = str(result.get("detail_page_status", "")).strip().lower()
+    return was_notified and bool(notification_kind) and notification_kind != "none" and detail_page_status != "disabled"
+
+
 def _compact_self_review_readiness(source_file: Path) -> dict[str, Any] | None:
     artifact_path = _source_repo_root(source_file) / "local" / "self_review_current_check" / "self_review_current.json"
     if not artifact_path.exists():
@@ -333,6 +340,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--signal-id", default="", help="Optional guard: fail if input signal_id differs.")
     parser.add_argument("--stdout-json", action="store_true", help="Print the generated JSON snapshot to stdout.")
     parser.add_argument("--dry-run", action="store_true", help="Build only in memory unless stdout-json is set.")
+    parser.add_argument(
+        "--allow-non-notified",
+        action="store_true",
+        help="Allow non-dry-run snapshot writing even when the input is not a real notified observation.",
+    )
     return parser
 
 
@@ -344,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
     signal_id = str(result.get("signal_id", "")).strip()
     if args.signal_id and signal_id != args.signal_id:
         parser.error(f"signal_id mismatch: expected {args.signal_id!r}, got {signal_id!r}")
+    if not args.dry_run and not args.allow_non_notified and not _notification_observation_is_eligible(result):
+        parser.error(
+            "input is not an eligible notified observation; use --allow-non-notified to override for manual debug",
+        )
     snapshot = build_value_defense_observation_snapshot(result, source_file=input_path.resolve())
     if not args.dry_run:
         write_snapshot(snapshot, Path(args.out_dir))
