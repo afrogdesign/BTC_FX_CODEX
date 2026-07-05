@@ -73,6 +73,29 @@ def _fixture_result(
     }
 
 
+def _write_self_review_current_artifact(base_dir: Path) -> Path:
+    payload = {
+        "schema_version": "judgment_self_review.v1",
+        "report_fingerprint": "jsr_test_1234567890ab",
+        "review_queue_count": 10,
+        "change_readiness": {
+            "change_readiness_status": "observe_more",
+            "change_readiness_level": "low",
+            "human_approval_required": "yes",
+            "tuning_review_allowed": "no",
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        },
+        "run_metadata": {
+            "report_fingerprint": "jsr_test_runmeta_abcdef12",
+        },
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+    path = base_dir / "local" / "self_review_current_check" / "self_review_current.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
 class ValueDefenseObservationSnapshotTest(unittest.TestCase):
     def test_dry_run_stdout_json_does_not_write_files(self) -> None:
         result = _fixture_result()
@@ -153,6 +176,56 @@ class ValueDefenseObservationSnapshotTest(unittest.TestCase):
         markdown = snapshot_tool.render_observation_markdown(snapshot)
         self.assertIn("Phase4 tuning remains blocked until observation evidence is reviewed and human approval is explicit.", markdown)
         self.assertIn("report-only / not_FORMAL_GO / no automatic order / human decides manually", markdown)
+
+    def test_missing_self_review_artifact_keeps_none(self) -> None:
+        result = _fixture_result()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_dir = base_dir / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            input_path = logs_dir / "last_result.json"
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            snapshot = snapshot_tool.build_value_defense_observation_snapshot(
+                result,
+                source_file=input_path,
+            )
+
+        self.assertIsNone(snapshot["self_review_readiness"])
+
+    def test_available_self_review_artifact_is_compactly_summarized(self) -> None:
+        result = _fixture_result()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_dir = base_dir / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            input_path = logs_dir / "last_result.json"
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            _write_self_review_current_artifact(base_dir)
+
+            snapshot = snapshot_tool.build_value_defense_observation_snapshot(
+                result,
+                source_file=input_path,
+            )
+            markdown = snapshot_tool.render_observation_markdown(snapshot)
+
+        readiness = snapshot["self_review_readiness"]
+        self.assertIsInstance(readiness, dict)
+        self.assertEqual(readiness["schema_version"], "judgment_self_review.v1")
+        self.assertEqual(readiness["report_fingerprint"], "jsr_test_1234567890ab")
+        self.assertEqual(readiness["run_metadata_fingerprint"], "jsr_test_runmeta_abcdef12")
+        self.assertEqual(readiness["review_queue_count"], 10)
+        self.assertEqual(readiness["change_readiness_status"], "observe_more")
+        self.assertEqual(readiness["change_readiness_level"], "low")
+        self.assertEqual(readiness["human_approval_required"], "yes")
+        self.assertEqual(readiness["tuning_review_allowed"], "no")
+        self.assertEqual(
+            readiness["safety_boundary"],
+            "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        )
+        self.assertIn("## Self Review Readiness", markdown)
+        self.assertIn("change_readiness_status: observe_more", markdown)
+        self.assertIn("tuning_review_allowed: no", markdown)
 
     def test_signal_guard_mismatch_exits_non_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

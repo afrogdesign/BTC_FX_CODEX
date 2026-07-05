@@ -37,6 +37,13 @@ def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _source_repo_root(source_file: Path) -> Path:
+    resolved = source_file.resolve()
+    if resolved.parent.name == "logs":
+        return resolved.parent.parent
+    return resolved.parent
+
+
 def _as_float(value: Any) -> float | None:
     try:
         return float(value)
@@ -133,6 +140,33 @@ def _operator_label_status(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_self_review_readiness(source_file: Path) -> dict[str, Any] | None:
+    artifact_path = _source_repo_root(source_file) / "local" / "self_review_current_check" / "self_review_current.json"
+    if not artifact_path.exists():
+        return None
+    try:
+        payload = _read_json(artifact_path)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    change_readiness = payload.get("change_readiness")
+    change_readiness = change_readiness if isinstance(change_readiness, dict) else {}
+    run_metadata = payload.get("run_metadata")
+    run_metadata = run_metadata if isinstance(run_metadata, dict) else {}
+    return {
+        "schema_version": payload.get("schema_version"),
+        "report_fingerprint": payload.get("report_fingerprint"),
+        "run_metadata_fingerprint": run_metadata.get("report_fingerprint") or payload.get("run_metadata_fingerprint"),
+        "review_queue_count": payload.get("review_queue_count"),
+        "change_readiness_status": change_readiness.get("change_readiness_status"),
+        "change_readiness_level": change_readiness.get("change_readiness_level"),
+        "human_approval_required": change_readiness.get("human_approval_required"),
+        "tuning_review_allowed": change_readiness.get("tuning_review_allowed"),
+        "safety_boundary": change_readiness.get("safety_boundary") or payload.get("safety_boundary"),
+    }
+
+
 def _extract_value_defense(setup: dict[str, Any] | None) -> dict[str, Any]:
     setup = setup or {}
     vd = setup.get("value_defense_entry_layer") if isinstance(setup, dict) else {}
@@ -176,6 +210,7 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
     detail_page_url = result.get("detail_page_url")
     detail_page_local_path = result.get("detail_page_local_path")
     summary_subject = str(result.get("summary_subject", "")).strip()
+    self_review_readiness = _compact_self_review_readiness(source_file)
     observation = {
         "schema_version": "value_defense_observation_snapshot.v1",
         "source_file": str(source_file),
@@ -198,7 +233,7 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
         "operator_label_status": _operator_label_status(result),
         "long_value_defense": long_vd,
         "short_value_defense": short_vd,
-        "self_review_readiness": None,
+        "self_review_readiness": self_review_readiness,
         "observation_checklist": dict(DEFAULT_OBSERVATION_CHECKLIST),
         "current_price_position_long": long_position,
         "current_price_position_short": short_position,
@@ -257,6 +292,23 @@ def render_observation_markdown(snapshot: dict[str, Any]) -> str:
     lines.append("## Observation Checklist")
     for key, value in (snapshot.get("observation_checklist") or {}).items():
         lines.append(f"- {key}: {value}")
+    self_review_readiness = snapshot.get("self_review_readiness")
+    if isinstance(self_review_readiness, dict):
+        lines.append("")
+        lines.append("## Self Review Readiness")
+        for key in (
+            "schema_version",
+            "report_fingerprint",
+            "run_metadata_fingerprint",
+            "review_queue_count",
+            "change_readiness_status",
+            "change_readiness_level",
+            "human_approval_required",
+            "tuning_review_allowed",
+            "safety_boundary",
+        ):
+            if key in self_review_readiness:
+                lines.append(f"- {key}: {self_review_readiness.get(key)}")
     lines.append("")
     lines.append("Phase4 tuning remains blocked until observation evidence is reviewed and human approval is explicit.")
     lines.append("report-only / not_FORMAL_GO / no automatic order / human decides manually")
