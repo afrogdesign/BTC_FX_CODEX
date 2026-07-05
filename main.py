@@ -72,6 +72,10 @@ from src.storage.json_store import (
     save_json,
     save_signal_snapshot,
 )
+from tools.build_value_defense_observation_snapshot import (  # noqa: E402
+    build_value_defense_observation_snapshot as build_value_defense_observation_snapshot_report,
+    write_snapshot as write_value_defense_observation_snapshot,
+)
 from src.trade.active_plan import build_active_trade_plan
 from src.trade.actionability_gate import compute_actionability_gate_v1
 from src.trade.activation import determine_phase1_activation
@@ -164,6 +168,55 @@ def _error_log(base_dir: Path, title: str, details: str) -> None:
     path = base_dir / "logs" / "errors" / f"{ts}_{title}.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(details, encoding="utf-8")
+
+
+def _maybe_write_value_defense_observation_snapshot(
+    result_payload: dict[str, Any],
+    *,
+    base_dir: Path,
+) -> dict[str, Any]:
+    signal_id = str(result_payload.get("signal_id", "")).strip()
+    notification_kind = str(result_payload.get("notification_kind", "")).strip()
+    detail_page_status = str(result_payload.get("detail_page_status", "")).strip()
+    should_write = (
+        result_payload.get("was_notified") is True
+        and bool(signal_id)
+        and (detail_page_status == "published" or (notification_kind and notification_kind != "no_send"))
+    )
+    status: dict[str, Any] = {
+        "status": "skipped",
+        "written": False,
+        "signal_id": signal_id,
+        "should_write": should_write,
+    }
+    if not should_write:
+        status["reason"] = "not_eligible"
+        return status
+    source_file = base_dir / "logs" / "last_result.json"
+    out_dir = base_dir / "local" / "value_defense_observation"
+    try:
+        snapshot = build_value_defense_observation_snapshot_report(
+            result_payload,
+            source_file=source_file,
+        )
+        write_value_defense_observation_snapshot(snapshot, out_dir)
+        return {
+            "status": "written",
+            "written": True,
+            "signal_id": signal_id,
+            "source_file": str(source_file),
+            "out_dir": str(out_dir),
+            "snapshot_schema_version": snapshot.get("schema_version", ""),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "failed",
+            "written": False,
+            "signal_id": signal_id,
+            "source_file": str(source_file),
+            "out_dir": str(out_dir),
+            "error": str(exc),
+        }
 
 
 def _round2(value: float) -> float:
@@ -1297,6 +1350,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     if persisted_result.get("paper_order_status") == "planned":
         append_paper_order(base_dir, persisted_result)
     save_json(get_last_result_path(base_dir), persisted_result)
+    _maybe_write_value_defense_observation_snapshot(persisted_result, base_dir=base_dir)
 
     return persisted_result
 
