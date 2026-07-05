@@ -1170,7 +1170,7 @@ class SummaryFormatTest(unittest.TestCase):
             f"{CURRENT_EMAIL_SUBJECT_PREFIX} 既存件名",
         )
 
-    def test_build_summary_subject_normalizes_legacy_version_labels_to_ver04_v1(self) -> None:
+    def test_build_summary_subject_normalizes_legacy_version_labels_to_ver04_v2(self) -> None:
         payload = {
             "timestamp_jst": "2026-07-02T10:05:00+09:00",
             "system_label": "Ver02.6-v2",

@@ -202,7 +202,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "AI_ADVICE_CLI_COMMAND": "",
         "AI_SUMMARY_CLI_COMMAND": "",
         "TIMEZONE": "Asia/Tokyo",
-        "SYSTEM_LABEL": "",
+        "SYSTEM_LABEL": "Ver04-v2",
         "REPORT_TIMES": [
             "00:05",
             "01:05",

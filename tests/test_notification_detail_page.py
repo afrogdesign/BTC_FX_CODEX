@@ -1060,12 +1060,12 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
 
-    def test_build_notification_detail_html_uses_ver04_v1_subject_and_header(self) -> None:
+    def test_build_notification_detail_html_uses_ver04_v2_subject_and_header(self) -> None:
         payload = _sample_detail_payload()
 
         html = build_notification_detail_html(payload)
 
-        self.assertIn("[BTCFX Ver04-v1]", html)
+        self.assertIn("[BTCFX Ver04-v2]", html)
         self.assertIn("内部確認・検証情報", html)
         self.assertNotIn("Ver02.6-v2", html)
         self.assertNotIn("[BTCFX Ver03-v4]", html)
