@@ -1,16 +1,20 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260705-VALUE-DEFENSE-OBSERVATION-COLLECTION`
+- current_work_id: `BTCFX-20260706-OBSERVATION-SCHEMA-RUNTIME-STATE-DOCS`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v2 is production-applied. The next posture is observation collection / review only. Phase4 tuning is still blocked until observation evidence exists and the human explicitly approves it.
+Ver04-v2 is production-applied. The next posture is observe-the-next-notified-snapshot / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
 Operator-facing subject/title/path use stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
 
 ## Observation queue
 
-- after each normal notification, run the Value Defense observation snapshot builder against `logs/last_result.json`
+- after each real notified snapshot after restart, run the Value Defense observation snapshot builder against `logs/last_result.json`
+- verify the new runtime-generated snapshot includes `self_review_readiness`
+- verify the new runtime-generated snapshot includes `attack_review_flags`
+- verify `attack_review_flags.evidence_source == raw_result` and `attack_review_flags.evidence_quality == full` for natural generation
+- if the next notified snapshot is still old schema, inspect runtime hook / import path
 - review the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal
 - verify latest HTML is generated under `manual-trading`
@@ -81,5 +85,13 @@ Next recommended task is observation / review only:
 
 `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the later ground-truth candidate.
 `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` stays gated behind observation evidence and explicit human approval.
+Phase4 tuning remains blocked.
 
 Ver04-v2 is the new source working branch. Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.
+
+## High-priority human review note
+
+- Preserve `docs/operations/ai-orchestration/VALUE_DEFENSE_TREND_TRANSITION_ATTACK_REVIEW_20260706.md` as a Phase4 review candidate.
+- Key lesson: safety must not become passivity; BTC trend-transition setups need evidence-backed aggression.
+- Review future notified observations for `trend_transition_candidate`, `breakout_extension_candidate`, `tp_too_conservative`, `short_invalidated_by_reclaim`, and `runner_should_have_been_considered`.
+- Do not tune from this single example. Accumulate observations first, then review with explicit human approval.

@@ -36,7 +36,9 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 
 - Ver04-v2 runtime deployment is complete and reflected active.
 - First post-deploy normal notification observation passed for signal `20260705_050500`.
-- Value Defense observation snapshot exists as a local ignored artifact for the observed signal.
+- Value Defense observation snapshot source now includes `attack_review_flags`.
+- Existing snapshot backfill / upgrade path exists for previously published observations.
+- latest local observation `20260706_030500` has been backfilled with `self_review_readiness` and `attack_review_flags`.
 - Immediate posture is post-deployment observation / review only.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
@@ -94,12 +96,13 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - judgment self-review now supports explicit `late` classification when late evidence is present.
 - judgment self-review now includes deterministic run metadata and fingerprints for later report comparison.
 - controlled runtime restart completed for the current Ver04-v2 production apply.
+- active process path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/main.py`.
+- deployed process after restart was pid `46203` started `2026-07-06 15:47:09 JST`.
 - Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER is runtime-applied and running on runtime_head `1099a1ae8169f9b1d39d501e46597349a7c13475`.
-- active process path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/main.py` and the deployed process after restart was pid `73939` started `2026-07-05 11:40:20 JST`.
 - Value Defense UI rendered with real data and the reusable local observation snapshot tool was added as a report-only helper.
 - `tools/build_value_defense_observation_snapshot.py` was added in commit `fb7a32f12deb94e699a9f57636c7c8ebc7137faa`.
 - GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
-- Phase4 scoring / gate tuning is blocked until observation evidence exists and the human explicitly approves.
+- Phase4 scoring / gate tuning is blocked until future notified observation evidence exists and the human explicitly approves.
 - operator-facing version/mode labels are retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 
