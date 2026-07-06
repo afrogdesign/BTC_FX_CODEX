@@ -42,6 +42,8 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - Immediate posture is post-deployment observation / review only.
 - Notification sending behavior remains unchanged.
 - No immediate implementation is required unless observation finds an issue.
+- Next strategic design focus is Big Chance / Failed Thesis Layer.
+- guiding principle: failed thesis is opportunity.
 - Next major design target is VALUE-DEFENSE-ENTRY-LAYER.
 - Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete and production-applied:
   - Phase1: report-only payload attached to `build_setup`

@@ -6,6 +6,7 @@
 ## Current goal
 
 Ver04-v2 is production-applied and the followup notification lifecycle is operational. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
+Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
 
 ## Observation queue
 
@@ -25,6 +26,16 @@ Ver04-v2 is production-applied and the followup notification lifecycle is operat
   `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --out-dir local/value_defense_observation --signal-id <signal_id>`
 - dry-run check:
   `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --signal-id <signal_id> --dry-run --stdout-json`
+
+## Design review queue
+
+- review the Big Chance / Failed Thesis Layer design before any implementation
+- keep the first implementation candidate local artifact / replay only
+- do not add live notification behavior yet
+- do not tune scoring, gates, or thresholds yet
+- verify failed long to short / failed short to long symmetry
+- verify HTF context comes first and 15m is activation / invalidation only
+- keep Phase4 blocked until future observation evidence and explicit human approval
 
 ## Completed history
 
