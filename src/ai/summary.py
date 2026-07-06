@@ -1104,6 +1104,7 @@ def _root_summary_lines(
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_big_chance_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))
@@ -1230,7 +1231,41 @@ def _followup_summary(result: dict[str, Any], display_context: dict[str, Any], n
             f"- {notification_context.get('entry_window_label', '前回通知の期限切れを確認')}",
         ]
     )
+    lines.extend(_big_chance_summary_lines(result))
     return "\n".join(lines)
+
+
+def _big_chance_summary_lines(result: dict[str, Any]) -> list[str]:
+    candidate = result.get("big_chance_candidate")
+    if not isinstance(candidate, dict) or not candidate.get("present"):
+        return []
+
+    lines = [
+        "",
+        "【Big Chance / Failed Thesis】",
+        "これは通常スコアとは別の report-only な失敗仮説チャンスです。",
+        f"- 見出し: {candidate.get('headline', '')}",
+        f"- 要約: {candidate.get('operator_summary', '')}",
+        f"- 側: {candidate.get('side', 'none')} / 型: {candidate.get('type', 'none')} / 状態: {candidate.get('status', 'none')}",
+        f"- スコア: {candidate.get('score', 0)} / グレード: {candidate.get('grade', 'none')}",
+        f"- 安全境界: {candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
+    ]
+    macro_context = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
+    failed_thesis = candidate.get("failed_thesis") if isinstance(candidate.get("failed_thesis"), dict) else {}
+    activation = candidate.get("activation") if isinstance(candidate.get("activation"), dict) else {}
+    invalidation = candidate.get("invalidation") if isinstance(candidate.get("invalidation"), dict) else {}
+    evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
+    lines.extend(
+        [
+            f"- Macro: HTF={macro_context.get('signals_4h')} / 1h={macro_context.get('signals_1h')} / 15m={macro_context.get('signals_15m')} / map={macro_context.get('market_map_primary_state')}",
+            f"- Failed thesis: prior={failed_thesis.get('prior_side')} / reasons={failed_thesis.get('failure_reason_labels')}",
+            f"- Core principle: {failed_thesis.get('thesis_summary', 'Failed thesis is opportunity')}",
+            f"- Activation: tf={activation.get('activation_tf')} / condition={activation.get('activation_condition')} / state={activation.get('activation_state')}",
+            f"- Invalidation: tf={invalidation.get('invalidation_tf')} / condition={invalidation.get('invalidation_condition')} / state={invalidation.get('invalidation_state')}",
+            f"- Evidence: price={evidence.get('current_price')} / long_pos={evidence.get('current_price_position_long')} / short_pos={evidence.get('current_price_position_short')}",
+        ]
+    )
+    return lines
 
 
 def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], notification_context: dict[str, Any]) -> str:
@@ -1247,6 +1282,7 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
     lines.extend(_local_confirmation_lines())
     lines.extend(_safe_config_schema_audit_lines(result))
     lines.extend(_operator_triage_summary_lines(result))
+    lines.extend(_big_chance_summary_lines(result))
     lines.extend(_integrated_evidence_overview_lines(result))
     lines.extend(_evidence_quality_summary_lines(result, notification_context, display_context))
     lines.extend(_ohlcv_source_coverage_summary_lines(result, notification_context, display_context))

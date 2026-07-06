@@ -1051,6 +1051,82 @@ def _value_defense_chart_dashboard(result: dict[str, Any]) -> str:
     return f'<div class="value-defense-dashboard">{cards}</div>'
 
 
+def _big_chance_section_html(result: dict[str, Any]) -> str:
+    candidate = result.get("big_chance_candidate")
+    if not isinstance(candidate, dict) or not candidate.get("present"):
+        return ""
+
+    macro_context = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
+    failed_thesis = candidate.get("failed_thesis") if isinstance(candidate.get("failed_thesis"), dict) else {}
+    activation = candidate.get("activation") if isinstance(candidate.get("activation"), dict) else {}
+    invalidation = candidate.get("invalidation") if isinstance(candidate.get("invalidation"), dict) else {}
+    evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
+    reason_labels = candidate.get("reason_labels") if isinstance(candidate.get("reason_labels"), list) else []
+    reason_items = "".join(f"<li>{html.escape(label)}</li>" for label in reason_labels) or "<li>未記録</li>"
+    return f"""
+    <section class="section">
+      <h2>Big Chance / Failed Thesis</h2>
+      <p>Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。</p>
+      <div class="panel">
+        <ul class="summary-list">
+          <li><span class="emoji">🧭</span><div><strong>Headline:</strong> {html.escape(str(candidate.get('headline', '未記録')))}</div></li>
+          <li><span class="emoji">📝</span><div><strong>Operator summary:</strong> {html.escape(str(candidate.get('operator_summary', '未記録')))}</div></li>
+          <li><span class="emoji">⚖️</span><div><strong>Side / Type / Status:</strong> {html.escape(str(candidate.get('side', 'none')))} / {html.escape(str(candidate.get('type', 'none')))} / {html.escape(str(candidate.get('status', 'none')))}</div></li>
+          <li><span class="emoji">🏁</span><div><strong>Score / Grade:</strong> {html.escape(str(candidate.get('score', 0)))} / {html.escape(str(candidate.get('grade', 'none')))}</div></li>
+          <li><span class="emoji">🛡️</span><div><strong>Safety boundary:</strong> {html.escape(str(candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')))}</div></li>
+        </ul>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Macro Context</h3>
+            <ul>
+              <li>4時間足: {html.escape(str(macro_context.get('signals_4h', '未記録')))}</li>
+              <li>1時間足: {html.escape(str(macro_context.get('signals_1h', '未記録')))}</li>
+              <li>15分足: {html.escape(str(macro_context.get('signals_15m', '未記録')))}</li>
+              <li>市場地合い: {html.escape(str(macro_context.get('market_map_primary_state', '未記録')))}</li>
+            </ul>
+          </div>
+        <div class="panel">
+          <h3>Failed Thesis</h3>
+          <ul>
+              <li>前提側: {html.escape(str(failed_thesis.get('prior_side', '未記録')))}</li>
+              <li>失敗理由: {html.escape(', '.join(str(item) for item in failed_thesis.get('failure_reason_labels', []) or []) or '未記録')}</li>
+              <li>仮説メモ: {html.escape(str(failed_thesis.get('thesis_summary', '未記録')))}</li>
+              <li>本質: {html.escape(str(failed_thesis.get('thesis_summary', 'Failed thesis is opportunity')))}</li>
+          </ul>
+        </div>
+        </div>
+        <div class="two-col">
+          <div class="panel">
+            <h3>Activation</h3>
+            <ul>
+              <li>時間軸: {html.escape(str(activation.get('activation_tf', '未記録')))}</li>
+              <li>条件: {html.escape(str(activation.get('activation_condition', '未記録')))}</li>
+              <li>状態: {html.escape(str(activation.get('activation_state', '未記録')))}</li>
+              <li>価格位置: {html.escape(str(activation.get('price_position', '未記録')))}</li>
+              <li>起動条件: {html.escape(str(activation.get('price_position_trigger', '未記録')))}</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>Invalidation</h3>
+            <ul>
+              <li>時間軸: {html.escape(str(invalidation.get('invalidation_tf', '未記録')))}</li>
+              <li>条件: {html.escape(str(invalidation.get('invalidation_condition', '未記録')))}</li>
+              <li>状態: {html.escape(str(invalidation.get('invalidation_state', '未記録')))}</li>
+              <li>価格位置: {html.escape(str(invalidation.get('price_position', '未記録')))}</li>
+              <li>無効化条件: {html.escape(str(invalidation.get('price_position_trigger', '未記録')))}</li>
+            </ul>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Reason Labels</h3>
+          <ul>{reason_items}</ul>
+          <p class="muted">Evidence: 現値 {html.escape(str(evidence.get('current_price')))} / long_pos {html.escape(str(evidence.get('current_price_position_long')))} / short_pos {html.escape(str(evidence.get('current_price_position_short')))}</p>
+        </div>
+      </div>
+    </section>
+    """
+
+
 def _build_wait_reasons(display_context: dict[str, Any], result: dict[str, Any]) -> list[str]:
     reasons = [str(item) for item in display_context.get("wait_reason_labels", []) if str(item).strip()]
     if reasons:
@@ -2118,6 +2194,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     score_compare_html = _score_compare_rows(result)
     price_map_svg = _price_map_svg(result)
     value_defense_chart_dashboard_html = _value_defense_chart_dashboard(result)
+    big_chance_section_html = _big_chance_section_html(result)
     show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
     ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
     ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
@@ -3005,6 +3082,7 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
     </section>
 
     {followup_section_html}
+    {big_chance_section_html}
 
     <section class="section">
       <h2>手動アクション確認</h2>

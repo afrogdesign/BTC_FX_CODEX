@@ -16,6 +16,10 @@ from src.analysis.chart_pattern_shadow import build_chart_pattern_shadow
 from src.analysis.liquidation import analyze_liquidation_clusters
 from src.analysis.liquidity import analyze_liquidity
 from src.analysis.breakout import previous_breakout_levels
+from src.analysis.big_chance import (
+    build_big_chance_artifact as build_big_chance_artifact_payload,
+    write_big_chance_artifact,
+)
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
 from src.analysis.market_map import build_market_map
 from src.analysis.oi_cvd import analyze_oi_cvd
@@ -216,6 +220,40 @@ def _maybe_write_value_defense_observation_snapshot(
             "written": False,
             "signal_id": signal_id,
             "source_file": str(source_file),
+            "out_dir": str(out_dir),
+            "error": str(exc),
+        }
+
+
+def _maybe_write_big_chance_artifact(
+    result_payload: dict[str, Any],
+    *,
+    base_dir: Path,
+    previous_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    signal_id = str(result_payload.get("signal_id", "")).strip()
+    out_dir = base_dir / "local" / "big_chance"
+    source_file = base_dir / "logs" / "last_result.json"
+    try:
+        artifact = build_big_chance_artifact_payload(
+            result_payload,
+            previous=previous_result,
+            source_file=source_file,
+        )
+        write_big_chance_artifact(artifact, out_dir)
+        return {
+            "status": "written",
+            "written": True,
+            "signal_id": signal_id,
+            "out_dir": str(out_dir),
+            "artifact_schema_version": artifact.get("schema_version", ""),
+            "candidate_present": bool((artifact.get("candidate") or {}).get("present")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "failed",
+            "written": False,
+            "signal_id": signal_id,
             "out_dir": str(out_dir),
             "error": str(exc),
         }
@@ -1290,6 +1328,12 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         confidence_details=confidence_details,
         display_context=core_result["display_context"],
     )
+    big_chance_artifact = build_big_chance_artifact_payload(
+        core_result,
+        previous=last_result,
+        source_file=get_last_result_path(base_dir),
+    )
+    core_result["big_chance_candidate"] = big_chance_artifact.get("candidate", {})
 
     if notify:
         if detail_page_enabled(cfg, core_result):
@@ -1362,6 +1406,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         append_paper_order(base_dir, persisted_result)
     save_json(get_last_result_path(base_dir), persisted_result)
     _maybe_write_value_defense_observation_snapshot(persisted_result, base_dir=base_dir)
+    _maybe_write_big_chance_artifact(persisted_result, base_dir=base_dir, previous_result=last_result)
 
     return persisted_result
 
