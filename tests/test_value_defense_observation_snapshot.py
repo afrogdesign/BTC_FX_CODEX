@@ -104,6 +104,25 @@ def _write_self_review_current_artifact(base_dir: Path) -> Path:
     return path
 
 
+def _attack_review_fixture_result() -> dict[str, object]:
+    result = _fixture_result()
+    result.update(
+        {
+            "market_map_primary_state": "transition_early_up",
+            "market_map_flags": ["resistance_to_support_flip", "resistance_to_support_retest_confirmed"],
+            "active_level_role": "runner_setup",
+            "level_flip_state": "resistance_to_support",
+            "failed_breakout_state": "trend_flip",
+            "trend_flip_state": "trend_flip",
+            "transition_direction": "up",
+            "bias": "long",
+            "current_price_position_long": "above_zones",
+            "current_price_position_short": "below_zones",
+        }
+    )
+    return result
+
+
 class ValueDefenseObservationSnapshotTest(unittest.TestCase):
     def test_dry_run_stdout_json_does_not_write_files(self) -> None:
         result = _fixture_result()
@@ -272,6 +291,36 @@ class ValueDefenseObservationSnapshotTest(unittest.TestCase):
         markdown = snapshot_tool.render_observation_markdown(snapshot)
         self.assertIn("Phase4 tuning remains blocked until observation evidence is reviewed and human approval is explicit.", markdown)
         self.assertIn("report-only / not_FORMAL_GO / no automatic order / human decides manually", markdown)
+
+    def test_attack_review_flags_are_present_and_compact(self) -> None:
+        snapshot = snapshot_tool.build_value_defense_observation_snapshot(
+            _attack_review_fixture_result(),
+            source_file=Path("/tmp/result.json"),
+        )
+        flags = snapshot["attack_review_flags"]
+        self.assertIsInstance(flags, dict)
+        self.assertEqual(flags["schema_version"], "value_defense_attack_review_flags.v1")
+        self.assertTrue(flags["review_only"])
+        self.assertEqual(flags["phase4_tuning_allowed"], "no")
+        self.assertEqual(flags["human_approval_required"], "yes")
+        self.assertEqual(flags["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
+        self.assertIn("trend_transition_candidate", flags["watch_tags"])
+        self.assertIn("higher_timeframe_reclaim", flags["watch_tags"])
+        self.assertIn("breakout_extension_candidate", flags["watch_tags"])
+        self.assertIn("tp_too_conservative", flags["watch_tags"])
+        self.assertIn("short_invalidated_by_reclaim", flags["watch_tags"])
+        self.assertIn("runner_should_have_been_considered", flags["watch_tags"])
+        self.assertIn("micro_profit_trap_risk", flags["watch_tags"])
+        self.assertIn("trend_transition_candidate", flags["matched_tags"])
+        self.assertIn("higher_timeframe_reclaim", flags["matched_tags"])
+        self.assertIn("breakout_extension_candidate", flags["matched_tags"])
+        self.assertIn("runner_should_have_been_considered", flags["matched_tags"])
+        self.assertIn("micro_profit_trap_risk", flags["matched_tags"])
+        self.assertIn("short_invalidated_by_reclaim", flags["matched_tags"])
+        markdown = snapshot_tool.render_observation_markdown(snapshot)
+        self.assertIn("## Attack Review Flags", markdown)
+        self.assertIn("phase4_tuning_allowed: no", markdown)
+        self.assertIn("human_approval_required: yes", markdown)
 
     def test_missing_self_review_artifact_keeps_none(self) -> None:
         result = _fixture_result()

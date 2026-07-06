@@ -174,6 +174,92 @@ def _compact_self_review_readiness(source_file: Path) -> dict[str, Any] | None:
     }
 
 
+def _iter_text_values(node: Any) -> list[str]:
+    values: list[str] = []
+    if isinstance(node, dict):
+        for value in node.values():
+            values.extend(_iter_text_values(value))
+    elif isinstance(node, list):
+        for value in node:
+            values.extend(_iter_text_values(value))
+    elif node is not None:
+        values.append(str(node))
+    return values
+
+
+def _attack_review_flags(result: dict[str, Any]) -> dict[str, Any]:
+    market_map_flags = _iter_text_values(result.get("market_map_flags"))
+    market_map_primary_state = " ".join(_iter_text_values(result.get("market_map_primary_state"))).strip().lower()
+    active_level_role = " ".join(_iter_text_values(result.get("active_level_role"))).strip().lower()
+    level_flip_state = " ".join(_iter_text_values(result.get("level_flip_state"))).strip().lower()
+    failed_breakout_state = " ".join(_iter_text_values(result.get("failed_breakout_state"))).strip().lower()
+    trend_flip_state = " ".join(_iter_text_values(result.get("trend_flip_state"))).strip().lower()
+    transition_direction = str(result.get("transition_direction", "")).strip().lower()
+    bias = str(result.get("bias", "")).strip().lower()
+    long_vd = result.get("long_value_defense") if isinstance(result.get("long_value_defense"), dict) else {}
+    short_vd = result.get("short_value_defense") if isinstance(result.get("short_value_defense"), dict) else {}
+    long_state = str((long_vd or {}).get("lifecycle_state", "")).strip().lower()
+    short_state = str((short_vd or {}).get("lifecycle_state", "")).strip().lower()
+    current_price_position_long = str(result.get("current_price_position_long", "")).strip().lower()
+    current_price_position_short = str(result.get("current_price_position_short", "")).strip().lower()
+
+    watch_tags = [
+        "trend_transition_candidate",
+        "higher_timeframe_reclaim",
+        "breakout_extension_candidate",
+        "tp_too_conservative",
+        "short_invalidated_by_reclaim",
+        "runner_should_have_been_considered",
+        "micro_profit_trap_risk",
+    ]
+    matched_tags: list[str] = []
+    evidence = {
+        "market_map_primary_state": market_map_primary_state or None,
+        "active_level_role": active_level_role or None,
+        "level_flip_state": level_flip_state or None,
+        "failed_breakout_state": failed_breakout_state or None,
+        "trend_flip_state": trend_flip_state or None,
+        "transition_direction": transition_direction or None,
+        "bias": bias or None,
+        "long_value_defense_lifecycle_state": long_state or None,
+        "short_value_defense_lifecycle_state": short_state or None,
+        "current_price_position_long": current_price_position_long or None,
+        "current_price_position_short": current_price_position_short or None,
+        "market_map_flags": market_map_flags[:5],
+    }
+
+    def _has_transition_token(text: str) -> bool:
+        lowered = text.lower()
+        return any(token in lowered for token in ("early_up", "early_down", "transition", "trend_flip"))
+
+    if any(_has_transition_token(text) for text in (market_map_primary_state, trend_flip_state, failed_breakout_state, active_level_role)):
+        matched_tags.append("trend_transition_candidate")
+    if "resistance_to_support" in level_flip_state or any(
+        flag in {"resistance_to_support_flip", "resistance_to_support_retest_confirmed"} for flag in market_map_flags
+    ):
+        matched_tags.append("higher_timeframe_reclaim")
+    if "trend_transition_candidate" in matched_tags and (
+        current_price_position_long == "above_zones" or current_price_position_short == "below_zones"
+    ):
+        matched_tags.append("breakout_extension_candidate")
+    if "higher_timeframe_reclaim" in matched_tags and (bias == "long" or transition_direction == "up"):
+        matched_tags.append("short_invalidated_by_reclaim")
+    if "breakout_extension_candidate" in matched_tags:
+        matched_tags.extend(["runner_should_have_been_considered", "micro_profit_trap_risk"])
+
+    matched_tags = list(dict.fromkeys(matched_tags))
+    return {
+        "schema_version": "value_defense_attack_review_flags.v1",
+        "review_only": True,
+        "phase4_tuning_allowed": "no",
+        "human_approval_required": "yes",
+        "matched_tags": matched_tags,
+        "watch_tags": watch_tags,
+        "evidence": evidence,
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+
+
 def _extract_value_defense(setup: dict[str, Any] | None) -> dict[str, Any]:
     setup = setup or {}
     vd = setup.get("value_defense_entry_layer") if isinstance(setup, dict) else {}
@@ -218,6 +304,7 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
     detail_page_local_path = result.get("detail_page_local_path")
     summary_subject = str(result.get("summary_subject", "")).strip()
     self_review_readiness = _compact_self_review_readiness(source_file)
+    attack_review_flags = _attack_review_flags(result)
     observation = {
         "schema_version": "value_defense_observation_snapshot.v1",
         "source_file": str(source_file),
@@ -241,6 +328,7 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
         "long_value_defense": long_vd,
         "short_value_defense": short_vd,
         "self_review_readiness": self_review_readiness,
+        "attack_review_flags": attack_review_flags,
         "observation_checklist": dict(DEFAULT_OBSERVATION_CHECKLIST),
         "current_price_position_long": long_position,
         "current_price_position_short": short_position,
@@ -316,6 +404,20 @@ def render_observation_markdown(snapshot: dict[str, Any]) -> str:
         ):
             if key in self_review_readiness:
                 lines.append(f"- {key}: {self_review_readiness.get(key)}")
+    attack_review_flags = snapshot.get("attack_review_flags")
+    if isinstance(attack_review_flags, dict):
+        lines.append("")
+        lines.append("## Attack Review Flags")
+        for key in (
+            "review_only",
+            "phase4_tuning_allowed",
+            "human_approval_required",
+            "matched_tags",
+            "watch_tags",
+            "safety_boundary",
+        ):
+            if key in attack_review_flags:
+                lines.append(f"- {key}: {attack_review_flags.get(key)}")
     lines.append("")
     lines.append("Phase4 tuning remains blocked until observation evidence is reviewed and human approval is explicit.")
     lines.append("report-only / not_FORMAL_GO / no automatic order / human decides manually")
