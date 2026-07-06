@@ -323,6 +323,169 @@ class ValueDefenseObservationSnapshotTest(unittest.TestCase):
         self.assertIn("phase4_tuning_allowed: no", markdown)
         self.assertIn("human_approval_required: yes", markdown)
 
+    def test_upgrade_existing_snapshot_backfills_readiness_and_attack_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_dir = base_dir / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            snapshot_dir = base_dir / "local" / "value_defense_observation"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            input_path = logs_dir / "last_result.json"
+            source_snapshot_path = snapshot_dir / "20260706_030500.json"
+            result = _fixture_result()
+            result.update(
+                {
+                    "signal_id": "20260706_030500",
+                    "timestamp_jst": "2026-07-06T12:05:00.357210+09:00",
+                    "notification_kind": "attention",
+                    "detail_page_status": "published",
+                    "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/attention/20260706_030500.html",
+                    "detail_page_local_path": str(
+                        base_dir
+                        / "logs"
+                        / "notifications_html"
+                        / "manual-trading"
+                        / "attention"
+                        / "20260706_030500.html"
+                    ),
+                    "summary_subject": "[BTCFX Manual Trading Report] 20260706_030500",
+                    "current_price": 63425.0,
+                }
+            )
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            snapshot = snapshot_tool.build_value_defense_observation_snapshot(
+                result,
+                source_file=input_path,
+            )
+            snapshot.pop("attack_review_flags", None)
+            snapshot["self_review_readiness"] = None
+            source_snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+            _write_self_review_current_artifact(base_dir)
+
+            upgraded = snapshot_tool.upgrade_existing_observation_snapshot(
+                snapshot,
+                source_file=source_snapshot_path,
+            )
+            markdown = snapshot_tool.render_observation_markdown(upgraded)
+
+        self.assertEqual(upgraded["signal_id"], "20260706_030500")
+        self.assertEqual(upgraded["notification_kind"], "attention")
+        self.assertEqual(upgraded["detail_page_status"], "published")
+        self.assertIsNotNone(upgraded["self_review_readiness"])
+        self.assertIsNotNone(upgraded["attack_review_flags"])
+        self.assertEqual(upgraded["attack_review_flags"]["phase4_tuning_allowed"], "no")
+        self.assertEqual(upgraded["attack_review_flags"]["human_approval_required"], "yes")
+        self.assertEqual(upgraded["attack_review_flags"]["evidence_source"], "existing_observation_snapshot")
+        self.assertEqual(upgraded["attack_review_flags"]["evidence_quality"], "limited_snapshot_backfill")
+        self.assertIn("## Self Review Readiness", markdown)
+        self.assertIn("## Attack Review Flags", markdown)
+        self.assertIn("tuning_review_allowed: no", markdown)
+
+    def test_upgrade_existing_snapshot_dry_run_writes_no_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_dir = base_dir / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            snapshot_dir = base_dir / "local" / "value_defense_observation"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            input_path = logs_dir / "last_result.json"
+            source_snapshot_path = snapshot_dir / "20260706_030500.json"
+            result = _fixture_result()
+            result.update(
+                {
+                    "signal_id": "20260706_030500",
+                    "notification_kind": "attention",
+                    "detail_page_status": "published",
+                }
+            )
+            input_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            snapshot = snapshot_tool.build_value_defense_observation_snapshot(
+                result,
+                source_file=input_path,
+            )
+            snapshot.pop("attack_review_flags", None)
+            snapshot["self_review_readiness"] = None
+            source_snapshot_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+            _write_self_review_current_artifact(base_dir)
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                exit_code = snapshot_tool.main(
+                    [
+                        "--upgrade-existing-snapshot",
+                        str(source_snapshot_path),
+                        "--dry-run",
+                        "--stdout-json",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["signal_id"], "20260706_030500")
+        self.assertIsNotNone(payload["self_review_readiness"])
+        self.assertIsNotNone(payload["attack_review_flags"])
+        self.assertFalse((base_dir / "local" / "value_defense_observation" / "latest.json").exists())
+
+    def test_upgrade_existing_snapshot_refuses_no_send_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            snapshot_dir = base_dir / "local" / "value_defense_observation"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            source_snapshot_path = snapshot_dir / "20260706_060500.json"
+            result = _fixture_result(
+                signal_id="20260706_060500",
+                was_notified=False,
+                notification_kind="none",
+                detail_page_status="disabled",
+                detail_page_url="",
+                detail_page_local_path="",
+                summary_subject="no-send",
+            )
+            source_snapshot_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            with self.assertRaises(SystemExit) as exc, contextlib.redirect_stderr(io.StringIO()):
+                snapshot_tool.main(
+                    [
+                        "--upgrade-existing-snapshot",
+                        str(source_snapshot_path),
+                        "--out-dir",
+                        str(base_dir / "out"),
+                    ]
+                )
+        self.assertNotEqual(exc.exception.code, 0)
+
+    def test_upgrade_existing_snapshot_allow_non_notified_writes_no_send_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            snapshot_dir = base_dir / "local" / "value_defense_observation"
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            source_snapshot_path = snapshot_dir / "20260706_060500.json"
+            result = _fixture_result(
+                signal_id="20260706_060500",
+                was_notified=False,
+                notification_kind="none",
+                detail_page_status="disabled",
+                detail_page_url="",
+                detail_page_local_path="",
+                summary_subject="no-send",
+            )
+            source_snapshot_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            _write_self_review_current_artifact(base_dir)
+            exit_code = snapshot_tool.main(
+                [
+                    "--upgrade-existing-snapshot",
+                    str(source_snapshot_path),
+                    "--out-dir",
+                    str(base_dir / "out"),
+                    "--allow-non-notified",
+                ]
+            )
+            upgraded = json.loads((base_dir / "out" / "latest.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(upgraded["signal_id"], "20260706_060500")
+        self.assertEqual(upgraded["notification_kind"], "none")
+        self.assertEqual(upgraded["detail_page_status"], "disabled")
+
     def test_missing_self_review_artifact_keeps_none(self) -> None:
         result = _fixture_result()
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -41,6 +41,8 @@ def _source_repo_root(source_file: Path) -> Path:
     resolved = source_file.resolve()
     if resolved.parent.name == "logs":
         return resolved.parent.parent
+    if resolved.parent.name == "value_defense_observation":
+        return resolved.parent.parent.parent
     return resolved.parent
 
 
@@ -147,6 +149,15 @@ def _notification_observation_is_eligible(result: dict[str, Any]) -> bool:
     return was_notified and bool(notification_kind) and notification_kind != "none" and detail_page_status != "disabled"
 
 
+def _existing_snapshot_observation_is_eligible(snapshot: dict[str, Any]) -> bool:
+    was_notified = snapshot.get("was_notified")
+    if was_notified is False:
+        return False
+    notification_kind = str(snapshot.get("notification_kind", "")).strip().lower()
+    detail_page_status = str(snapshot.get("detail_page_status", "")).strip().lower()
+    return bool(notification_kind) and notification_kind != "none" and detail_page_status != "disabled"
+
+
 def _compact_self_review_readiness(source_file: Path) -> dict[str, Any] | None:
     artifact_path = _source_repo_root(source_file) / "local" / "self_review_current_check" / "self_review_current.json"
     if not artifact_path.exists():
@@ -194,6 +205,8 @@ def _attack_review_flags(
     short_value_defense: dict[str, Any],
     current_price_position_long: str,
     current_price_position_short: str,
+    evidence_source: str | None = None,
+    evidence_quality: str | None = None,
 ) -> dict[str, Any]:
     market_map_flags = _iter_text_values(result.get("market_map_flags"))
     market_map_primary_state = " ".join(_iter_text_values(result.get("market_map_primary_state"))).strip().lower()
@@ -262,6 +275,8 @@ def _attack_review_flags(
         "watch_tags": watch_tags,
         "evidence": evidence,
         "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        **({"evidence_source": evidence_source} if evidence_source else {}),
+        **({"evidence_quality": evidence_quality} if evidence_quality else {}),
     }
 
 
@@ -315,6 +330,8 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
         short_value_defense=short_vd,
         current_price_position_long=long_position,
         current_price_position_short=short_position,
+        evidence_source="raw_result",
+        evidence_quality="full",
     )
     observation = {
         "schema_version": "value_defense_observation_snapshot.v1",
@@ -345,6 +362,33 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
         "current_price_position_short": short_position,
     }
     return observation
+
+
+def upgrade_existing_observation_snapshot(snapshot: dict[str, Any], *, source_file: Path) -> dict[str, Any]:
+    upgraded = dict(snapshot)
+    long_value_defense = upgraded.get("long_value_defense") if isinstance(upgraded.get("long_value_defense"), dict) else {}
+    short_value_defense = upgraded.get("short_value_defense") if isinstance(upgraded.get("short_value_defense"), dict) else {}
+    current_price_position_long = str(upgraded.get("current_price_position_long", "")).strip().lower()
+    current_price_position_short = str(upgraded.get("current_price_position_short", "")).strip().lower()
+    if not current_price_position_long:
+        current_price_position_long = "outside_known_zones"
+    if not current_price_position_short:
+        current_price_position_short = "outside_known_zones"
+    if upgraded.get("self_review_readiness") is None:
+        self_review_readiness = _compact_self_review_readiness(source_file)
+        if self_review_readiness is not None:
+            upgraded["self_review_readiness"] = self_review_readiness
+    if not isinstance(upgraded.get("attack_review_flags"), dict):
+        upgraded["attack_review_flags"] = _attack_review_flags(
+            upgraded,
+            long_value_defense=long_value_defense,
+            short_value_defense=short_value_defense,
+            current_price_position_long=current_price_position_long,
+            current_price_position_short=current_price_position_short,
+            evidence_source="existing_observation_snapshot",
+            evidence_quality="limited_snapshot_backfill",
+        )
+    return upgraded
 
 
 def render_observation_markdown(snapshot: dict[str, Any]) -> str:
@@ -449,6 +493,11 @@ def write_snapshot(snapshot: dict[str, Any], out_dir: Path) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a report-only Value Defense observation snapshot.")
     parser.add_argument("--input", default="logs/last_result.json", help="Result JSON to inspect.")
+    parser.add_argument(
+        "--upgrade-existing-snapshot",
+        default="",
+        help="Upgrade an existing snapshot JSON instead of reading a live result JSON.",
+    )
     parser.add_argument("--out-dir", default="local/value_defense_observation", help="Output directory for snapshot files.")
     parser.add_argument("--signal-id", default="", help="Optional guard: fail if input signal_id differs.")
     parser.add_argument("--stdout-json", action="store_true", help="Print the generated JSON snapshot to stdout.")
@@ -464,16 +513,23 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    input_path = Path(args.input)
-    result = _read_json(input_path)
-    signal_id = str(result.get("signal_id", "")).strip()
+    source_path = Path(args.upgrade_existing_snapshot or args.input)
+    payload = _read_json(source_path)
+    signal_id = str(payload.get("signal_id", "")).strip()
     if args.signal_id and signal_id != args.signal_id:
         parser.error(f"signal_id mismatch: expected {args.signal_id!r}, got {signal_id!r}")
-    if not args.dry_run and not args.allow_non_notified and not _notification_observation_is_eligible(result):
+    if args.upgrade_existing_snapshot:
+        eligible = _existing_snapshot_observation_is_eligible(payload)
+    else:
+        eligible = _notification_observation_is_eligible(payload)
+    if not args.dry_run and not args.allow_non_notified and not eligible:
         parser.error(
             "input is not an eligible notified observation; use --allow-non-notified to override for manual debug",
         )
-    snapshot = build_value_defense_observation_snapshot(result, source_file=input_path.resolve())
+    if args.upgrade_existing_snapshot:
+        snapshot = upgrade_existing_observation_snapshot(payload, source_file=source_path.resolve())
+    else:
+        snapshot = build_value_defense_observation_snapshot(payload, source_file=source_path.resolve())
     if not args.dry_run:
         write_snapshot(snapshot, Path(args.out_dir))
     if args.stdout_json:
