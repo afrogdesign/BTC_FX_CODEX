@@ -108,6 +108,7 @@ def _attack_review_fixture_result() -> dict[str, object]:
     result = _fixture_result()
     result.update(
         {
+            "current_price": 63350.0,
             "market_map_primary_state": "transition_early_up",
             "market_map_flags": ["resistance_to_support_flip", "resistance_to_support_retest_confirmed"],
             "active_level_role": "runner_setup",
@@ -116,8 +117,6 @@ def _attack_review_fixture_result() -> dict[str, object]:
             "trend_flip_state": "trend_flip",
             "transition_direction": "up",
             "bias": "long",
-            "current_price_position_long": "above_zones",
-            "current_price_position_short": "below_zones",
         }
     )
     return result
@@ -317,6 +316,8 @@ class ValueDefenseObservationSnapshotTest(unittest.TestCase):
         self.assertIn("runner_should_have_been_considered", flags["matched_tags"])
         self.assertIn("micro_profit_trap_risk", flags["matched_tags"])
         self.assertIn("short_invalidated_by_reclaim", flags["matched_tags"])
+        self.assertEqual(flags["evidence"]["current_price_position_long"], "above_zones")
+        self.assertEqual(flags["evidence"]["current_price_position_short"], "above_zones")
         markdown = snapshot_tool.render_observation_markdown(snapshot)
         self.assertIn("## Attack Review Flags", markdown)
         self.assertIn("phase4_tuning_allowed: no", markdown)

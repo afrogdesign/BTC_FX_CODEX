@@ -187,7 +187,14 @@ def _iter_text_values(node: Any) -> list[str]:
     return values
 
 
-def _attack_review_flags(result: dict[str, Any]) -> dict[str, Any]:
+def _attack_review_flags(
+    result: dict[str, Any],
+    *,
+    long_value_defense: dict[str, Any],
+    short_value_defense: dict[str, Any],
+    current_price_position_long: str,
+    current_price_position_short: str,
+) -> dict[str, Any]:
     market_map_flags = _iter_text_values(result.get("market_map_flags"))
     market_map_primary_state = " ".join(_iter_text_values(result.get("market_map_primary_state"))).strip().lower()
     active_level_role = " ".join(_iter_text_values(result.get("active_level_role"))).strip().lower()
@@ -196,12 +203,10 @@ def _attack_review_flags(result: dict[str, Any]) -> dict[str, Any]:
     trend_flip_state = " ".join(_iter_text_values(result.get("trend_flip_state"))).strip().lower()
     transition_direction = str(result.get("transition_direction", "")).strip().lower()
     bias = str(result.get("bias", "")).strip().lower()
-    long_vd = result.get("long_value_defense") if isinstance(result.get("long_value_defense"), dict) else {}
-    short_vd = result.get("short_value_defense") if isinstance(result.get("short_value_defense"), dict) else {}
-    long_state = str((long_vd or {}).get("lifecycle_state", "")).strip().lower()
-    short_state = str((short_vd or {}).get("lifecycle_state", "")).strip().lower()
-    current_price_position_long = str(result.get("current_price_position_long", "")).strip().lower()
-    current_price_position_short = str(result.get("current_price_position_short", "")).strip().lower()
+    long_state = str((long_value_defense or {}).get("lifecycle_state", "")).strip().lower()
+    short_state = str((short_value_defense or {}).get("lifecycle_state", "")).strip().lower()
+    current_price_position_long = str(current_price_position_long or "").strip().lower()
+    current_price_position_short = str(current_price_position_short or "").strip().lower()
 
     watch_tags = [
         "trend_transition_candidate",
@@ -304,7 +309,13 @@ def build_value_defense_observation_snapshot(result: dict[str, Any], *, source_f
     detail_page_local_path = result.get("detail_page_local_path")
     summary_subject = str(result.get("summary_subject", "")).strip()
     self_review_readiness = _compact_self_review_readiness(source_file)
-    attack_review_flags = _attack_review_flags(result)
+    attack_review_flags = _attack_review_flags(
+        result,
+        long_value_defense=long_vd,
+        short_value_defense=short_vd,
+        current_price_position_long=long_position,
+        current_price_position_short=short_position,
+    )
     observation = {
         "schema_version": "value_defense_observation_snapshot.v1",
         "source_file": str(source_file),
