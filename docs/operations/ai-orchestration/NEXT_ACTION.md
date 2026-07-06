@@ -1,29 +1,26 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260706-OBSERVATION-SCHEMA-RUNTIME-STATE-DOCS`
+- current_work_id: `BTCFX-20260706-FOLLOWUP-NOTIFICATION-DOCS-CLEANUP`
 - mode: `REVIEW_ONLY`
 
 ## Current goal
 
-Ver04-v2 is production-applied. The next posture is observe-the-next-notified-snapshot / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
-Operator-facing subject/title/path use stable product labeling, so future branch changes no longer require SYSTEM_LABEL/title/slug/subject updates. Operational verification should use commit hash, process path, generated_at, and report_fingerprint.
+Ver04-v2 is production-applied and the followup notification lifecycle is operational. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
 
 ## Observation queue
 
-- after each real notified snapshot after restart, run the Value Defense observation snapshot builder against `logs/last_result.json`
-- verify the new runtime-generated snapshot includes `self_review_readiness`
-- verify the new runtime-generated snapshot includes `attack_review_flags`
-- verify `attack_review_flags.evidence_source == raw_result` and `attack_review_flags.evidence_quality == full` for natural generation
-- if the next notified snapshot is still old schema, inspect runtime hook / import path
-- review the latest snapshot plus HTML manually
+- verify the next followup only fires after expiry or thesis weakening
+- verify no repeated followup is sent for the same baseline signal
+- verify `logs/last_followup_notified.json` is written after the first natural followup
+- verify the subject and detail HTML render the followup section correctly
+- verify notification frequency does not become noisy
+- verify no scoring, gate, or threshold tuning occurred
+- verify the next notified snapshot still includes the observation schema fields:
+  - `self_review_readiness`
+  - `attack_review_flags`
+- if the next notified snapshot still lacks the observation schema, inspect the runtime hook / import path
+- continue reviewing the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal
-- verify latest HTML is generated under `manual-trading`
-- verify title is `BTCFX Manual Trading Report`
-- verify `VerXX` / `[CLI]` / `[API]` no longer leak into operator-facing output
-- verify Value Defense UI renders with real data
-- verify shallow retest zone and value defense zone are readable
-- verify notification sending behavior / subject / frequency did not change unintentionally
-- verify self-review current artifact / readiness remains available
 - run snapshot builder:
   `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --out-dir local/value_defense_observation --signal-id <signal_id>`
 - dry-run check:

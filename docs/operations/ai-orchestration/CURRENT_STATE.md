@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-05
+last_updated: 2026-07-06
 
 ## Safety boundary
 
@@ -105,6 +105,13 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - Phase4 scoring / gate tuning is blocked until future notified observation evidence exists and the human explicitly approves.
 - operator-facing version/mode labels are retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+
+## Followup notification lifecycle
+
+- followup notification lifecycle is implemented, tested, checkpoint-pushed, and runtime-applied
+- implementation commit is `b4f0089`
+- runtime path remained the primary repo path
+- current posture remains observation / review only
 
 ## Current operational blocker
 
