@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 import unittest
@@ -218,6 +219,28 @@ class BigChanceEvaluationTests(unittest.TestCase):
         self.assertIn("## Big Chance / Failed Thesis", markdown)
         self.assertIn("## Safety Boundary", markdown)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", markdown)
+
+    def test_snapshot_replay_20260706_100500_detects_short_failed_to_short(self) -> None:
+        snapshot_path = BASE_DIR / "local" / "value_defense_observation" / "20260706_100500.json"
+        current = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        candidate = evaluate_big_chance(current, None)
+
+        self.assertTrue(candidate["present"])
+        self.assertEqual(candidate["side"], "short")
+        self.assertEqual(candidate["type"], "long_failed_to_short")
+        self.assertIn(candidate["status"], {"armed", "triggered", "follow_through"})
+        self.assertTrue(
+            any(
+                code in candidate["reason_codes"]
+                for code in (
+                    "support_to_resistance_flip",
+                    "support_to_resistance_retest_confirmed",
+                    "trend_flip_early_down",
+                    "failed_long_thesis",
+                )
+            )
+        )
+        self.assertEqual(candidate["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / human decides manually")
 
 
 if __name__ == "__main__":

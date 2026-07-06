@@ -1055,6 +1055,7 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
     candidate = result.get("big_chance_candidate")
     if not isinstance(candidate, dict) or not candidate.get("present"):
         return ""
+    status = str(candidate.get("status", "")).strip().lower()
 
     macro_context = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
     failed_thesis = candidate.get("failed_thesis") if isinstance(candidate.get("failed_thesis"), dict) else {}
@@ -1063,10 +1064,17 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
     evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
     reason_labels = candidate.get("reason_labels") if isinstance(candidate.get("reason_labels"), list) else []
     reason_items = "".join(f"<li>{html.escape(label)}</li>" for label in reason_labels) or "<li>未記録</li>"
+    if status == "invalidated":
+        header = "Big Chance / Failed Thesis（候補失効 / 再評価済み）"
+        intro = "これは既に失効した候補の記録です。active な最優先候補ではありません。"
+    else:
+        header = "Big Chance / Failed Thesis"
+        intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。"
+
     return f"""
     <section class="section">
-      <h2>Big Chance / Failed Thesis</h2>
-      <p>Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。</p>
+      <h2>{html.escape(header)}</h2>
+      <p>{html.escape(intro)}</p>
       <div class="panel">
         <ul class="summary-list">
           <li><span class="emoji">🧭</span><div><strong>Headline:</strong> {html.escape(str(candidate.get('headline', '未記録')))}</div></li>

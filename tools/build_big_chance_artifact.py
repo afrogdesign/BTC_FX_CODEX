@@ -42,16 +42,22 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = Path(args.input)
     current = _read_json(input_path)
-    if args.signal_id and str(current.get("signal_id", "")).strip() != str(args.signal_id).strip():
-        raise SystemExit(
-            f"signal_id mismatch: expected {args.signal_id}, got {current.get('signal_id', '')}"
-        )
+    current_signal_id = str(current.get("signal_id", "")).strip()
+    replay_signal_id = args.replay_signal_id
+    if args.signal_id and current_signal_id != str(args.signal_id).strip():
+        expected = str(args.signal_id).strip()
+        if expected.startswith("replay_") and current_signal_id == expected.removeprefix("replay_"):
+            replay_signal_id = replay_signal_id or expected
+        else:
+            raise SystemExit(
+                f"signal_id mismatch: expected {args.signal_id}, got {current.get('signal_id', '')}"
+            )
     previous = _read_json(Path(args.previous)) if args.previous else None
     artifact = _build_big_chance_artifact(
         current,
         previous=previous,
         source_file=input_path,
-        replay_signal_id=args.replay_signal_id,
+        replay_signal_id=replay_signal_id,
     )
     if args.stdout_json:
         sys.stdout.write(json.dumps(artifact, ensure_ascii=False, sort_keys=True) + "\n")
@@ -59,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         _write_big_chance_artifact(
             artifact,
             Path(args.out_dir),
-            replay_signal_id=args.replay_signal_id,
+            replay_signal_id=replay_signal_id,
         )
     return 0
 

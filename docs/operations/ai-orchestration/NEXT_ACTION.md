@@ -1,11 +1,11 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260706-FOLLOWUP-NOTIFICATION-DOCS-CLEANUP`
-- mode: `REVIEW_ONLY`
+- current_work_id: `BTCFX-20260706-BIG-CHANCE-REPLAY-DOCS-FIX`
+- mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Ver04-v2 is production-applied and the followup notification lifecycle is operational. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
+Ver04-v2 is production-applied and the Big Chance / Failed Thesis Layer is runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
 Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
 
 ## Observation queue
@@ -29,7 +29,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
 
 ## Design review queue
 
-- review the Big Chance / Failed Thesis Layer design before any implementation
+- verify the replay artifact for `20260706_100500` is short-side Big Chance (`long_failed_to_short`) with active status
+- verify invalidated candidates are rendered as replayed / expired, not as active top-priority opportunities
 - keep the first implementation candidate local artifact / replay only
 - do not add live notification behavior yet
 - do not tune scoring, gates, or thresholds yet
@@ -62,6 +63,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
 - VALUE-DEFENSE-ENTRY-LAYER Phase2 complete
 - VALUE-DEFENSE-ENTRY-LAYER Phase3 complete
 - VALUE-DEFENSE-ENTRY-LAYER runtime apply complete via local MCP source fallback after GitHub DNS/SSH reachability issue
+- Big Chance / Failed Thesis Layer runtime apply complete
+- replay artifact for `20260706_100500` generated for the failed-thesis review
 
 ## Hard boundary
 

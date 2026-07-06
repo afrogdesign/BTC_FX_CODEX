@@ -1239,17 +1239,30 @@ def _big_chance_summary_lines(result: dict[str, Any]) -> list[str]:
     candidate = result.get("big_chance_candidate")
     if not isinstance(candidate, dict) or not candidate.get("present"):
         return []
+    status = str(candidate.get("status", "")).strip().lower()
 
-    lines = [
-        "",
-        "【Big Chance / Failed Thesis】",
-        "これは通常スコアとは別の report-only な失敗仮説チャンスです。",
-        f"- 見出し: {candidate.get('headline', '')}",
-        f"- 要約: {candidate.get('operator_summary', '')}",
-        f"- 側: {candidate.get('side', 'none')} / 型: {candidate.get('type', 'none')} / 状態: {candidate.get('status', 'none')}",
-        f"- スコア: {candidate.get('score', 0)} / グレード: {candidate.get('grade', 'none')}",
-        f"- 安全境界: {candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
-    ]
+    if status == "invalidated":
+        lines = [
+            "",
+            "【Big Chance / Failed Thesis】 候補失効 / 再評価済み",
+            "これは既に失効した候補の記録です。active な最優先候補ではありません。",
+            f"- 見出し: {candidate.get('headline', '')}",
+            f"- 要約: {candidate.get('operator_summary', '')}",
+            f"- 側: {candidate.get('side', 'none')} / 型: {candidate.get('type', 'none')} / 状態: {candidate.get('status', 'none')}",
+            f"- スコア: {candidate.get('score', 0)} / グレード: {candidate.get('grade', 'none')}",
+            f"- 安全境界: {candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
+        ]
+    else:
+        lines = [
+            "",
+            "【Big Chance / Failed Thesis】",
+            "これは通常スコアとは別の report-only な失敗仮説チャンスです。",
+            f"- 見出し: {candidate.get('headline', '')}",
+            f"- 要約: {candidate.get('operator_summary', '')}",
+            f"- 側: {candidate.get('side', 'none')} / 型: {candidate.get('type', 'none')} / 状態: {candidate.get('status', 'none')}",
+            f"- スコア: {candidate.get('score', 0)} / グレード: {candidate.get('grade', 'none')}",
+            f"- 安全境界: {candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')}",
+        ]
     macro_context = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
     failed_thesis = candidate.get("failed_thesis") if isinstance(candidate.get("failed_thesis"), dict) else {}
     activation = candidate.get("activation") if isinstance(candidate.get("activation"), dict) else {}

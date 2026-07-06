@@ -114,6 +114,13 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - implementation commit is `b4f0089`
 - runtime path remained the primary repo path
 - current posture remains observation / review only
+- Big Chance / Failed Thesis Layer runtime apply is complete.
+- implementation commit is `76e8b302078ff1d7fae9ed1abc4b581e247540b6`.
+- replay artifact for `20260706_100500` has been generated for the failure-case review.
+- no live Big Chance notification trigger was added.
+- no scoring / gate / threshold tuning was performed.
+- `invalidated` Big Chance candidates must be shown as replayed / expired, not as active top-priority opportunities.
+- Phase4 remains blocked until future observation evidence and explicit human approval.
 
 ## Current operational blocker
 

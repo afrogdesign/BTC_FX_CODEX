@@ -56,6 +56,65 @@ class NotificationDetailBigChanceTests(unittest.TestCase):
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertIn("Failed thesis is opportunity", summary_body)
 
+    def test_invalidated_big_chance_renders_as_replayed_not_active(self) -> None:
+        current = _payload(
+            signal_id="20260706_160500",
+            timestamp_jst="2026-07-06T16:05:00+09:00",
+            bias="short",
+            current_price=62_019.7,
+            signals_4h="wait",
+            signals_1h="wait",
+            signals_15m="short",
+            market_map_primary_state="early_down",
+            market_map_flags=["support_to_resistance_flip", "support_to_resistance_retest_confirmed", "trend_flip_early_down"],
+            level_flip_state="support_to_resistance_confirmed",
+            trend_flip_state="early_down",
+            failed_breakout_state="",
+            transition_direction="up",
+            long_zone=(63_032.83, 63_381.07, 62_737.93, 62_982.77, 62_486.41, 62_541.75, 63_007.8, 63_206.95, "continuation_candidate"),
+            short_zone=(63_826.73, 64_055.07, 64_546.15, 64_601.49, 63_991.25, 64_042.55, 64_105.0, 64_200.0, "shallow_retest_risk"),
+        )
+        current["big_chance_candidate"] = {
+            "schema_version": "big_chance_failed_thesis.v1",
+            "present": True,
+            "side": "long",
+            "type": "short_failed_to_long",
+            "status": "invalidated",
+            "score": 70,
+            "grade": "B",
+            "headline": "ショート失敗→ロング候補",
+            "operator_summary": "ショート仮説の失敗を見ています。",
+            "macro_context": {},
+            "failed_thesis": {"thesis_summary": "Failed thesis is opportunity"},
+            "activation": {},
+            "invalidation": {},
+            "reason_codes": ["failed_short_thesis"],
+            "reason_labels": ["ショート仮説が崩れた"],
+            "evidence": {},
+            "normal_score_context": {},
+            "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+        }
+        current["summary_subject"] = build_summary_subject(current)
+
+        summary_body, _provider = build_summary_body(
+            provider="api",
+            api_key="x",
+            model="gpt-4o",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=0,
+            base_dir=BASE_DIR,
+            result_payload=current,
+        )
+        html = build_notification_detail_html(current)
+
+        self.assertIn("候補失効 / 再評価済み", summary_body)
+        self.assertIn("候補失効 / 再評価済み", html)
+        self.assertIn("既に失効した候補の記録です", summary_body)
+        self.assertIn("既に失効した候補の記録です", html)
+        self.assertNotIn("通常スコアとは別の report-only な失敗仮説チャンスです。", summary_body)
+        self.assertNotIn("通常スコアとは別の report-only な失敗仮説チャンスです。", html)
+
 
 if __name__ == "__main__":
     unittest.main()

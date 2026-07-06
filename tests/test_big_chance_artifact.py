@@ -97,6 +97,30 @@ class BigChanceArtifactTests(unittest.TestCase):
             self.assertEqual(hook_status["status"], "written")
             self.assertTrue((hook_dir / "local" / "big_chance" / "20260706_151500.json").exists())
 
+    def test_cli_replay_alias_signal_id_supports_local_snapshot(self) -> None:
+        snapshot_path = BASE_DIR / "local" / "value_defense_observation" / "20260706_100500.json"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir) / "out"
+            cmd = [
+                sys.executable,
+                str(BASE_DIR / "tools" / "build_big_chance_artifact.py"),
+                "--input",
+                str(snapshot_path),
+                "--out-dir",
+                str(out_dir),
+                "--signal-id",
+                "replay_20260706_100500",
+                "--dry-run",
+                "--stdout-json",
+            ]
+            completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            artifact = json.loads(completed.stdout)
+
+            self.assertEqual(artifact["signal_id"], "20260706_100500")
+            self.assertEqual(artifact["replay_signal_id"], "replay_20260706_100500")
+            self.assertTrue(artifact["candidate"]["present"])
+            self.assertFalse(out_dir.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

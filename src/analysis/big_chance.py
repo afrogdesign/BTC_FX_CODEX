@@ -50,6 +50,23 @@ def _iter_text_values(node: Any) -> list[str]:
     return values
 
 
+def _attack_review_evidence(result: dict[str, Any]) -> dict[str, Any]:
+    attack_review_flags = result.get("attack_review_flags")
+    if isinstance(attack_review_flags, dict):
+        evidence = attack_review_flags.get("evidence")
+        if isinstance(evidence, dict):
+            return evidence
+    return {}
+
+
+def _result_value(result: dict[str, Any], key: str, *, default: Any = None) -> Any:
+    value = result.get(key, default)
+    if value is not None:
+        return value
+    attack_evidence = _attack_review_evidence(result)
+    return attack_evidence.get(key, default)
+
+
 def _zone_bounds(zone: dict[str, Any] | None) -> tuple[float | None, float | None]:
     if not isinstance(zone, dict):
         return None, None
@@ -127,6 +144,11 @@ def _classify_price_position(
 def _extract_value_defense(setup: dict[str, Any] | None) -> dict[str, Any]:
     setup = setup or {}
     vd = setup.get("value_defense_entry_layer") if isinstance(setup, dict) else {}
+    if not isinstance(vd, dict) or not vd:
+        if isinstance(setup, dict) and any(
+            key in setup for key in ("shallow_retest_zone", "value_defense_zone", "invalidation_zone")
+        ):
+            vd = setup
     vd = vd if isinstance(vd, dict) else {}
     return {
         "side": vd.get("side"),
@@ -163,17 +185,17 @@ def _normal_score_context(result: dict[str, Any]) -> dict[str, Any]:
 
 def _macro_context(result: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
     return {
-        "market_regime": result.get("market_regime"),
-        "phase": result.get("phase"),
-        "signals_4h": result.get("signals_4h"),
-        "signals_1h": result.get("signals_1h"),
-        "signals_15m": result.get("signals_15m"),
-        "market_map_primary_state": result.get("market_map_primary_state"),
-        "level_flip_state": result.get("level_flip_state"),
-        "trend_flip_state": result.get("trend_flip_state"),
-        "failed_breakout_state": result.get("failed_breakout_state"),
-        "transition_direction": result.get("transition_direction"),
-        "active_level_role": result.get("active_level_role"),
+        "market_regime": _result_value(result, "market_regime"),
+        "phase": _result_value(result, "phase"),
+        "signals_4h": _result_value(result, "signals_4h"),
+        "signals_1h": _result_value(result, "signals_1h"),
+        "signals_15m": _result_value(result, "signals_15m"),
+        "market_map_primary_state": _result_value(result, "market_map_primary_state"),
+        "level_flip_state": _result_value(result, "level_flip_state"),
+        "trend_flip_state": _result_value(result, "trend_flip_state"),
+        "failed_breakout_state": _result_value(result, "failed_breakout_state"),
+        "transition_direction": _result_value(result, "transition_direction"),
+        "active_level_role": _result_value(result, "active_level_role"),
         "previous_signal_id": (previous or {}).get("signal_id"),
         "previous_notification_kind": (previous or {}).get("notification_kind"),
         "previous_bias": (previous or {}).get("bias"),
@@ -213,8 +235,12 @@ def _reason_labels(reason_codes: list[str], target_side: str) -> list[str]:
         "failed_short_thesis": "ショート仮説が崩れた",
         "support_to_resistance_flip": "サポート→レジスタンス反転",
         "resistance_to_support_flip": "レジスタンス→サポート反転",
+        "support_to_resistance_retest_confirmed": "サポート→レジスタンスの再確認",
+        "resistance_to_support_retest_confirmed": "レジスタンス→サポートの再確認",
         "trend_flip_early_down": "早期下方向転換",
         "trend_flip_early_up": "早期上方向転換",
+        "trend_transition_candidate": "転換候補",
+        "breakout_extension_candidate": "ブレイク拡張候補",
         "1h_wait_pressure": "1時間足は様子見",
         "1h_side_alignment": "1時間足が候補側に寄っている",
         "15m_side_activation": "15分足が候補側で起動",
@@ -277,17 +303,25 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
     opposite = "long" if target_side == "short" else "short"
     long_setup = current.get("long_setup") if isinstance(current.get("long_setup"), dict) else {}
     short_setup = current.get("short_setup") if isinstance(current.get("short_setup"), dict) else {}
+    if not long_setup and isinstance(current.get("long_value_defense"), dict):
+        long_setup = current.get("long_value_defense")
+    if not short_setup and isinstance(current.get("short_value_defense"), dict):
+        short_setup = current.get("short_value_defense")
     long_vd = _extract_value_defense(long_setup)
     short_vd = _extract_value_defense(short_setup)
     current_price = _to_float(current.get("current_price"))
+    current_position_long = str(current.get("current_price_position_long") or _attack_review_evidence(current).get("current_price_position_long") or "").strip()
+    current_position_short = str(current.get("current_price_position_short") or _attack_review_evidence(current).get("current_price_position_short") or "").strip()
     current_positions = {
-        "long": _classify_price_position(
+        "long": current_position_long
+        or _classify_price_position(
             current_price,
             long_vd.get("shallow_retest_zone") or long_setup.get("entry_zone"),
             long_vd.get("value_defense_zone"),
             long_vd.get("invalidation_zone"),
         ),
-        "short": _classify_price_position(
+        "short": current_position_short
+        or _classify_price_position(
             current_price,
             short_vd.get("shallow_retest_zone") or short_setup.get("entry_zone"),
             short_vd.get("value_defense_zone"),
@@ -296,15 +330,21 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
     }
     bias = str(current.get("bias", "")).strip().lower()
     previous_bias = str((previous or {}).get("bias", "")).strip().lower()
-    signals_4h = str(current.get("signals_4h", "")).strip().lower()
-    signals_1h = str(current.get("signals_1h", "")).strip().lower()
-    signals_15m = str(current.get("signals_15m", "")).strip().lower()
-    market_map_primary_state = " ".join(_iter_text_values(current.get("market_map_primary_state"))).strip().lower()
-    market_map_flags = [str(item).strip().lower() for item in _iter_text_values(current.get("market_map_flags")) if str(item).strip()]
-    level_flip_state = " ".join(_iter_text_values(current.get("level_flip_state"))).strip().lower()
-    failed_breakout_state = " ".join(_iter_text_values(current.get("failed_breakout_state"))).strip().lower()
-    trend_flip_state = " ".join(_iter_text_values(current.get("trend_flip_state"))).strip().lower()
-    transition_direction = str(current.get("transition_direction", "")).strip().lower()
+    signals_4h = str(_result_value(current, "signals_4h", default="") or "").strip().lower()
+    signals_1h = str(_result_value(current, "signals_1h", default="") or "").strip().lower()
+    signals_15m = str(_result_value(current, "signals_15m", default="") or "").strip().lower()
+    market_map_primary_state = " ".join(_iter_text_values(_result_value(current, "market_map_primary_state", default=""))).strip().lower()
+    market_map_flags = [str(item).strip().lower() for item in _iter_text_values(_result_value(current, "market_map_flags", default=[])) if str(item).strip()]
+    level_flip_state = " ".join(_iter_text_values(_result_value(current, "level_flip_state", default=""))).strip().lower()
+    failed_breakout_state = " ".join(_iter_text_values(_result_value(current, "failed_breakout_state", default=""))).strip().lower()
+    trend_flip_state = " ".join(_iter_text_values(_result_value(current, "trend_flip_state", default=""))).strip().lower()
+    transition_direction = str(_result_value(current, "transition_direction", default="") or "").strip().lower()
+    attack_review_flags = current.get("attack_review_flags") if isinstance(current.get("attack_review_flags"), dict) else {}
+    attack_matched_tags = {
+        str(tag).strip().lower()
+        for tag in _iter_text_values(attack_review_flags.get("matched_tags") if isinstance(attack_review_flags, dict) else [])
+        if str(tag).strip()
+    }
     value_defense = long_vd if target_side == "short" else short_vd
     target_value_position = current_positions["long" if target_side == "short" else "short"]
 
@@ -323,9 +363,15 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
         ):
             reason_codes.append("support_to_resistance_flip")
             score += 28
+            if "support_to_resistance_retest_confirmed" in market_map_flags:
+                reason_codes.append("support_to_resistance_retest_confirmed")
+                score += 6
         if any(token in text for text in (market_map_primary_state, failed_breakout_state, trend_flip_state) for token in ("early_down", "trend_flip")):
             reason_codes.append("trend_flip_early_down")
             score += 24
+        if any(token in market_map_primary_state for token in ("transition", "candidate")) or "trend_flip" in trend_flip_state:
+            reason_codes.append("trend_transition_candidate")
+            score += 6
         if signals_1h in {"wait", "short"}:
             reason_codes.append("1h_wait_pressure")
             score += 10
@@ -344,9 +390,15 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
         ):
             reason_codes.append("resistance_to_support_flip")
             score += 28
+            if "resistance_to_support_retest_confirmed" in market_map_flags:
+                reason_codes.append("resistance_to_support_retest_confirmed")
+                score += 6
         if any(token in text for text in (market_map_primary_state, failed_breakout_state, trend_flip_state) for token in ("early_up", "trend_flip")):
             reason_codes.append("trend_flip_early_up")
             score += 24
+        if any(token in market_map_primary_state for token in ("transition", "candidate")) or "trend_flip" in trend_flip_state:
+            reason_codes.append("trend_transition_candidate")
+            score += 6
         if signals_1h in {"wait", "long"}:
             reason_codes.append("1h_side_alignment")
             score += 10
@@ -364,6 +416,18 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
         score += 8
     if target_side == "long" and current_positions["short"] == "below_zones":
         score += 8
+    if "breakout_extension_candidate" in attack_matched_tags:
+        reason_codes.append("breakout_extension_candidate")
+        score += 10
+    if "trend_transition_candidate" in attack_matched_tags:
+        reason_codes.append("trend_transition_candidate")
+        score += 8
+    if "runner_should_have_been_considered" in attack_matched_tags:
+        reason_codes.append("runner_should_have_been_considered")
+        score += 4
+    if "micro_profit_trap_risk" in attack_matched_tags:
+        reason_codes.append("micro_profit_trap_risk")
+        score += 4
 
     reason_codes = list(dict.fromkeys(reason_codes))
     reason_labels = _reason_labels(reason_codes, target_side)
@@ -386,6 +450,15 @@ def _candidate_for_side(current: dict[str, Any], previous: dict[str, Any] | None
         elif any(position == ("below_zones" if target_side == "short" else "above_zones") for position in (current_positions["long"], current_positions["short"])):
             status = "armed"
             score += 5
+        elif "breakout_extension_candidate" in attack_matched_tags:
+            status = "triggered" if target_value_position in {"above_zones", "below_zones"} else "armed"
+            score += 12 if status == "triggered" else 6
+        elif "trend_transition_candidate" in attack_matched_tags:
+            status = "armed"
+            score += 6
+        elif "runner_should_have_been_considered" in attack_matched_tags or "micro_profit_trap_risk" in attack_matched_tags:
+            status = "armed"
+            score += 4
         else:
             status = "watch"
 
@@ -600,6 +673,8 @@ def build_big_chance_markdown(candidate: dict[str, Any]) -> str:
 
 def _artifact_prefix(artifact: dict[str, Any], replay_signal_id: str | None = None) -> str:
     if replay_signal_id:
+        if str(replay_signal_id).startswith("replay_"):
+            return str(replay_signal_id)
         return f"replay_{replay_signal_id}"
     signal_id = str(artifact.get("signal_id", "")).strip()
     if signal_id:
