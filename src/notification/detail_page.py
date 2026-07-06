@@ -15,6 +15,12 @@ from src.presentation.sanitize import (
     sanitize_flag_list,
     sanitize_user_text,
 )
+from src.notification.followup import (
+    FOLLOWUP_HUMAN_MESSAGE,
+    FOLLOWUP_PUBLIC_LABEL,
+    FOLLOWUP_SAFETY_BOUNDARY,
+    build_followup_notification_context,
+)
 from src.notification.intraperiod_breakout import build_intraperiod_breakout_alert_candidate
 
 
@@ -288,11 +294,24 @@ def _reason_cards_html(reasons: list[str]) -> str:
     return "".join(cards)
 
 
+def _notification_context_for_result(result: dict[str, Any]) -> dict[str, Any]:
+    notification_context = build_notification_context(result)
+    override = result.get("notification_context")
+    if isinstance(override, dict):
+        notification_context.update(override)
+    followup_context = result.get("followup_context")
+    if str(result.get("notification_kind", "main")).lower().strip() == "followup" and isinstance(followup_context, dict):
+        notification_context.update(build_followup_notification_context(followup_context))
+    return notification_context
+
+
 def _active_plan_hero_label(notification_context: dict[str, Any], result: dict[str, Any]) -> str:
     notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
     trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
 
+    if notification_kind == "followup":
+        return FOLLOWUP_PUBLIC_LABEL
     if notification_kind == "attention":
         return "注意報・売買非推奨"
 
@@ -315,6 +334,12 @@ def _active_plan_hero_summary(
     trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
 
+    if notification_kind == "followup":
+        followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+        return str(
+            followup_context.get("human_message")
+            or FOLLOWUP_HUMAN_MESSAGE
+        )
     if notification_kind == "attention":
         return "これは売買推奨ではなく、方向変化や初動を早めに共有する注意通知です。"
 
@@ -1951,10 +1976,11 @@ def _runtime_startup_status_html(base_dir: Path | None) -> str:
 
 def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None = None) -> str:
     display_context = build_display_context(result)
-    notification_context = build_notification_context(result)
+    notification_context = _notification_context_for_result(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
     public_title = STABLE_DETAIL_PAGE_PRODUCT_LABEL
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
     wait_reasons = _build_wait_reasons(display_context, result)
     ai_audit = result.get("ai_audit") if isinstance(result.get("ai_audit"), dict) else {}
     audit_agreement = str(ai_audit.get("agreement", "")).strip().lower()
@@ -1967,11 +1993,13 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         notification_context.get("status_label", "中立"),
         display_context.get("entry_quality_label", "内部評価あり"),
     ]
+    if notification_kind == "followup":
+        summary_chips[0] = FOLLOWUP_PUBLIC_LABEL
     active_subject_label = str(notification_context.get("active_subject_label", "")).strip()
-    if active_subject_label:
+    if active_subject_label and active_subject_label not in summary_chips:
         summary_chips.append(active_subject_label)
     summary_chips.append(display_context.get("direction_compact_label", "中立"))
-    if notification_context.get("final_rank_emoji"):
+    if notification_context.get("final_rank_emoji") and notification_kind != "followup":
         summary_chips[0] = f"{notification_context.get('final_rank_emoji', '')} {summary_chips[0]}".strip()
 
     def esc(value: Any) -> str:
@@ -1989,6 +2017,34 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         '</div></li>'
         for label, value in active_status_rows
     )
+    followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+    followup_reason_labels = [
+        str(label).strip()
+        for label in (
+            followup_context.get("reason_labels")
+            or followup_context.get("reason_labels_full")
+            or []
+        )
+        if str(label).strip()
+    ]
+    followup_section_html = ""
+    if notification_kind == "followup":
+        followup_reason_items = "".join(f"<li>{esc(label)}</li>" for label in followup_reason_labels) or "<li>有効期限切れ</li>"
+        followup_section_html = f"""
+    <section class="section">
+      <h2>{esc(FOLLOWUP_PUBLIC_LABEL)}</h2>
+      <div class="panel">
+        <p>前回通知は時間切れになったため、ここでは新規売買判断ではなく根拠の再評価だけを行います。</p>
+        <ul class="summary-list">
+          <li><span class="emoji">🧾</span><div><strong>前回信号:</strong> {esc(followup_context.get('previous_signal_id', '未記録'))}</div></li>
+          <li><span class="emoji">⏰</span><div><strong>有効期限:</strong> {esc(followup_context.get('valid_until_utc', '未記録'))}</div></li>
+          <li><span class="emoji">🔎</span><div><strong>理由:</strong> <ul>{followup_reason_items}</ul></div></li>
+          <li><span class="emoji">📝</span><div><strong>案内:</strong> {esc(followup_context.get('human_message', FOLLOWUP_HUMAN_MESSAGE))}</div></li>
+          <li><span class="emoji">🛡️</span><div><strong>安全境界:</strong> {esc(followup_context.get('safety_boundary', FOLLOWUP_SAFETY_BOUNDARY))}</div></li>
+        </ul>
+      </div>
+    </section>
+        """
     manual_support_reference_items = _manual_support_reference_items()
     manual_support_reference_list_html = "".join(
         '<li><strong>{label}:</strong> <code>{value}</code></li>'.format(
@@ -2947,6 +3003,8 @@ def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None
         </div>
       </div>
     </section>
+
+    {followup_section_html}
 
     <section class="section">
       <h2>手動アクション確認</h2>

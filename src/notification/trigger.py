@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.analysis.signal_tier import signal_tier_upgraded
+from src.notification.followup import evaluate_followup_notification
 
 
 def _parse_utc(iso_text: str) -> datetime | None:
@@ -159,6 +160,7 @@ def should_notify(
     last_notified: dict[str, Any] | None,
     last_attention_notified: dict[str, Any] | None,
     cfg: Any,
+    last_followup_notified: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     main_reasons: list[str] = []
     suppress_reasons: list[str] = []
@@ -167,71 +169,74 @@ def should_notify(
     confidence = int(current.get("confidence", 0))
     attention_reasons = _attention_reasons(current, last_result, cfg)
     if bias not in {"long", "short"}:
-        return {
-            "notify": False,
-            "notify_reason_codes": [],
-            "suppress_reason_codes": ["bias_wait"],
-            "notification_kind": "none",
-        }
+        suppress_reasons.append("bias_wait")
 
-    prev_status = (last_result or {}).get("primary_setup_status", "none")
-    current_status = current.get("primary_setup_status", "none")
-    if _status_upgrade(prev_status, current_status):
-        main_reasons.append("status_upgraded")
+    if bias in {"long", "short"}:
+        prev_status = (last_result or {}).get("primary_setup_status", "none")
+        current_status = current.get("primary_setup_status", "none")
+        if _status_upgrade(prev_status, current_status):
+            main_reasons.append("status_upgraded")
 
-    prev_bias = (last_result or {}).get("bias", "wait")
-    if _bias_upgrade(prev_bias, bias):
-        main_reasons.append("bias_changed")
+        prev_bias = (last_result or {}).get("bias", "wait")
+        if _bias_upgrade(prev_bias, bias):
+            main_reasons.append("bias_changed")
 
-    prev_prelabel = (last_result or {}).get("prelabel", "NO_TRADE_CANDIDATE")
-    current_prelabel = current.get("prelabel", "NO_TRADE_CANDIDATE")
-    if _prelabel_upgrade(prev_prelabel, current_prelabel):
-        main_reasons.append("prelabel_improved")
+        prev_prelabel = (last_result or {}).get("prelabel", "NO_TRADE_CANDIDATE")
+        current_prelabel = current.get("prelabel", "NO_TRADE_CANDIDATE")
+        if _prelabel_upgrade(prev_prelabel, current_prelabel):
+            main_reasons.append("prelabel_improved")
 
-    prev_conf = int((last_notified or {}).get("confidence", confidence))
-    if abs(confidence - prev_conf) >= cfg.CONFIDENCE_ALERT_CHANGE:
-        main_reasons.append("confidence_jump")
+        prev_conf = int((last_notified or {}).get("confidence", confidence))
+        if abs(confidence - prev_conf) >= cfg.CONFIDENCE_ALERT_CHANGE:
+            main_reasons.append("confidence_jump")
 
-    prev_agreement = (last_notified or {}).get("agreement_with_machine")
-    curr_agreement = current.get("agreement_with_machine")
-    if prev_agreement in {"agree", "disagree"} and curr_agreement in {"agree", "disagree"}:
-        if prev_agreement != curr_agreement:
-            main_reasons.append("agreement_changed")
+        prev_agreement = (last_notified or {}).get("agreement_with_machine")
+        curr_agreement = current.get("agreement_with_machine")
+        if prev_agreement in {"agree", "disagree"} and curr_agreement in {"agree", "disagree"}:
+            if prev_agreement != curr_agreement:
+                main_reasons.append("agreement_changed")
 
-    prev_tier = str((last_notified or {}).get("signal_tier", "normal"))
-    curr_tier = str(current.get("signal_tier", "normal"))
-    if signal_tier_upgraded(prev_tier, curr_tier):
-        main_reasons.append("signal_tier_upgraded")
+        prev_tier = str((last_notified or {}).get("signal_tier", "normal"))
+        curr_tier = str(current.get("signal_tier", "normal"))
+        if signal_tier_upgraded(prev_tier, curr_tier):
+            main_reasons.append("signal_tier_upgraded")
 
-    no_trade_flags = current.get("no_trade_flags", [])
-    risk_flags = [str(flag) for flag in current.get("risk_flags", [])]
-    main_blocked = False
-    if bias == "long" and confidence < cfg.CONFIDENCE_LONG_MIN:
-        suppress_reasons.append("confidence_below_long_min")
-        main_blocked = True
-    if bias == "short" and confidence < cfg.CONFIDENCE_SHORT_MIN:
-        suppress_reasons.append("confidence_below_short_min")
-        main_blocked = True
-    if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
-        suppress_reasons.extend(["primary_setup_invalid", "multiple_no_trade_flags"])
-        main_blocked = True
-    if _sweep_recheck_wait_case(current):
-        suppress_reasons.append("rr_sweep_recheck_wait")
-        main_blocked = True
-    elif _watch_low_execution_recheck_case(current):
-        suppress_reasons.append("watch_low_execution_recheck_wait")
-        main_blocked = True
-    elif _watch_sweep_recheck_case(current) and set(main_reasons).issubset(_WATCH_SWEEP_MAIN_REASONS):
-        suppress_reasons.append("watch_sweep_recheck_wait")
-        main_blocked = True
+        no_trade_flags = current.get("no_trade_flags", [])
+        risk_flags = [str(flag) for flag in current.get("risk_flags", [])]
+        main_blocked = False
+        if bias == "long" and confidence < cfg.CONFIDENCE_LONG_MIN:
+            suppress_reasons.append("confidence_below_long_min")
+            main_blocked = True
+        if bias == "short" and confidence < cfg.CONFIDENCE_SHORT_MIN:
+            suppress_reasons.append("confidence_below_short_min")
+            main_blocked = True
+        if current_status == "invalid" and len(no_trade_flags) >= 2 and current_prelabel != "ENTRY_OK":
+            suppress_reasons.extend(["primary_setup_invalid", "multiple_no_trade_flags"])
+            main_blocked = True
+        if _sweep_recheck_wait_case(current):
+            suppress_reasons.append("rr_sweep_recheck_wait")
+            main_blocked = True
+        elif _watch_low_execution_recheck_case(current):
+            suppress_reasons.append("watch_low_execution_recheck_wait")
+            main_blocked = True
+        elif _watch_sweep_recheck_case(current) and set(main_reasons).issubset(_WATCH_SWEEP_MAIN_REASONS):
+            suppress_reasons.append("watch_sweep_recheck_wait")
+            main_blocked = True
 
-    if not main_blocked and main_reasons:
-        last_notified_ts = _parse_utc((last_notified or {}).get("timestamp_utc", ""))
-        now_ts = _parse_utc(str(current.get("timestamp_utc", "")))
-        if last_notified_ts and now_ts:
-            cooldown = timedelta(minutes=cfg.ALERT_COOLDOWN_MINUTES)
-            if now_ts - last_notified_ts < cooldown and "signal_tier_upgraded" not in main_reasons:
-                suppress_reasons.append("cooldown_active")
+        if not main_blocked and main_reasons:
+            last_notified_ts = _parse_utc((last_notified or {}).get("timestamp_utc", ""))
+            now_ts = _parse_utc(str(current.get("timestamp_utc", "")))
+            if last_notified_ts and now_ts:
+                cooldown = timedelta(minutes=cfg.ALERT_COOLDOWN_MINUTES)
+                if now_ts - last_notified_ts < cooldown and "signal_tier_upgraded" not in main_reasons:
+                    suppress_reasons.append("cooldown_active")
+                else:
+                    return {
+                        "notify": True,
+                        "notify_reason_codes": sorted(set(main_reasons)),
+                        "suppress_reason_codes": [],
+                        "notification_kind": "main",
+                    }
             else:
                 return {
                     "notify": True,
@@ -239,13 +244,6 @@ def should_notify(
                     "suppress_reason_codes": [],
                     "notification_kind": "main",
                 }
-        else:
-            return {
-                "notify": True,
-                "notify_reason_codes": sorted(set(main_reasons)),
-                "suppress_reason_codes": [],
-                "notification_kind": "main",
-            }
 
     if attention_reasons:
         last_attention_ts = _parse_utc((last_attention_notified or {}).get("timestamp_utc", ""))
@@ -272,6 +270,22 @@ def should_notify(
         suppress_reasons.append("attention_rr_sweep_recheck_wait")
     elif _watch_low_execution_recheck_case(current):
         suppress_reasons.append("attention_watch_low_execution_recheck_wait")
+
+    followup_info = evaluate_followup_notification(
+        current,
+        last_notified,
+        last_attention_notified,
+        last_followup_notified,
+        cfg,
+    )
+    if followup_info.get("followup_needed") is True:
+        return {
+            "notify": True,
+            "notify_reason_codes": list(followup_info.get("reason_codes", [])),
+            "suppress_reason_codes": [],
+            "notification_kind": "followup",
+            "followup_context": followup_info,
+        }
 
     if not main_reasons and not attention_reasons:
         suppress_reasons.append("no_material_change")

@@ -11,6 +11,11 @@ from src.presentation.sanitize import (
     sanitize_flag_list,
     sanitize_user_text,
 )
+from src.notification.followup import (
+    FOLLOWUP_HUMAN_MESSAGE,
+    FOLLOWUP_PUBLIC_LABEL,
+    build_followup_notification_context,
+)
 
 
 STABLE_PUBLIC_PRODUCT_LABEL = "BTCFX Manual Trading Report"
@@ -1186,6 +1191,48 @@ def _ai_audit_lines(result: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _notification_context_for_result(result: dict[str, Any]) -> dict[str, Any]:
+    notification_context = build_notification_context(result)
+    override = result.get("notification_context")
+    if isinstance(override, dict):
+        notification_context.update(override)
+    followup_context = result.get("followup_context")
+    if str(result.get("notification_kind", "main")).lower().strip() == "followup" and isinstance(followup_context, dict):
+        notification_context.update(build_followup_notification_context(followup_context))
+    return notification_context
+
+
+def _followup_summary(result: dict[str, Any], display_context: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+    reason_labels = [str(label).strip() for label in followup_context.get("reason_labels", []) if str(label).strip()]
+    previous_signal_id = str(followup_context.get("previous_signal_id", "")).strip() or "未記録"
+    previous_kind = str(followup_context.get("previous_notification_kind", "")).strip() or "未記録"
+    valid_until = str(followup_context.get("valid_until_utc", "")).strip() or "未記録"
+    human_message = str(followup_context.get("human_message") or FOLLOWUP_HUMAN_MESSAGE).strip()
+    safety_boundary = str(followup_context.get("safety_boundary") or "report-only / no automatic order / human decides manually").strip()
+    lines = [
+        "【期限切れ・再評価】",
+        "これは売買推奨メールではありません。",
+        "前回通知は有効期限切れです。",
+        f"- 前回通知: {previous_signal_id} / {previous_kind}",
+        f"- 有効期限: {valid_until}",
+    ]
+    if reason_labels:
+        lines.append(f"- 理由: {' / '.join(reason_labels)}")
+    else:
+        lines.append("- 理由: 有効期限切れ")
+    lines.extend(
+        [
+            f"- {human_message}",
+            f"- 再確認の見方: {display_context.get('direction_label', '相場は中立です')}",
+            f"- 安全境界: {safety_boundary}",
+            f"- 現在価格: {_format_price(result.get('current_price'))}",
+            f"- {notification_context.get('entry_window_label', '前回通知の期限切れを確認')}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], notification_context: dict[str, Any]) -> str:
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
     lines = [
@@ -1248,13 +1295,21 @@ def _attention_summary(result: dict[str, Any], display_context: dict[str, Any], 
 
 def build_summary_subject(result: dict[str, Any]) -> str:
     display_context = build_display_context(result)
-    notification_context = build_notification_context(result)
+    notification_context = _notification_context_for_result(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     price_text = _format_subject_price(result.get("current_price"))
-    headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
     rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
     rank_label = str(notification_context.get("final_rank_label", "送信なし")).strip()
     notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    if notification_kind == "followup":
+        followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+        subject_hint = str(
+            followup_context.get("subject_hint")
+            or f"{FOLLOWUP_PUBLIC_LABEL} 前回通知の有効期限切れ / 根拠再確認"
+        ).strip()
+        subject = f"{subject_hint} 【BTC:{price_text}】 {jst_ts}"
+        return _apply_current_email_subject_prefix(subject)
+    headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
     trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
     use_existing_subject = (
@@ -1296,8 +1351,11 @@ def build_summary_body(
     del api_key, model, cli_command, timeout_sec, retry_count, base_dir
     provider_name = str(provider or "api").strip().lower()
     display_context = build_display_context(result_payload)
-    notification_context = build_notification_context(result_payload)
-    if str(result_payload.get("notification_kind", "main")).lower() == "attention":
+    notification_context = _notification_context_for_result(result_payload)
+    notification_kind = str(result_payload.get("notification_kind", "main")).lower()
+    if notification_kind == "followup":
+        return _followup_summary(result_payload, display_context, notification_context), provider_name
+    if notification_kind == "attention":
         return _attention_summary(result_payload, display_context, notification_context), provider_name
     lines = _root_summary_lines(result_payload, display_context, notification_context)
     lines.extend(_ai_audit_lines(result_payload))

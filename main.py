@@ -54,6 +54,7 @@ from src.notification.detail_page import (
     detail_page_enabled,
     publish_notification_detail,
 )
+from src.notification.followup import build_followup_notification_context
 from src.notification.trigger import should_notify
 from src.storage.cleanup import cleanup_if_due
 from src.storage.csv_logger import (
@@ -66,6 +67,7 @@ from src.storage.csv_logger import (
 )
 from src.storage.json_store import (
     get_last_attention_notified_path,
+    get_last_followup_notified_path,
     get_last_notified_path,
     get_last_result_path,
     load_json,
@@ -1219,13 +1221,21 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     last_result = load_json(get_last_result_path(base_dir))
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
-    notify_info = should_notify(core_result, last_result, last_notified, last_attention_notified, cfg)
+    last_followup_notified = load_json(get_last_followup_notified_path(base_dir))
+    notify_info = should_notify(core_result, last_result, last_notified, last_attention_notified, cfg, last_followup_notified)
     notify = bool(notify_info["notify"])
     core_result["notify_reason_codes"] = notify_info["notify_reason_codes"]
     core_result["suppress_reason_codes"] = notify_info["suppress_reason_codes"]
     core_result["reason_for_notification"] = notify_info["notify_reason_codes"]
     core_result["notification_kind"] = notify_info["notification_kind"]
+    followup_context = notify_info.get("followup_context")
+    if isinstance(followup_context, dict):
+        core_result["followup_context"] = followup_context
+        core_result["followup_for_signal_id"] = followup_context.get("followup_for_signal_id") or followup_context.get("previous_signal_id")
+        core_result["followup_reason_codes"] = list(followup_context.get("reason_codes", []))
     core_result["notification_context"] = build_notification_context(core_result)
+    if isinstance(followup_context, dict):
+        core_result["notification_context"].update(build_followup_notification_context(followup_context))
     advice_provider_used = getattr(cfg, "AI_ADVICE_PROVIDER", "api")
     if notify:
         ai_advice, advice_provider_used = request_ai_advice(
@@ -1294,11 +1304,12 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                 core_result["detail_page_enabled"] = True
                 core_result["detail_page_status"] = "failed"
                 _error_log(base_dir, "notification_detail_page_error", f"{exc}\n{traceback.format_exc()}")
-        notify_path = (
-            get_last_attention_notified_path(base_dir)
-            if core_result["notification_kind"] == "attention"
-            else get_last_notified_path(base_dir)
-        )
+        if core_result["notification_kind"] == "attention":
+            notify_path = get_last_attention_notified_path(base_dir)
+        elif core_result["notification_kind"] == "followup":
+            notify_path = get_last_followup_notified_path(base_dir)
+        else:
+            notify_path = get_last_notified_path(base_dir)
         if cfg.DRYRUN_MODE:
             core_result["was_notified"] = True
             core_result["notified_at_utc"] = datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z")
