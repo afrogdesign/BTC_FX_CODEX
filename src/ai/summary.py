@@ -298,6 +298,164 @@ def _apply_ver03_v4_subject_prefix(subject: str) -> str:
     return _apply_current_email_subject_prefix(subject)
 
 
+def _compact_direction_text(result: dict[str, Any], display_context: dict[str, Any]) -> str:
+    bias = str(result.get("bias", "")).strip().lower()
+    if bias == "long":
+        return "上方向"
+    if bias == "short":
+        return "下方向"
+    if bias == "wait":
+        return "中立"
+    direction_label = str(display_context.get("direction_label", "")).strip()
+    if "上方向" in direction_label:
+        return "上方向"
+    if "下方向" in direction_label:
+        return "下方向"
+    return direction_label or "中立"
+
+
+def _compact_handling_line(
+    *,
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> str:
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+    if notification_kind == "followup":
+        return "前回通知は失効。新規根拠として使わない。"
+    if trade_gate == "pass" and paper_order_status == "planned":
+        return "紙実行候補。実弾不可。最終判断は人間。"
+    if notification_kind == "attention":
+        return "実行候補ではない。高優先で監視。"
+    execution_label = str(notification_context.get("execution_label", "")).strip()
+    if execution_label and execution_label != "見送り":
+        return f"実行候補ではない。{execution_label}でHTML確認。"
+    direction = _compact_direction_text(result, display_context)
+    if direction == "中立":
+        return "実行候補ではない。HTMLで条件確認。"
+    return f"実行候補ではない。HTMLで条件確認。"
+
+
+def _compact_holding_lines(notification_kind: str) -> list[str]:
+    if notification_kind == "followup":
+        return [
+            "保有中: 撤退 / 建値 / 損切り確認",
+            "未保有: 追いかけず、HTMLで条件確認",
+        ]
+    return [
+        "保有中: 根拠維持 / 無効化ライン確認",
+        "未保有: 追いかけず、HTMLで条件確認",
+    ]
+
+
+def _compact_big_chance_side_label(candidate_type: str) -> str:
+    mapping = {
+        "long_failed_to_short": "ロング失敗 → ショート候補",
+        "short_failed_to_long": "ショート失敗 → ロング候補",
+    }
+    return mapping.get(candidate_type, "失敗仮説チャンス")
+
+
+def _compact_big_chance_line(result: dict[str, Any]) -> str:
+    candidate = result.get("big_chance_candidate")
+    if not isinstance(candidate, dict) or not candidate.get("present"):
+        return "Big Chance: なし"
+    status = str(candidate.get("status", "")).strip().lower() or "none"
+    if status == "invalidated":
+        return "Big Chance: 候補失効 / 再評価済み"
+    side_type = _compact_big_chance_side_label(str(candidate.get("type", "")).strip().lower())
+    grade = str(candidate.get("grade", "")).strip() or "?"
+    return f"Big Chance: {side_type} / {status} / {grade}"
+
+
+def _compact_price_zones(result: dict[str, Any], notification_context: dict[str, Any]) -> list[str]:
+    def _zone_range_text(zones: Any) -> str:
+        if not isinstance(zones, list) or not zones:
+            return "なし"
+        zone = zones[0] if isinstance(zones[0], dict) else {}
+        low = _format_price(zone.get("low"))
+        high = _format_price(zone.get("high"))
+        if low == "None" or high == "None":
+            return "なし"
+        return f"{low} - {high}"
+
+    support = _zone_range_text(result.get("support_zones"))
+    resistance = _zone_range_text(result.get("resistance_zones"))
+    price_map = notification_context.get("price_map") if isinstance(notification_context.get("price_map"), dict) else {}
+    if support == "なし":
+        support_label = str(price_map.get("support_label", "")).strip()
+        if support_label:
+            support = support_label.replace("サポート: ", "")
+    if resistance == "なし":
+        resistance_label = str(price_map.get("resistance_label", "")).strip()
+        if resistance_label:
+            resistance = resistance_label.replace("レジスタンス: ", "")
+    return [f"上: {resistance}", f"下: {support}"]
+
+
+def _compact_detail_url_line(result: dict[str, Any]) -> str:
+    url = str(result.get("detail_page_url", "")).strip()
+    if not url.startswith("https://server.afrog.jp/btc-monitor/notifications/manual-trading/"):
+        return ""
+    return f"詳細:\n{url}"
+
+
+def _normalize_safety_boundary_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "_" in text and " " not in text:
+        return text.replace("_", " ")
+    return text
+
+
+def _compact_email_body(
+    *,
+    result: dict[str, Any],
+    display_context: dict[str, Any],
+    notification_context: dict[str, Any],
+) -> str:
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    if notification_kind == "followup":
+        heading = "【期限切れ・再評価】"
+    elif notification_kind == "attention":
+        heading = "【注意報】"
+    else:
+        rank_label = str(notification_context.get("final_rank_label", "")).strip()
+        if rank_label and "紙" in rank_label:
+            heading = "【紙実行候補】"
+        else:
+            heading = "【結論】"
+
+    lines = [heading, _compact_handling_line(result=result, display_context=display_context, notification_context=notification_context)]
+    lines.extend(_compact_holding_lines(notification_kind))
+    lines.append(_compact_big_chance_line(result))
+    lines.append(
+        f"通常バイアス: {_compact_direction_text(result, display_context)} / 実行判断: {str(notification_context.get('execution_label', '見送り')).strip() or '見送り'}"
+    )
+    lines.append(f"現在: {_format_price(result.get('current_price'))}")
+    lines.extend(_compact_price_zones(result, notification_context))
+    detail_line = _compact_detail_url_line(result)
+    if detail_line:
+        lines.append(detail_line)
+    if notification_kind == "followup":
+        safety_boundary = _normalize_safety_boundary_text(
+            notification_context.get("followup_safety_boundary")
+            or notification_context.get("safety_boundary")
+            or "report-only / no automatic order / human decides manually"
+        )
+    else:
+        safety_boundary = _normalize_safety_boundary_text(
+            result.get("actionability_safety")
+            or notification_context.get("safety_boundary")
+            or "report-only / no automatic order / human decides manually"
+        )
+    lines.append(f"※ {safety_boundary}")
+    return "\n".join(lines)
+
+
 def _extend_gate_lines(lines: list[str], result: dict[str, Any]) -> None:
     trade_gate = str(result.get("trade_execution_gate", "blocked")).strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).strip()
@@ -1347,42 +1505,26 @@ def build_summary_subject(result: dict[str, Any]) -> str:
     notification_context = _notification_context_for_result(result)
     jst_ts = str(result.get("timestamp_jst", ""))[:16].replace("T", " ")
     price_text = _format_subject_price(result.get("current_price"))
-    rank_emoji = str(notification_context.get("final_rank_emoji", "")).strip()
-    rank_label = str(notification_context.get("final_rank_label", "送信なし")).strip()
     notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    big_chance_line = _compact_big_chance_line(result)
     if notification_kind == "followup":
-        followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
-        subject_hint = str(
-            followup_context.get("subject_hint")
-            or f"{FOLLOWUP_PUBLIC_LABEL} 前回通知の有効期限切れ / 根拠再確認"
-        ).strip()
-        subject = f"{subject_hint} 【BTC:{price_text}】 {jst_ts}"
+        compact_hint = "再評価"
+        if big_chance_line not in {"Big Chance: なし", "Big Chance: 候補失効 / 再評価済み"}:
+            compact_hint = big_chance_line.replace("Big Chance: ", "")
+        subject = f"⏱期限切れ | {compact_hint} | BTC {price_text}"
         return _apply_current_email_subject_prefix(subject)
-    headline_reason = (notification_context.get("reason_labels") or ["理由未整理"])[0]
+    if big_chance_line != "Big Chance: なし":
+        subject = f"⚡BigChance | {big_chance_line.replace('Big Chance: ', '')} | BTC {price_text}"
+        return _apply_current_email_subject_prefix(subject)
     trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
-    use_existing_subject = (
-        notification_kind == "attention"
-        or (trade_gate == "pass" and paper_order_status == "planned")
-    )
-    active_plan_present = any(
-        key in result for key in ("active_primary_action", "active_headline", "active_trade_plan")
-    )
-    legacy_subject = (
-        f"{rank_emoji} [{rank_label}] "
-        f"{display_context['direction_compact_label']} | {headline_reason} "
-        f"【BTC:{price_text}】 {jst_ts}"
-    ).strip()
-    active_label = str(notification_context.get("active_subject_label", "")).strip()
-    active_detail = _active_subject_detail(notification_context)
-    if use_existing_subject or not active_plan_present or not active_label:
-        subject = legacy_subject
+    if notification_kind == "attention":
+        subject = f"👀 注意報 | {display_context['direction_compact_label']} / {notification_context.get('execution_label', '見送り')} | BTC {price_text}"
+        return _apply_current_email_subject_prefix(subject)
+    if trade_gate == "pass" and paper_order_status == "planned":
+        subject = f"🧪 紙実行候補 | 実弾不可 | BTC {price_text}"
     else:
-        subject = (
-            f"{rank_emoji} [{rank_label}] "
-            f"{active_label} / 実弾不可・行動計画 | {active_detail} "
-            f"【BTC:{price_text}】 {jst_ts}"
-    ).strip()
+        subject = f"📊 結論 | {display_context['direction_compact_label']} / {notification_context.get('execution_label', '見送り')} | BTC {price_text}"
     return _apply_current_email_subject_prefix(subject)
 
 
@@ -1401,11 +1543,20 @@ def build_summary_body(
     provider_name = str(provider or "api").strip().lower()
     display_context = build_display_context(result_payload)
     notification_context = _notification_context_for_result(result_payload)
-    notification_kind = str(result_payload.get("notification_kind", "main")).lower()
-    if notification_kind == "followup":
-        return _followup_summary(result_payload, display_context, notification_context), provider_name
-    if notification_kind == "attention":
-        return _attention_summary(result_payload, display_context, notification_context), provider_name
-    lines = _root_summary_lines(result_payload, display_context, notification_context)
-    lines.extend(_ai_audit_lines(result_payload))
-    return "\n".join(lines), provider_name
+    if provider_name == "cli":
+        notification_kind = str(result_payload.get("notification_kind", "main")).lower()
+        if notification_kind == "followup":
+            return _followup_summary(result_payload, display_context, notification_context), provider_name
+        if notification_kind == "attention":
+            return _attention_summary(result_payload, display_context, notification_context), provider_name
+        lines = _root_summary_lines(result_payload, display_context, notification_context)
+        lines.extend(_ai_audit_lines(result_payload))
+        return "\n".join(lines), provider_name
+    return (
+        _compact_email_body(
+            result=result_payload,
+            display_context=display_context,
+            notification_context=notification_context,
+        ),
+        provider_name,
+    )

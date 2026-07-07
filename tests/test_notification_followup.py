@@ -187,11 +187,12 @@ class ValueDefenseFollowupObservationTest(unittest.TestCase):
 
         self.assertEqual(provider, "api")
         self.assertTrue(current["summary_subject"].startswith(CURRENT_EMAIL_SUBJECT_PREFIX))
-        self.assertIn("⏱️ [期限切れ・再評価]", current["summary_subject"])
-        self.assertIn("前回通知は有効期限切れです。", body)
+        self.assertIn("⏱期限切れ", current["summary_subject"])
+        self.assertIn("前回通知は失効。新規根拠として使わない。", body)
         self.assertIn("report-only / no automatic order / human decides manually", body)
         self.assertIn(FOLLOWUP_PUBLIC_LABEL, html)
-        self.assertIn("前回通知は有効期限切れです。", html)
+        self.assertIn("前回通知の有効期限", html)
+        self.assertIn("再評価中", html)
         self.assertIn("安全境界", html)
 
 

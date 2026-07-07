@@ -50,11 +50,11 @@ class NotificationDetailBigChanceTests(unittest.TestCase):
         html = build_notification_detail_html(current)
 
         self.assertEqual(provider, "api")
-        self.assertIn("【Big Chance / Failed Thesis】", summary_body)
+        self.assertIn("Big Chance: ロング失敗 → ショート候補 / follow_through / S", summary_body)
         self.assertIn("Big Chance / Failed Thesis", html)
-        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", summary_body)
+        self.assertIn("report-only / no automatic order / human decides manually", summary_body)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
-        self.assertIn("Failed thesis is opportunity", summary_body)
+        self.assertIn("Big Chance: ロング失敗 → ショート候補 / follow_through / S", summary_body)
 
     def test_invalidated_big_chance_renders_as_replayed_not_active(self) -> None:
         current = _payload(
@@ -110,8 +110,6 @@ class NotificationDetailBigChanceTests(unittest.TestCase):
 
         self.assertIn("候補失効 / 再評価済み", summary_body)
         self.assertIn("候補失効 / 再評価済み", html)
-        self.assertIn("既に失効した候補の記録です", summary_body)
-        self.assertIn("既に失効した候補の記録です", html)
         self.assertNotIn("通常スコアとは別の report-only な失敗仮説チャンスです。", summary_body)
         self.assertNotIn("通常スコアとは別の report-only な失敗仮説チャンスです。", html)
 
