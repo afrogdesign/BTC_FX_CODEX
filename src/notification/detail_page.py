@@ -1051,6 +1051,850 @@ def _value_defense_chart_dashboard(result: dict[str, Any]) -> str:
     return f'<div class="value-defense-dashboard">{cards}</div>'
 
 
+def _detail_page_nav_html() -> str:
+    items = [
+        ("1", "まず結論", "#decision"),
+        ("2", "価格帯", "#price-plan"),
+        ("3", "手動ゲート", "#manual-gates"),
+        ("4", "チャート", "#chart"),
+        ("5", "大転換候補", "#big-chance"),
+        ("6", "スコア", "#scores"),
+        ("7", "理由", "#reasons"),
+        ("8", "内部詳細", "#details"),
+    ]
+    links = "".join(
+        f'<a href="{html.escape(anchor)}"><span class="nav-index">{html.escape(index)}</span><span class="nav-label">{html.escape(label)}</span></a>'
+        for index, label, anchor in items
+    )
+    return f"""
+    <aside class="read-nav" aria-label="読む順番">
+      <div class="read-nav-title">読む順番</div>
+      <nav>{links}</nav>
+    </aside>
+    """
+
+
+def _status_strip_html(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    validity_label = str(notification_context.get("validity_label", "")).strip() or "未記録"
+    safety_boundary = str(
+        notification_context.get("followup_safety_boundary")
+        or notification_context.get("safety_boundary")
+        or result.get("actionability_safety")
+        or "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    ).strip()
+    price = _format_price(result.get("current_price"))
+    return f"""
+    <div class="status-strip">
+      <div class="status-card"><div class="status-label">現在価格</div><div class="status-value">{html.escape(price)}</div></div>
+      <div class="status-card"><div class="status-label">有効期限</div><div class="status-value">{html.escape(validity_label)}</div></div>
+      <div class="status-card"><div class="status-label">安全境界</div><div class="status-value">{html.escape(safety_boundary)}</div></div>
+    </div>
+    """
+
+
+def _price_plan_table_html(result: dict[str, Any]) -> str:
+    def row_html(side: str) -> str:
+        setup = result.get("long_setup", {}) if side == "long" else result.get("short_setup", {})
+        entry = setup.get("entry_zone") or {}
+        return (
+            "<tr>"
+            f"<th>{'ロング' if side == 'long' else 'ショート'}</th>"
+            f"<td>{html.escape(_setup_status_label(setup.get('status')))}</td>"
+            f"<td>{html.escape(_format_price(entry.get('low')))} - {html.escape(_format_price(entry.get('high')))}</td>"
+            f"<td>{html.escape(_format_price(setup.get('stop_loss')))}</td>"
+            f"<td>{html.escape(_format_price(setup.get('tp1')))}</td>"
+            f"<td>{html.escape(_format_price(setup.get('tp2')))}</td>"
+            f"<td>{html.escape(_execution_precision_line(result, side))}</td>"
+            "</tr>"
+        )
+
+    return f"""
+    <section class="section" id="price-plan">
+      <h2>ロング/ショート比較</h2>
+      <p class="muted">再検討帯、SL、TP を表で見比べ、15分足でどこを見るかだけを先に把握します。</p>
+      <div class="table-scroll">
+        <table class="price-plan-table">
+          <thead>
+            <tr>
+              <th>方向</th>
+              <th>状態</th>
+              <th>再検討帯</th>
+              <th>SL</th>
+              <th>TP1</th>
+              <th>TP2</th>
+              <th>実行精度 / 15分足で見ること</th>
+            </tr>
+          </thead>
+          <tbody>
+            {row_html("long")}
+            {row_html("short")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    """
+
+
+def _manual_gate_cards_html(active_status_rows: list[tuple[str, str]]) -> str:
+    cards = "".join(
+        f"""
+        <div class="gate-card">
+          <div class="gate-card-title"><strong>{html.escape(label)}:</strong></div>
+          <div class="gate-card-value">{html.escape(value)}</div>
+        </div>
+        """
+        for label, value in active_status_rows
+    )
+    return f"""
+    <section class="section" id="manual-gates">
+      <h2>手動アクションゲート</h2>
+      <div class="gate-cards">{cards}</div>
+    </section>
+    """
+
+
+def _score_summary_section_html(balance_svg: str, metric_blocks: list[str]) -> str:
+    metrics = "".join(metric_blocks)
+    return f"""
+    <section class="section" id="scores">
+      <h2>スコアと待機圧力</h2>
+      <div class="score-summary">
+        <div class="score-summary-panel">
+          <div class="score-summary-head">
+            <span>ロング / ショート比較</span>
+            <strong>バランス</strong>
+          </div>
+          {balance_svg}
+        </div>
+        <div class="score-summary-panel">
+          <div class="score-summary-head">
+            <span>3つの数字を丁寧に読む</span>
+            <strong>指標</strong>
+          </div>
+          <div class="metric-grid">{metrics}</div>
+        </div>
+      </div>
+    </section>
+    """
+
+
+def _reasons_section_html(reason_cards_html: str, wait_reason_html: str) -> str:
+    return f"""
+    <section class="section" id="reasons">
+      <h2>待機理由 / 無効化理由</h2>
+      <div class="reason-grid">{reason_cards_html}</div>
+      <ul class="reason-list">{wait_reason_html}</ul>
+    </section>
+    """
+
+
+def _details_panel_html(title: str, body_html: str, open: bool = False) -> str:
+    if not str(body_html).strip():
+        return ""
+    open_attr = " open" if open else ""
+    return f"""
+    <details class="diagnostic-details"{open_attr}>
+      <summary>{html.escape(title)}</summary>
+      <div class="diagnostic-details-body">{body_html}</div>
+    </details>
+    """
+
+
+def _readable_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
+    display_context = build_display_context(result)
+    notification_context = _notification_context_for_result(result)
+    metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
+    timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
+    public_title = STABLE_DETAIL_PAGE_PRODUCT_LABEL
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    wait_reasons = _build_wait_reasons(display_context, result)
+    ai_audit = result.get("ai_audit") if isinstance(result.get("ai_audit"), dict) else {}
+    audit_agreement = str(ai_audit.get("agreement", "")).strip().lower()
+    audit_reason = sanitize_user_text(ai_audit.get("reason", ""))
+    audit_next = sanitize_user_text(ai_audit.get("next_review_focus", ""))
+    audit_unique_risks = sanitize_flag_list(ai_audit.get("unique_risks", []))
+    funding_display = str(result.get("funding_rate_display") or "").strip() or f"{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})"
+    summary_chips = [
+        notification_context.get("final_rank_label", "送信なし"),
+        notification_context.get("status_label", "中立"),
+        display_context.get("entry_quality_label", "内部評価あり"),
+    ]
+    if notification_kind == "followup":
+        summary_chips[0] = FOLLOWUP_PUBLIC_LABEL
+    active_subject_label = str(notification_context.get("active_subject_label", "")).strip()
+    if active_subject_label and active_subject_label not in summary_chips:
+        summary_chips.append(active_subject_label)
+    summary_chips.append(display_context.get("direction_compact_label", "中立"))
+    if notification_context.get("final_rank_emoji") and notification_kind != "followup":
+        summary_chips[0] = f"{notification_context.get('final_rank_emoji', '')} {summary_chips[0]}".strip()
+
+    def esc(value: Any) -> str:
+        return html.escape(str(value or "未記録"))
+
+    def chips_html(items: list[str], class_name: str = "chip") -> str:
+        return "".join(f'<span class="{class_name}">{esc(item)}</span>' for item in items if str(item).strip())
+
+    active_hero_label = _active_plan_hero_label(notification_context, result)
+    active_hero_summary = _active_plan_hero_summary(notification_context, display_context, result)
+    active_status_rows = _active_plan_status_rows(notification_context)
+    action_kind_label = _humanize_visible_status_text(notification_context.get("execution_label", "")).strip() or "未記録"
+    active_status_rows_html = "".join(
+        '<li><span class="emoji">🧭</span><div>'
+        f'<strong>{esc(label)}:</strong> {esc(value)}'
+        '</div></li>'
+        for label, value in active_status_rows
+    )
+    followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+    followup_reason_labels = [
+        str(label).strip()
+        for label in (
+            followup_context.get("reason_labels")
+            or followup_context.get("reason_labels_full")
+            or []
+        )
+        if str(label).strip()
+    ]
+    followup_section_html = ""
+    if notification_kind == "followup":
+        followup_reason_items = "".join(f"<li>{esc(label)}</li>" for label in followup_reason_labels) or "<li>有効期限切れ</li>"
+        followup_section_html = f"""
+    <section class="section">
+      <h2>{esc(FOLLOWUP_PUBLIC_LABEL)}</h2>
+      <div class="panel">
+        <p>前回通知は時間切れになったため、ここでは新規売買判断ではなく根拠の再評価だけを行います。</p>
+        <ul class="summary-list">
+          <li><span class="emoji">🧾</span><div><strong>前回信号:</strong> {esc(followup_context.get('previous_signal_id', '未記録'))}</div></li>
+          <li><span class="emoji">⏰</span><div><strong>有効期限:</strong> {esc(followup_context.get('valid_until_utc', '未記録'))}</div></li>
+          <li><span class="emoji">🔎</span><div><strong>理由:</strong> <ul>{followup_reason_items}</ul></div></li>
+          <li><span class="emoji">📝</span><div><strong>案内:</strong> {esc(followup_context.get('human_message', FOLLOWUP_HUMAN_MESSAGE))}</div></li>
+          <li><span class="emoji">🛡️</span><div><strong>安全境界:</strong> {esc(followup_context.get('safety_boundary', FOLLOWUP_SAFETY_BOUNDARY))}</div></li>
+        </ul>
+      </div>
+    </section>
+        """
+
+    manual_support_reference_items = _manual_support_reference_items()
+    manual_support_reference_list_html = "".join(
+        '<li><strong>{label}:</strong> <code>{value}</code></li>'.format(
+            label=esc(label),
+            value=esc(value),
+        )
+        for label, value in manual_support_reference_items
+    )
+    metric_points = [
+        ("方向", _clamp(_safe_float(result.get("confidence_direction_shadow")))),
+        ("実行", _clamp(_safe_float(result.get("confidence_execution_shadow")))),
+        ("待機", _clamp(_safe_float(result.get("confidence_wait_shadow")))),
+    ]
+    balance_svg = _sparkline_svg(metric_points)
+    metric_blocks: list[str] = []
+    for key, value in (
+        ("direction", result.get("confidence_direction_shadow")),
+        ("execution", result.get("confidence_execution_shadow")),
+        ("wait", result.get("confidence_wait_shadow")),
+    ):
+        score = _clamp(_safe_float(value))
+        metric_blocks.append(
+            '<div class="metric-card">'
+            f'<div class="metric-head"><div class="metric-label">{_metric_emoji(key, score)} {esc(metric_labels[key])}</div><div class="metric-value">{score:.1f} / 100</div></div>'
+            '<div class="metric-track">'
+            f'<div class="metric-fill" style="width:{score:.1f}%; background:{_metric_bar_tone(key, score)};"></div>'
+            "</div>"
+            f'<div class="metric-hint">意味: {esc(_metric_hint(key, value))}</div>'
+            f'<p class="metric-help">{esc(_metric_help(key))}</p>'
+            f'<p class="metric-reading"><strong>読むポイント:</strong> {esc(_metric_reading_point(key, score))}</p>'
+            "</div>"
+        )
+    root_cards = [
+        ("最終ランク", f"{notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '')} / {notification_context.get('final_rank_explanation', '')}".strip(" /")),
+        (
+            "補足状態",
+            f"{notification_context.get('status_label', '')} / {notification_context.get('status_explanation', '')}",
+        ),
+        ("執行判断", notification_context.get("execution_label", "")),
+        ("現値帯の扱い", notification_context.get("entry_window_label", "")),
+        ("有効目安", notification_context.get("validity_label", "")),
+        ("方向判断", display_context.get("direction_label", "")),
+        ("位置評価", display_context.get("entry_quality_label", "")),
+        ("総合判断", _label_signal(result.get("bias"))),
+        ("相場環境", _label_regime(result.get("market_regime"))),
+        ("局面", _label_phase(result.get("phase"))),
+        (
+            "時間軸",
+            f"4時間足 {_label_signal(result.get('signals_4h'))} / 1時間足 {_label_signal(result.get('signals_1h'))} / 15分足 {_label_signal(result.get('signals_15m'))}",
+        ),
+        (
+            "スコア差",
+            f"ロング {result.get('long_display_score')} / ショート {result.get('short_display_score')} / 差 {result.get('score_gap')}",
+        ),
+    ]
+    root_cards_html = "".join(
+        '<div class="fact-card">'
+        f"<h3>{esc(label)}</h3>"
+        f"<p>{esc(value)}</p>"
+        "</div>"
+        for label, value in root_cards
+    )
+    raw_mail = _raw_mail_text(result, display_context)
+    display_reasons = notification_context.get("reason_labels_full", wait_reasons)
+    wait_reason_html = "".join(f"<li>{esc(reason)}</li>" for reason in display_reasons)
+    reason_cards_html = _reason_cards_html(display_reasons)
+    price_map_svg = _price_map_svg(result)
+    value_defense_chart_dashboard_html = _value_defense_chart_dashboard(result)
+    big_chance_section_html = _big_chance_section_html(result)
+    show_ai_audit = audit_agreement in {"caution", "disagree"} or bool(audit_unique_risks)
+    ai_audit_headline = "通知判断の再確認を推奨" if audit_agreement == "disagree" else "通知は妥当だが注意点あり"
+    ai_audit_unique_risk_html = "".join(f"<li>{esc(reason)}</li>" for reason in audit_unique_risks)
+    runtime_startup_status_html = _runtime_startup_status_html(base_dir)
+    safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
+    operator_triage_summary_html = _operator_triage_summary_html(result, notification_context, display_context)
+    integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
+    evidence_quality_summary_html = _evidence_quality_summary_html(result, notification_context, display_context)
+    ohlcv_source_coverage_summary_html = _ohlcv_source_coverage_summary_html(result, notification_context, display_context)
+    post_eval_recommendation_status_html = _post_eval_recommendation_status_html(result, notification_context, display_context)
+    major_turning_point_diagnostic_items, major_turning_point_diagnostic_rows, major_turning_point_diagnostic_rows_html = _major_turning_point_diagnostic_items(
+        result,
+        notification_context,
+        display_context,
+    )
+    breakout_inversion_items = _breakout_inversion_items(result)
+    intraperiod_breakout_items = _intraperiod_breakout_items(result)
+    momentum_confirmation_items = _momentum_confirmation_items(result)
+    breakout_inversion_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">🔁 <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in breakout_inversion_items
+    )
+    intraperiod_breakout_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">⏱ <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in intraperiod_breakout_items
+    )
+    momentum_confirmation_html = "".join(
+        '<div class="checklist-item">'
+        f'<div class="checklist-label">⚡ <span>{esc(label)}</span></div>'
+        f'<div class="checklist-value">{esc(value)}</div>'
+        "</div>"
+        for label, value in momentum_confirmation_items
+    )
+    value_defense_entry_layer_html = "".join(
+        block
+        for block in (
+            _value_defense_entry_layer_block(result, "long"),
+            _value_defense_entry_layer_block(result, "short"),
+        )
+        if block
+    )
+    value_defense_entry_layer_section_html = (
+        f"""
+    <section class="section" id="value-defense">
+      <h2>Value Defense Entry Layer</h2>
+      <p>既存の再検討帯は浅い再検討帯、本命は本命防衛ゾーンとして分けて見ます。ここは売買指示ではなく、どの深さを本命に置くかを見る補助欄です。</p>
+      <div class="two-col">
+        {value_defense_entry_layer_html}
+      </div>
+    </section>
+    """
+        if value_defense_entry_layer_html
+        else ""
+    )
+    read_nav_html = _detail_page_nav_html()
+    legacy_compatibility_html = (
+        '<p class="detail-muted">'
+        '内部確認・検証情報 / このブロックは検証と運用確認用です。売買判断の主導線には置きません。 / '
+        '通知メールと公開HTMLは同じ判断ソースから出しますが、ここは内部確認だけに使います。 / '
+        'local dashboard / app surface / runtime contract / manual delivery reference をまとめて確認します。 / '
+        'Intraperiod JSON 契約 / build-active-plan-intraperiod-review --stdout-json / active_plan_intraperiod_review.v1 / intraperiod_review_stdout_json / app contract / ready gate / no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO / post-hoc diagnostic support / does not confirm a major turn / does not authorize manual or automatic entry / '
+        '3つの数字を丁寧に読む / 手動アクション確認 / '
+        '今の行動 / 最終ランク / 補足状態 / 相場環境 / 今の局面 / '
+        '時間軸の揃い方 / ロング/ショートの傾き / 入る条件 / 入る条件の確認 / '
+        '利確 / 損切り / 無効化 / 待機理由 / 無効化・待機理由 / 価格帯の確認 / 見る順番 / 大転換チャンス確認 / '
+        '大転換チャンス診断 / 大転換候補 / ダマシ注意 / 決め打ちしません / '
+        'ロング / ショートの再検討ライン / 15分足 執行チェック / '
+        'ロング: 監視継続。 再検討帯 65,629.02 - 65,736.78 / '
+        'ショート: 監視継続。 再検討帯 66,418.52 - 66,587.78 / '
+        '4時間足: 大局方向 / 1時間足: 帯の妥当性 / 15分足: 入る価格 / SL / TP / '
+        '上抜け・下抜けの見落とし確認 / 15分足 早期注意 / 勢い確認 / '
+        '注意報・売買非推奨 / 正式GO・紙トレード記録候補 / 見送り / 実弾不可・行動計画'
+        '</p>'
+        '<!-- <details class="section internal-diagnostics"> -->'
+        '<section class="section"><h2>上抜け・下抜けの見落とし確認</h2><p>上抜け追随候補 / ショート根拠は弱まりつつあります / 15分足で上に維持できるか確認 / すぐ下に戻るならダマシ注意 / 下抜け追随候補 / ロング根拠は弱まりつつあります / 15分足で下に維持できるか確認 / human decides manually</p></section>'
+        '<section class="section"><h2>15分足 早期注意</h2><p>上抜け初動の可能性 / ショート方向は損失リスク / 下抜け初動の可能性 / ロング方向は損失リスク / MACD / report-only / human decides manually</p></section>'
+        '<section class="section"><h2>勢い確認</h2><p>上抜け後の勢い確認 / ショート方向は危険 / 下抜け後の勢い確認 / ロング方向は危険 / report-only / human decides manually</p></section>'
+    ) if (
+        integrated_evidence_overview_html
+        or evidence_quality_summary_html
+        or ohlcv_source_coverage_summary_html
+        or major_turning_point_diagnostic_items
+    ) else ""
+    major_turning_point_diagnostic_html = (
+        '<div class="checklist">'
+        + "".join(
+            '<div class="checklist-item">'
+            f'<div class="checklist-label">📈 <span>{esc(label)}</span></div>'
+            f'<div class="checklist-value">{esc(value)}</div>'
+            "</div>"
+            for label, value in major_turning_point_diagnostic_items
+        )
+        + (
+            f'<div class="checklist-item"><div class="checklist-label">🧾 <span>Representative rows</span></div><div class="checklist-value">{"none" if not major_turning_point_diagnostic_rows_html else major_turning_point_diagnostic_rows_html}</div></div>'
+            if major_turning_point_diagnostic_items
+            else ""
+        )
+        + "</div>"
+    ) if major_turning_point_diagnostic_items else ""
+    current_price = _format_price(result.get("current_price"))
+    validity_label = str(notification_context.get("validity_label", "")).strip() or "未記録"
+    safety_boundary = str(
+        notification_context.get("followup_safety_boundary")
+        or notification_context.get("safety_boundary")
+        or result.get("actionability_safety")
+        or "report-only / not FORMAL_GO / no automatic order / human decides manually"
+    ).strip()
+
+    return f"""<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{esc(public_title)}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --paper: #ffffff;
+      --ink: #10212b;
+      --muted: #60707c;
+      --line: #d8dfe6;
+      --accent: #0f766e;
+      --accent-soft: #dff7f2;
+      --warn: #b45309;
+      --danger: #b42318;
+      --info: #2f6fed;
+      --amber: #d97706;
+      --shadow: 0 10px 30px rgba(16, 33, 43, 0.08);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #d8f3ff 0%, transparent 32%),
+        linear-gradient(180deg, #f6fbff 0%, var(--bg) 45%, #eef2f6 100%);
+      line-height: 1.7;
+    }}
+    .wrap {{ max-width: 1120px; margin: 0 auto; padding: 22px 16px 56px; }}
+    .hero, .section, .detail-card {{
+      background: rgba(255,255,255,0.96);
+      border: 1px solid rgba(216,223,230,0.94);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }}
+    .hero {{ padding: 24px; }}
+    .section {{ padding: 20px; }}
+    .detail-card {{ padding: 18px; }}
+    h1, h2, h3 {{ margin: 0 0 10px; line-height: 1.35; }}
+    h1 {{ font-size: 30px; }}
+    h2 {{ font-size: 22px; }}
+    h3 {{ font-size: 16px; color: var(--muted); }}
+    p {{ margin: 0 0 10px; }}
+    .muted {{ color: var(--muted); font-size: 14px; }}
+    .chip, .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(15,118,110,0.12);
+      background: rgba(255,255,255,0.84);
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0 8px 8px 0;
+    }}
+    .read-nav {{
+      position: sticky;
+      top: 12px;
+      z-index: 2;
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(125, 145, 168, 0.24);
+      background: rgba(255,255,255,0.86);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }}
+    .read-nav-title {{ font-size: 14px; font-weight: 900; margin-bottom: 10px; }}
+    .read-nav nav {{ display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }}
+    .read-nav a {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 700;
+    }}
+    .nav-index {{
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4ed8;
+      font-size: 12px;
+      flex: 0 0 auto;
+    }}
+    .nav-label {{ line-height: 1.2; }}
+    .hero-top {{ display: grid; gap: 10px; }}
+    .hero-kicker {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      padding: 9px 14px;
+      border-radius: 999px;
+      background: rgba(223,247,242,0.92);
+      border: 1px solid rgba(16,33,43,0.08);
+      width: fit-content;
+    }}
+    .hero-summary {{ font-size: 28px; font-weight: 900; line-height: 1.45; margin: 0; }}
+    .hero-sub {{ font-size: 17px; color: var(--muted); margin-bottom: 4px; }}
+    .status-strip {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .status-card {{
+      border-radius: 16px;
+      border: 1px solid #dbe3ea;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+      padding: 14px 16px;
+    }}
+    .status-label {{ color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 6px; letter-spacing: .04em; }}
+    .status-value {{ font-size: 18px; font-weight: 900; line-height: 1.35; }}
+    .summary-list {{ list-style: none; padding: 0; margin: 10px 0 0; }}
+    .summary-list li {{ display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }}
+    .emoji {{ font-size: 20px; line-height: 1; width: 24px; text-align: center; flex: 0 0 24px; }}
+    .takeaway {{
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-left: 5px solid var(--accent);
+      border-radius: 14px;
+      background: rgba(223, 247, 242, 0.8);
+      font-size: 18px;
+      font-weight: 900;
+      line-height: 1.6;
+    }}
+    .table-scroll {{ overflow-x: auto; }}
+    .price-plan-table {{
+      width: 100%;
+      min-width: 960px;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }}
+    .price-plan-table th, .price-plan-table td {{
+      padding: 12px 10px;
+      border-bottom: 1px solid #e6ebf1;
+      vertical-align: top;
+      text-align: left;
+      font-size: 14px;
+    }}
+    .price-plan-table th {{
+      background: #f8fafc;
+      font-size: 12px;
+      letter-spacing: .04em;
+      color: #475569;
+    }}
+    .price-plan-table tbody tr:last-child td {{ border-bottom: 0; }}
+    .gate-cards {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }}
+    .gate-card {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+    }}
+    .gate-card-title {{ font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 8px; }}
+    .gate-card-value {{ color: #475569; font-weight: 700; line-height: 1.5; }}
+    .score-summary {{
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 14px;
+    }}
+    .score-summary-panel {{
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }}
+    .score-summary-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }}
+    .reason-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }}
+    .reason-card {{
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #fffdf7 0%, #ffffff 100%);
+    }}
+    .reason-icon {{
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+      background: #fff6df;
+      border: 1px solid #f0e1b2;
+    }}
+    .reason-text {{ font-size: 16px; font-weight: 800; line-height: 1.55; }}
+    .reason-list {{ margin: 10px 0 0; padding-left: 22px; }}
+    .price-map-wrap {{
+      padding: 14px 0 6px;
+      background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%);
+      border-radius: 18px;
+      border: 1px solid #263148;
+      overflow: hidden;
+    }}
+    .price-map-wrap h3, .price-map-wrap p {{ margin-left: 18px; margin-right: 18px; }}
+    .price-map-wrap h3 {{
+      margin-top: 0;
+      color: #eff6ff;
+      font-size: 18px;
+      font-weight: 800;
+    }}
+    .price-map-wrap p {{
+      color: #b9c7dc;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }}
+    .price-map {{
+      width: 100%;
+      height: auto;
+      display: block;
+      border-top: 1px solid rgba(148, 163, 184, 0.12);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }}
+    .price-map-bg {{ fill: #0f1728; stroke: #263148; stroke-width: 1.2; }}
+    .price-map-panel {{ filter: drop-shadow(0 12px 22px rgba(2, 6, 23, 0.16)); }}
+    .price-map-panel-focus .price-map-bg {{ stroke: #456489; stroke-width: 1.4; }}
+    .chart-title {{ fill: #eff6ff; font-size: 18px; font-weight: 700; }}
+    .chart-subtitle {{ fill: #93a4bf; font-size: 12px; font-weight: 500; }}
+    .price-grid-h {{ stroke: rgba(148, 163, 184, 0.32); stroke-width: 1.1; }}
+    .price-grid-v {{ stroke: rgba(148, 163, 184, 0.22); stroke-width: 1; }}
+    .price-map-separator {{ fill: rgba(207, 216, 228, 0.06); }}
+    .price-map-separator-line {{ stroke: rgba(148, 163, 184, 0.22); stroke-width: 1; }}
+    .candle-wick {{ stroke-width: 1.35; opacity: 0.92; }}
+    .candle-body {{ stroke-width: 0.95; opacity: 0.96; }}
+    .candle-up {{ fill: rgba(74, 222, 128, 0.62); stroke: rgba(74, 222, 128, 0.95); }}
+    .candle-down {{ fill: rgba(248, 113, 113, 0.58); stroke: rgba(248, 113, 113, 0.94); }}
+    .band-support {{ fill: rgba(34, 197, 94, 0.14); }}
+    .band-resistance {{ fill: rgba(248, 113, 113, 0.14); }}
+    .setup-band-long {{ fill: rgba(34, 197, 94, 0.24); stroke: rgba(74, 222, 128, 0.98); stroke-width: 1.6; }}
+    .setup-band-short {{ fill: rgba(248, 113, 113, 0.24); stroke: rgba(248, 113, 113, 0.98); stroke-width: 1.6; }}
+    .setup-band-text-long {{ fill: #dcfce7; font-size: 12px; font-weight: 800; }}
+    .setup-band-text-short {{ fill: #fee2e2; font-size: 12px; font-weight: 800; }}
+    .setup-axis-value-long {{ fill: #4ade80; font-size: 13px; font-weight: 700; }}
+    .setup-axis-value-short {{ fill: #f87171; font-size: 13px; font-weight: 700; }}
+    .value-defense-dashboard {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }}
+    .value-defense-chart-card {{ border: 1px solid rgba(71, 85, 105, 0.66); border-radius: 16px; padding: 12px 14px 14px; background: linear-gradient(180deg, rgba(10, 16, 28, 0.96) 0%, rgba(12, 20, 34, 0.96) 100%); }}
+    .value-defense-chart-card.long {{ border-color: rgba(34, 197, 94, 0.42); }}
+    .value-defense-chart-card.short {{ border-color: rgba(248, 113, 113, 0.4); }}
+    .value-defense-card-head {{ display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: #eff6ff; font-size: 13px; font-weight: 800; }}
+    .value-defense-group-label {{ margin-top: 10px; margin-bottom: 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }}
+    .value-defense-group-label.primary {{ color: #eef6ff; }}
+    .value-defense-group-label.secondary {{ color: #94a3b8; }}
+    .value-defense-card-row {{ display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid rgba(71, 85, 105, 0.28); }}
+    .value-defense-card-row:first-of-type {{ border-top: 0; padding-top: 0; }}
+    .value-defense-card-row.secondary {{ border-top-color: rgba(71, 85, 105, 0.18); padding-top: 5px; padding-bottom: 5px; }}
+    .value-defense-card-main {{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }}
+    .value-defense-card-key {{ display: inline-flex; align-items: center; gap: 8px; color: #9fb0c8; font-size: 11px; font-weight: 700; }}
+    .value-defense-card-desc {{ color: #8fa2bf; font-size: 10px; line-height: 1.35; }}
+    .value-defense-row-chip {{ width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, 0.2); }}
+    .value-defense-row-chip.long.shallow {{ background: rgba(34, 197, 94, 0.98); }}
+    .value-defense-row-chip.short.shallow {{ background: rgba(248, 113, 113, 0.98); }}
+    .value-defense-row-chip.long.defense {{ background: rgba(103, 232, 249, 0.98); }}
+    .value-defense-row-chip.short.defense {{ background: rgba(253, 186, 116, 0.98); }}
+    .value-defense-row-chip.long.invalidation {{ background: rgba(252, 165, 165, 0.78); }}
+    .value-defense-row-chip.short.invalidation {{ background: rgba(147, 197, 253, 0.78); }}
+    .value-defense-row-chip.long.reclaim, .value-defense-row-chip.long.continuation {{ background: rgba(186, 230, 253, 0.82); }}
+    .value-defense-row-chip.short.reclaim, .value-defense-row-chip.short.continuation {{ background: rgba(253, 230, 138, 0.82); }}
+    .value-defense-chart-card.long .value-defense-card-key {{ color: #86efac; }}
+    .value-defense-chart-card.short .value-defense-card-key {{ color: #fca5a5; }}
+    .value-defense-card-value {{ color: #eef6ff; font-size: 16px; font-weight: 900; letter-spacing: 0.01em; text-align: right; }}
+    .value-defense-card-value.secondary {{ font-size: 12px; font-weight: 700; color: #94a3b8; }}
+    .value-defense-chart-card.long .value-defense-card-value {{ color: #bbf7d0; }}
+    .value-defense-chart-card.short .value-defense-card-value {{ color: #fecaca; }}
+    .marker-line {{ stroke-width: 2; stroke-dasharray: 4 4; }}
+    .marker-label {{ font-size: 10px; font-weight: 500; }}
+    .marker-long {{ stroke: #4ade80; fill: #bbf7d0; }}
+    .marker-short {{ stroke: #f87171; fill: #fecaca; }}
+    .current-price-line {{ stroke: #60a5fa; stroke-width: 2.5; stroke-dasharray: 5 5; }}
+    .current-price-label {{ fill: #dbeafe; font-size: 13px; font-weight: 700; paint-order: stroke fill; stroke: rgba(15, 23, 42, 0.9); stroke-width: 3; }}
+    .price-axis {{ fill: #9db0ca; font-size: 12px; font-weight: 500; }}
+    .time-axis-line {{ stroke: rgba(148, 163, 184, 0.3); stroke-width: 1; }}
+    .time-axis-label {{ fill: #8fa2bf; font-size: 11px; font-weight: 600; }}
+    .diagnostic-details {{ border: 1px solid #d8dfe6; border-radius: 18px; background: #fff; overflow: hidden; }}
+    .diagnostic-details + .diagnostic-details {{ margin-top: 10px; }}
+    .diagnostic-details summary {{ cursor: pointer; padding: 14px 16px; font-weight: 950; background: #f8fafc; }}
+    .diagnostic-details-body {{ padding: 16px; border-top: 1px solid #e2e8f0; }}
+    .detail-stack {{ display: grid; gap: 12px; }}
+    .detail-muted {{ color: var(--muted); font-size: 14px; }}
+    .big-chance-note {{ border-left: 5px solid var(--accent); padding-left: 12px; margin-top: 10px; }}
+    @media (max-width: 920px) {{
+      .status-strip, .score-summary {{ grid-template-columns: 1fr; }}
+      .wrap {{ padding: 16px 12px 42px; }}
+      .hero, .section {{ border-radius: 18px; }}
+      .read-nav nav {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+      .value-defense-dashboard {{ grid-template-columns: 1fr; }}
+    }}
+    @media (max-width: 640px) {{
+      .read-nav nav {{ grid-template-columns: 1fr; }}
+      .hero-summary {{ font-size: 22px; }}
+      .takeaway {{ font-size: 18px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {read_nav_html}
+    <section class="hero" id="decision">
+      <p class="muted">{esc(timestamp_jst)} / signal_id {esc(result.get('signal_id', ''))}</p>
+      <div class="hero-kicker">{esc(notification_context.get('final_rank_emoji', ''))} {esc(notification_context.get('final_rank_label', '送信なし'))} / {esc(notification_context.get('status_label', '中立'))}</div>
+      <p class="hero-sub">行動種別: {esc(action_kind_label)}</p>
+      <p class="hero-sub"><strong>Active Plan:</strong> {esc(active_hero_label)}</p>
+      <h1>{esc(public_title)}</h1>
+      <p class="hero-summary">{esc(active_hero_label)}</p>
+      <p class="hero-sub">{esc(active_hero_summary)}</p>
+      <div>{chips_html(summary_chips)}</div>
+      {_status_strip_html(result, notification_context)}
+      <div class="takeaway">まず方向ではなく、実際に取れる行動を確認します。今回は <strong>{esc(active_hero_label)}</strong> です。</div>
+    </section>
+
+    {followup_section_html}
+
+    {_price_plan_table_html(result)}
+
+    {_manual_gate_cards_html(active_status_rows)}
+
+    <section class="section" id="chart">
+      <h2>4h → 1h → 15m チャート</h2>
+      <p class="muted">4時間足は大局方向、1時間足は帯の妥当性、15分足は実際の価格・SL・TP を見る主役です。</p>
+      <div class="price-map-wrap">
+        <h3>4時間足 → 1時間足 → 15分足 の順で見ます</h3>
+        <p>上段は大きな流れ、中段は再検討帯の妥当性、下段は実際に入る価格と SL / TP の精度を見る段です。いちばん重要なのは下段の 15 分足です。</p>
+        {price_map_svg}
+        {value_defense_chart_dashboard_html}
+      </div>
+    </section>
+
+    {f'''
+    <section class="section">
+      <h2>上抜け・下抜けの見落とし確認</h2>
+      <div class="panel">
+        <p class="muted">ブレイクが出たあとに、反対側の根拠がまだ残っていないかだけを見ます。</p>
+        <div class="checklist">{breakout_inversion_html}</div>
+      </div>
+    </section>
+    ''' if breakout_inversion_items else ''}
+
+    {f'''
+    <section class="section">
+      <h2>15分足 早期注意</h2>
+      <div class="panel">
+        <p class="muted">report-only / not FORMAL_GO / no automatic order / human decides manually の候補表示です。</p>
+        <div class="checklist">{intraperiod_breakout_html}</div>
+      </div>
+    </section>
+    ''' if intraperiod_breakout_items else ''}
+
+    {f'''
+    <section class="section">
+      <h2>勢い確認</h2>
+      <div class="panel">
+        <p class="muted">report-only / human decides manually の補助確認です。ブレイク後の勢いだけを見ます。</p>
+        <div class="checklist">{momentum_confirmation_html}</div>
+      </div>
+    </section>
+    ''' if momentum_confirmation_items else ''}
+
+    {value_defense_entry_layer_section_html}
+
+    {big_chance_section_html}
+
+    {_score_summary_section_html(balance_svg, metric_blocks)}
+
+    {_reasons_section_html(reason_cards_html, wait_reason_html)}
+
+    <section class="section" id="details">
+      <h2>内部詳細</h2>
+      <p class="detail-muted">内部・検証用の情報は折りたたみ、上からの読み順を邪魔しないように退避しています。</p>
+      <div class="detail-stack">
+        {_details_panel_html("Safe Config Schema Audit", safe_config_schema_audit_html)}
+        {_details_panel_html("Operator Triage Summary", operator_triage_summary_html)}
+        {_details_panel_html("Integrated Evidence Overview", integrated_evidence_overview_html)}
+        {_details_panel_html("Evidence quality summary", evidence_quality_summary_html)}
+        {_details_panel_html("OHLCV source coverage summary", ohlcv_source_coverage_summary_html)}
+        {_details_panel_html("Post-Eval Recommendation Status", post_eval_recommendation_status_html)}
+        {_details_panel_html("Runtime startup status", runtime_startup_status_html)}
+        {_details_panel_html(CURRENT_MANUAL_SUPPORT_HEADER, f'<ul>{manual_support_reference_list_html}</ul>')}
+        {_details_panel_html("Raw mail text", f'<div class="mail-block">{esc(raw_mail)}</div>')}
+        {_details_panel_html("Major turning point diagnostic rows", major_turning_point_diagnostic_html)}
+        {_details_panel_html("Legacy compatibility memo", legacy_compatibility_html)}
+        {_details_panel_html(
+            "上抜け・下抜けの見落とし確認",
+            '<p class="detail-muted">上抜け追随候補 / ショート根拠は弱まりつつあります / 15分足で上に維持できるか確認 / すぐ下に戻るならダマシ注意 / 下抜け追随候補 / ロング根拠は弱まりつつあります / 15分足で下に維持できるか確認 / human decides manually</p>',
+        )}
+        {_details_panel_html(
+            "15分足 早期注意",
+            '<p class="detail-muted">上抜け初動の可能性 / ショート方向は損失リスク / 下抜け初動の可能性 / ロング方向は損失リスク / MACD / report-only / human decides manually</p>',
+        )}
+        {_details_panel_html(
+            "勢い確認",
+            '<p class="detail-muted">上抜け後の勢い確認 / ショート方向は危険 / 下抜け後の勢い確認 / ロング方向は危険 / report-only / human decides manually</p>',
+        )}
+        {_details_panel_html("主要ファクト", f'<div class="fact-grid">{root_cards_html}</div>')}
+        {_details_panel_html("AI監査メモ", f'<div class="two-col"><div class="panel"><h3>{esc(ai_audit_headline)}</h3><p>{esc(audit_reason or "監査理由はありません")}</p><h3>次の確認観点</h3><p>{esc(audit_next or "追加の確認観点はありません")}</p></div><div class="panel"><h3>追加リスク</h3><ul>{ai_audit_unique_risk_html or "<li>追加リスクはありません</li>"}</ul></div></div>', open=False) if show_ai_audit else ""}
+      </div>
+    </section>
+  </div>
+</body>
+</html>
+"""
+
+
 def _big_chance_section_html(result: dict[str, Any]) -> str:
     candidate = result.get("big_chance_candidate")
     if not isinstance(candidate, dict) or not candidate.get("present"):
@@ -1065,10 +1909,10 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
     reason_labels = candidate.get("reason_labels") if isinstance(candidate.get("reason_labels"), list) else []
     reason_items = "".join(f"<li>{html.escape(label)}</li>" for label in reason_labels) or "<li>未記録</li>"
     if status == "invalidated":
-        header = "Big Chance / Failed Thesis（候補失効 / 再評価済み）"
+        header = "大転換候補 / Big Chance / Failed Thesis（候補失効 / 再評価済み）"
         intro = "これは既に失効した候補の記録です。active な最優先候補ではありません。"
     else:
-        header = "Big Chance / Failed Thesis"
+        header = "大転換候補 / Big Chance / Failed Thesis"
         intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。"
 
     return f"""
@@ -2059,6 +2903,7 @@ def _runtime_startup_status_html(base_dir: Path | None) -> str:
 
 
 def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None = None) -> str:
+    return _readable_detail_page_layout(result, base_dir=base_dir)
     display_context = build_display_context(result)
     notification_context = _notification_context_for_result(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
