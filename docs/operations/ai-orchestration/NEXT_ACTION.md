@@ -6,6 +6,7 @@
 ## Current goal
 
 Ver04-v2 is production-applied and the Big Chance / Failed Thesis Layer is runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
+Compact email triage is now on the actual CLI runtime path; next natural mail should be checked for the short body.
 Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
 
 ## Observation queue
@@ -20,6 +21,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
   - `self_review_readiness`
   - `attack_review_flags`
 - if the next notified snapshot still lacks the observation schema, inspect the runtime hook / import path
+- verify the next delivered attention mail no longer contains actionability / local / gate debug sections
+- verify the next generated HTML still shows `読む順番` and `ロング/ショート比較`
 - continue reviewing the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal
 - run snapshot builder:

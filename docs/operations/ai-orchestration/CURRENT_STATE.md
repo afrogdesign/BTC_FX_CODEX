@@ -114,6 +114,8 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - implementation commit is `b4f0089`
 - runtime path remained the primary repo path
 - current posture remains observation / review only
+- compact email triage body is now used on the actual CLI runtime path as well
+- the earlier compact body change was preview/API-oriented only; runtime CLI now uses the same compact body
 - Big Chance / Failed Thesis Layer runtime apply is complete.
 - implementation commit is `76e8b302078ff1d7fae9ed1abc4b581e247540b6`.
 - replay artifact for `20260706_100500` has been generated for the failure-case review.

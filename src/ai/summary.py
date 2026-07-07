@@ -1543,15 +1543,6 @@ def build_summary_body(
     provider_name = str(provider or "api").strip().lower()
     display_context = build_display_context(result_payload)
     notification_context = _notification_context_for_result(result_payload)
-    if provider_name == "cli":
-        notification_kind = str(result_payload.get("notification_kind", "main")).lower()
-        if notification_kind == "followup":
-            return _followup_summary(result_payload, display_context, notification_context), provider_name
-        if notification_kind == "attention":
-            return _attention_summary(result_payload, display_context, notification_context), provider_name
-        lines = _root_summary_lines(result_payload, display_context, notification_context)
-        lines.extend(_ai_audit_lines(result_payload))
-        return "\n".join(lines), provider_name
     return (
         _compact_email_body(
             result=result_payload,

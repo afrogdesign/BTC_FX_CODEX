@@ -104,6 +104,40 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertNotIn("【実行ゲート】", body)
         self.assertNotIn("【観測ゲート】", body)
 
+    def test_cli_attention_body_uses_compact_body(self) -> None:
+        payload = _base_payload(
+            notification_kind="attention",
+            bias="short",
+            current_price=70765.2,
+            signals_4h="wait",
+            signals_1h="short",
+        )
+        body, provider = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(provider, "cli")
+        self.assertIn("【注意報】", body)
+        self.assertIn("実行候補ではない。高優先で監視。", body)
+        self.assertIn("保有中:", body)
+        self.assertIn("未保有:", body)
+        self.assertIn("Big Chance:", body)
+        self.assertIn("詳細:", body)
+        self.assertNotIn("【行動判定】", body)
+        self.assertNotIn("actionability_label:", body)
+        self.assertNotIn("【ローカル確認】", body)
+        self.assertNotIn("【実行ゲート】", body)
+        self.assertNotIn("【観測ゲート】", body)
+        self.assertNotIn("local/manual_delivery_app_surface", body)
+        self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
+
     def test_compact_followup_body_and_subject(self) -> None:
         baseline = {
             "signal_id": "20260705_220500",
@@ -149,6 +183,74 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("Big Chance:", body)
         self.assertIn("詳細:", body)
         self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
+
+    def test_cli_followup_body_is_compact(self) -> None:
+        baseline = {
+            "signal_id": "20260705_220500",
+            "notification_kind": "main",
+            "bias": "long",
+            "timestamp_utc": "2026-07-05T12:05:00Z",
+            "notified_at_utc": "2026-07-05T12:05:00Z",
+            "confidence": 74,
+        }
+        current = _base_payload(
+            signal_id="20260705_230500",
+            timestamp_jst="2026-07-05T23:10:00+09:00",
+            timestamp_utc="2026-07-05T14:10:00Z",
+            notification_kind="followup",
+            bias="wait",
+            signals_1h="wait",
+            confidence=57,
+            long_setup={"status": "invalid"},
+            followup_context={
+                "subject_hint": "⏱期限切れ",
+            },
+        )
+        evaluation = evaluate_followup_notification(current, None, baseline, None, _followup_cfg())
+        current["followup_context"] = evaluation
+        body, provider = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=current,
+        )
+
+        self.assertEqual(provider, "cli")
+        self.assertIn("【期限切れ・再評価】", body)
+        self.assertIn("前回通知は失効。新規根拠として使わない。", body)
+        self.assertIn("保有中:", body)
+        self.assertIn("未保有:", body)
+        self.assertIn("Big Chance:", body)
+        self.assertIn("詳細:", body)
+        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
+
+    def test_cli_main_body_is_compact(self) -> None:
+        payload = _base_payload()
+        body, provider = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(provider, "cli")
+        self.assertIn("【結論】", body)
+        self.assertIn("実行候補ではない。", body)
+        self.assertIn("HTML確認", body)
+        self.assertIn("Big Chance:", body)
+        self.assertIn("詳細:", body)
+        self.assertNotIn("【行動判定】", body)
+        self.assertNotIn("【ローカル確認】", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
 
     def test_compact_subject_suppresses_legacy_labels(self) -> None:
