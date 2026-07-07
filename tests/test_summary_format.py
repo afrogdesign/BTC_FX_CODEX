@@ -62,7 +62,7 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("上: 70,450.00 - 70,600.00", body)
         self.assertIn("下: 69,900.00 - 70,010.00", body)
         self.assertIn("詳細:", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
         self.assertNotIn("【ローカル確認】", body)
         self.assertNotIn("【実行ゲート】", body)
@@ -98,7 +98,7 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("通常バイアス: 下方向", body)
         self.assertIn("現在: 70,765.20", body)
         self.assertIn("詳細:", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
         self.assertNotIn("【ローカル確認】", body)
         self.assertNotIn("【実行ゲート】", body)
@@ -182,7 +182,7 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("未保有:", body)
         self.assertIn("Big Chance:", body)
         self.assertIn("詳細:", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
 
     def test_cli_followup_body_is_compact(self) -> None:
@@ -227,7 +227,7 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("未保有:", body)
         self.assertIn("Big Chance:", body)
         self.assertIn("詳細:", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
 
     def test_cli_main_body_is_compact(self) -> None:
@@ -251,7 +251,45 @@ class SummaryFormatTest(unittest.TestCase):
         self.assertIn("詳細:", body)
         self.assertNotIn("【行動判定】", body)
         self.assertNotIn("【ローカル確認】", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertLessEqual(len([line for line in body.splitlines() if line.strip()]), 25)
+
+    def test_non_pass_main_body_does_not_use_paper_candidate_heading(self) -> None:
+        payload = _base_payload(trade_execution_gate="blocked", paper_order_status="planned")
+        body, provider = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(provider, "cli")
+        self.assertNotIn("【紙実行候補】", body)
+        self.assertIn("【結論】", body)
+        self.assertNotIn("実行候補ではない /", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
+
+    def test_pass_planned_main_body_may_use_paper_candidate_heading(self) -> None:
+        payload = _base_payload(trade_execution_gate="pass", paper_order_status="planned")
+        body, provider = build_summary_body(
+            provider="cli",
+            api_key="",
+            model="",
+            cli_command="",
+            timeout_sec=1,
+            retry_count=1,
+            base_dir=BASE_DIR,
+            result_payload=payload,
+        )
+
+        self.assertEqual(provider, "cli")
+        self.assertIn("【紙実行候補】", body)
+        self.assertIn("紙実行候補。実弾不可。最終判断は人間。", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
 
     def test_compact_subject_suppresses_legacy_labels(self) -> None:
         payload = _base_payload(system_label="Ver02.6-v2", system_mode_label="CLI")

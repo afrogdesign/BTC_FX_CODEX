@@ -57,13 +57,13 @@ class SummaryWordingTest(unittest.TestCase):
     def test_market_map_down_reversal_is_explained_without_internal_codes(self) -> None:
         body = self._build({"bias": "long", "primary_setup_status": "watch", "current_price": 101.0, "market_map_flags": ["support_to_resistance_flip"]})
         self.assertIn("【結論】", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertNotIn("support_to_resistance_flip", body)
 
     def test_market_map_up_reversal_is_explained_without_internal_codes(self) -> None:
         body = self._build({"bias": "short", "primary_setup_status": "watch", "current_price": 101.0, "market_map_flags": ["resistance_to_support_flip"]})
         self.assertIn("【結論】", body)
-        self.assertIn("※ report-only / no automatic order / human decides manually", body)
+        self.assertIn("※ report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertNotIn("resistance_to_support_flip", body)
 
 

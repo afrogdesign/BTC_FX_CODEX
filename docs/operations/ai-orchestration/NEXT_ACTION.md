@@ -22,6 +22,7 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
   - `attack_review_flags`
 - if the next notified snapshot still lacks the observation schema, inspect the runtime hook / import path
 - verify the next delivered attention mail no longer contains actionability / local / gate debug sections
+- verify the next delivered compact mail uses the canonical safety line and does not show a contradictory paper heading
 - verify the next generated HTML still shows `読む順番` and `ロング/ショート比較`
 - continue reviewing the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal

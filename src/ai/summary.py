@@ -402,10 +402,17 @@ def _compact_detail_url_line(result: dict[str, Any]) -> str:
     return f"詳細:\n{url}"
 
 
+_COMPACT_SAFETY_BOUNDARY_CANONICAL = "report-only / not FORMAL_GO / no automatic order / human decides manually"
+
+
 def _normalize_safety_boundary_text(value: Any) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
+    normalized = text.replace("_", " ").replace("-", " ")
+    normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+    if "report only" in normalized and "automatic order" in normalized and "human decides manually" in normalized:
+        return _COMPACT_SAFETY_BOUNDARY_CANONICAL
     if "_" in text and " " not in text:
         return text.replace("_", " ")
     return text
@@ -423,8 +430,9 @@ def _compact_email_body(
     elif notification_kind == "attention":
         heading = "【注意報】"
     else:
-        rank_label = str(notification_context.get("final_rank_label", "")).strip()
-        if rank_label and "紙" in rank_label:
+        trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+        paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+        if trade_gate == "pass" and paper_order_status == "planned":
             heading = "【紙実行候補】"
         else:
             heading = "【結論】"
@@ -444,15 +452,15 @@ def _compact_email_body(
         safety_boundary = _normalize_safety_boundary_text(
             notification_context.get("followup_safety_boundary")
             or notification_context.get("safety_boundary")
-            or "report-only / no automatic order / human decides manually"
+            or _COMPACT_SAFETY_BOUNDARY_CANONICAL
         )
     else:
         safety_boundary = _normalize_safety_boundary_text(
             result.get("actionability_safety")
             or notification_context.get("safety_boundary")
-            or "report-only / no automatic order / human decides manually"
+            or _COMPACT_SAFETY_BOUNDARY_CANONICAL
         )
-    lines.append(f"※ {safety_boundary}")
+    lines.append(f"※ {safety_boundary or _COMPACT_SAFETY_BOUNDARY_CANONICAL}")
     return "\n".join(lines)
 
 

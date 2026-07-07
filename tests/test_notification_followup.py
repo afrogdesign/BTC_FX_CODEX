@@ -90,7 +90,8 @@ class ValueDefenseFollowupObservationTest(unittest.TestCase):
         self.assertIn("prior_long_bias_lost", evaluation["reason_codes"])
         self.assertIn("prior_long_1h_weakened", evaluation["reason_codes"])
         self.assertEqual(evaluation["safety_boundary"], FOLLOWUP_SAFETY_BOUNDARY)
-        self.assertIn("report-only / no automatic order / human decides manually", evaluation["human_message"])
+        self.assertIn("report-only", evaluation["human_message"])
+        self.assertIn("no automatic order", evaluation["human_message"])
 
     def test_expired_long_baseline_with_weakenings_produces_reason_codes(self) -> None:
         cfg = _followup_cfg()
@@ -189,7 +190,7 @@ class ValueDefenseFollowupObservationTest(unittest.TestCase):
         self.assertTrue(current["summary_subject"].startswith(CURRENT_EMAIL_SUBJECT_PREFIX))
         self.assertIn("⏱期限切れ", current["summary_subject"])
         self.assertIn("前回通知は失効。新規根拠として使わない。", body)
-        self.assertIn("report-only / no automatic order / human decides manually", body)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", body)
         self.assertIn(FOLLOWUP_PUBLIC_LABEL, html)
         self.assertIn("前回通知の有効期限", html)
         self.assertIn("再評価中", html)
