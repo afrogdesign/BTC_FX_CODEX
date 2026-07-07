@@ -56,6 +56,7 @@ _SIGNAL_LABELS = {
 CURRENT_MANUAL_SUPPORT_HEADER = "内部確認・検証情報"
 STABLE_DETAIL_PAGE_PRODUCT_LABEL = "BTCFX Manual Trading Report"
 STABLE_NOTIFICATION_SYSTEM_SLUG = "manual-trading"
+STABLE_DETAIL_PAGE_SAFETY_BOUNDARY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 
 _VISIBLE_STATUS_LABELS = {
     "blocked": "見送り",
@@ -1074,14 +1075,23 @@ def _detail_page_nav_html() -> str:
     """
 
 
+def _normalize_detail_page_safety_boundary(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return STABLE_DETAIL_PAGE_SAFETY_BOUNDARY
+    normalized = re.sub(r"[\s/_-]+", " ", text).strip().lower()
+    if "report only" in normalized and "automatic order" in normalized and "human decides manually" in normalized:
+        return STABLE_DETAIL_PAGE_SAFETY_BOUNDARY
+    return text
+
+
 def _status_strip_html(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
     validity_label = str(notification_context.get("validity_label", "")).strip() or "未記録"
-    safety_boundary = str(
+    safety_boundary = _normalize_detail_page_safety_boundary(
         notification_context.get("followup_safety_boundary")
         or notification_context.get("safety_boundary")
         or result.get("actionability_safety")
-        or "report-only / not FORMAL_GO / no automatic order / human decides manually"
-    ).strip()
+    )
     price = _format_price(result.get("current_price"))
     return f"""
     <div class="status-strip">
@@ -1267,7 +1277,7 @@ def _readable_detail_page_layout(result: dict[str, Any], base_dir: Path | None =
           <li><span class="emoji">⏰</span><div><strong>有効期限:</strong> {esc(followup_context.get('valid_until_utc', '未記録'))}</div></li>
           <li><span class="emoji">🔎</span><div><strong>理由:</strong> <ul>{followup_reason_items}</ul></div></li>
           <li><span class="emoji">📝</span><div><strong>案内:</strong> {esc(followup_context.get('human_message', FOLLOWUP_HUMAN_MESSAGE))}</div></li>
-          <li><span class="emoji">🛡️</span><div><strong>安全境界:</strong> {esc(followup_context.get('safety_boundary', FOLLOWUP_SAFETY_BOUNDARY))}</div></li>
+          <li><span class="emoji">🛡️</span><div><strong>安全境界:</strong> {esc(_normalize_detail_page_safety_boundary(followup_context.get('safety_boundary', FOLLOWUP_SAFETY_BOUNDARY)))}</div></li>
         </ul>
       </div>
     </section>
@@ -1449,12 +1459,11 @@ def _readable_detail_page_layout(result: dict[str, Any], base_dir: Path | None =
     ) if major_turning_point_diagnostic_items else ""
     current_price = _format_price(result.get("current_price"))
     validity_label = str(notification_context.get("validity_label", "")).strip() or "未記録"
-    safety_boundary = str(
+    safety_boundary = _normalize_detail_page_safety_boundary(
         notification_context.get("followup_safety_boundary")
         or notification_context.get("safety_boundary")
         or result.get("actionability_safety")
-        or "report-only / not FORMAL_GO / no automatic order / human decides manually"
-    ).strip()
+    )
 
     return f"""<!doctype html>
 <html lang="ja">
@@ -1916,7 +1925,7 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
         intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。"
 
     return f"""
-    <section class="section">
+    <section class="section" id="big-chance">
       <h2>{html.escape(header)}</h2>
       <p>{html.escape(intro)}</p>
       <div class="panel">
@@ -1925,7 +1934,7 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
           <li><span class="emoji">📝</span><div><strong>Operator summary:</strong> {html.escape(str(candidate.get('operator_summary', '未記録')))}</div></li>
           <li><span class="emoji">⚖️</span><div><strong>Side / Type / Status:</strong> {html.escape(str(candidate.get('side', 'none')))} / {html.escape(str(candidate.get('type', 'none')))} / {html.escape(str(candidate.get('status', 'none')))}</div></li>
           <li><span class="emoji">🏁</span><div><strong>Score / Grade:</strong> {html.escape(str(candidate.get('score', 0)))} / {html.escape(str(candidate.get('grade', 'none')))}</div></li>
-          <li><span class="emoji">🛡️</span><div><strong>Safety boundary:</strong> {html.escape(str(candidate.get('safety_boundary', 'report-only / not FORMAL_GO / no automatic order / human decides manually')))}</div></li>
+          <li><span class="emoji">🛡️</span><div><strong>Safety boundary:</strong> {html.escape(_normalize_detail_page_safety_boundary(candidate.get('safety_boundary', STABLE_DETAIL_PAGE_SAFETY_BOUNDARY)))}</div></li>
         </ul>
         <div class="two-col">
           <div class="panel">

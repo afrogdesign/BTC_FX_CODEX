@@ -24,6 +24,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
 - verify the next delivered attention mail no longer contains actionability / local / gate debug sections
 - verify the next delivered compact mail uses the canonical safety line and does not show a contradictory paper heading
 - verify the next generated HTML still shows `読む順番` and `ロング/ショート比較`
+- verify the next generated HTML also has the `big-chance` anchor when a candidate exists
+- verify the top HTML safety boundary uses the canonical report-only wording
 - continue reviewing the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal
 - run snapshot builder:

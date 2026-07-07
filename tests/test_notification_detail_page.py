@@ -518,6 +518,8 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("無効化", html)
         self.assertIn("回収条件", html)
         self.assertIn("継続条件", html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
+        self.assertNotIn("report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually", html)
         self.assertIn("最初に反応しやすい近い押し目/戻り", html)
         self.assertIn("本命として待ちたい深い押し目/戻り", html)
         self.assertIn("この目線が崩れやすい価格帯", html)
