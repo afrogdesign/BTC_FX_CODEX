@@ -149,14 +149,6 @@ def _metric_hint(metric_key: str, value: Any) -> str:
     return "待機圧力は低め"
 
 
-def _metric_help(metric_key: str) -> str:
-    if metric_key == "direction":
-        return "相場の向きそのものが、どれだけはっきりしているかを表します。高いほど方向判断に迷いが少ない状態です。"
-    if metric_key == "execution":
-        return "今この価格で実際に入る条件がどれだけ整っているかを表します。方向が合っていても、ここが低いなら飛びつきは不利です。"
-    return "今は待ったほうがよい圧力の強さです。高いほど、方向は見えていてもタイミングはまだという意味になります。"
-
-
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -176,22 +168,6 @@ def _status_emoji(status_code: str) -> str:
         "invalid": "⛔️",
         "neutral": "🧭",
     }.get(str(status_code), "🧭")
-
-
-def _metric_emoji(metric_key: str, score: float) -> str:
-    if metric_key == "direction":
-        return "🧭" if score >= 40 else "🌫️"
-    if metric_key == "execution":
-        return "⚡" if score >= 60 else "⛔"
-    return "⏸️" if score >= 40 else "🟢"
-
-
-def _metric_bar_tone(metric_key: str, score: float) -> str:
-    if metric_key == "direction":
-        return "var(--bar-direction)"
-    if metric_key == "execution":
-        return "var(--bar-execution)"
-    return "var(--bar-wait)"
 
 
 def _metric_reading_point(metric_key: str, score: float) -> str:
@@ -214,60 +190,6 @@ def _metric_reading_point(metric_key: str, score: float) -> str:
     return "待機圧力は低めで、待ち理由はそこまで強くありません。"
 
 
-def _sparkline_svg(points: list[tuple[str, float]]) -> str:
-    width = 300
-    height = 96
-    left = 14
-    right = 14
-    top = 16
-    bottom = 26
-    usable_w = width - left - right
-    usable_h = height - top - bottom
-    count = max(len(points), 1)
-    step = usable_w / max(count - 1, 1)
-    coords: list[tuple[float, float, str, float]] = []
-    for idx, (label, raw_score) in enumerate(points):
-        score = _clamp(raw_score)
-        x = left + idx * step
-        y = top + (100.0 - score) / 100.0 * usable_h
-        coords.append((x, y, label, score))
-    polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y, _label, _score in coords)
-    circles = "".join(
-        (
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" class="spark-dot" />'
-            f'<text x="{x:.1f}" y="{height - 8}" text-anchor="middle" class="spark-label">{html.escape(label)}</text>'
-        )
-        for x, y, label, _score in coords
-    )
-    return (
-        f'<svg viewBox="0 0 {width} {height}" class="sparkline" aria-label="3指標バランス">'
-        '<line x1="14" y1="16" x2="286" y2="16" class="spark-grid" />'
-        '<line x1="14" y1="43" x2="286" y2="43" class="spark-grid" />'
-        '<line x1="14" y1="70" x2="286" y2="70" class="spark-grid" />'
-        f'<polyline points="{polyline}" class="spark-line" />'
-        f"{circles}"
-        "</svg>"
-    )
-
-
-def _score_compare_rows(result: dict[str, Any]) -> str:
-    rows: list[str] = []
-    for label, key, tone in (
-        ("ロング", "long_display_score", "var(--score-long)"),
-        ("ショート", "short_display_score", "var(--score-short)"),
-    ):
-        score = _clamp(_safe_float(result.get(key)))
-        rows.append(
-            '<div class="score-row">'
-            f'<div class="score-row-head"><span>{html.escape(label)}</span><strong>{score:.0f}</strong></div>'
-            '<div class="score-track">'
-            f'<div class="score-fill" style="width:{score:.1f}%; background:{tone};"></div>'
-            "</div>"
-            "</div>"
-        )
-    return "".join(rows)
-
-
 def _reason_emoji(reason: str) -> str:
     text = str(reason)
     if "流動性" in text or "Sweep" in text:
@@ -283,18 +205,6 @@ def _reason_emoji(reason: str) -> str:
     return "🔎"
 
 
-def _reason_cards_html(reasons: list[str]) -> str:
-    cards: list[str] = []
-    for reason in reasons:
-        cards.append(
-            '<div class="reason-card">'
-            f'<div class="reason-icon">{html.escape(_reason_emoji(reason))}</div>'
-            f'<div class="reason-text">{html.escape(reason)}</div>'
-            "</div>"
-        )
-    return "".join(cards)
-
-
 def _notification_context_for_result(result: dict[str, Any]) -> dict[str, Any]:
     notification_context = build_notification_context(result)
     override = result.get("notification_context")
@@ -308,6 +218,8 @@ def _notification_context_for_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def _active_plan_hero_label(notification_context: dict[str, Any], result: dict[str, Any]) -> str:
     notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_execution_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
     trade_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
     paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
 
@@ -1082,6 +994,8 @@ def _normalize_detail_page_safety_boundary(value: Any) -> str:
     normalized = re.sub(r"[\s/_-]+", " ", text).strip().lower()
     if "report only" in normalized and "automatic order" in normalized and "human decides manually" in normalized:
         return STABLE_DETAIL_PAGE_SAFETY_BOUNDARY
+    if "report only" in normalized and "no automatic order" in normalized and "human decides manually" in normalized:
+        return STABLE_DETAIL_PAGE_SAFETY_BOUNDARY
     return text
 
 
@@ -1108,30 +1022,28 @@ def _price_plan_table_html(result: dict[str, Any]) -> str:
         entry = setup.get("entry_zone") or {}
         return (
             "<tr>"
-            f"<th>{'ロング' if side == 'long' else 'ショート'}</th>"
+            f"<td><span class=\"v2-side-pill {'long' if side == 'long' else 'short'}\">{'ロング' if side == 'long' else 'ショート'}</span></td>"
             f"<td>{html.escape(_setup_status_label(setup.get('status')))}</td>"
             f"<td>{html.escape(_format_price(entry.get('low')))} - {html.escape(_format_price(entry.get('high')))}</td>"
             f"<td>{html.escape(_format_price(setup.get('stop_loss')))}</td>"
-            f"<td>{html.escape(_format_price(setup.get('tp1')))}</td>"
-            f"<td>{html.escape(_format_price(setup.get('tp2')))}</td>"
+            f"<td>{html.escape(_format_price(setup.get('tp1')))}<br>{html.escape(_format_price(setup.get('tp2')))}</td>"
             f"<td>{html.escape(_execution_precision_line(result, side))}</td>"
             "</tr>"
         )
 
     return f"""
-    <section class="section" id="price-plan">
-      <h2>ロング/ショート比較</h2>
-      <p class="muted">再検討帯、SL、TP を表で見比べ、15分足でどこを見るかだけを先に把握します。</p>
-      <div class="table-scroll">
-        <table class="price-plan-table">
+    <section class="v2-section v2-section-anchor" id="price-plan">
+      <h2>ロング / ショート比較</h2>
+      <p class="v2-muted">再検討帯、SL、TP を表で見比べ、15分足でどこを見るかだけを先に把握します。</p>
+      <div class="v2-table-wrap">
+        <table class="v2-table">
           <thead>
             <tr>
               <th>方向</th>
               <th>状態</th>
               <th>再検討帯</th>
               <th>SL</th>
-              <th>TP1</th>
-              <th>TP2</th>
+              <th>TP1 / TP2</th>
               <th>実行精度 / 15分足で見ること</th>
             </tr>
           </thead>
@@ -1148,41 +1060,90 @@ def _price_plan_table_html(result: dict[str, Any]) -> str:
 def _manual_gate_cards_html(active_status_rows: list[tuple[str, str]]) -> str:
     cards = "".join(
         f"""
-        <div class="gate-card">
-          <div class="gate-card-title"><strong>{html.escape(label)}:</strong></div>
-          <div class="gate-card-value">{html.escape(value)}</div>
+        <div class="v2-card">
+          <div class="v2-kicker">{html.escape(label)}</div>
+          <div class="v2-big">{html.escape(value)}</div>
         </div>
         """
         for label, value in active_status_rows
     )
     return f"""
-    <section class="section" id="manual-gates">
+    <section class="v2-section v2-section-anchor" id="manual-gates">
       <h2>手動アクションゲート</h2>
-      <div class="gate-cards">{cards}</div>
+      <div class="v2-grid-3">{cards}</div>
     </section>
     """
 
 
-def _score_summary_section_html(balance_svg: str, metric_blocks: list[str]) -> str:
-    metrics = "".join(metric_blocks)
+def _score_summary_heading(result: dict[str, Any]) -> str:
+    bias = str(result.get("bias", "")).strip().lower()
+    direction_score = _clamp(_safe_float(result.get("confidence_direction_shadow")))
+    execution_score = _clamp(_safe_float(result.get("confidence_execution_shadow")))
+    wait_score = _clamp(_safe_float(result.get("confidence_wait_shadow")))
+    if bias == "long":
+        bias_label = "上目線"
+    elif bias == "short":
+        bias_label = "下目線"
+    else:
+        bias_label = "方向感はあるが慎重"
+    if execution_score < 45 or wait_score >= 50:
+        action_label = "見送り"
+    elif execution_score >= 65 and wait_score < 40:
+        action_label = "条件確認"
+    else:
+        action_label = "慎重判断"
+    if direction_score < 25 and bias not in {"long", "short"}:
+        return "スコア根拠: なぜまだ方向を決め切れないのか"
+    return f'スコア根拠: なぜ「{bias_label}だが{action_label}」なのか'
+
+
+def _v2_score_card_html(label: str, score: Any, tone: str, note: str, *, wide: bool = False) -> str:
+    numeric = _clamp(_safe_float(score))
+    wide_class = " wide" if wide else ""
     return f"""
-    <section class="section" id="scores">
-      <h2>スコアと待機圧力</h2>
-      <div class="score-summary">
-        <div class="score-summary-panel">
-          <div class="score-summary-head">
-            <span>ロング / ショート比較</span>
-            <strong>バランス</strong>
-          </div>
-          {balance_svg}
-        </div>
-        <div class="score-summary-panel">
-          <div class="score-summary-head">
-            <span>3つの数字を丁寧に読む</span>
-            <strong>指標</strong>
-          </div>
-          <div class="metric-grid">{metrics}</div>
-        </div>
+    <article class="v2-score-card{wide_class}">
+      <div class="v2-score-head">
+        <div class="v2-score-label">{html.escape(label)}</div>
+        <div class="v2-score-value">{numeric:.1f}</div>
+      </div>
+      <div class="v2-score-track"><div class="v2-score-fill {html.escape(tone)}" style="width:{numeric:.1f}%"></div></div>
+      <p class="v2-score-note">{html.escape(note)}</p>
+    </article>
+    """
+
+
+def _score_summary_section_html(result: dict[str, Any], reason_cards_html: str) -> str:
+    direction_score = _clamp(_safe_float(result.get("confidence_direction_shadow")))
+    execution_score = _clamp(_safe_float(result.get("confidence_execution_shadow")))
+    wait_score = _clamp(_safe_float(result.get("confidence_wait_shadow")))
+    long_score = _clamp(_safe_float(result.get("long_display_score")))
+    short_score = _clamp(_safe_float(result.get("short_display_score")))
+    top_cards = "".join(
+        [
+            _v2_score_card_html("方向の強さ", direction_score, "blue", _metric_hint("direction", direction_score)),
+            _v2_score_card_html("実行しやすさ", execution_score, "orange", _metric_hint("execution", execution_score)),
+            _v2_score_card_html("待機圧力", wait_score, "red", _metric_hint("wait", wait_score)),
+        ]
+    )
+    lower_cards = "".join(
+        [
+            _v2_score_card_html("ロング", long_score, "green", "ロング側の相対スコアです。強さだけを短く確認します。", wide=True),
+            _v2_score_card_html("ショート", short_score, "red", "ショート側の相対スコアです。強さだけを短く確認します。", wide=True),
+        ]
+    )
+    return f"""
+    <section class="v2-section v2-section-anchor" id="scores">
+      <h2>{html.escape(_score_summary_heading(result))}</h2>
+      <p class="v2-muted">5つの数字をカードで確認し、理由は下のチップだけ見る構成にしています。</p>
+      <div class="v2-score-grid-top">
+        {top_cards}
+      </div>
+      <div class="v2-score-grid-bottom">
+        {lower_cards}
+      </div>
+      <div class="v2-card" style="margin-top:14px;">
+        <div class="v2-kicker">待機理由・注意点</div>
+        <div class="v2-reasons">{reason_cards_html or '<span class="v2-reason">大きな待機理由は出ていません</span>'}</div>
       </div>
     </section>
     """
@@ -1190,10 +1151,13 @@ def _score_summary_section_html(balance_svg: str, metric_blocks: list[str]) -> s
 
 def _reasons_section_html(reason_cards_html: str, wait_reason_html: str) -> str:
     return f"""
-    <section class="section" id="reasons">
+    <section class="v2-section v2-section-anchor" id="reasons">
       <h2>待機理由 / 無効化理由</h2>
-      <div class="reason-grid">{reason_cards_html}</div>
-      <ul class="reason-list">{wait_reason_html}</ul>
+      <div class="v2-reasons">{reason_cards_html}</div>
+      <div class="v2-card">
+        <div class="v2-kicker">補足</div>
+        <p class="v2-muted">{wait_reason_html}</p>
+      </div>
     </section>
     """
 
@@ -1203,11 +1167,636 @@ def _details_panel_html(title: str, body_html: str, open: bool = False) -> str:
         return ""
     open_attr = " open" if open else ""
     return f"""
-    <details class="diagnostic-details"{open_attr}>
+    <details class="v2-details diagnostic-details"{open_attr}>
       <summary>{html.escape(title)}</summary>
-      <div class="diagnostic-details-body">{body_html}</div>
+      <div class="v2-details-body diagnostic-details-body">{body_html}</div>
     </details>
     """
+
+
+def _v2_meter_html(label: str, score: Any, tone: str, hint: str, note: str = "") -> str:
+    numeric = _clamp(_safe_float(score))
+    return f"""
+    <div class="v2-meter">
+      <div class="v2-meter-head">
+        <span>{html.escape(label)}</span>
+        <strong>{numeric:.1f} / 100</strong>
+      </div>
+      <div class="v2-bar"><div class="v2-fill {html.escape(tone)}" style="width:{numeric:.1f}%"></div></div>
+      <div class="v2-meter-hint">{html.escape(hint)}</div>
+      {f'<div class="v2-meter-note">{html.escape(note)}</div>' if note else ''}
+    </div>
+    """
+
+
+def _v2_card_html(kicker: str, title: str, body: str, class_name: str = "") -> str:
+    classes = "v2-card" + (f" {class_name}" if class_name else "")
+    return f"""
+    <article class="{classes}">
+      <div class="v2-kicker">{html.escape(kicker)}</div>
+      <h3>{html.escape(title)}</h3>
+      <p>{html.escape(body)}</p>
+    </article>
+    """
+
+
+def _v2_reason_chips_html(reasons: list[str]) -> str:
+    return "".join(f'<span class="v2-reason">{html.escape(reason)}</span>' for reason in reasons if str(reason).strip())
+
+
+def _v2_action_strip_html(items: list[tuple[str, str]]) -> str:
+    return "".join(
+        f"""
+        <div class="v2-action-item">
+          <div class="v2-action-title">{html.escape(label)}</div>
+          <div class="v2-action-value">{html.escape(value)}</div>
+        </div>
+        """
+        for label, value in items
+    )
+
+
+def _v2_sidebar_html(result: dict[str, Any], notification_context: dict[str, Any], active_hero_label: str, current_price: str) -> str:
+    items = [
+        ("1", "まず結論", "#decision"),
+        ("2", "Phase4 キュー", "#phase4-cues"),
+        ("3", "価格帯", "#price-plan"),
+        ("4", "手動ゲート", "#manual-gates"),
+        ("5", "チャート", "#chart"),
+        ("6", "Big Chance", "#big-chance"),
+        ("7", "スコア", "#scores"),
+        ("8", "詳細", "#logs"),
+    ]
+    nav_html = "".join(
+        f'<a href="{html.escape(anchor)}"><span class="v2-nav-index">{html.escape(index)}</span><span>{html.escape(label)}</span></a>'
+        for index, label, anchor in items
+    )
+    return f"""
+    <aside class="v2-sidebar" aria-label="読む順番">
+      <h2>読む順番</h2>
+      <div class="v2-nav">{nav_html}</div>
+      <div class="v2-mini-summary">
+        <div><strong>signal_id:</strong> {html.escape(str(result.get('signal_id', '未記録')))}</div>
+        <div><strong>時刻:</strong> {html.escape(str(result.get('timestamp_jst', '')).replace('T', ' '))}</div>
+        <div><strong>種別:</strong> {html.escape(str(result.get('notification_kind', 'main')))}</div>
+        <div><strong>現在値:</strong> {html.escape(current_price)}</div>
+        <div><strong>行動:</strong> {html.escape(active_hero_label)}</div>
+      </div>
+    </aside>
+    """
+
+
+def _phase4_display_cue_panel_html(result: dict[str, Any]) -> str:
+    display_context = build_display_context(result)
+    big_chance = result.get("big_chance_candidate") if isinstance(result.get("big_chance_candidate"), dict) else {}
+    cue_cards = [
+        (
+            "CUE01 / side-aware review context",
+            "long / short は別々に読む。非対称を 1 つにまとめない。"
+            f" 現在の bias: {str(display_context.get('direction_label', '未記録')).strip() or '未記録'}。",
+            "emphasis",
+        ),
+        (
+            "CUE02 / long active_limit_retest narrow width",
+            "long active_limit_retest を review するときは、15m で entry-zone width を chart_review_only で確認する。"
+            " これは not entry prohibition ではない。",
+            "warn",
+        ),
+        (
+            "CUE03 / long q4 position hold",
+            "long q4 position は hold / do_not_show_yet。artifact risk のため active cue にしない。",
+            "warn",
+        ),
+        (
+            "CUE04 / short active_limit_retest wide bucket",
+            "preserve cue。short 側の review では long-side reduction logic を適用しない。",
+            "good",
+        ),
+        (
+            "CUE05 / stop_distance / ATR",
+            "not_directly_evaluated。0 とみなさない。entry cue ではなく別の review question に置く。",
+            "",
+        ),
+        (
+            "CUE06 / runner extension",
+            "not_directly_evaluated。entry cue と切り分け、runner のレビューとして独立させる。",
+            "",
+        ),
+        (
+            "CUE07 / data coverage",
+            "analysis/review quality only。no_ohlcv と resolved-only は分けて読む。",
+            "",
+        ),
+        (
+            "CUE08 / Big Chance",
+            "Big Chance is not an entry instruction. review-only cue として 15m chart の failed thesis を読む補助に使う。"
+            + (
+                f" 現在の latest: {str(big_chance.get('side', 'none'))} / {str(big_chance.get('type', 'none'))} / "
+                f"{str(big_chance.get('status', 'none'))} / score {str(big_chance.get('score', 'none'))} / "
+                f"grade {str(big_chance.get('grade', 'none'))}。"
+                if big_chance.get("present")
+                else ""
+            ),
+            "warn",
+        ),
+        (
+            "CUE09 / Value Defense",
+            "shallow zone と defense zone を別々に確認する。1 つの label にまとめない。",
+            "emphasis",
+        ),
+    ]
+    return f"""
+    <section class="v2-section v2-section-anchor" id="phase4-cues">
+      <h2>Phase4 レビューキュー</h2>
+      <p class="v2-muted">report-only / not FORMAL_GO / no automatic order / human decides manually。これは chart_review_only の補助表示で、エントリー指示ではありません。</p>
+      <div class="v2-grid-3">
+        {''.join(_v2_card_html(cue_id, cue_id.split(' / ', 1)[1], body, class_name) for cue_id, body, class_name in cue_cards)}
+      </div>
+      <div class="v2-callout">
+        <div class="v2-callout-icon">!</div>
+        <div><strong>運用ルール</strong><br>CUE02 は chart_review_only、CUE03 は hold / do_not_show_yet、CUE04 は preserve cue、CUE05/CUE06 は not_directly_evaluated、CUE08 は entry instruction ではありません。</div>
+      </div>
+    </section>
+    """
+
+
+def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
+    display_context = build_display_context(result)
+    notification_context = _notification_context_for_result(result)
+    timestamp_jst = str(result.get("timestamp_jst", "")).replace("T", " ")
+    notification_kind = str(result.get("notification_kind", "main")).lower().strip() or "main"
+    trade_execution_gate = str(result.get("trade_execution_gate", "blocked")).lower().strip() or "blocked"
+    paper_order_status = str(result.get("paper_order_status", "")).lower().strip()
+    funding_display = str(result.get("funding_rate_display") or "").strip() or f"{result.get('funding_rate_label', 'ほぼ中立')} ({_format_pct(result.get('funding_rate_pct', 0.0))})"
+    active_hero_label = _active_plan_hero_label(notification_context, result)
+    active_hero_summary = _active_plan_hero_summary(notification_context, display_context, result)
+    active_status_rows = _active_plan_status_rows(notification_context)
+    action_kind_label = _humanize_visible_status_text(notification_context.get("execution_label", "")).strip() or "未記録"
+    current_price = _format_price(result.get("current_price"))
+    validity_label = str(notification_context.get("validity_label", "")).strip() or "未記録"
+    safety_boundary = _normalize_detail_page_safety_boundary(
+        notification_context.get("followup_safety_boundary")
+        or notification_context.get("safety_boundary")
+        or result.get("actionability_safety")
+    )
+    watch_zone_label = str(notification_context.get("entry_window_label", "")).strip() or "未記録"
+    status_chip = f"{notification_context.get('final_rank_emoji', '')} {notification_context.get('final_rank_label', '送信なし')}".strip()
+    status_sub = str(notification_context.get("status_label", "中立")).strip() or "中立"
+    summary_chips = [
+        status_chip,
+        status_sub,
+        str(display_context.get("direction_compact_label", "中立")).strip() or "中立",
+        f"有効: {validity_label}",
+        safety_boundary,
+    ]
+    if notification_kind == "followup":
+        summary_chips[0] = FOLLOWUP_PUBLIC_LABEL
+    elif notification_kind == "attention":
+        summary_chips[0] = "注意報・売買非推奨"
+
+    followup_context = result.get("followup_context") if isinstance(result.get("followup_context"), dict) else {}
+    followup_reason_labels = [
+        str(label).strip()
+        for label in (
+            followup_context.get("reason_labels")
+            or followup_context.get("reason_labels_full")
+            or []
+        )
+        if str(label).strip()
+    ]
+    followup_card_html = ""
+    if notification_kind == "followup":
+        followup_card_html = f"""
+        <div class="v2-card warn" style="margin-top:14px;">
+          <div class="v2-kicker">{FOLLOWUP_PUBLIC_LABEL}</div>
+          <h3>{html.escape(str(followup_context.get('previous_notification_kind', 'followup')))} / {html.escape(str(followup_context.get('previous_signal_id', '未記録')))}</h3>
+          <p>前回通知は失効。新規根拠として使わない。</p>
+          <div class="v2-grid-2" style="margin-top:10px;">
+            <div class="v2-card"><div class="v2-kicker">Valid until</div><p>{html.escape(str(followup_context.get('valid_until_utc', '未記録')))}</p></div>
+            <div class="v2-card"><div class="v2-kicker">Human message</div><p>{html.escape(str(followup_context.get('human_message') or FOLLOWUP_HUMAN_MESSAGE))}</p></div>
+          </div>
+          <div class="v2-reasons" style="margin-top:10px;">{_v2_reason_chips_html(followup_reason_labels) or '<span class="v2-reason">有効期限切れ</span>'}</div>
+          <div class="v2-card" style="margin-top:10px;"><div class="v2-kicker">Safety boundary</div><p>{html.escape(_normalize_detail_page_safety_boundary(followup_context.get('safety_boundary', FOLLOWUP_SAFETY_BOUNDARY)))}</p></div>
+        </div>
+        """
+
+    reason_labels = notification_context.get("reason_labels_full") or _build_wait_reasons(display_context, result)
+    reason_label_items = [str(item).strip() for item in reason_labels if str(item).strip()]
+    reason_chips_html = _v2_reason_chips_html(reason_label_items)
+    wait_reason_summary = " / ".join(reason_label_items[:4]) or "大きな待機理由は出ていません"
+
+    price_map_svg = _price_map_svg(result)
+    value_defense_chart_dashboard_html = _value_defense_chart_dashboard(result)
+    big_chance_section_html = _big_chance_section_html(result)
+    active_plan_rows_html = "".join(
+        f"<p><strong>{html.escape(label)}:</strong> {html.escape(value)}</p>"
+        for label, value in active_status_rows
+    )
+    lead_detail = active_hero_summary or display_context.get("direction_label", "相場を確認中です。")
+    if notification_kind == "main" and trade_execution_gate == "pass" and paper_order_status == "planned":
+        lead_prefix = "紙実行候補。"
+        lead_detail = "実弾不可。最終判断は人間。"
+    lead_prefix = "今は入らない。"
+    if notification_kind == "followup":
+        lead_prefix = "前回通知は失効。新規根拠として使わない。"
+    elif notification_kind == "attention":
+        lead_prefix = "今は入らない。"
+
+    value_defense_entry_layer_html = "".join(
+        block
+        for block in (
+            _value_defense_entry_layer_block(result, "long"),
+            _value_defense_entry_layer_block(result, "short"),
+        )
+        if block
+    )
+
+    runtime_startup_status_html = _runtime_startup_status_html(base_dir)
+    safe_config_schema_audit_html = _safe_config_schema_audit_html(result, notification_context, display_context)
+    operator_triage_summary_html = _operator_triage_summary_html(result, notification_context, display_context)
+    integrated_evidence_overview_html = _integrated_evidence_overview_html(result, notification_context, display_context)
+    evidence_quality_summary_html = _evidence_quality_summary_html(result, notification_context, display_context)
+    ohlcv_source_coverage_summary_html = _ohlcv_source_coverage_summary_html(result, notification_context, display_context)
+    post_eval_recommendation_status_html = _post_eval_recommendation_status_html(result, notification_context, display_context)
+    major_turning_point_diagnostic_items, major_turning_point_diagnostic_rows, major_turning_point_diagnostic_rows_html = _major_turning_point_diagnostic_items(
+        result,
+        notification_context,
+        display_context,
+    )
+    breakout_inversion_items = _breakout_inversion_items(result)
+    intraperiod_breakout_items = _intraperiod_breakout_items(result)
+    momentum_confirmation_items = _momentum_confirmation_items(result)
+    major_turning_point_diagnostic_html = (
+        '<div class="v2-reasons">'
+        + "".join(
+            f'<span class="v2-reason">{html.escape(label)}: {html.escape(value)}</span>'
+            for label, value in major_turning_point_diagnostic_items
+        )
+        + (
+            f'<span class="v2-reason">代表行: {html.escape(major_turning_point_diagnostic_rows_html or "なし")}</span>'
+            if major_turning_point_diagnostic_items
+            else ""
+        )
+        + "</div>"
+    ) if major_turning_point_diagnostic_items else ""
+    raw_mail = _raw_mail_text(result, display_context)
+    manual_support_reference_html = "".join(
+        f"<li><strong>{html.escape(label)}:</strong> <code>{html.escape(value)}</code></li>"
+        for label, value in _manual_support_reference_items()
+    )
+    breakout_inversion_html = "".join(
+        f'<div class="v2-check"><strong>{html.escape(label)}</strong><div>{html.escape(value)}</div></div>'
+        for label, value in breakout_inversion_items
+    )
+    intraperiod_breakout_html = "".join(
+        f'<div class="v2-check"><strong>{html.escape(label)}</strong><div>{html.escape(value)}</div></div>'
+        for label, value in intraperiod_breakout_items
+    )
+    momentum_confirmation_html = "".join(
+        f'<div class="v2-check"><strong>{html.escape(label)}</strong><div>{html.escape(value)}</div></div>'
+        for label, value in momentum_confirmation_items
+    )
+
+    css = """
+    <style>
+      :root {
+        color-scheme: light;
+        --v2-bg: #eef3f8;
+        --v2-paper: #ffffff;
+        --v2-ink: #10212b;
+        --v2-muted: #60707c;
+        --v2-line: #d8dfe6;
+        --v2-shadow: 0 18px 55px rgba(15, 23, 42, 0.10);
+        --v2-blue: #2563eb;
+        --v2-red: #b42318;
+        --v2-orange: #d97706;
+        --v2-green: #0f766e;
+      }
+      html { scroll-behavior: smooth; }
+      body.v2-report { margin: 0; font-family: "Hiragino Sans", "Yu Gothic", "Yu Gothic UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif; color: var(--v2-ink); line-height: 1.72; background: radial-gradient(circle at 8% 0%, rgba(96, 165, 250, 0.18) 0, transparent 34%), radial-gradient(circle at 100% 6%, rgba(20, 184, 166, 0.13) 0, transparent 30%), linear-gradient(180deg, #f8fbff 0%, var(--v2-bg) 44%, #e8eef5 100%); }
+      .v2-shell { max-width: 1240px; margin: 0 auto; padding: 24px 18px 64px; }
+      .v2-hero { border: 1px solid rgba(216,225,234,.94); border-radius: 28px; background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(239,248,255,.98) 54%, rgba(236,253,245,.95)); box-shadow: var(--v2-shadow); overflow: hidden; }
+      .v2-hero-top { padding: 24px 26px 18px; border-bottom: 1px solid rgba(216,225,234,.82); }
+      .v2-eyebrow { color: var(--v2-muted); font-size: 13px; font-weight: 800; margin-bottom: 10px; }
+      .v2-hero-grid { display:grid; grid-template-columns: minmax(0,1.25fr) minmax(320px,.75fr); gap: 18px; align-items: stretch; }
+      .v2-status-badge { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px; background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; font-size:14px; font-weight:900; }
+      .v2-h1 { margin: 14px 0 8px; font-size: clamp(28px, 4vw, 46px); line-height: 1.18; letter-spacing: -.03em; }
+      .v2-lead { margin: 0; max-width: 720px; color: #334155; font-size: clamp(16px, 2vw, 20px); font-weight: 800; }
+      .v2-lead strong { color: var(--v2-red); }
+      .v2-chip-row { display:flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+      .v2-chip { display:inline-flex; align-items:center; gap:6px; padding:7px 11px; border-radius:999px; background: rgba(255,255,255,.82); border: 1px solid rgba(148,163,184,.35); color:#334155; font-size:12px; font-weight:800; }
+      .v2-now-card { display:grid; align-content:center; gap:12px; border:1px solid rgba(15,118,110,.16); border-radius:22px; padding:18px; background: linear-gradient(180deg, rgba(255,255,255,.97), rgba(240,253,250,.94)); }
+      .v2-now-label { color: var(--v2-muted); font-size:12px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+      .v2-price { font-size: clamp(34px, 5vw, 54px); line-height:1; font-weight:950; letter-spacing:-.04em; }
+      .v2-now-card p { margin:0; color:#334155; font-weight:800; }
+      .v2-action-strip { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); background: rgba(255,255,255,.68); }
+      .v2-action-item { padding: 16px 18px; border-right: 1px solid rgba(216,225,234,.9); }
+      .v2-action-item:last-child { border-right: 0; }
+      .v2-action-title { color: var(--v2-muted); font-size: 12px; font-weight:900; margin-bottom: 5px; }
+      .v2-action-value { font-size: 16px; font-weight: 950; line-height: 1.45; }
+      .v2-layout { display:grid; grid-template-columns: 260px minmax(0,1fr); gap: 18px; margin-top: 18px; align-items: start; }
+      .v2-sidebar { position: sticky; top: 16px; border: 1px solid var(--v2-line); border-radius: 22px; background: rgba(255,255,255,.86); box-shadow: 0 10px 30px rgba(15,23,42,.06); padding: 16px; }
+      .v2-sidebar h2 { margin: 0 0 10px; font-size: 15px; }
+      .v2-nav { display:grid; gap:8px; margin-bottom:16px; }
+      .v2-nav a { display:grid; grid-template-columns: 26px 1fr; gap:8px; align-items:center; text-decoration:none; color:#334155; font-size:13px; font-weight:900; border:1px solid transparent; border-radius:13px; padding:8px; }
+      .v2-nav a:hover { background:#f1f5f9; border-color:#e2e8f0; }
+      .v2-nav-index { display:grid; place-items:center; width:26px; height:26px; border-radius:999px; background:#dbeafe; color:#1d4ed8; }
+      .v2-mini-summary { border-radius:16px; padding:12px; background:#0f172a; color:#e2e8f0; font-size:12px; display:grid; gap:4px; }
+      .v2-mini-summary strong { color:white; }
+      .v2-main { display:grid; gap:18px; }
+      .v2-section { border:1px solid var(--v2-line); border-radius:24px; background: rgba(255,255,255,.94); box-shadow: 0 12px 36px rgba(15,23,42,.06); padding: clamp(18px, 2.5vw, 26px); }
+      .v2-section h2 { margin:0 0 12px; font-size: clamp(21px, 2.5vw, 28px); letter-spacing:-.02em; }
+      .v2-section h3 { margin:0 0 8px; font-size:16px; color:#243445; }
+      .v2-section p { margin:0 0 12px; }
+      .v2-section-anchor { scroll-margin-top: 18px; }
+      .v2-muted { color: var(--v2-muted); font-size: 14px; }
+      .v2-grid-2 { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+      .v2-grid-3 { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+      .v2-card { border:1px solid var(--v2-line); border-radius:18px; background: linear-gradient(180deg, #fff, #f8fbfd); padding:16px; }
+      .v2-card.emphasis { background: linear-gradient(180deg, #f8fbff, #ffffff); border-color: rgba(37,99,235,.22); }
+      .v2-card.warn { background: linear-gradient(180deg, #fffaf0, #ffffff); border-color: rgba(217,119,6,.24); }
+      .v2-card.good { background: linear-gradient(180deg, #f0fdfa, #ffffff); border-color: rgba(15,118,110,.22); }
+      .v2-kicker { color: var(--v2-muted); font-size:12px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px; }
+      .v2-big { font-size: clamp(24px, 3vw, 38px); font-weight:950; line-height:1.1; letter-spacing:-.03em; }
+      .v2-callout { display:grid; grid-template-columns: 40px 1fr; gap:12px; border:1px solid rgba(217,119,6,.28); border-radius:18px; background:#fffbeb; padding:14px 16px; margin-top:14px; }
+      .v2-callout-icon { width:40px; height:40px; border-radius:13px; display:grid; place-items:center; background:#fed7aa; font-size:20px; }
+      .v2-callout strong { color:#9a3412; }
+      .v2-table-wrap { overflow-x:auto; border:1px solid var(--v2-line); border-radius:18px; }
+      .v2-table { width:100%; border-collapse:collapse; min-width: 760px; background:white; }
+      .v2-table th, .v2-table td { padding:13px 14px; text-align:left; border-bottom:1px solid #e7edf3; vertical-align:top; }
+      .v2-table th { background:#f8fafc; color:#475569; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+      .v2-table tr:last-child td { border-bottom:0; }
+      .v2-side-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; font-weight:950; font-size:12px; }
+      .v2-side-pill.long { background:#dcfce7; color:#166534; }
+      .v2-side-pill.short { background:#fee2e2; color:#991b1b; }
+      .v2-meter-list { display:grid; gap:12px; }
+      .v2-meter { display:grid; gap:8px; }
+      .v2-meter-head { display:flex; justify-content:space-between; gap:12px; font-weight:950; }
+      .v2-bar { width:100%; height:13px; border-radius:999px; background:#e8eef5; overflow:hidden; border:1px solid #dde6ef; }
+      .v2-fill { height:100%; border-radius:999px; }
+      .v2-fill.blue { background: linear-gradient(90deg,#93c5fd,#2563eb); }
+      .v2-fill.red { background: linear-gradient(90deg,#fb7185,#b42318); }
+      .v2-fill.orange { background: linear-gradient(90deg,#fbbf24,#d97706); }
+      .v2-fill.green { background: linear-gradient(90deg,#86efac,#0f766e); }
+      .v2-meter-hint { color:#334155; font-size:13px; font-weight:800; }
+      .v2-meter-note { color: var(--v2-muted); font-size:12px; }
+      .v2-score-grid-top { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:14px; }
+      .v2-score-grid-bottom { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; margin-top:14px; }
+      .v2-score-card { border:1px solid var(--v2-line); border-radius:20px; background:linear-gradient(180deg, #fff, #f8fbfd); padding:16px; display:grid; gap:10px; box-shadow: 0 8px 24px rgba(15,23,42,.05); }
+      .v2-score-card.wide { min-height: 132px; }
+      .v2-score-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+      .v2-score-label { font-size:14px; font-weight:950; color:#243445; }
+      .v2-score-value { font-size:30px; line-height:1; font-weight:950; letter-spacing:-.03em; color:#10212b; }
+      .v2-score-track { width:100%; height:14px; border-radius:999px; background:#e8eef5; overflow:hidden; border:1px solid #dde6ef; }
+      .v2-score-fill { height:100%; border-radius:999px; }
+      .v2-score-fill.blue { background: linear-gradient(90deg,#93c5fd,#2563eb); }
+      .v2-score-fill.orange { background: linear-gradient(90deg,#fdba74,#d97706); }
+      .v2-score-fill.red { background: linear-gradient(90deg,#fca5a5,#b42318); }
+      .v2-score-fill.green { background: linear-gradient(90deg,#86efac,#0f766e); }
+      .v2-score-note { margin:0; color:var(--v2-muted); font-size:13px; line-height:1.55; font-weight:700; }
+      .v2-step-list { display:grid; gap:10px; counter-reset: step; }
+      .v2-step { display:grid; grid-template-columns: 34px 1fr; gap:10px; align-items:start; padding:12px; border-radius:16px; background:#f8fafc; border:1px solid #e2e8f0; }
+      .v2-step::before { content: counter(step); counter-increment: step; display:grid; place-items:center; width:34px; height:34px; border-radius:12px; background:#0f172a; color:#fff; font-weight:950; }
+      .v2-step-title { font-weight:950; margin-bottom:4px; }
+      .v2-step-body { color:#334155; }
+      .v2-check-grid { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px; }
+      .v2-check { border:1px solid #e2e8f0; border-radius:16px; padding:13px; background:#fff; }
+      .v2-reasons { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+      .v2-reason { padding:8px 10px; border-radius:999px; background:#f8fafc; border:1px solid #e2e8f0; font-size:13px; font-weight:800; color:#334155; }
+      .v2-reason-list { margin: 10px 0 0; padding-left: 20px; color:#334155; }
+      .v2-details { border:1px solid var(--v2-line); border-radius:18px; background:#fff; overflow:hidden; }
+      .v2-details + .v2-details { margin-top:10px; }
+      .v2-details summary { cursor:pointer; padding:14px 16px; font-weight:950; background:#f8fafc; }
+      .v2-details-body { padding:16px; border-top:1px solid #e2e8f0; }
+      .v2-raw { white-space:pre-wrap; overflow-wrap:anywhere; font-family:"SFMono-Regular", Menlo, Consolas, monospace; font-size:12px; line-height:1.65; background:#0f172a; color:#dbeafe; border-radius:16px; padding:16px; }
+      .v2-chart .price-map-wrap { margin:0; padding:14px 0 8px; border-radius:20px; overflow:hidden; }
+      .v2-chart .price-map { min-width:860px; }
+      .v2-chart-scroll { overflow-x:auto; border-radius:20px; }
+      .v2-chart .two-col { margin-top:14px; }
+      .v2-details-stack { display:grid; gap:10px; }
+      .price-map-wrap { padding: 14px 0 6px; background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%); border-radius: 18px; border: 1px solid #263148; overflow: hidden; }
+      .price-map-wrap h3, .price-map-wrap p { margin-left: 18px; margin-right: 18px; }
+      .price-map-wrap h3 { margin-top: 0; color: #eff6ff; font-size: 18px; font-weight: 800; }
+      .price-map-wrap p { color: #b9c7dc; font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+      .price-map { width: 100%; height: auto; display: block; border-top: 1px solid rgba(148, 163, 184, 0.12); border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+      .price-map-bg { fill: #0f1728; stroke: #263148; stroke-width: 1.2; }
+      .price-map-panel { filter: drop-shadow(0 12px 22px rgba(2, 6, 23, 0.16)); }
+      .price-map-panel-focus .price-map-bg { stroke: #456489; stroke-width: 1.4; }
+      .chart-title { fill: #eff6ff; font-size: 18px; font-weight: 700; }
+      .chart-subtitle { fill: #93a4bf; font-size: 12px; font-weight: 500; }
+      .price-grid-h { stroke: rgba(148, 163, 184, 0.32); stroke-width: 1.1; }
+      .price-grid-v { stroke: rgba(148, 163, 184, 0.22); stroke-width: 1; }
+      .price-map-separator { fill: rgba(207, 216, 228, 0.06); }
+      .price-map-separator-line { stroke: rgba(148, 163, 184, 0.22); stroke-width: 1; }
+      .candle-wick { stroke-width: 1.35; opacity: 0.92; }
+      .candle-body { stroke-width: 0.95; opacity: 0.96; }
+      .candle-up { fill: rgba(74, 222, 128, 0.62); stroke: rgba(74, 222, 128, 0.95); }
+      .candle-down { fill: rgba(248, 113, 113, 0.58); stroke: rgba(248, 113, 113, 0.94); }
+      .band-support { fill: rgba(34, 197, 94, 0.14); }
+      .band-resistance { fill: rgba(248, 113, 113, 0.14); }
+      .setup-band-long { fill: rgba(34, 197, 94, 0.24); stroke: rgba(74, 222, 128, 0.98); stroke-width: 1.6; }
+      .setup-band-short { fill: rgba(248, 113, 113, 0.24); stroke: rgba(248, 113, 113, 0.98); stroke-width: 1.6; }
+      .setup-band-text-long { fill: #dcfce7; font-size: 12px; font-weight: 800; }
+      .setup-band-text-short { fill: #fee2e2; font-size: 12px; font-weight: 800; }
+      .setup-axis-value-long { fill: #4ade80; font-size: 13px; font-weight: 700; }
+      .setup-axis-value-short { fill: #f87171; font-size: 13px; font-weight: 700; }
+      .value-defense-dashboard { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; margin-top:12px; }
+      .value-defense-chart-card { border: 1px solid rgba(71,85,105,0.66); border-radius:16px; padding:12px 14px 14px; background: linear-gradient(180deg, rgba(10,16,28,.96) 0%, rgba(12,20,34,.96) 100%); }
+      .value-defense-chart-card.long { border-color: rgba(34,197,94,.42); }
+      .value-defense-chart-card.short { border-color: rgba(248,113,113,.4); }
+      .value-defense-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#eff6ff; font-size:13px; font-weight:800; }
+      .value-defense-group-label { margin-top:10px; margin-bottom:6px; font-size:10px; font-weight:800; letter-spacing:0.06em; text-transform:uppercase; }
+      .value-defense-group-label.primary { color:#eef6ff; }
+      .value-defense-group-label.secondary { color:#94a3b8; }
+      .value-defense-card-row { display:grid; grid-template-columns:92px 1fr; gap:10px; align-items:center; padding:6px 0; border-top:1px solid rgba(71,85,105,0.28); }
+      .value-defense-card-row:first-of-type { border-top:0; padding-top:0; }
+      .value-defense-card-row.secondary { border-top-color: rgba(71,85,105,0.18); padding-top:5px; padding-bottom:5px; }
+      .value-defense-card-main { display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .value-defense-card-key { display:inline-flex; align-items:center; gap:8px; color:#9fb0c8; font-size:11px; font-weight:700; }
+      .value-defense-card-desc { color:#8fa2bf; font-size:10px; line-height:1.35; }
+      .value-defense-row-chip { width:10px; height:10px; border-radius:999px; flex:0 0 auto; border:1px solid rgba(255,255,255,.2); }
+      .value-defense-row-chip.long.shallow { background: rgba(34,197,94,.98); }
+      .value-defense-row-chip.short.shallow { background: rgba(248,113,113,.98); }
+      .value-defense-row-chip.long.defense { background: rgba(103,232,249,.98); }
+      .value-defense-row-chip.short.defense { background: rgba(253,186,116,.98); }
+      .value-defense-row-chip.long.invalidation { background: rgba(252,165,165,.78); }
+      .value-defense-row-chip.short.invalidation { background: rgba(147,197,253,.78); }
+      .value-defense-row-chip.long.reclaim, .value-defense-row-chip.long.continuation { background: rgba(186,230,253,.82); }
+      .value-defense-row-chip.short.reclaim, .value-defense-row-chip.short.continuation { background: rgba(253,230,138,.82); }
+      .value-defense-chart-card.long .value-defense-card-key { color:#86efac; }
+      .value-defense-chart-card.short .value-defense-card-key { color:#fca5a5; }
+      .value-defense-card-value { color:#eef6ff; font-size:16px; font-weight:900; letter-spacing:.01em; text-align:right; }
+      .value-defense-card-value.secondary { font-size:12px; font-weight:700; color:#94a3b8; }
+      .value-defense-chart-card.long .value-defense-card-value { color:#bbf7d0; }
+      .value-defense-chart-card.short .value-defense-card-value { color:#fecaca; }
+      .marker-line { stroke-width:2; stroke-dasharray:4 4; }
+      .marker-label { font-size:10px; font-weight:500; }
+      .marker-long { stroke:#4ade80; fill:#bbf7d0; }
+      .marker-short { stroke:#f87171; fill:#fecaca; }
+      .current-price-line { stroke:#60a5fa; stroke-width:2.5; stroke-dasharray:5 5; }
+      .current-price-label { fill:#dbeafe; font-size:13px; font-weight:700; paint-order: stroke fill; stroke: rgba(15,23,42,.9); stroke-width:3; }
+      .price-axis { fill:#9db0ca; font-size:12px; font-weight:500; }
+      .time-axis-line { stroke: rgba(148,163,184,.3); stroke-width:1; }
+      .time-axis-label { fill:#8fa2bf; font-size:11px; font-weight:600; }
+      @media (max-width: 980px) {
+        .v2-hero-grid, .v2-layout, .v2-grid-2, .v2-grid-3, .v2-check-grid, .v2-score-grid-top, .v2-score-grid-bottom { grid-template-columns: 1fr; }
+        .v2-sidebar { position: static; }
+        .v2-action-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .v2-action-item { border-bottom: 1px solid rgba(216,225,234,.9); }
+        .v2-action-item:nth-child(2n) { border-right: 0; }
+      }
+      @media (max-width: 620px) {
+        .v2-shell { padding: 14px 10px 44px; }
+        .v2-hero, .v2-section { border-radius: 20px; }
+        .v2-hero-top { padding: 18px 16px; }
+        .v2-action-strip { grid-template-columns: 1fr; }
+        .v2-action-item { border-right: 0; }
+        .v2-table { min-width: 620px; }
+      }
+    </style>
+    """
+
+    decision_cards = "".join(
+        [
+            f'<div class="v2-card emphasis"><div class="v2-kicker">Active Plan</div><h3>{html.escape(active_hero_label)}</h3><p>{html.escape(active_hero_summary)}</p></div>',
+            f'<div class="v2-card"><div class="v2-kicker">Execution</div><p><strong>行動:</strong> {html.escape(action_kind_label)}</p>{active_plan_rows_html}</div>',
+            f'<div class="v2-card good"><div class="v2-kicker">Bias</div><p><strong>{html.escape(str(display_context.get("direction_label", "未記録")))}</strong></p><p>{html.escape(str(display_context.get("entry_quality_label", "未記録")))}</p><p class="v2-muted">手動アクション確認: まず価格帯 → 15分足 → 安全境界。</p></div>',
+        ]
+    )
+
+    return f"""<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(STABLE_DETAIL_PAGE_PRODUCT_LABEL)}</title>
+  {css}
+</head>
+<body class="v2-report">
+  <div class="v2-shell">
+    <header class="v2-hero">
+      <div class="v2-hero-top">
+        <div class="v2-eyebrow">{html.escape(timestamp_jst)} / signal_id {html.escape(str(result.get('signal_id', '')))}</div>
+        <div class="v2-hero-grid">
+          <div>
+            <div class="v2-status-badge">{html.escape(status_chip)} / {html.escape(status_sub)}</div>
+            <h1 class="v2-h1">結論を先に読めるBTCFXレポート</h1>
+            <p class="v2-lead"><strong>{html.escape(lead_prefix)}</strong> {html.escape(lead_detail)}</p>
+            <div class="v2-chip-row">
+              {''.join(f'<span class="v2-chip">{html.escape(chip)}</span>' for chip in summary_chips if str(chip).strip())}
+            </div>
+          </div>
+          <div class="v2-now-card">
+            <div class="v2-now-label">Current Price</div>
+            <div class="v2-price">{html.escape(current_price)}</div>
+            <p>上 / 下の再検討帯: {html.escape(watch_zone_label)}</p>
+            <p>有効期限: {html.escape(validity_label)}</p>
+            <p>安全境界: {html.escape(safety_boundary)}</p>
+          </div>
+        </div>
+      </div>
+      <div class="v2-action-strip">
+        {_v2_action_strip_html([
+            ("今の行動", active_hero_label),
+            ("成行", action_kind_label),
+            ("監視できる形", str(display_context.get('entry_quality_label', '未記録'))),
+            ("安全境界", safety_boundary),
+        ])}
+      </div>
+    </header>
+
+    <div class="v2-layout">
+      {_v2_sidebar_html(result, notification_context, active_hero_label, current_price)}
+      <main class="v2-main">
+        <section class="v2-section v2-section-anchor" id="decision">
+          <h2>最初に確認すること</h2>
+          <div class="v2-grid-3">{decision_cards}</div>
+          <div class="v2-callout">
+            <div class="v2-callout-icon">!</div>
+            <div><strong>見る順番</strong><br>ロング / ショートの価格帯を先に確認し、15分足で入る場所だけを見る。</div>
+          </div>
+          {followup_card_html}
+        </section>
+
+        {_phase4_display_cue_panel_html(result)}
+
+        {_price_plan_table_html(result)}
+        {_manual_gate_cards_html(active_status_rows)}
+
+        <section class="v2-section v2-section-anchor v2-chart" id="chart">
+          <h2>4h → 1h → 15m チャート</h2>
+          <p class="v2-muted">4時間足は大局方向、1時間足は帯の妥当性、15分足は実際の価格・SL・TP を見る主役です。</p>
+          <div class="v2-card">
+            <h3>4時間足 → 1時間足 → 15分足 の順で見ます</h3>
+            <p class="v2-muted">上段は大きな流れ、中段は再検討帯の妥当性、下段は実際に入る価格と SL / TP の精度を見る段です。いちばん重要なのは下段の 15 分足です。</p>
+            <div class="v2-chart-scroll">
+              {price_map_svg}
+            </div>
+            {value_defense_chart_dashboard_html}
+          </div>
+          <div class="v2-grid-2" style="margin-top:14px;">
+            <div class="v2-card"><div class="v2-kicker">Current price / funding / ATR / volume</div><p>{html.escape(current_price)} / {html.escape(funding_display)} / ATR {html.escape(str(result.get('atr_ratio', '未記録')))} / volume {html.escape(str(result.get('volume_ratio', '未記録')))}</p></div>
+            <div class="v2-card"><div class="v2-kicker">図の読み方</div><p>4h で trap / fuel、1h で帯の妥当性、15m で entry / SL / TP の順に確認します。</p></div>
+          </div>
+        </section>
+
+        {big_chance_section_html}
+
+        {_score_summary_section_html(result, reason_chips_html)}
+
+        {_reasons_section_html(reason_chips_html, wait_reason_summary)}
+
+        <section class="v2-section v2-section-anchor" id="logs">
+          <h2>詳細ログ・補助情報は折りたたむ</h2>
+          <p class="v2-muted">{CURRENT_MANUAL_SUPPORT_HEADER} / HTML の本体はここではなく下の details に退避しています。</p>
+          <div class="v2-details-stack">
+            {_details_panel_html("Value Defense Entry Layer", f'<div class="v2-grid-2">{value_defense_entry_layer_html}</div>') if value_defense_entry_layer_html else ""}
+            {_details_panel_html("Safe Config Schema Audit", safe_config_schema_audit_html)}
+            {_details_panel_html("Operator Triage Summary", operator_triage_summary_html)}
+            {_details_panel_html("Integrated Evidence Overview", integrated_evidence_overview_html)}
+            {_details_panel_html("Evidence quality summary", evidence_quality_summary_html)}
+            {_details_panel_html("OHLCV source coverage summary", ohlcv_source_coverage_summary_html)}
+            {_details_panel_html("Post-Eval Recommendation Status", post_eval_recommendation_status_html)}
+            {_details_panel_html("Runtime startup status", runtime_startup_status_html)}
+            {_details_panel_html(CURRENT_MANUAL_SUPPORT_HEADER, f'<ul>{manual_support_reference_html}</ul>')}
+            {_details_panel_html("Raw mail text", f'<div class="v2-raw">{html.escape(raw_mail)}</div>')}
+            {_details_panel_html(
+                "上抜け・下抜けの見落とし確認",
+                (
+                    '<p class="v2-muted">report-only / human decides manually</p>'
+                    + '<div class="v2-check-grid">'
+                    + breakout_inversion_html
+                    + '</div>'
+                ) if breakout_inversion_html else "",
+            )}
+            {_details_panel_html(
+                "15分足 早期注意",
+                (
+                    '<p class="v2-muted">report-only / human decides manually</p>'
+                    + '<div class="v2-check-grid">'
+                    + intraperiod_breakout_html
+                    + '</div>'
+                ) if intraperiod_breakout_html else "",
+            )}
+            {_details_panel_html(
+                "勢い確認",
+                (
+                    '<p class="v2-muted">report-only / human decides manually</p>'
+                    + '<div class="v2-check-grid">'
+                    + momentum_confirmation_html
+                    + '</div>'
+                ) if momentum_confirmation_html else "",
+            )}
+            {_details_panel_html("Major turning point diagnostic rows", major_turning_point_diagnostic_html)}
+            {_details_panel_html("Legacy compatibility memo", '<p class="v2-muted">互換メモ / 旧レイアウト残置。詳細の主導線ではありません。</p>')}
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
+"""
 
 
 def _readable_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
@@ -1916,73 +2505,82 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
     invalidation = candidate.get("invalidation") if isinstance(candidate.get("invalidation"), dict) else {}
     evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
     reason_labels = candidate.get("reason_labels") if isinstance(candidate.get("reason_labels"), list) else []
-    reason_items = "".join(f"<li>{html.escape(label)}</li>" for label in reason_labels) or "<li>未記録</li>"
     if status == "invalidated":
-        header = "大転換候補 / Big Chance / Failed Thesis（候補失効 / 再評価済み）"
-        intro = "これは既に失効した候補の記録です。active な最優先候補ではありません。"
+        header = "大転換候補 / Big Chance / Failed Thesis"
+        intro = "候補失効 / 再評価済み。active な最優先候補ではありません。Big Chance is not an entry instruction."
     else:
         header = "大転換候補 / Big Chance / Failed Thesis"
-        intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。"
+        intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。Big Chance is not an entry instruction."
+
+    safety_boundary = _normalize_detail_page_safety_boundary(candidate.get("safety_boundary", STABLE_DETAIL_PAGE_SAFETY_BOUNDARY))
+    reason_chips = _v2_reason_chips_html(reason_labels)
+    reason_summary = " / ".join(reason_labels[:3]) or "未記録"
+    step_cards = "".join(
+        f"""
+        <div class="v2-step">
+          <div class="v2-step-title">{html.escape(label)}</div>
+          <div class="v2-step-body">{html.escape(text)}</div>
+        </div>
+        """
+        for label, text in (
+            ("4時間足", str(macro_context.get("signals_4h") or "未記録")),
+            ("1時間足", str(macro_context.get("signals_1h") or "未記録")),
+            ("15分足", str(macro_context.get("signals_15m") or "未記録")),
+        )
+    )
 
     return f"""
-    <section class="section" id="big-chance">
+    <section class="v2-section v2-section-anchor" id="big-chance">
       <h2>{html.escape(header)}</h2>
-      <p>{html.escape(intro)}</p>
-      <div class="panel">
-        <ul class="summary-list">
-          <li><span class="emoji">🧭</span><div><strong>Headline:</strong> {html.escape(str(candidate.get('headline', '未記録')))}</div></li>
-          <li><span class="emoji">📝</span><div><strong>Operator summary:</strong> {html.escape(str(candidate.get('operator_summary', '未記録')))}</div></li>
-          <li><span class="emoji">⚖️</span><div><strong>Side / Type / Status:</strong> {html.escape(str(candidate.get('side', 'none')))} / {html.escape(str(candidate.get('type', 'none')))} / {html.escape(str(candidate.get('status', 'none')))}</div></li>
-          <li><span class="emoji">🏁</span><div><strong>Score / Grade:</strong> {html.escape(str(candidate.get('score', 0)))} / {html.escape(str(candidate.get('grade', 'none')))}</div></li>
-          <li><span class="emoji">🛡️</span><div><strong>Safety boundary:</strong> {html.escape(_normalize_detail_page_safety_boundary(candidate.get('safety_boundary', STABLE_DETAIL_PAGE_SAFETY_BOUNDARY)))}</div></li>
-        </ul>
-        <div class="two-col">
-          <div class="panel">
-            <h3>Macro Context</h3>
-            <ul>
-              <li>4時間足: {html.escape(str(macro_context.get('signals_4h', '未記録')))}</li>
-              <li>1時間足: {html.escape(str(macro_context.get('signals_1h', '未記録')))}</li>
-              <li>15分足: {html.escape(str(macro_context.get('signals_15m', '未記録')))}</li>
-              <li>市場地合い: {html.escape(str(macro_context.get('market_map_primary_state', '未記録')))}</li>
-            </ul>
-          </div>
-        <div class="panel">
-          <h3>Failed Thesis</h3>
-          <ul>
-              <li>前提側: {html.escape(str(failed_thesis.get('prior_side', '未記録')))}</li>
-              <li>失敗理由: {html.escape(', '.join(str(item) for item in failed_thesis.get('failure_reason_labels', []) or []) or '未記録')}</li>
-              <li>仮説メモ: {html.escape(str(failed_thesis.get('thesis_summary', '未記録')))}</li>
-              <li>本質: {html.escape(str(failed_thesis.get('thesis_summary', 'Failed thesis is opportunity')))}</li>
-          </ul>
+      <p class="v2-muted">{html.escape(intro)}</p>
+      <div class="v2-grid-2">
+        <div class="v2-card emphasis">
+          <div class="v2-kicker">Score / Grade</div>
+          <div class="v2-big">{html.escape(str(candidate.get('score', 0)))} / {html.escape(str(candidate.get('grade', 'none')))}</div>
         </div>
+        <div class="v2-card">
+          <div class="v2-kicker">Safety boundary</div>
+          <p>{html.escape(safety_boundary)}</p>
         </div>
-        <div class="two-col">
-          <div class="panel">
-            <h3>Activation</h3>
-            <ul>
-              <li>時間軸: {html.escape(str(activation.get('activation_tf', '未記録')))}</li>
-              <li>条件: {html.escape(str(activation.get('activation_condition', '未記録')))}</li>
-              <li>状態: {html.escape(str(activation.get('activation_state', '未記録')))}</li>
-              <li>価格位置: {html.escape(str(activation.get('price_position', '未記録')))}</li>
-              <li>起動条件: {html.escape(str(activation.get('price_position_trigger', '未記録')))}</li>
-            </ul>
-          </div>
-          <div class="panel">
-            <h3>Invalidation</h3>
-            <ul>
-              <li>時間軸: {html.escape(str(invalidation.get('invalidation_tf', '未記録')))}</li>
-              <li>条件: {html.escape(str(invalidation.get('invalidation_condition', '未記録')))}</li>
-              <li>状態: {html.escape(str(invalidation.get('invalidation_state', '未記録')))}</li>
-              <li>価格位置: {html.escape(str(invalidation.get('price_position', '未記録')))}</li>
-              <li>無効化条件: {html.escape(str(invalidation.get('price_position_trigger', '未記録')))}</li>
-            </ul>
-          </div>
+      </div>
+      <div class="v2-grid-2" style="margin-top:14px;">
+        <div class="v2-card">
+          <div class="v2-kicker">Headline</div>
+          <h3>{html.escape(str(candidate.get('headline', '未記録')))}</h3>
+          <p>{html.escape(str(candidate.get('operator_summary', '未記録')))}</p>
         </div>
-        <div class="panel">
-          <h3>Reason Labels</h3>
-          <ul>{reason_items}</ul>
-          <p class="muted">Evidence: 現値 {html.escape(str(evidence.get('current_price')))} / long_pos {html.escape(str(evidence.get('current_price_position_long')))} / short_pos {html.escape(str(evidence.get('current_price_position_short')))}</p>
+        <div class="v2-card {('warn' if status == 'invalidated' else 'good')}">
+          <div class="v2-kicker">Side / Type / Status</div>
+          <p>{html.escape(str(candidate.get('side', 'none')))} / {html.escape(str(candidate.get('type', 'none')))} / {html.escape(str(candidate.get('status', 'none')))}</p>
+          <p>{html.escape(str(candidate.get('headline', '未記録')))}</p>
         </div>
+      </div>
+      <div class="v2-callout">
+        <div class="v2-callout-icon">①</div>
+        <div><strong>見る順番</strong><br>HTF で trap / fuel を確認し、1時間足で再評価、15分足で activation / invalidation を読む。</div>
+      </div>
+      <div class="v2-card" style="margin-top:14px;">
+        <div class="v2-kicker">見る順番</div>
+        <div class="v2-step-list">{step_cards}</div>
+      </div>
+      <div class="v2-grid-2" style="margin-top:14px;">
+        <div class="v2-card">
+          <div class="v2-kicker">Activation condition</div>
+          <p>{html.escape(str(activation.get('activation_condition') or activation.get('activation_trigger') or '未記録'))}</p>
+          <p class="v2-muted">時間軸: {html.escape(str(activation.get('activation_tf', '未記録')))} / 状態: {html.escape(str(activation.get('activation_state', '未記録')))} / 価格位置: {html.escape(str(activation.get('price_position', '未記録')))}</p>
+        </div>
+        <div class="v2-card">
+          <div class="v2-kicker">Invalidation condition</div>
+          <p>{html.escape(str(invalidation.get('invalidation_condition') or invalidation.get('invalidation_trigger') or '未記録'))}</p>
+          <p class="v2-muted">時間軸: {html.escape(str(invalidation.get('invalidation_tf', '未記録')))} / 状態: {html.escape(str(invalidation.get('invalidation_state', '未記録')))} / 価格位置: {html.escape(str(invalidation.get('price_position', '未記録')))}</p>
+        </div>
+      </div>
+      <div class="v2-card" style="margin-top:14px;">
+        <div class="v2-kicker">Weakening / risk note</div>
+        <p>{html.escape(str(failed_thesis.get('thesis_summary') or failed_thesis.get('weakening_note') or failed_thesis.get('risk_note') or '未記録'))}</p>
+        <div class="v2-reasons">{reason_chips}</div>
+        <p class="v2-muted">Evidence: 現値 {html.escape(str(evidence.get('current_price', '未記録')))} / long_pos {html.escape(str(evidence.get('current_price_position_long', '未記録')))} / short_pos {html.escape(str(evidence.get('current_price_position_short', '未記録')))}</p>
+        <p class="v2-muted">{html.escape(reason_summary)}</p>
       </div>
     </section>
     """
@@ -2912,7 +3510,7 @@ def _runtime_startup_status_html(base_dir: Path | None) -> str:
 
 
 def build_notification_detail_html(result: dict[str, Any], base_dir: Path | None = None) -> str:
-    return _readable_detail_page_layout(result, base_dir=base_dir)
+    return _v2_detail_page_layout(result, base_dir=base_dir)
     display_context = build_display_context(result)
     notification_context = _notification_context_for_result(result)
     metric_labels = display_context.get("confidence_metric_labels", CONFIDENCE_METRIC_LABELS)
