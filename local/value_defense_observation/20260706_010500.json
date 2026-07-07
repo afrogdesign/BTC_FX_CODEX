@@ -1,0 +1,87 @@
+{
+  "actionability_label": "watch_only",
+  "actionability_safety": "report-only / not_FORMAL_GO / no automatic order / human decides manually",
+  "bias": "long",
+  "current_price": 63728.0,
+  "current_price_position_long": "above_zones",
+  "current_price_position_short": "below_zones",
+  "detail_page_local_path": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/main/20260706_010500.html",
+  "detail_page_status": "published",
+  "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/main/20260706_010500.html",
+  "human_action": "次の通常通知で Value Defense Entry Layer を再確認し、浅い再検討帯と本命防衛ゾーンの位置関係を観察する。",
+  "long_value_defense": {
+    "continuation_trigger": 63190.65,
+    "defense_zone_basis": "next_support_below_shallow_zone",
+    "invalidation_zone": {
+      "high": 62816.19,
+      "low": 62783.57
+    },
+    "lifecycle_state": "continuation_candidate",
+    "market_entry_status": "watch",
+    "operator_guidance": "浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。",
+    "reclaim_trigger": 62918.8,
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "shallow_retest_risk": "high",
+    "shallow_retest_zone": {
+      "high": 63275.67,
+      "low": 63105.63
+    },
+    "side": "long",
+    "value_defense_zone": {
+      "high": 62731.97,
+      "low": 62649.73
+    }
+  },
+  "notification_kind": "main",
+  "observation_checklist": {
+    "continuation_trigger_met": "unknown_pending_followup",
+    "invalidation_zone_reached": "unknown_pending_followup",
+    "reclaim_trigger_met": "unknown_pending_followup",
+    "shallow_retest_touched_first": "unknown_pending_followup",
+    "value_defense_zone_touched": "unknown_pending_followup",
+    "wait_or_enter_hindsight": "unknown_pending_followup"
+  },
+  "operator_label_status": {
+    "checked_fields": [
+      "summary_subject",
+      "detail_page_url",
+      "detail_page_local_path"
+    ],
+    "html_title_expected": "BTCFX Manual Trading Report",
+    "legacy_operator_label_leak_visible": false,
+    "path_slug_expected": "manual-trading"
+  },
+  "phase4_status": "blocked_until_observation_review_and_human_approval",
+  "primary_setup_reason": "entry_zone_not_reached",
+  "primary_setup_side": "long",
+  "primary_setup_status": "watch",
+  "schema_version": "value_defense_observation_snapshot.v1",
+  "self_review_readiness": null,
+  "short_value_defense": {
+    "continuation_trigger": 63985.9,
+    "defense_zone_basis": "next_resistance_above_shallow_zone",
+    "invalidation_zone": {
+      "high": 64348.73,
+      "low": 64316.11
+    },
+    "lifecycle_state": "continuation_candidate",
+    "market_entry_status": "watch",
+    "operator_guidance": "浅い戻り売りだけで決め打ちせず、本命戻り売りと invalidation を先に確認する。",
+    "reclaim_trigger": 64790.1,
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "shallow_retest_risk": "high",
+    "shallow_retest_zone": {
+      "high": 64026.67,
+      "low": 63945.13
+    },
+    "side": "short",
+    "value_defense_zone": {
+      "high": 65635.07,
+      "low": 65553.53
+    }
+  },
+  "signal_id": "20260706_010500",
+  "source_file": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/last_result.json",
+  "summary_subject": "[BTCFX Manual Trading Report] 🧪 [紙実行候補・実弾不可] 押し目買い待ち / 実弾不可・行動計画 | 上方向優勢。ただし成行ロング不可。押し目買い待ち。 【BTC:63,728】 2026-07-06 10:05",
+  "timestamp_jst": "2026-07-06T10:05:00.002980+09:00"
+}

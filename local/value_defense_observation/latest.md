@@ -1,0 +1,78 @@
+# Value Defense Observation Snapshot
+
+- source signal/time: 20260707_010500 / 2026-07-07T10:05:00.281305+09:00
+- public/detail page status: published
+- detail page URL: https://server.afrog.jp/btc-monitor/notifications/manual-trading/attention/20260707_010500.html
+- detail page local path: /Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/attention/20260707_010500.html
+- summary subject: [BTCFX Manual Trading Report] 👀 注意報 | 上方向バイアス / 見送り | BTC 64,175
+- operator label check: BTCFX Manual Trading Report / manual-trading / legacy leak=False
+- current price: 64175.3
+- actionability: watch_only
+- human action: 次の通常通知で Value Defense Entry Layer を再確認し、浅い再検討帯と本命防衛ゾーンの位置関係を観察する。
+- safety: report-only / not_FORMAL_GO / no automatic order / human decides manually
+- Phase4: blocked_until_observation_review_and_human_approval
+
+## Long / Short Value Defense
+| Long | value |
+|---|---|
+| side | long |
+| lifecycle_state | continuation_candidate |
+| market_entry_status | invalid |
+| shallow_retest_zone | {'low': 63943.59, 'high': 64028.61} |
+| shallow_retest_risk | high |
+| value_defense_zone | {'low': 63489.99, 'high': 63670.41} |
+| defense_zone_basis | next_support_below_shallow_zone |
+| invalidation_zone | {'low': 63607.72, 'high': 63641.74} |
+| reclaim_trigger | 63807.0 |
+| continuation_trigger | 63986.1 |
+| operator_guidance | 浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。 |
+| safety_boundary | report-only / not FORMAL_GO / no automatic order / human decides manually |
+
+| Short | value |
+|---|---|
+| side | short |
+| lifecycle_state | continuation_candidate |
+| market_entry_status | invalid |
+| shallow_retest_zone | {'low': 64255.59, 'high': 64365.51} |
+| shallow_retest_risk | high |
+| value_defense_zone | {'low': 64475.69, 'high': 64560.71} |
+| defense_zone_basis | next_resistance_above_shallow_zone |
+| invalidation_zone | {'low': 64667.36, 'high': 64701.38} |
+| reclaim_trigger | 64420.6 |
+| continuation_trigger | 64310.55 |
+| operator_guidance | 浅い戻り売りだけで決め打ちせず、本命戻り売りと invalidation を先に確認する。 |
+| safety_boundary | report-only / not FORMAL_GO / no automatic order / human decides manually |
+
+## Current Price Position
+- long: above_zones
+- short: below_zones
+
+## Observation Checklist
+- shallow_retest_touched_first: unknown_pending_followup
+- value_defense_zone_touched: unknown_pending_followup
+- reclaim_trigger_met: unknown_pending_followup
+- continuation_trigger_met: unknown_pending_followup
+- invalidation_zone_reached: unknown_pending_followup
+- wait_or_enter_hindsight: unknown_pending_followup
+
+## Self Review Readiness
+- schema_version: judgment_self_review.v1
+- report_fingerprint: jsr_47f3974e829ff589
+- run_metadata_fingerprint: jsr_47f3974e829ff589
+- review_queue_count: 10
+- change_readiness_status: tuning_review_candidate
+- change_readiness_level: high
+- human_approval_required: yes
+- tuning_review_allowed: no
+- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## Attack Review Flags
+- review_only: True
+- phase4_tuning_allowed: no
+- human_approval_required: yes
+- matched_tags: ['trend_transition_candidate', 'higher_timeframe_reclaim', 'breakout_extension_candidate', 'short_invalidated_by_reclaim', 'runner_should_have_been_considered', 'micro_profit_trap_risk']
+- watch_tags: ['trend_transition_candidate', 'higher_timeframe_reclaim', 'breakout_extension_candidate', 'tp_too_conservative', 'short_invalidated_by_reclaim', 'runner_should_have_been_considered', 'micro_profit_trap_risk']
+- safety_boundary: report-only / not FORMAL_GO / no automatic order / human decides manually
+
+Phase4 tuning remains blocked until observation evidence is reviewed and human approval is explicit.
+report-only / not_FORMAL_GO / no automatic order / human decides manually

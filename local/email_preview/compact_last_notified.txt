@@ -1,0 +1,13 @@
+[BTCFX Manual Trading Report] 📊 結論 | 上方向監視 / 監視継続（実行不可） | BTC 63,520
+【紙実行候補】
+実行候補ではない。監視継続（実行不可）でHTML確認。
+保有中: 根拠維持 / 無効化ライン確認
+未保有: 追いかけず、HTMLで条件確認
+Big Chance: なし
+通常バイアス: 上方向 / 実行判断: 監視継続（実行不可）
+現在: 63,519.90
+上: 63,826.73 - 64,055.07
+下: 63,032.83 - 63,381.07
+詳細:
+https://server.afrog.jp/btc-monitor/notifications/manual-trading/main/20260706_160500.html
+※ report-only not FORMAL GO no automatic order human decides manually

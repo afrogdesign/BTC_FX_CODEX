@@ -1,0 +1,13 @@
+[BTCFX Manual Trading Report] ⏱期限切れ | ショート失敗 → ロング候補 / triggered / A | BTC 63,563
+【期限切れ・再評価】
+前回通知は失効。新規根拠として使わない。
+保有中: 撤退 / 建値 / 損切り確認
+未保有: 追いかけず、HTMLで条件確認
+Big Chance: ショート失敗 → ロング候補 / triggered / A
+通常バイアス: 上方向 / 実行判断: 再評価
+現在: 63,563.00
+上: 63,782.84 - 64,048.06
+下: 63,039.84 - 63,374.06
+詳細:
+https://server.afrog.jp/btc-monitor/notifications/manual-trading/followup/20260706_180500.html
+※ report-only / no automatic order / human decides manually

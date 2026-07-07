@@ -1,0 +1,170 @@
+{
+  "schema_version": "big_chance_artifact.v1",
+  "source_file": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/last_result.json",
+  "generated_at_utc": "2026-07-06T18:05:09.305346Z",
+  "signal_id": "20260706_180500",
+  "timestamp_jst": "2026-07-07T03:05:00.609580+09:00",
+  "previous_signal_id": "20260706_170500",
+  "previous_notification_kind": "none",
+  "replay_signal_id": null,
+  "candidate": {
+    "schema_version": "big_chance_failed_thesis.v1",
+    "present": true,
+    "side": "long",
+    "type": "short_failed_to_long",
+    "status": "triggered",
+    "score": 81,
+    "grade": "A",
+    "headline": "ショート失敗→ロング候補",
+    "operator_summary": "ショート仮説が崩れたため、ロング側の Big Chance を report-only で監視します。HTF の reclaim と 15m の起動を分けて見るのが要点です。",
+    "macro_context": {
+      "market_regime": "transition",
+      "phase": "range",
+      "signals_4h": "wait",
+      "signals_1h": "wait",
+      "signals_15m": "wait",
+      "market_map_primary_state": "early_up",
+      "level_flip_state": "resistance_to_support_confirmed",
+      "trend_flip_state": "early_up",
+      "failed_breakout_state": "",
+      "transition_direction": "up",
+      "active_level_role": "support",
+      "previous_signal_id": "20260706_170500",
+      "previous_notification_kind": "none",
+      "previous_bias": "long"
+    },
+    "failed_thesis": {
+      "prior_side": "short",
+      "failure_reason": [
+        "failed_short_thesis",
+        "resistance_to_support_flip",
+        "trend_flip_early_up",
+        "long_side_activation"
+      ],
+      "failure_reason_labels": [
+        "ショート仮説が崩れた",
+        "レジスタンス→サポート反転",
+        "早期上方向転換",
+        "ロング候補"
+      ],
+      "thesis_summary": "Failed thesis is opportunity"
+    },
+    "activation": {
+      "activation_tf": "15m",
+      "activation_condition": "signals_15m == long",
+      "activation_state": "watch",
+      "tf_alignment": {
+        "4h": "wait",
+        "1h": "wait",
+        "15m": "wait"
+      },
+      "price_position": "above_zones",
+      "price_position_trigger": "below_zones"
+    },
+    "invalidation": {
+      "invalidation_tf": "15m",
+      "invalidation_condition": "signals_15m == short and signals_1h == short",
+      "invalidation_state": "watch",
+      "opposite_side_signal": {
+        "4h": "wait",
+        "1h": "wait",
+        "15m": "wait"
+      },
+      "price_position": "below_zones",
+      "price_position_trigger": "above_zones"
+    },
+    "reason_codes": [
+      "resistance_to_support_flip",
+      "resistance_to_support_retest_confirmed",
+      "trend_flip_early_up",
+      "1h_side_alignment",
+      "failed_short_thesis",
+      "long_side_activation"
+    ],
+    "reason_labels": [
+      "レジスタンス→サポート反転",
+      "レジスタンス→サポートの再確認",
+      "早期上方向転換",
+      "1時間足が候補側に寄っている",
+      "ショート仮説が崩れた",
+      "ロング候補"
+    ],
+    "evidence": {
+      "current_price": 63563.0,
+      "current_price_position_long": "above_zones",
+      "current_price_position_short": "below_zones",
+      "market_map_primary_state": "early_up",
+      "market_map_flags": [
+        "long_into_major_resistance",
+        "short_into_major_support",
+        "resistance_to_support_flip",
+        "resistance_to_support_retest_confirmed",
+        "trend_flip_early_up"
+      ],
+      "level_flip_state": "resistance_to_support_confirmed",
+      "trend_flip_state": "early_up",
+      "failed_breakout_state": "",
+      "transition_direction": "up",
+      "bias": "long",
+      "previous_bias": "long",
+      "long_value_defense": {
+        "side": "long",
+        "lifecycle_state": "continuation_candidate",
+        "market_entry_status": "watch",
+        "shallow_retest_zone": {
+          "low": 63039.84,
+          "high": 63374.06
+        },
+        "shallow_retest_risk": "high",
+        "value_defense_zone": {
+          "low": 62744.94,
+          "high": 62975.76
+        },
+        "defense_zone_basis": "next_support_below_shallow_zone",
+        "invalidation_zone": {
+          "low": 62548.74,
+          "high": 62598.48
+        },
+        "reclaim_trigger": 63007.8,
+        "continuation_trigger": 63206.95,
+        "operator_guidance": "浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。",
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"
+      },
+      "short_value_defense": {
+        "side": "short",
+        "lifecycle_state": "continuation_candidate",
+        "market_entry_status": "invalid",
+        "shallow_retest_zone": {
+          "low": 63782.84,
+          "high": 64048.06
+        },
+        "shallow_retest_risk": "shallow_only",
+        "value_defense_zone": null,
+        "defense_zone_basis": "shallow_only_no_deeper_resistance",
+        "invalidation_zone": {
+          "low": 64489.42,
+          "high": 64539.16
+        },
+        "reclaim_trigger": 64048.06,
+        "continuation_trigger": 63915.45,
+        "operator_guidance": "深い value defense zone が見当たらないため、浅い retest entry のみを参考にする。",
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"
+      }
+    },
+    "normal_score_context": {
+      "bias": "long",
+      "signals_4h": "wait",
+      "signals_1h": "wait",
+      "signals_15m": "wait",
+      "long_display_score": 82,
+      "short_display_score": 38,
+      "score_gap": 44,
+      "confidence": 45,
+      "primary_setup_status": "watch",
+      "primary_setup_reason": "entry_zone_not_reached",
+      "signal_tier": "normal",
+      "trade_execution_gate": "blocked"
+    },
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"
+  }
+}

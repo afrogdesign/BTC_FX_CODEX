@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>[BTCFX Ver04-v1] 📊 [通常監視・実行不可] 下方向バイアス | 上側流動性が近く先に振られやすい 【BTC:65,818】 2026-03-31 01:05 [Ver04-v1]</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --paper: #ffffff;
+      --ink: #10212b;
+      --muted: #60707c;
+      --line: #d8dfe6;
+      --accent: #0f766e;
+      --accent-soft: #dff7f2;
+      --warn: #b45309;
+      --danger: #b42318;
+      --info: #2f6fed;
+      --amber: #d97706;
+      --bar-direction: linear-gradient(90deg, #67b7ff 0%, #2f6fed 100%);
+      --bar-execution: linear-gradient(90deg, #ff8d7a 0%, #b42318 100%);
+      --bar-wait: linear-gradient(90deg, #ffd36b 0%, #d97706 100%);
+      --score-long: linear-gradient(90deg, #34d399 0%, #0f766e 100%);
+      --score-short: linear-gradient(90deg, #fb923c 0%, #ea580c 100%);
+      --sky: #e0f2fe;
+      --shadow: 0 10px 30px rgba(16, 33, 43, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, #d8f3ff 0%, transparent 32%),
+        linear-gradient(180deg, #f6fbff 0%, var(--bg) 45%, #eef2f6 100%);
+      line-height: 1.75;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 18px 56px; }
+    .hero, .section {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid rgba(216, 223, 230, 0.9);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+    .hero {
+      padding: 28px;
+      background:
+        linear-gradient(135deg, rgba(224, 242, 254, 0.92) 0%, rgba(255,255,255,0.96) 48%, rgba(223,247,242,0.96) 100%);
+    }
+    .section { padding: 22px; }
+    h1, h2, h3 { margin: 0 0 10px; line-height: 1.4; }
+    h1 { font-size: 30px; letter-spacing: 0.01em; }
+    h2 { font-size: 21px; }
+    h3 { font-size: 15px; color: var(--muted); }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 118, 110, 0.12);
+      background: rgba(255,255,255,0.84);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+      margin: 0 8px 8px 0;
+    }
+    .hero-grid, .fact-grid, .metric-grid, .two-col, .overview-grid, .reason-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .hero-grid { grid-template-columns: 1.4fr 1fr; margin-top: 18px; }
+    .overview-grid { grid-template-columns: 1.2fr 0.8fr; margin-top: 16px; }
+    .fact-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+    .metric-grid { grid-template-columns: 1fr; }
+    .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reason-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #fbfdfe;
+    }
+    .fact-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f9fbfc 100%);
+    }
+    .fact-card p { font-size: 18px; font-weight: 700; margin: 0; }
+    .metric-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .metric-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .metric-label { font-size: 28px; color: var(--ink); font-weight: 800; }
+    .metric-value { font-size: 20px; font-weight: 800; line-height: 1.1; }
+    .metric-track {
+      width: 100%;
+      height: 16px;
+      border-radius: 999px;
+      background: #e8edf2;
+      overflow: hidden;
+      margin-bottom: 12px;
+      border: 1px solid #e3e8ee;
+    }
+    .metric-fill {
+      height: 100%;
+      border-radius: 999px;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,0.35);
+    }
+    .metric-hint { color: var(--muted); font-weight: 700; margin: 2px 0 8px; }
+    .metric-help { margin-bottom: 6px; }
+    .metric-reading {
+      color: #1d4d3f;
+      font-weight: 700;
+      margin: 0;
+    }
+    ul { margin: 8px 0 0; padding-left: 22px; }
+    li { margin-bottom: 8px; }
+    .mail-block {
+      white-space: pre-wrap;
+      font-family: "SFMono-Regular", Menlo, monospace;
+      font-size: 13px;
+      background: #0f172a;
+      color: #dbeafe;
+      border-radius: 18px;
+      padding: 18px;
+      overflow-wrap: anywhere;
+    }
+    .strong {
+      border-left: 4px solid var(--accent);
+      padding-left: 12px;
+      margin-top: 12px;
+      font-weight: 700;
+    }
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      padding: 9px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(16, 33, 43, 0.08);
+      margin-bottom: 10px;
+    }
+    .hero-summary {
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1.45;
+      margin: 0 0 10px;
+    }
+    .hero-sub {
+      font-size: 17px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .verdict-card {
+      border-radius: 20px;
+      border: 1px solid rgba(15, 118, 110, 0.14);
+      background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(233, 247, 245, 0.95) 100%);
+      padding: 18px;
+    }
+    .verdict-card h2 { margin-bottom: 12px; }
+    .summary-list {
+      list-style: none;
+      padding: 0;
+      margin: 14px 0 0;
+    }
+    .summary-list li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .emoji {
+      font-size: 20px;
+      line-height: 1;
+      width: 24px;
+      text-align: center;
+      flex: 0 0 24px;
+    }
+    .balance-panel {
+      border-radius: 20px;
+      border: 1px solid rgba(47, 111, 237, 0.14);
+      background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+      padding: 18px;
+    }
+    .sparkline {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin-top: 10px;
+    }
+    .spark-grid {
+      stroke: #d7dfeb;
+      stroke-width: 1;
+    }
+    .spark-line {
+      fill: none;
+      stroke: #2f6fed;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .spark-dot {
+      fill: #ffffff;
+      stroke: #2f6fed;
+      stroke-width: 3;
+    }
+    .spark-label {
+      fill: #60707c;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .score-row {
+      margin-top: 14px;
+    }
+    .score-row-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+      font-weight: 800;
+    }
+    .score-track {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: #e8edf2;
+      overflow: hidden;
+    }
+    .score-fill {
+      height: 100%;
+      border-radius: 999px;
+    }
+    .reason-card {
+      display: grid;
+      grid-template-columns: 54px 1fr;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #fffdf7 0%, #ffffff 100%);
+    }
+    .reason-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+      background: #fff6df;
+      border: 1px solid #f0e1b2;
+    }
+    .reason-text {
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.55;
+    }
+    .checklist {
+      display: grid;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .checklist-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+    }
+    .checklist-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+    .checklist-value {
+      color: var(--muted);
+      font-weight: 700;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .checklist-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .takeaway {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-left: 5px solid var(--accent);
+      border-radius: 16px;
+      background: rgba(223, 247, 242, 0.78);
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1.6;
+    }
+    .price-map-wrap {
+      padding: 14px 0 6px;
+      background: linear-gradient(180deg, #121a2c 0%, #0e1422 100%);
+      border-color: #263148;
+    }
+    .price-map-wrap h3 {
+      margin: 0 18px 10px;
+      color: #eff6ff;
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .price-map-wrap p {
+      margin: 0 18px 14px;
+      color: #b9c7dc;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .price-map {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: linear-gradient(180deg, rgba(205, 216, 232, 0.05) 0%, rgba(205, 216, 232, 0.05) 100%);
+      border-top: 1px solid rgba(148, 163, 184, 0.12);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .price-map-bg {
+      fill: #0f1728;
+      stroke: #263148;
+      stroke-width: 1.2;
+    }
+    .price-map-panel {
+      filter: drop-shadow(0 12px 22px rgba(2, 6, 23, 0.16));
+    }
+    .price-map-panel-focus .price-map-bg {
+      stroke: #456489;
+      stroke-width: 1.4;
+    }
+    .chart-title {
+      fill: #eff6ff;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .chart-subtitle {
+      fill: #93a4bf;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .price-grid-h {
+      stroke: rgba(148, 163, 184, 0.32);
+      stroke-width: 1.1;
+    }
+    .price-grid-v {
+      stroke: rgba(148, 163, 184, 0.22);
+      stroke-width: 1;
+    }
+    .price-map-separator {
+      fill: rgba(207, 216, 228, 0.06);
+    }
+    .price-map-separator-line {
+      stroke: rgba(148, 163, 184, 0.22);
+      stroke-width: 1;
+    }
+    .candle-wick {
+      stroke-width: 1.35;
+      opacity: 0.92;
+    }
+    .candle-body {
+      stroke-width: 0.95;
+      opacity: 0.96;
+    }
+    .candle-up {
+      fill: rgba(74, 222, 128, 0.62);
+      stroke: rgba(74, 222, 128, 0.95);
+    }
+    .candle-down {
+      fill: rgba(248, 113, 113, 0.58);
+      stroke: rgba(248, 113, 113, 0.94);
+    }
+    .band-support {
+      fill: rgba(34, 197, 94, 0.14);
+    }
+    .band-resistance {
+      fill: rgba(248, 113, 113, 0.14);
+    }
+    .setup-band-long {
+      fill: rgba(34, 197, 94, 0.24);
+      stroke: rgba(74, 222, 128, 0.98);
+      stroke-width: 1.6;
+    }
+    .setup-band-short {
+      fill: rgba(248, 113, 113, 0.24);
+      stroke: rgba(248, 113, 113, 0.98);
+      stroke-width: 1.6;
+    }
+    .setup-band-text-long {
+      fill: #dcfce7;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .setup-band-text-short {
+      fill: #fee2e2;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .value-defense-band-long {
+      fill: rgba(6, 182, 212, 0.18);
+      stroke: rgba(103, 232, 249, 0.96);
+      stroke-width: 1.7;
+      stroke-dasharray: 5 4;
+    }
+    .value-defense-band-short {
+      fill: rgba(249, 115, 22, 0.18);
+      stroke: rgba(253, 186, 116, 0.96);
+      stroke-width: 1.7;
+      stroke-dasharray: 5 4;
+    }
+    .invalidation-band-long {
+      fill: rgba(0, 0, 0, 0);
+      stroke: rgba(252, 165, 165, 0.52);
+      stroke-width: 0.85;
+    }
+    .invalidation-band-short {
+      fill: rgba(0, 0, 0, 0);
+      stroke: rgba(147, 197, 253, 0.52);
+      stroke-width: 0.85;
+    }
+    .value-defense-band-text-long, .value-defense-band-text-short,
+    .invalidation-band-text-long, .invalidation-band-text-short {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .value-defense-band-text-long {
+      fill: #dbeafe;
+    }
+    .value-defense-band-text-short {
+      fill: #fef3c7;
+    }
+    .invalidation-band-text-long {
+      fill: #fecaca;
+    }
+    .invalidation-band-text-short {
+      fill: #bfdbfe;
+    }
+    .value-defense-trigger-long, .value-defense-trigger-short {
+      stroke-width: 0.9;
+      stroke-dasharray: 4 6;
+    }
+    .value-defense-trigger-long {
+      stroke: rgba(186, 230, 253, 0.62);
+    }
+    .value-defense-trigger-short {
+      stroke: rgba(253, 230, 138, 0.62);
+    }
+    .value-defense-trigger-text-long, .value-defense-trigger-text-short {
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .value-defense-trigger-text-long {
+      fill: #e0f2fe;
+    }
+    .value-defense-trigger-text-short {
+      fill: #fef3c7;
+    }
+    .value-defense-dashboard {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 18px 8px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(71, 85, 105, 0.38);
+    }
+    .value-defense-chart-card {
+      border: 1px solid rgba(71, 85, 105, 0.66);
+      border-radius: 16px;
+      padding: 12px 14px 14px;
+      background: linear-gradient(180deg, rgba(10, 16, 28, 0.96) 0%, rgba(12, 20, 34, 0.96) 100%);
+    }
+    .value-defense-chart-card.long {
+      border-color: rgba(34, 197, 94, 0.42);
+      box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.08);
+    }
+    .value-defense-chart-card.short {
+      border-color: rgba(248, 113, 113, 0.4);
+      box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.08);
+    }
+    .value-defense-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      color: #eff6ff;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .value-defense-group-label {
+      margin-top: 10px;
+      margin-bottom: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .value-defense-group-label.primary {
+      color: #eef6ff;
+    }
+    .value-defense-group-label.secondary {
+      color: #94a3b8;
+    }
+    .value-defense-card-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      height: 24px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .value-defense-card-pill.long {
+      background: rgba(34, 197, 94, 0.16);
+      color: #dcfce7;
+    }
+    .value-defense-card-pill.short {
+      background: rgba(248, 113, 113, 0.16);
+      color: #fee2e2;
+    }
+    .value-defense-card-row {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 6px 0;
+      border-top: 1px solid rgba(71, 85, 105, 0.28);
+    }
+    .value-defense-card-row.primary {
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+    .value-defense-card-row.secondary {
+      border-top-color: rgba(71, 85, 105, 0.18);
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+    .value-defense-card-row:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+    }
+    .value-defense-card-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #9fb0c8;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .value-defense-card-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .value-defense-card-desc {
+      color: #8fa2bf;
+      font-size: 10px;
+      line-height: 1.35;
+    }
+    .value-defense-row-chip {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .value-defense-row-chip.long.shallow {
+      background: rgba(34, 197, 94, 0.98);
+    }
+    .value-defense-row-chip.short.shallow {
+      background: rgba(248, 113, 113, 0.98);
+    }
+    .value-defense-row-chip.long.defense {
+      background: rgba(103, 232, 249, 0.98);
+    }
+    .value-defense-row-chip.short.defense {
+      background: rgba(253, 186, 116, 0.98);
+    }
+    .value-defense-row-chip.long.invalidation {
+      background: rgba(252, 165, 165, 0.78);
+    }
+    .value-defense-row-chip.short.invalidation {
+      background: rgba(147, 197, 253, 0.78);
+    }
+    .value-defense-row-chip.long.reclaim,
+    .value-defense-row-chip.long.continuation {
+      background: rgba(186, 230, 253, 0.82);
+    }
+    .value-defense-row-chip.short.reclaim,
+    .value-defense-row-chip.short.continuation {
+      background: rgba(253, 230, 138, 0.82);
+    }
+    .value-defense-chart-card.long .value-defense-card-key {
+      color: #86efac;
+    }
+    .value-defense-chart-card.short .value-defense-card-key {
+      color: #fca5a5;
+    }
+    .value-defense-card-value {
+      color: #eef6ff;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+      text-align: right;
+    }
+    .value-defense-card-value.secondary {
+      font-size: 12px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .value-defense-chart-card.long .value-defense-card-value {
+      color: #bbf7d0;
+    }
+    .value-defense-chart-card.short .value-defense-card-value {
+      color: #fecaca;
+    }
+    .setup-callout-long, .setup-callout-short {
+      stroke-width: 1;
+    }
+    .setup-callout-long {
+      fill: rgba(7, 20, 34, 0.92);
+      stroke: rgba(74, 222, 128, 0.45);
+    }
+    .setup-callout-short {
+      fill: rgba(7, 20, 34, 0.92);
+      stroke: rgba(248, 113, 113, 0.45);
+    }
+    .setup-callout-text-long {
+      fill: #bbf7d0;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .setup-callout-text-short {
+      fill: #fecaca;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .setup-callout-value {
+      fill: #dbe7f7;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .setup-axis-value-long {
+      fill: #4ade80;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .setup-axis-value-short {
+      fill: #f87171;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .price-axis {
+      fill: #9db0ca;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .time-axis-line {
+      stroke: rgba(148, 163, 184, 0.3);
+      stroke-width: 1;
+    }
+    .time-axis-label {
+      fill: #8fa2bf;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .current-price-line {
+      stroke: #60a5fa;
+      stroke-width: 2.5;
+      stroke-dasharray: 5 5;
+    }
+    .current-price-label {
+      fill: #dbeafe;
+      font-size: 13px;
+      font-weight: 700;
+      paint-order: stroke fill;
+      stroke: rgba(15, 23, 42, 0.9);
+      stroke-width: 3;
+    }
+    .marker-line {
+      stroke-width: 2;
+      stroke-dasharray: 4 4;
+    }
+    .marker-label {
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .marker-long {
+      stroke: #4ade80;
+      fill: #bbf7d0;
+    }
+    .marker-short {
+      stroke: #f87171;
+      fill: #fecaca;
+    }
+    .price-list p { margin-bottom: 8px; }
+    @media (max-width: 820px) {
+      .hero-grid, .two-col, .overview-grid { grid-template-columns: 1fr; }
+      .metric-label { font-size: 24px; }
+      .metric-value { font-size: 18px; }
+      .hero-summary { font-size: 22px; }
+      .takeaway { font-size: 18px; }
+      .wrap { padding: 16px 12px 42px; }
+      .hero, .section { border-radius: 18px; }
+      .price-map-wrap { padding: 12px 0 10px; }
+      .panel.price-map-wrap { padding-left: 0; padding-right: 0; }
+      .value-defense-dashboard { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <p class="muted">2026-03-31 01:05:00+09:00 / signal_id 20260331_010500</p>
+      <div class="hero-kicker">📊 通常監視・実行不可 / 監視</div>
+      <h1>[BTCFX Ver04-v1] 📊 [通常監視・実行不可] 下方向バイアス | 上側流動性が近く先に振られやすい 【BTC:65,818】 2026-03-31 01:05 [Ver04-v1]</h1>
+      <p class="hero-summary">見送り / 実弾不可・行動計画</p>
+      <p class="hero-sub">相場は下方向バイアスです。現時点では実弾不可の行動計画として確認します。</p>
+      <div><span class="chip">📊 通常監視・実行不可</span><span class="chip">監視</span><span class="chip">流動性回収待ち</span><span class="chip">見送り</span><span class="chip">下方向バイアス</span></div>
+      <div class="overview-grid">
+        <div class="verdict-card">
+          <h2>最初に読む結論</h2>
+          <ul class="summary-list">
+            <li><span class="emoji">🎯</span><div><strong>Active Plan:</strong> 見送り / 実弾不可・行動計画</div></li>
+            <li><span class="emoji">🧩</span><div><strong>今の行動:</strong> 見送り / 実弾不可・行動計画</div></li>
+            <li><span class="emoji">🧭</span><div><strong>成行:</strong> ロング: 見送り / ショート: 見送り</div></li><li><span class="emoji">🧭</span><div><strong>指値・戻り待ち:</strong> ロング: 見送り / ショート: 見送り</div></li><li><span class="emoji">🧭</span><div><strong>ブレイク追随:</strong> ロング: 見送り / ショート: 見送り</div></li><li><span class="emoji">🧭</span><div><strong>逆方向短期:</strong> ロング: 見送り / ショート: 見送り</div></li><li><span class="emoji">🧭</span><div><strong>保有中処理:</strong> 保有中なら主要価格帯で利確・建値撤退・撤退条件を確認</div></li>
+          </ul>
+          <div class="takeaway">まず方向ではなく、実際に取れる行動を確認します。今回は <strong>見送り / 実弾不可・行動計画</strong> です。</div>
+        </div>
+        <div class="balance-panel">
+          <h2>ひと目で分かるバランス</h2>
+          <p><strong>方向の正しさ</strong> と <strong>今の入りやすさ</strong> と <strong>待つ圧力</strong> を折れ線で重ねています。</p>
+          <svg viewBox="0 0 300 96" class="sparkline" aria-label="3指標バランス"><line x1="14" y1="16" x2="286" y2="16" class="spark-grid" /><line x1="14" y1="43" x2="286" y2="43" class="spark-grid" /><line x1="14" y1="70" x2="286" y2="70" class="spark-grid" /><polyline points="14.0,16.0 150.0,66.2 286.0,32.8" class="spark-line" /><circle cx="14.0" cy="16.0" r="5" class="spark-dot" /><text x="14.0" y="88" text-anchor="middle" class="spark-label">方向</text><circle cx="150.0" cy="66.2" r="5" class="spark-dot" /><text x="150.0" y="88" text-anchor="middle" class="spark-label">実行</text><circle cx="286.0" cy="32.8" r="5" class="spark-dot" /><text x="286.0" y="88" text-anchor="middle" class="spark-label">待機</text></svg>
+          <div class="score-row-head" style="margin-top:16px;"><span>ロング / ショート比較</span><strong>スコア</strong></div>
+          <div class="score-row"><div class="score-row-head"><span>ロング</span><strong>51</strong></div><div class="score-track"><div class="score-fill" style="width:51.0%; background:var(--score-long);"></div></div></div><div class="score-row"><div class="score-row-head"><span>ショート</span><strong>100</strong></div><div class="score-track"><div class="score-fill" style="width:100.0%; background:var(--score-short);"></div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>手動アクション確認</h2>
+      <div class="panel">
+        <p><strong>見送り / 実弾不可・行動計画</strong> を前提に、いま手で確かめる要点だけを並べます。</p>
+        <p class="muted">相場は下方向バイアスです。現時点では実弾不可の行動計画として確認します。</p>
+        <div class="checklist"><div class="checklist-item"><div class="checklist-label">📝 <span>行動種別</span></div><div class="checklist-value">監視継続</div></div><div class="checklist-item"><div class="checklist-label">📝 <span>入る条件</span></div><div class="checklist-value">発火条件待ち。流動性回収待ち。相場は下方向バイアスです。現時点では実弾不可の行動計画として確認します。</div></div><div class="checklist-item"><div class="checklist-label">📝 <span>利確 / 損切り</span></div><div class="checklist-value">ロング: 監視継続。 再検討帯 65,629.02 - 65,736.78 / 損切り目安 65,224.90 / TP1 66,418.52 / TP2 66,598.90
+ショート: 監視継続。 再検討帯 66,418.52 - 66,587.78 / 損切り目安 66,991.90 / TP1 66,341.98 / TP2 65,525.65</div></div><div class="checklist-item"><div class="checklist-label">📝 <span>無効化 / 待機理由</span></div><div class="checklist-value">上側流動性が近く先に振られやすい。流動性回収が未完了。RR 条件が基準未満。再検討帯は近いが発火条件待ち。</div></div><div class="checklist-item"><div class="checklist-label">📝 <span>有効期限</span></div><div class="checklist-value">次回更新までを目安</div></div><div class="checklist-item"><div class="checklist-label">📝 <span>安全境界</span></div><div class="checklist-value">report-only / not FORMAL_GO / no automatic order / human decides manually</div></div></div>
+        <div class="checklist-note">この確認は、判断ソースを見やすくまとめるだけで、売買ロジックは変更しません。</div>
+      </div>
+    </section>
+
+    
+
+    
+
+    
+
+    <section class="section">
+      <h2>大転換チャンス確認</h2>
+      <div class="panel">
+        <p><strong>見送り / 実弾不可・行動計画</strong> を見ながら、大転換候補とダマシ注意を取り違えないための確認を先に置きます。</p>
+        <p class="muted">大転換は「方向」だけで決めず、4h → 1h → 15m の順で根拠を見ます。15分足だけで決め打ちしません。</p>
+        <div class="checklist"><div class="checklist-item"><div class="checklist-label">🔁 <span>相場環境</span></div><div class="checklist-value">下降基調</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>今の局面</span></div><div class="checklist-value">押し目・戻り待ち</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>時間軸の揃い方</span></div><div class="checklist-value">4時間足 ショート優勢。1時間足 ショート優勢。15分足 様子見。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>ロング/ショートの傾き</span></div><div class="checklist-value">ロング 51。ショート 100。スコア差 -49。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>入る条件の確認</span></div><div class="checklist-value">監視継続。発火条件待ち。流動性回収待ち。相場は下方向バイアスです。現時点では実弾不可の行動計画として確認します。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>無効化・待機理由</span></div><div class="checklist-value">主要レジスタンス 66,418.52 - 66,587.78 上抜けで無効寄り。上側流動性スイープ完了後に再評価。上側流動性が近く先に振られやすい、流動性回収が未完了、RR 条件が基準未満、再検討帯は近いが発火条件待ち。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>価格帯の確認</span></div><div class="checklist-value">現在価格 65,817.70。近いサポート帯: 65,629.02 - 65,736.78（現在値から 80.92 ドル）。近いレジスタンス帯: 66,418.52 - 66,587.78（現在値から 600.82 ドル）。ロング: 監視継続。 再検討帯 65,629.02 - 65,736.78 / 損切り目安 65,224.90 / TP1 66,418.52 / TP2 66,598.90。ショート: 監視継続。 再検討帯 66,418.52 - 66,587.78 / 損切り目安 66,991.90 / TP1 66,341.98 / TP2 65,525.65。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>見る順番</span></div><div class="checklist-value">大転換は 4h → 1h → 15m の順で根拠を確認します。15分足だけの反応で決め打ちしません。スコア差が小さいときは大転換候補とダマシ注意を取り違えやすいので、主要サポート・レジスタンス付近では反転・ブレイク・失敗の3択を確認します。入る条件・無効化条件・次の確認点がそろうまでは、決め打ちしません。</div></div><div class="checklist-item"><div class="checklist-label">🔁 <span>安全境界</span></div><div class="checklist-value">report-only / not FORMAL_GO / no automatic order / human decides manually</div></div></div>
+        <div class="checklist-note">これは転換の決め打ちではなく、条件成立まで人間確認を続けるための表示です。</div>
+      </div>
+    </section>
+
+    
+
+    <section class="section">
+      <h2>3つの数字を丁寧に読む</h2>
+      <div class="metric-grid"><div class="metric-card"><div class="metric-head"><div class="metric-label">🧭 方向の強さ</div><div class="metric-value">100.0 / 100</div></div><div class="metric-track"><div class="metric-fill" style="width:100.0%; background:var(--bar-direction);"></div></div><div class="metric-hint">意味: かなり強い</div><p class="metric-help">相場の向きそのものが、どれだけはっきりしているかを表します。高いほど方向判断に迷いが少ない状態です。</p><p class="metric-reading"><strong>読むポイント:</strong> 「方向そのもの」には迷いがかなり少ないです。</p></div><div class="metric-card"><div class="metric-head"><div class="metric-label">⛔ 実行しやすさ</div><div class="metric-value">7.0 / 100</div></div><div class="metric-track"><div class="metric-fill" style="width:7.0%; background:var(--bar-execution);"></div></div><div class="metric-hint">意味: 今は入りにくい</div><p class="metric-help">今この価格で実際に入る条件がどれだけ整っているかを表します。方向が合っていても、ここが低いなら飛びつきは不利です。</p><p class="metric-reading"><strong>読むポイント:</strong> 方向が合っていても、入る場所としては不利です。</p></div><div class="metric-card"><div class="metric-head"><div class="metric-label">⏸️ 待機圧力</div><div class="metric-value">68.8 / 100</div></div><div class="metric-track"><div class="metric-fill" style="width:68.8%; background:var(--bar-wait);"></div></div><div class="metric-hint">意味: 待ち優先</div><p class="metric-help">今は待ったほうがよい圧力の強さです。高いほど、方向は見えていてもタイミングはまだという意味になります。</p><p class="metric-reading"><strong>読むポイント:</strong> 待ち優先で、条件がもう一段ほしい状態です。</p></div></div>
+    </section>
+
+    <section class="section">
+      <h2>再検討ラインチャート</h2>
+      <div class="panel price-map-wrap">
+        <h3>4時間足 → 1時間足 → 15分足 の順で見ます</h3>
+        <p>上段は大きな流れ、中段は再検討帯の妥当性、下段は実際に入る価格と SL / TP の精度を見る段です。いちばん重要なのは下段の 15 分足です。</p>
+        <svg viewBox="0 0 860 1155" class="price-map" aria-label="再検討ラインチャート"><g class="price-map-separator-wrap"><rect x="0" y="319" width="860" height="34" class="price-map-separator" rx="18" /><line x1="24" y1="336.0" x2="836" y2="336.0" class="price-map-separator-line" /></g><g class="price-map-separator-wrap"><rect x="0" y="682" width="860" height="34" class="price-map-separator" rx="18" /><line x1="24" y1="699.0" x2="836" y2="699.0" class="price-map-separator-line" /></g><g class="price-map-panel "><rect x="0" y="0" width="860" height="309" rx="18" class="price-map-bg" /><text x="22" y="22" class="chart-title">4時間足: 大局方向</text><text x="22" y="40" class="chart-subtitle">大きな流れと主要なサポート / レジスタンスだけを見ます。入る価格の判断は下段です</text><line x1="30" y1="271.0" x2="698" y2="271.0" class="price-grid-h" /><line x1="30" y1="209.8" x2="698" y2="209.8" class="price-grid-h" /><line x1="30" y1="148.5" x2="698" y2="148.5" class="price-grid-h" /><line x1="30" y1="87.2" x2="698" y2="87.2" class="price-grid-h" /><line x1="30" y1="26.0" x2="698" y2="26.0" class="price-grid-h" /><line x1="163.6" y1="26" x2="163.6" y2="271" class="price-grid-v" /><line x1="297.2" y1="26" x2="297.2" y2="271" class="price-grid-v" /><line x1="430.8" y1="26" x2="430.8" y2="271" class="price-grid-v" /><line x1="564.4" y1="26" x2="564.4" y2="271" class="price-grid-v" /><rect x="30" y="42.9" width="668" height="37.3" class="band-resistance" /><rect x="30" y="230.4" width="668" height="23.7" class="band-support" /><line x1="145.3" y1="145.9" x2="145.3" y2="220.8" class="candle-wick candle-up" /><rect x="137.8" y="163.6" width="15.0" height="30.8" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="130.5" x2="364.0" y2="198.8" class="candle-wick candle-down" /><rect x="356.5" y="163.6" width="15.0" height="17.6" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="154.8" x2="582.7" y2="218.6" class="candle-wick candle-down" /><rect x="575.2" y="181.2" width="15.0" height="28.6" rx="1.3" class="candle-body candle-down" /><line x1="30" y1="212.5" x2="698" y2="212.5" class="current-price-line" /><text x="22.0" y="216.5" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="275.0" text-anchor="end" class="price-axis">65,552</text><text x="846" y="213.8" text-anchor="end" class="price-axis">65,830</text><text x="846" y="152.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="91.2" text-anchor="end" class="price-axis">66,386</text><text x="846" y="30.0" text-anchor="end" class="price-axis">66,664</text><text x="145.3" y="295.0" text-anchor="middle" class="time-axis-label">04/10 00:00</text><text x="364.0" y="295.0" text-anchor="middle" class="time-axis-label">04/10 04:00</text><text x="582.7" y="295.0" text-anchor="middle" class="time-axis-label">04/10 08:00</text><line x1="30" y1="271.0" x2="698" y2="271.0" class="time-axis-line" /></g><g class="price-map-panel "><rect x="0" y="363" width="860" height="309" rx="18" class="price-map-bg" /><text x="22" y="385" class="chart-title">1時間足: 帯の妥当性</text><text x="22" y="403" class="chart-subtitle">再検討帯が押し目 / 戻りとして自然かを見る段です。利確 / 損切りはここでは見ません</text><line x1="30" y1="634.0" x2="698" y2="634.0" class="price-grid-h" /><line x1="30" y1="572.8" x2="698" y2="572.8" class="price-grid-h" /><line x1="30" y1="511.5" x2="698" y2="511.5" class="price-grid-h" /><line x1="30" y1="450.2" x2="698" y2="450.2" class="price-grid-h" /><line x1="30" y1="389.0" x2="698" y2="389.0" class="price-grid-h" /><line x1="163.6" y1="389" x2="163.6" y2="634" class="price-grid-v" /><line x1="297.2" y1="389" x2="297.2" y2="634" class="price-grid-v" /><line x1="430.8" y1="389" x2="430.8" y2="634" class="price-grid-v" /><line x1="564.4" y1="389" x2="564.4" y2="634" class="price-grid-v" /><rect x="30" y="405.9" width="668" height="37.3" class="band-resistance" /><rect x="30" y="593.4" width="668" height="23.7" class="band-support" /><rect x="83.4" y="634.0" width="227.1" height="10.0" rx="9" class="value-defense-band-long" /><rect x="83.4" y="634.0" width="227.1" height="10.0" rx="9" class="invalidation-band-long" /><line x1="83.4" y1="629.3" x2="310.6" y2="629.3" class="value-defense-trigger-long" /><line x1="83.4" y1="605.2" x2="310.6" y2="605.2" class="value-defense-trigger-long" /><rect x="417.4" y="389.0" width="227.1" height="10.0" rx="9" class="value-defense-band-short" /><rect x="417.4" y="389.0" width="227.1" height="10.0" rx="9" class="invalidation-band-short" /><line x1="417.4" y1="389.0" x2="644.6" y2="389.0" class="value-defense-trigger-short" /><line x1="417.4" y1="424.5" x2="644.6" y2="424.5" class="value-defense-trigger-short" /><line x1="145.3" y1="528.8" x2="145.3" y2="559.6" class="candle-wick candle-up" /><rect x="137.8" y="539.8" width="15.0" height="13.2" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="526.6" x2="364.0" y2="572.8" class="candle-wick candle-down" /><rect x="356.5" y="539.8" width="15.0" height="24.2" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="555.2" x2="582.7" y2="581.6" class="candle-wick candle-down" /><rect x="575.2" y="564.0" width="15.0" height="11.0" rx="1.3" class="candle-body candle-down" /><rect x="110.2" y="593.4" width="561.1" height="23.7" rx="10" class="setup-band-long" style="opacity:0.14;" /><text x="704.0" y="598.4" class="setup-axis-value-long">65,737</text><text x="704.0" y="622.1" class="setup-axis-value-long">65,629</text><rect x="110.2" y="405.9" width="561.1" height="37.3" rx="10" class="setup-band-short" style="opacity:0.14;" /><text x="704.0" y="410.9" class="setup-axis-value-short">66,588</text><text x="704.0" y="448.2" class="setup-axis-value-short">66,419</text><line x1="30" y1="575.5" x2="698" y2="575.5" class="current-price-line" /><text x="22.0" y="579.5" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="638.0" text-anchor="end" class="price-axis">65,552</text><text x="846" y="576.8" text-anchor="end" class="price-axis">65,830</text><text x="846" y="515.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="454.2" text-anchor="end" class="price-axis">66,386</text><text x="846" y="393.0" text-anchor="end" class="price-axis">66,664</text><text x="145.3" y="658.0" text-anchor="middle" class="time-axis-label">04/10 08:00</text><text x="364.0" y="658.0" text-anchor="middle" class="time-axis-label">04/10 09:00</text><text x="582.7" y="658.0" text-anchor="middle" class="time-axis-label">04/10 10:00</text><line x1="30" y1="634.0" x2="698" y2="634.0" class="time-axis-line" /></g><g class="price-map-panel price-map-panel-focus"><rect x="0" y="726" width="860" height="429" rx="18" class="price-map-bg" /><text x="22" y="748" class="chart-title">15分足: 入る価格 / SL / TP</text><text x="22" y="766" class="chart-subtitle">実際に入る価格を見る主役の段です。再検討帯、SL、TP1、TP2 をここに集約しています</text><line x1="30" y1="1117.0" x2="698" y2="1117.0" class="price-grid-h" /><line x1="30" y1="1025.7" x2="698" y2="1025.7" class="price-grid-h" /><line x1="30" y1="934.5" x2="698" y2="934.5" class="price-grid-h" /><line x1="30" y1="843.2" x2="698" y2="843.2" class="price-grid-h" /><line x1="30" y1="752.0" x2="698" y2="752.0" class="price-grid-h" /><line x1="163.6" y1="752" x2="163.6" y2="1117" class="price-grid-v" /><line x1="297.2" y1="752" x2="297.2" y2="1117" class="price-grid-v" /><line x1="430.8" y1="752" x2="430.8" y2="1117" class="price-grid-v" /><line x1="564.4" y1="752" x2="564.4" y2="1117" class="price-grid-v" /><rect x="83.4" y="1039.6" width="227.1" height="10.0" rx="9" class="value-defense-band-long" /><rect x="83.4" y="1090.4" width="227.1" height="10.0" rx="9" class="invalidation-band-long" /><line x1="83.4" y1="1029.7" x2="310.6" y2="1029.7" class="value-defense-trigger-long" /><line x1="83.4" y1="1010.3" x2="310.6" y2="1010.3" class="value-defense-trigger-long" /><rect x="417.4" y="804.2" width="227.1" height="10.0" rx="9" class="value-defense-band-short" /><rect x="417.4" y="775.7" width="227.1" height="10.0" rx="9" class="invalidation-band-short" /><line x1="417.4" y1="831.1" x2="644.6" y2="831.1" class="value-defense-trigger-short" /><line x1="417.4" y1="864.2" x2="644.6" y2="864.2" class="value-defense-trigger-short" /><line x1="145.3" y1="973.4" x2="145.3" y2="987.6" class="candle-wick candle-up" /><rect x="137.8" y="977.0" width="15.0" height="5.3" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="969.8" x2="364.0" y2="985.9" class="candle-wick candle-down" /><rect x="356.5" y="977.0" width="15.0" height="6.2" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="978.7" x2="582.7" y2="990.3" class="candle-wick candle-down" /><rect x="575.2" y="983.2" width="15.0" height="3.0" rx="1.3" class="candle-body candle-down" /><rect x="136.9" y="1000.7" width="534.4" height="19.2" rx="10" class="setup-band-long" style="opacity:0.3;" /><text x="704.0" y="1005.7" class="setup-axis-value-long">65,737</text><text x="704.0" y="1024.9" class="setup-axis-value-long">65,629</text><text x="146.9" y="1016.7" text-anchor="start" class="setup-band-text-long">浅い再検討帯</text><rect x="136.9" y="849.1" width="534.4" height="30.1" rx="10" class="setup-band-short" style="opacity:0.3;" /><text x="704.0" y="854.1" class="setup-axis-value-short">66,588</text><text x="704.0" y="884.3" class="setup-axis-value-short">66,419</text><text x="661.3" y="865.1" text-anchor="end" class="setup-band-text-short">浅い再検討帯</text><line x1="50.0" y1="847.2" x2="136.9" y2="847.2" class="marker-line marker-long" /><text x="146.9" y="851.2" text-anchor="start" class="marker-label marker-long">Long TP2 66,599</text><line x1="50.0" y1="879.3" x2="136.9" y2="879.3" class="marker-line marker-long" /><text x="146.9" y="883.3" text-anchor="start" class="marker-label marker-long">Long TP1 66,419</text><line x1="50.0" y1="1091.8" x2="136.9" y2="1091.8" class="marker-line marker-long" /><text x="146.9" y="1095.8" text-anchor="start" class="marker-label marker-long">Long SL 65,225</text><line x1="591.1" y1="777.2" x2="678.0" y2="777.2" class="marker-line marker-short" /><text x="581.1" y="781.2" text-anchor="end" class="marker-label marker-short">Short SL 66,992</text><line x1="591.1" y1="892.9" x2="678.0" y2="892.9" class="marker-line marker-short" /><text x="581.1" y="896.9" text-anchor="end" class="marker-label marker-short">Short TP1 66,342</text><line x1="591.1" y1="1038.3" x2="678.0" y2="1038.3" class="marker-line marker-short" /><text x="581.1" y="1042.3" text-anchor="end" class="marker-label marker-short">Short TP2 65,526</text><line x1="30" y1="986.3" x2="698" y2="986.3" class="current-price-line" /><text x="22.0" y="990.3" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="1121.0" text-anchor="end" class="price-axis">65,084</text><text x="846" y="1029.7" text-anchor="end" class="price-axis">65,596</text><text x="846" y="938.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="847.2" text-anchor="end" class="price-axis">66,621</text><text x="846" y="756.0" text-anchor="end" class="price-axis">67,133</text><text x="145.3" y="1141.0" text-anchor="middle" class="time-axis-label">09:30</text><text x="364.0" y="1141.0" text-anchor="middle" class="time-axis-label">10:00</text><text x="582.7" y="1141.0" text-anchor="middle" class="time-axis-label">11:45</text><line x1="30" y1="1117.0" x2="698" y2="1117.0" class="time-axis-line" /></g></svg>
+        <div class="value-defense-dashboard"><div class="value-defense-chart-card long"><div class="value-defense-card-head"><span class="value-defense-card-pill long">ロング</span><strong>Value Defense</strong></div><div class="value-defense-group-label primary">主情報</div><div class="value-defense-card-row primary long"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip long shallow"></span>浅い再検討帯</span><span class="value-defense-card-desc">最初に反応しやすい近い押し目/戻り</span></div><span class="value-defense-card-value">65,629 - 65,737</span></div><div class="value-defense-card-row primary long"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip long defense"></span>本命防衛ゾーン</span><span class="value-defense-card-desc">本命として待ちたい深い押し目/戻り</span></div><span class="value-defense-card-value">65,480 - 65,518</span></div><div class="value-defense-group-label secondary">補助情報</div><div class="value-defense-card-row secondary long"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip long invalidation"></span>無効化</span><span class="value-defense-card-desc">この目線が崩れやすい価格帯</span></div><span class="value-defense-card-value secondary">65,217 - 65,233</span></div><div class="value-defense-card-row secondary long"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip long reclaim"></span>回収条件</span><span class="value-defense-card-desc">深く刺したあとに戻してほしい水準</span></div><span class="value-defense-card-value secondary">65,574</span></div><div class="value-defense-card-row secondary long"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip long continuation"></span>継続条件</span><span class="value-defense-card-desc">方向継続を確認する目安</span></div><span class="value-defense-card-value secondary">65,683</span></div></div><div class="value-defense-chart-card short"><div class="value-defense-card-head"><span class="value-defense-card-pill short">ショート</span><strong>Value Defense</strong></div><div class="value-defense-group-label primary">主情報</div><div class="value-defense-card-row primary short"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip short shallow"></span>浅い再検討帯</span><span class="value-defense-card-desc">最初に反応しやすい近い押し目/戻り</span></div><span class="value-defense-card-value">66,419 - 66,588</span></div><div class="value-defense-card-row primary short"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip short defense"></span>本命防衛ゾーン</span><span class="value-defense-card-desc">本命として待ちたい深い押し目/戻り</span></div><span class="value-defense-card-value">66,790 - 66,840</span></div><div class="value-defense-group-label secondary">補助情報</div><div class="value-defense-card-row secondary short"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip short invalidation"></span>無効化</span><span class="value-defense-card-desc">この目線が崩れやすい価格帯</span></div><span class="value-defense-card-value secondary">66,984 - 67,000</span></div><div class="value-defense-card-row secondary short"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip short reclaim"></span>回収条件</span><span class="value-defense-card-desc">深く刺したあとに戻してほしい水準</span></div><span class="value-defense-card-value secondary">66,689</span></div><div class="value-defense-card-row secondary short"><div class="value-defense-card-main"><span class="value-defense-card-key"><span class="value-defense-row-chip short continuation"></span>継続条件</span><span class="value-defense-card-desc">方向継続を確認する目安</span></div><span class="value-defense-card-value secondary">66,503</span></div></div></div>
+      </div>
+      <div class="two-col" style="margin-top:14px;">
+        <div class="panel price-list">
+          <p><strong>現在価格:</strong> 65,817.70</p>
+          <p><strong>Funding:</strong> ほぼ中立 (+0.0028%)</p>
+          <p><strong>ATR比 / 出来高比:</strong> 1.75 / 4.53</p>
+        </div>
+        <div class="panel">
+          <h3>図の読み方</h3>
+          <ul>
+            <li>青い横線が現在価格です。</li>
+            <li>緑帯がロング再検討帯、赤帯がショート再検討帯です。</li>
+            <li>水色 / 金色の細い帯が本命防衛ゾーン、淡い危険帯が無効化です。</li>
+            <li>上段と中段は「その帯が自然か」を見る段、下段は「その価格で実際に入れるか」を見る段です。</li>
+            <li>点線は SL と TP で、15分足ではどこで切るか・利確するかを直接確認できます。</li>
+            <li>主情報は「浅い再検討帯 / 本命防衛ゾーン」、補助情報は「無効化 / 回収条件 / 継続条件」です。</li>
+            <li>Value Defense の詳しい数字は、チャート下のカードで色チップと一緒に確認します。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>ロング / ショートの再検討ライン</h2>
+      <div class="two-col">
+        <div class="panel">
+          <h3>ロング</h3>
+          <p>ロング: 監視継続。 再検討帯 65,629.02 - 65,736.78 / 損切り目安 65,224.90 / TP1 66,418.52 / TP2 66,598.90</p>
+          <p><strong>15分足 執行チェック:</strong> そのまま監視（追加注意なし）</p>
+        </div>
+        <div class="panel">
+          <h3>ショート</h3>
+          <p>ショート: 監視継続。 再検討帯 66,418.52 - 66,587.78 / 損切り目安 66,991.90 / TP1 66,341.98 / TP2 65,525.65</p>
+          <p><strong>15分足 執行チェック:</strong> 待機のみ。主要サポートが近く、15分足ショートは追いかけず待機（主要サポート接近）</p>
+        </div>
+      </div>
+    </section>
+
+    
+    <section class="section">
+      <h2>Value Defense Entry Layer</h2>
+      <p>既存の再検討帯は浅い再検討帯、本命は本命防衛ゾーンとして分けて見ます。ここは売買指示ではなく、どの深さを本命に置くかを見る補助欄です。</p>
+      <div class="two-col">
+        <div class="panel"><h3>ロング / 本命防衛ゾーン</h3><p>浅い再検討帯と本命防衛ゾーンを分けて見る補助欄です。売買指示ではありません。</p><ul><li><strong>浅い再検討帯:</strong> 65,629.02 - 65,736.78</li><li><strong>浅い再検討リスク:</strong> high</li><li><strong>本命防衛ゾーン:</strong> 65,480.00 - 65,518.00</li><li><strong>無効化:</strong> 65,216.90 - 65,232.90</li><li><strong>回収条件:</strong> 65,573.51</li><li><strong>継続条件:</strong> 65,682.90</li><li><strong>局面:</strong> continuation_candidate</li><li><strong>運用メモ:</strong> 浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。</li><li><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</li></ul></div><div class="panel"><h3>ショート / 本命防衛ゾーン</h3><p>浅い再検討帯と本命防衛ゾーンを分けて見る補助欄です。売買指示ではありません。</p><ul><li><strong>浅い再検討帯:</strong> 66,418.52 - 66,587.78</li><li><strong>浅い再検討リスク:</strong> high</li><li><strong>本命防衛ゾーン:</strong> 66,790.00 - 66,840.00</li><li><strong>無効化:</strong> 66,983.90 - 66,999.90</li><li><strong>回収条件:</strong> 66,688.89</li><li><strong>継続条件:</strong> 66,503.15</li><li><strong>局面:</strong> continuation_candidate</li><li><strong>運用メモ:</strong> 浅い戻り売りだけで決め打ちせず、本命戻り売りと invalidation を先に確認する。</li><li><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</li></ul></div>
+      </div>
+    </section>
+    
+
+    <section class="section">
+      <h2>待機理由または注意点</h2>
+      <div class="reason-grid"><div class="reason-card"><div class="reason-icon">🌊</div><div class="reason-text">上側流動性が近く先に振られやすい</div></div><div class="reason-card"><div class="reason-icon">🌊</div><div class="reason-text">流動性回収が未完了</div></div><div class="reason-card"><div class="reason-icon">📏</div><div class="reason-text">RR 条件が基準未満</div></div><div class="reason-card"><div class="reason-icon">🔎</div><div class="reason-text">再検討帯は近いが発火条件待ち</div></div></div>
+      <ul><li>上側流動性が近く先に振られやすい</li><li>流動性回収が未完了</li><li>RR 条件が基準未満</li><li>再検討帯は近いが発火条件待ち</li></ul>
+    </section>
+
+    <details class="section internal-diagnostics">
+      <summary><strong>内部確認・検証情報</strong> - 検証 / 運用確認だけに使うブロック</summary>
+      <div class="panel">
+        <p>このブロックは検証と運用確認用です。売買判断の主導線には置きません。</p>
+        <p><strong>安全境界:</strong> report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        <p>local dashboard / app surface / runtime contract / manual delivery reference をまとめて確認します。</p>
+        <p>通知メールと公開HTMLは同じ判断ソースから出しますが、ここは内部確認だけに使います。</p>
+        <h3>Intraperiod JSON 契約</h3>
+        <p>local/report-only の手動確認向けに、<code>build-active-plan-intraperiod-review --stdout-json</code> と <code>active_plan_intraperiod_review.v1</code> の app contract exposure を案内します。</p>
+        <p>app surface / ready gate validation は <code>intraperiod_review_stdout_json</code> の契約露出を確認し、<strong>app contract</strong> と <strong>ready gate</strong> の整合だけを見ます。</p>
+        <p>負荷や実行は行わず、<strong>report-only / not FORMAL_GO / no automatic order / human decides manually</strong> を維持します。</p>
+        <p>negative boundary: no exchange fetch / no daily-sync wiring / no secret/API key reading / no automatic order / no FORMAL_GO</p>
+        
+        
+        
+        
+        
+        
+        
+        <ul><li><strong>事前生成/検証:</strong> <code>scripts/refresh_current_manual_delivery_app_surface.command</code></li><li><strong>ready gate:</strong> <code>refresh-and-check-current-manual-delivery-app-surface --stdout-json</code></li><li><strong>確認入口:</strong> <code>local/manual_delivery_app_surface/index.html</code></li><li><strong>Dashboard:</strong> <code>local/manual_delivery_app_surface/app-dashboard.html</code></li><li><strong>Ready JSON:</strong> <code>local/manual_delivery_app_surface/app-ready.json</code></li><li><strong>Snapshot:</strong> <code>local/manual_delivery_app_surface/app-snapshot.json</code></li><li><strong>Manifest:</strong> <code>local/manual_delivery_app_surface/app-surface-manifest.json</code></li></ul>
+      </div>
+    </details>
+
+    
+
+    <section class="section">
+      <h2>主要ファクト</h2>
+      <div class="fact-grid"><div class="fact-card"><h3>最終ランク</h3><p>📊 通常監視・実行不可 / 監視と再評価のための通知です</p></div><div class="fact-card"><h3>補足状態</h3><p>監視 / 条件接近</p></div><div class="fact-card"><h3>執行判断</h3><p>監視継続</p></div><div class="fact-card"><h3>現値帯の扱い</h3><p>発火条件待ち</p></div><div class="fact-card"><h3>有効目安</h3><p>次回更新までを目安</p></div><div class="fact-card"><h3>方向判断</h3><p>相場は下方向バイアスです</p></div><div class="fact-card"><h3>位置評価</h3><p>流動性回収待ち</p></div><div class="fact-card"><h3>総合判断</h3><p>ショート優勢</p></div><div class="fact-card"><h3>相場環境</h3><p>下降基調</p></div><div class="fact-card"><h3>局面</h3><p>押し目・戻り待ち</p></div><div class="fact-card"><h3>時間軸</h3><p>4時間足 ショート優勢 / 1時間足 ショート優勢 / 15分足 様子見</p></div><div class="fact-card"><h3>スコア差</h3><p>ロング 51 / ショート 100 / 差 -49</p></div></div>
+    </section>
+
+    <section class="section">
+      <h2>元メールの要点</h2>
+      <div class="mail-block">【結論】
+方向判断: 相場は下方向バイアスです
+いまの扱い: 上側流動性回収待ち
+方向の強さ: 100
+実行しやすさ: 7.0
+待機圧力: 68.8
+位置評価: 流動性回収待ち</div>
+    </section>
+  </div>
+</body>
+</html>
