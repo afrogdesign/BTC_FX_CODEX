@@ -1,13 +1,24 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260706-BIG-CHANCE-REPLAY-DOCS-FIX`
+- current_work_id: `BTCFX-20260707-PHASE4-DISPLAY-CUE-RUNTIME-DOCS-SYNC`
 - mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Ver04-v2 is production-applied and the Big Chance / Failed Thesis Layer is runtime-applied. The next posture is observation / review only. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
-Compact email triage is now on the actual CLI runtime path; next natural mail should be checked for the short body.
+Ver04-v2 runtime deployment for the display/report-label cues is complete. Phase4 tuning is still blocked until future notified observation evidence exists and the human explicitly approves it.
+Use `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md` as the Phase4 route document.
+Next posture is observation-only on the next natural notification / detail HTML.
+Verify the Phase4 cue panel appears and is not misread as an entry instruction.
+Verify Big Chance text says it is not an entry instruction.
+Verify Value Defense keeps shallow zone and defense zone separate.
 Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
+
+## Current posture
+
+- default next action is observation-only unless the human explicitly approves more offline review
+- no scoring, gate, threshold, runtime, or launchd changes
+- no notification trigger changes
+- no automatic tuning from single examples
 
 ## Observation queue
 

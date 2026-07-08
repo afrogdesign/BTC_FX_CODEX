@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-06
+last_updated: 2026-07-07
 
 ## Safety boundary
 
@@ -32,9 +32,22 @@ Automatic trading remains out of scope and later-stage only.
 Ver03-v4 is prior baseline/history; Ver04-v1 is the prior active product branch.
 Ver04-v2 is the current active source working branch for follow-on observation/review work.
 
+## Current Phase4 self-improvement route
+
+- source-of-truth route now includes `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
+- recent Phase4 analysis / cue design / display planning is complete
+- display/report-label-only implementation is complete
+- commit `d2beafe` is pushed and runtime-applied
+- active process path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/main.py`
+- no-send/render-only smoke passed
+- no scoring / gate / threshold / trading logic / notification trigger changes were made
+- human approval is required before any future implementation beyond display labels
+- Phase4 tuning remains blocked
+
 ## Current operational posture
 
 - Ver04-v2 runtime deployment is complete and reflected active.
+- display/report-label-only implementation `d2beafe` is runtime-applied.
 - First post-deploy normal notification observation passed for signal `20260705_050500`.
 - Value Defense observation snapshot source now includes `attack_review_flags`.
 - Existing snapshot backfill / upgrade path exists for previously published observations.
@@ -105,6 +118,7 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - `tools/build_value_defense_observation_snapshot.py` was added in commit `fb7a32f12deb94e699a9f57636c7c8ebc7137faa`.
 - GitHub DNS / SSH reachability issue was operationally mitigated by local MCP source fallback; OS/network config was not changed.
 - Phase4 scoring / gate tuning is blocked until future notified observation evidence exists and the human explicitly approves.
+- display/report-label-only work is complete; tuning remains blocked.
 - operator-facing version/mode labels are retired; public subject/title/path no longer needs VerXX or API/CLI updates and runtime verification should rely on commit hash, process path, generated_at, and report_fingerprint.
 - safety boundary remains report-only / not FORMAL_GO / no automatic order / human decides manually.
 

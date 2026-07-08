@@ -1,6 +1,6 @@
 # AI Orchestration Control
 
-last_updated: 2026-07-02
+last_updated: 2026-07-07
 repo: `afrogdesign/BTC_FX_CODEX`
 primary_mcp_working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 frozen_old_runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
@@ -13,10 +13,13 @@ branch_source_rule: `read from git status --short --branch and CONTROL.md, not f
 - routine GitHub push is wasteful and out of default scope
 - old runtime execution repo must not be edited, run, inspected, or synced in normal MCP tasks
 - product route has been consolidated into Ver04-v1 self-improvement loop docs
+- current Phase4 self-improvement route is `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
 - current operational posture is post-deployment observation
+- display/report-label-only implementation `d2beafe` is runtime-applied
 - Ver04-v1 runtime deployment is complete and reflected active
 - notification sending behavior remains unchanged
 - no immediate implementation is required unless observation finds an issue
+- future implementation beyond display labels still requires explicit human approval
 
 ## Current Objective
 
@@ -56,6 +59,7 @@ Immediate product objective:
 - final self-improvement design: `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
 - manual 15m win definition: `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
 - high-level integrated plan: `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
+- Phase4 control plan: `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
 - durable accepted history: `docs/operations/ai-orchestration/MILESTONES.md`
 
 ## Validation Rules
@@ -79,6 +83,13 @@ Immediate product objective:
 - product docs should stay concise and route through `PRODUCT_IMPLEMENTATION_ROUTE.md`
 - runtime repo remains off-limits during normal MCP tasks
 - normal tasks should avoid orchestration doc updates unless posture, next action, safety, or runtime actually changes
+
+## Current Phase4 decision gate
+
+- Phase4 tuning remains blocked
+- display/report-label only implementation requires human approval
+- source/runtime/scoring changes remain forbidden without explicit approval
+- report-only / not FORMAL_GO / no automatic order / human decides manually
 
 ## Next Decision
 
