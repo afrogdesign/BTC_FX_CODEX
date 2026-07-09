@@ -1,0 +1,59 @@
+{
+  "work_id": "BTCFX-20260709-PHASE4-DISPLAY-CUE-NATURAL-HTML-OBSERVATION",
+  "observation_date": "2026-07-09",
+  "implementation_commit": "d2beafe",
+  "docs_sync_commit": "dfe8955",
+  "runtime_status": "runtime_applied",
+  "observed_html_files": [
+    "logs/notifications_html/manual-trading/attention/20260709_040500.html",
+    "logs/notifications_html/manual-trading/followup/20260709_060500.html",
+    "logs/notifications_html/manual-trading/main/20260708_210500.html"
+  ],
+  "required_markers": [
+    "chart_review_only",
+    "not entry prohibition",
+    "preserve cue",
+    "not_directly_evaluated",
+    "Big Chance is not an entry instruction",
+    "shallow zone",
+    "defense zone",
+    "report-only / not FORMAL_GO / no automatic order / human decides manually"
+  ],
+  "marker_results": {
+    "attention/20260709_040500.html": {
+      "chart_review_only": true,
+      "not entry prohibition": true,
+      "preserve cue": true,
+      "not_directly_evaluated": true,
+      "Big Chance is not an entry instruction": true,
+      "shallow zone": true,
+      "defense zone": true,
+      "report-only / not FORMAL_GO / no automatic order / human decides manually": true
+    },
+    "followup/20260709_060500.html": {
+      "chart_review_only": true,
+      "not entry prohibition": true,
+      "preserve cue": true,
+      "not_directly_evaluated": true,
+      "Big Chance is not an entry instruction": true,
+      "shallow zone": true,
+      "defense zone": true,
+      "report-only / not FORMAL_GO / no automatic order / human decides manually": true
+    },
+    "main/20260708_210500.html": {
+      "chart_review_only": true,
+      "not entry prohibition": true,
+      "preserve cue": true,
+      "not_directly_evaluated": true,
+      "Big Chance is not an entry instruction": true,
+      "shallow zone": true,
+      "defense zone": true,
+      "report-only / not FORMAL_GO / no automatic order / human decides manually": true
+    }
+  },
+  "technical_reflection_confirmed": true,
+  "human_usability_judged": false,
+  "phase4_tuning_status": "blocked",
+  "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"
+}
+
