@@ -1,15 +1,15 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260709-PHASE4-DISPLAY-CUE-NATURAL-HTML-OBSERVATION`
+- current_work_id: `BTCFX-20260709-OPERATOR-V3-STASH-AND-PRODUCTION-APPLY`
 - mode: `BOUNDED_CODEX`
 
 ## Current goal
 
-Ver04-v2 runtime deployment for the display/report-label cues is complete and reflected in natural generated HTML.
+Ver04-v2 operator v3 detail layout is implemented and runtime-applied on the Primary repo path.
 Use `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md` as the Phase4 route document.
 Next posture is observation-only on the next natural notification / detail HTML.
-Verify the Phase4 cue panel is readable and not too noisy.
-Verify CUE02 is not misread as a long prohibition.
+Verify the operator v3 top area is readable and not too noisy.
+Verify the new top summary is not misread as an entry instruction.
 Verify Big Chance text says it is not an entry instruction.
 Verify Value Defense keeps shallow zone and defense zone separate.
 Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
@@ -20,7 +20,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
 - no scoring, gate, threshold, runtime, or launchd changes
 - no notification trigger changes
 - no automatic tuning from single examples
-- natural generated HTML reflection is confirmed
+- operator v3 runtime apply is complete
+- natural generated HTML reflection for earlier Phase4 cue text was confirmed before operator v3 apply
 - Phase4 tuning remains blocked
 
 ## Observation queue
@@ -41,6 +42,8 @@ Next strategic review target is the Big Chance / Failed Thesis Layer. The guidin
 - verify the next generated HTML also has the `big-chance` anchor when a candidate exists
 - verify the top HTML safety boundary uses the canonical report-only wording
 - verify the display cue panel is not misread as an entry instruction
+- verify the operator v3 top summary improves readability in natural HTML
+- verify `結論` / `いまの見方` / `方向メーター` stay visible in natural HTML
 - continue reviewing the latest snapshot plus HTML manually
 - accumulate enough observations before any Phase4 tuning proposal
 - run snapshot builder:
