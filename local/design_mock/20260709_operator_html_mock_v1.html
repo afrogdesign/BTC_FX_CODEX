@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTCFX Manual Trading Report - Operator Mock</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f8;
+      --paper: #ffffff;
+      --ink: #10212b;
+      --muted: #61707d;
+      --line: #d9e1e8;
+      --shadow: 0 18px 55px rgba(15, 23, 42, 0.10);
+      --blue: #2563eb;
+      --red: #b42318;
+      --orange: #d97706;
+      --green: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Hiragino Sans", "Yu Gothic", system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 10% 0%, rgba(96,165,250,.18) 0, transparent 34%),
+                  radial-gradient(circle at 100% 6%, rgba(20,184,166,.12) 0, transparent 28%),
+                  linear-gradient(180deg, #f8fbff 0%, var(--bg) 46%, #e8eef5 100%);
+      line-height: 1.65;
+    }
+    .shell { max-width: 1240px; margin: 0 auto; padding: 20px 18px 56px; }
+    .safety { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid #f6c29f; background:#fff7ed; color:#9a3412; font-size:12px; font-weight:900; letter-spacing:.02em; }
+    .hero {
+      margin-top: 14px;
+      border: 1px solid rgba(216,225,234,.95);
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(239,248,255,.98) 54%, rgba(236,253,245,.95));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .hero-top { padding: 24px 24px 18px; display:grid; grid-template-columns: minmax(0,1.3fr) minmax(300px,.7fr); gap: 18px; align-items: stretch; }
+    .eyebrow { color: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .posture { margin: 10px 0 8px; font-size: clamp(30px, 5vw, 52px); line-height: 1.08; letter-spacing: -.04em; font-weight: 950; }
+    .lead { margin: 0; font-size: clamp(16px, 2vw, 20px); font-weight: 850; color: #334155; max-width: 720px; }
+    .lead strong { color: var(--red); }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top: 16px; }
+    .chip { display:inline-flex; align-items:center; padding:7px 11px; border-radius:999px; border:1px solid rgba(148,163,184,.35); background: rgba(255,255,255,.85); color:#334155; font-size:12px; font-weight:800; }
+    .now { display:grid; align-content:center; gap:10px; border:1px solid rgba(15,118,110,.16); border-radius:22px; padding:18px; background: linear-gradient(180deg, rgba(255,255,255,.97), rgba(240,253,250,.94)); }
+    .now-label { color: var(--muted); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .price { font-size: clamp(34px, 5vw, 56px); line-height: 1; font-weight: 950; letter-spacing: -.04em; }
+    .now p { margin: 0; font-weight: 800; color: #334155; }
+    .action-strip {
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      background: rgba(255,255,255,.72);
+      border-top: 1px solid rgba(216,225,234,.9);
+    }
+    .action { padding: 16px 18px; border-right: 1px solid rgba(216,225,234,.9); }
+    .action:last-child { border-right: 0; }
+    .action-title { color: var(--muted); font-size: 12px; font-weight: 900; margin-bottom: 6px; }
+    .action-value { font-size: 16px; font-weight: 950; line-height: 1.45; }
+    .layout { display:grid; grid-template-columns: 280px minmax(0,1fr); gap: 18px; margin-top: 18px; }
+    .sidebar {
+      position: sticky; top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,.92);
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(15,23,42,.06);
+      height: fit-content;
+    }
+    .sidebar h2 { margin: 0 0 10px; font-size: 15px; }
+    .nav { display:grid; gap:8px; margin-bottom: 14px; }
+    .nav a {
+      display:grid; grid-template-columns: 26px 1fr; gap:8px; align-items:center;
+      text-decoration:none; color:#334155; font-size:13px; font-weight:900;
+      border-radius: 13px; border:1px solid transparent; padding:8px;
+    }
+    .nav a:hover { background:#f1f5f9; border-color:#e2e8f0; }
+    .nav-index {
+      display:grid; place-items:center; width:26px; height:26px; border-radius:999px;
+      background:#dbeafe; color:#1d4ed8;
+    }
+    .mini {
+      border-radius: 16px;
+      padding: 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 12px;
+      display:grid;
+      gap:4px;
+    }
+    .mini strong { color:#fff; }
+    .main { display:grid; gap:18px; }
+    .section {
+      border:1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 12px 36px rgba(15,23,42,.06);
+      padding: clamp(18px, 2.5vw, 26px);
+    }
+    .section h2 { margin: 0 0 12px; font-size: clamp(22px, 2.6vw, 30px); letter-spacing: -.02em; }
+    .section p { margin: 0 0 12px; }
+    .section .muted { color: var(--muted); font-size: 14px; }
+    .chart-grid { display:grid; gap: 14px; }
+    .chart {
+      border-radius: 20px;
+      border:1px solid #d9e1e8;
+      background: linear-gradient(180deg, #0f172a, #111827);
+      color:#eef2ff;
+      padding: 16px;
+      min-height: 180px;
+      display:grid;
+      gap: 10px;
+    }
+    .chart-title { font-weight: 950; font-size: 16px; }
+    .chart-sub { color: #cbd5e1; font-size: 13px; }
+    .chart-placeholder {
+      border: 1px dashed rgba(148,163,184,.45);
+      border-radius: 16px;
+      min-height: 120px;
+      display:grid;
+      place-items:center;
+      color:#cbd5e1;
+      font-weight: 800;
+      background: rgba(255,255,255,.04);
+    }
+    .band {
+      display:grid;
+      gap:8px;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff, #f8fbfd);
+    }
+    .band-head { display:flex; justify-content:space-between; gap:12px; font-weight: 950; }
+    .band-bar { height: 14px; border-radius:999px; background:#e8eef5; overflow:hidden; border:1px solid #dde6ef; }
+    .fill { height: 100%; border-radius:999px; }
+    .fill.blue { background: linear-gradient(90deg,#93c5fd,#2563eb); width: 68%; }
+    .fill.red { background: linear-gradient(90deg,#fca5a5,#b42318); width: 62%; }
+    .fill.orange { background: linear-gradient(90deg,#fbbf24,#d97706); width: 52%; }
+    .fill.green { background: linear-gradient(90deg,#86efac,#0f766e); width: 74%; }
+    .quick {
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 14px;
+    }
+    .quick .card, .reason-box, .big-chance, .cue-box, .sample {
+      border:1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, #fff, #f8fbfd);
+      padding: 16px;
+    }
+    .card-title, .box-title { font-weight: 950; margin-bottom: 8px; }
+    .big { font-size: clamp(24px, 3.2vw, 36px); font-weight: 950; line-height: 1.12; letter-spacing: -.03em; }
+    .reason-list, .cue-list, .todo-list { margin: 0; padding-left: 20px; color:#334155; }
+    .reason-list li, .cue-list li, .todo-list li { margin: 6px 0; }
+    .small { color: var(--muted); font-size: 13px; }
+    .two { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    .sample-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    .sample-tag { display:inline-flex; padding:5px 9px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:900; }
+    .sample.short .sample-tag { background:#fef2f2; color:#b42318; }
+    .sample.long .sample-tag { background:#ecfdf5; color:#0f766e; }
+    .footer-note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    @media (max-width: 980px) {
+      .hero-top, .layout, .quick, .sample-grid, .two { grid-template-columns: 1fr; }
+      .action-strip { grid-template-columns: 1fr; }
+      .action { border-right:0; border-bottom:1px solid rgba(216,225,234,.9); }
+      .action:last-child { border-bottom:0; }
+      .sidebar { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="safety">report-only / not FORMAL_GO / no automatic order / human decides manually</div>
+
+    <section class="hero" aria-label="operator mock hero">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow">BTCFX Manual Trading Report / Operator Mock</div>
+          <div class="posture">いまの見方: ショート優勢、ロングは監視</div>
+          <p class="lead"><strong>今は入らない。</strong> 先に chart を見て、どちらの方向を警戒するかを素早く決めるための読みやすい mock です。</p>
+          <div class="chips">
+            <span class="chip">ロング: 監視</span>
+            <span class="chip">ショート: 優勢 / 監視</span>
+            <span class="chip">4時間足 → 1時間足 → 15分足</span>
+            <span class="chip">安全境界あり</span>
+          </div>
+        </div>
+        <div class="now">
+          <div class="now-label">Current Price</div>
+          <div class="price">62,540</div>
+          <p>今の価格と見方を最初に置く。</p>
+          <p class="small">この数値は mock の見本表示です。</p>
+        </div>
+      </div>
+
+      <div class="action-strip" role="list" aria-label="quick posture">
+        <div class="action"><div class="action-title">今の行動</div><div class="action-value">見送り</div></div>
+        <div class="action"><div class="action-title">見る方向</div><div class="action-value">ショート寄り</div></div>
+        <div class="action"><div class="action-title">チャート確認</div><div class="action-value">4時間足 → 15分足</div></div>
+        <div class="action"><div class="action-title">安全境界</div><div class="action-value">report-only</div></div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>読む順番</h2>
+        <nav class="nav">
+          <a href="#posture"><span class="nav-index">1</span><span>いまの見方</span></a>
+          <a href="#chart"><span class="nav-index">2</span><span>チャート</span></a>
+          <a href="#todo"><span class="nav-index">3</span><span>今やること</span></a>
+          <a href="#reasons"><span class="nav-index">4</span><span>理由</span></a>
+          <a href="#big-chance"><span class="nav-index">5</span><span>Big Chance</span></a>
+          <a href="#review"><span class="nav-index">6</span><span>読み方メモ</span></a>
+        </nav>
+        <div class="mini">
+          <strong>ひとこと</strong>
+          <span>ロング/ショートは別々に読む。</span>
+          <span>内部用語は脇役にする。</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="section" id="posture">
+          <h2>いまの見方</h2>
+          <div class="quick">
+            <div class="card">
+              <div class="card-title">ロング</div>
+              <div class="big" style="color:var(--blue);">監視</div>
+              <div class="small">浅い押し目だけで決めない。</div>
+            </div>
+            <div class="card">
+              <div class="card-title">ショート</div>
+              <div class="big" style="color:var(--red);">優勢</div>
+              <div class="small">戻り売り待ち。急がない。</div>
+            </div>
+            <div class="card">
+              <div class="card-title">判断</div>
+              <div class="big" style="color:var(--orange);">見送り</div>
+              <div class="small">今は飛びつかず chart を見る。</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="chart">
+          <h2>チャートを見る場所</h2>
+          <div class="chart-grid">
+            <div class="chart">
+              <div class="chart-title">4時間足: 大きな流れ</div>
+              <div class="chart-sub">まず全体の向きを決める</div>
+              <div class="chart-placeholder">4時間足の大きな流れの図を置く場所</div>
+            </div>
+            <div class="two">
+              <div class="chart">
+                <div class="chart-title">1時間足: いまの妥当性</div>
+                <div class="chart-sub">今の見方が崩れていないかを見る</div>
+                <div class="chart-placeholder">1時間足の妥当性メモ</div>
+              </div>
+              <div class="chart">
+                <div class="chart-title">15分足: 入る価格 / SL / TP</div>
+                <div class="chart-sub">実際に反応する帯だけ確認する</div>
+                <div class="chart-placeholder">15分足の実行確認メモ</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;" class="two">
+            <div class="band">
+              <div class="band-head"><span>上方向の重さ</span><span style="color:var(--red);">要注意</span></div>
+              <div class="band-bar"><div class="fill red"></div></div>
+              <div class="small">上値が重いときは、ショート優勢を優先して読む。</div>
+            </div>
+            <div class="band">
+              <div class="band-head"><span>下方向の反応帯</span><span style="color:var(--green);">監視</span></div>
+              <div class="band-bar"><div class="fill green"></div></div>
+              <div class="small">浅い再検討帯と防衛ゾーンは別々に見る。</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="todo">
+          <h2>今やること</h2>
+          <ul class="todo-list">
+            <li>ロングはまだ待つ</li>
+            <li>ショートは監視継続</li>
+            <li>15分足で浅い戻り帯と直近高値反応を確認</li>
+          </ul>
+        </section>
+
+        <section class="section" id="reasons">
+          <h2>なぜそう見るのか</h2>
+          <div class="reason-box">
+            <ul class="reason-list">
+              <li>上値が重い</li>
+              <li>戻り売りが見えやすい</li>
+              <li>主要帯の近くはノイズが出やすい</li>
+              <li>浅い zone と防衛 zone は別々に確認する</li>
+              <li>ロングは浅い押し目だけで決めない</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="section" id="big-chance">
+          <h2>Big Chance / Failed Thesis</h2>
+          <div class="big-chance">
+            <div class="box-title">大転換候補の見方</div>
+            <p class="big" style="font-size:22px; margin:0 0 10px;">Big Chance is not an entry instruction.</p>
+            <p>Big Chance は売買指示ではありません。失敗した thesis の反対側を読むための補助メモです。</p>
+          </div>
+        </section>
+
+        <section class="section" id="review">
+          <h2>読み方メモ</h2>
+          <div class="cue-box">
+            <div class="box-title">レビュー時の注意</div>
+            <ul class="cue-list">
+              <li>ロングとショートは別々に読む</li>
+              <li>ロングの浅い再検討は慎重に確認する</li>
+              <li>ショート側の優位は雑に崩さない</li>
+              <li>Big Chance はエントリー指示ではない</li>
+              <li>shallow zone と defense zone は分けて見る</li>
+            </ul>
+            <p class="footer-note">補足: 内部 cue ID や technical label は、必要なら別の小さな補足欄だけに置く。</p>
+          </div>
+        </section>
+
+        <section class="section" id="samples">
+          <h2>サンプルの見え方</h2>
+          <div class="sample-grid">
+            <div class="sample short">
+              <span class="sample-tag">pattern A / short優勢</span>
+              <h3>ショート優勢ケース</h3>
+              <p>いまはショートを主に監視。戻り売りの反応を chart で確認。</p>
+            </div>
+            <div class="sample long">
+              <span class="sample-tag">pattern B / ロング監視</span>
+              <h3>ロング監視ケース</h3>
+              <p>ロングはまだ待つ。浅い押し目と無効化ラインを先に確認。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
