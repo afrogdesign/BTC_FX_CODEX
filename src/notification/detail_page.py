@@ -1219,13 +1219,16 @@ def _v2_action_strip_html(items: list[tuple[str, str]]) -> str:
 def _v2_sidebar_html(result: dict[str, Any], notification_context: dict[str, Any], active_hero_label: str, current_price: str) -> str:
     items = [
         ("1", "まず結論", "#decision"),
-        ("2", "Phase4 キュー", "#phase4-cues"),
-        ("3", "価格帯", "#price-plan"),
-        ("4", "手動ゲート", "#manual-gates"),
-        ("5", "チャート", "#chart"),
-        ("6", "Big Chance", "#big-chance"),
-        ("7", "スコア", "#scores"),
-        ("8", "詳細", "#logs"),
+        ("2", "いまの見方", "#posture"),
+        ("3", "方向メーター", "#direction-meter"),
+        ("4", "チャートを見る場所", "#chart-focus"),
+        ("5", "今やること", "#now-action"),
+        ("6", "読み方メモ", "#phase4-cues"),
+        ("7", "価格帯", "#price-plan"),
+        ("8", "チャート", "#chart"),
+        ("9", "Big Chance", "#big-chance"),
+        ("10", "スコア", "#scores"),
+        ("11", "詳細", "#logs"),
     ]
     nav_html = "".join(
         f'<a href="{html.escape(anchor)}"><span class="v2-nav-index">{html.escape(index)}</span><span>{html.escape(label)}</span></a>'
@@ -1246,76 +1249,178 @@ def _v2_sidebar_html(result: dict[str, Any], notification_context: dict[str, Any
     """
 
 
-def _phase4_display_cue_panel_html(result: dict[str, Any]) -> str:
-    display_context = build_display_context(result)
-    big_chance = result.get("big_chance_candidate") if isinstance(result.get("big_chance_candidate"), dict) else {}
-    cue_cards = [
-        (
-            "CUE01 / side-aware review context",
-            "long / short は別々に読む。非対称を 1 つにまとめない。"
-            f" 現在の bias: {str(display_context.get('direction_label', '未記録')).strip() or '未記録'}。",
-            "emphasis",
-        ),
-        (
-            "CUE02 / long active_limit_retest narrow width",
-            "long active_limit_retest を review するときは、15m で entry-zone width を chart_review_only で確認する。"
-            " これは not entry prohibition ではない。",
-            "warn",
-        ),
-        (
-            "CUE03 / long q4 position hold",
-            "long q4 position は hold / do_not_show_yet。artifact risk のため active cue にしない。",
-            "warn",
-        ),
-        (
-            "CUE04 / short active_limit_retest wide bucket",
-            "preserve cue。short 側の review では long-side reduction logic を適用しない。",
-            "good",
-        ),
-        (
-            "CUE05 / stop_distance / ATR",
-            "not_directly_evaluated。0 とみなさない。entry cue ではなく別の review question に置く。",
-            "",
-        ),
-        (
-            "CUE06 / runner extension",
-            "not_directly_evaluated。entry cue と切り分け、runner のレビューとして独立させる。",
-            "",
-        ),
-        (
-            "CUE07 / data coverage",
-            "analysis/review quality only。no_ohlcv と resolved-only は分けて読む。",
-            "",
-        ),
-        (
-            "CUE08 / Big Chance",
-            "Big Chance is not an entry instruction. review-only cue として 15m chart の failed thesis を読む補助に使う。"
-            + (
-                f" 現在の latest: {str(big_chance.get('side', 'none'))} / {str(big_chance.get('type', 'none'))} / "
-                f"{str(big_chance.get('status', 'none'))} / score {str(big_chance.get('score', 'none'))} / "
-                f"grade {str(big_chance.get('grade', 'none'))}。"
-                if big_chance.get("present")
-                else ""
-            ),
-            "warn",
-        ),
-        (
-            "CUE09 / Value Defense",
-            "shallow zone と defense zone を別々に確認する。1 つの label にまとめない。",
-            "emphasis",
-        ),
+def _operator_v3_side_status(notification_context: dict[str, Any], result: dict[str, Any], side: str) -> str:
+    side_key = "long" if side == "long" else "short"
+    bias = str(result.get("bias", "")).strip().lower()
+    limit = str(((notification_context.get("active_limit_retest_entry") or {}).get(side_key)) or "").strip().lower()
+    market = str(((notification_context.get("active_market_entry_now") or {}).get(side_key)) or "").strip().lower()
+    breakout = str(((notification_context.get("active_breakout_follow_entry") or {}).get(side_key)) or "").strip().lower()
+    counter = str(((notification_context.get("active_countertrend_scalp_entry") or {}).get(side_key)) or "").strip().lower()
+    watchable = {limit, market, breakout, counter} & {"allowed", "conditional", "watch", "ready", "pass"}
+    if bias == side_key and watchable:
+        return "優勢 / 監視"
+    if watchable:
+        return "監視"
+    if bias == side_key:
+        return "監視"
+    return "見送り"
+
+
+def _operator_v3_wait_status(result: dict[str, Any]) -> str:
+    wait_score = _clamp(_safe_float(result.get("confidence_wait_shadow")))
+    if wait_score >= 70:
+        return "高め"
+    if wait_score >= 40:
+        return "中くらい"
+    return "低め"
+
+
+def _operator_v3_conclusion_text(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    notification_kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
+    bias = str(result.get("bias", "")).strip().lower()
+    long_state = _operator_v3_side_status(notification_context, result, "long")
+    short_state = _operator_v3_side_status(notification_context, result, "short")
+    if notification_kind == "followup":
+        return "今は前回通知を使わず再評価。新規判断は急がない。"
+    if notification_kind == "attention":
+        return "今は入らない。注意報として価格帯だけを監視する。"
+    if bias == "short":
+        return "今は見送り。ショート寄りに監視。ロングは浅い押し目だけで判断しない。"
+    if bias == "long":
+        return "今は見送り。ロング寄りに監視。ショートは飛びつかず戻りを待つ。"
+    if "監視" in short_state and "監視" not in long_state:
+        return "今は見送り。ショート側を先に監視し、ロングは急がない。"
+    if "監視" in long_state and "監視" not in short_state:
+        return "今は見送り。ロング側を先に監視し、ショートは急がない。"
+    return "今は見送り。方向を固定せず、価格帯と15分足だけを確認する。"
+
+
+def _operator_v3_posture_html(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    cards = [
+        ("ロング", _operator_v3_side_status(notification_context, result, "long"), "long", "浅い反応帯だけで決めず、押し目の質を先に見る。"),
+        ("ショート", _operator_v3_side_status(notification_context, result, "short"), "short", "戻りの反応を見て、追いかけずに判断する。"),
+        ("待機", _operator_v3_wait_status(result), "wait", "15分足の価格反応と安全境界を優先して確認する。"),
+    ]
+    card_html = "".join(
+        f"""
+        <div class="v2-operator-card {html.escape(tone)}">
+          <div class="v2-operator-label">{html.escape(label)}</div>
+          <div class="v2-operator-value">{html.escape(value)}</div>
+          <p class="v2-operator-note">{html.escape(note)}</p>
+        </div>
+        """
+        for label, value, tone, note in cards
+    )
+    return f"""
+    <section class="v2-section v2-section-anchor" id="posture">
+      <h2>いまの見方</h2>
+      <div class="v2-operator-grid">
+        {card_html}
+      </div>
+    </section>
+    """
+
+
+def _operator_v3_direction_meter_html(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
+    return f"""
+    <section class="v2-section v2-section-anchor" id="direction-meter">
+      <h2>方向メーター</h2>
+      <p class="v2-muted">表示用の読みやすい要約です。新しい scoring / gate / threshold logic は作っていません。</p>
+      <div class="v2-score-grid-top">
+        {_v2_score_card_html("ロング", result.get("long_display_score"), "blue", f"{_operator_v3_side_status(notification_context, result, 'long')}。浅い反応帯だけで決めない。")}
+        {_v2_score_card_html("ショート", result.get("short_display_score"), "red", f"{_operator_v3_side_status(notification_context, result, 'short')}。戻りの妥当性を先に見る。")}
+        {_v2_score_card_html("待機", result.get("confidence_wait_shadow"), "orange", f"{_operator_v3_wait_status(result)}。今やることを先に確認する。")}
+      </div>
+    </section>
+    """
+
+
+def _operator_v3_chart_focus_html(result: dict[str, Any]) -> str:
+    long_setup = result.get("long_setup", {}) or {}
+    short_setup = result.get("short_setup", {}) or {}
+    long_zone = long_setup.get("entry_zone") or {}
+    short_zone = short_setup.get("entry_zone") or {}
+    long_layer = long_setup.get("value_defense_entry_layer") if isinstance(long_setup.get("value_defense_entry_layer"), dict) else {}
+    short_layer = short_setup.get("value_defense_entry_layer") if isinstance(short_setup.get("value_defense_entry_layer"), dict) else {}
+    long_zone_text = _value_defense_entry_layer_zone_text(long_layer.get("shallow_retest_zone")) if long_layer else f"{_format_price(long_zone.get('low'))} - {_format_price(long_zone.get('high'))}"
+    short_zone_text = _value_defense_entry_layer_zone_text(short_layer.get("value_defense_zone")) if short_layer else f"{_format_price(short_zone.get('low'))} - {_format_price(short_zone.get('high'))}"
+    return f"""
+    <section class="v2-section v2-section-anchor" id="chart-focus">
+      <h2>チャートを見る場所</h2>
+      <div class="v2-grid-3">
+        {_v2_card_html("4時間足", "大きな流れ", "まず全体方向と主要帯だけを見る。")}
+        {_v2_card_html("1時間足", "戻りの妥当性", "浅い反応帯と本命防衛帯の位置関係を確認する。")}
+        {_v2_card_html("15分足", "入るなら見る場所", "実際に反応する価格、SL、TP だけを短く確認する。")}
+      </div>
+      <div class="v2-grid-2" style="margin-top:14px;">
+        {_v2_card_html("ロングの浅い反応帯", long_zone_text, "ロングの浅い再検討は慎重に見る。", class_name="emphasis")}
+        {_v2_card_html("ショートの本命防衛帯", short_zone_text, "浅い反応帯と本命防衛帯は分けて見る。", class_name="good")}
+      </div>
+    </section>
+    """
+
+
+def _operator_v3_now_action_html(result: dict[str, Any], action_kind_label: str) -> str:
+    long_setup = result.get("long_setup", {}) or {}
+    short_setup = result.get("short_setup", {}) or {}
+    long_zone = long_setup.get("entry_zone") or {}
+    short_zone = short_setup.get("entry_zone") or {}
+    bullets = [
+        f"成行は {action_kind_label}。まずは価格帯を確認する。",
+        f"ロングの浅い反応帯 {_format_price(long_zone.get('low'))} - {_format_price(long_zone.get('high'))} を 15分足で確認する。",
+        f"ショートの戻り帯 {_format_price(short_zone.get('low'))} - {_format_price(short_zone.get('high'))} を追いかけずに見る。",
     ]
     return f"""
+    <section class="v2-section v2-section-anchor" id="now-action">
+      <h2>今やること</h2>
+      <ul class="v2-reason-list">
+        {''.join(f'<li>{html.escape(item)}</li>' for item in bullets)}
+      </ul>
+    </section>
+    """
+
+
+def _operator_v3_why_html(result: dict[str, Any], wait_reason_summary: str) -> str:
+    ai_advice = result.get("ai_advice") if isinstance(result.get("ai_advice"), dict) else {}
+    reasons = [
+        str(ai_advice.get("primary_reason") or "").strip(),
+        str(ai_advice.get("next_condition") or "").strip(),
+        "ロングとショートは別々に読む。",
+        "浅い反応帯と本命防衛帯は分けて見る。",
+    ]
+    normalized = [reason for reason in reasons if reason]
+    if wait_reason_summary and wait_reason_summary not in normalized:
+        normalized.append(wait_reason_summary)
+    return f"""
+    <section class="v2-section v2-section-anchor" id="why">
+      <h2>なぜそう見るのか</h2>
+      <ul class="v2-reason-list">
+        {''.join(f'<li>{html.escape(reason)}</li>' for reason in normalized[:5])}
+      </ul>
+    </section>
+    """
+
+
+def _phase4_display_cue_panel_html(result: dict[str, Any]) -> str:
+    return f"""
     <section class="v2-section v2-section-anchor" id="phase4-cues">
-      <h2>Phase4 レビューキュー</h2>
-      <p class="v2-muted">report-only / not FORMAL_GO / no automatic order / human decides manually。これは chart_review_only の補助表示で、エントリー指示ではありません。</p>
-      <div class="v2-grid-3">
-        {''.join(_v2_card_html(cue_id, cue_id.split(' / ', 1)[1], body, class_name) for cue_id, body, class_name in cue_cards)}
+      <h2>読み方メモ</h2>
+      <p class="v2-muted">report-only / not FORMAL_GO / no automatic order / human decides manually。これは読み方の補助で、売買指示ではありません。</p>
+      <div class="v2-card">
+        <ul class="v2-reason-list">
+          <li>ロングとショートは別々に読む</li>
+          <li>ロングの浅い再検討は慎重に見る</li>
+          <li>ショート側の優位は雑に崩さない</li>
+          <li>Big Chance はエントリー指示ではない</li>
+          <li>浅い反応帯と本命防衛帯は分けて見る</li>
+        </ul>
       </div>
-      <div class="v2-callout">
-        <div class="v2-callout-icon">!</div>
-        <div><strong>運用ルール</strong><br>CUE02 は chart_review_only、CUE03 は hold / do_not_show_yet、CUE04 は preserve cue、CUE05/CUE06 は not_directly_evaluated、CUE08 は entry instruction ではありません。</div>
-      </div>
+      <details class="v2-details" style="margin-top:12px;">
+        <summary>内部補足</summary>
+        <div class="v2-details-body">
+          <p class="v2-muted">chart_review_only / preserve cue / not_directly_evaluated は内部トレース用であり、メインUIの指示ではありません。</p>
+        </div>
+      </details>
     </section>
     """
 
@@ -1479,6 +1584,14 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
       .v2-hero-top { padding: 24px 26px 18px; border-bottom: 1px solid rgba(216,225,234,.82); }
       .v2-eyebrow { color: var(--v2-muted); font-size: 13px; font-weight: 800; margin-bottom: 10px; }
       .v2-hero-grid { display:grid; grid-template-columns: minmax(0,1.25fr) minmax(320px,.75fr); gap: 18px; align-items: stretch; }
+      .v2-operator-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:14px; }
+      .v2-operator-card { border:1px solid var(--v2-line); border-radius:20px; background:linear-gradient(180deg, #fff, #f8fbfd); padding:16px; display:grid; gap:8px; }
+      .v2-operator-card.long { border-color: rgba(37,99,235,.18); }
+      .v2-operator-card.short { border-color: rgba(180,35,24,.18); }
+      .v2-operator-card.wait { border-color: rgba(217,119,6,.18); }
+      .v2-operator-label { color: var(--v2-muted); font-size:12px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
+      .v2-operator-value { font-size: clamp(24px, 3vw, 38px); line-height:1.1; font-weight:950; letter-spacing:-.03em; }
+      .v2-operator-note { margin:0; color:#334155; font-size:13px; font-weight:700; }
       .v2-status-badge { display:inline-flex; align-items:center; gap:8px; padding:9px 14px; border-radius:999px; background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; font-size:14px; font-weight:900; }
       .v2-h1 { margin: 14px 0 8px; font-size: clamp(28px, 4vw, 46px); line-height: 1.18; letter-spacing: -.03em; }
       .v2-lead { margin: 0; max-width: 720px; color: #334155; font-size: clamp(16px, 2vw, 20px); font-weight: 800; }
@@ -1639,7 +1752,7 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
       .time-axis-line { stroke: rgba(148,163,184,.3); stroke-width:1; }
       .time-axis-label { fill:#8fa2bf; font-size:11px; font-weight:600; }
       @media (max-width: 980px) {
-        .v2-hero-grid, .v2-layout, .v2-grid-2, .v2-grid-3, .v2-check-grid, .v2-score-grid-top, .v2-score-grid-bottom { grid-template-columns: 1fr; }
+        .v2-hero-grid, .v2-layout, .v2-grid-2, .v2-grid-3, .v2-check-grid, .v2-score-grid-top, .v2-score-grid-bottom, .v2-operator-grid { grid-template-columns: 1fr; }
         .v2-sidebar { position: static; }
         .v2-action-strip { grid-template-columns: repeat(2, minmax(0,1fr)); }
         .v2-action-item { border-bottom: 1px solid rgba(216,225,234,.9); }
@@ -1663,6 +1776,22 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
             f'<div class="v2-card good"><div class="v2-kicker">Bias</div><p><strong>{html.escape(str(display_context.get("direction_label", "未記録")))}</strong></p><p>{html.escape(str(display_context.get("entry_quality_label", "未記録")))}</p><p class="v2-muted">手動アクション確認: まず価格帯 → 15分足 → 安全境界。</p></div>',
         ]
     )
+    operator_v3_summary_html = f"""
+        <section class="v2-section v2-section-anchor" id="decision">
+          <h2>結論</h2>
+          <div class="v2-card emphasis">
+            <div class="v2-kicker">answer first</div>
+            <h3>{html.escape(_operator_v3_conclusion_text(result, notification_context))}</h3>
+            <p>report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+          </div>
+          <div class="v2-grid-3" style="margin-top:14px;">{decision_cards}</div>
+          <div class="v2-callout">
+            <div class="v2-callout-icon">!</div>
+            <div><strong>見る順番</strong><br>ロング / ショートの価格帯を先に確認し、15分足で入る場所だけを見る。</div>
+          </div>
+          {followup_card_html}
+        </section>
+    """
 
     return f"""<!doctype html>
 <html lang="ja">
@@ -1687,7 +1816,7 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
             </div>
           </div>
           <div class="v2-now-card">
-            <div class="v2-now-label">Current Price</div>
+            <div class="v2-now-label">現在値</div>
             <div class="v2-price">{html.escape(current_price)}</div>
             <p>上 / 下の再検討帯: {html.escape(watch_zone_label)}</p>
             <p>有効期限: {html.escape(validity_label)}</p>
@@ -1708,16 +1837,12 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
     <div class="v2-layout">
       {_v2_sidebar_html(result, notification_context, active_hero_label, current_price)}
       <main class="v2-main">
-        <section class="v2-section v2-section-anchor" id="decision">
-          <h2>最初に確認すること</h2>
-          <div class="v2-grid-3">{decision_cards}</div>
-          <div class="v2-callout">
-            <div class="v2-callout-icon">!</div>
-            <div><strong>見る順番</strong><br>ロング / ショートの価格帯を先に確認し、15分足で入る場所だけを見る。</div>
-          </div>
-          {followup_card_html}
-        </section>
-
+        {operator_v3_summary_html}
+        {_operator_v3_posture_html(result, notification_context)}
+        {_operator_v3_direction_meter_html(result, notification_context)}
+        {_operator_v3_chart_focus_html(result)}
+        {_operator_v3_now_action_html(result, action_kind_label)}
+        {_operator_v3_why_html(result, wait_reason_summary)}
         {_phase4_display_cue_panel_html(result)}
 
         {_price_plan_table_html(result)}
@@ -1735,7 +1860,7 @@ def _v2_detail_page_layout(result: dict[str, Any], base_dir: Path | None = None)
             {value_defense_chart_dashboard_html}
           </div>
           <div class="v2-grid-2" style="margin-top:14px;">
-            <div class="v2-card"><div class="v2-kicker">Current price / funding / ATR / volume</div><p>{html.escape(current_price)} / {html.escape(funding_display)} / ATR {html.escape(str(result.get('atr_ratio', '未記録')))} / volume {html.escape(str(result.get('volume_ratio', '未記録')))}</p></div>
+            <div class="v2-card"><div class="v2-kicker">現在値 / funding / ATR / volume</div><p>{html.escape(current_price)} / {html.escape(funding_display)} / ATR {html.escape(str(result.get('atr_ratio', '未記録')))} / volume {html.escape(str(result.get('volume_ratio', '未記録')))}</p></div>
             <div class="v2-card"><div class="v2-kicker">図の読み方</div><p>4h で trap / fuel、1h で帯の妥当性、15m で entry / SL / TP の順に確認します。</p></div>
           </div>
         </section>
@@ -2507,10 +2632,10 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
     reason_labels = candidate.get("reason_labels") if isinstance(candidate.get("reason_labels"), list) else []
     if status == "invalidated":
         header = "大転換候補 / Big Chance / Failed Thesis"
-        intro = "候補失効 / 再評価済み。active な最優先候補ではありません。Big Chance is not an entry instruction."
+        intro = "候補失効 / 再評価済み。これはエントリー指示ではありません。Big Chance is not an entry instruction."
     else:
         header = "大転換候補 / Big Chance / Failed Thesis"
-        intro = "Failed thesis から反対側の大転換候補を report-only で確認します。通常スコアとは別枠です。Big Chance is not an entry instruction."
+        intro = "失敗シナリオの反対側を補助確認します。これはエントリー指示ではありません。Big Chance is not an entry instruction."
 
     safety_boundary = _normalize_detail_page_safety_boundary(candidate.get("safety_boundary", STABLE_DETAIL_PAGE_SAFETY_BOUNDARY))
     reason_chips = _v2_reason_chips_html(reason_labels)
@@ -2537,6 +2662,7 @@ def _big_chance_section_html(result: dict[str, Any]) -> str:
         <div class="v2-card emphasis">
           <div class="v2-kicker">Score / Grade</div>
           <div class="v2-big">{html.escape(str(candidate.get('score', 0)))} / {html.escape(str(candidate.get('grade', 'none')))}</div>
+          <p>これはエントリー指示ではありません</p>
         </div>
         <div class="v2-card">
           <div class="v2-kicker">Safety boundary</div>
