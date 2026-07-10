@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-07
+last_updated: 2026-07-10
 
 ## Safety boundary
 
@@ -504,13 +504,7 @@ chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 
 P6 remains offline/report-only and is not connected to production gates, notifications, runtime, APIs, or orders. P6 source implementation is complete and accepted.
 
-Current exact next task:
-
-```text
-BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT
-```
-
-The next task is a human checkpoint before any P7 specification is created.
+P6 was subsequently implemented, accepted, and archived as recorded in the P6 completion section below.
 
 ---
 
