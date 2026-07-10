@@ -55,12 +55,6 @@ def _read_signal_outcomes(path: Path) -> tuple[list[dict[str, str]], str]:
             return rows, "ok"
     except (OSError, UnicodeError, csv.Error):
         return [], "invalid"
-    try:
-        return Decimal(text)
-    except InvalidOperation:
-        return None
-
-
 def build_manual_trade_ground_truth_report_v2(*, trades: Path, orders: Path, positions: Path, episodes: Path, links: Path, signal_outcomes: Path | None = None, output_md: Path | None = None, dry_run: bool = False) -> tuple[str, dict[str, Any]]:
     fills, fill_status = _read(trades, TRADE_HEADERS, "manual_actual_trade.v2")
     order_rows, order_status = _read(orders, ORDER_HEADERS, "manual_actual_trade.v2")
