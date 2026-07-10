@@ -157,5 +157,49 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         self.assertEqual(self.run_classifier(fixture)["classification_status_counts"]["insufficient_evidence"], 1)
         repo = Path(__file__).resolve().parents[1]; result = subprocess.run([sys.executable, str(repo / "tools" / "log_feedback.py"), "build-manual-operator-classifier", "--scenarios", str(self.root / "missing"), "--scenario-events", str(self.root / "missing"), "--candidates", str(self.root / "missing"), "--signal-context", str(self.root / "missing"), "--output-csv", str(self.root / "x.csv"), "--output-json", str(self.root / "x.json"), "--output-md", str(self.root / "x.md"), "--date", "20260710", "--stdout-json"], cwd=repo, text=True, capture_output=True, check=False); self.assertEqual(result.returncode, 2); self.assertEqual(len(result.stdout.strip().splitlines()), 1); self.assertNotIn("Traceback", result.stderr)
 
+    def test_zero_rr_is_present_and_does_not_fallback(self) -> None:
+        result = self.run_classifier(self.fixture(rr1="0", rr2="0", extra_candidate={"rr_current_tp1": "9", "rr_current_tp2": "9"}))
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(self.read_rows()[0]["rr_tp1_used"], "0")
+        self.assertEqual(self.read_rows()[0]["rr_tp2_used"], "0")
+
+    def test_nonfinite_numeric_and_threshold_fail_closed(self) -> None:
+        for value in ("NaN", "Infinity", "-Infinity"):
+            self.assertEqual(self.run_classifier(self.fixture(extra_candidate={"entry_price": value}))["exit_code"], 2)
+        self.assertEqual(self.run_classifier(self.fixture(), thresholds={"long_direction_min": "NaN"})["exit_code"], 2)
+        self.assertEqual(self.run_classifier(self.fixture(), thresholds={"long_direction_min": "Infinity"})["exit_code"], 2)
+
+    def test_join_side_and_b_contracts(self) -> None:
+        fixture = self.fixture()
+        with fixture["candidates"].open(newline="", encoding="utf-8") as fp:
+            candidate = next(csv.DictReader(fp))
+        candidate["source_signal_id"] = "other"
+        fixture["candidates"] = self.write("mismatch.csv", CANDIDATE_HEADERS, [candidate])
+        self.assertEqual(self.run_classifier(fixture)["exit_code"], 2)
+        fixture = self.fixture()
+        with fixture["events"].open(newline="", encoding="utf-8") as fp:
+            event = next(csv.DictReader(fp))
+        event["side"] = ""
+        fixture["events"] = self.write("bad-side.csv", EVENT_HEADERS, [event])
+        self.assertEqual(self.run_classifier(fixture)["exit_code"], 2)
+        self.assertEqual(self.run_classifier(self.fixture(quality=""))["class_counts"].get("B_CHECK_15M", 0), 0)
+        self.assertEqual(self.run_classifier(self.fixture(setup_status="invalid", gate="blocked"))["class_counts"].get("B_CHECK_15M", 0), 0)
+
+    def test_output_snapshot_and_required_markdown_sections(self) -> None:
+        result = self.run_classifier(self.fixture(extra_signal={"warning_flags": "a,b", "risk_flags": "r|r", "no_trade_flags": "[\"n1\", \"n2\"]"}))
+        self.assertTrue(result["ok"])
+        with (self.root / "out.csv").open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        for field in ("short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min", "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min"):
+            self.assertTrue(row[field])
+        self.assertEqual(result["warning_token_counts"], {"a": 1, "b": 1})
+        self.assertEqual(result["risk_token_counts"], {"r": 1})
+        self.assertEqual(result["no_trade_token_counts"], {"n1": 1, "n2": 1})
+        markdown = (self.root / "out.md").read_text(encoding="utf-8")
+        for section in ("Purpose", "Input Status", "Method and No-Leakage Boundary", "Threshold Snapshot", "Classification Coverage", "Class Distribution", "Side Breakdown", "Regime Breakdown", "Setup-Family Breakdown", "Existing Gate Comparison", "Warnings and Risks", "Limitations", "Safety Boundary"):
+            self.assertIn(f"## {section}", markdown)
+        for statement in ("not FORMAL_GO", "no automatic order", "human decides manually", "A/B/C/STOP does not replace existing gates"):
+            self.assertIn(statement, markdown)
+
 
 if __name__ == "__main__": unittest.main()

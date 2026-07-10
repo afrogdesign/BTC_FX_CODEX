@@ -86,7 +86,8 @@ def _dec(value: Any) -> Decimal | None:
     if not text:
         return None
     try:
-        return Decimal(text)
+        parsed = Decimal(text)
+        return parsed if parsed.is_finite() else None
     except (InvalidOperation, ValueError):
         return None
 
@@ -97,9 +98,18 @@ def _dec_text(value: Any) -> str:
 
 
 def _tokens(value: Any) -> tuple[str, ...]:
+    if isinstance(value, (list, tuple, set)):
+        return tuple(sorted({str(token).strip().lower() for token in value if str(token).strip()}))
     text = str(value or "").strip()
     if not text:
         return ()
+    if text.startswith("[") and text.endswith("]"):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return tuple(sorted({str(token).strip().lower() for token in parsed if str(token).strip()}))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
     return tuple(sorted({token.strip().lower() for token in re.split(r"[;,|]", text) if token.strip()}))
 
 
@@ -133,9 +143,9 @@ def _fingerprint(row: dict[str, str], fields: list[str]) -> str:
         if field in {"timestamp_jst", "event_timestamp_jst", "event_timestamp_utc"}:
             parsed = _dt(value)
             value = _jst(parsed) if parsed else value
-        elif field.startswith("rr_") or field.endswith("_price") or field in {"entry_price", "entry_zone_low", "entry_zone_high"}:
+        elif field.startswith("rr_") or field.endswith("_price") or field in {"entry_price", "entry_zone_low", "entry_zone_high", "current_price", "confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow", "long_rr", "short_rr", "nearest_major_support", "nearest_major_resistance"}:
             value = _dec_text(value) if value else ""
-        elif field in {"no_trade_flags", "warning_flags", "risk_flags", "trade_execution_blockers"}:
+        elif field in {"no_trade_flags", "warning_flags", "risk_flags", "trade_execution_blockers", "phase1b_lite_reasons", "opportunity_reasons"}:
             value = ";".join(_tokens(value))
         else:
             value = str(value or "").strip().lower()
@@ -205,8 +215,10 @@ def _threshold_text(value: Decimal) -> str:
 
 
 def _rr_values(candidate: dict[str, str], signal: dict[str, str], side: str) -> tuple[Decimal | None, Decimal | None]:
-    tp1 = _dec(candidate.get("rr_zone_mid_tp1")) or _dec(candidate.get("rr_current_tp1"))
-    tp2 = _dec(candidate.get("rr_zone_mid_tp2")) or _dec(candidate.get("rr_current_tp2"))
+    zone_tp1 = str(candidate.get("rr_zone_mid_tp1", "")).strip()
+    zone_tp2 = str(candidate.get("rr_zone_mid_tp2", "")).strip()
+    tp1 = _dec(zone_tp1) if zone_tp1 else (_dec(candidate.get("rr_current_tp1")) if str(candidate.get("rr_current_tp1", "")).strip() else None)
+    tp2 = _dec(zone_tp2) if zone_tp2 else (_dec(candidate.get("rr_current_tp2")) if str(candidate.get("rr_current_tp2", "")).strip() else None)
     if side == "long":
         tp1 = tp1 if tp1 is not None else _dec(signal.get("long_rr"))
     else:
@@ -232,8 +244,8 @@ def _base_row(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         "market_regime": signal.get("market_regime", ""), "transition_direction": signal.get("transition_direction", ""),
         "classification_status": status, "operator_class": operator_class,
         "priority_rank": str(CLASSES.index(operator_class) + 1) if operator_class in CLASSES else "",
-        "reason_codes": ";".join(reasons), "warning_codes": ";".join(warning), "required_human_check": required_check,
-        "trade_execution_gate": signal.get("trade_execution_gate", ""), "trade_execution_blockers": signal.get("trade_execution_blockers", ""),
+        "reason_codes": ";".join(sorted(set(reasons))), "warning_codes": ";".join(sorted(set(warning))), "required_human_check": required_check,
+        "trade_execution_gate": signal.get("trade_execution_gate", ""), "trade_execution_blockers": ";".join(_tokens(signal.get("trade_execution_blockers"))),
         "phase1b_lite_gate": signal.get("phase1b_lite_gate", ""), "phase1b_lite_type": signal.get("phase1b_lite_type", ""),
         "opportunity_gate": signal.get("opportunity_gate", ""), "opportunity_type": signal.get("opportunity_type", ""),
         "prelabel": signal.get("prelabel", ""), "signal_tier": signal.get("signal_tier", ""),
@@ -244,13 +256,16 @@ def _base_row(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         "tp1_price": candidate.get("tp1", event.get("tp1_price", "")), "tp2_price": candidate.get("tp2", event.get("tp2_price", "")),
         "rr_tp1_used": _threshold_text(tp1) if tp1 is not None else "", "rr_tp2_used": _threshold_text(tp2) if tp2 is not None else "",
         "confidence_direction_shadow": signal.get("confidence_direction_shadow", ""), "confidence_execution_shadow": signal.get("confidence_execution_shadow", ""), "confidence_wait_shadow": signal.get("confidence_wait_shadow", ""),
-        "data_quality_flag": signal.get("data_quality_flag", ""), "no_trade_flags": signal.get("no_trade_flags", ""), "risk_flags": signal.get("risk_flags", ""),
+        "data_quality_flag": signal.get("data_quality_flag", ""), "no_trade_flags": ";".join(_tokens(signal.get("no_trade_flags"))), "risk_flags": ";".join(_tokens(signal.get("risk_flags"))),
         "source_join_status": "complete" if candidate and signal else "incomplete",
     })
+    row["warning_codes"] = ";".join(_tokens(signal.get("warning_flags")))
     return row
 
 
 def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str, str], thresholds: dict[str, Decimal]) -> dict[str, str]:
+    if event.get("grouping_status") == "ambiguous":
+        return _base_row(event, candidate, signal, "ambiguous_grouping", reasons=("ambiguous_scenario_assignment",))
     if not candidate or not signal:
         return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("missing_candidate_context" if not candidate else "missing_signal_context",))
     event_dt = _dt(event.get("event_timestamp_utc") or event.get("event_timestamp_jst"))
@@ -260,14 +275,18 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("missing_timestamp",))
     if candidate_dt > event_dt or signal_dt > event_dt:
         raise ValueError("future_context")
-    if event.get("grouping_status") == "ambiguous":
-        return _base_row(event, candidate, signal, "ambiguous_grouping", reasons=("ambiguous_scenario_assignment",))
     quality = signal.get("data_quality_flag", "").strip().lower()
     no_trade = _tokens(signal.get("no_trade_flags"))
     candidate_status = candidate.get("candidate_status", event.get("candidate_status", "")).strip().lower()
-    if (quality and quality != "ok") or no_trade or candidate_status in {"invalidated", "cancelled", "expired"}:
-        reasons = ("stop_data_quality",) if quality and quality != "ok" else (("stop_no_trade_flag",) if no_trade else ("stop_candidate_" + candidate_status,))
-        return _base_row(event, candidate, signal, "classified", "STOP_OR_EXIT", reasons=reasons, required_check="human_review_only")
+    stop_reasons: list[str] = []
+    if quality != "ok":
+        stop_reasons.append("stop_data_quality")
+    if no_trade:
+        stop_reasons.append("stop_no_trade_flag")
+    if candidate_status in {"invalidated", "cancelled", "expired"}:
+        stop_reasons.append("stop_candidate_" + candidate_status)
+    if stop_reasons:
+        return _base_row(event, candidate, signal, "classified", "STOP_OR_EXIT", reasons=tuple(sorted(set(stop_reasons))), required_check="human_review_only")
     side = event.get("side", "").strip().lower()
     setup_status = signal.get("primary_setup_status", "").strip().lower()
     setup_side = signal.get("primary_setup_side", "").strip().lower()
@@ -287,7 +306,7 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
     rr_ok = (tp1 is not None and tp1 >= thresholds[f"{side}_tp1_rr_min"]) or (tp2 is not None and tp2 >= thresholds[f"{side}_tp2_rr_min"])
     eligible = candidate_status in {"allowed", "conditional", "armed", "watch"}
     entry_defined = bool(candidate.get("entry_price") or candidate.get("entry_zone_low") or candidate.get("entry_zone_high") or event.get("entry_price") or event.get("entry_zone_low"))
-    non_gate_b = bool(entry_defined and direction is not None and execution is not None and wait is not None and direction >= direction_min and execution >= execution_min and wait <= wait_max and rr_ok and eligible and setup_side == side and (side != "long" or setup_status == "ready"))
+    non_gate_b = bool(quality == "ok" and not no_trade and entry_defined and direction is not None and execution is not None and wait is not None and direction >= direction_min and execution >= execution_min and wait <= wait_max and rr_ok and eligible and setup_side == side and (side != "long" or setup_status == "ready") and (side != "short" or setup_status in {"ready", "watch"}))
     if non_gate_b and (gate == "blocked" or (gate == "pass" and not a_ok)):
         reasons = ("b_shadow_thresholds_pass", "b_rr_threshold_pass", "b_setup_eligible", "b_side_match")
         if gate == "blocked": reasons += ("b_formal_gate_not_pass",)
@@ -330,9 +349,11 @@ def _atomic_three(paths_text: list[tuple[Path, str]]) -> None:
 
 
 def _markdown(payload: dict[str, Any]) -> str:
-    lines = ["# Manual Operator Classifier Report", "", "## Purpose", "", "Offline event-time operator hypothesis only; not FORMAL_GO, no automatic order, human decides manually.", "", "## Classification Coverage", "", f"- classified_rows: {payload['classified_rows']}", f"- insufficient_evidence_rows: {payload['insufficient_evidence_rows']}", f"- ambiguous_event_rows: {payload['ambiguous_event_rows']}", "", "## Class Distribution", ""]
+    lines = ["# Manual Operator Classifier Report", "", "## Purpose", "", "Offline hypothesis only. This is not FORMAL_GO; no automatic order is created and a human decides manually.", "", "## Input Status", "", f"- scenario_event_input_rows: {payload['scenario_event_input_rows']}", f"- candidate_context_rows: {payload['candidate_context_rows']}", f"- signal_context_rows: {payload['signal_context_rows']}", "", "## Method and No-Leakage Boundary", "", "Event-time evidence only. Outcome, actual trade, and human decision evidence are not classifier inputs. A/B/C/STOP does not replace existing gates.", "", "## Threshold Snapshot", ""]
+    for key, value in payload["thresholds"].items(): lines.append(f"- {key}: {value}")
+    lines += ["", "## Classification Coverage", "", f"- classified_rows: {payload['classified_rows']}", f"- insufficient_evidence_rows: {payload['insufficient_evidence_rows']}", f"- ambiguous_event_rows: {payload['ambiguous_event_rows']}", "", "## Class Distribution", ""]
     for name in (*CLASSES, "insufficient_evidence"): lines.append(f"- {name}: {payload['class_counts'].get(name, payload['insufficient_evidence_rows'] if name == 'insufficient_evidence' else 0)}")
-    lines += ["", "## Side Breakdown", json.dumps(payload["side_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Regime Breakdown", json.dumps(payload["regime_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Setup-Family Breakdown", json.dumps(payload["setup_family_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Existing Gate Comparison", f"- formal_gate_pass_rows: {payload['formal_gate_pass_rows']}", f"- formal_pass_not_a_rows: {payload['formal_pass_not_a_rows']}", "", "## Limitations", "- No P5 profitability or performance claim is made.", "- Scenario proxy outcomes and human decisions are not classifier inputs.", "- This report does not modify gates, thresholds, notifications, runtime, or orders.", "", "## Safety Boundary", SAFETY, ""]
+    lines += ["", "## Side Breakdown", json.dumps(payload["side_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Regime Breakdown", json.dumps(payload["regime_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Setup-Family Breakdown", json.dumps(payload["setup_family_class_counts"], ensure_ascii=False, sort_keys=True), "", "## Existing Gate Comparison", f"- formal_gate_pass_rows: {payload['formal_gate_pass_rows']}", f"- formal_pass_not_a_rows: {payload['formal_pass_not_a_rows']}", "- B thresholds are comparison values, not production settings.", "", "## Warnings and Risks", f"- warning_token_counts: {json.dumps(payload['warning_token_counts'], sort_keys=True)}", f"- risk_token_counts: {json.dumps(payload['risk_token_counts'], sort_keys=True)}", f"- no_trade_token_counts: {json.dumps(payload['no_trade_token_counts'], sort_keys=True)}", "", "## Limitations", "- No P5 profitability evaluation exists.", "- Outcome, actual trade, and human decision evidence are not classifier inputs.", "- This report does not modify gates, thresholds, notifications, runtime, or orders.", "", "## Safety Boundary", SAFETY, ""]
     return "\n".join(lines)
 
 
@@ -362,7 +383,10 @@ def build_manual_operator_classifier(*, scenarios: Path, scenario_events: Path, 
     for event in event_rows:
         candidate = candidates_by_id.get(event.get("candidate_id", ""), {})
         signal = signals_by_id.get(event.get("source_signal_id", ""), {})
-        if signal and signal.get("signal_id") != event.get("source_signal_id"): signal = {}
+        if event.get("side", "").strip().lower() not in {"long", "short"}:
+            return {"ok": False, "exit_code": 2, "errors": ["invalid_side"], "report_written": False, "safety_boundary": SAFETY}
+        if candidate and candidate.get("source_signal_id", "") != event.get("source_signal_id", ""):
+            return {"ok": False, "exit_code": 2, "errors": ["source_signal_mismatch"], "report_written": False, "safety_boundary": SAFETY}
         if _dt(event.get("event_timestamp_utc") or event.get("event_timestamp_jst")) is None or (candidate and _dt(candidate.get("timestamp_jst")) is None) or (signal and _dt(signal.get("timestamp_jst")) is None):
             return {"ok": False, "exit_code": 2, "errors": ["invalid_timestamp"], "report_written": False, "safety_boundary": SAFETY}
         try:
@@ -372,6 +396,8 @@ def build_manual_operator_classifier(*, scenarios: Path, scenario_events: Path, 
                 return {"ok": False, "exit_code": 2, "errors": ["future_context"], "report_written": False, "safety_boundary": SAFETY}
             raise
         rows.append(row)
+        for key, value in threshold_values.items():
+            row[key] = _threshold_text(value)
         if signal.get("trade_execution_gate", "").strip().lower() == "pass": formal_pass += 1
     rows.sort(key=lambda row: (row.get("event_timestamp_utc", ""), row.get("scenario_event_id", ""), row.get("classification_id", "")))
     threshold_order = tuple(_threshold_text(threshold_values[key]) for key in threshold_values)
@@ -385,7 +411,10 @@ def build_manual_operator_classifier(*, scenarios: Path, scenario_events: Path, 
     side_counts = {side: {name: sum(1 for row in rows if row.get("side") == side and row.get("operator_class") == name) for name in CLASSES} for side in sorted({row.get("side", "") for row in rows})}
     regime_counts = {regime: {name: sum(1 for row in rows if row.get("market_regime") == regime and row.get("operator_class") == name) for name in CLASSES} for regime in sorted({row.get("market_regime", "") for row in rows})}
     setup_counts = {setup: {name: sum(1 for row in rows if row.get("setup_family") == setup and row.get("operator_class") == name) for name in CLASSES} for setup in sorted({row.get("setup_family", "") for row in rows})}
-    payload: dict[str, Any] = {"schema_version": REPORT_SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "scenario_event_input_rows": len(event_rows), "assigned_event_rows": sum(1 for row in event_rows if row.get("grouping_status") != "ambiguous"), "ambiguous_event_rows": sum(1 for row in event_rows if row.get("grouping_status") == "ambiguous"), "candidate_context_rows": len(candidates_by_id), "signal_context_rows": len(signals_by_id), "exact_duplicate_candidate_rows": candidate_dupes, "exact_duplicate_signal_rows": signal_dupes, "candidate_conflict_rows": 0, "signal_conflict_rows": 0, "complete_join_rows": sum(1 for row in rows if row.get("source_join_status") == "complete"), "insufficient_evidence_rows": sum(1 for row in rows if row.get("classification_status") == "insufficient_evidence"), "classified_rows": sum(1 for row in rows if row.get("classification_status") == "classified"), "class_counts": dict(sorted(class_counts.items())), "classification_status_counts": status_counts, "side_class_counts": side_counts, "regime_class_counts": regime_counts, "setup_family_class_counts": setup_counts, "formal_gate_pass_rows": formal_pass, "a_formal_rows": class_counts["A_FORMAL"], "formal_pass_not_a_rows": formal_pass - class_counts["A_FORMAL"], "b_check_15m_rows": class_counts["B_CHECK_15M"], "c_watch_zone_rows": class_counts["C_WATCH_ZONE"], "stop_or_exit_rows": class_counts["STOP_OR_EXIT"], "thresholds": {key: _threshold_text(value) for key, value in sorted(threshold_values.items())}, "dry_run": dry_run, "errors": []}
+    warning_counts = dict(sorted(Counter(token for row in rows for token in _tokens(row.get("warning_codes"))).items()))
+    risk_counts = dict(sorted(Counter(token for row in rows for token in _tokens(row.get("risk_flags"))).items()))
+    no_trade_counts = dict(sorted(Counter(token for row in rows for token in _tokens(row.get("no_trade_flags"))).items()))
+    payload: dict[str, Any] = {"schema_version": REPORT_SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "scenario_event_input_rows": len(event_rows), "assigned_event_rows": sum(1 for row in event_rows if row.get("grouping_status") != "ambiguous"), "ambiguous_event_rows": sum(1 for row in event_rows if row.get("grouping_status") == "ambiguous"), "candidate_context_rows": len(candidates_by_id), "signal_context_rows": len(signals_by_id), "exact_duplicate_candidate_rows": candidate_dupes, "exact_duplicate_signal_rows": signal_dupes, "candidate_conflict_rows": 0, "signal_conflict_rows": 0, "complete_join_rows": sum(1 for row in rows if row.get("source_join_status") == "complete"), "insufficient_evidence_rows": sum(1 for row in rows if row.get("classification_status") == "insufficient_evidence"), "classified_rows": sum(1 for row in rows if row.get("classification_status") == "classified"), "class_counts": dict(sorted(class_counts.items())), "classification_status_counts": status_counts, "side_class_counts": side_counts, "regime_class_counts": regime_counts, "setup_family_class_counts": setup_counts, "formal_gate_pass_rows": formal_pass, "a_formal_rows": class_counts["A_FORMAL"], "formal_pass_not_a_rows": formal_pass - class_counts["A_FORMAL"], "b_check_15m_rows": class_counts["B_CHECK_15M"], "c_watch_zone_rows": class_counts["C_WATCH_ZONE"], "stop_or_exit_rows": class_counts["STOP_OR_EXIT"], "thresholds": {key: _threshold_text(value) for key, value in sorted(threshold_values.items())}, "warning_token_counts": warning_counts, "risk_token_counts": risk_counts, "no_trade_token_counts": no_trade_counts, "dry_run": dry_run, "errors": []}
     payload["ok"] = True
     payload["exit_code"] = 0
     csv_text = _serialize_csv(rows)
