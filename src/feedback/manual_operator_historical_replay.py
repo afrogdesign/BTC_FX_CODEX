@@ -334,11 +334,8 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
             event = events_by_id[cls["scenario_event_id"]]; scenario = scenarios_by_id.get(event.get("scenario_id", ""), {})
             _, role, reason = _qualifies(policy, cls); selected_at = _dt(cls.get("event_timestamp_utc")) or _dt(event.get("event_timestamp_utc")); outcome = _normal_outcome(event)
             replay = {key: "" for key in REPLAY_HEADERS}; replay.update(schema_version=SCHEMA_VERSION, replay_row_id=_row_id(policy, role, event.get("scenario_id", ""), event.get("scenario_event_id", ""), cls.get("classification_id", "")), replay_method_version=METHOD_VERSION, policy_name=policy, row_role=role, scenario_id=event.get("scenario_id", ""), selected_scenario_event_id=event.get("scenario_event_id", ""), classification_id=cls.get("classification_id", ""), selected_at_utc=_utc(selected_at), selected_at_jst=_jst(selected_at), symbol=event.get("symbol", ""), side=event.get("side", ""), setup_family=event.get("setup_family", ""), market_regime=cls.get("market_regime", ""), selected_operator_class=cls.get("operator_class", ""), trade_execution_gate=cls.get("trade_execution_gate", ""), selection_reason=reason, intraperiod_outcome=event.get("intraperiod_outcome", ""), normalized_outcome_status=outcome, first_exit_reason=event.get("first_exit_reason", ""), mfe_r=event.get("mfe_r", ""), mae_r=event.get("mae_r", ""), ohlcv_coverage_status=event.get("ohlcv_coverage_status", ""), ohlcv_gap_reason=event.get("ohlcv_gap_reason", ""), scenario_final_status=scenario.get("scenario_status", ""), scenario_final_lifecycle=scenario.get("lifecycle_state", ""), scenario_final_proxy_outcome=scenario.get("proxy_outcome", ""), source_join_status="complete")
-            for decision in effective_decisions:
-                decision_time = _dt(decision.get("human_checked_at_utc") or decision.get("human_checked_at_jst"));
-                if decision.get("scenario_id") == event.get("scenario_id") and decision_time and selected_at and decision_time >= selected_at:
-                    replay["decision_join_status"] = "matched"; replay["first_effective_human_action"] = decision.get("human_action", ""); replay["first_human_checked_at_utc"] = _utc(decision_time); break
-            if not replay["decision_join_status"] and decision_events is not None: replay["decision_join_status"] = "no_match"
+            if decision_events is not None:
+                replay["decision_join_status"] = "no_match"
             eligible_links = [link for link in link_rows if replay["row_role"] == "entry_candidate" and link.get("signal_id") == event.get("source_signal_id") and link.get("link_status") == "linked" and link.get("link_confidence") in {"high", "medium"} and link.get("side_compatibility") == "match" and link.get("symbol_compatibility") == "match"]
             if eligible_links:
                 episode = next((item for item in episode_rows if item.get("episode_id") == eligible_links[0].get("episode_id")), None)
@@ -389,12 +386,14 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                 upgrade = sorted(later, key=lambda item: (item.get("event_timestamp_utc", ""), item.get("scenario_event_id", ""), item.get("classification_id", "")))[0]
                 replay["later_upgrade_class"] = upgrade.get("operator_class", ""); upgrade_time = _dt(upgrade.get("event_timestamp_utc")); replay["later_upgrade_at_utc"] = _utc(upgrade_time); selected_time = _dt(replay.get("selected_at_utc")); replay["upgrade_latency_minutes"] = str(int((upgrade_time - selected_time).total_seconds() / 60)) if upgrade_time and selected_time else ""
     decision_metrics: dict[str, dict[str, Any]] = {}
+    decision_display: dict[str, dict[str, dict[str, str]]] = {}
     for policy in POLICIES:
         selected_policy = [row for row in rows if row["policy_name"] == policy]
         signal_map: dict[str, set[str]] = {}
         for row in selected_policy:
             signal_map.setdefault(events_by_id[row["selected_scenario_event_id"]].get("source_signal_id", ""), set()).add(row["scenario_id"])
         metrics = {"effective_decision_rows": 0, "scenarios_with_decision": 0, "decision_coverage_rate": 0.0, "entered_rows": 0, "watched_no_entry_rows": 0, "skipped_rows": 0, "exited_rows": 0, "took_profit_rows": 0, "adjusted_stop_rows": 0, "cancelled_plan_rows": 0, "pre_selection_decision_rows": 0, "ambiguous_signal_only_decision_rows": 0, "orphan_decision_rows": 0}
+        display: dict[str, dict[str, str]] = {}
         seen_scenarios: set[str] = set()
         for decision in effective_decisions:
             decision_time = _dt(decision.get("human_checked_at_utc") or decision.get("human_checked_at_jst")); scenario_id = decision.get("scenario_id", ""); signal_id = decision.get("signal_id", "")
@@ -410,8 +409,17 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                 metrics["pre_selection_decision_rows"] += 1; continue
             metrics["effective_decision_rows"] += 1; seen_scenarios.add(target["scenario_id"])
             action = decision.get("human_action", ""); key = {"entered": "entered_rows", "watched_no_entry": "watched_no_entry_rows", "skipped": "skipped_rows", "exited": "exited_rows", "took_profit": "took_profit_rows", "adjusted_stop": "adjusted_stop_rows", "cancelled_plan": "cancelled_plan_rows"}.get(action)
+            display.setdefault(target["scenario_id"], {"human_action": action, "human_checked_at_utc": _utc(decision_time)})
             if key: metrics[key] += 1
-        metrics["scenarios_with_decision"] = len(seen_scenarios); metrics["decision_coverage_rate"] = len(seen_scenarios) / len(selected_policy) if selected_policy else 0.0; decision_metrics[policy] = metrics
+        metrics["scenarios_with_decision"] = len(seen_scenarios); metrics["decision_coverage_rate"] = len(seen_scenarios) / len(selected_policy) if selected_policy else 0.0; decision_metrics[policy] = metrics; decision_display[policy] = display
+    for row in rows:
+        if decision_events is None:
+            continue
+        selected = decision_display.get(row["policy_name"], {}).get(row["scenario_id"])
+        if selected:
+            row["decision_join_status"] = "matched"; row["first_effective_human_action"] = selected["human_action"]; row["first_human_checked_at_utc"] = selected["human_checked_at_utc"]
+        else:
+            row["decision_join_status"] = "no_match"
     def breakdown(field: str) -> dict[str, dict[str, int]]:
         result: dict[str, dict[str, int]] = {}
         for replay in rows:
@@ -425,10 +433,12 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
     actual_net = [(gross - abs(fee), fee) for gross, fee in actual_gross if gross is not None and fee is not None]
     net_values = [net for net, _ in actual_net]; positive_net = [value for value in net_values if value > 0]; negative_net = [value for value in net_values if value < 0]
     actual_policy: dict[str, dict[str, Any]] = {}
+    episode_by_id = {row.get("episode_id", ""): row for row in episode_rows}
     for policy in POLICIES:
         seen: set[str] = set(); linked = []
         for row in rows:
-            if row["policy_name"] == policy and row.get("actual_episode_id") and row["actual_episode_id"] not in seen:
+            episode = episode_by_id.get(row.get("actual_episode_id", ""))
+            if row["policy_name"] == policy and row.get("row_role") == "entry_candidate" and row.get("actual_episode_id") and row["actual_episode_id"] not in seen and episode and episode.get("status") == "closed" and _dec(episode.get("realized_pnl")) is not None:
                 seen.add(row["actual_episode_id"]); linked.append(row)
         vals = [(_dec(row.get("actual_gross_realized_pnl")), _dec(row.get("actual_fee_total"))) for row in linked]
         nets = [gross - abs(fee) for gross, fee in vals if gross is not None and fee is not None]; losses = [v for v in nets if v < 0]; wins = [v for v in nets if v > 0]

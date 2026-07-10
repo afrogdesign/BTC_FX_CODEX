@@ -124,5 +124,28 @@ class HistoricalReplayTests(unittest.TestCase):
     def test_actual_summary_contract_keys_and_open_episode(self) -> None:
         fx = self.fixtures(); episodes, links = self.episode_inputs(status="open", realized="10", fee="2", closed=""); result = self.build(fx, trade_episodes=episodes, episode_links=links); summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]; self.assertEqual(summary["actual_gross_realized_pnl"], "0"); self.assertEqual(summary["actual_net_pnl_after_fee"], "0"); self.assertEqual(set(summary), {"actual_linked_episode_count", "actual_high_confidence_episode_count", "actual_medium_confidence_episode_count", "actual_gross_realized_pnl", "actual_fee_covered_episode_count", "actual_fee_missing_episode_count", "actual_net_pnl_after_fee", "actual_wins", "actual_losses", "actual_breakeven", "actual_profit_factor"})
 
+    def test_decision_csv_uses_earliest_and_signal_only(self) -> None:
+        fx = self.fixtures(); decisions = [self.decision(event_id="late", checked="2026-07-10T03:00:00Z", action="skipped"), self.decision(event_id="early", checked="2026-07-10T01:00:00Z", action="entered")]; path = self.write("ordered-decisions.csv", DECISION_HEADERS, decisions); result = self.build(fx, decision_events=path); self.assertEqual(result["decision_summary"]["policy_metrics"]["A_ONLY"]["entered_rows"], 1)
+        with (self.root / "replay.csv").open(newline="", encoding="utf-8") as fp: rows = list(csv.DictReader(fp))
+        row = next(item for item in rows if item["policy_name"] == "A_ONLY"); self.assertEqual(row["first_effective_human_action"], "entered"); self.assertEqual(row["first_human_checked_at_utc"], "2026-07-10T01:00:00Z")
+
+    def test_signal_only_and_excluded_decisions_are_not_attached(self) -> None:
+        fx = self.fixtures(); decisions = [self.decision(scenario_id="", signal_id="sig1", event_id="signal", checked="2026-07-10T01:00:00Z", action="watched_no_entry"), self.decision(event_id="pre", checked="2026-07-09T23:00:00Z", action="entered"), self.decision(scenario_id="", signal_id="missing", event_id="orphan", checked="2026-07-10T01:00:00Z")]; path = self.write("signal-decisions.csv", DECISION_HEADERS, decisions); result = self.build(fx, decision_events=path); metrics = result["decision_summary"]["policy_metrics"]["A_ONLY"]; self.assertEqual(metrics["watched_no_entry_rows"], 1); self.assertEqual(metrics["pre_selection_decision_rows"], 1); self.assertEqual(metrics["orphan_decision_rows"], 1)
+        with (self.root / "replay.csv").open(newline="", encoding="utf-8") as fp: row = next(item for item in csv.DictReader(fp) if item["policy_name"] == "A_ONLY")
+        self.assertEqual(row["decision_join_status"], "matched"); self.assertEqual(row["first_effective_human_action"], "watched_no_entry")
+
+    def test_open_and_fee_missing_closed_episode_monetary_contract(self) -> None:
+        fx = self.fixtures(); episodes, links = self.episode_inputs(status="open", realized="10", fee="2", closed=""); result = self.build(fx, trade_episodes=episodes, episode_links=links); summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]; self.assertEqual(summary["actual_linked_episode_count"], 0)
+        with (self.root / "replay.csv").open(newline="", encoding="utf-8") as fp: row = next(item for item in csv.DictReader(fp) if item["policy_name"] == "A_ONLY")
+        self.assertEqual(row["actual_gross_realized_pnl"], ""); self.assertEqual(row["actual_fee_total"], ""); self.assertEqual(row["actual_net_pnl_after_fee"], "")
+        fx = self.fixtures(); episodes, links = self.episode_inputs(realized="10", fee=""); result = self.build(fx, trade_episodes=episodes, episode_links=links); summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]; self.assertEqual(summary["actual_linked_episode_count"], 1); self.assertEqual(summary["actual_gross_realized_pnl"], "10"); self.assertEqual(summary["actual_fee_missing_episode_count"], 1); self.assertEqual(summary["actual_net_pnl_after_fee"], "0")
+
+    def test_blank_realized_closed_episode_is_excluded(self) -> None:
+        fx = self.fixtures(); episodes, links = self.episode_inputs(realized="", fee="2"); result = self.build(fx, trade_episodes=episodes, episode_links=links); summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]; self.assertEqual(summary["actual_linked_episode_count"], 0); self.assertEqual(summary["actual_gross_realized_pnl"], "0")
+
+    def test_duplicate_episode_and_signal_ambiguity_clear_csv_fields(self) -> None:
+        fx = self.fixtures(); episodes, links = self.episode_inputs(); result = self.build(fx, trade_episodes=episodes, episode_links=links); with_path = self.root / "replay.csv"; self.assertTrue(with_path.exists()); self.assertEqual(result["actual_summary"]["policy_summaries"]["A_ONLY"]["actual_linked_episode_count"], 1)
+        self.assertNotIn("gross_realized_pnl", result["actual_summary"])
+
 
 if __name__ == "__main__": unittest.main()
