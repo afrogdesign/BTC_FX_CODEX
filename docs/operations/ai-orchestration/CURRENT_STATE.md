@@ -342,3 +342,172 @@ Current exact next task:
 ```text
 BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT
 ```
+
+
+---
+
+## 2026-07-10 P2 completion and P3 activation
+
+Manual actual trade importer hardening is complete and reviewed.
+
+Reviewed capabilities:
+
+- canonical `import-manual-actual-trades` command with legacy alias
+- strict three-category workbook validation
+- privacy-safe UID and filename handling
+- deterministic file, batch, source-row, logical-key, row fingerprints
+- merge/idempotency and corrected-export conflict handling
+- process-level transactional replacement with rollback
+- compact safe workbook failure handling
+- dry-run planning fields and category-level worksheet counts
+- downstream linker/report compatibility tests preserved
+
+Reported local commits:
+
+```text
+d8ce83b
+01746c1
+c9b7715
+```
+
+Reported targeted validation:
+
+```text
+35 tests passed
+targeted git diff --check passed
+push: none
+```
+
+The P2 spec was archived to:
+
+```text
+chatgpt/specs/archive/20260710_manual_actual_trade_importer.md
+```
+
+New active P3 spec:
+
+```text
+chatgpt/specs/active/20260710_manual_trade_linkage_ground_truth_pipeline.md
+```
+
+P3 design correction:
+
+- `manual_actual_trades.csv` is fill-level evidence, not human trade count
+- position lifecycle is the preferred primary link target
+- episode-level performance must be separated from fill-level monetary totals
+- buy/sell must not be silently interpreted as long/short without position-action evidence
+- only high/medium signal links may contribute to actual-backed aggregate comparison
+- exchange exports cannot prove human intent, skip, watch, avoided loss, or missed opportunity
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-LINKAGE-PIPELINE-SPEC-CHECKPOINT
+```
+
+This is a docs-only Git validation and commit task. P3 source implementation remains blocked until the new active spec is committed and reviewed.
+
+
+---
+
+## 2026-07-10 P4 completion and P5 activation
+
+P4 scenario normalization and manual decision-event infrastructure is complete and reviewed.
+
+Reviewed capabilities:
+
+- deterministic scenario identity and event identity
+- candidate-to-scenario compression with explicit ambiguous grouping
+- terminal-boundary and lifecycle handling
+- detailed OHLCV coverage diagnosis
+- append-only manual decision events with correction semantics
+- effective decision coverage metrics
+- deterministic JSON and Markdown coverage reports
+- transactional output replacement and rollback
+- compact CLI routes with expected error handling
+
+Reported local commits reviewed through:
+
+```text
+106042937a39fff495d14de219eb1728038cc7f8
+```
+
+Reported targeted validation:
+
+```text
+101 tests passed
+targeted git diff --check passed
+push: none
+```
+
+Archived P4 spec:
+
+```text
+chatgpt/specs/archive/20260710_manual_scenario_coverage_decision_events.md
+```
+
+New active P5 spec:
+
+```text
+chatgpt/specs/active/20260710_manual_operator_classifier_offline.md
+```
+
+P5 design boundary:
+
+- event-time offline classification only
+- no hindsight outcome leakage
+- output classes are `A_FORMAL`, `B_CHECK_15M`, `C_WATCH_ZONE`, and `STOP_OR_EXIT`
+- existing gate results are retained and not recomputed
+- thresholds are CLI/report comparison values, not production settings
+- long and short use separate hypotheses
+- no notification, gate, runtime, or order behavior changes
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-OFFLINE-CLASSIFIER-SPEC-CHECKPOINT
+```
+
+This is a docs-only checkpoint before P5 source implementation.
+
+---
+
+## 2026-07-10 P5 completion and P6 activation
+
+P5 offline operator classifier was completed and accepted by ChatGPT source review.
+
+Reported completion commit:
+
+```text
+57d6151
+```
+
+Reported targeted validation:
+
+```text
+123 tests passed
+targeted git diff --check passed
+push: none
+```
+
+The P5 spec is archived at:
+
+```text
+chatgpt/specs/archive/20260710_manual_operator_classifier_offline.md
+```
+
+The active P6 source of truth is:
+
+```text
+chatgpt/specs/active/20260710_manual_operator_historical_replay.md
+```
+
+P6 remains offline/report-only and is not connected to production gates, notifications, runtime, APIs, or orders. P6 source implementation has not started.
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT
+```
+
+This is the bounded implementation task for the active P6 spec.
