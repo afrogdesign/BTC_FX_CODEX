@@ -1763,6 +1763,9 @@ from src.feedback.manual_actual_trade_importer import (  # noqa: E402
     normalize_mexc_position_history,
     normalize_mexc_trade_history,
 )
+from src.feedback.manual_trade_episode_builder import build_manual_trade_episodes  # noqa: E402
+from src.feedback.manual_trade_signal_linker import link_manual_trade_episodes_to_signals  # noqa: E402
+from src.feedback.manual_trade_ground_truth import build_manual_trade_ground_truth_report_v2  # noqa: E402
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -22472,6 +22475,7 @@ def _build_parser() -> argparse.ArgumentParser:
         mexc_import_parser.add_argument("--conflict-policy", choices=("reject", "replace"), default="reject")
 
     manual_trade_link_parser = subparsers.add_parser("link-manual-trades-to-signals")
+    manual_trade_link_parser.add_argument("--episodes")
     manual_trade_link_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
     manual_trade_link_parser.add_argument("--signals", default="logs/csv/user_reviews.csv")
     manual_trade_link_parser.add_argument("--signal-outcomes", default="logs/csv/signal_outcomes.csv")
@@ -22479,9 +22483,24 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_trade_link_parser.add_argument("--stdout-json", action="store_true")
     manual_trade_link_parser.add_argument("--dry-run", action="store_true")
     manual_trade_link_parser.add_argument("--max-after-minutes", type=_non_negative_int_arg, default=240)
+    manual_trade_link_parser.add_argument("--max-lookback-minutes", type=_non_negative_int_arg, default=None)
+    manual_trade_link_parser.add_argument("--replace-output", action="store_true")
+
+    episode_parser = subparsers.add_parser("build-manual-trade-episodes")
+    episode_parser.add_argument("--trades", required=True)
+    episode_parser.add_argument("--orders", required=True)
+    episode_parser.add_argument("--positions", required=True)
+    episode_parser.add_argument("--output-csv", default="logs/csv/manual_trade_episodes.csv")
+    episode_parser.add_argument("--dry-run", action="store_true")
+    episode_parser.add_argument("--replace-output", action="store_true")
+    episode_parser.add_argument("--stdout-json", action="store_true")
 
     ground_truth_parser = subparsers.add_parser("build-manual-trade-ground-truth-report")
     ground_truth_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
+    ground_truth_parser.add_argument("--trades")
+    ground_truth_parser.add_argument("--orders")
+    ground_truth_parser.add_argument("--positions")
+    ground_truth_parser.add_argument("--episodes")
     ground_truth_parser.add_argument("--links", default="logs/csv/manual_trade_signal_links.csv")
     ground_truth_parser.add_argument("--signal-outcomes", default="logs/csv/signal_outcomes.csv")
     ground_truth_parser.add_argument("--output-md")
@@ -23204,6 +23223,26 @@ def main() -> None:
             )
         return int(summary.get("exit_code", 0))
 
+    if args.command == "build-manual-trade-episodes":
+        summary = build_manual_trade_episodes(
+            trades=Path(args.trades), orders=Path(args.orders), positions=Path(args.positions),
+            output_csv=Path(args.output_csv), dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "link-manual-trades-to-signals" and getattr(args, "episodes", None):
+        summary = link_manual_trade_episodes_to_signals(
+            episodes=Path(args.episodes), signals=Path(args.signals), signal_outcomes=Path(args.signal_outcomes),
+            output_csv=Path(args.output_csv) if args.output_csv else None,
+            max_lookback_minutes=int(args.max_lookback_minutes if args.max_lookback_minutes is not None else args.max_after_minutes),
+            dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
     if args.command == "link-manual-trades-to-signals":
         summary = link_manual_trades_to_signals(
             manual_trades=Path(args.manual_trades),
@@ -23224,7 +23263,22 @@ def main() -> None:
             print(f"manual_trade_count={summary['manual_trade_count']}")
             print(f"linked_trade_count={summary['linked_trade_count']}")
             print(f"ambiguous_count={summary['ambiguous_count']}")
-        return
+        return 0
+
+    if args.command == "build-manual-trade-ground-truth-report" and getattr(args, "episodes", None):
+        report, payload = build_manual_trade_ground_truth_report_v2(
+            trades=Path(args.trades or args.manual_trades), orders=Path(args.orders or "logs/csv/manual_actual_orders.csv"),
+            positions=Path(args.positions or "logs/csv/manual_actual_positions.csv"), episodes=Path(args.episodes),
+            links=Path(args.links), signal_outcomes=Path(args.signal_outcomes),
+            output_md=Path(args.output_md) if args.output_md else None, dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        elif args.output_md and not args.dry_run:
+            print(Path(payload["report_path"]))
+        else:
+            print(report)
+        return 0
 
     if args.command == "build-manual-trade-ground-truth-report":
         report, payload = build_manual_trade_ground_truth_report(

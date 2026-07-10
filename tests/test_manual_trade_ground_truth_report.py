@@ -16,6 +16,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from tools.log_feedback import build_manual_trade_ground_truth_report  # noqa: E402
+from src.feedback.manual_trade_ground_truth import build_manual_trade_ground_truth_report_v2  # noqa: E402
 
 
 MANUAL_TRADE_HEADERS = [
@@ -306,6 +307,35 @@ class ManualTradeGroundTruthReportTest(unittest.TestCase):
             self.assertFalse(output_md.exists())
             self.assertNotIn("uid_sensitive_12345", result.stdout)
             self.assertEqual(payload["safety_boundary"], "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually")
+
+    def test_v2_report_separates_fill_and_episode_metrics(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fills = _write_csv(root / "trades.csv", MANUAL_TRADE_HEADERS, [_trade_row("f1", "2026-07-01T10:00:00+09:00", "long", "10", "1"), _trade_row("f2", "2026-07-01T10:01:00+09:00", "long", "-2", "0.5")])
+            orders = _write_headers_only(root / "orders.csv", ["actual_order_id"])
+            positions = _write_headers_only(root / "positions.csv", ["actual_position_id"])
+            episodes = _write_csv(root / "episodes.csv", ["episode_id", "status", "side", "realized_pnl"], [{"episode_id": "ep-1", "status": "closed", "side": "long", "realized_pnl": "8"}])
+            links = _write_csv(root / "links.csv", ["episode_id", "link_confidence", "link_status", "notification_class", "link_reason"], [{"episode_id": "ep-1", "link_confidence": "high", "link_status": "linked", "notification_class": "entry_like", "link_reason": "matched_unique_top_candidate"}])
+            report, payload = build_manual_trade_ground_truth_report_v2(trades=fills, orders=orders, positions=positions, episodes=episodes, links=links, output_md=root / "report.md")
+            self.assertEqual(payload["fill_row_count"], 2)
+            self.assertEqual(payload["episode_count"], 1)
+            self.assertEqual(payload["episode_win_rate"], 1.0)
+            self.assertIn("Fill-Level Monetary Evidence", report)
+            self.assertIn("Position/Episode-Level Performance", report)
+            self.assertIn("Safety Boundary", report)
+            self.assertNotIn("avoided loss", report.lower())
+            self.assertNotIn("missed opportunity", report.lower())
+
+    def test_v2_report_dry_run_does_not_write(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = []
+            for name, headers in (("trades.csv", ["x"]), ("orders.csv", ["x"]), ("positions.csv", ["x"]), ("episodes.csv", ["x"]), ("links.csv", ["x"])):
+                paths.append(_write_headers_only(root / name, headers))
+            output = root / "report.md"
+            _, payload = build_manual_trade_ground_truth_report_v2(trades=paths[0], orders=paths[1], positions=paths[2], episodes=paths[3], links=paths[4], output_md=output, dry_run=True)
+            self.assertTrue(payload["dry_run"])
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

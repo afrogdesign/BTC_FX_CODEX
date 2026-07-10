@@ -21,6 +21,7 @@ from tools.log_feedback import (  # noqa: E402
     link_manual_trades_to_signals,
     score_manual_trade_signal_link,
 )
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS, build_manual_trade_signal_link_rows as build_v2_signal_link_rows, link_manual_trade_episodes_to_signals  # noqa: E402
 
 
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> Path:
@@ -323,6 +324,63 @@ class ManualTradeSignalLinkerTest(unittest.TestCase):
             self.assertFalse(output_csv.exists())
             self.assertEqual(summary["output_written"], False)
             self.assertEqual(summary["linked_trade_count"], 1)
+
+    def test_v2_entry_window_side_conflict_and_tie(self) -> None:
+        episodes = [{
+            "schema_version": "manual_trade_episode.v1", "episode_id": "ep-1", "position_id": "pos-1",
+            "symbol": "BTCUSDT", "side": "long", "opened_at_jst": "2026-07-01T10:00:00+09:00",
+        }]
+        signals = [
+            {"signal_id": "sig-high", "timestamp_jst": "2026-07-01T09:50:00+09:00", "bias": "long", "symbol": "BTCUSDT"},
+            {"signal_id": "sig-tie", "timestamp_jst": "2026-07-01T09:50:00+09:00", "bias": "long", "symbol": "BTCUSDT"},
+            {"signal_id": "sig-after", "timestamp_jst": "2026-07-01T10:01:00+09:00", "bias": "long", "symbol": "BTCUSDT"},
+            {"signal_id": "sig-follow", "timestamp_jst": "2026-07-01T09:55:00+09:00", "bias": "long", "symbol": "BTCUSDT", "notification_kind": "followup"},
+        ]
+        rows = build_v2_signal_link_rows(episodes=episodes, signal_rows=signals, signal_outcome_rows=[], max_lookback_minutes=240)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["link_status"], "ambiguous")
+        self.assertEqual(rows[0]["link_reason"], "competing_candidate_tie")
+        self.assertEqual(rows[0]["signal_id"], "")
+
+    def test_v2_unique_high_medium_low_and_dry_run_legacy_rejection(self) -> None:
+        episodes = [{"schema_version": "manual_trade_episode.v1", "episode_id": "ep-1", "position_id": "pos-1", "symbol": "BTCUSDT", "side": "long", "opened_at_jst": "2026-07-01T10:00:00+09:00"}]
+        signals = [{"signal_id": "sig", "timestamp_jst": "2026-07-01T09:50:00+09:00", "bias": "long", "symbol": "BTCUSDT"}]
+        rows = build_v2_signal_link_rows(episodes=episodes, signal_rows=signals, signal_outcome_rows=[], max_lookback_minutes=240)
+        self.assertEqual(rows[0]["link_confidence"], "high")
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            episode_path = _write_csv(root / "episodes.csv", ["schema_version", "episode_id"], episodes)
+            signal_path = _write_csv(root / "signals.csv", ["signal_id", "timestamp_jst", "bias", "symbol"], signals)
+            outcome_path = _write_csv(root / "outcomes.csv", ["signal_id"], [])
+            output = root / "links.csv"
+            dry = link_manual_trade_episodes_to_signals(episodes=episode_path, signals=signal_path, signal_outcomes=outcome_path, output_csv=output, dry_run=True)
+            self.assertTrue(dry["ok"])
+            self.assertFalse(output.exists())
+            _write_csv(output, ["legacy"], [{"legacy": "1"}])
+            rejected = link_manual_trade_episodes_to_signals(episodes=episode_path, signals=signal_path, signal_outcomes=outcome_path, output_csv=output)
+            self.assertEqual(rejected["exit_code"], 4)
+            replaced = link_manual_trade_episodes_to_signals(episodes=episode_path, signals=signal_path, signal_outcomes=outcome_path, output_csv=output, replace_output=True)
+            self.assertTrue(replaced["ok"])
+            with output.open(newline="", encoding="utf-8") as fp:
+                self.assertEqual(next(csv.reader(fp)), LINK_HEADERS)
+
+    def test_v2_time_bands_same_time_post_entry_and_low_review(self) -> None:
+        episode = {"schema_version": "manual_trade_episode.v1", "episode_id": "ep-band", "position_id": "p-band", "symbol": "BTCUSDT", "side": "long", "opened_at_jst": "2026-07-01T10:00:00+09:00"}
+        for minutes, expected in ((0, "high"), (30, "high"), (60, "high"), (120, "medium")):
+            signal_time = f"2026-07-01T{9 - minutes // 60:02d}:{60 - minutes % 60 if minutes % 60 else 0:02d}:00+09:00"
+            if minutes == 30:
+                signal_time = "2026-07-01T09:30:00+09:00"
+            if minutes == 60:
+                signal_time = "2026-07-01T09:00:00+09:00"
+            if minutes == 120:
+                signal_time = "2026-07-01T08:00:00+09:00"
+            row = build_v2_signal_link_rows(episodes=[episode], signal_rows=[{"signal_id": f"sig-{minutes}", "timestamp_jst": signal_time, "bias": "long", "symbol": "BTCUSDT"}], signal_outcome_rows=[])[0]
+            self.assertEqual(row["link_confidence"], expected)
+        after = build_v2_signal_link_rows(episodes=[episode], signal_rows=[{"signal_id": "after", "timestamp_jst": "2026-07-01T10:01:00+09:00", "bias": "long"}], signal_outcome_rows=[])[0]
+        self.assertEqual(after["link_reason"], "no_candidate")
+        low = build_v2_signal_link_rows(episodes=[episode], signal_rows=[{"signal_id": "low", "timestamp_jst": "2026-07-01T08:00:00+09:00"}], signal_outcome_rows=[])[0]
+        self.assertEqual(low["link_confidence"], "low")
+        self.assertEqual(low["link_status"], "linked")
 
 
 if __name__ == "__main__":
