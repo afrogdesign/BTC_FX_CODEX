@@ -168,8 +168,17 @@ def _validate_integrity(scenarios: list[dict[str, str]], events: list[dict[str, 
     if len(classes) != len(events):
         return "missing_classification"
     refs = [row.get("scenario_event_id", "") for row in classes]
-    if len(set(refs)) != len(refs) or set(refs) != set(event_ids):
-        return "classification_assignment_conflict" if len(set(refs)) != len(refs) else "missing_classification"
+    if len(set(refs)) != len(refs):
+        grouped: dict[str, dict[str, str]] = {}
+        for row in classes:
+            event_ref = row.get("scenario_event_id", "")
+            normalized = {key: value for key, value in row.items() if key not in {"scenario_event_id", "classification_id"}}
+            if event_ref in grouped and grouped[event_ref] != normalized:
+                return "classification_assignment_conflict"
+            grouped[event_ref] = normalized
+        return "duplicate_classification_assignment"
+    if set(refs) != set(event_ids):
+        return "missing_classification"
     methods = {row.get("classifier_method_version", "").strip() for row in classes}
     threshold_fields = ("short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min", "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min")
     snapshots = {tuple(format(_dec(row.get(key)), "f") if _dec(row.get(key)) is not None else "" for key in threshold_fields) for row in classes}
@@ -225,7 +234,9 @@ def _effective_decisions(rows: list[dict[str, str]]) -> tuple[list[dict[str, str
     targets = [row.get("supersedes_decision_event_id") for row in rows if row.get("supersedes_decision_event_id")]
     if len(superseded) != len(set(targets)) or len(targets) != len(set(targets)):
         return [], "invalid_correction_graph"
-    return [row for row in rows if row["decision_event_id"] not in superseded], None
+    effective = [row for row in rows if row["decision_event_id"] not in superseded]
+    effective.sort(key=lambda row: (_dt(row.get("human_checked_at_utc") or row.get("human_checked_at_jst")) or datetime.max.replace(tzinfo=timezone.utc), row.get("decision_event_id", "")))
+    return effective, None
 
 
 def _row_id(policy: str, role: str, scenario_id: str, event_id: str, classification_id: str) -> str:
@@ -335,7 +346,11 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                 if len(eligible_links) != 1:
                     replay["actual_join_status"] = "ambiguous"
                 elif episode and opened and selected_at and opened >= selected_at and episode.get("association_status") == "matched":
-                    replay["actual_join_status"] = "matched"; replay["actual_episode_id"] = episode.get("episode_id", ""); replay["actual_link_confidence"] = eligible_links[0].get("link_confidence", ""); replay["actual_gross_realized_pnl"] = episode.get("realized_pnl", ""); replay["actual_fee_total"] = episode.get("fee_total", "")
+                    replay["actual_join_status"] = "matched"; replay["actual_episode_id"] = episode.get("episode_id", ""); replay["actual_link_confidence"] = eligible_links[0].get("link_confidence", "")
+                    if episode.get("status") == "closed":
+                        replay["actual_gross_realized_pnl"] = episode.get("realized_pnl", ""); replay["actual_fee_total"] = episode.get("fee_total", "")
+                    else:
+                        replay["actual_join_status"] = "open_episode_observation"
                     gross = _dec(episode.get("realized_pnl")); fee = _dec(episode.get("fee_total"))
                     if episode.get("status") == "closed" and gross is not None and fee is not None:
                         replay["actual_net_pnl_after_fee"] = str(gross - abs(fee))
@@ -357,7 +372,16 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
         for row in selected_policy:
             signal_id = events_by_id[row["selected_scenario_event_id"]].get("source_signal_id", "")
             if len(signal_scenarios.get(signal_id, set())) > 1:
-                row["actual_join_status"] = "ambiguous"; row["actual_episode_id"] = ""; row["actual_link_confidence"] = ""; row["actual_gross_realized_pnl"] = ""; row["actual_fee_total"] = ""
+                row["actual_join_status"] = "ambiguous"; row["actual_episode_id"] = ""; row["actual_link_confidence"] = ""; row["actual_gross_realized_pnl"] = ""; row["actual_fee_total"] = ""; row["actual_net_pnl_after_fee"] = ""
+        seen_episodes: set[str] = set()
+        for row in sorted(selected_policy, key=lambda item: (item.get("selected_at_utc", ""), item.get("scenario_id", ""), item.get("replay_row_id", ""))):
+            episode_id = row.get("actual_episode_id", "")
+            if not episode_id:
+                continue
+            if episode_id in seen_episodes:
+                row["actual_join_status"] = "duplicate_episode_excluded"; row["actual_episode_id"] = ""; row["actual_link_confidence"] = ""; row["actual_gross_realized_pnl"] = ""; row["actual_fee_total"] = ""; row["actual_net_pnl_after_fee"] = ""
+            else:
+                seen_episodes.add(episode_id)
     for replay in rows:
         if replay["row_role"] == "observe_only":
             later = [item for item in grouped.get(replay["scenario_id"], []) if item.get("classification_status") == "classified" and item.get("operator_class") in {"A_FORMAL", "B_CHECK_15M"} and (_dt(item.get("event_timestamp_utc")) or datetime.min.replace(tzinfo=timezone.utc)) > (_dt(replay["selected_at_utc"]) or datetime.min.replace(tzinfo=timezone.utc))]
@@ -408,8 +432,8 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                 seen.add(row["actual_episode_id"]); linked.append(row)
         vals = [(_dec(row.get("actual_gross_realized_pnl")), _dec(row.get("actual_fee_total"))) for row in linked]
         nets = [gross - abs(fee) for gross, fee in vals if gross is not None and fee is not None]; losses = [v for v in nets if v < 0]; wins = [v for v in nets if v > 0]
-        actual_policy[policy] = {"linked_episode_count": len(linked), "high_confidence_count": sum(row.get("actual_link_confidence") == "high" for row in linked), "medium_confidence_count": sum(row.get("actual_link_confidence") == "medium" for row in linked), "gross_realized_pnl": str(sum((gross for gross, _ in vals if gross is not None), Decimal("0"))), "fee_covered_count": len(nets), "fee_missing_count": len(linked) - len(nets), "net_pnl": str(sum(nets, Decimal("0"))), "wins": len(wins), "losses": len(losses), "breakeven": sum(v == 0 for v in nets), "profit_factor": str(sum(wins, Decimal("0")) / abs(sum(losses, Decimal("0")))) if losses else ""}
-    payload: dict[str, Any] = {"schema_version": REPORT_SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "scenario_rows": len(scenario_rows), "scenario_event_rows": len(event_rows), "classification_rows": len(class_rows), "assigned_event_rows": sum(bool(r.get("scenario_id")) for r in event_rows), "ambiguous_event_rows": sum(not bool(r.get("scenario_id")) for r in event_rows), "insufficient_classification_rows": sum(r.get("classification_status") == "insufficient_evidence" for r in class_rows), "classifier_method_version": next(iter({r.get("classifier_method_version", "") for r in class_rows}), ""), "threshold_snapshot": {key: class_rows[0].get(key, "") for key in ("short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min", "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min")} if class_rows else {}, "policy_summaries": {policy: summaries.get(policy, {}) for policy in POLICIES}, "side_policy_summaries": breakdown("side"), "regime_policy_summaries": breakdown("market_regime"), "setup_family_policy_summaries": breakdown("setup_family"), "class_policy_summaries": breakdown("selected_operator_class"), "outcome_policy_summaries": breakdown("normalized_outcome_status"), "strict_pass_inconsistent_rows": strict_inconsistent, "proxy_over_suppression_candidate_rows": over_suppression, "proxy_false_positive_candidate_rows": sum(r["normalized_outcome_status"] == "resolved_negative" and r["row_role"] == "entry_candidate" for r in rows), "proxy_c_observation_positive_candidate_rows": sum(r["row_role"] == "observe_only" and r["normalized_outcome_status"] == "resolved_positive" for r in rows), "proxy_c_upgrade_candidate_rows": sum(bool(r.get("later_upgrade_class")) for r in rows), "decision_input_status": "absent" if decision_events is None else "provided", "decision_summary": {"effective_decision_rows": len(effective_decisions), "decision_action_counts": dict(sorted(Counter(row.get("human_action", "") for row in effective_decisions).items())), "policy_metrics": decision_metrics}, "actual_input_status": "absent" if trade_episodes is None else "provided", "actual_summary": {"policy_metrics": actual_policy, "eligible_linked_episode_count": len(actual_matched), "actual_high_confidence_episode_count": sum(r.get("actual_link_confidence") == "high" for r in actual_matched), "actual_medium_confidence_episode_count": sum(r.get("actual_link_confidence") == "medium" for r in actual_matched), "actual_gross_realized_pnl": str(sum((gross for gross, _ in actual_gross if gross is not None), Decimal("0"))), "actual_net_pnl_after_fee": str(sum(net_values, Decimal("0"))), "actual_fee_covered_episode_count": len(actual_net), "actual_fee_missing_episode_count": len(actual_matched) - len(actual_net), "actual_wins": len(positive_net), "actual_losses": len(negative_net), "actual_breakeven": sum(value == 0 for value in net_values), "actual_profit_factor": str(sum(positive_net, Decimal("0")) / abs(sum(negative_net, Decimal("0")))) if negative_net else ""}, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided"}, "errors": []}
+        actual_policy[policy] = {"actual_linked_episode_count": len(linked), "actual_high_confidence_episode_count": sum(row.get("actual_link_confidence") == "high" for row in linked), "actual_medium_confidence_episode_count": sum(row.get("actual_link_confidence") == "medium" for row in linked), "actual_gross_realized_pnl": str(sum((gross for gross, _ in vals if gross is not None), Decimal("0"))), "actual_fee_covered_episode_count": len(nets), "actual_fee_missing_episode_count": len(linked) - len(nets), "actual_net_pnl_after_fee": str(sum(nets, Decimal("0"))), "actual_wins": len(wins), "actual_losses": len(losses), "actual_breakeven": sum(v == 0 for v in nets), "actual_profit_factor": str(sum(wins, Decimal("0")) / abs(sum(losses, Decimal("0")))) if losses else ""}
+    payload: dict[str, Any] = {"schema_version": REPORT_SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "scenario_rows": len(scenario_rows), "scenario_event_rows": len(event_rows), "classification_rows": len(class_rows), "assigned_event_rows": sum(bool(r.get("scenario_id")) for r in event_rows), "ambiguous_event_rows": sum(not bool(r.get("scenario_id")) for r in event_rows), "insufficient_classification_rows": sum(r.get("classification_status") == "insufficient_evidence" for r in class_rows), "classifier_method_version": next(iter({r.get("classifier_method_version", "") for r in class_rows}), ""), "threshold_snapshot": {key: class_rows[0].get(key, "") for key in ("short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min", "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min")} if class_rows else {}, "policy_summaries": {policy: summaries.get(policy, {}) for policy in POLICIES}, "side_policy_summaries": breakdown("side"), "regime_policy_summaries": breakdown("market_regime"), "setup_family_policy_summaries": breakdown("setup_family"), "class_policy_summaries": breakdown("selected_operator_class"), "outcome_policy_summaries": breakdown("normalized_outcome_status"), "strict_pass_inconsistent_rows": strict_inconsistent, "proxy_over_suppression_candidate_rows": over_suppression, "proxy_false_positive_candidate_rows": sum(r["normalized_outcome_status"] == "resolved_negative" and r["row_role"] == "entry_candidate" for r in rows), "proxy_c_observation_positive_candidate_rows": sum(r["row_role"] == "observe_only" and r["normalized_outcome_status"] == "resolved_positive" for r in rows), "proxy_c_upgrade_candidate_rows": sum(bool(r.get("later_upgrade_class")) for r in rows), "decision_input_status": "absent" if decision_events is None else "provided", "decision_summary": {"effective_decision_rows": len(effective_decisions), "decision_action_counts": dict(sorted(Counter(row.get("human_action", "") for row in effective_decisions).items())), "policy_metrics": decision_metrics}, "actual_input_status": "absent" if trade_episodes is None else "provided", "actual_summary": {"policy_summaries": {policy: actual_policy[policy] for policy in POLICIES}}, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided"}, "errors": []}
     csv_text = _csv_text(rows); payload["ok"] = True; payload["exit_code"] = 0
     json_text = json.dumps(payload | {"report_written": True}, ensure_ascii=False, sort_keys=True, indent=2) + "\n"; md_text = _markdown(payload)
     if dry_run: return payload

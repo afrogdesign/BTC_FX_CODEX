@@ -1,16 +1,14 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-5`
+- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-6`
 - mode: `REVIEW_ONLY`
 - task_type: `PYTHON SOURCE / DIRECT REGRESSION TESTS / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-FIX-3`
-- previous_status: `P6 FIX-4 COMMITTED / PUSH NONE`
+- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-FIX-4`
+- previous_status: `P6 FIX-5 COMMITTED / PUSH NONE`
 
 ## Goal
 
-Review the completed P6 attribution and validation fixes and direct regression tests.
-
-P6 remains active. P7 is blocked.
+Review the completed P6 policy evidence fix. P6 remains active. P7 has not started.
 
 Source of truth:
 
@@ -18,150 +16,136 @@ Source of truth:
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 ```
 
-Reported FIX-3 commit:
+Reported FIX-4 commit:
 
 ```text
-2bae8d2
+00fb36a
 ```
 
-## Non-negotiable acceptance gate
+## Confirmed remaining defects
 
-`tests/test_manual_operator_historical_replay.py` must be edited and committed in this task.
+### 1. Duplicate classification assignment semantics
 
-The task must not report `done` unless:
-
-- the P6 replay test module contains direct tests for every behavior listed below
-- the reported P6 replay test-method count increases from the current 6
-- source and tests are staged in the same commit
-
-Changing source without adding these tests is incomplete.
-
-## Confirmed source defects
-
-### 1. Classification and correction integrity
-
-Required fixes:
-
-- `operator_class` must be blank for `insufficient_evidence` and `ambiguous_grouping`
-- exact duplicate classification ID with identical normalized content => exit 2
-- same classification ID with differing normalized content => exit 3
-- duplicate scenario-event assignment with identical normalized content => exit 2
-- duplicate scenario-event assignment with differing normalized content => exit 3
-- multiple correction rows targeting the same decision event => exit 2
-
-Use explicit grouping/counting. Do not compare a set against another set to detect duplicate correction targets.
-
-### 2. One policy-level decision attribution pass
-
-Remove the current split behavior where replay rows use the old direct-scenario/file-order loop while policy metrics use a separate pass.
+Classification IDs are now handled correctly, but duplicate classification rows referencing the same `scenario_event_id` still return exit 3 unconditionally.
 
 Required:
 
-- build one attribution result per policy after selections are fixed
-- map scenario-scoped decisions directly
-- map signal-only decisions only when the signal maps to exactly one selected scenario in that policy
-- sort eligible decisions by `(human_checked_at_utc, decision_event_id)`
-- populate replay row fields from that same attribution result:
+- group classification rows by `scenario_event_id`
+- compare canonical normalized content excluding only `classification_id`
+- duplicate assignment with identical normalized content => exit 2
+- duplicate assignment with differing normalized content => exit 3
+- missing or extra event assignment remains exit 2
+
+### 2. Decision attribution is still split
+
+The replay-row construction still contains the old direct-scenario, input-order loop. The later policy-metrics pass supports signal-only decisions but does not update replay rows.
+
+Required:
+
+- remove the decision loop from initial row construction
+- after all policy rows are selected, run one deterministic attribution pass per policy
+- scenario-scoped decisions map by scenario ID
+- signal-only decisions map only when the signal resolves to exactly one selected scenario in that policy
+- sort eligible decisions by:
+  - `human_checked_at_utc`
+  - `decision_event_id`
+- populate replay row fields from this pass:
   - `decision_join_status`
   - `first_effective_human_action`
   - `first_human_checked_at_utc`
-- use the same result for policy metrics
-- count pre-selection, ambiguous signal-only, and orphan decisions separately
-- do not attach those excluded decisions to a replay row
-- never expose `manual_note`
+- derive policy decision metrics from the same attribution result
+- pre-selection, ambiguous signal-only, and orphan decisions remain counts only and are not attached
 
-### 3. Actual evidence eligibility
+### 3. Open episodes still populate monetary evidence
 
-Required fixes:
-
-- only `row_role == entry_candidate` may receive actual entry attribution
-- C and STOP rows must never receive actual episode IDs or monetary fields
-- only a row with `link_status == linked` must have a non-empty signal ID; blank signal IDs on non-linked rows remain valid
-- validate every episode open timestamp
-- closed episode must have a valid close timestamp at or after open
-- matched open episodes may have a descriptive join status but must not populate gross, fee, or net monetary fields
-- gross/fee/net monetary fields require:
-  - matched association
-  - linked high/medium evidence
-  - side and symbol match
-  - post-selection opening
-  - closed episode
-  - numeric realized PnL
-- row net PnL is `realized_pnl - abs(fee_total)` when fee exists
-
-### 4. Ambiguity and policy-local deduplication
+Current code populates gross PnL and fee before checking that an episode is closed.
 
 Required:
 
-- multiple eligible links for one replay row => ambiguous and excluded
-- one signal mapping to multiple selected scenarios in one policy => ambiguous and excluded
-- one episode may contribute monetary evidence at most once within one policy
-- choose the deterministic earliest selected replay row for a duplicated episode, ordered by:
-  - selected timestamp
-  - scenario ID
-  - replay row ID
-- mark later duplicate episode rows as excluded and clear monetary fields
-- the same episode may independently contribute once to each separate policy
-
-### 5. Actual summary shape
-
-Required:
-
-- monetary summaries are per policy in fixed policy order
-- do not publish a cross-policy gross/net/win/PF total that adds nested policy views together
-- each policy summary includes:
-  - `actual_linked_episode_count`
-  - `actual_high_confidence_episode_count`
-  - `actual_medium_confidence_episode_count`
+- a matched open episode may have a descriptive `actual_join_status`
+- open episodes must have blank:
   - `actual_gross_realized_pnl`
-  - `actual_fee_covered_episode_count`
-  - `actual_fee_missing_episode_count`
+  - `actual_fee_total`
   - `actual_net_pnl_after_fee`
-  - `actual_wins`
-  - `actual_losses`
-  - `actual_breakeven`
-  - `actual_profit_factor`
-- PF is blank when there are no negative net episodes
-- linked open episodes are excluded from these monetary metrics
+- open episodes must not contribute to any monetary, win/loss, breakeven, or PF metric
+- closed episodes with numeric realized PnL may populate gross
+- net/PF require fee coverage
 
-### 6. Markdown
+### 4. Policy-local episode dedup must alter rows
 
-Keep the computed policy decision and actual summaries now present, but ensure they reflect the corrected row attribution and per-policy actual metrics.
+Current summary deduplicates episode IDs but later duplicate replay rows retain episode IDs and monetary fields.
 
-Do not include raw rows, notes, account/order identifiers, local paths, or private values.
+Required:
 
-## Mandatory direct regression tests
+- within each policy, sort candidate actual-attributed rows by:
+  - `selected_at_utc`
+  - `scenario_id`
+  - `replay_row_id`
+- retain the first row per episode
+- for later rows using the same episode:
+  - set `actual_join_status = duplicate_episode_excluded`
+  - clear episode ID, confidence, gross, fee, and net fields
+- when signal-to-scenario ambiguity is applied, also clear `actual_net_pnl_after_fee`
 
-Add direct synthetic tests for all of the following:
+### 5. Actual summary must be policy-only and use contract names
 
-1. non-classified row with operator class => exit 2
-2. identical duplicate classification ID => exit 2
-3. differing duplicate classification ID => exit 3
-4. identical duplicate scenario-event assignment => exit 2
-5. differing duplicate scenario-event assignment => exit 3
-6. multiple corrections targeting one decision => exit 2
-7. earliest scenario decision wins regardless of input file order
-8. unique signal-only decision populates replay row and policy metrics
-9. pre-selection decision is counted but not attached
-10. ambiguous signal-only decision is counted but not attached
-11. orphan decision is counted but not attached
-12. STOP row has no actual attribution
-13. C row has no actual attribution
-14. non-linked row with blank signal ID is accepted
-15. linked row with blank signal ID => exit 2
-16. malformed episode open timestamp => exit 2
-17. closed timestamp before open => exit 2
-18. open episode has no monetary fields and no monetary summary contribution
-19. competing eligible links => ambiguous
-20. one signal mapped to multiple selected scenarios => ambiguous
-21. duplicate episode within one policy contributes once
-22. same episode may contribute once in separate policies
-23. row net PnL subtracts absolute fee
-24. per-policy high/medium/gross/fee/net/win/loss/breakeven/PF values
-25. no cross-policy monetary total is emitted
-26. Markdown contains the computed decision and per-policy actual summaries
+Current output still publishes cross-policy totals that sum nested policy views, and policy metrics use abbreviated key names.
 
-The P6 replay module must have more than 6 test methods after this task. Prefer one focused method per contract area rather than one oversized method.
+Required `actual_summary` shape:
+
+```text
+policy_summaries:
+  CURRENT_STRICT: {...}
+  A_ONLY: {...}
+  A_PLUS_B: {...}
+  A_PLUS_B_PLUS_C_OBSERVE: {...}
+  STOP_OVERLAY: {...}
+```
+
+Each policy summary must use these exact keys:
+
+```text
+actual_linked_episode_count
+actual_high_confidence_episode_count
+actual_medium_confidence_episode_count
+actual_gross_realized_pnl
+actual_fee_covered_episode_count
+actual_fee_missing_episode_count
+actual_net_pnl_after_fee
+actual_wins
+actual_losses
+actual_breakeven
+actual_profit_factor
+```
+
+Rules:
+
+- no cross-policy gross/net/win/loss/PF total
+- STOP and C-only rows contribute zero
+- open episodes contribute zero monetary evidence
+- fee-missing closed episodes count as linked and gross-covered but not net/PF-covered
+- PF blank when there are no negative net episodes
+
+### 6. Direct tests must verify row fields and summary shape
+
+Current tests increased to 12 methods, but several only check aggregate counts and do not verify the claimed row-level behavior.
+
+Add direct tests for:
+
+1. identical duplicate classification assignment with different classification IDs => exit 2
+2. differing duplicate classification assignment with different classification IDs => exit 3
+3. earliest scenario decision is written to CSV regardless of input order
+4. unique signal-only decision is written to CSV and matches policy metrics
+5. pre-selection decision leaves CSV row unmatched
+6. open episode leaves gross/fee/net CSV fields blank and contributes zero monetary metrics
+7. duplicate episode inside one policy clears the later replay row fields
+8. signal-to-multiple-scenario ambiguity clears gross, fee, and net
+9. `actual_summary` contains only `policy_summaries` for monetary results
+10. policy summaries use the exact contract key names
+11. fee-missing closed episode contributes gross but not net/PF
+12. Markdown reflects the corrected policy-only actual summary
+
+Increase the P6 replay test-method count beyond 12. Source and tests must be in the same commit.
 
 ## Allowed read
 
@@ -207,16 +191,16 @@ git diff --check -- \
   tools/log_feedback.py
 ```
 
-Also report the exact number of test methods in `HistoricalReplayTests` after editing.
+Report the exact number of test methods in `HistoricalReplayTests`.
 
 ## Completion transition
 
 After successful validation:
 
 ```text
-current_work_id: BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-5
+current_work_id: BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-6
 mode: REVIEW_ONLY
-previous_status: P6 FIX-4 COMMITTED / PUSH NONE
+previous_status: P6 FIX-5 COMMITTED / PUSH NONE
 ```
 
 Do not archive P6 or start P7.
@@ -232,7 +216,7 @@ Do not archive P6 or start P7.
 ## Commit
 
 ```text
-fix: finalize replay attribution tests
+fix: finalize replay policy evidence
 ```
 
 ## Safety boundary
