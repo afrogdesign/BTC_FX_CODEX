@@ -20,7 +20,7 @@ branch_source_rule: `read from git status --short --branch and CURRENT_STATE.md,
 - manual trading practicality plan and AI execution route are now active planning sources
 - planning route approval does not authorize scoring, gate, threshold, notification, or runtime changes
 - P7 shadow surface is complete, checkpointed and runtime-applied
-- P8 is pending human decision
+- P8 evidence pipeline implementation is active under the approved P8/P9 operating doctrine
 
 ## Current Objective
 
@@ -131,31 +131,27 @@ One task must cover one phase or one narrow subtask only.
 ## Current next task
 
 ```text
-BTCFX-20260710-MTP-P8-HUMAN-MANUAL-TRIAL-DECISION
+BTCFX-20260711-MTP-P8-EVIDENCE-PIPELINE
 ```
 
 Mode:
 
 ```text
-HUMAN_CHECK
+BOUNDED_CODEX
 ```
 
 Task type:
 
 ```text
-PRODUCT / TRADING / SAFETY DECISION
+P8 SOURCE IMPLEMENTATION / REPORT-ONLY
 ```
 
 State:
 
-- no executable Codex task is authorized yet
-- no P8 source implementation is authorized
-- no P8 active spec is created in this closeout
-- human must first decide the bounded manual-trial contract
-- P8 cannot introduce automatic orders
-- live extra notification sending remains unapproved
-- production gate or threshold tuning remains unapproved
-- P8 must define how A/B/C/STOP observations and human actions are recorded without treating candidates as orders
+- automatic market-path evaluation and actual-trade evidence joining are approved by the P8/P9 operating specification
+- human input remains limited to ambiguous or intent-dependent exceptions
+- no production classifier, gate, threshold, notification, runtime, or order behavior is authorized to change
+- P9 remains proposal-first and requires explicit human approval
 
 ## Validation Rules
 
@@ -214,5 +210,5 @@ State:
 - actual trade linking after importer stabilization
 - scenario normalization after linking contract is clear
 - offline A/B/C/STOP classifier after coverage work
-- P8 human manual trial only after explicit product/safety approval and a new active spec
+- P8 evidence pipeline implementation and review remain bounded by the active P8 spec; P9 tuning still requires explicit product/safety approval
 - production tuning only after adequate ground truth and explicit human approval

@@ -540,4 +540,4 @@ P7 is complete at accepted checkpoint `74047f1` (`74047f14bceb4644ec3ab86eb5d0e5
 
 P7 changed only the existing public detail HTML shadow surface. Production gate, scoring, threshold, notification, runtime, API, account, and order behavior were unchanged; the posture remains report-only and human-decided.
 
-P7 is complete. P8 human manual trial has not started and requires a new active spec plus explicit human product/safety approval. P8 was not started by this closeout.
+P7 is complete. P8 evidence pipeline implementation is active under `chatgpt/specs/active/20260711_manual_operator_trial_evidence_pipeline.md`, following the approved automatic-evaluation doctrine. P8 remains report-only / not `FORMAL_GO` / human-decided; no production behavior is changed.

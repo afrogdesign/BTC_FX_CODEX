@@ -1,46 +1,73 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-P8-HUMAN-MANUAL-TRIAL-DECISION`
-- mode: `HUMAN_CHECK`
-- task_type: `PRODUCT / TRADING / SAFETY DECISION`
-- previous_work_id: `BTCFX-20260710-MTP-P7-CLOSEOUT`
-- previous_status: `P7 COMPLETE / CHECKPOINTED / RUNTIME-APPLIED`
+- current_work_id: `BTCFX-20260711-MTP-P8-EVIDENCE-PIPELINE`
+- mode: `BOUNDED_CODEX`
+- task_type: `P8 SOURCE IMPLEMENTATION / REPORT-ONLY`
+- previous_work_id: `BTCFX-20260710-MTP-P8-HUMAN-MANUAL-TRIAL-DECISION`
+- previous_status: `PRODUCT DECISION COMPLETE / P8 CONTRACT APPROVED`
 
 ## Current state
 
-P7 operator shadow surface is complete, accepted, checkpointed, and runtime-applied.
+P7 operator shadow surface is complete, checkpointed, and runtime-applied.
 
-Archived source of truth:
+P8 product decision is now fixed:
 
-`chatgpt/specs/archive/20260710_manual_operator_shadow_surface.md`
+- P8 is not full manual logging.
+- market-path outcomes are evaluated automatically.
+- actual trades are imported from local exchange exports and linked automatically.
+- human input is limited to ambiguous intent and exceptional cases.
+- AI explains and proposes; it does not automatically mutate production behavior.
+- P9 remains proposal-first and requires explicit human approval.
 
-No P8 active spec exists.
+## Active sources of truth
 
-## Human decision required
+Operating specification:
 
-Before any executable P8 task, the human must approve a bounded manual-trial contract covering:
+`docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
 
-- trial objective and duration
-- which `A_FORMAL`, `B_CHECK_15M`, `C_WATCH_ZONE`, and `STOP_OR_EXIT` observations are included
-- required 15-minute chart checks
-- how human decisions, skips, exits, avoided losses, and missed opportunities are recorded
-- success, failure, and stop criteria
-- privacy boundary for manual records
-- confirmation that no automatic order or unapproved live extra mail is introduced
+Issue register:
 
-## Prohibited until approval
+`docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
 
-- no P8 source implementation
-- no production gate, scoring, or threshold tuning
-- no automatic order
-- no live extra notification sending
+Active implementation specification:
+
+`chatgpt/specs/active/20260711_manual_operator_trial_evidence_pipeline.md`
+
+## Next exact task
+
+Implement the bounded P8 evidence pipeline described by the active specification.
+
+The implementation must:
+
+- reuse P2-P7 accepted evidence semantics
+- build deterministic trial facts and a human exception queue
+- compare prediction, market-path outcome, and eligible actual trades
+- measure the global-STOP/opposite-side-opportunity hypothesis without changing classifier behavior
+- produce reproducible P9 readiness fields
+- keep all outputs report-only
+
+## Prohibited
+
+- no P5 classifier threshold change
+- no production side-specific STOP change
+- no gate/scoring change
+- no notification/mail behavior change
+- no public HTML redesign in the P8 source task
 - no runtime or launchd change
-- no API, account, private endpoint, or order endpoint work
+- no exchange API, account, private, or order endpoint
+- no secrets or raw export commit
 - no `paper_positions.csv` integration
-- no new active spec
+- no automatic recommendation application
+- no P9 implementation in the same task
+
+## Validation
+
+```text
+./.venv312/bin/python -m unittest <targeted P8 and directly affected feedback tests>
+<relevant sanitized CLI smoke once>
+git diff --check
+```
 
 ## Safety
 
 report-only / not FORMAL_GO / no automatic order / human decides manually
-
-Do not include a Codex implementation instruction inside NEXT_ACTION.

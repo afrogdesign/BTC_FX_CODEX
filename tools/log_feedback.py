@@ -1771,6 +1771,7 @@ from src.feedback.manual_decision_events import record_manual_decision  # noqa: 
 from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage  # noqa: E402
 from src.feedback.manual_operator_classifier import build_manual_operator_classifier  # noqa: E402
 from src.feedback.manual_operator_historical_replay import build_manual_operator_historical_replay  # noqa: E402
+from src.feedback.manual_operator_trial_evidence import build_manual_operator_trial_evidence  # noqa: E402
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -22034,6 +22035,22 @@ def _build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--replace-output", action="store_true")
     replay_parser.add_argument("--stdout-json", action="store_true")
 
+    trial_parser = subparsers.add_parser("build-manual-operator-trial-report")
+    trial_parser.add_argument("--scenarios", required=True)
+    trial_parser.add_argument("--scenario-events", required=True)
+    trial_parser.add_argument("--classifications", required=True)
+    trial_parser.add_argument("--output-csv", required=True)
+    trial_parser.add_argument("--output-queue-csv", required=True)
+    trial_parser.add_argument("--output-json", required=True)
+    trial_parser.add_argument("--output-md", required=True)
+    trial_parser.add_argument("--date", required=True)
+    trial_parser.add_argument("--decision-events")
+    trial_parser.add_argument("--trade-episodes")
+    trial_parser.add_argument("--episode-links")
+    trial_parser.add_argument("--dry-run", action="store_true")
+    trial_parser.add_argument("--replace-output", action="store_true")
+    trial_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23390,6 +23407,20 @@ def main() -> None:
         summary = build_manual_operator_historical_replay(
             scenarios=Path(args.scenarios), scenario_events=Path(args.scenario_events), classifications=Path(args.classifications),
             output_csv=Path(args.output_csv), output_json=Path(args.output_json), output_md=Path(args.output_md), report_date=args.date,
+            decision_events=Path(args.decision_events) if args.decision_events else None,
+            trade_episodes=Path(args.trade_episodes) if args.trade_episodes else None,
+            episode_links=Path(args.episode_links) if args.episode_links else None,
+            dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "build-manual-operator-trial-report":
+        summary = build_manual_operator_trial_evidence(
+            scenarios=Path(args.scenarios), scenario_events=Path(args.scenario_events), classifications=Path(args.classifications),
+            output_csv=Path(args.output_csv), output_queue_csv=Path(args.output_queue_csv), output_json=Path(args.output_json),
+            output_md=Path(args.output_md), report_date=args.date,
             decision_events=Path(args.decision_events) if args.decision_events else None,
             trade_episodes=Path(args.trade_episodes) if args.trade_episodes else None,
             episode_links=Path(args.episode_links) if args.episode_links else None,
