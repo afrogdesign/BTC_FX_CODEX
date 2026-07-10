@@ -1,10 +1,10 @@
-# Manual Trade Linkage and Ground-Truth Pipeline Active Spec
+# Manual Trade Linkage and Ground-Truth Pipeline Archived Spec
 
 ## Metadata
 
 - work_id: `BTCFX-20260710-MTP-LINKAGE-PIPELINE-SPEC`
 - created_at: `2026-07-10`
-- status: active / design baseline
+- status: archived / reviewed implementation baseline
 - phase: `P3`
 - previous_phase: `P2 manual actual trade importer hardening complete`
 - safety: report-only / not `FORMAL_GO` / no automatic order / human decides manually

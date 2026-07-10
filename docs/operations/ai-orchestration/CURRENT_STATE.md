@@ -278,3 +278,67 @@ BTCFX-20260710-MTP-LINKAGE-PIPELINE-SPEC-CHECKPOINT
 ```
 
 This is a docs-only Git validation and commit task. P3 source implementation remains blocked until the new active spec is committed and reviewed.
+
+
+---
+
+## 2026-07-10 P3 completion and P4 activation
+
+Manual trade linkage and ground-truth pipeline P3 is complete and reviewed.
+
+Completed capabilities:
+
+- hardened importer v2 input validation
+- deterministic position-backed manual trade episodes
+- unresolved and ambiguous association coverage
+- signal linkage v2 with pre-entry eligibility, confidence bands, and tie handling
+- fail-closed signal classification and input validation
+- episode-level performance separated from fill-level monetary evidence
+- high/medium actual-backed descriptive aggregation only
+- atomic generated output replacement
+- v2 CLI routes for episodes, links, and ground-truth report
+
+Reported local commits:
+
+```text
+d7083bb
+2a66c56
+d5736ac
+5988a87
+```
+
+Reported targeted validation:
+
+```text
+48 tests passed
+targeted git diff --check passed
+push: none
+```
+
+Archived P3 spec:
+
+```text
+chatgpt/specs/archive/20260710_manual_trade_linkage_ground_truth_pipeline.md
+```
+
+New active P4 spec:
+
+```text
+chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md
+```
+
+P4 separates:
+
+```text
+scenario evidence
+proxy market-path outcome
+human decision/action
+```
+
+P4 does not implement A/B/C/STOP classification, production threshold changes, notification behavior changes, or runtime changes.
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT
+```
