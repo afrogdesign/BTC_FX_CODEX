@@ -1766,6 +1766,9 @@ from src.feedback.manual_actual_trade_importer import (  # noqa: E402
 from src.feedback.manual_trade_episode_builder import build_manual_trade_episodes  # noqa: E402
 from src.feedback.manual_trade_signal_linker import link_manual_trade_episodes_to_signals  # noqa: E402
 from src.feedback.manual_trade_ground_truth import build_manual_trade_ground_truth_report_v2  # noqa: E402
+from src.feedback.manual_scenario_normalizer import build_manual_scenarios  # noqa: E402
+from src.feedback.manual_decision_events import record_manual_decision  # noqa: E402
+from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage  # noqa: E402
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -21940,6 +21943,56 @@ def _build_parser() -> argparse.ArgumentParser:
     active_plan_intraperiod_cli_parser.add_argument("--timeout-hours", type=float, default=24.0)
     active_plan_intraperiod_cli_parser.add_argument("--now", default="")
 
+    scenario_parser = subparsers.add_parser("build-manual-scenarios")
+    scenario_parser.add_argument("--candidates", required=True)
+    scenario_parser.add_argument("--intraperiod-outcomes")
+    scenario_parser.add_argument("--scenarios-out", default="logs/csv/manual_scenarios.csv")
+    scenario_parser.add_argument("--events-out", default="logs/csv/manual_scenario_events.csv")
+    scenario_parser.add_argument("--max-update-gap-minutes", type=int, default=360)
+    scenario_parser.add_argument("--max-scenario-age-hours", type=int, default=24)
+    scenario_parser.add_argument("--zone-tolerance-bps", type=int, default=25)
+    scenario_parser.add_argument("--invalidation-tolerance-bps", type=int, default=50)
+    scenario_parser.add_argument("--ohlcv")
+    scenario_parser.add_argument("--replace-output", action="store_true")
+    scenario_parser.add_argument("--dry-run", action="store_true")
+    scenario_parser.add_argument("--stdout-json", action="store_true")
+
+    decision_parser = subparsers.add_parser("record-manual-decision")
+    decision_parser.add_argument("--scenario-id", default="")
+    decision_parser.add_argument("--signal-id", default="")
+    decision_parser.add_argument("--human-checked-at-jst", required=True)
+    decision_parser.add_argument("--decision-stage", required=True)
+    decision_parser.add_argument("--human-action", required=True)
+    decision_parser.add_argument("--human-side", required=True)
+    decision_parser.add_argument("--reason-code", action="append", default=[])
+    decision_parser.add_argument("--mail-timestamp-jst", default="")
+    decision_parser.add_argument("--observed-price", default="")
+    decision_parser.add_argument("--planned-entry-price", default="")
+    decision_parser.add_argument("--planned-sl-price", default="")
+    decision_parser.add_argument("--planned-tp1-price", default="")
+    decision_parser.add_argument("--planned-tp2-price", default="")
+    decision_parser.add_argument("--manual-note", default="")
+    decision_parser.add_argument("--source", default="manual_local")
+    decision_parser.add_argument("--supersedes-decision-event-id", default="")
+    decision_parser.add_argument("--output-csv", default="logs/csv/manual_decision_events.csv")
+    decision_parser.add_argument("--scenarios")
+    decision_parser.add_argument("--dry-run", action="store_true")
+    decision_parser.add_argument("--stdout-json", action="store_true")
+
+    coverage_parser = subparsers.add_parser("build-manual-scenario-coverage")
+    coverage_parser.add_argument("--candidates", required=True)
+    coverage_parser.add_argument("--scenarios", required=True)
+    coverage_parser.add_argument("--scenario-events", required=True)
+    coverage_parser.add_argument("--intraperiod-outcomes")
+    coverage_parser.add_argument("--decision-events")
+    coverage_parser.add_argument("--episodes")
+    coverage_parser.add_argument("--episode-links")
+    coverage_parser.add_argument("--output-json")
+    coverage_parser.add_argument("--output-md")
+    coverage_parser.add_argument("--date", default="")
+    coverage_parser.add_argument("--dry-run", action="store_true")
+    coverage_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23222,6 +23275,58 @@ def main() -> None:
                 + (",".join(summary["missing_categories"]) if summary["missing_categories"] else "none")
             )
         return int(summary.get("exit_code", 0))
+
+    if args.command == "build-manual-scenarios":
+        summary = build_manual_scenarios(
+            candidates=Path(args.candidates),
+            intraperiod_outcomes=Path(args.intraperiod_outcomes) if args.intraperiod_outcomes else None,
+            scenarios_out=Path(args.scenarios_out), events_out=Path(args.events_out),
+            max_update_gap_minutes=int(args.max_update_gap_minutes),
+            max_scenario_age_hours=int(args.max_scenario_age_hours),
+            zone_tolerance_bps=int(args.zone_tolerance_bps),
+            invalidation_tolerance_bps=int(args.invalidation_tolerance_bps),
+            ohlcv=Path(args.ohlcv) if args.ohlcv else None,
+            dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "record-manual-decision":
+        summary = record_manual_decision(
+            scenario_id=args.scenario_id, signal_id=args.signal_id,
+            human_checked_at_jst=args.human_checked_at_jst, decision_stage=args.decision_stage,
+            human_action=args.human_action, human_side=args.human_side, reason_code=args.reason_code,
+            mail_timestamp_jst=args.mail_timestamp_jst, observed_price=args.observed_price,
+            planned_entry_price=args.planned_entry_price, planned_sl_price=args.planned_sl_price,
+            planned_tp1_price=args.planned_tp1_price, planned_tp2_price=args.planned_tp2_price,
+            manual_note=args.manual_note, source=args.source,
+            supersedes_decision_event_id=args.supersedes_decision_event_id,
+            output_csv=Path(args.output_csv), scenarios=Path(args.scenarios) if args.scenarios else None,
+            dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "build-manual-scenario-coverage":
+        report, payload = build_manual_scenario_coverage(
+            candidates=Path(args.candidates), scenarios=Path(args.scenarios), scenario_events=Path(args.scenario_events),
+            intraperiod_outcomes=Path(args.intraperiod_outcomes) if args.intraperiod_outcomes else None,
+            decision_events=Path(args.decision_events) if args.decision_events else None,
+            output_json=Path(args.output_json) if args.output_json else None,
+            output_md=Path(args.output_md) if args.output_md else None,
+            episodes=Path(args.episodes) if args.episodes else None,
+            episode_links=Path(args.episode_links) if args.episode_links else None,
+            report_date=args.date or None, dry_run=bool(args.dry_run),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")
+        elif args.output_md and not args.dry_run:
+            print(args.output_md)
+        else:
+            print(report)
+        return int(payload.get("exit_code", 0))
 
     if args.command == "build-manual-trade-episodes":
         summary = build_manual_trade_episodes(

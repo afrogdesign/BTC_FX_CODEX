@@ -1,75 +1,58 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT`
-- mode: `DOCS-ONLY / CODEX CHECKPOINT`
-- task_type: `SPEC VALIDATION / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-LINKAGE-DEAD-CODE-CLEANUP`
-- previous_status: `P3 COMPLETE / REVIEWED / LOCAL COMMITS REPORTED / PUSH NONE`
+- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-IMPLEMENT`
+- mode: `BOUNDED_CODEX`
+- task_type: `P4 SOURCE / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT`
+- previous_status: `P4 ACTIVE SPEC COMMITTED / PUSH NONE`
 
 ## Current goal
 
-P3を完了・archiveし、P4のscenario identity、OHLCV coverage、manual decision-event schemaをactive specとして確定する。
+P4 active specに従い、scenario normalizer、append-only manual decision-event recorder、deterministic scenario coverage reportをreport-only pipelineとして実装する。
 
-Archived P3 spec:
-
-```text
-chatgpt/specs/archive/20260710_manual_trade_linkage_ground_truth_pipeline.md
-```
-
-Active P4 spec:
+Active spec:
 
 ```text
 chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md
 ```
 
-## P4 design decision
-
-P4は次の3層を分離する。
-
-```text
-scenario evidence
-proxy market-path outcome
-human decision/action
-```
-
-P4 does not implement A/B/C/STOP classification, notification changes, gate changes, or runtime changes.
-
-Core outputs:
+## Required outputs
 
 ```text
 logs/csv/manual_scenarios.csv
 logs/csv/manual_scenario_events.csv
 logs/csv/manual_decision_events.csv
-運用資料/reports/post_eval/manual_scenario_coverage_YYYYMMDD.md
 logs/json/manual_scenario_coverage_YYYYMMDD.json
+運用資料/reports/post_eval/manual_scenario_coverage_YYYYMMDD.md
 ```
 
-## Required checkpoint validation
+The pipeline keeps scenario evidence, proxy market-path outcomes, and human decision/action separate. Candidate rows are not independent opportunities and are not human actions.
 
-- P3 active spec absent
-- P3 archive exists
-- P4 active spec exists
-- active spec defines deterministic scenario identity
-- ambiguous grouping has no hidden tie-break
-- no_ohlcv is coverage failure, not win/loss
-- human decision events do not contain hindsight result fields
-- P4 explicitly blocks classifier, gate, notification, and runtime work
-- docs-only `git diff --check` passes
+## Boundaries
+
+- P4 does not implement an A/B/C/STOP classifier.
+- no Active Plan, gate, threshold, scoring, notification, mail, runtime, or launchd changes
+- no API, secret, private/account/order endpoint, real exchange export, or `paper_positions.csv`
+- `no_ohlcv` is coverage failure, never win/loss
+- decision events are append-only and do not contain hindsight results
+
+## Validation
+
+```bash
+./.venv312/bin/python -m unittest \
+  tests.test_manual_scenario_normalizer \
+  tests.test_manual_decision_events \
+  tests.test_manual_scenario_coverage \
+  tests.test_manual_trade_episode_builder \
+  tests.test_manual_trade_signal_linker \
+  tests.test_manual_trade_ground_truth_report \
+  tests.test_mexc_actual_trade_importer
+```
+
+P4 generated CSV/JSON/Markdown remains local and is not committed. Preserve unrelated dirty and untracked files; do not reset, checkout, stash, or delete them.
 
 ## Safety boundary
 
 ```text
 report-only / not FORMAL_GO / no automatic order / human decides manually
 ```
-
-## Next after checkpoint
-
-After the checkpoint commit, implement P4 as one bounded theme:
-
-```text
-scenario normalizer
-+ decision-event recorder
-+ coverage report
-```
-
-No production behavior change.
