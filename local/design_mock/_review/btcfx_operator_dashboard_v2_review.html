@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>BTCFX Manual Trading Report</title><style>    :root {
+      color-scheme: dark;
+      --bg: #071019;
+      --surface: #0b1622;
+      --surface-2: #0e1c2b;
+      --surface-3: #122337;
+      --line: #213449;
+      --line-soft: rgba(148, 163, 184, .16);
+      --text: #edf4fb;
+      --muted: #90a4b8;
+      --faint: #61758a;
+      --wait: #f3b44f;
+      --wait-soft: rgba(243, 180, 79, .12);
+      --long: #42d392;
+      --long-soft: rgba(66, 211, 146, .11);
+      --long-main: #58d6ea;
+      --short: #ff6f78;
+      --short-soft: rgba(255, 111, 120, .10);
+      --short-main: #f6b75e;
+      --blue: #67a9ff;
+      --danger: #ff6f78;
+      --radius: 18px;
+      --shadow: 0 24px 70px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 8% -10%, rgba(42, 117, 176, .22), transparent 30%),
+        radial-gradient(circle at 92% 0%, rgba(44, 155, 125, .10), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Hiragino Sans", "Yu Gothic", "Yu Gothic UI", system-ui, -apple-system, sans-serif;
+      line-height: 1.55;
+    }
+    button { font: inherit; }
+    .shell { width: min(1460px, calc(100% - 28px)); margin: 0 auto; padding: 18px 0 56px; }
+    .topbar {
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      margin-bottom:12px; color:var(--muted); font-size:12px; font-weight:800;
+    }
+    .brand { display:flex; align-items:center; gap:10px; color:var(--text); letter-spacing:.08em; }
+    .brand-mark { display:grid; place-items:center; width:30px; height:30px; border-radius:9px; background:#f59e0b; color:#111827; font-size:18px; }
+    .meta-line { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px 16px; }
+    .hero {
+      display:grid; grid-template-columns:minmax(0,1.5fr) minmax(310px,.5fr);
+      border:1px solid var(--line); border-radius:24px; overflow:hidden;
+      background:linear-gradient(145deg, rgba(15,31,48,.98), rgba(9,20,31,.98));
+      box-shadow:var(--shadow);
+    }
+    .hero-main { padding:26px 28px 24px; }
+    .hero-side { padding:24px; background:rgba(5,13,21,.44); border-left:1px solid var(--line); }
+    .status-line { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:18px; }
+    .status-badge {
+      display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid rgba(243,180,79,.45);
+      border-radius:999px; background:var(--wait-soft); color:#ffd68f; font-size:12px; font-weight:950; letter-spacing:.06em;
+    }
+    .safety { color:var(--faint); font-size:11px; font-weight:800; }
+    .decision-grid { display:grid; grid-template-columns:auto minmax(0,1fr); gap:20px; align-items:center; }
+    .decision-word { color:var(--wait); font-size:clamp(52px,8vw,104px); line-height:.9; font-weight:1000; letter-spacing:-.065em; }
+    .decision-copy h1 { margin:0 0 8px; font-size:clamp(25px,3.2vw,43px); line-height:1.15; letter-spacing:-.035em; }
+    .decision-copy p { margin:0; max-width:760px; color:#b8c8d7; font-size:15px; font-weight:700; }
+    .hero-action {
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; margin-top:22px;
+      border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
+    }
+    .action-cell { padding:12px 14px; background:#0a1723; min-width:0; }
+    .action-cell span { display:block; color:var(--faint); font-size:10px; font-weight:900; letter-spacing:.08em; margin-bottom:4px; }
+    .action-cell strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+    .current-label { color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.12em; }
+    .current-price { margin:6px 0 18px; font-size:clamp(39px,5vw,64px); line-height:1; font-weight:1000; letter-spacing:-.05em; font-variant-numeric:tabular-nums; }
+    .metric-stack { display:grid; gap:11px; }
+    .metric { display:grid; grid-template-columns:72px 1fr 42px; gap:10px; align-items:center; }
+    .metric-label { color:var(--muted); font-size:12px; font-weight:900; }
+    .metric-track { height:8px; border-radius:999px; background:#1a2a3b; overflow:hidden; }
+    .metric-fill { height:100%; border-radius:inherit; }
+    .metric-fill.direction { background:var(--blue); }
+    .metric-fill.execution { background:var(--long); }
+    .metric-fill.wait { background:var(--wait); }
+    .metric-value { text-align:right; font-size:18px; font-weight:1000; font-variant-numeric:tabular-nums; }
+    .expiry { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    .alert-strip {
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:12px 0;
+    }
+    .alert-item {
+      display:grid; grid-template-columns:28px 1fr; gap:9px; align-items:start; padding:12px 13px;
+      border:1px solid var(--line); border-radius:14px; background:rgba(12,27,42,.9);
+    }
+    .alert-icon { display:grid; place-items:center; width:28px; height:28px; border-radius:9px; background:var(--wait-soft); color:var(--wait); font-weight:1000; }
+    .alert-item strong { display:block; font-size:12px; margin-bottom:2px; }
+    .alert-item small { display:block; color:var(--muted); font-size:10px; line-height:1.45; }
+    .workspace {
+      display:grid;
+      grid-template-columns:280px minmax(0,1fr) 280px;
+      grid-template-areas:"long chart short";
+      gap:12px;
+      align-items:start;
+    }
+    .panel { border:1px solid var(--line); border-radius:var(--radius); background:rgba(11,22,34,.96); box-shadow:0 14px 40px rgba(0,0,0,.15); }
+    .chart-panel { grid-area:chart; min-width:0; overflow:hidden; }
+    .plans { display:contents; }
+    .side-card.long { grid-area:long; }
+    .side-card.short { grid-area:short; }
+    .panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:18px 18px 12px; }
+    .panel-head h2 { margin:0; font-size:18px; letter-spacing:-.02em; }
+    .panel-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .chart-controls { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+    .segmented { display:inline-flex; padding:3px; border:1px solid var(--line); border-radius:11px; background:#07121d; }
+    .segmented button {
+      border:0; padding:7px 10px; border-radius:8px; background:transparent; color:var(--muted);
+      cursor:pointer; font-size:11px; font-weight:900;
+    }
+    .segmented button.active { background:var(--surface-3); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.05) inset; }
+    .chart-legend {
+      display:flex; flex-wrap:wrap; gap:8px 14px; padding:0 18px 12px; color:var(--muted); font-size:10px; font-weight:800;
+    }
+    .legend-item { display:inline-flex; align-items:center; gap:6px; }
+    .legend-dot { width:11px; height:7px; border-radius:3px; border:1px solid transparent; }
+    .legend-dot.long-shallow { background:rgba(66,211,146,.42); border-color:var(--long); }
+    .legend-dot.long-main { background:rgba(88,214,234,.25); border-color:var(--long-main); }
+    .legend-dot.short-shallow { background:rgba(255,111,120,.42); border-color:var(--short); }
+    .legend-dot.short-main { background:rgba(246,183,94,.25); border-color:var(--short-main); }
+    .chart-scroll { overflow-x:auto; padding:0 12px 12px; scrollbar-color:#30475f transparent; }
+    .chart-stage { min-width:790px; border:1px solid #24364b; border-radius:14px; overflow:hidden; background:#07111d; }
+    .price-map,
+    .chart-svg { display:block; width:100%; height:auto; }
+    .chart-note {
+      display:flex; justify-content:space-between; gap:14px; padding:11px 15px; border-top:1px solid #1e3044;
+      color:var(--muted); font-size:10px;
+    }
+    .side-card { overflow:hidden; }
+    .side-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:13px 13px; border-bottom:1px solid var(--line); }
+    .side-card.long .side-head { background:linear-gradient(100deg,var(--long-soft),transparent); }
+    .side-card.short .side-head { background:linear-gradient(100deg,var(--short-soft),transparent); }
+    .side-title { display:flex; align-items:center; gap:9px; }
+    .side-pill { padding:5px 8px; border-radius:7px; font-size:11px; font-weight:1000; letter-spacing:.08em; }
+    .long .side-pill { background:rgba(66,211,146,.16); color:#91f2bf; }
+    .short .side-pill { background:rgba(255,111,120,.15); color:#ffadb2; }
+    .side-state { font-size:15px; font-weight:1000; }
+    .side-score { text-align:right; }
+    .side-score strong { display:block; font-size:24px; line-height:1; }
+    .side-score small { color:var(--faint); font-size:9px; }
+    .levels { padding:5px 11px 8px; }
+    .level-group-label { padding:7px 2px 3px; color:var(--faint); font-size:8px; font-weight:1000; letter-spacing:.12em; }
+    .level-row {
+      display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+      min-height:34px; padding:5px 2px; border-top:1px solid var(--line-soft);
+    }
+    .level-name { color:#c1d0df; font-size:10px; font-weight:900; }
+    .level-name small { display:block; margin-top:2px; color:var(--faint); font-size:8px; font-weight:700; }
+    .level-value { font-size:13px; font-weight:1000; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .level-row.shallow.long-tone .level-value { color:#84edb8; }
+    .level-row.main.long-tone .level-value { color:#80e5f2; }
+    .level-row.shallow.short-tone .level-value { color:#ff9da4; }
+    .level-row.main.short-tone .level-value { color:#ffd08d; }
+    .level-row.invalid .level-value { color:#ff9aa2; }
+    .level-row.trigger .level-value { color:#bdd2e6; }
+    .level-row.target .level-value { color:#d5e3ef; }
+    .side-guidance { margin:0 11px 11px; padding:9px 10px; border-radius:10px; background:#07131e; color:var(--muted); font-size:9px; line-height:1.5; }
+    .lower-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:12px; margin-top:12px; }
+    .section-card { padding:18px; }
+    .section-title { margin:0 0 4px; font-size:18px; }
+    .section-lead { margin:0 0 15px; color:var(--muted); font-size:12px; }
+    .condition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .condition { padding:13px; border:1px solid var(--line); border-radius:13px; background:#091724; }
+    .condition-label { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; color:var(--muted); font-size:10px; font-weight:900; }
+    .condition-label b { padding:3px 6px; border-radius:6px; background:#15273a; color:var(--text); }
+    .condition strong { display:block; font-size:13px; margin-bottom:4px; }
+    .condition p { margin:0; color:var(--muted); font-size:10px; }
+    .big-chance {
+      display:grid; grid-template-columns:82px 1fr; gap:15px; padding:18px;
+      border:1px solid rgba(103,169,255,.28); border-radius:var(--radius);
+      background:linear-gradient(145deg,rgba(17,43,69,.9),rgba(9,23,36,.97));
+    }
+    .big-score { display:grid; place-items:center; align-content:center; min-height:90px; border-radius:14px; background:#081624; border:1px solid #294562; }
+    .big-score strong { font-size:32px; line-height:1; }
+    .big-score span { color:var(--blue); font-size:12px; font-weight:1000; }
+    .big-chance h3 { margin:0 0 6px; font-size:16px; }
+    .big-chance p { margin:0; color:#b1c4d6; font-size:11px; }
+    .timeline { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:12px; }
+    .timeline span { padding:5px 8px; border-radius:8px; background:#0c1c2b; border:1px solid #27405a; font-size:9px; font-weight:900; }
+    .timeline i { color:var(--faint); font-style:normal; }
+    .context-bar {
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin-top:12px;
+      border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
+    }
+    .context-cell { padding:13px; background:#0a1723; }
+    .context-cell span { display:block; color:var(--faint); font-size:9px; font-weight:900; letter-spacing:.08em; }
+    .context-cell strong { display:block; margin-top:3px; font-size:13px; }
+    .details-panel { margin-top:12px; overflow:hidden; }
+    details { border-top:1px solid var(--line); }
+    details:first-of-type { border-top:0; }
+    summary { cursor:pointer; list-style:none; padding:14px 18px; font-size:12px; font-weight:900; }
+    summary::-webkit-details-marker { display:none; }
+    summary::after { content:"＋"; float:right; color:var(--faint); }
+    details[open] summary::after { content:"−"; }
+    .details-body { padding:0 18px 18px; color:var(--muted); font-size:11px; overflow-wrap:anywhere; word-break:break-word; }
+    .details-body pre { white-space:pre-wrap; max-width:100%; overflow-x:auto; }
+    .details-body p, .details-body li { overflow-wrap:anywhere; word-break:break-word; }
+    .score-mini-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+    .score-mini { padding:10px; border:1px solid var(--line); border-radius:10px; background:#081521; }
+    .score-mini span { display:block; color:var(--faint); font-size:8px; }
+    .score-mini strong { display:block; font-size:20px; }
+    .reason-list { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+    .reason-chip { padding:6px 8px; border:1px solid #2a4055; border-radius:999px; background:#0b1927; color:#aebfd0; font-size:9px; }
+    .diagnostic-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .diagnostic { padding:11px; border:1px solid var(--line); border-radius:11px; background:#081521; }
+    .diagnostic span { display:block; color:var(--faint); font-size:8px; }
+    .diagnostic strong { display:block; margin-top:3px; font-size:11px; color:#c7d6e4; }
+    footer { padding:20px 4px 0; color:var(--faint); font-size:9px; text-align:center; }
+
+    /* SVG chart */
+    .price-map-bg { fill:#0a1422; stroke:#26384c; stroke-width:1.2; }
+    .price-map-panel { filter:drop-shadow(0 10px 22px rgba(0,0,0,.18)); }
+    .price-map-panel-focus .price-map-bg { stroke:#3d5d7f; stroke-width:1.4; }
+    .chart-title { fill:#eef6ff; font-size:18px; font-weight:800; }
+    .chart-subtitle { fill:#8ca0b6; font-size:12px; font-weight:600; }
+    .price-grid-h { stroke:rgba(148,163,184,.26); stroke-width:1; }
+    .price-grid-v { stroke:rgba(148,163,184,.16); stroke-width:1; }
+    .price-map-separator { fill:rgba(207,216,228,.04); }
+    .price-map-separator-line { stroke:rgba(148,163,184,.18); }
+    .candle-wick { stroke-width:1.35; opacity:.9; }
+    .candle-body { stroke-width:.95; opacity:.96; }
+    .candle-up { fill:rgba(66,211,146,.58); stroke:rgba(66,211,146,.95); }
+    .candle-down { fill:rgba(255,111,120,.56); stroke:rgba(255,111,120,.94); }
+    .band-support { fill:rgba(66,211,146,.09); }
+    .band-resistance { fill:rgba(255,111,120,.09); }
+    .setup-band-long { fill:rgba(66,211,146,.22); stroke:var(--long); stroke-width:1.7; }
+    .setup-band-short { fill:rgba(255,111,120,.22); stroke:var(--short); stroke-width:1.7; }
+    .setup-axis-value-long { fill:#70e8ad; font-size:13px; font-weight:800; }
+    .setup-axis-value-short { fill:#ff979e; font-size:13px; font-weight:800; }
+    .value-defense-band-long { fill:rgba(88,214,234,.18); stroke:var(--long-main); stroke-width:2; }
+    .value-defense-band-short { fill:rgba(246,183,94,.18); stroke:var(--short-main); stroke-width:2; }
+    .invalidation-band-long, .invalidation-band-short { fill:rgba(255,111,120,.11); stroke:rgba(255,111,120,.75); stroke-width:1.3; stroke-dasharray:4 4; }
+    .value-defense-trigger-long { stroke:#a9dff0; stroke-width:1.5; stroke-dasharray:5 4; }
+    .value-defense-trigger-short { stroke:#f6d49e; stroke-width:1.5; stroke-dasharray:5 4; }
+    .marker-line { stroke-width:2; stroke-dasharray:4 4; }
+    .marker-label { font-size:10px; font-weight:700; }
+    .marker-long { stroke:#55d99a; fill:#b9f7d4; }
+    .marker-short { stroke:#ff777f; fill:#ffc1c5; }
+    .current-price-line { stroke:#67a9ff; stroke-width:2.5; stroke-dasharray:5 5; }
+    .current-price-label { fill:#dcecff; font-size:13px; font-weight:800; paint-order:stroke fill; stroke:#0a1422; stroke-width:3; }
+    .price-axis { fill:#9dafc3; font-size:12px; font-weight:600; }
+    .time-axis-line { stroke:rgba(148,163,184,.25); }
+    .time-axis-label { fill:#879bb1; font-size:11px; font-weight:600; }
+    .zone-caption { font-size:10px; font-weight:1000; letter-spacing:.02em; paint-order:stroke fill; stroke:#07111d; stroke-width:3; }
+    .zone-long-shallow { fill:#a6f3cb; }
+    .zone-long-main { fill:#98ebf4; }
+    .zone-short-shallow { fill:#ffc1c5; }
+    .zone-short-main { fill:#ffda9f; }
+    .chart-stage.basic .marker-line,
+    .chart-stage.basic .marker-label,
+    .chart-stage.basic .invalidation-band-long,
+    .chart-stage.basic .invalidation-band-short,
+    .chart-stage.basic .invalidation-band-text-long,
+    .chart-stage.basic .invalidation-band-text-short,
+    .chart-stage.basic .value-defense-trigger-long,
+    .chart-stage.basic .value-defense-trigger-short {
+      opacity:0;
+    }
+
+    @media (max-width:1180px) {
+      .workspace {
+        grid-template-columns:1fr 1fr;
+        grid-template-areas:"chart chart" "long short";
+      }
+      .alert-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .hero-action { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width:860px) {
+      .shell { width:min(100% - 18px, 760px); padding-top:10px; }
+      .topbar { align-items:flex-start; }
+      .meta-line { display:none; }
+      .hero { grid-template-columns:1fr; }
+      .hero-side { border-left:0; border-top:1px solid var(--line); }
+      .decision-grid { grid-template-columns:1fr; gap:10px; }
+      .decision-word { font-size:66px; }
+      .workspace {
+        grid-template-columns:1fr;
+        grid-template-areas:"long" "short" "chart";
+      }
+      .lower-grid { grid-template-columns:1fr; }
+      .score-mini-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    @media (max-width:590px) {
+      .hero-main, .hero-side { padding:18px 16px; }
+      .status-line { margin-bottom:12px; }
+      .decision-copy h1 { font-size:25px; }
+      .hero-action { grid-template-columns:1fr 1fr; }
+      .action-cell { padding:10px; }
+      .alert-strip { grid-template-columns:1fr; gap:7px; }
+      .panel-head { display:block; }
+      .chart-controls { justify-content:flex-start; margin-top:10px; }
+      .chart-scroll { padding-left:8px; padding-right:8px; }
+      .condition-grid { grid-template-columns:1fr; }
+      .big-chance { grid-template-columns:68px 1fr; }
+      .context-bar { grid-template-columns:1fr; }
+      .score-mini-grid, .diagnostic-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .topbar { margin-left:4px; }
+    }
+  </style></head>
+<body class="v2-report operator-dashboard"><div class="shell">
+  <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>2026-03-31 01:05:00+09:00</span><span>signal 20260331_010500</span><span>attention</span></div></div>
+  <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● 注意報・売買非推奨</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word">WAIT</div><div class="decision-copy"><h1>今は入らない。注意報として価格帯だけを監視する。</h1><p>上側流動性が近く先に振られやすい / 流動性回収が未完了</p></div></div><div class="hero-action"><div class="action-cell"><span>成行</span><strong>見送り</strong></div><div class="action-cell"><span>指値・戻り待ち</span><strong>見送り</strong></div><div class="action-cell"><span>ブレイク追随</span><strong>見送り</strong></div><div class="action-cell"><span>逆方向短期</span><strong>見送り</strong></div></div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">65,818</div><div class="metric-stack"><div class="metric"><span class="metric-label">方向</span><div class="metric-track"><div class="metric-fill direction" style="width:100%"></div></div><strong class="metric-value">100</strong></div><div class="metric"><span class="metric-label">実行</span><div class="metric-track"><div class="metric-fill execution" style="width:7%"></div></div><strong class="metric-value">7</strong></div><div class="metric"><span class="metric-label">待機</span><div class="metric-track"><div class="metric-fill wait" style="width:69%"></div></div><strong class="metric-value">69</strong></div></div><div class="expiry">有効期限：次の1時間足確定までを目安</div></div></header>
+  <section class="alert-strip" id="active-alerts" aria-label="現在発火中の警戒"><div class="alert-item"><span class="alert-icon">!</span><div><strong>Long 実行注意</strong><small>下抜けが出ているため、ロング根拠は弱まりました。15分足で下方向の維持を確認します</small></div></div><div class="alert-item"><span class="alert-icon">!</span><div><strong>Short 実行注意</strong><small>上抜けが出ているため、ショート根拠は弱まりました。15分足で上方向の維持を確認します</small></div></div><div class="alert-item"><span class="alert-icon">↗</span><div><strong>ブレイク / 反転</strong><small>ショート根拠は弱まりつつあります。15分足で上に維持できるか確認。すぐ下に戻るならダマシ注意。</small></div></div><div class="alert-item"><span class="alert-icon">勢</span><div><strong>モメンタム</strong><small>ショート方向は危険。15分足で上に維持できるか確認。すぐ下に戻るならダマシ注意。</small></div></div></section>
+  <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage"><svg viewBox="0 726 860 429" class="price-map chart-svg" aria-label="再検討ラインチャート"><g class="price-map-separator-wrap"><rect x="0" y="319" width="860" height="34" class="price-map-separator" rx="18" /><line x1="24" y1="336.0" x2="836" y2="336.0" class="price-map-separator-line" /></g><g class="price-map-separator-wrap"><rect x="0" y="682" width="860" height="34" class="price-map-separator" rx="18" /><line x1="24" y1="699.0" x2="836" y2="699.0" class="price-map-separator-line" /></g><g class="price-map-panel "><rect x="0" y="0" width="860" height="309" rx="18" class="price-map-bg" /><text x="22" y="22" class="chart-title">4時間足: 大局方向</text><text x="22" y="40" class="chart-subtitle">大きな流れと主要なサポート / レジスタンスだけを見ます。入る価格の判断は下段です</text><line x1="30" y1="271.0" x2="698" y2="271.0" class="price-grid-h" /><line x1="30" y1="209.8" x2="698" y2="209.8" class="price-grid-h" /><line x1="30" y1="148.5" x2="698" y2="148.5" class="price-grid-h" /><line x1="30" y1="87.2" x2="698" y2="87.2" class="price-grid-h" /><line x1="30" y1="26.0" x2="698" y2="26.0" class="price-grid-h" /><line x1="163.6" y1="26" x2="163.6" y2="271" class="price-grid-v" /><line x1="297.2" y1="26" x2="297.2" y2="271" class="price-grid-v" /><line x1="430.8" y1="26" x2="430.8" y2="271" class="price-grid-v" /><line x1="564.4" y1="26" x2="564.4" y2="271" class="price-grid-v" /><rect x="30" y="42.9" width="668" height="37.3" class="band-resistance" /><rect x="30" y="230.4" width="668" height="23.7" class="band-support" /><line x1="145.3" y1="145.9" x2="145.3" y2="220.8" class="candle-wick candle-up" /><rect x="137.8" y="163.6" width="15.0" height="30.8" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="130.5" x2="364.0" y2="198.8" class="candle-wick candle-down" /><rect x="356.5" y="163.6" width="15.0" height="17.6" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="154.8" x2="582.7" y2="218.6" class="candle-wick candle-down" /><rect x="575.2" y="181.2" width="15.0" height="28.6" rx="1.3" class="candle-body candle-down" /><line x1="30" y1="212.5" x2="698" y2="212.5" class="current-price-line" /><text x="22.0" y="216.5" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="275.0" text-anchor="end" class="price-axis">65,552</text><text x="846" y="213.8" text-anchor="end" class="price-axis">65,830</text><text x="846" y="152.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="91.2" text-anchor="end" class="price-axis">66,386</text><text x="846" y="30.0" text-anchor="end" class="price-axis">66,664</text><text x="145.3" y="295.0" text-anchor="middle" class="time-axis-label">04/10 00:00</text><text x="364.0" y="295.0" text-anchor="middle" class="time-axis-label">04/10 04:00</text><text x="582.7" y="295.0" text-anchor="middle" class="time-axis-label">04/10 08:00</text><line x1="30" y1="271.0" x2="698" y2="271.0" class="time-axis-line" /></g><g class="price-map-panel "><rect x="0" y="363" width="860" height="309" rx="18" class="price-map-bg" /><text x="22" y="385" class="chart-title">1時間足: 帯の妥当性</text><text x="22" y="403" class="chart-subtitle">再検討帯が押し目 / 戻りとして自然かを見る段です。利確 / 損切りはここでは見ません</text><line x1="30" y1="634.0" x2="698" y2="634.0" class="price-grid-h" /><line x1="30" y1="572.7" x2="698" y2="572.7" class="price-grid-h" /><line x1="30" y1="511.5" x2="698" y2="511.5" class="price-grid-h" /><line x1="30" y1="450.2" x2="698" y2="450.2" class="price-grid-h" /><line x1="30" y1="389.0" x2="698" y2="389.0" class="price-grid-h" /><line x1="163.6" y1="389" x2="163.6" y2="634" class="price-grid-v" /><line x1="297.2" y1="389" x2="297.2" y2="634" class="price-grid-v" /><line x1="430.8" y1="389" x2="430.8" y2="634" class="price-grid-v" /><line x1="564.4" y1="389" x2="564.4" y2="634" class="price-grid-v" /><rect x="30" y="454.7" width="668" height="20.0" class="band-resistance" /><rect x="30" y="555.5" width="668" height="12.8" class="band-support" /><rect x="83.4" y="581.4" width="227.1" height="10.0" rx="9" class="value-defense-band-long" /><text x="91.4" y="597.4" text-anchor="start" class="value-defense-band-text-long zone-caption zone-long-main">LONG 本命ゾーン</text><rect x="83.4" y="615.2" width="227.1" height="10.0" rx="9" class="invalidation-band-long" /><text x="91.4" y="626.0" text-anchor="start" class="invalidation-band-text-long">無効化</text><line x1="83.4" y1="574.9" x2="310.6" y2="574.9" class="value-defense-trigger-long" /><line x1="83.4" y1="561.9" x2="310.6" y2="561.9" class="value-defense-trigger-long" /><rect x="417.4" y="424.8" width="227.1" height="10.0" rx="9" class="value-defense-band-short" /><text x="636.6" y="440.8" text-anchor="end" class="value-defense-band-text-short zone-caption zone-short-main">SHORT 本命ゾーン</text><rect x="417.4" y="405.9" width="227.1" height="10.0" rx="9" class="invalidation-band-short" /><text x="636.6" y="421.9" text-anchor="end" class="invalidation-band-text-short">無効化</text><line x1="417.4" y1="442.7" x2="644.6" y2="442.7" class="value-defense-trigger-short" /><line x1="417.4" y1="464.7" x2="644.6" y2="464.7" class="value-defense-trigger-short" /><line x1="145.3" y1="520.8" x2="145.3" y2="537.4" class="candle-wick candle-up" /><rect x="137.8" y="526.7" width="15.0" height="7.1" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="519.6" x2="364.0" y2="544.5" class="candle-wick candle-down" /><rect x="356.5" y="526.7" width="15.0" height="13.0" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="535.0" x2="582.7" y2="549.2" class="candle-wick candle-down" /><rect x="575.2" y="539.7" width="15.0" height="5.9" rx="1.3" class="candle-body candle-down" /><rect x="110.2" y="555.5" width="561.1" height="12.8" rx="10" class="setup-band-long" style="opacity:0.14;" /><text x="704.0" y="560.5" class="setup-axis-value-long">65,737</text><text x="704.0" y="573.3" class="setup-axis-value-long">65,629</text><text x="120.2" y="571.5" text-anchor="start" class="zone-caption zone-long-shallow">LONG 浅い入り</text><rect x="110.2" y="454.7" width="561.1" height="20.0" rx="10" class="setup-band-short" style="opacity:0.14;" /><text x="704.0" y="459.7" class="setup-axis-value-short">66,588</text><text x="704.0" y="479.8" class="setup-axis-value-short">66,419</text><text x="661.3" y="470.7" text-anchor="end" class="zone-caption zone-short-shallow">SHORT 浅い入り</text><line x1="30" y1="545.9" x2="698" y2="545.9" class="current-price-line" /><text x="22.0" y="549.9" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="638.0" text-anchor="end" class="price-axis">65,074</text><text x="846" y="576.7" text-anchor="end" class="price-axis">65,591</text><text x="846" y="515.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="454.2" text-anchor="end" class="price-axis">66,625</text><text x="846" y="393.0" text-anchor="end" class="price-axis">67,143</text><text x="145.3" y="658.0" text-anchor="middle" class="time-axis-label">04/10 08:00</text><text x="364.0" y="658.0" text-anchor="middle" class="time-axis-label">04/10 09:00</text><text x="582.7" y="658.0" text-anchor="middle" class="time-axis-label">04/10 10:00</text><line x1="30" y1="634.0" x2="698" y2="634.0" class="time-axis-line" /></g><g class="price-map-panel price-map-panel-focus"><rect x="0" y="726" width="860" height="429" rx="18" class="price-map-bg" /><text x="22" y="748" class="chart-title">15分足: 入る価格 / SL / TP</text><text x="22" y="766" class="chart-subtitle">実際に入る価格を見る主役の段です。再検討帯、SL、TP1、TP2 をここに集約しています</text><line x1="30" y1="1117.0" x2="698" y2="1117.0" class="price-grid-h" /><line x1="30" y1="1025.7" x2="698" y2="1025.7" class="price-grid-h" /><line x1="30" y1="934.5" x2="698" y2="934.5" class="price-grid-h" /><line x1="30" y1="843.2" x2="698" y2="843.2" class="price-grid-h" /><line x1="30" y1="752.0" x2="698" y2="752.0" class="price-grid-h" /><line x1="163.6" y1="752" x2="163.6" y2="1117" class="price-grid-v" /><line x1="297.2" y1="752" x2="297.2" y2="1117" class="price-grid-v" /><line x1="430.8" y1="752" x2="430.8" y2="1117" class="price-grid-v" /><line x1="564.4" y1="752" x2="564.4" y2="1117" class="price-grid-v" /><rect x="83.4" y="1038.7" width="227.1" height="10.0" rx="9" class="value-defense-band-long" /><text x="91.4" y="1054.7" text-anchor="start" class="value-defense-band-text-long zone-caption zone-long-main">LONG 本命ゾーン</text><rect x="83.4" y="1089.0" width="227.1" height="10.0" rx="9" class="invalidation-band-long" /><text x="91.4" y="1105.0" text-anchor="start" class="invalidation-band-text-long">無効化</text><line x1="83.4" y1="1028.9" x2="310.6" y2="1028.9" class="value-defense-trigger-long" /><line x1="83.4" y1="1009.6" x2="310.6" y2="1009.6" class="value-defense-trigger-long" /><rect x="417.4" y="805.4" width="227.1" height="10.0" rx="9" class="value-defense-band-short" /><text x="636.6" y="821.4" text-anchor="end" class="value-defense-band-text-short zone-caption zone-short-main">SHORT 本命ゾーン</text><rect x="417.4" y="777.2" width="227.1" height="10.0" rx="9" class="invalidation-band-short" /><text x="636.6" y="793.2" text-anchor="end" class="invalidation-band-text-short">無効化</text><line x1="417.4" y1="832.1" x2="644.6" y2="832.1" class="value-defense-trigger-short" /><line x1="417.4" y1="864.8" x2="644.6" y2="864.8" class="value-defense-trigger-short" /><line x1="145.3" y1="973.0" x2="145.3" y2="987.2" class="candle-wick candle-up" /><rect x="137.8" y="976.6" width="15.0" height="5.3" rx="1.3" class="candle-body candle-up" /><line x1="364.0" y1="969.5" x2="364.0" y2="985.4" class="candle-wick candle-down" /><rect x="356.5" y="976.6" width="15.0" height="6.2" rx="1.3" class="candle-body candle-down" /><line x1="582.7" y1="978.3" x2="582.7" y2="989.8" class="candle-wick candle-down" /><rect x="575.2" y="982.7" width="15.0" height="3.0" rx="1.3" class="candle-body candle-down" /><rect x="136.9" y="1000.1" width="534.4" height="19.0" rx="10" class="setup-band-long" style="opacity:0.3;" /><text x="704.0" y="1005.1" class="setup-axis-value-long">65,737</text><text x="704.0" y="1024.1" class="setup-axis-value-long">65,629</text><text x="146.9" y="1016.1" text-anchor="start" class="zone-caption zone-long-shallow">LONG 浅い入り</text><rect x="136.9" y="849.9" width="534.4" height="29.9" rx="10" class="setup-band-short" style="opacity:0.3;" /><text x="704.0" y="854.9" class="setup-axis-value-short">66,588</text><text x="704.0" y="884.8" class="setup-axis-value-short">66,419</text><text x="661.3" y="865.9" text-anchor="end" class="zone-caption zone-short-shallow">SHORT 浅い入り</text><line x1="50.0" y1="847.9" x2="136.9" y2="847.9" class="marker-line marker-long" /><text x="146.9" y="851.9" text-anchor="start" class="marker-label marker-long">Long TP2 66,599</text><line x1="50.0" y1="879.8" x2="136.9" y2="879.8" class="marker-line marker-long" /><text x="146.9" y="883.8" text-anchor="start" class="marker-label marker-long">Long TP1 66,419</text><line x1="50.0" y1="1090.4" x2="136.9" y2="1090.4" class="marker-line marker-long" /><text x="146.9" y="1094.4" text-anchor="start" class="marker-label marker-long">Long SL 65,225</text><line x1="591.1" y1="778.6" x2="678.0" y2="778.6" class="marker-line marker-short" /><text x="581.1" y="782.6" text-anchor="end" class="marker-label marker-short">Short SL 66,992</text><line x1="591.1" y1="893.3" x2="678.0" y2="893.3" class="marker-line marker-short" /><text x="581.1" y="897.3" text-anchor="end" class="marker-label marker-short">Short TP1 66,342</text><line x1="591.1" y1="1037.3" x2="678.0" y2="1037.3" class="marker-line marker-short" /><text x="581.1" y="1041.3" text-anchor="end" class="marker-label marker-short">Short TP2 65,526</text><line x1="30" y1="985.8" x2="698" y2="985.8" class="current-price-line" /><text x="22.0" y="989.8" text-anchor="end" class="current-price-label">現在値 65,818</text><text x="846" y="1121.0" text-anchor="end" class="price-axis">65,074</text><text x="846" y="1029.7" text-anchor="end" class="price-axis">65,591</text><text x="846" y="938.5" text-anchor="end" class="price-axis">66,108</text><text x="846" y="847.2" text-anchor="end" class="price-axis">66,625</text><text x="846" y="756.0" text-anchor="end" class="price-axis">67,143</text><text x="145.3" y="1141.0" text-anchor="middle" class="time-axis-label">09:30</text><text x="364.0" y="1141.0" text-anchor="middle" class="time-axis-label">10:00</text><text x="582.7" y="1141.0" text-anchor="middle" class="time-axis-label">11:45</text><line x1="30" y1="1117.0" x2="698" y2="1117.0" class="time-axis-line" /></g></svg><div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">
+    <section class="panel side-card long" aria-label="LONG trade plan">
+      <div class="side-head">
+        <div class="side-title"><span class="side-pill">LONG</span><span class="side-state">監視継続</span></div>
+        <div class="side-score"><strong>51</strong><small>SCORE / 100</small></div>
+      </div>
+      <div class="levels"><div class="level-group-label">ENTRY LAYERS</div><div class="level-row shallow long-tone"><div class="level-name">浅い入り<small>最初の反応帯。ここだけで決めない</small></div><div class="level-value">65,629–65,737</div></div><div class="level-row main long-tone"><div class="level-name">本命ゾーン<small>深い押し戻りで価値を守る帯</small></div><div class="level-value">65,480–65,518</div></div><div class="level-group-label">VALIDATION</div><div class="level-row invalid"><div class="level-name">無効化<small>割れて回収できなければ目線を弱める</small></div><div class="level-value">65,217–65,233</div></div><div class="level-row trigger"><div class="level-name">回収条件<small>深く刺した後に戻してほしい水準</small></div><div class="level-value">65,574</div></div><div class="level-row trigger"><div class="level-name">継続条件<small>方向継続を確認する目安</small></div><div class="level-value">65,683</div></div><div class="level-group-label">RISK / TARGET</div><div class="level-row target"><div class="level-name">SL</div><div class="level-value">65,225</div></div><div class="level-row target"><div class="level-name">TP1</div><div class="level-value">66,419</div></div><div class="level-row target"><div class="level-name">TP2</div><div class="level-value">66,599</div></div></div>
+      <div class="side-guidance">そのまま監視。下抜けが出ているため、ロング根拠は弱まりました。15分足で下方向の維持を確認します。下抜け後の抵抗化を警戒。</div>
+    </section>
+    
+    <section class="panel side-card short" aria-label="SHORT trade plan">
+      <div class="side-head">
+        <div class="side-title"><span class="side-pill">SHORT</span><span class="side-state">監視継続</span></div>
+        <div class="side-score"><strong>100</strong><small>SCORE / 100</small></div>
+      </div>
+      <div class="levels"><div class="level-group-label">ENTRY LAYERS</div><div class="level-row shallow short-tone"><div class="level-name">浅い入り<small>最初の反応帯。ここだけで決めない</small></div><div class="level-value">66,419–66,588</div></div><div class="level-row main short-tone"><div class="level-name">本命ゾーン<small>深い押し戻りで価値を守る帯</small></div><div class="level-value">66,790–66,840</div></div><div class="level-group-label">VALIDATION</div><div class="level-row invalid"><div class="level-name">無効化<small>割れて回収できなければ目線を弱める</small></div><div class="level-value">66,984–67,000</div></div><div class="level-row trigger"><div class="level-name">回収条件<small>深く刺した後に戻してほしい水準</small></div><div class="level-value">66,689</div></div><div class="level-row trigger"><div class="level-name">継続条件<small>方向継続を確認する目安</small></div><div class="level-value">66,503</div></div><div class="level-group-label">RISK / TARGET</div><div class="level-row target"><div class="level-name">SL</div><div class="level-value">66,992</div></div><div class="level-row target"><div class="level-name">TP1</div><div class="level-value">66,342</div></div><div class="level-row target"><div class="level-name">TP2</div><div class="level-value">65,526</div></div></div>
+      <div class="side-guidance">待機のみ。上抜けが出ているため、ショート根拠は弱まりました。15分足で上方向の維持を確認します。上抜け後の支持化を警戒。</div>
+    </section>
+    </aside></main>
+  <section class="lower-grid"><div class="panel section-card"><h2 class="section-title">判断が変わる条件</h2><p class="section-lead">説明ではなく、次に確認するイベントだけを残します。</p><div class="condition-grid"><article class="condition"><div class="condition-label"><span>LONG</span><b>起動</b></div><strong>回収・継続条件を確認</strong><p>65,574 回収後、65,683 の維持を確認する。</p></article><article class="condition"><div class="condition-label"><span>LONG</span><b>弱化</b></div><strong>無効化帯を割り、回収できない</strong><p>65,217–65,233 を明確に下回る場合は仮説を弱める。</p></article><article class="condition"><div class="condition-label"><span>SHORT</span><b>再評価</b></div><strong>本命ゾーンで上値拒否を確認</strong><p>66,790–66,840 と既存ゲートを再確認する。</p></article><article class="condition"><div class="condition-label"><span>COMMON</span><b>見送り</b></div><strong>既存の待機条件が残る</strong><p>上側流動性が近く先に振られやすい</p></article></div></div><div>
+    <section class="big-chance" id="big-chance">
+      <div class="big-score"><strong>52</strong><span>C / ARMED</span></div>
+      <div><h3>ショート失敗からロング候補</h3>
+        <p>失敗シナリオの反対側を補助監視します。 <strong>通常のLong / Short判断を上書きしません</strong></p>
+        <div class="timeline"><span>4H wait</span><i>→</i><span>1H long</span><i>→</i><span>15M wait</span></div>
+      </div>
+    </section>
+    <div class="context-bar"><div class="context-cell"><span>FUNDING</span><strong>ほぼ中立 (+0.0028%)</strong></div><div class="context-cell"><span>ATR RATIO</span><strong>1.75</strong></div><div class="context-cell"><span>VOLUME RATIO</span><strong>4.53</strong></div></div></div></section>
+  
+    <section class="panel details-panel">
+      <details><summary>判断根拠と5つのスコア</summary><div class="details-body"><div class="score-mini-grid"><div class="score-mini"><span>方向</span><strong>100</strong></div><div class="score-mini"><span>実行</span><strong>7</strong></div><div class="score-mini"><span>待機</span><strong>69</strong></div><div class="score-mini"><span>Long</span><strong>51</strong></div><div class="score-mini"><span>Short</span><strong>100</strong></div></div><div class="reason-list"><span class="reason-chip">上側流動性が近く先に振られやすい</span><span class="reason-chip">流動性回収が未完了</span><span class="reason-chip">RR 条件が基準未満</span><span class="reason-chip">再検討帯は近いが発火条件待ち</span></div></div></details>
+      <details><summary>高度な検出レイヤー</summary><div class="details-body"><div class="diagnostic-grid"><div class="diagnostic"><span>BREAKOUT / INVERSION</span><strong>ショート根拠は弱まりつつあります。15分足で上に維持できるか確認。すぐ下に戻るならダマシ注意。 / ロング根拠は弱まりつつあります。15分足で下に維持できるか確認。すぐ上に戻るならダマシ注意。 / ショート方向は損失リスクが高いので、15分足で上に維持できるか確認。すぐ下に戻るならダマシ注意。MACDは上方向の勢いを補強。 / ロング方向は損失リスクが高いので、15分足で下に維持できるか確認。すぐ上に戻るならダマシ注意。MACDは下方向の勢いを補強。 / report-only / not FORMAL_GO / no automatic order / human decides manually</strong></div><div class="diagnostic"><span>VALUE DEFENSE</span><strong>LONG continuation_candidate / SHORT continuation_candidate</strong></div><div class="diagnostic"><span>FAILED THESIS</span><strong>ショート失敗からロング候補</strong></div><div class="diagnostic"><span>LIQUIDITY</span><strong>upper_liquidity_close / sweep_incomplete / rr_below_min</strong></div><div class="diagnostic"><span>MOMENTUM</span><strong>ショート方向は危険。15分足で上に維持できるか確認。すぐ下に戻るならダマシ注意。 / ロング方向は危険。15分足で下に維持できるか確認。すぐ上に戻るならダマシ注意。</strong></div></div></div></details>
+      <details><summary>保有中の処理と安全境界</summary><div class="details-body"><p>保有中は既存の撤退・利確・建値条件を確認します。</p><p>report-only / not FORMAL_GO / no automatic order / human decides manually</p></div></details>
+      <details><summary>内部ログ・Runtime・検証情報</summary><div class="details-body"><pre>【結論】
+方向判断: 相場は下方向バイアスです
+いまの扱い: 上側流動性回収待ち
+方向の強さ: 100
+実行しやすさ: 7.0
+待機圧力: 68.8
+位置評価: 流動性回収待ち</pre></div></details>
+    </section>
+    
+  <footer>report-only / not FORMAL_GO / no automatic order / human decides manually</footer>
+</div><script>
+    (() => {
+      const stage = document.getElementById("chart-stage");
+      const chart = stage ? stage.querySelector("svg") : null;
+      const views = {"15m":"0 726 860 429","1h":"0 363 860 309","4h":"0 0 860 309"};
+      document.querySelectorAll("[data-chart-view]").forEach((button) => button.addEventListener("click", () => {
+        if (chart) chart.setAttribute("viewBox", views[button.dataset.chartView] || views["15m"]);
+        document.querySelectorAll("[data-chart-view]").forEach((item) => item.classList.toggle("active", item === button));
+      }));
+      document.querySelectorAll("[data-layer-mode]").forEach((button) => button.addEventListener("click", () => {
+        if (stage) stage.classList.toggle("basic", button.dataset.layerMode === "basic");
+        document.querySelectorAll("[data-layer-mode]").forEach((item) => item.classList.toggle("active", item === button));
+      }));
+    })();
+    </script></body></html>

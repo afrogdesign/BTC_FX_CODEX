@@ -1,0 +1,11 @@
+{
+  "source": "dynamic generator",
+  "notification_kind": "attention",
+  "initial_view_box": "0 726 860 429",
+  "has_long_plan": true,
+  "has_short_plan": true,
+  "has_all_four_zone_captions": true,
+  "has_big_chance": true,
+  "has_diagnostics": true,
+  "tests_passed": true
+}

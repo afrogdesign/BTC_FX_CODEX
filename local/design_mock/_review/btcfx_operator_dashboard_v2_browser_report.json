@@ -1,0 +1,24 @@
+{
+  "desktop": {
+    "initial_view_box": "0 726 860 429",
+    "after_1h": "0 363 860 309",
+    "after_4h": "0 0 860 309",
+    "after_15m": "0 726 860 429",
+    "full_layer_enabled": true,
+    "basic_layer_restored": true,
+    "scroll_width": 1440,
+    "client_width": 1440,
+    "page_overflow": false
+  },
+  "mobile": {
+    "initial_view_box": "0 726 860 429",
+    "after_1h": "0 363 860 309",
+    "after_4h": "0 0 860 309",
+    "after_15m": "0 726 860 429",
+    "full_layer_enabled": true,
+    "basic_layer_restored": true,
+    "scroll_width": 500,
+    "client_width": 500,
+    "page_overflow": false
+  }
+}
