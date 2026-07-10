@@ -64,5 +64,22 @@ class HistoricalReplayTests(unittest.TestCase):
         ok = subprocess.run(cmd, cwd=repo, text=True, capture_output=True); self.assertEqual(ok.returncode, 0); self.assertEqual(len(ok.stdout.strip().splitlines()), 1); self.assertTrue(json.loads(ok.stdout)["ok"]); self.assertNotIn("Traceback", ok.stderr); self.assertNotIn(str(self.root), ok.stdout)
         bad = subprocess.run([*cmd[:cmd.index("--scenarios")], "--scenarios", str(self.root / "missing"), *cmd[cmd.index("--scenario-events"):]], cwd=repo, text=True, capture_output=True); self.assertNotEqual(bad.returncode, 0); self.assertNotIn("Traceback", bad.stderr)
 
+    def test_timestamp_threshold_and_mfe_validation(self) -> None:
+        fx = self.fixtures()
+        with fx["classifications"].open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        row["long_direction_min"] = "NaN"; fx["classifications"] = self.write("bad-threshold.csv", OUTPUT_HEADERS, [row])
+        self.assertEqual(self.build(fx)["exit_code"], 2)
+        fx = self.fixtures()
+        with fx["events"].open(newline="", encoding="utf-8") as fp:
+            event = next(csv.DictReader(fp))
+        event["mfe_r"] = "Infinity"; fx["events"] = self.write("bad-mfe.csv", EVENT_HEADERS, [event])
+        self.assertEqual(self.build(fx)["exit_code"], 2)
+
+    def test_existing_output_schema_is_fail_closed(self) -> None:
+        fx = self.fixtures(); self.build(fx)
+        (self.root / "replay.json").write_text('{"schema_version":"wrong"}\n', encoding="utf-8")
+        self.assertEqual(self.build(fx)["exit_code"], 4)
+
 
 if __name__ == "__main__": unittest.main()
