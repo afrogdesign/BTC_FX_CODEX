@@ -1,14 +1,14 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-6`
+- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-7`
 - mode: `REVIEW_ONLY`
 - task_type: `PYTHON SOURCE / DIRECT REGRESSION TESTS / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-FIX-4`
-- previous_status: `P6 FIX-5 COMMITTED / PUSH NONE`
+- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-FIX-6`
+- previous_status: `P6 FIX-6 COMMITTED / PUSH NONE`
 
 ## Goal
 
-Review the completed P6 policy evidence fix. P6 remains active. P7 has not started.
+Final ChatGPT P6 acceptance review. P6 remains active. P7 has not started.
 
 Source of truth:
 

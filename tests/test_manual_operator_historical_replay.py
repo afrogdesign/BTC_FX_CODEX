@@ -103,6 +103,10 @@ class HistoricalReplayTests(unittest.TestCase):
         fx = self.fixtures(); event = list(csv.DictReader(fx["events"].open(newline="", encoding="utf-8")))[0]; fx["events"] = self.write("dup-events.csv", EVENT_HEADERS, [event, event]); fx["classifications"] = self.write("dup-classes.csv", OUTPUT_HEADERS, [next(csv.DictReader(fx["classifications"].open(newline="", encoding="utf-8")))] * 2); self.assertEqual(self.build(fx)["exit_code"], 2)
         event2 = dict(event); event2["candidate_id"] = "other"; fx["events"] = self.write("conf-events.csv", EVENT_HEADERS, [event, event2]); self.assertEqual(self.build(fx)["exit_code"], 3)
 
+    def test_duplicate_classification_assignment_different_ids(self) -> None:
+        fx = self.fixtures(); base = next(csv.DictReader(fx["classifications"].open(newline="", encoding="utf-8"))); duplicate = dict(base); duplicate["classification_id"] = "opc_" + "2" * 24; fx["classifications"] = self.write("same-assignment.csv", OUTPUT_HEADERS, [base, duplicate]); self.assertEqual(self.build(fx)["exit_code"], 2)
+        duplicate["operator_class"] = "C_WATCH_ZONE"; fx["classifications"] = self.write("different-assignment.csv", OUTPUT_HEADERS, [base, duplicate]); self.assertEqual(self.build(fx)["exit_code"], 3)
+
     def test_multiple_correction_targets_rejected(self) -> None:
         fx = self.fixtures(); decisions = [self.decision(event_id="base"), self.decision(event_id="c1", status="correction", target="base"), self.decision(event_id="c2", status="correction", target="base")]; path = self.write("decisions.csv", DECISION_HEADERS, decisions); self.assertEqual(self.build(fx, decision_events=path)["exit_code"], 2)
 

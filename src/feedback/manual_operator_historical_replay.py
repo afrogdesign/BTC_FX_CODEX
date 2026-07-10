@@ -165,8 +165,6 @@ def _validate_integrity(scenarios: list[dict[str, str]], events: list[dict[str, 
                 return "duplicate_classification_id"
             return "classification_identity_conflict"
         by_class_id[identity] = normalized
-    if len(classes) != len(events):
-        return "missing_classification"
     refs = [row.get("scenario_event_id", "") for row in classes]
     if len(set(refs)) != len(refs):
         grouped: dict[str, dict[str, str]] = {}
@@ -177,6 +175,8 @@ def _validate_integrity(scenarios: list[dict[str, str]], events: list[dict[str, 
                 return "classification_assignment_conflict"
             grouped[event_ref] = normalized
         return "duplicate_classification_assignment"
+    if len(classes) != len(events):
+        return "missing_classification"
     if set(refs) != set(event_ids):
         return "missing_classification"
     methods = {row.get("classifier_method_version", "").strip() for row in classes}
