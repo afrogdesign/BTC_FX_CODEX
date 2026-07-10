@@ -4,6 +4,7 @@ import csv
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -51,6 +52,52 @@ class TrialEvidenceTests(unittest.TestCase):
         link = {key: "" for key in LINK_HEADERS}
         link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id="sig1", link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
         return self.write("episodes.csv", EPISODE_HEADERS, [episode]), self.write("links.csv", LINK_HEADERS, [link])
+
+    def paired_fixtures(self, *, short_direction: str = "80", stop_cause: str = "global") -> dict[str, Path]:
+        scenarios, events, classifications = [], [], []
+        for index, side in enumerate(("long", "short")):
+            scenario_id = f"scn_{side}_{index:023d}"
+            event_id = f"sce_{side}_{index:023d}"
+            scenario = {key: "" for key in SCENARIO_HEADERS}
+            scenario.update(schema_version="manual_scenario.v1", scenario_id=scenario_id, symbol="BTCUSDT", side=side, setup_family="limit_retest", scenario_status="resolved", lifecycle_state="proxy_resolved", proxy_outcome="tp1_first")
+            event = {key: "" for key in EVENT_HEADERS}
+            event.update(schema_version="manual_scenario_event.v1", scenario_event_id=event_id, scenario_id=scenario_id, candidate_id=f"cand_{side}", source_signal_id="sig_pair", event_timestamp_utc=f"2026-07-10T00:0{index}:00Z", event_timestamp_jst=f"2026-07-10T09:0{index}:00+09:00", grouping_status="new_scenario", symbol="BTCUSDT", side=side, candidate_type="limit", candidate_status="allowed", setup_family="limit_retest", entry_price="100", intraperiod_outcome="tp1_first", first_exit_reason="tp1_first")
+            classification = {key: "" for key in OUTPUT_HEADERS}
+            classification.update(schema_version="manual_operator_classification.v1", classification_id=f"opc_{side}_{index:023d}", classifier_method_version="manual_operator_classifier.v1", scenario_event_id=event_id, scenario_id=scenario_id, candidate_id=event["candidate_id"], source_signal_id="sig_pair", event_timestamp_utc=event["event_timestamp_utc"], event_timestamp_jst=event["event_timestamp_jst"], symbol="BTCUSDT", side=side, setup_family="limit_retest", classification_status="classified", operator_class="STOP_OR_EXIT", trade_execution_gate="blocked", primary_setup_status="ready" if side == "long" else "watch", primary_setup_side=side, candidate_status="allowed", entry_price="100", rr_tp1_used="2", confidence_direction_shadow=short_direction if side == "short" else "80", confidence_execution_shadow="80", confidence_wait_shadow="20", data_quality_flag="ok", no_trade_flags="global_stop" if stop_cause == "global" else "", reason_codes="stop_no_trade_flag" if stop_cause == "global" else ("stop_data_quality" if stop_cause == "quality" else f"stop_candidate_{stop_cause}"), short_direction_min="55", short_execution_min="18", short_wait_max="75", short_tp1_rr_min="0.8", short_tp2_rr_min="1.5", long_direction_min="60", long_execution_min="22", long_wait_max="70", long_tp1_rr_min="1.0", long_tp2_rr_min="1.8")
+            if stop_cause == "quality":
+                classification["data_quality_flag"] = "bad"
+            if stop_cause in {"invalidated", "cancelled", "expired"}:
+                classification["candidate_status"] = stop_cause
+                event["candidate_status"] = stop_cause
+            scenarios.append(scenario); events.append(event); classifications.append(classification)
+        return {"scenarios": self.write("paired-scenarios.csv", SCENARIO_HEADERS, scenarios), "events": self.write("paired-events.csv", EVENT_HEADERS, events), "classifications": self.write("paired-classes.csv", OUTPUT_HEADERS, classifications)}
+
+    def readiness_fixtures(self, *, event_count: int = 100, actual_count: int = 30, method: str = "manual_operator_classifier.v1") -> tuple[dict[str, Path], tuple[Path, Path]]:
+        scenarios, events, classifications = [], [], []
+        base = datetime(2026, 7, 10, tzinfo=timezone.utc)
+        class_names = ("A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT")
+        actual_indices = []
+        for index in range(event_count):
+            side = "long" if index % 2 == 0 else "short"
+            operator = class_names[index % len(class_names)]
+            if operator in {"A_FORMAL", "B_CHECK_15M"} and len(actual_indices) < actual_count:
+                actual_indices.append(index)
+            stamp = base + timedelta(minutes=index)
+            scenario_id = f"scn_{index:024x}"[-28:]
+            event_id = f"sce_{index:024x}"[-28:]
+            signal_id = f"sig_{index:024x}"
+            scenario = {key: "" for key in SCENARIO_HEADERS}; scenario.update(schema_version="manual_scenario.v1", scenario_id=scenario_id, symbol="BTCUSDT", side=side, setup_family="limit_retest", scenario_status="resolved", lifecycle_state="proxy_resolved", proxy_outcome="tp1_first")
+            event = {key: "" for key in EVENT_HEADERS}; event.update(schema_version="manual_scenario_event.v1", scenario_event_id=event_id, scenario_id=scenario_id, candidate_id=f"cand_{index}", source_signal_id=signal_id, event_timestamp_utc=stamp.isoformat().replace("+00:00", "Z"), event_timestamp_jst=stamp.astimezone(timezone(timedelta(hours=9))).isoformat(), grouping_status="new_scenario", symbol="BTCUSDT", side=side, candidate_type="limit", candidate_status="allowed", setup_family="limit_retest", entry_price="100", intraperiod_outcome="tp1_first", first_exit_reason="tp1_first")
+            classification = {key: "" for key in OUTPUT_HEADERS}; classification.update(schema_version="manual_operator_classification.v1", classification_id=f"opc_{index:024x}", classifier_method_version=method, scenario_event_id=event_id, scenario_id=scenario_id, candidate_id=event["candidate_id"], source_signal_id=signal_id, event_timestamp_utc=event["event_timestamp_utc"], event_timestamp_jst=event["event_timestamp_jst"], symbol="BTCUSDT", side=side, market_regime="trend", setup_family="limit_retest", classification_status="classified", operator_class=operator, trade_execution_gate="pass" if operator == "A_FORMAL" else "blocked", primary_setup_status="ready", primary_setup_side=side, candidate_status="allowed", entry_price="100", rr_tp1_used="2", confidence_direction_shadow="80", confidence_execution_shadow="80", confidence_wait_shadow="20", data_quality_flag="ok", short_direction_min="55", short_execution_min="18", short_wait_max="75", short_tp1_rr_min="0.8", short_tp2_rr_min="1.5", long_direction_min="60", long_execution_min="22", long_wait_max="70", long_tp1_rr_min="1.0", long_tp2_rr_min="1.8")
+            scenarios.append(scenario); events.append(event); classifications.append(classification)
+        fixtures = {"scenarios": self.write("readiness-scenarios.csv", SCENARIO_HEADERS, scenarios), "events": self.write("readiness-events.csv", EVENT_HEADERS, events), "classifications": self.write("readiness-classes.csv", OUTPUT_HEADERS, classifications)}
+        episodes, links = [], []
+        for episode_index, event_index in enumerate(actual_indices):
+            stamp = base + timedelta(minutes=event_index, seconds=30)
+            episode = {key: "" for key in EPISODE_HEADERS}; episode.update(schema_version="manual_trade_episode.v1", episode_id=f"ep_{episode_index}", position_id=f"pos_{episode_index}", symbol="BTCUSDT", side="long" if event_index % 2 == 0 else "short", opened_at_utc=stamp.isoformat().replace("+00:00", "Z"), closed_at_utc=(stamp + timedelta(minutes=10)).isoformat().replace("+00:00", "Z"), status="closed", realized_pnl="1", fee_total="0", association_status="matched")
+            link = {key: "" for key in LINK_HEADERS}; link.update(schema_version="manual_trade_signal_link.v2", link_id=f"ln_{episode_index}", episode_id=episode["episode_id"], signal_id=f"sig_{event_index:024x}", link_confidence="high", link_status="linked", side_compatibility="match", symbol_compatibility="match")
+            episodes.append(episode); links.append(link)
+        return fixtures, (self.write("readiness-episodes.csv", EPISODE_HEADERS, episodes), self.write("readiness-links.csv", LINK_HEADERS, links))
 
     def test_resolved_proxy_only_and_schema(self) -> None:
         result = self.build(self.fixtures())
@@ -128,11 +175,60 @@ class TrialEvidenceTests(unittest.TestCase):
         self.assertTrue(result["no_automatic_tuning"])
         self.assertIn("global_stop_opportunity", result)
 
+    def test_paired_global_stop_counterfactual_b_is_qualified(self) -> None:
+        result = self.build(self.paired_fixtures())
+        opportunity = result["global_stop_opportunity"]
+        self.assertGreaterEqual(opportunity["opposite_side_exists"], 1)
+        self.assertGreaterEqual(opportunity["counterfactual_B"], 1)
+        self.assertEqual(opportunity["counterfactual_C"], 0)
+        self.assertGreaterEqual(opportunity["issue_001_qualified_rows"], 1)
+        self.assertTrue(result["no_automatic_tuning"])
+        with (self.root / "facts.csv").open(newline="", encoding="utf-8") as handle:
+            self.assertTrue(any("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY" in row["issue_flags"] for row in csv.DictReader(handle)))
+
+    def test_paired_global_stop_counterfactual_c_is_qualified(self) -> None:
+        result = self.build(self.paired_fixtures(short_direction="10"))
+        opportunity = result["global_stop_opportunity"]
+        self.assertGreaterEqual(opportunity["counterfactual_C"], 1)
+        self.assertGreaterEqual(opportunity["issue_001_qualified_rows"], 1)
+
+    def test_non_global_stop_causes_are_not_issue_001(self) -> None:
+        for cause in ("quality", "invalidated", "cancelled", "expired"):
+            result = self.build(self.paired_fixtures(stop_cause=cause), replace_output=True)
+            self.assertEqual(result["global_stop_opportunity"]["issue_001_qualified_rows"], 0, cause)
+
+    def test_opposite_side_counters_are_independent(self) -> None:
+        result = self.build(self.paired_fixtures())
+        opportunity = result["global_stop_opportunity"]
+        self.assertEqual(opportunity["opposite_side_exists"], opportunity["counterfactual_B"] + opportunity["counterfactual_C"] + opportunity["not_eligible"])
+
+    def test_blank_quality_and_unsupported_gate_never_become_b(self) -> None:
+        event = {"side": "short", "entry_price": "100", "candidate_status": "allowed", "event_timestamp_utc": "2026-07-10T00:00:00Z", "event_timestamp_jst": "2026-07-10T09:00:00+09:00", "grouping_status": "new_scenario"}
+        evidence = {"side": "short", "primary_setup_side": "short", "primary_setup_status": "watch", "candidate_status": "allowed", "data_quality_flag": "", "trade_execution_gate": "blocked", "entry_price": "100", "confidence_direction_shadow": "80", "confidence_execution_shadow": "80", "confidence_wait_shadow": "20", "rr_tp1_used": "2", "short_direction_min": "55", "short_execution_min": "18", "short_wait_max": "75", "short_tp1_rr_min": "0.8", "short_tp2_rr_min": "1.5"}
+        self.assertNotEqual(_counterfactual_classification(evidence, event), "counterfactual_B")
+        evidence["data_quality_flag"] = "ok"; evidence["trade_execution_gate"] = "unknown"
+        self.assertNotEqual(_counterfactual_classification(evidence, event), "counterfactual_B")
+
     def test_p9_readiness_below_threshold(self) -> None:
         result = self.build(self.fixtures())
         self.assertFalse(result["p9_readiness"]["initial"]["ready"])
         self.assertFalse(result["p9_readiness"]["practical"]["ready"])
         self.assertEqual(result["p9_readiness"]["practical"]["validation_window_status"], "not_established")
+
+    def test_p9_initial_readiness_exact_boundary_and_below_boundaries(self) -> None:
+        fixtures, actual = self.readiness_fixtures(event_count=100, actual_count=30)
+        result = self.build(fixtures, trade_episodes=actual[0], episode_links=actual[1])
+        self.assertTrue(result["p9_readiness"]["initial"]["ready"])
+        self.assertFalse(result["p9_readiness"]["practical"]["ready"])
+        fixtures, actual = self.readiness_fixtures(event_count=99, actual_count=30)
+        self.assertFalse(self.build(fixtures, trade_episodes=actual[0], episode_links=actual[1], replace_output=True)["p9_readiness"]["initial"]["ready"])
+        fixtures, actual = self.readiness_fixtures(event_count=100, actual_count=29)
+        self.assertFalse(self.build(fixtures, trade_episodes=actual[0], episode_links=actual[1], replace_output=True)["p9_readiness"]["initial"]["ready"])
+
+    def test_classifier_version_is_read_from_input(self) -> None:
+        fixtures, actual = self.readiness_fixtures(event_count=1, actual_count=0, method="manual_operator_classifier.test.v9")
+        result = self.build(fixtures, trade_episodes=actual[0], episode_links=actual[1])
+        self.assertEqual(result["classifier_method_version"], "manual_operator_classifier.test.v9")
 
     def test_reproducibility_metadata_is_deterministic(self) -> None:
         result = self.build(self.fixtures())
