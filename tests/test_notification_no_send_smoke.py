@@ -46,6 +46,11 @@ def _unsafe_post_eval_payload() -> dict[str, object]:
     }
 
 
+def _valid_detail_html() -> str:
+    payload = render_no_send_smoke._synthetic_result_payload()
+    return render_no_send_smoke.build_notification_detail_html(payload, base_dir=BASE_DIR)
+
+
 class NotificationNoSendSmokeTest(unittest.TestCase):
     def test_command_stdout_json_is_pass_and_implicitly_no_send(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -79,6 +84,9 @@ class NotificationNoSendSmokeTest(unittest.TestCase):
         self.assertNotIn("Ver04-v2", subject)
         self.assertTrue(report["post_eval_recommendations_present"])
         self.assertFalse(report["sensitive_leak_detected"])
+        self.assertEqual(report["inline_script_count"], 1)
+        self.assertTrue(report["approved_local_script"])
+        self.assertFalse(report["unsafe_script_detected"])
 
     def test_helper_does_not_touch_send_email_or_save_pending_email(self) -> None:
         fake_main = types.SimpleNamespace(
@@ -114,6 +122,35 @@ class NotificationNoSendSmokeTest(unittest.TestCase):
         self.assertEqual(report["status"], "fail")
         self.assertTrue(report["sensitive_leak_detected"])
         self.assertTrue(report["forbidden_tokens"])
+
+    def test_external_script_causes_failure(self) -> None:
+        detail_html = _valid_detail_html() + '<script src="https://example.com/test.js"></script>'
+        with mock.patch.object(render_no_send_smoke, "build_notification_detail_html", return_value=detail_html):
+            report = render_no_send_smoke._render_no_send_render_only_smoke()
+
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["inline_script_count"], 2)
+        self.assertFalse(report["approved_local_script"])
+        self.assertTrue(report["unsafe_script_detected"])
+
+    def test_network_script_causes_failure(self) -> None:
+        detail_html = _valid_detail_html() + '<script>fetch("https://example.com")</script>'
+        with mock.patch.object(render_no_send_smoke, "build_notification_detail_html", return_value=detail_html):
+            report = render_no_send_smoke._render_no_send_render_only_smoke()
+
+        self.assertEqual(report["status"], "fail")
+        self.assertFalse(report["approved_local_script"])
+        self.assertTrue(report["unsafe_script_detected"])
+
+    def test_additional_script_causes_failure(self) -> None:
+        detail_html = _valid_detail_html() + "<script>const extra = true;</script>"
+        with mock.patch.object(render_no_send_smoke, "build_notification_detail_html", return_value=detail_html):
+            report = render_no_send_smoke._render_no_send_render_only_smoke()
+
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["inline_script_count"], 2)
+        self.assertFalse(report["approved_local_script"])
+        self.assertTrue(report["unsafe_script_detected"])
 
 
 if __name__ == "__main__":

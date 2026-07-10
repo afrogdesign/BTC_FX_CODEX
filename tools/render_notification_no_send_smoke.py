@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,24 @@ _LEGACY_VERSION_PATTERNS = (
     "ver04-v2",
     "[BTCFX Ver03-v4]",
     "Ver03-v4 手動確認サポート",
+)
+_SCRIPT_BLOCK_RE = re.compile(
+    r"<script\b(?P<attrs>[^>]*)>(?P<body>.*?)</script\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_UNSAFE_INLINE_SCRIPT_PATTERNS = (
+    "fetch(",
+    "xmlhttprequest",
+    "websocket",
+    "sendbeacon",
+    "eval(",
+    "new function",
+    "import(",
+    "document.cookie",
+    "localstorage",
+    "sessionstorage",
+    "http://",
+    "https://",
 )
 
 
@@ -135,6 +154,36 @@ def _find_legacy_version_tokens(text: str) -> list[str]:
     return [token for token in _LEGACY_VERSION_PATTERNS if token in text]
 
 
+def _validate_detail_inline_scripts(detail_html: str) -> dict[str, Any]:
+    blocks = list(_SCRIPT_BLOCK_RE.finditer(detail_html))
+    approved_local_script = False
+    if len(blocks) == 1:
+        match = blocks[0]
+        attrs = match.group("attrs")
+        body = match.group("body")
+        script_text = f"{attrs}\n{body}"
+        lowered = script_text.lower()
+        required_markers = (
+            "[data-chart-view]",
+            'setattribute("viewbox"',
+            "[data-layer-mode]",
+            'classlist.toggle("basic"',
+        )
+        has_external_src = bool(re.search(r"\bsrc\s*=", attrs, re.IGNORECASE))
+        has_module_type = bool(re.search(r"\btype\s*=\s*['\"]module['\"]", attrs, re.IGNORECASE))
+        approved_local_script = (
+            not has_external_src
+            and not has_module_type
+            and all(marker in lowered for marker in required_markers)
+            and not any(pattern in lowered for pattern in _UNSAFE_INLINE_SCRIPT_PATTERNS)
+        )
+    return {
+        "inline_script_count": len(blocks),
+        "approved_local_script": approved_local_script,
+        "unsafe_script_detected": len(blocks) != 1 or not approved_local_script,
+    }
+
+
 def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = _synthetic_result_payload(result_payload)
     summary_subject = build_summary_subject(payload)
@@ -150,12 +199,23 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         result_payload=payload,
     )
     detail_html = build_notification_detail_html(payload, base_dir=BASE_DIR)
-    combined = "\n".join([summary_subject, summary_body, detail_html])
-    leaks = _find_forbidden_tokens(combined)
-    legacy_version_tokens = _find_legacy_version_tokens(combined)
+    inline_script_report = _validate_detail_inline_scripts(detail_html)
+    detail_without_scripts = _SCRIPT_BLOCK_RE.sub("", detail_html)
+    summary_leaks = _find_forbidden_tokens("\n".join([summary_subject, summary_body]))
+    detail_leaks = _find_forbidden_tokens(detail_without_scripts)
+    leaks = list(dict.fromkeys(summary_leaks + detail_leaks))
+    legacy_version_tokens = _find_legacy_version_tokens(
+        "\n".join([summary_subject, summary_body, detail_without_scripts])
+    )
     sensitive_leak_detected = bool(leaks)
     legacy_label_leak_detected = bool(legacy_version_tokens)
-    status = "fail" if sensitive_leak_detected or legacy_label_leak_detected else "pass"
+    status = (
+        "fail"
+        if sensitive_leak_detected
+        or legacy_label_leak_detected
+        or inline_script_report["unsafe_script_detected"]
+        else "pass"
+    )
     return {
         "status": status,
         "mode": "no_send_render_only",
@@ -174,6 +234,7 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         "post_eval_recommendations_present": True,
         "sensitive_leak_detected": sensitive_leak_detected,
         "forbidden_tokens": leaks,
+        **inline_script_report,
     }
 
 
