@@ -24,6 +24,12 @@ from tools.log_feedback import (  # noqa: E402
     normalize_mexc_position_history,
     normalize_mexc_trade_history,
 )
+from src.feedback.manual_actual_trade_importer import (  # noqa: E402
+    import_manual_actual_trades,
+    ORDER_HEADERS as CANONICAL_ORDER_HEADERS,
+    POSITION_HEADERS as CANONICAL_POSITION_HEADERS,
+    TRADE_HEADERS as CANONICAL_TRADE_HEADERS,
+)
 
 
 TRADE_HEADERS = [
@@ -64,52 +70,9 @@ POSITION_HEADERS = [
     "ステータス",
 ]
 
-EXPECTED_TRADE_OUTPUT_HEADERS = [
-    "actual_trade_id",
-    "source_uid_hash",
-    "source_file",
-    "timestamp_jst",
-    "symbol",
-    "side",
-    "order_type",
-    "fill_qty_contract",
-    "fill_qty_token",
-    "fill_qty_value",
-    "fill_price",
-    "fee",
-    "fee_asset",
-    "role",
-    "realized_pnl",
-    "import_status",
-]
-EXPECTED_ORDER_OUTPUT_HEADERS = [
-    "actual_order_id",
-    "source_uid_hash",
-    "source_file",
-    "timestamp_jst",
-    "symbol",
-    "side",
-    "leverage",
-    "order_type",
-    "filled_qty",
-    "avg_fill_price",
-    "realized_pnl",
-    "fee",
-    "status",
-    "import_status",
-]
-EXPECTED_POSITION_OUTPUT_HEADERS = [
-    "actual_position_id",
-    "source_uid_hash",
-    "source_file",
-    "opened_at_jst",
-    "closed_at_jst",
-    "symbol",
-    "side",
-    "realized_pnl",
-    "status",
-    "import_status",
-]
+EXPECTED_TRADE_OUTPUT_HEADERS = CANONICAL_TRADE_HEADERS
+EXPECTED_ORDER_OUTPUT_HEADERS = CANONICAL_ORDER_HEADERS
+EXPECTED_POSITION_OUTPUT_HEADERS = CANONICAL_POSITION_HEADERS
 
 
 def _col_name(index: int) -> str:
@@ -224,11 +187,11 @@ def _mexc_position_rows() -> list[dict[str, str]]:
     ]
 
 
-def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+def _run_cli(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(BASE_DIR / "tools" / "log_feedback.py"), *args],
         cwd=BASE_DIR,
-        check=True,
+        check=check,
         capture_output=True,
         text=True,
     )
@@ -241,22 +204,23 @@ class MexcActualTradeImporterTest(unittest.TestCase):
         position_rows = normalize_mexc_position_history(_mexc_position_rows(), source_file="Position History sample.xlsx")
 
         self.assertEqual(trade_rows[0]["source_file"], "Trade History sample.xlsx")
-        self.assertEqual(trade_rows[0]["timestamp_jst"], "2026-07-01 09:15:00")
-        self.assertEqual(trade_rows[0]["symbol"], "BTC_USDT")
+        self.assertEqual(trade_rows[0]["timestamp_jst"], "2026-07-01T09:15:00+09:00")
+        self.assertEqual(trade_rows[0]["timestamp_utc"], "2026-07-01T00:15:00Z")
+        self.assertEqual(trade_rows[0]["symbol"], "BTCUSDT")
         self.assertEqual(trade_rows[0]["fee_asset"], "USDT")
         self.assertTrue(trade_rows[0]["actual_trade_id"].startswith("tra_"))
-        self.assertTrue(trade_rows[0]["source_uid_hash"].startswith("uid_"))
+        self.assertEqual(len(trade_rows[0]["source_uid_hash"]), 64)
         self.assertNotIn("trade-uid-001", json.dumps(trade_rows, ensure_ascii=False))
 
         self.assertEqual(order_rows[0]["source_file"], "Order History sample.xlsx")
         self.assertEqual(order_rows[0]["leverage"], "20")
-        self.assertEqual(order_rows[0]["status"], "Filled")
+        self.assertEqual(order_rows[0]["status"], "filled")
         self.assertTrue(order_rows[0]["actual_order_id"].startswith("ord_"))
         self.assertNotIn("order-uid-001", json.dumps(order_rows, ensure_ascii=False))
 
         self.assertEqual(position_rows[0]["source_file"], "Position History sample.xlsx")
-        self.assertEqual(position_rows[0]["opened_at_jst"], "2026-07-01 08:00:00")
-        self.assertEqual(position_rows[0]["status"], "Closed")
+        self.assertEqual(position_rows[0]["opened_at_jst"], "2026-07-01T08:00:00+09:00")
+        self.assertEqual(position_rows[0]["status"], "closed")
         self.assertTrue(position_rows[0]["actual_position_id"].startswith("pos_"))
         self.assertNotIn("position-uid-001", json.dumps(position_rows, ensure_ascii=False))
 
@@ -318,7 +282,9 @@ class MexcActualTradeImporterTest(unittest.TestCase):
                 str(output_dir),
                 "--dry-run",
                 "--stdout-json",
+                check=False,
             )
+            self.assertEqual(result.returncode, 2)
             self.assertEqual(result.stdout.strip().count("\n"), 0)
             summary = json.loads(result.stdout)
             self.assertEqual(summary["dry_run"], True)
@@ -338,13 +304,152 @@ class MexcActualTradeImporterTest(unittest.TestCase):
 
             summary = import_mexc_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=False)
             self.assertEqual(summary["missing_categories"], ["trade_history", "order_history"])
-            self.assertTrue((output_dir / "manual_actual_trades.csv").exists())
-            self.assertTrue((output_dir / "manual_actual_orders.csv").exists())
-            self.assertTrue((output_dir / "manual_actual_positions.csv").exists())
-            with (output_dir / "manual_actual_positions.csv").open("r", newline="", encoding="utf-8") as fp:
-                rows = list(csv.DictReader(fp))
-            self.assertEqual(len(rows), 1)
-            self.assertNotIn("position-uid-001", json.dumps(rows, ensure_ascii=False))
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertFalse(output_dir.exists())
+
+    def _complete_batch(self, root: Path, *, trade_rows: list[dict[str, str]] | None = None) -> tuple[Path, Path]:
+        input_dir = root / "input"
+        output_dir = root / "output"
+        input_dir.mkdir(parents=True, exist_ok=True)
+        _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, trade_rows or _mexc_trade_rows())
+        _write_minimal_xlsx(input_dir / "Order History.xlsx", ORDER_HEADERS, _mexc_order_rows())
+        _write_minimal_xlsx(input_dir / "Position History.xlsx", POSITION_HEADERS, _mexc_position_rows())
+        return input_dir, output_dir
+
+    def test_canonical_cli_and_legacy_alias_share_implementation(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            canonical = _run_cli("import-manual-actual-trades", "--input-dir", str(input_dir), "--output-dir", str(output_dir), "--stdout-json")
+            legacy = _run_cli("import-mexc-actual-trades", "--input-dir", str(input_dir), "--output-dir", str(root / "alias-output"), "--dry-run", "--stdout-json")
+            self.assertFalse(json.loads(canonical.stdout)["cli_alias_used"])
+            self.assertTrue(json.loads(legacy.stdout)["cli_alias_used"])
+
+    def test_same_file_reimport_is_duplicate_only(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            first = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            second = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(first["rows_inserted"], 3)
+            self.assertEqual(second["duplicate_rows_skipped"], 3)
+            self.assertEqual(second["rows_inserted"], 0)
+
+    def test_overlapping_export_merges_only_new_logical_rows(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            rows = _mexc_trade_rows() + [{**_mexc_trade_rows()[0], "UID": "trade-uid-002", "時間(UTC+09:00)": "2026-07-01 10:15:00"}]
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, rows)
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["duplicate_rows_skipped"], 3)
+            self.assertEqual(summary["rows_inserted"], 1)
+            with (output_dir / "manual_actual_trades.csv").open(newline="", encoding="utf-8") as fp:
+                self.assertEqual(len(list(csv.DictReader(fp))), 2)
+
+    def test_corrected_export_rejects_without_mutation_and_replace_audits(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            before = (output_dir / "manual_actual_trades.csv").read_bytes()
+            corrected = [{**_mexc_trade_rows()[0], "取引手数料": "2.00"}]
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, corrected)
+            rejected = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, conflict_policy="reject")
+            self.assertEqual(rejected["exit_code"], 3)
+            self.assertEqual((output_dir / "manual_actual_trades.csv").read_bytes(), before)
+            replaced = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, conflict_policy="replace")
+            self.assertEqual(replaced["rows_replaced"], 1)
+            self.assertTrue((output_dir / "manual_actual_trade_import_issues.csv").exists())
+
+    def test_malformed_date_and_numeric_are_rejected_not_zero(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bad_trade = {**_mexc_trade_rows()[0], "時間(UTC+09:00)": "not-a-date", "約定価格": "not-a-number"}
+            input_dir, output_dir = self._complete_batch(root, trade_rows=[bad_trade])
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["rows_rejected"], 1)
+            self.assertEqual(summary["rows_accepted"], 2)
+            with (output_dir / "manual_actual_orders.csv").open(newline="", encoding="utf-8") as fp:
+                self.assertEqual(len(list(csv.DictReader(fp))), 1)
+            self.assertTrue((output_dir / "manual_actual_trade_import_issues.csv").exists())
+
+    def test_comma_numeric_fee_and_pnl_sign_are_normalized(self) -> None:
+        row = {**_mexc_trade_rows()[0], "約定価格": "125,000.50", "取引手数料": "-1.25", "決済損益": "-12.50"}
+        normalized = normalize_mexc_trade_history([row], source_file="Trade History.xlsx")[0]
+        self.assertEqual(normalized["fill_price"], "125000.50")
+        self.assertEqual(normalized["fee"], "1.25")
+        self.assertEqual(normalized["realized_pnl"], "-12.50")
+
+    def test_symbol_alias_and_direction_mapping(self) -> None:
+        row = {**_mexc_trade_rows()[0], "先物取引ペア": "BTC/USDT", "方向": "Open Long"}
+        normalized = normalize_mexc_trade_history([row], source_file="Trade History.xlsx")[0]
+        self.assertEqual(normalized["symbol"], "BTCUSDT")
+        self.assertEqual(normalized["side"], "long")
+        self.assertEqual(normalized["transaction_side"], "buy")
+        self.assertEqual(normalized["position_action"], "open")
+
+    def test_unknown_direction_and_symbol_are_rejected(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bad_direction = {**_mexc_trade_rows()[0], "方向": "sideways"}
+            input_dir, output_dir = self._complete_batch(root, trade_rows=[bad_direction])
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["rows_rejected"], 1)
+        with self.assertRaisesRegex(ValueError, "unsupported_symbol"):
+            normalize_mexc_trade_history([{**_mexc_trade_rows()[0], "先物取引ペア": "ETH_USDT"}], source_file="Trade History.xlsx")
+
+    def test_fee_absent_and_open_closed_position_consistency(self) -> None:
+        row = {**_mexc_trade_rows()[0], "取引手数料": ""}
+        normalized = normalize_mexc_trade_history([row], source_file="Trade History.xlsx")[0]
+        self.assertEqual(normalized["fee"], "")
+        open_row = {**_mexc_position_rows()[0], "決済時刻": "", "ステータス": "Open"}
+        self.assertEqual(normalize_mexc_position_history([open_row], source_file="Position History.xlsx")[0]["status"], "open")
+        with self.assertRaisesRegex(ValueError, "open_position_has_close_time"):
+            normalize_mexc_position_history([_mexc_position_rows()[0] | {"ステータス": "Open"}], source_file="Position History.xlsx")
+
+    def test_uid_and_full_path_never_leak(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            result = _run_cli("import-manual-actual-trades", "--input-dir", str(input_dir), "--output-dir", str(output_dir), "--stdout-json")
+            self.assertNotIn("trade-uid-001", result.stdout)
+            self.assertNotIn(str(root), result.stdout)
+            self.assertNotIn("trade-uid-001", json.dumps([path.read_text(encoding="utf-8") for path in output_dir.glob("*.csv")]))
+
+    def test_filename_with_sensitive_digits_is_sanitized(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            source = input_dir / "Trade History account@example.com 20260701.xlsx"
+            (input_dir / "Trade History.xlsx").rename(source)
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertTrue(summary["ok"])
+            with (output_dir / "manual_actual_trades.csv").open(newline="", encoding="utf-8") as fp:
+                row = next(csv.DictReader(fp))
+            self.assertTrue(row["source_file"].startswith("mexc_trade_history_"))
+            self.assertNotIn("account@example.com", row["source_file"])
+
+    def test_existing_schema_mismatch_returns_four(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            output_dir.mkdir()
+            (output_dir / "manual_actual_trades.csv").write_text("wrong,header\n", encoding="utf-8")
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 4)
+            self.assertIn("existing_output_schema_mismatch", summary["errors"])
+
+    def test_unsupported_files_are_reported_without_private_data(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            (input_dir / "legacy.xls").write_bytes(b"unsupported")
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertEqual(len(summary["unsupported_files"]), 1)
+            self.assertNotIn("legacy.xls", json.dumps(summary))
+            self.assertTrue(summary["ok"])
 
 
 if __name__ == "__main__":

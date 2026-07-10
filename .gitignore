@@ -33,3 +33,6 @@ exports/
 *.wav
 *.psd
 *.ai
+
+# Local private exchange exports
+local/manual_trade_imports/

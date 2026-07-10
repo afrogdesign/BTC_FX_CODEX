@@ -174,3 +174,55 @@ Ver04-v2 is the current active source working branch for follow-on observation/r
 - generated CSV / report / HTML
 - raw exchange exports under `local/manual_trade_imports/`
 - full `TASK_LEDGER.md`
+
+
+## Planning route update — 2026-07-10
+
+The user approved direct documentation and AI routing for the manual trading practicality improvement plan.
+
+New active planning sources:
+
+- `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+- `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+
+Current planning decision:
+
+- retain the strict formal candidate path as `A_FORMAL`
+- add future report-only/manual-review layers `B_CHECK_15M`, `C_WATCH_ZONE`, and `STOP_OR_EXIT`
+- do not relax existing gates
+- normalize candidate rows into scenario lifecycle before changing notification volume
+- connect actual trade ground truth before evidence-backed production tuning
+
+This planning update does not change runtime behavior, scoring, gates, thresholds, notification triggers, or live mail sending.
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC
+```
+
+The next task is active-spec creation only. Importer source implementation remains blocked until the spec is reviewed and approved.
+
+
+---
+
+## 2026-07-10 importer-plan correction
+
+Repo inspection confirmed that the actual-trade importer, manual trade linker, and ground-truth report already exist as early implementations. The active route is corrected accordingly.
+
+Completed preparation:
+
+- created `chatgpt/specs/active/20260710_manual_actual_trade_importer.md`
+- selected `local/manual_trade_imports/YYYYMMDD/` as the canonical private input path
+- added `local/manual_trade_imports/` to `.gitignore`
+- defined deterministic merge/idempotency/conflict behavior
+- preserved report-only / not FORMAL_GO / human-decided boundaries
+- separated exchange ground truth from later human decision-event ground truth
+
+Current exact next task:
+
+```text
+BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-HARDENING
+```
+
+Git branch, dirty tree, validation result, commit, and push remain unverified because the public MCP file interface does not expose Git metadata or execute repo commands. Those checks belong at the beginning/end of the bounded Codex implementation task.

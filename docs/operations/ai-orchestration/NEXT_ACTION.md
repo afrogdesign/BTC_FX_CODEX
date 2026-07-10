@@ -1,132 +1,215 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260709-OPERATOR-V3-STASH-AND-PRODUCTION-APPLY`
+- current_work_id: `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-HARDENING`
 - mode: `BOUNDED_CODEX`
+- task_type: `PYTHON SOURCE / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC`
+- previous_status: `P1 SPEC CREATED; GIT VALIDATION PENDING`
 
 ## Current goal
 
-Ver04-v2 operator v3 detail layout is implemented and runtime-applied on the Primary repo path.
-Use `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md` as the Phase4 route document.
-Next posture is observation-only on the next natural notification / detail HTML.
-Verify the operator v3 top area is readable and not too noisy.
-Verify the new top summary is not misread as an entry instruction.
-Verify Big Chance text says it is not an entry instruction.
-Verify Value Defense keeps shallow zone and defense zone separate.
-Next strategic review target is the Big Chance / Failed Thesis Layer. The guiding principle is: failed thesis is opportunity.
+既存MEXC actual trade importerを、active specに従ってhardeningする。
 
-## Current posture
+これはgreenfield実装ではない。
 
-- default next action is observation-only unless the human explicitly approves more offline review
-- no scoring, gate, threshold, runtime, or launchd changes
-- no notification trigger changes
-- no automatic tuning from single examples
-- operator v3 runtime apply is complete
-- natural generated HTML reflection for earlier Phase4 cue text was confirmed before operator v3 apply
-- Phase4 tuning remains blocked
+Existing baseline:
 
-## Observation queue
+```text
+tools/log_feedback.py
+  import_mexc_actual_trades()
+  normalize_mexc_trade_history()
+  normalize_mexc_order_history()
+  normalize_mexc_position_history()
 
-- verify the next followup only fires after expiry or thesis weakening
-- verify no repeated followup is sent for the same baseline signal
-- verify `logs/last_followup_notified.json` is written after the first natural followup
-- verify the subject and detail HTML render the followup section correctly
-- verify notification frequency does not become noisy
-- verify no scoring, gate, or threshold tuning occurred
-- verify the next notified snapshot still includes the observation schema fields:
-  - `self_review_readiness`
-  - `attack_review_flags`
-- if the next notified snapshot still lacks the observation schema, inspect the runtime hook / import path
-- verify the next delivered attention mail no longer contains actionability / local / gate debug sections
-- verify the next delivered compact mail uses the canonical safety line and does not show a contradictory paper heading
-- verify the next generated HTML still shows `読む順番` and `ロング/ショート比較`
-- verify the next generated HTML also has the `big-chance` anchor when a candidate exists
-- verify the top HTML safety boundary uses the canonical report-only wording
-- verify the display cue panel is not misread as an entry instruction
-- verify the operator v3 top summary improves readability in natural HTML
-- verify `結論` / `いまの見方` / `方向メーター` stay visible in natural HTML
-- continue reviewing the latest snapshot plus HTML manually
-- accumulate enough observations before any Phase4 tuning proposal
-- run snapshot builder:
-  `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --out-dir local/value_defense_observation --signal-id <signal_id>`
-- dry-run check:
-  `./.venv312/bin/python tools/build_value_defense_observation_snapshot.py --input logs/last_result.json --signal-id <signal_id> --dry-run --stdout-json`
+tests/test_mexc_actual_trade_importer.py
+```
 
-## Design review queue
+Existing downstream:
 
-- verify the replay artifact for `20260706_100500` is short-side Big Chance (`long_failed_to_short`) with active status
-- verify invalidated candidates are rendered as replayed / expired, not as active top-priority opportunities
-- keep the first implementation candidate local artifact / replay only
-- do not add live notification behavior yet
-- do not tune scoring, gates, or thresholds yet
-- verify failed long to short / failed short to long symmetry
-- verify HTF context comes first and 15m is activation / invalidation only
-- keep Phase4 blocked until future observation evidence and explicit human approval
+```text
+tests/test_manual_trade_signal_linker.py
+tests/test_manual_trade_ground_truth_report.py
+```
 
-## Completed history
+Active spec:
 
-- Ver04-v1 runtime deployment complete
-- blocked version-label fix attempt requiring detail-page scope expansion
-- notification version-label fix complete
-- breakout / inversion warning layer complete
-- momentum confirmation layer complete
-- intraperiod MACD buildout complete
-- required post-deployment observation gate for intraperiod / MACD buildout
-- judgment self-review link complete
-- controlled runtime restart for stale-process issue complete
-- human UI subject / chart cleanup complete
-- judgment self-review stability buildout complete
-- judgment self-review queue surface complete
-- judgment self-review rollup digest complete
-- judgment self-review change-readiness gate complete
-- judgment self-review explicit late label pass complete
-- judgment self-review run metadata / fingerprint complete
-- Ver04-v1 self-review / run-fingerprint checkpoint complete
-- source working branch moved to Ver04-v2
-- VALUE-DEFENSE-ENTRY-LAYER design doc created
-- VALUE-DEFENSE-ENTRY-LAYER Phase1 complete
-- VALUE-DEFENSE-ENTRY-LAYER Phase2 complete
-- VALUE-DEFENSE-ENTRY-LAYER Phase3 complete
-- VALUE-DEFENSE-ENTRY-LAYER runtime apply complete via local MCP source fallback after GitHub DNS/SSH reachability issue
-- Big Chance / Failed Thesis Layer runtime apply complete
-- replay artifact for `20260706_100500` generated for the failed-thesis review
+```text
+chatgpt/specs/active/20260710_manual_actual_trade_importer.md
+```
 
-## Hard boundary
+## Completed preparation
 
-- no runtime restart during normal product work
-- no launchd modification
-- no real mail sending test
-- no API / secrets / private / account / order endpoints
-- no trading logic change
-- no raw export commit
+ChatGPT has already:
 
-## Later candidates
+- inspected the current importer, linker, report, and matching tests
+- corrected the plan from “new importer implementation” to “existing importer hardening”
+- selected `local/manual_trade_imports/YYYYMMDD/` as the canonical private input path
+- added `local/manual_trade_imports/` to `.gitignore`
+- created the active spec
+- separated exchange ground truth from human decision ground truth
+- fixed input, schema, privacy, idempotency, merge, conflict, CLI, exit-code, and test contracts
 
-- `BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` only after observation evidence exists and the human explicitly approves tuning review.
-- `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the candidate for actual-trade evaluation.
-- live extra intraperiod sending decision remains explicit-approval-only.
+No real exchange export was read.
+
+## Required read
+
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. `chatgpt/specs/active/20260710_manual_actual_trade_importer.md`
+4. `tools/log_feedback.py` only around the existing importer and CLI registration
+5. `tests/test_mexc_actual_trade_importer.py`
+6. downstream tests only as required for compatibility
+
+Do not perform broad repo exploration.
+
+## Exact next task
+
+```text
+BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-HARDENING
+```
+
+## Required implementation outcome
+
+- add canonical CLI `import-manual-actual-trades`
+- preserve `import-mexc-actual-trades` as an alias
+- validate all three required workbook categories
+- select sheets according to the active spec
+- validate required columns before normalization
+- normalize timezone, Decimal values, BTC symbol aliases, side/action/status, fee, and realized PnL
+- add deterministic file, batch, source-row, logical-key, and row fingerprints
+- merge with existing canonical CSVs
+- skip exact duplicates
+- reject corrected-export conflicts by default
+- support explicit `--conflict-policy replace`
+- perform atomic multi-output updates
+- produce privacy-safe compact stdout JSON
+- produce sanitized issues CSV when applicable
+- preserve linker/report compatibility or update matching tests in the same bounded task
+
+## Preferred structure
+
+`tools/log_feedback.py` is already very large. Prefer extracting importer logic to:
+
+```text
+src/feedback/__init__.py
+src/feedback/manual_actual_trade_importer.py
+```
+
+Keep CLI wiring in `tools/log_feedback.py`.
+
+Do not extract unrelated code.
+
+## Allowed edit
+
+```text
+.gitignore
+tools/log_feedback.py
+src/feedback/__init__.py
+src/feedback/manual_actual_trade_importer.py
+tests/test_mexc_actual_trade_importer.py
+tests/test_manual_trade_signal_linker.py
+tests/test_manual_trade_ground_truth_report.py
+chatgpt/specs/active/20260710_manual_actual_trade_importer.md
+```
+
+The active spec may be corrected only when implementation proves a narrow technical impossibility or an internal contradiction. Report any such correction explicitly.
+
+## Prohibited
+
+- frozen old runtime repo
+- real exchange export
+- API key / secret / `.env`
+- account/private/order endpoint
+- runtime restart
+- launchd modification
+- mail sending or notification behavior change
+- gate / threshold / score / trading logic change
+- `paper_positions.csv` integration
+- raw/export/generated CSV commit
+- silent conflict overwrite
 
 ## Validation
 
-- task-specific minimal validation only
-- docs-only: `git diff --check`
-- source/test: changed-file compile/test only
+Run once after implementation:
 
-## Resume rule
+```bash
+./.venv312/bin/python -m unittest \
+  tests.test_mexc_actual_trade_importer \
+  tests.test_manual_trade_signal_linker \
+  tests.test_manual_trade_ground_truth_report
+git diff --check
+```
 
-Next recommended task is observation / review only:
+Do not add `py_compile` when the targeted tests already import the changed modules.
 
-- observe generated notifications / detail HTML / self-review rows
-- do not tune scores or gates yet
+Do not run the full suite unless shared-helper impact makes it necessary.
 
-`BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` remains the later ground-truth candidate.
-`BTCFX-20260703-VER04-V2-VALUE-DEFENSE-ENTRY-LAYER-PHASE4` stays gated behind observation evidence and explicit human approval.
-Phase4 tuning remains blocked.
+## Git and dirty tree
 
-Ver04-v2 is the new source working branch. Future Codex prompts should use task-specific minimal validation and must not include `git diff --name-only` unless changed-file list confirmation is needed.
+Start once with:
 
-## High-priority human review note
+```bash
+git status --short --branch
+```
 
-- Preserve `docs/operations/ai-orchestration/VALUE_DEFENSE_TREND_TRANSITION_ATTACK_REVIEW_20260706.md` as a Phase4 review candidate.
-- Key lesson: safety must not become passivity; BTC trend-transition setups need evidence-backed aggression.
-- Review future notified observations for `trend_transition_candidate`, `breakout_extension_candidate`, `tp_too_conservative`, `short_invalidated_by_reclaim`, and `runner_should_have_been_considered`.
-- Do not tune from this single example. Accumulate observations first, then review with explicit human approval.
+- integrate only safe overlapping changes
+- leave unrelated dirty files untouched
+- never reset, checkout, delete, or stash existing work
+- stage only this task’s files
+- stop if the branch is unclear, changes conflict, or private data appears
+
+## Commit / push
+
+Commit meaningful completed work in the same task.
+
+Suggested commit:
+
+```text
+Harden manual actual trade importer
+```
+
+Do not push unless a checkpoint push is explicitly requested in the current user instruction.
+
+## Compact report
+
+Report:
+
+```text
+WORK_ID
+STATUS
+BRANCH
+CHANGED
+TESTS
+COMMIT
+PUSH
+NOTES
+```
+
+Also write the same compact report exactly once to:
+
+```text
+/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt
+```
+
+Do not read, check, retry, watch, or recreate that file after writing.
+
+## Safety boundary
+
+```text
+report-only / not FORMAL_GO / no automatic order / human decides manually
+```
+
+## Later corrected route
+
+```text
+P2 importer hardening
+→ P3 existing linker / ground-truth pipeline audit and hardening
+→ P4 scenario identity, coverage, and human decision-event schema
+→ P5 offline A/B/C/STOP classifier
+→ P6 historical replay
+→ P7 shadow surface
+→ P8 human manual trial
+→ P9 evidence-backed tuning review
+```
+
+The exchange export alone cannot measure watch, skip, avoided loss, missed opportunity, or the reason for a human decision. Those require the P4 human decision-event layer.

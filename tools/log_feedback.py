@@ -1639,7 +1639,7 @@ def _mexc_normalize_rows(
     return normalized_rows
 
 
-def normalize_mexc_trade_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+def _legacy_normalize_mexc_trade_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
     return _mexc_normalize_rows(
         rows,
         category="trade_history",
@@ -1651,7 +1651,7 @@ def normalize_mexc_trade_history(rows: list[dict[str, Any]], *, source_file: str
     )
 
 
-def normalize_mexc_order_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+def _legacy_normalize_mexc_order_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
     return _mexc_normalize_rows(
         rows,
         category="order_history",
@@ -1663,7 +1663,7 @@ def normalize_mexc_order_history(rows: list[dict[str, Any]], *, source_file: str
     )
 
 
-def normalize_mexc_position_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
+def _legacy_normalize_mexc_position_history(rows: list[dict[str, Any]], *, source_file: str) -> list[dict[str, str]]:
     return _mexc_normalize_rows(
         rows,
         category="position_history",
@@ -1692,7 +1692,7 @@ def _mexc_collect_source_files(input_dir: Path) -> dict[str, list[Path]]:
     return files_by_category
 
 
-def import_mexc_actual_trades(
+def _legacy_import_mexc_actual_trades(
     *,
     input_dir: Path,
     output_dir: Path | None = None,
@@ -1754,6 +1754,15 @@ def import_mexc_actual_trades(
         }
     summary["total_rows"] = sum(category_info["row_count"] for category_info in summary["categories"].values())
     return summary
+
+
+from src.feedback.manual_actual_trade_importer import (  # noqa: E402
+    import_manual_actual_trades,
+    import_mexc_actual_trades,
+    normalize_mexc_order_history,
+    normalize_mexc_position_history,
+    normalize_mexc_trade_history,
+)
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -22454,11 +22463,13 @@ def _build_parser() -> argparse.ArgumentParser:
     paper_positions_parser.add_argument("--trades-path")
     paper_positions_parser.add_argument("--output-csv")
 
-    mexc_import_parser = subparsers.add_parser("import-mexc-actual-trades")
-    mexc_import_parser.add_argument("--input-dir", required=True)
-    mexc_import_parser.add_argument("--output-dir", default="logs/csv")
-    mexc_import_parser.add_argument("--stdout-json", action="store_true")
-    mexc_import_parser.add_argument("--dry-run", action="store_true")
+    for importer_command in ("import-manual-actual-trades", "import-mexc-actual-trades"):
+        mexc_import_parser = subparsers.add_parser(importer_command)
+        mexc_import_parser.add_argument("--input-dir", required=True)
+        mexc_import_parser.add_argument("--output-dir", default="logs/csv")
+        mexc_import_parser.add_argument("--stdout-json", action="store_true")
+        mexc_import_parser.add_argument("--dry-run", action="store_true")
+        mexc_import_parser.add_argument("--conflict-policy", choices=("reject", "replace"), default="reject")
 
     manual_trade_link_parser = subparsers.add_parser("link-manual-trades-to-signals")
     manual_trade_link_parser.add_argument("--manual-trades", default="logs/csv/manual_actual_trades.csv")
@@ -23172,11 +23183,13 @@ def main() -> None:
         print(path)
         return
 
-    if args.command == "import-mexc-actual-trades":
-        summary = import_mexc_actual_trades(
+    if args.command in {"import-manual-actual-trades", "import-mexc-actual-trades"}:
+        summary = import_manual_actual_trades(
             input_dir=Path(args.input_dir),
             output_dir=Path(args.output_dir) if args.output_dir else None,
             dry_run=bool(args.dry_run),
+            conflict_policy=str(args.conflict_policy),
+            cli_alias_used=args.command == "import-mexc-actual-trades",
         )
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -23184,12 +23197,12 @@ def main() -> None:
             print(f"input_dir={summary['input_dir']}")
             print(f"output_dir={summary['output_dir']}")
             print(f"dry_run={summary['dry_run']}")
-            print(f"total_rows={summary['total_rows']}")
+            print(f"rows_read={summary['rows_read']}")
             print(
                 "missing_categories="
                 + (",".join(summary["missing_categories"]) if summary["missing_categories"] else "none")
             )
-        return
+        return int(summary.get("exit_code", 0))
 
     if args.command == "link-manual-trades-to-signals":
         summary = link_manual_trades_to_signals(
@@ -23324,4 +23337,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)
