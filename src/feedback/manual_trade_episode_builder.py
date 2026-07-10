@@ -84,8 +84,8 @@ def _read_csv(path: Path, headers: list[str]) -> tuple[list[dict[str, str]], str
     try:
         with path.open(newline="", encoding="utf-8") as fp:
             reader = csv.DictReader(fp)
-            headers = reader.fieldnames or []
-            if headers != reader.fieldnames:
+            actual_headers = reader.fieldnames or []
+            if actual_headers != headers:
                 return [], "input_schema_mismatch"
             rows = [dict(row) for row in reader]
             if any(row.get("schema_version") != "manual_actual_trade.v2" for row in rows):

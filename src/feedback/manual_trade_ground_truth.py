@@ -41,13 +41,33 @@ def _dec(value: Any) -> Decimal | None:
         return None
 
 
+def _read_signal_outcomes(path: Path) -> tuple[list[dict[str, str]], str]:
+    if not path.exists():
+        return [], "missing"
+    try:
+        with path.open(newline="", encoding="utf-8") as fp:
+            reader = csv.DictReader(fp)
+            if "signal_id" not in (reader.fieldnames or []):
+                return [], "input_schema_mismatch"
+            rows = [dict(row) for row in reader]
+            if any(not str(row.get("signal_id", "")).strip() for row in rows):
+                return [], "input_schema_mismatch"
+            return rows, "ok"
+    except (OSError, UnicodeError, csv.Error):
+        return [], "invalid"
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
 def build_manual_trade_ground_truth_report_v2(*, trades: Path, orders: Path, positions: Path, episodes: Path, links: Path, signal_outcomes: Path | None = None, output_md: Path | None = None, dry_run: bool = False) -> tuple[str, dict[str, Any]]:
     fills, fill_status = _read(trades, TRADE_HEADERS, "manual_actual_trade.v2")
     order_rows, order_status = _read(orders, ORDER_HEADERS, "manual_actual_trade.v2")
     position_rows, position_status = _read(positions, POSITION_HEADERS, "manual_actual_trade.v2")
     episode_rows, episode_status = _read(episodes, EPISODE_HEADERS, "manual_trade_episode.v1")
     link_rows, link_status = _read(links, LINK_HEADERS, "manual_trade_signal_link.v2")
-    signal_rows, signal_status = _read(signal_outcomes) if signal_outcomes else ([], "missing")
+    signal_rows, signal_status = _read_signal_outcomes(signal_outcomes) if signal_outcomes else ([], "missing")
     input_status = {"fills": fill_status, "orders": order_status, "positions": position_status, "episodes": episode_status, "links": link_status, "signals": signal_status}
     input_errors = [status for status in input_status.values() if status != "ok"]
     if input_errors:

@@ -350,6 +350,27 @@ class ManualTradeGroundTruthReportTest(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertFalse(output.exists())
 
+    def test_v2_signal_outcome_minimum_header_and_empty_id_fail_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            paths = []
+            for name, headers in (("trades.csv", CANONICAL_TRADE_HEADERS), ("orders.csv", CANONICAL_ORDER_HEADERS), ("positions.csv", CANONICAL_POSITION_HEADERS), ("episodes.csv", EPISODE_HEADERS), ("links.csv", CANONICAL_LINK_HEADERS)):
+                paths.append(_write_headers_only(root / name, headers))
+            valid_outcomes = _write_headers_only(root / "outcomes.csv", ["signal_id"])
+            report, payload = build_manual_trade_ground_truth_report_v2(trades=paths[0], orders=paths[1], positions=paths[2], episodes=paths[3], links=paths[4], signal_outcomes=valid_outcomes, output_md=root / "report.md")
+            self.assertTrue(payload["ok"])
+            self.assertTrue((root / "report.md").exists())
+            invalid_outcomes = _write_headers_only(root / "bad-outcomes.csv", ["bias"])
+            existing = root / "existing.md"; existing.write_text("keep", encoding="utf-8")
+            _, invalid_payload = build_manual_trade_ground_truth_report_v2(trades=paths[0], orders=paths[1], positions=paths[2], episodes=paths[3], links=paths[4], signal_outcomes=invalid_outcomes, output_md=existing)
+            self.assertFalse(invalid_payload["ok"])
+            self.assertEqual(invalid_payload["exit_code"], 2)
+            self.assertFalse(invalid_payload["report_written"])
+            self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+            empty_id_outcomes = _write_csv(root / "empty-id.csv", ["signal_id"], [{"signal_id": ""}])
+            _, empty_payload = build_manual_trade_ground_truth_report_v2(trades=paths[0], orders=paths[1], positions=paths[2], episodes=paths[3], links=paths[4], signal_outcomes=empty_id_outcomes, output_md=existing)
+            self.assertEqual(empty_payload["exit_code"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

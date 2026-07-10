@@ -121,6 +121,23 @@ class ManualTradeEpisodeBuilderTest(unittest.TestCase):
             self.assertEqual(json.loads(report_result.stdout)["schema_version"], "manual_trade_ground_truth.v2")
             self.assertTrue(report.exists())
 
+    def test_header_only_exact_contract_and_wrong_headers_fail_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            trades, orders, positions, output = (root / name for name in ("trades.csv", "orders.csv", "positions.csv", "episodes.csv"))
+            _write(trades, TRADE_HEADERS, []); _write(orders, ORDER_HEADERS, []); _write(positions, POSITION_HEADERS, [])
+            valid = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output, dry_run=True)
+            self.assertTrue(valid["ok"])
+            for bad_headers in (TRADE_HEADERS[:-1], TRADE_HEADERS + ["extra"], TRADE_HEADERS[1:] + TRADE_HEADERS[:1]):
+                _write(trades, bad_headers, [])
+                invalid = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output)
+                self.assertEqual(invalid["exit_code"], 2)
+                self.assertIn("input_schema_mismatch", invalid["errors"])
+            _write(trades, TRADE_HEADERS, [{field: ("wrong.version" if field == "schema_version" else "") for field in TRADE_HEADERS}])
+            invalid_version = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output)
+            self.assertEqual(invalid_version["exit_code"], 2)
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
