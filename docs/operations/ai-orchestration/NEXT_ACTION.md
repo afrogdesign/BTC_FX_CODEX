@@ -1,75 +1,67 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-CLI-CONTRACT-FINISH`
-- mode: `BOUNDED_CODEX`
-- task_type: `P4 CLI CONTRACT / TARGETED TEST / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-FINAL-FIX`
-- previous_status: `P4 implementation complete locally / awaiting final CLI contract review / PUSH NONE`
+- current_work_id: `BTCFX-20260710-MTP-OFFLINE-CLASSIFIER-IMPLEMENT`
+- mode: `BOUNDED CODEX IMPLEMENTATION`
+- task_type: `PYTHON SOURCE / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-OFFLINE-CLASSIFIER-SPEC-CHECKPOINT`
+- previous_status: `P5 ACTIVE SPEC CHECKPOINT COMMITTED / PUSH NONE`
 
 ## Current goal
 
-P4 implementation complete locally / awaiting ChatGPT acceptance review. Keep P4 active; do not archive or activate P5.
+active P5 specに従い、event-time offline A/B/C/STOP classifier、deterministic CSV/JSON/Markdown report、compact CLI routeを実装する。
 
-Archived P3 spec:
-
-```text
-chatgpt/specs/archive/20260710_manual_trade_linkage_ground_truth_pipeline.md
-```
-
-Active P4 spec:
+Active spec:
 
 ```text
-chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md
+chatgpt/specs/active/20260710_manual_operator_classifier_offline.md
 ```
 
-## P4 design decision
-
-P4は次の3層を分離する。
+## Preferred implementation files
 
 ```text
-scenario evidence
-proxy market-path outcome
-human decision/action
+src/feedback/manual_operator_classifier.py
+tools/log_feedback.py
+tests/test_manual_operator_classifier.py
 ```
 
-P4 does not implement A/B/C/STOP classification, notification changes, gate changes, or runtime changes.
+`src/feedback/__init__.py`は既存package convention上必要な場合だけ編集する。
 
-Core outputs:
+## Validation
 
-```text
-logs/csv/manual_scenarios.csv
-logs/csv/manual_scenario_events.csv
-logs/csv/manual_decision_events.csv
-運用資料/reports/post_eval/manual_scenario_coverage_YYYYMMDD.md
-logs/json/manual_scenario_coverage_YYYYMMDD.json
+```bash
+./.venv312/bin/python -m unittest \
+  tests.test_manual_operator_classifier \
+  tests.test_manual_scenario_normalizer \
+  tests.test_manual_decision_events \
+  tests.test_manual_scenario_coverage \
+  tests.test_manual_trade_episode_builder \
+  tests.test_manual_trade_signal_linker \
+  tests.test_manual_trade_ground_truth_report \
+  tests.test_mexc_actual_trade_importer
+
+git diff --check -- \
+  src/feedback/manual_operator_classifier.py \
+  tools/log_feedback.py \
+  tests/test_manual_operator_classifier.py \
+  src/feedback/__init__.py
 ```
 
-## Required checkpoint validation
+## Safety boundaries
 
-- P3 active spec absent
-- P3 archive exists
-- P4 active spec exists
-- active spec defines deterministic scenario identity
-- ambiguous grouping has no hidden tie-break
-- no_ohlcv is coverage failure, not win/loss
-- human decision events do not contain hindsight result fields
-- P4 explicitly blocks classifier, gate, notification, and runtime work
-- docs-only `git diff --check` passes
+- no production gate edit
+- no scoring / threshold edit
+- no notification edit
+- no runtime / launchd edit
+- no order / account / private endpoint
+- no generated output commit
+- no raw exchange export commit
+- no `paper_positions.csv` integration
+- no frozen runtime repo access
+
+P5 remains offline, report-only, event-time, and separate from production behavior. Do not connect A/B/C/STOP to gates, notifications, runtime, or orders.
 
 ## Safety boundary
 
 ```text
 report-only / not FORMAL_GO / no automatic order / human decides manually
 ```
-
-## Next after checkpoint
-
-After the checkpoint commit, implement P4 as one bounded theme:
-
-```text
-scenario normalizer
-+ decision-event recorder
-+ coverage report
-```
-
-No production behavior change.
