@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BTCFX Operator Dashboard V2 — 20260710_000501</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071019;
+      --surface: #0b1622;
+      --surface-2: #0e1c2b;
+      --surface-3: #122337;
+      --line: #213449;
+      --line-soft: rgba(148, 163, 184, .16);
+      --text: #edf4fb;
+      --muted: #90a4b8;
+      --faint: #61758a;
+      --wait: #f3b44f;
+      --wait-soft: rgba(243, 180, 79, .12);
+      --long: #42d392;
+      --long-soft: rgba(66, 211, 146, .11);
+      --long-main: #58d6ea;
+      --short: #ff6f78;
+      --short-soft: rgba(255, 111, 120, .10);
+      --short-main: #f6b75e;
+      --blue: #67a9ff;
+      --danger: #ff6f78;
+      --radius: 18px;
+      --shadow: 0 24px 70px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 8% -10%, rgba(42, 117, 176, .22), transparent 30%),
+        radial-gradient(circle at 92% 0%, rgba(44, 155, 125, .10), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Hiragino Sans", "Yu Gothic", "Yu Gothic UI", system-ui, -apple-system, sans-serif;
+      line-height: 1.55;
+    }
+    button { font: inherit; }
+    .shell { width: min(1460px, calc(100% - 28px)); margin: 0 auto; padding: 18px 0 56px; }
+    .topbar {
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      margin-bottom:12px; color:var(--muted); font-size:12px; font-weight:800;
+    }
+    .brand { display:flex; align-items:center; gap:10px; color:var(--text); letter-spacing:.08em; }
+    .brand-mark { display:grid; place-items:center; width:30px; height:30px; border-radius:9px; background:#f59e0b; color:#111827; font-size:18px; }
+    .meta-line { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px 16px; }
+    .hero {
+      display:grid; grid-template-columns:minmax(0,1.5fr) minmax(310px,.5fr);
+      border:1px solid var(--line); border-radius:24px; overflow:hidden;
+      background:linear-gradient(145deg, rgba(15,31,48,.98), rgba(9,20,31,.98));
+      box-shadow:var(--shadow);
+    }
+    .hero-main { padding:26px 28px 24px; }
+    .hero-side { padding:24px; background:rgba(5,13,21,.44); border-left:1px solid var(--line); }
+    .status-line { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:18px; }
+    .status-badge {
+      display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid rgba(243,180,79,.45);
+      border-radius:999px; background:var(--wait-soft); color:#ffd68f; font-size:12px; font-weight:950; letter-spacing:.06em;
+    }
+    .safety { color:var(--faint); font-size:11px; font-weight:800; }
+    .decision-grid { display:grid; grid-template-columns:auto minmax(0,1fr); gap:20px; align-items:center; }
+    .decision-word { color:var(--wait); font-size:clamp(52px,8vw,104px); line-height:.9; font-weight:1000; letter-spacing:-.065em; }
+    .decision-copy h1 { margin:0 0 8px; font-size:clamp(25px,3.2vw,43px); line-height:1.15; letter-spacing:-.035em; }
+    .decision-copy p { margin:0; max-width:760px; color:#b8c8d7; font-size:15px; font-weight:700; }
+    .hero-action {
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; margin-top:22px;
+      border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
+    }
+    .action-cell { padding:12px 14px; background:#0a1723; min-width:0; }
+    .action-cell span { display:block; color:var(--faint); font-size:10px; font-weight:900; letter-spacing:.08em; margin-bottom:4px; }
+    .action-cell strong { display:block; font-size:14px; overflow-wrap:anywhere; }
+    .current-label { color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.12em; }
+    .current-price { margin:6px 0 18px; font-size:clamp(39px,5vw,64px); line-height:1; font-weight:1000; letter-spacing:-.05em; font-variant-numeric:tabular-nums; }
+    .metric-stack { display:grid; gap:11px; }
+    .metric { display:grid; grid-template-columns:72px 1fr 42px; gap:10px; align-items:center; }
+    .metric-label { color:var(--muted); font-size:12px; font-weight:900; }
+    .metric-track { height:8px; border-radius:999px; background:#1a2a3b; overflow:hidden; }
+    .metric-fill { height:100%; border-radius:inherit; }
+    .metric-fill.direction { width:54%; background:var(--blue); }
+    .metric-fill.execution { width:10%; background:var(--long); }
+    .metric-fill.wait { width:88%; background:var(--wait); }
+    .metric-value { text-align:right; font-size:18px; font-weight:1000; font-variant-numeric:tabular-nums; }
+    .expiry { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    .alert-strip {
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:12px 0;
+    }
+    .alert-item {
+      display:grid; grid-template-columns:28px 1fr; gap:9px; align-items:start; padding:12px 13px;
+      border:1px solid var(--line); border-radius:14px; background:rgba(12,27,42,.9);
+    }
+    .alert-icon { display:grid; place-items:center; width:28px; height:28px; border-radius:9px; background:var(--wait-soft); color:var(--wait); font-weight:1000; }
+    .alert-item strong { display:block; font-size:12px; margin-bottom:2px; }
+    .alert-item small { display:block; color:var(--muted); font-size:10px; line-height:1.45; }
+    .workspace {
+      display:grid;
+      grid-template-columns:280px minmax(0,1fr) 280px;
+      grid-template-areas:"long chart short";
+      gap:12px;
+      align-items:start;
+    }
+    .panel { border:1px solid var(--line); border-radius:var(--radius); background:rgba(11,22,34,.96); box-shadow:0 14px 40px rgba(0,0,0,.15); }
+    .chart-panel { grid-area:chart; min-width:0; overflow:hidden; }
+    .plans { display:contents; }
+    .side-card.long { grid-area:long; }
+    .side-card.short { grid-area:short; }
+    .panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; padding:18px 18px 12px; }
+    .panel-head h2 { margin:0; font-size:18px; letter-spacing:-.02em; }
+    .panel-head p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+    .chart-controls { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+    .segmented { display:inline-flex; padding:3px; border:1px solid var(--line); border-radius:11px; background:#07121d; }
+    .segmented button {
+      border:0; padding:7px 10px; border-radius:8px; background:transparent; color:var(--muted);
+      cursor:pointer; font-size:11px; font-weight:900;
+    }
+    .segmented button.active { background:var(--surface-3); color:var(--text); box-shadow:0 1px 0 rgba(255,255,255,.05) inset; }
+    .chart-legend {
+      display:flex; flex-wrap:wrap; gap:8px 14px; padding:0 18px 12px; color:var(--muted); font-size:10px; font-weight:800;
+    }
+    .legend-item { display:inline-flex; align-items:center; gap:6px; }
+    .legend-dot { width:11px; height:7px; border-radius:3px; border:1px solid transparent; }
+    .legend-dot.long-shallow { background:rgba(66,211,146,.42); border-color:var(--long); }
+    .legend-dot.long-main { background:rgba(88,214,234,.25); border-color:var(--long-main); }
+    .legend-dot.short-shallow { background:rgba(255,111,120,.42); border-color:var(--short); }
+    .legend-dot.short-main { background:rgba(246,183,94,.25); border-color:var(--short-main); }
+    .chart-scroll { overflow-x:auto; padding:0 12px 12px; scrollbar-color:#30475f transparent; }
+    .chart-stage { min-width:790px; border:1px solid #24364b; border-radius:14px; overflow:hidden; background:#07111d; }
+    .chart-svg { display:block; width:100%; height:auto; }
+    .chart-note {
+      display:flex; justify-content:space-between; gap:14px; padding:11px 15px; border-top:1px solid #1e3044;
+      color:var(--muted); font-size:10px;
+    }
+    .side-card { overflow:hidden; }
+    .side-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:13px 13px; border-bottom:1px solid var(--line); }
+    .side-card.long .side-head { background:linear-gradient(100deg,var(--long-soft),transparent); }
+    .side-card.short .side-head { background:linear-gradient(100deg,var(--short-soft),transparent); }
+    .side-title { display:flex; align-items:center; gap:9px; }
+    .side-pill { padding:5px 8px; border-radius:7px; font-size:11px; font-weight:1000; letter-spacing:.08em; }
+    .long .side-pill { background:rgba(66,211,146,.16); color:#91f2bf; }
+    .short .side-pill { background:rgba(255,111,120,.15); color:#ffadb2; }
+    .side-state { font-size:15px; font-weight:1000; }
+    .side-score { text-align:right; }
+    .side-score strong { display:block; font-size:24px; line-height:1; }
+    .side-score small { color:var(--faint); font-size:9px; }
+    .levels { padding:5px 11px 8px; }
+    .level-group-label { padding:7px 2px 3px; color:var(--faint); font-size:8px; font-weight:1000; letter-spacing:.12em; }
+    .level-row {
+      display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center;
+      min-height:34px; padding:5px 2px; border-top:1px solid var(--line-soft);
+    }
+    .level-name { color:#c1d0df; font-size:10px; font-weight:900; }
+    .level-name small { display:block; margin-top:2px; color:var(--faint); font-size:8px; font-weight:700; }
+    .level-value { font-size:13px; font-weight:1000; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .level-row.shallow.long-tone .level-value { color:#84edb8; }
+    .level-row.main.long-tone .level-value { color:#80e5f2; }
+    .level-row.shallow.short-tone .level-value { color:#ff9da4; }
+    .level-row.main.short-tone .level-value { color:#ffd08d; }
+    .level-row.invalid .level-value { color:#ff9aa2; }
+    .level-row.trigger .level-value { color:#bdd2e6; }
+    .level-row.target .level-value { color:#d5e3ef; }
+    .side-guidance { margin:0 11px 11px; padding:9px 10px; border-radius:10px; background:#07131e; color:var(--muted); font-size:9px; line-height:1.5; }
+    .lower-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:12px; margin-top:12px; }
+    .section-card { padding:18px; }
+    .section-title { margin:0 0 4px; font-size:18px; }
+    .section-lead { margin:0 0 15px; color:var(--muted); font-size:12px; }
+    .condition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .condition { padding:13px; border:1px solid var(--line); border-radius:13px; background:#091724; }
+    .condition-label { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; color:var(--muted); font-size:10px; font-weight:900; }
+    .condition-label b { padding:3px 6px; border-radius:6px; background:#15273a; color:var(--text); }
+    .condition strong { display:block; font-size:13px; margin-bottom:4px; }
+    .condition p { margin:0; color:var(--muted); font-size:10px; }
+    .big-chance {
+      display:grid; grid-template-columns:82px 1fr; gap:15px; padding:18px;
+      border:1px solid rgba(103,169,255,.28); border-radius:var(--radius);
+      background:linear-gradient(145deg,rgba(17,43,69,.9),rgba(9,23,36,.97));
+    }
+    .big-score { display:grid; place-items:center; align-content:center; min-height:90px; border-radius:14px; background:#081624; border:1px solid #294562; }
+    .big-score strong { font-size:32px; line-height:1; }
+    .big-score span { color:var(--blue); font-size:12px; font-weight:1000; }
+    .big-chance h3 { margin:0 0 6px; font-size:16px; }
+    .big-chance p { margin:0; color:#b1c4d6; font-size:11px; }
+    .timeline { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:12px; }
+    .timeline span { padding:5px 8px; border-radius:8px; background:#0c1c2b; border:1px solid #27405a; font-size:9px; font-weight:900; }
+    .timeline i { color:var(--faint); font-style:normal; }
+    .context-bar {
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin-top:12px;
+      border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
+    }
+    .context-cell { padding:13px; background:#0a1723; }
+    .context-cell span { display:block; color:var(--faint); font-size:9px; font-weight:900; letter-spacing:.08em; }
+    .context-cell strong { display:block; margin-top:3px; font-size:13px; }
+    .details-panel { margin-top:12px; overflow:hidden; }
+    details { border-top:1px solid var(--line); }
+    details:first-of-type { border-top:0; }
+    summary { cursor:pointer; list-style:none; padding:14px 18px; font-size:12px; font-weight:900; }
+    summary::-webkit-details-marker { display:none; }
+    summary::after { content:"＋"; float:right; color:var(--faint); }
+    details[open] summary::after { content:"−"; }
+    .details-body { padding:0 18px 18px; color:var(--muted); font-size:11px; }
+    .score-mini-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+    .score-mini { padding:10px; border:1px solid var(--line); border-radius:10px; background:#081521; }
+    .score-mini span { display:block; color:var(--faint); font-size:8px; }
+    .score-mini strong { display:block; font-size:20px; }
+    .reason-list { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+    .reason-chip { padding:6px 8px; border:1px solid #2a4055; border-radius:999px; background:#0b1927; color:#aebfd0; font-size:9px; }
+    .diagnostic-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .diagnostic { padding:11px; border:1px solid var(--line); border-radius:11px; background:#081521; }
+    .diagnostic span { display:block; color:var(--faint); font-size:8px; }
+    .diagnostic strong { display:block; margin-top:3px; font-size:11px; color:#c7d6e4; }
+    footer { padding:20px 4px 0; color:var(--faint); font-size:9px; text-align:center; }
+
+    /* SVG chart */
+    .price-map-bg { fill:#0a1422; stroke:#26384c; stroke-width:1.2; }
+    .price-map-panel { filter:drop-shadow(0 10px 22px rgba(0,0,0,.18)); }
+    .price-map-panel-focus .price-map-bg { stroke:#3d5d7f; stroke-width:1.4; }
+    .chart-title { fill:#eef6ff; font-size:18px; font-weight:800; }
+    .chart-subtitle { fill:#8ca0b6; font-size:12px; font-weight:600; }
+    .price-grid-h { stroke:rgba(148,163,184,.26); stroke-width:1; }
+    .price-grid-v { stroke:rgba(148,163,184,.16); stroke-width:1; }
+    .price-map-separator { fill:rgba(207,216,228,.04); }
+    .price-map-separator-line { stroke:rgba(148,163,184,.18); }
+    .candle-wick { stroke-width:1.35; opacity:.9; }
+    .candle-body { stroke-width:.95; opacity:.96; }
+    .candle-up { fill:rgba(66,211,146,.58); stroke:rgba(66,211,146,.95); }
+    .candle-down { fill:rgba(255,111,120,.56); stroke:rgba(255,111,120,.94); }
+    .band-support { fill:rgba(66,211,146,.09); }
+    .band-resistance { fill:rgba(255,111,120,.09); }
+    .setup-band-long { fill:rgba(66,211,146,.22); stroke:var(--long); stroke-width:1.7; }
+    .setup-band-short { fill:rgba(255,111,120,.22); stroke:var(--short); stroke-width:1.7; }
+    .setup-axis-value-long { fill:#70e8ad; font-size:13px; font-weight:800; }
+    .setup-axis-value-short { fill:#ff979e; font-size:13px; font-weight:800; }
+    .value-defense-band-long { fill:rgba(88,214,234,.18); stroke:var(--long-main); stroke-width:2; }
+    .value-defense-band-short { fill:rgba(246,183,94,.18); stroke:var(--short-main); stroke-width:2; }
+    .invalidation-band-long, .invalidation-band-short { fill:rgba(255,111,120,.11); stroke:rgba(255,111,120,.75); stroke-width:1.3; stroke-dasharray:4 4; }
+    .value-defense-trigger-long { stroke:#a9dff0; stroke-width:1.5; stroke-dasharray:5 4; }
+    .value-defense-trigger-short { stroke:#f6d49e; stroke-width:1.5; stroke-dasharray:5 4; }
+    .marker-line { stroke-width:2; stroke-dasharray:4 4; }
+    .marker-label { font-size:10px; font-weight:700; }
+    .marker-long { stroke:#55d99a; fill:#b9f7d4; }
+    .marker-short { stroke:#ff777f; fill:#ffc1c5; }
+    .current-price-line { stroke:#67a9ff; stroke-width:2.5; stroke-dasharray:5 5; }
+    .current-price-label { fill:#dcecff; font-size:13px; font-weight:800; paint-order:stroke fill; stroke:#0a1422; stroke-width:3; }
+    .price-axis { fill:#9dafc3; font-size:12px; font-weight:600; }
+    .time-axis-line { stroke:rgba(148,163,184,.25); }
+    .time-axis-label { fill:#879bb1; font-size:11px; font-weight:600; }
+    .zone-caption { font-size:10px; font-weight:1000; letter-spacing:.02em; paint-order:stroke fill; stroke:#07111d; stroke-width:3; }
+    .zone-long-shallow { fill:#a6f3cb; }
+    .zone-long-main { fill:#98ebf4; }
+    .zone-short-shallow { fill:#ffc1c5; }
+    .zone-short-main { fill:#ffda9f; }
+    .chart-stage.basic .marker-line,
+    .chart-stage.basic .marker-label,
+    .chart-stage.basic .invalidation-band-long,
+    .chart-stage.basic .invalidation-band-short,
+    .chart-stage.basic .value-defense-trigger-long,
+    .chart-stage.basic .value-defense-trigger-short {
+      opacity:0;
+    }
+
+    @media (max-width:1180px) {
+      .workspace {
+        grid-template-columns:1fr 1fr;
+        grid-template-areas:"chart chart" "long short";
+      }
+      .alert-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .hero-action { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width:860px) {
+      .shell { width:min(100% - 18px, 760px); padding-top:10px; }
+      .topbar { align-items:flex-start; }
+      .meta-line { display:none; }
+      .hero { grid-template-columns:1fr; }
+      .hero-side { border-left:0; border-top:1px solid var(--line); }
+      .decision-grid { grid-template-columns:1fr; gap:10px; }
+      .decision-word { font-size:66px; }
+      .workspace {
+        grid-template-columns:1fr;
+        grid-template-areas:"long" "short" "chart";
+      }
+      .lower-grid { grid-template-columns:1fr; }
+      .score-mini-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    }
+    @media (max-width:590px) {
+      .hero-main, .hero-side { padding:18px 16px; }
+      .status-line { margin-bottom:12px; }
+      .decision-copy h1 { font-size:25px; }
+      .hero-action { grid-template-columns:1fr 1fr; }
+      .action-cell { padding:10px; }
+      .alert-strip { grid-template-columns:1fr; gap:7px; }
+      .panel-head { display:block; }
+      .chart-controls { justify-content:flex-start; margin-top:10px; }
+      .chart-scroll { padding-left:8px; padding-right:8px; }
+      .condition-grid { grid-template-columns:1fr; }
+      .big-chance { grid-template-columns:68px 1fr; }
+      .context-bar { grid-template-columns:1fr; }
+      .score-mini-grid, .diagnostic-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .topbar { margin-left:4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR / UI STUDY V2</span></div>
+      <div class="meta-line">
+        <span>2026-07-10 09:05 JST</span>
+        <span>signal 20260710_000501</span>
+        <span>attention</span>
+      </div>
+    </div>
+
+    <header class="hero">
+      <div class="hero-main">
+        <div class="status-line">
+          <span class="status-badge">● 注意報・売買非推奨</span>
+          <span class="safety">REPORT ONLY / HUMAN DECISION</span>
+        </div>
+        <div class="decision-grid">
+          <div class="decision-word">WAIT</div>
+          <div class="decision-copy">
+            <h1>上方向だが、今は入らない。</h1>
+            <p>方向はロング優勢。ただし実行しやすさは10、待機圧力は88。浅い入りで飛びつかず、本命ゾーンと15分足の反応まで確認します。</p>
+          </div>
+        </div>
+        <div class="hero-action">
+          <div class="action-cell"><span>成行</span><strong>見送り</strong></div>
+          <div class="action-cell"><span>指値・戻り待ち</span><strong>監視可</strong></div>
+          <div class="action-cell"><span>ブレイク追随</span><strong>見送り</strong></div>
+          <div class="action-cell"><span>逆方向短期</span><strong>ショートのみ条件付き</strong></div>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div class="current-label">BTC CURRENT PRICE</div>
+        <div class="current-price">63,198</div>
+        <div class="metric-stack">
+          <div class="metric"><span class="metric-label">方向</span><div class="metric-track"><div class="metric-fill direction"></div></div><strong class="metric-value">54</strong></div>
+          <div class="metric"><span class="metric-label">実行</span><div class="metric-track"><div class="metric-fill execution"></div></div><strong class="metric-value">10</strong></div>
+          <div class="metric"><span class="metric-label">待機</span><div class="metric-track"><div class="metric-fill wait"></div></div><strong class="metric-value">88</strong></div>
+        </div>
+        <div class="expiry">有効期限：次の1時間足確定までを目安</div>
+      </div>
+    </header>
+
+    <section class="alert-strip" aria-label="現在発火中の警戒">
+      <div class="alert-item"><span class="alert-icon">!</span><div><strong>主要レジスタンス接近</strong><small>ロングは上方向でも追いかけない</small></div></div>
+      <div class="alert-item"><span class="alert-icon">↓</span><div><strong>下側流動性が近い</strong><small>先に下へ振られる可能性を残す</small></div></div>
+      <div class="alert-item"><span class="alert-icon">板</span><div><strong>近い売り板あり</strong><small>短期ノイズと上値拒否に注意</small></div></div>
+      <div class="alert-item"><span class="alert-icon">↗</span><div><strong>上抜け追随候補</strong><small>15分足で上に維持できる場合のみ再評価</small></div></div>
+    </section>
+
+    <main class="workspace">
+      <section class="panel chart-panel">
+        <div class="panel-head">
+          <div>
+            <h2>チャートと価格レイヤー</h2>
+            <p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p>
+          </div>
+          <div class="chart-controls">
+            <div class="segmented" aria-label="時間足切替">
+              <button class="active" data-chart-view="15m">15分足</button>
+              <button data-chart-view="1h">1時間足</button>
+              <button data-chart-view="4h">4時間足</button>
+            </div>
+            <div class="segmented" aria-label="レイヤー切替">
+              <button class="active" data-layer-mode="basic">基本</button>
+              <button data-layer-mode="full">全レイヤー</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span>
+          <span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span>
+          <span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span>
+          <span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span>
+          <span>基本表示でも4ゾーンは消えません</span>
+        </div>
+        <div class="chart-scroll">
+          <div class="chart-stage basic" id="chart-stage">
+            <svg aria-label="BTCFX 15分足・1時間足・4時間足チャート" class="chart-svg" id="market-chart" viewBox="0 726 860 429"><g class="price-map-separator-wrap"><rect class="price-map-separator" height="34" rx="18" width="860" x="0" y="319"></rect><line class="price-map-separator-line" x1="24" x2="836" y1="336.0" y2="336.0"></line></g><g class="price-map-separator-wrap"><rect class="price-map-separator" height="34" rx="18" width="860" x="0" y="682"></rect><line class="price-map-separator-line" x1="24" x2="836" y1="699.0" y2="699.0"></line></g><g class="price-map-panel"><rect class="price-map-bg" height="309" rx="18" width="860" x="0" y="0"></rect><text class="chart-title" x="22" y="22">4時間足: 大局方向</text><text class="chart-subtitle" x="22" y="40">大きな流れと主要なサポート / レジスタンスだけを見ます。入る価格の判断は下段です</text><line class="price-grid-h" x1="30" x2="698" y1="271.0" y2="271.0"></line><line class="price-grid-h" x1="30" x2="698" y1="209.8" y2="209.8"></line><line class="price-grid-h" x1="30" x2="698" y1="148.5" y2="148.5"></line><line class="price-grid-h" x1="30" x2="698" y1="87.2" y2="87.2"></line><line class="price-grid-h" x1="30" x2="698" y1="26.0" y2="26.0"></line><line class="price-grid-v" x1="163.6" x2="163.6" y1="26" y2="271"></line><line class="price-grid-v" x1="297.2" x2="297.2" y1="26" y2="271"></line><line class="price-grid-v" x1="430.8" x2="430.8" y1="26" y2="271"></line><line class="price-grid-v" x1="564.4" x2="564.4" y1="26" y2="271"></line><rect class="band-resistance" height="8.0" width="668" x="30" y="131.1"></rect><rect class="band-resistance" height="11.1" width="668" x="30" y="116.5"></rect><rect class="band-resistance" height="8.0" width="668" x="30" y="100.1"></rect><rect class="band-support" height="9.4" width="668" x="30" y="131.7"></rect><rect class="band-support" height="8.2" width="668" x="30" y="140.0"></rect><rect class="band-support" height="8.0" width="668" x="30" y="161.2"></rect><line class="candle-wick candle-down" x1="47.7" x2="47.7" y1="143.0" y2="184.1"></line><rect class="candle-body candle-down" height="22.8" rx="1.3" width="15.0" x="40.2" y="148.5"></rect><line class="candle-wick candle-up" x1="71.1" x2="71.1" y1="153.2" y2="177.1"></line><rect class="candle-body candle-up" height="5.2" rx="1.3" width="15.0" x="63.6" y="166.2"></rect><line class="candle-wick candle-up" x1="94.6" x2="94.6" y1="157.2" y2="175.1"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="15.0" x="87.1" y="164.2"></rect><line class="candle-wick candle-up" x1="118.0" x2="118.0" y1="86.9" y2="174.4"></line><rect class="candle-body candle-up" height="54.4" rx="1.3" width="15.0" x="110.5" y="109.8"></rect><line class="candle-wick candle-down" x1="141.4" x2="141.4" y1="92.5" y2="141.9"></line><rect class="candle-body candle-down" height="21.4" rx="1.3" width="15.0" x="133.9" y="109.8"></rect><line class="candle-wick candle-down" x1="164.9" x2="164.9" y1="125.3" y2="157.0"></line><rect class="candle-body candle-down" height="13.0" rx="1.3" width="15.0" x="157.4" y="131.2"></rect><line class="candle-wick candle-down" x1="188.3" x2="188.3" y1="134.1" y2="181.7"></line><rect class="candle-body candle-down" height="37.4" rx="1.3" width="15.0" x="180.8" y="144.2"></rect><line class="candle-wick candle-up" x1="211.7" x2="211.7" y1="115.3" y2="254.1"></line><rect class="candle-body candle-up" height="65.8" rx="1.3" width="15.0" x="204.2" y="115.9"></rect><line class="candle-wick candle-up" x1="235.1" x2="235.1" y1="88.9" y2="125.8"></line><rect class="candle-body candle-up" height="12.0" rx="1.3" width="15.0" x="227.6" y="103.9"></rect><line class="candle-wick candle-up" x1="258.6" x2="258.6" y1="42.9" y2="113.2"></line><rect class="candle-body candle-up" height="19.4" rx="1.3" width="15.0" x="251.1" y="84.5"></rect><line class="candle-wick candle-down" x1="282.0" x2="282.0" y1="67.4" y2="140.6"></line><rect class="candle-body candle-down" height="53.5" rx="1.3" width="15.0" x="274.5" y="84.5"></rect><line class="candle-wick candle-down" x1="305.4" x2="305.4" y1="122.0" y2="163.5"></line><rect class="candle-body candle-down" height="6.4" rx="1.3" width="15.0" x="297.9" y="138.0"></rect><line class="candle-wick candle-up" x1="328.9" x2="328.9" y1="121.3" y2="150.6"></line><rect class="candle-body candle-up" height="19.6" rx="1.3" width="15.0" x="321.4" y="124.7"></rect><line class="candle-wick candle-up" x1="352.3" x2="352.3" y1="80.3" y2="170.5"></line><rect class="candle-body candle-up" height="33.1" rx="1.3" width="15.0" x="344.8" y="91.6"></rect><line class="candle-wick candle-down" x1="375.7" x2="375.7" y1="71.8" y2="126.2"></line><rect class="candle-body candle-down" height="7.4" rx="1.3" width="15.0" x="368.2" y="91.6"></rect><line class="candle-wick candle-down" x1="399.1" x2="399.1" y1="93.8" y2="137.0"></line><rect class="candle-body candle-down" height="28.6" rx="1.3" width="15.0" x="391.6" y="98.9"></rect><line class="candle-wick candle-down" x1="422.6" x2="422.6" y1="102.1" y2="179.4"></line><rect class="candle-body candle-down" height="36.8" rx="1.3" width="15.0" x="415.1" y="127.6"></rect><line class="candle-wick candle-up" x1="446.0" x2="446.0" y1="156.1" y2="183.0"></line><rect class="candle-body candle-up" height="7.1" rx="1.3" width="15.0" x="438.5" y="157.3"></rect><line class="candle-wick candle-down" x1="469.4" x2="469.4" y1="153.7" y2="228.9"></line><rect class="candle-body candle-down" height="36.4" rx="1.3" width="15.0" x="461.9" y="157.3"></rect><line class="candle-wick candle-down" x1="492.9" x2="492.9" y1="186.0" y2="240.1"></line><rect class="candle-body candle-down" height="37.1" rx="1.3" width="15.0" x="485.4" y="193.7"></rect><line class="candle-wick candle-up" x1="516.3" x2="516.3" y1="187.3" y2="231.3"></line><rect class="candle-body candle-up" height="36.1" rx="1.3" width="15.0" x="508.8" y="194.7"></rect><line class="candle-wick candle-up" x1="539.7" x2="539.7" y1="190.1" y2="214.8"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="15.0" x="532.2" y="194.5"></rect><line class="candle-wick candle-down" x1="563.1" x2="563.1" y1="171.9" y2="231.3"></line><rect class="candle-body candle-down" height="19.5" rx="1.3" width="15.0" x="555.6" y="194.5"></rect><line class="candle-wick candle-up" x1="586.6" x2="586.6" y1="133.0" y2="214.9"></line><rect class="candle-body candle-up" height="64.1" rx="1.3" width="15.0" x="579.1" y="149.9"></rect><line class="candle-wick candle-down" x1="610.0" x2="610.0" y1="144.0" y2="174.1"></line><rect class="candle-body candle-down" height="13.5" rx="1.3" width="15.0" x="602.5" y="149.9"></rect><line class="candle-wick candle-up" x1="633.4" x2="633.4" y1="134.0" y2="183.8"></line><rect class="candle-body candle-up" height="4.9" rx="1.3" width="15.0" x="625.9" y="158.5"></rect><line class="candle-wick candle-up" x1="656.9" x2="656.9" y1="118.5" y2="177.4"></line><rect class="candle-body candle-up" height="23.9" rx="1.3" width="15.0" x="649.4" y="134.6"></rect><line class="candle-wick candle-down" x1="680.3" x2="680.3" y1="123.6" y2="146.2"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="15.0" x="672.8" y="134.6"></rect><line class="current-price-line" x1="30" x2="698" y1="135.9" y2="135.9"></line><text class="current-price-label" text-anchor="end" x="22.0" y="139.9">現在値 63,198</text><text class="price-axis" text-anchor="end" x="846" y="275.0">61,029</text><text class="price-axis" text-anchor="end" x="846" y="213.8">62,012</text><text class="price-axis" text-anchor="end" x="846" y="152.5">62,996</text><text class="price-axis" text-anchor="end" x="846" y="91.2">63,980</text><text class="price-axis" text-anchor="end" x="846" y="30.0">64,963</text><text class="time-axis-label" text-anchor="middle" x="47.7" y="295.0">07/05 17:00</text><text class="time-axis-label" text-anchor="middle" x="375.7" y="295.0">07/08 01:00</text><text class="time-axis-label" text-anchor="middle" x="680.3" y="295.0">07/10 05:00</text><line class="time-axis-line" x1="30" x2="698" y1="271.0" y2="271.0"></line></g><g class="price-map-panel"><rect class="price-map-bg" height="309" rx="18" width="860" x="0" y="363"></rect><text class="chart-title" x="22" y="385">1時間足: 帯の妥当性</text><text class="chart-subtitle" x="22" y="403">再検討帯が押し目 / 戻りとして自然かを見る段です。利確 / 損切りはここでは見ません</text><line class="price-grid-h" x1="30" x2="698" y1="634.0" y2="634.0"></line><line class="price-grid-h" x1="30" x2="698" y1="572.8" y2="572.8"></line><line class="price-grid-h" x1="30" x2="698" y1="511.5" y2="511.5"></line><line class="price-grid-h" x1="30" x2="698" y1="450.2" y2="450.2"></line><line class="price-grid-h" x1="30" x2="698" y1="389.0" y2="389.0"></line><line class="price-grid-v" x1="163.6" x2="163.6" y1="389" y2="634"></line><line class="price-grid-v" x1="297.2" x2="297.2" y1="389" y2="634"></line><line class="price-grid-v" x1="430.8" x2="430.8" y1="389" y2="634"></line><line class="price-grid-v" x1="564.4" x2="564.4" y1="389" y2="634"></line><rect class="band-resistance" height="8.7" width="668" x="30" y="452.7"></rect><rect class="band-resistance" height="16.7" width="668" x="30" y="430.7"></rect><rect class="band-resistance" height="8.0" width="668" x="30" y="405.9"></rect><rect class="band-support" height="14.2" width="668" x="30" y="453.5"></rect><rect class="band-support" height="12.4" width="668" x="30" y="466.1"></rect><rect class="band-support" height="8.0" width="668" x="30" y="498.1"></rect><rect class="value-defense-band-long" height="10.0" rx="9" width="227.1" x="83.4" y="498.1"></rect><rect class="invalidation-band-long" height="10.0" rx="9" width="227.1" x="83.4" y="487.9"></rect><line class="value-defense-trigger-long" x1="83.4" x2="310.6" y1="483.0" y2="483.0"></line><line class="value-defense-trigger-long" x1="83.4" x2="310.6" y1="460.7" y2="460.7"></line><rect class="value-defense-band-short" height="16.7" rx="9" width="227.1" x="417.4" y="430.7"></rect><rect class="invalidation-band-short" height="10.0" rx="9" width="227.1" x="417.4" y="430.3"></rect><line class="value-defense-trigger-short" x1="417.4" x2="644.6" y1="450.0" y2="450.0"></line><line class="value-defense-trigger-short" x1="417.4" x2="644.6" y1="457.0" y2="457.0"></line><line class="candle-wick candle-down" x1="45.1" x2="45.1" y1="535.5" y2="578.7"></line><rect class="candle-body candle-down" height="31.6" rx="1.3" width="14.9" x="37.6" y="547.1"></rect><line class="candle-wick candle-down" x1="63.3" x2="63.3" y1="565.9" y2="608.5"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="14.9" x="55.9" y="578.7"></rect><line class="candle-wick candle-down" x1="81.6" x2="81.6" y1="558.2" y2="601.9"></line><rect class="candle-body candle-down" height="5.4" rx="1.3" width="14.9" x="74.1" y="579.7"></rect><line class="candle-wick candle-down" x1="99.8" x2="99.8" y1="582.1" y2="617.1"></line><rect class="candle-body candle-down" height="17.9" rx="1.3" width="14.9" x="92.3" y="585.1"></rect><line class="candle-wick candle-up" x1="118.0" x2="118.0" y1="560.3" y2="603.9"></line><rect class="candle-body candle-up" height="38.7" rx="1.3" width="14.9" x="110.5" y="564.4"></rect><line class="candle-wick candle-up" x1="136.2" x2="136.2" y1="537.4" y2="572.0"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="14.9" x="128.8" y="564.4"></rect><line class="candle-wick candle-up" x1="154.4" x2="154.4" y1="541.4" y2="571.1"></line><rect class="candle-body candle-up" height="6.8" rx="1.3" width="14.9" x="147.0" y="557.5"></rect><line class="candle-wick candle-up" x1="172.7" x2="172.7" y1="547.1" y2="568.4"></line><rect class="candle-body candle-up" height="9.0" rx="1.3" width="14.9" x="165.2" y="548.6"></rect><line class="candle-wick candle-down" x1="190.9" x2="190.9" y1="545.5" y2="567.7"></line><rect class="candle-body candle-down" height="16.7" rx="1.3" width="14.9" x="183.4" y="548.6"></rect><line class="candle-wick candle-up" x1="209.1" x2="209.1" y1="551.2" y2="578.9"></line><rect class="candle-body candle-up" height="8.1" rx="1.3" width="14.9" x="201.6" y="557.2"></rect><line class="candle-wick candle-up" x1="227.3" x2="227.3" y1="541.6" y2="559.0"></line><rect class="candle-body candle-up" height="13.2" rx="1.3" width="14.9" x="219.9" y="544.0"></rect><line class="candle-wick candle-down" x1="245.6" x2="245.6" y1="542.4" y2="559.4"></line><rect class="candle-body candle-down" height="4.3" rx="1.3" width="14.9" x="238.1" y="544.0"></rect><line class="candle-wick candle-down" x1="263.8" x2="263.8" y1="545.8" y2="570.1"></line><rect class="candle-body candle-down" height="14.6" rx="1.3" width="14.9" x="256.3" y="548.3"></rect><line class="candle-wick candle-down" x1="282.0" x2="282.0" y1="514.2" y2="590.3"></line><rect class="candle-body candle-down" height="20.6" rx="1.3" width="14.9" x="274.5" y="562.9"></rect><line class="candle-wick candle-down" x1="300.2" x2="300.2" y1="563.3" y2="603.9"></line><rect class="candle-body candle-down" height="11.9" rx="1.3" width="14.9" x="292.8" y="583.5"></rect><line class="candle-wick candle-up" x1="318.4" x2="318.4" y1="568.5" y2="601.3"></line><rect class="candle-body candle-up" height="17.7" rx="1.3" width="14.9" x="311.0" y="577.7"></rect><line class="candle-wick candle-up" x1="336.7" x2="336.7" y1="532.3" y2="579.1"></line><rect class="candle-body candle-up" height="44.8" rx="1.3" width="14.9" x="329.2" y="533.0"></rect><line class="candle-wick candle-up" x1="354.9" x2="354.9" y1="516.3" y2="553.1"></line><rect class="candle-body candle-up" height="13.6" rx="1.3" width="14.9" x="347.4" y="519.3"></rect><line class="candle-wick candle-up" x1="373.1" x2="373.1" y1="483.2" y2="529.9"></line><rect class="candle-body candle-up" height="34.6" rx="1.3" width="14.9" x="365.6" y="484.8"></rect><line class="candle-wick candle-up" x1="391.3" x2="391.3" y1="455.6" y2="499.7"></line><rect class="candle-body candle-up" height="3.7" rx="1.3" width="14.9" x="383.9" y="481.0"></rect><line class="candle-wick candle-down" x1="409.6" x2="409.6" y1="472.2" y2="495.2"></line><rect class="candle-body candle-down" height="9.4" rx="1.3" width="14.9" x="402.1" y="481.0"></rect><line class="candle-wick candle-up" x1="427.8" x2="427.8" y1="480.9" y2="501.1"></line><rect class="candle-body candle-up" height="4.8" rx="1.3" width="14.9" x="420.3" y="485.7"></rect><line class="candle-wick candle-down" x1="446.0" x2="446.0" y1="475.7" y2="511.1"></line><rect class="candle-body candle-down" height="15.7" rx="1.3" width="14.9" x="438.5" y="485.7"></rect><line class="candle-wick candle-down" x1="464.2" x2="464.2" y1="496.9" y2="517.5"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="14.9" x="456.8" y="501.4"></rect><line class="candle-wick candle-down" x1="482.4" x2="482.4" y1="484.9" y2="532.2"></line><rect class="candle-body candle-down" height="16.2" rx="1.3" width="14.9" x="475.0" y="501.5"></rect><line class="candle-wick candle-up" x1="500.7" x2="500.7" y1="458.4" y2="526.5"></line><rect class="candle-body candle-up" height="39.1" rx="1.3" width="14.9" x="493.2" y="478.6"></rect><line class="candle-wick candle-down" x1="518.9" x2="518.9" y1="467.4" y2="513.1"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="14.9" x="511.4" y="478.6"></rect><line class="candle-wick candle-down" x1="537.1" x2="537.1" y1="457.0" y2="499.0"></line><rect class="candle-body candle-down" height="13.8" rx="1.3" width="14.9" x="529.6" y="480.2"></rect><line class="candle-wick candle-down" x1="555.3" x2="555.3" y1="478.9" y2="522.6"></line><rect class="candle-body candle-down" height="15.5" rx="1.3" width="14.9" x="547.9" y="494.0"></rect><line class="candle-wick candle-up" x1="573.6" x2="573.6" y1="465.2" y2="512.4"></line><rect class="candle-body candle-up" height="41.7" rx="1.3" width="14.9" x="566.1" y="467.8"></rect><line class="candle-wick candle-up" x1="591.8" x2="591.8" y1="433.7" y2="474.6"></line><rect class="candle-body candle-up" height="8.0" rx="1.3" width="14.9" x="584.3" y="459.8"></rect><line class="candle-wick candle-up" x1="610.0" x2="610.0" y1="444.4" y2="469.1"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="14.9" x="602.5" y="457.9"></rect><line class="candle-wick candle-up" x1="628.2" x2="628.2" y1="450.3" y2="464.7"></line><rect class="candle-body candle-up" height="6.4" rx="1.3" width="14.9" x="620.8" y="451.5"></rect><line class="candle-wick candle-down" x1="646.4" x2="646.4" y1="443.7" y2="461.6"></line><rect class="candle-body candle-down" height="3.7" rx="1.3" width="14.9" x="639.0" y="451.5"></rect><line class="candle-wick candle-down" x1="664.7" x2="664.7" y1="441.4" y2="461.6"></line><rect class="candle-body candle-down" height="5.8" rx="1.3" width="14.9" x="657.2" y="455.2"></rect><line class="candle-wick candle-up" x1="682.9" x2="682.9" y1="450.8" y2="475.5"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="14.9" x="675.4" y="460.0"></rect><rect class="setup-band-long" height="14.2" rx="10" style="opacity:0.14;" width="561.1" x="110.2" y="453.5"></rect><text class="setup-axis-value-long" x="704.0" y="458.5">63,267</text><text class="setup-axis-value-long" x="704.0" y="472.8">63,115</text><rect class="setup-band-short" height="10.0" rx="10" style="opacity:0.14;" width="561.1" x="110.2" y="452.7"></rect><text class="setup-axis-value-short" x="704.0" y="457.7">63,276</text><text class="setup-axis-value-short" x="704.0" y="466.3">63,183</text><line class="current-price-line" x1="30" x2="698" y1="460.0" y2="460.0"></line><text class="current-price-label" text-anchor="end" x="22.0" y="464.0">現在値 63,198</text><text class="price-axis" text-anchor="end" x="846" y="638.0">61,345</text><text class="price-axis" text-anchor="end" x="846" y="576.8">61,997</text><text class="price-axis" text-anchor="end" x="846" y="515.5">62,649</text><text class="price-axis" text-anchor="end" x="846" y="454.2">63,301</text><text class="price-axis" text-anchor="end" x="846" y="393.0">63,954</text><text class="time-axis-label" text-anchor="middle" x="45.1" y="658.0">07/08 21:00</text><text class="time-axis-label" text-anchor="middle" x="373.1" y="658.0">07/09 15:00</text><text class="time-axis-label" text-anchor="middle" x="682.9" y="658.0">07/10 08:00</text><line class="time-axis-line" x1="30" x2="698" y1="634.0" y2="634.0"></line><text class="zone-caption zone-long-main" text-anchor="start" x="91.4" y="510.1">LONG 本命ゾーン</text><text class="zone-caption zone-short-main" text-anchor="end" x="636.5" y="444.7">SHORT 本命ゾーン</text><text class="zone-caption zone-long-shallow" text-anchor="start" x="120.2" y="465.5">LONG 浅い入り</text><text class="zone-caption zone-short-shallow" text-anchor="end" x="661.3" y="466.7">SHORT 浅い入り</text></g><g class="price-map-panel price-map-panel-focus"><rect class="price-map-bg" height="429" rx="18" width="860" x="0" y="726"></rect><text class="chart-title" x="22" y="748">15分足: 入る価格 / SL / TP</text><text class="chart-subtitle" x="22" y="766">実際に入る価格を見る主役の段です。再検討帯、SL、TP1、TP2 をここに集約しています</text><line class="price-grid-h" x1="30" x2="698" y1="1117.0" y2="1117.0"></line><line class="price-grid-h" x1="30" x2="698" y1="1025.8" y2="1025.8"></line><line class="price-grid-h" x1="30" x2="698" y1="934.5" y2="934.5"></line><line class="price-grid-h" x1="30" x2="698" y1="843.2" y2="843.2"></line><line class="price-grid-h" x1="30" x2="698" y1="752.0" y2="752.0"></line><line class="price-grid-v" x1="163.6" x2="163.6" y1="752" y2="1117"></line><line class="price-grid-v" x1="297.2" x2="297.2" y1="752" y2="1117"></line><line class="price-grid-v" x1="430.8" x2="430.8" y1="752" y2="1117"></line><line class="price-grid-v" x1="564.4" x2="564.4" y1="752" y2="1117"></line><rect class="value-defense-band-long" height="14.4" rx="9" width="227.1" x="83.4" y="1015.0"></rect><rect class="invalidation-band-long" height="10.0" rx="9" width="227.1" x="83.4" y="991.9"></rect><line class="value-defense-trigger-long" x1="83.4" x2="310.6" y1="980.8" y2="980.8"></line><line class="value-defense-trigger-long" x1="83.4" x2="310.6" y1="930.6" y2="930.6"></line><rect class="value-defense-band-short" height="37.7" rx="9" width="227.1" x="417.4" y="863.1"></rect><rect class="invalidation-band-short" height="10.0" rx="9" width="227.1" x="417.4" y="862.2"></rect><line class="value-defense-trigger-short" x1="417.4" x2="644.6" y1="906.7" y2="906.7"></line><line class="value-defense-trigger-short" x1="417.4" x2="644.6" y1="922.3" y2="922.3"></line><line class="candle-wick candle-down" x1="42.8" x2="42.8" y1="1002.3" y2="1049.6"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="11.2" x="37.2" y="1022.5"></rect><line class="candle-wick candle-up" x1="56.5" x2="56.5" y1="1008.7" y2="1058.7"></line><rect class="candle-body candle-up" height="7.3" rx="1.3" width="11.2" x="50.9" y="1016.7"></rect><line class="candle-wick candle-down" x1="70.2" x2="70.2" y1="985.2" y2="1065.9"></line><rect class="candle-body candle-down" height="41.5" rx="1.3" width="11.2" x="64.6" y="1016.7"></rect><line class="candle-wick candle-down" x1="83.8" x2="83.8" y1="1045.9" y2="1091.8"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="11.2" x="78.2" y="1058.2"></rect><line class="candle-wick candle-up" x1="97.5" x2="97.5" y1="992.7" y2="1059.1"></line><rect class="candle-body candle-up" height="55.7" rx="1.3" width="11.2" x="91.9" y="1003.4"></rect><line class="candle-wick candle-down" x1="111.2" x2="111.2" y1="1002.9" y2="1042.6"></line><rect class="candle-body candle-down" height="31.5" rx="1.3" width="11.2" x="105.6" y="1003.4"></rect><line class="candle-wick candle-up" x1="124.8" x2="124.8" y1="982.9" y2="1079.0"></line><rect class="candle-body candle-up" height="52.0" rx="1.3" width="11.2" x="119.2" y="983.0"></rect><line class="candle-wick candle-up" x1="138.5" x2="138.5" y1="925.4" y2="1016.7"></line><rect class="candle-body candle-up" height="12.0" rx="1.3" width="11.2" x="132.9" y="970.9"></rect><line class="candle-wick candle-down" x1="152.2" x2="152.2" y1="945.8" y2="1007.6"></line><rect class="candle-body candle-down" height="22.4" rx="1.3" width="11.2" x="146.6" y="970.9"></rect><line class="candle-wick candle-down" x1="165.8" x2="165.8" y1="993.4" y2="1048.8"></line><rect class="candle-body candle-down" height="8.7" rx="1.3" width="11.2" x="160.2" y="993.4"></rect><line class="candle-wick candle-up" x1="179.5" x2="179.5" y1="976.5" y2="1031.6"></line><rect class="candle-body candle-up" height="6.8" rx="1.3" width="11.2" x="173.9" y="995.2"></rect><line class="candle-wick candle-up" x1="193.2" x2="193.2" y1="968.2" y2="1016.6"></line><rect class="candle-body candle-up" height="20.6" rx="1.3" width="11.2" x="187.6" y="974.6"></rect><line class="candle-wick candle-up" x1="206.8" x2="206.8" y1="933.9" y2="994.3"></line><rect class="candle-body candle-up" height="17.5" rx="1.3" width="11.2" x="201.2" y="957.1"></rect><line class="candle-wick candle-down" x1="220.5" x2="220.5" y1="922.3" y2="989.4"></line><rect class="candle-body candle-down" height="21.9" rx="1.3" width="11.2" x="214.9" y="957.1"></rect><line class="candle-wick candle-down" x1="234.2" x2="234.2" y1="957.8" y2="1001.0"></line><rect class="candle-body candle-down" height="3.0" rx="1.3" width="11.2" x="228.6" y="979.0"></rect><line class="candle-wick candle-down" x1="247.8" x2="247.8" y1="966.4" y2="1016.9"></line><rect class="candle-body candle-down" height="23.8" rx="1.3" width="11.2" x="242.2" y="982.0"></rect><line class="candle-wick candle-down" x1="261.5" x2="261.5" y1="971.7" y2="1013.7"></line><rect class="candle-body candle-down" height="2.4" rx="1.3" width="11.2" x="255.9" y="1005.7"></rect><line class="candle-wick candle-down" x1="275.2" x2="275.2" y1="1001.6" y2="1070.1"></line><rect class="candle-body candle-down" height="30.1" rx="1.3" width="11.2" x="269.6" y="1008.1"></rect><line class="candle-wick candle-up" x1="288.8" x2="288.8" y1="1020.0" y2="1043.9"></line><rect class="candle-body candle-up" height="4.7" rx="1.3" width="11.2" x="283.2" y="1033.5"></rect><line class="candle-wick candle-down" x1="302.5" x2="302.5" y1="1030.9" y2="1058.8"></line><rect class="candle-body candle-down" height="7.0" rx="1.3" width="11.2" x="296.9" y="1033.5"></rect><line class="candle-wick candle-up" x1="316.2" x2="316.2" y1="1017.9" y2="1047.1"></line><rect class="candle-body candle-up" height="2.2" rx="1.3" width="11.2" x="310.6" y="1038.3"></rect><line class="candle-wick candle-up" x1="329.8" x2="329.8" y1="1006.8" y2="1038.6"></line><rect class="candle-body candle-up" height="28.4" rx="1.3" width="11.2" x="324.2" y="1009.9"></rect><line class="candle-wick candle-up" x1="343.5" x2="343.5" y1="965.4" y2="1028.0"></line><rect class="candle-body candle-up" height="39.9" rx="1.3" width="11.2" x="337.9" y="970.0"></rect><line class="candle-wick candle-up" x1="357.2" x2="357.2" y1="940.9" y2="972.7"></line><rect class="candle-body candle-up" height="23.3" rx="1.3" width="11.2" x="351.6" y="946.7"></rect><line class="candle-wick candle-up" x1="370.8" x2="370.8" y1="869.8" y2="962.0"></line><rect class="candle-body candle-up" height="51.5" rx="1.3" width="11.2" x="365.2" y="895.1"></rect><line class="candle-wick candle-up" x1="384.5" x2="384.5" y1="886.8" y2="923.9"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="11.2" x="378.9" y="894.3"></rect><line class="candle-wick candle-down" x1="398.2" x2="398.2" y1="886.3" y2="921.0"></line><rect class="candle-body candle-down" height="13.5" rx="1.3" width="11.2" x="392.6" y="894.3"></rect><line class="candle-wick candle-down" x1="411.8" x2="411.8" y1="900.4" y2="936.4"></line><rect class="candle-body candle-down" height="20.8" rx="1.3" width="11.2" x="406.2" y="907.8"></rect><line class="candle-wick candle-down" x1="425.5" x2="425.5" y1="917.2" y2="936.1"></line><rect class="candle-body candle-down" height="2.5" rx="1.3" width="11.2" x="419.9" y="928.6"></rect><line class="candle-wick candle-up" x1="439.2" x2="439.2" y1="916.3" y2="949.5"></line><rect class="candle-body candle-up" height="11.2" rx="1.3" width="11.2" x="433.6" y="920.0"></rect><line class="candle-wick candle-up" x1="452.8" x2="452.8" y1="895.4" y2="928.4"></line><rect class="candle-body candle-up" height="20.8" rx="1.3" width="11.2" x="447.2" y="899.2"></rect><line class="candle-wick candle-down" x1="466.5" x2="466.5" y1="894.1" y2="928.4"></line><rect class="candle-body candle-down" height="25.2" rx="1.3" width="11.2" x="460.9" y="899.2"></rect><line class="candle-wick candle-down" x1="480.2" x2="480.2" y1="915.0" y2="939.6"></line><rect class="candle-body candle-down" height="9.9" rx="1.3" width="11.2" x="474.6" y="924.4"></rect><line class="candle-wick candle-up" x1="493.8" x2="493.8" y1="907.7" y2="936.5"></line><rect class="candle-body candle-up" height="17.5" rx="1.3" width="11.2" x="488.2" y="916.8"></rect><line class="candle-wick candle-up" x1="507.5" x2="507.5" y1="907.4" y2="923.6"></line><rect class="candle-body candle-up" height="7.7" rx="1.3" width="11.2" x="501.9" y="909.1"></rect><line class="candle-wick candle-down" x1="521.2" x2="521.2" y1="907.4" y2="925.0"></line><rect class="candle-body candle-down" height="2.0" rx="1.3" width="11.2" x="515.6" y="909.1"></rect><line class="candle-wick candle-up" x1="534.8" x2="534.8" y1="892.4" y2="916.9"></line><rect class="candle-body candle-up" height="2.0" rx="1.3" width="11.2" x="529.2" y="909.4"></rect><line class="candle-wick candle-down" x1="548.5" x2="548.5" y1="903.0" y2="925.2"></line><rect class="candle-body candle-down" height="13.8" rx="1.3" width="11.2" x="542.9" y="909.4"></rect><line class="candle-wick candle-down" x1="562.2" x2="562.2" y1="917.2" y2="932.7"></line><rect class="candle-body candle-down" height="6.7" rx="1.3" width="11.2" x="556.6" y="923.2"></rect><line class="candle-wick candle-up" x1="575.8" x2="575.8" y1="915.1" y2="929.8"></line><rect class="candle-body candle-up" height="11.6" rx="1.3" width="11.2" x="570.2" y="918.2"></rect><line class="candle-wick candle-down" x1="589.5" x2="589.5" y1="903.8" y2="927.2"></line><rect class="candle-body candle-down" height="5.6" rx="1.3" width="11.2" x="583.9" y="918.2"></rect><line class="candle-wick candle-up" x1="603.2" x2="603.2" y1="896.2" y2="923.9"></line><rect class="candle-body candle-up" height="19.7" rx="1.3" width="11.2" x="597.6" y="904.2"></rect><line class="candle-wick candle-up" x1="616.8" x2="616.8" y1="887.1" y2="921.2"></line><rect class="candle-body candle-up" height="3.7" rx="1.3" width="11.2" x="611.2" y="900.5"></rect><line class="candle-wick candle-down" x1="630.5" x2="630.5" y1="892.7" y2="932.6"></line><rect class="candle-body candle-down" height="30.9" rx="1.3" width="11.2" x="624.9" y="900.5"></rect><line class="candle-wick candle-down" x1="644.2" x2="644.2" y1="922.8" y2="939.4"></line><rect class="candle-body candle-down" height="8.0" rx="1.3" width="11.2" x="638.6" y="931.3"></rect><line class="candle-wick candle-up" x1="657.8" x2="657.8" y1="908.5" y2="964.1"></line><rect class="candle-body candle-up" height="10.6" rx="1.3" width="11.2" x="652.2" y="928.8"></rect><line class="candle-wick candle-up" x1="671.5" x2="671.5" y1="914.3" y2="944.6"></line><rect class="candle-body candle-up" height="12.9" rx="1.3" width="11.2" x="665.9" y="915.9"></rect><line class="candle-wick candle-down" x1="685.2" x2="685.2" y1="908.5" y2="929.1"></line><rect class="candle-body candle-down" height="13.2" rx="1.3" width="11.2" x="679.6" y="915.9"></rect><rect class="setup-band-long" height="32.1" rx="10" style="opacity:0.3;" width="534.4" x="136.9" y="914.5"></rect><text class="setup-axis-value-long" x="704.0" y="919.5">63,267</text><text class="setup-axis-value-long" x="704.0" y="951.6">63,115</text><rect class="setup-band-short" height="19.5" rx="10" style="opacity:0.3;" width="534.4" x="136.9" y="912.6"></rect><text class="setup-axis-value-short" x="704.0" y="917.6">63,276</text><text class="setup-axis-value-short" x="704.0" y="937.1">63,183</text><line class="marker-line marker-long" x1="50.0" x2="136.9" y1="777.2" y2="777.2"></line><text class="marker-label marker-long" text-anchor="start" x="146.9" y="781.2">Long TP2 63,916</text><line class="marker-line marker-long" x1="50.0" x2="136.9" y1="847.5" y2="847.5"></line><text class="marker-label marker-long" text-anchor="start" x="146.9" y="851.5">Long TP1 63,583</text><line class="marker-line marker-long" x1="50.0" x2="136.9" y1="994.5" y2="994.5"></line><text class="marker-label marker-long" text-anchor="start" x="146.9" y="998.5">Long SL 62,889</text><line class="marker-line marker-short" x1="591.1" x2="678.0" y1="864.7" y2="864.7"></line><text class="marker-label marker-short" text-anchor="end" x="581.1" y="868.7">Short SL 63,502</text><line class="marker-line marker-short" x1="591.1" x2="678.0" y1="997.3" y2="997.3"></line><text class="marker-label marker-short" text-anchor="end" x="581.1" y="1001.3">Short TP1 62,875</text><line class="marker-line marker-short" x1="591.1" x2="678.0" y1="1060.7" y2="1060.7"></line><text class="marker-label marker-short" text-anchor="end" x="581.1" y="1064.7">Short TP2 62,576</text><line class="current-price-line" x1="30" x2="698" y1="929.1" y2="929.1"></line><text class="current-price-label" text-anchor="end" x="22.0" y="933.1">現在値 63,198</text><text class="price-axis" text-anchor="end" x="846" y="1121.0">62,310</text><text class="price-axis" text-anchor="end" x="846" y="1029.8">62,741</text><text class="price-axis" text-anchor="end" x="846" y="938.5">63,172</text><text class="price-axis" text-anchor="end" x="846" y="847.2">63,603</text><text class="price-axis" text-anchor="end" x="846" y="756.0">64,035</text><text class="time-axis-label" text-anchor="middle" x="42.8" y="1141.0">21:00</text><text class="time-axis-label" text-anchor="middle" x="370.8" y="1141.0">03:00</text><text class="time-axis-label" text-anchor="middle" x="685.2" y="1141.0">08:45</text><line class="time-axis-line" x1="30" x2="698" y1="1117.0" y2="1117.0"></line><text class="zone-caption zone-long-main" text-anchor="start" x="91.4" y="1027.0">LONG 本命ゾーン</text><text class="zone-caption zone-short-main" text-anchor="end" x="636.5" y="877.1">SHORT 本命ゾーン</text><text class="zone-caption zone-long-shallow" text-anchor="start" x="146.9" y="934.5">LONG 浅い入り</text><text class="zone-caption zone-short-shallow" text-anchor="end" x="661.3" y="926.6">SHORT 浅い入り</text></g></svg>
+            <div class="chart-note">
+              <span>基本：現在値・浅い入り・本命ゾーン</span>
+              <span>全レイヤー：無効化・回収・継続・SL・TPを追加</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="plans">
+        <section class="panel side-card long">
+          <div class="side-head">
+            <div class="side-title"><span class="side-pill">LONG</span><span class="side-state">優勢だが待機</span></div>
+            <div class="side-score"><strong>69</strong><small>SCORE / 100</small></div>
+          </div>
+          <div class="levels">
+            <div class="level-group-label">ENTRY LAYERS</div>
+            
+      <div class="level-row shallow long-tone">
+        <div class="level-name">浅い入り<small>最初の反応帯。ここだけで決めない</small></div>
+        <div class="level-value">63,115 — 63,267</div>
+      </div>
+    
+            
+      <div class="level-row main long-tone">
+        <div class="level-name">本命ゾーン<small>深い押し目で価値を守る帯</small></div>
+        <div class="level-value">62,724 — 62,791</div>
+      </div>
+    
+            <div class="level-group-label">VALIDATION</div>
+            
+      <div class="level-row invalid">
+        <div class="level-name">無効化<small>割れて回収できなければ目線を弱める</small></div>
+        <div class="level-value">62,877 — 62,901</div>
+      </div>
+    
+            
+      <div class="level-row trigger">
+        <div class="level-name">回収条件<small>深く刺した後に戻してほしい水準</small></div>
+        <div class="level-value">62,953</div>
+      </div>
+    
+            
+      <div class="level-row trigger">
+        <div class="level-name">継続条件<small>上方向を維持する目安</small></div>
+        <div class="level-value">63,191</div>
+      </div>
+    
+            <div class="level-group-label">RISK / TARGET</div>
+            
+      <div class="level-row target">
+        <div class="level-name">SL</div>
+        <div class="level-value">62,889</div>
+      </div>
+    
+            
+      <div class="level-row target">
+        <div class="level-name">TP1</div>
+        <div class="level-value">63,583</div>
+      </div>
+    
+            
+      <div class="level-row target">
+        <div class="level-name">TP2</div>
+        <div class="level-value">63,916</div>
+      </div>
+    
+          </div>
+          <div class="side-guidance">浅い入りは高リスク。主要レジスタンス直下では追わず、本命ゾーンまたは15分足の支持化を優先します。</div>
+        </section>
+
+        <section class="panel side-card short">
+          <div class="side-head">
+            <div class="side-title"><span class="side-pill">SHORT</span><span class="side-state">追わず監視</span></div>
+            <div class="side-score"><strong>2</strong><small>SCORE / 100</small></div>
+          </div>
+          <div class="levels">
+            <div class="level-group-label">ENTRY LAYERS</div>
+            
+      <div class="level-row shallow short-tone">
+        <div class="level-name">浅い入り<small>近い戻り帯。勢いだけで入らない</small></div>
+        <div class="level-value">63,183 — 63,276</div>
+      </div>
+    
+            
+      <div class="level-row main short-tone">
+        <div class="level-name">本命ゾーン<small>戻り売りの価値を守る帯</small></div>
+        <div class="level-value">63,332 — 63,510</div>
+      </div>
+    
+            <div class="level-group-label">VALIDATION</div>
+            
+      <div class="level-row invalid">
+        <div class="level-name">無効化<small>上抜け維持でショート目線を弱める</small></div>
+        <div class="level-value">63,490 — 63,514</div>
+      </div>
+    
+            
+      <div class="level-row trigger">
+        <div class="level-name">回収条件<small>戻り後に下へ戻してほしい水準</small></div>
+        <div class="level-value">63,304</div>
+      </div>
+    
+            
+      <div class="level-row trigger">
+        <div class="level-name">継続条件<small>下方向を維持する目安</small></div>
+        <div class="level-value">63,230</div>
+      </div>
+    
+            <div class="level-group-label">RISK / TARGET</div>
+            
+      <div class="level-row target">
+        <div class="level-name">SL</div>
+        <div class="level-value">63,502</div>
+      </div>
+    
+            
+      <div class="level-row target">
+        <div class="level-name">TP1</div>
+        <div class="level-value">62,875</div>
+      </div>
+    
+            
+      <div class="level-row target">
+        <div class="level-name">TP2</div>
+        <div class="level-value">62,576</div>
+      </div>
+    
+          </div>
+          <div class="side-guidance">主要サポートと下側流動性が近いため、ショートは追いかけない。上抜け失敗と1時間足の弱化が揃う場合のみ再評価します。</div>
+        </section>
+      </aside>
+    </main>
+
+    <section class="lower-grid">
+      <div class="panel section-card">
+        <h2 class="section-title">判断が変わる条件</h2>
+        <p class="section-lead">説明ではなく、次に確認するイベントだけを残します。</p>
+        <div class="condition-grid">
+          <article class="condition">
+            <div class="condition-label"><span>LONG</span><b>起動</b></div>
+            <strong>15分足が上方向へ転換</strong>
+            <p>63,191付近を維持し、上抜け後すぐ帯へ戻らない。</p>
+          </article>
+          <article class="condition">
+            <div class="condition-label"><span>LONG</span><b>弱化</b></div>
+            <strong>無効化帯を割り、回収できない</strong>
+            <p>62,877–62,901を明確に下回る場合は押し目仮説を弱める。</p>
+          </article>
+          <article class="condition">
+            <div class="condition-label"><span>SHORT</span><b>再評価</b></div>
+            <strong>15分足と1時間足が同時に弱化</strong>
+            <p>63,332–63,510の本命ゾーンで上値拒否を確認する。</p>
+          </article>
+          <article class="condition">
+            <div class="condition-label"><span>COMMON</span><b>見送り</b></div>
+            <strong>帯の中央で往復する</strong>
+            <p>方向が出ても、SLまでの余白とRRが不足するなら入らない。</p>
+          </article>
+        </div>
+      </div>
+
+      <div>
+        <section class="big-chance">
+          <div class="big-score"><strong>52</strong><span>C / ARMED</span></div>
+          <div>
+            <h3>Big Chance：ショート失敗 → ロング候補</h3>
+            <p>レジスタンスがサポートへ反転し、ショート仮説が崩れた場合の補助監視。通常のLong判断より優先しません。</p>
+            <div class="timeline"><span>4H WAIT</span><i>→</i><span>1H LONG</span><i>→</i><span>15M WAIT</span></div>
+          </div>
+        </section>
+        <div class="context-bar">
+          <div class="context-cell"><span>FUNDING</span><strong>ほぼ中立 +0.0090%</strong></div>
+          <div class="context-cell"><span>ATR RATIO</span><strong>0.75</strong></div>
+          <div class="context-cell"><span>VOLUME RATIO</span><strong>0.62</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel details-panel">
+      <details>
+        <summary>判断根拠と5つのスコア</summary>
+        <div class="details-body">
+          <div class="score-mini-grid">
+            <div class="score-mini"><span>方向</span><strong>54</strong></div>
+            <div class="score-mini"><span>実行</span><strong>10</strong></div>
+            <div class="score-mini"><span>待機</span><strong>88</strong></div>
+            <div class="score-mini"><span>Long</span><strong>69</strong></div>
+            <div class="score-mini"><span>Short</span><strong>2</strong></div>
+          </div>
+          <div class="reason-list">
+            <span class="reason-chip">重要帯付近で短期ノイズ</span>
+            <span class="reason-chip">近い売り板</span>
+            <span class="reason-chip">位置改善待ち</span>
+            <span class="reason-chip">下側流動性が近い</span>
+            <span class="reason-chip">流動性回収が未完了</span>
+            <span class="reason-chip">レジスタンス上抜け後の押し目確認</span>
+            <span class="reason-chip">ロング追随候補だが主要レジスタンス接近</span>
+          </div>
+        </div>
+      </details>
+      <details>
+        <summary>高度な検出レイヤー</summary>
+        <div class="details-body">
+          <div class="diagnostic-grid">
+            <div class="diagnostic"><span>BREAKOUT / INVERSION</span><strong>上抜け追随候補。15分足の維持を確認</strong></div>
+            <div class="diagnostic"><span>VALUE DEFENSE</span><strong>浅い入りは高リスク。本命ゾーンを分離</strong></div>
+            <div class="diagnostic"><span>FAILED THESIS</span><strong>ショート仮説崩壊をロング候補として監視</strong></div>
+            <div class="diagnostic"><span>LIQUIDITY</span><strong>下側流動性が近く、先振りリスクあり</strong></div>
+            <div class="diagnostic"><span>ORDER BOOK</span><strong>近い売り板による短期ノイズ</strong></div>
+            <div class="diagnostic"><span>MOMENTUM</span><strong>上抜け後の支持化と勢い確認待ち</strong></div>
+          </div>
+        </div>
+      </details>
+      <details>
+        <summary>保有中の処理と安全境界</summary>
+        <div class="details-body">
+          <p>ショート保有中なら、主要サポート反応では利確または建値撤退を優先。直近戻り高値の上抜けで下落継続シナリオを弱めます。</p>
+          <p>report-only / not FORMAL_GO / no automatic order / human decides manually</p>
+        </div>
+      </details>
+      <details>
+        <summary>内部ログ・Runtime・検証情報</summary>
+        <div class="details-body">
+          <p>本番生成時は Runtime startup status、Safe Config Audit、Evidence quality、OHLCV coverage、Raw mail、Human review queue をこの領域へ格納します。通常のトレード判断では開かない設計です。</p>
+        </div>
+      </details>
+    </section>
+
+    <footer>DESIGN MOCK ONLY — 元データ・スコア・売買ロジックは変更していません。</footer>
+  </div>
+
+  <script>
+    (() => {
+      const svg = document.getElementById('market-chart');
+      const stage = document.getElementById('chart-stage');
+      const views = {
+        '15m': '0 726 860 429',
+        '1h': '0 363 860 309',
+        '4h': '0 0 860 309'
+      };
+      document.querySelectorAll('[data-chart-view]').forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('[data-chart-view]').forEach(b => b.classList.remove('active'));
+          button.classList.add('active');
+          svg.setAttribute('viewBox', views[button.dataset.chartView]);
+        });
+      });
+      document.querySelectorAll('[data-layer-mode]').forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('[data-layer-mode]').forEach(b => b.classList.remove('active'));
+          button.classList.add('active');
+          stage.classList.toggle('basic', button.dataset.layerMode === 'basic');
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

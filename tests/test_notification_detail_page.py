@@ -481,30 +481,18 @@ class NotificationDetailPageTests(unittest.TestCase):
         }
 
         html = build_notification_detail_html(payload)
-        self.assertIn('body class="v2-report"', html)
-        self.assertIn('v2-shell', html)
-        self.assertIn('v2-hero', html)
-        self.assertIn('v2-section', html)
-        self.assertIn('v2-details', html)
-        self.assertIn('結論', html)
-        self.assertIn('いまの見方', html)
-        self.assertIn('現在値', html)
-        self.assertIn('方向メーター', html)
-        self.assertIn('チャートを見る場所', html)
-        self.assertIn('今やること', html)
-        self.assertIn('なぜそう見るのか', html)
-        self.assertIn('読み方メモ', html)
-        self.assertIn('浅い反応帯', html)
-        self.assertIn('本命防衛帯', html)
-        self.assertIn('結論を先に読めるBTCFXレポート', html)
-        self.assertIn('ロング / ショート比較', html)
+        self.assertIn('body class="v2-report operator-dashboard"', html)
+        for class_name in ('shell', 'hero', 'workspace', 'side-card long', 'side-card short', 'chart-panel', 'details-panel', 'decision-word', 'metric', 'condition-grid'):
+            self.assertIn(class_name, html)
+        self.assertIn('浅い入り', html)
+        self.assertIn('本命ゾーン', html)
         self.assertIn('4時間足: 大局方向', html)
         self.assertIn('1時間足: 帯の妥当性', html)
         self.assertIn('15分足: 入る価格 / SL / TP', html)
-        self.assertIn('詳細ログ・補助情報は折りたたむ', html)
-        self.assertIn('Value Defense Entry Layer', html)
+        self.assertIn('判断根拠と5つのスコア', html)
+        self.assertIn('VALUE DEFENSE', html)
         self.assertIn('price-map', html)
-        self.assertIn('diagnostic-details', html)
+        self.assertIn('diagnostic-grid', html)
         self.assertIn('report-only / not FORMAL_GO / no automatic order / human decides manually', html)
         self.assertNotIn('report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually', html)
         self.assertNotIn('Ver04-v1', html)
@@ -515,17 +503,15 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn('private/order', html)
 
         attention_html = build_notification_detail_html({**payload, 'notification_kind': 'attention'})
-        self.assertIn('body class="v2-report"', attention_html)
-        self.assertIn('v2-shell', attention_html)
-        self.assertIn('v2-hero', attention_html)
-        self.assertIn('v2-section', attention_html)
-        self.assertIn('詳細ログ・補助情報は折りたたむ', attention_html)
-        self.assertIn('ロング / ショート比較', attention_html)
+        self.assertIn('body class="v2-report operator-dashboard"', attention_html)
+        self.assertIn('class="shell"', attention_html)
+        self.assertIn('class="hero"', attention_html)
+        self.assertIn('class="workspace"', attention_html)
         self.assertIn('4時間足: 大局方向', attention_html)
         self.assertIn('1時間足: 帯の妥当性', attention_html)
         self.assertIn('15分足: 入る価格 / SL / TP', attention_html)
         self.assertIn('price-map', attention_html)
-        self.assertIn('<details class="v2-details diagnostic-details">', attention_html)
+        self.assertIn('<summary>高度な検出レイヤー</summary>', attention_html)
         self.assertIn('report-only / not FORMAL_GO / no automatic order / human decides manually', attention_html)
         self.assertNotIn('report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually', attention_html)
         self.assertNotIn('Ver04-v1', attention_html)
@@ -534,61 +520,49 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn('private/order', attention_html)
     def test_build_notification_detail_html_renders_breakout_inversion_section(self) -> None:
         html = build_notification_detail_html(_sample_breakout_inversion_payload())
-        match = re.search(
-            r'<details class="v2-details diagnostic-details">\s*<summary>上抜け・下抜けの見落とし確認</summary>(.*?)</details>',
-            html,
-            re.S,
-        )
+        match = re.search(r'<summary>高度な検出レイヤー</summary>(.*?)</details>', html, re.S)
         self.assertIsNotNone(match)
         section_html = match.group(1) if match else ""
 
-        self.assertIn("上抜け・下抜けの見落とし確認", html)
-        self.assertIn("上抜け追随候補", html)
+        self.assertIn("BREAKOUT / INVERSION", html)
         self.assertIn("ショート根拠は弱まりつつあります", html)
         self.assertIn("15分足で上に維持できるか確認", html)
         self.assertIn("すぐ下に戻るならダマシ注意", html)
-        self.assertIn("下抜け追随候補", html)
         self.assertIn("ロング根拠は弱まりつつあります", html)
         self.assertIn("15分足で下に維持できるか確認", html)
         self.assertIn("human decides manually", html)
-        self.assertIn("report-only / human decides manually", section_html)
-        self.assertNotIn("FORMAL_GO", section_html)
+        self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
         self.assertNotIn("automatic order allowed", section_html)
         self.assertNotIn("send_email", section_html)
         self.assertNotIn("private/account/order", section_html)
 
     def test_build_notification_detail_html_renders_intraperiod_early_warning_section(self) -> None:
         html = build_notification_detail_html(_sample_momentum_payload())
-        match = re.search(r'<details class="v2-details diagnostic-details">\s*<summary>15分足 早期注意</summary>(.*?)</details>', html, re.S)
+        match = re.search(r'<summary>高度な検出レイヤー</summary>(.*?)</details>', html, re.S)
         self.assertIsNotNone(match)
         section_html = match.group(1) if match else ""
 
-        self.assertIn("15分足 早期注意", html)
-        self.assertIn("上抜け初動の可能性", html)
-        self.assertIn("ショート方向は損失リスク", html)
-        self.assertIn("下抜け初動の可能性", html)
-        self.assertIn("ロング方向は損失リスク", html)
+        self.assertIn("BREAKOUT / INVERSION", html)
+        self.assertIn("ショート方向は損失リスクが高い", html)
+        self.assertIn("ロング方向は損失リスクが高い", html)
         self.assertIn("MACD", html)
-        self.assertIn("report-only", section_html)
-        self.assertIn("human decides manually", section_html)
+        self.assertIn("report-only", html)
+        self.assertIn("human decides manually", html)
         self.assertNotIn("automatic order allowed", section_html)
         self.assertNotIn("send_email", section_html)
         self.assertNotIn("private/account/order", section_html)
 
     def test_build_notification_detail_html_renders_momentum_confirmation_section(self) -> None:
         html = build_notification_detail_html(_sample_momentum_payload())
-        match = re.search(r'<details class="v2-details diagnostic-details">\s*<summary>勢い確認</summary>(.*?)</details>', html, re.S)
+        match = re.search(r'<summary>高度な検出レイヤー</summary>(.*?)</details>', html, re.S)
         self.assertIsNotNone(match)
         section_html = match.group(1) if match else ""
 
-        self.assertIn("勢い確認", html)
-        self.assertIn("上抜け後の勢い確認", html)
+        self.assertIn("MOMENTUM", html)
         self.assertIn("ショート方向は危険", html)
-        self.assertIn("下抜け後の勢い確認", html)
         self.assertIn("ロング方向は危険", html)
-        self.assertIn("report-only", section_html)
-        self.assertIn("human decides manually", section_html)
-        self.assertNotIn("FORMAL_GO", section_html)
+        self.assertIn("report-only", html)
+        self.assertIn("human decides manually", html)
         self.assertNotIn("automatic order allowed", section_html)
         self.assertNotIn("send_email", section_html)
         self.assertNotIn("private/account/order", section_html)
@@ -679,16 +653,16 @@ class NotificationDetailPageTests(unittest.TestCase):
 
         html = build_notification_detail_html(payload)
 
-        self.assertIn('body class="v2-report"', html)
-        self.assertIn('v2-shell', html)
-        self.assertIn('v2-hero', html)
-        self.assertIn('v2-section', html)
-        self.assertIn('v2-details', html)
+        self.assertIn('body class="v2-report operator-dashboard"', html)
+        self.assertIn('class="shell"', html)
+        self.assertIn('class="hero"', html)
+        self.assertIn('class="workspace"', html)
+        self.assertIn('class="panel details-panel"', html)
         self.assertIn('Operator Triage Summary', html)
         self.assertIn('Integrated Evidence Overview', html)
         self.assertIn('summary_status', html)
         self.assertIn('ready_for_human_review', html)
-        self.assertIn('Major turning point diagnostic rows', html)
+        self.assertIn('&quot;representative_rows&quot;', html)
         self.assertIn('Evidence quality summary', html)
         self.assertIn('OHLCV source coverage summary', html)
         self.assertIn('report-only / not FORMAL_GO / no automatic order / human decides manually', html)
@@ -725,7 +699,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("safe_config_schema_audit.v1", html)
         self.assertNotIn("Integrated Evidence Overview", html)
         self.assertNotIn("operator_hint_status", html)
-        self.assertIn("内部確認・検証情報", html)
+        self.assertIn("内部ログ・Runtime・検証情報", html)
         self.assertNotIn("Ver03-v4 手動確認サポート", html)
         self.assertNotIn("OPENAI_API_KEY", html)
         self.assertNotIn("SMTP_PASSWORD", html)
@@ -738,31 +712,13 @@ class NotificationDetailPageTests(unittest.TestCase):
         html = build_notification_detail_html(payload)
 
         self.assertIn("BTCFX Manual Trading Report", html)
-        self.assertIn('body class="v2-report"', html)
-        self.assertIn("v2-shell", html)
-        self.assertIn("v2-hero", html)
-        self.assertIn("v2-sidebar", html)
-        self.assertIn("v2-section", html)
-        self.assertIn("v2-score-card", html)
-        self.assertIn("v2-score-track", html)
-        self.assertIn("v2-score-fill", html)
-        self.assertIn("v2-details", html)
-        self.assertIn("結論を先に読めるBTCFXレポート", html)
-        self.assertIn("ロング / ショートの価格帯を先に確認", html)
-        self.assertIn("結論", html)
-        self.assertIn("いまの見方", html)
-        self.assertIn("現在値", html)
-        self.assertIn("方向メーター", html)
-        self.assertIn("今やること", html)
-        self.assertIn("読み方メモ", html)
-        self.assertIn("浅い反応帯", html)
-        self.assertIn("本命防衛帯", html)
-        self.assertIn("方向の強さ", html)
-        self.assertIn("実行しやすさ", html)
-        self.assertIn("待機圧力", html)
-        self.assertIn("待機理由・注意点", html)
-        self.assertIn("詳細ログ・補助情報は折りたたむ", html)
-        self.assertIn("内部確認・検証情報", html)
+        self.assertIn('body class="v2-report operator-dashboard"', html)
+        for class_name in ("shell", "hero", "workspace", "side-card long", "side-card short", "chart-panel", "details-panel", "decision-word", "metric", "condition-grid"):
+            self.assertIn(class_name, html)
+        self.assertIn("浅い入り", html)
+        self.assertIn("本命ゾーン", html)
+        self.assertIn("判断根拠と5つのスコア", html)
+        self.assertIn("内部ログ・Runtime・検証情報", html)
         self.assertNotIn("Ver02.6-v2", html)
         self.assertNotIn("Ver04-v1", html)
         self.assertNotIn("Ver04-v2", html)
@@ -774,37 +730,159 @@ class NotificationDetailPageTests(unittest.TestCase):
     def test_build_notification_detail_html_uses_v2_readability_layout(self) -> None:
         html = build_notification_detail_html(_sample_detail_payload())
 
-        self.assertIn('body class="v2-report"', html)
-        self.assertIn("v2-shell", html)
-        self.assertIn("v2-hero", html)
-        self.assertIn("v2-sidebar", html)
-        self.assertIn("v2-section", html)
-        self.assertIn("v2-score-card", html)
-        self.assertIn("v2-score-track", html)
-        self.assertIn("v2-score-fill", html)
-        self.assertIn("v2-details", html)
-        self.assertIn("結論を先に読めるBTCFXレポート", html)
-        self.assertIn("結論", html)
-        self.assertIn("いまの見方", html)
-        self.assertIn("現在値", html)
-        self.assertIn("方向メーター", html)
-        self.assertIn("チャートを見る場所", html)
-        self.assertIn("今やること", html)
-        self.assertIn("読み方メモ", html)
-        self.assertIn("ロング / ショートの価格帯を先に確認", html)
-        self.assertIn("chart_review_only", html)
-        self.assertIn("not_directly_evaluated", html)
-        self.assertIn("浅い反応帯", html)
-        self.assertIn("本命防衛帯", html)
-        self.assertIn("方向の強さ", html)
-        self.assertIn("実行しやすさ", html)
-        self.assertIn("待機圧力", html)
-        self.assertIn("待機理由・注意点", html)
-        self.assertIn("詳細ログ・補助情報は折りたたむ", html)
+        self.assertIn('body class="v2-report operator-dashboard"', html)
+        for class_name in ("shell", "hero", "workspace", "side-card long", "side-card short", "chart-panel", "details-panel", "decision-word", "metric", "condition-grid"):
+            self.assertIn(class_name, html)
+        self.assertIn("浅い入り", html)
+        self.assertIn("本命ゾーン", html)
+        self.assertIn("判断根拠と5つのスコア", html)
+        self.assertIn("待機理由", html)
         self.assertNotIn("Phase4 レビューキュー", html)
         self.assertNotIn("report-only_not_FORMAL_GO_no_automatic_order_human_decides_manually", html)
         self.assertNotIn('class="sparkline"', html)
         self.assertNotIn("not FORMAL_GO order", html)
+
+    def test_operator_dashboard_v2_structure_prices_and_value_defense(self) -> None:
+        payload = _sample_detail_payload()
+        payload["current_price"] = 63197.80
+        payload["long_setup"]["value_defense_entry_layer"]["shallow_retest_zone"] = {"low": 63114.83, "high": 63266.9}
+        html = build_notification_detail_html(payload)
+
+        self.assertIn('body class="v2-report operator-dashboard"', html)
+        self.assertIn('class="hero"', html)
+        self.assertIn('id="active-alerts"', html)
+        self.assertIn('aria-label="LONG trade plan"', html)
+        self.assertIn('aria-label="SHORT trade plan"', html)
+        self.assertIn('data-chart-view="15m"', html)
+        self.assertIn('data-chart-view="1h"', html)
+        self.assertIn('data-chart-view="4h"', html)
+        self.assertIn('data-layer-mode="basic"', html)
+        self.assertIn('data-layer-mode="full"', html)
+        self.assertIn('class="chart-stage basic"', html)
+        self.assertIn('viewBox="0 726 860 429"', html)
+        self.assertIn('class="price-map chart-svg"', html)
+        for selector in (".price-map-bg", ".candle-up", ".candle-down", ".value-defense-band-long", ".value-defense-band-short", ".current-price-line", ".zone-caption"):
+            self.assertIn(selector, html)
+        self.assertIn("63,198", html)
+        self.assertEqual(payload["current_price"], 63197.80)
+        for label in ("浅い入り", "本命ゾーン", "無効化", "回収条件", "継続条件"):
+            self.assertGreaterEqual(html.count(label), 2)
+        for caption in ("LONG 浅い入り", "LONG 本命ゾーン", "SHORT 浅い入り", "SHORT 本命ゾーン"):
+            self.assertIn(caption, html)
+        self.assertIn("判断が変わる条件", html)
+        self.assertLess(html.find('id="big-chance"'), html.find('details-panel')) if 'id="big-chance"' in html else None
+        self.assertIn("REPORT ONLY / HUMAN DECISION", html)
+        self.assertNotIn("automatic order placed", html)
+        advanced = re.search(r"<summary>高度な検出レイヤー</summary>(.*?)</details>", html, re.S)
+        self.assertIsNotNone(advanced)
+        self.assertNotIn("<details", advanced.group(1) if advanced else "")
+
+    def test_operator_dashboard_v2_action_summary_keeps_both_sides(self) -> None:
+        payload = _sample_detail_payload()
+        payload["notification_context"] = {
+            "active_market_entry_now": {"long": "allowed", "short": "blocked"},
+        }
+        with patch(
+            "src.notification.detail_page._notification_context_for_result",
+            return_value={
+                "active_market_entry_now": {"long": "allowed", "short": "blocked"},
+                "active_limit_retest_entry": {},
+                "active_breakout_follow_entry": {},
+                "active_countertrend_scalp_entry": {},
+                "execution_label": "blocked",
+            },
+        ):
+            html = build_notification_detail_html(payload)
+        self.assertIn("Long: 監視可 / Short: 見送り", html)
+
+    def test_operator_dashboard_v2_value_defense_expands_chart_geometry(self) -> None:
+        payload = _sample_detail_payload()
+        layer = payload["long_setup"]["value_defense_entry_layer"]
+        layer["value_defense_zone"] = {"low": 70000.0, "high": 70100.0}
+        html = build_notification_detail_html(payload)
+        panel = html.split('y="726"', 1)[1]
+        match = re.search(r'<rect x="83\.4" y="([0-9.]+)"[^>]+class="value-defense-band-long"', panel)
+        self.assertIsNotNone(match)
+        self.assertGreater(float(match.group(1)), 752.0)
+        self.assertLess(float(match.group(1)), 1117.0)
+
+    def test_operator_dashboard_v2_big_chance_and_context_share_lower_grid(self) -> None:
+        payload = _sample_detail_payload()
+        payload["big_chance_candidate"] = {
+            "present": True,
+            "score": 52,
+            "grade": "C",
+            "status": "armed",
+            "headline": "ショート失敗からロング候補",
+            "operator_summary": "補助監視",
+            "macro_context": {"signals_4h": "wait", "signals_1h": "long", "signals_15m": "wait"},
+        }
+        html = build_notification_detail_html(payload)
+        lower = re.search(r'<section class="lower-grid">(.*?)</section>\s*<section class="panel details-panel">', html, re.S)
+        self.assertIsNotNone(lower)
+        lower_html = lower.group(1) if lower else ""
+        self.assertLess(lower_html.find("判断が変わる条件"), lower_html.find('id="big-chance"'))
+        self.assertLess(lower_html.find('id="big-chance"'), lower_html.find('class="context-bar"'))
+        self.assertIn("通常のLong / Short判断を上書きしません", lower_html)
+
+    def test_operator_dashboard_v2_side_cards_hide_raw_execution_flags(self) -> None:
+        html = build_notification_detail_html(_sample_breakout_inversion_payload())
+        workspace = re.search(r'<main class="workspace">(.*?)</main>', html, re.S)
+        self.assertIsNotNone(workspace)
+        workspace_html = workspace.group(1) if workspace else ""
+        for raw_flag in (
+            "upside_breakout_follow_watch",
+            "downside_breakdown_follow_watch",
+            "short_invalidated_by_up_break",
+            "long_invalidated_by_down_break",
+        ):
+            self.assertNotIn(raw_flag, workspace_html)
+        self.assertIn("上抜け後の支持化を警戒", workspace_html)
+        self.assertIn("下抜け後の抵抗化を警戒", workspace_html)
+
+    def test_operator_dashboard_v2_big_chance_warning_appears_once(self) -> None:
+        for status, expected in (("armed", "通常のLong / Short判断を上書きしません"), ("invalidated", "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません")):
+            payload = _sample_detail_payload()
+            payload["big_chance_candidate"] = {
+                "present": True,
+                "score": 52,
+                "grade": "C",
+                "status": status,
+                "headline": "候補",
+                "macro_context": {},
+            }
+            html = build_notification_detail_html(payload)
+            section = re.search(r'<section class="big-chance.*?</section>', html, re.S)
+            self.assertIsNotNone(section)
+            section_html = section.group(0) if section else ""
+            self.assertEqual(section_html.count("通常のLong / Short判断を上書きしません"), 1)
+            self.assertIn(expected, section_html)
+
+    def test_operator_dashboard_v2_major_rows_are_plain_text(self) -> None:
+        payload = {
+            **_sample_detail_payload(),
+            "major_turning_point_diagnostic": _major_turning_point_diagnostic_payload(),
+        }
+        html = build_notification_detail_html(payload)
+        self.assertIn("代表行 1:", html)
+        self.assertIn("candidate_id: cand-missed-turn-1", html)
+        self.assertNotIn("&lt;div class=&quot;checklist-item&quot;", html)
+
+    def test_operator_dashboard_v2_metric_css_uses_only_dynamic_widths(self) -> None:
+        html = build_notification_detail_html(_sample_detail_payload())
+        self.assertNotIn(".metric-fill.direction { width:54%", html)
+        self.assertNotIn(".metric-fill.execution { width:10%", html)
+        self.assertNotIn(".metric-fill.wait { width:88%", html)
+        self.assertIn('style="width:100%"', html)
+        self.assertIn('style="width:7%"', html)
+
+    def test_operator_dashboard_v2_variants_degrade_safely(self) -> None:
+        for kind in ("main", "attention", "followup"):
+            html = build_notification_detail_html({**_sample_detail_payload(), "notification_kind": kind, "long_setup": {}, "short_setup": {}})
+            self.assertIn('operator-dashboard', html)
+            self.assertIn("LONG", html)
+            self.assertIn("SHORT", html)
+            self.assertIn("—", html)
 
     def test_build_notification_detail_html_shows_runtime_startup_status_section(self) -> None:
         payload = _sample_detail_payload()
@@ -1101,7 +1179,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("stale_before_latest_candidate", html)
         self.assertIn("candidate_max_after_ohlcv_end_hours: 479.83358999527775", html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / human decides manually", html)
-        self.assertNotIn("<script", html.lower())
+        self.assertIn("<script", html.lower())
         self.assertNotIn("fetch(", html.lower())
 
     def test_build_notification_detail_html_renders_post_eval_status_from_direct_payload(self) -> None:
@@ -1134,7 +1212,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         )
         self.assertIn("<strong>human_approval_required:</strong> true", html)
         self.assertIn("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", html)
-        self.assertNotIn("<script", html.lower())
+        self.assertEqual(html.lower().count("<script"), 1)
         self.assertNotIn("fetch(", html.lower())
         self.assertNotIn("send_email", html)
         self.assertNotIn("Gmail", html)
@@ -1172,7 +1250,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("Post-Eval Recommendation Status", absent_html)
         self.assertIn("post-eval recommendation payload is unavailable or malformed.", malformed_html)
         self.assertIn("report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually", malformed_html)
-        self.assertNotIn("<script", malformed_html.lower())
+        self.assertEqual(malformed_html.lower().count("<script"), 1)
 
 
 if __name__ == "__main__":
