@@ -1,128 +1,103 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT`
-- mode: `BOUNDED CODEX IMPLEMENTATION`
-- task_type: `DOCS-ONLY / VALIDATE / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-OFFLINE-CLASSIFIER-FIX-2`
-- previous_status: `P6 SPEC CHECKPOINT COMMITTED / PUSH NONE`
+- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT`
+- mode: `REVIEW_ONLY`
+- task_type: `PYTHON SOURCE / CLI / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-SPEC-CHECKPOINT`
+- previous_status: `P6 IMPLEMENTATION COMMITTED / PUSH NONE`
 
 ## Goal
 
-P6 active specに従うhistorical replay実装を開始する。
+Review the completed offline P6 historical replay implementation without changing production behavior.
+
+P6 remains active. P7 has not started.
 
 ## Source of truth
-
-`chatgpt/specs/active/20260710_manual_operator_historical_replay.md`
-
-実装契約はactive specを参照し、ここへ重複記載しない。
-
-## Known state
-
-- P5 classifier source/test契約はChatGPTがAFROG_MCPでreview済み。
-- reported targeted validation: 123 tests pass / task diff check pass。
-- P5 specはarchive済み。
-- P6 active specは作成済み。
-- P6 source implementationはまだ開始しない。
-
-Archived P5 spec:
-
-```text
-chatgpt/specs/archive/20260710_manual_operator_classifier_offline.md
-```
-
-Active P6 spec:
 
 ```text
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 ```
+
+Implement sections 3 through 16 and the test contract in sections 20 through 22.
 
 ## Allowed read
 
 ```text
 AGENTS.md
 docs/operations/ai-orchestration/START_HERE.md
-docs/operations/ai-orchestration/CURRENT_STATE.md
 docs/operations/ai-orchestration/NEXT_ACTION.md
-chatgpt/specs/archive/20260710_manual_operator_classifier_offline.md
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
+src/feedback/manual_operator_classifier.py
+src/feedback/manual_scenario_normalizer.py
+src/feedback/manual_decision_events.py
+src/feedback/manual_scenario_coverage.py
+src/feedback/manual_trade_episode_builder.py
+src/feedback/manual_trade_signal_linker.py
+src/feedback/manual_trade_ground_truth.py
+tools/log_feedback.py
+matching targeted tests
 ```
 
 ## Allowed edit
 
 ```text
-docs/operations/ai-orchestration/CURRENT_STATE.md
+src/feedback/manual_operator_historical_replay.py
+tools/log_feedback.py
+tests/test_manual_operator_historical_replay.py
 docs/operations/ai-orchestration/NEXT_ACTION.md
-chatgpt/specs/archive/20260710_manual_operator_classifier_offline.md
-chatgpt/specs/active/20260710_manual_operator_historical_replay.md
+src/feedback/__init__.py only if required by package convention
 ```
-
-Only correct an objective docs inconsistency. Do not redesign P6.
 
 ## Do
 
-1. Confirm branch `Ver04-v2` and inspect only allowed files.
-2. Confirm exactly one active phase spec exists and it is P6.
-3. Add a compact P5 completion / P6 activation section to `CURRENT_STATE.md` if not already present.
-4. After validation, transition `NEXT_ACTION.md` to:
-
-```text
-current_work_id: BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT
-mode: BOUNDED CODEX IMPLEMENTATION
-previous_status: P6 SPEC CHECKPOINT COMMITTED / PUSH NONE
-```
-
-Reference the active P6 spec as the implementation source of truth. Do not duplicate its general contract.
+- implement event-time, scenario-deduplicated policy selection exactly as specified
+- join outcome, human-decision, and actual-trade evidence only after policy selection is fixed
+- keep C observation-only and STOP as a separate overlay
+- use selected-event proxy outcome for primary metrics
+- preserve unresolved/no-OHLCV separation
+- implement deterministic CSV/JSON/Markdown and three-output rollback transaction
+- add compact CLI command `build-manual-operator-historical-replay`
+- use synthetic fixtures only
+- after successful validation, transition `NEXT_ACTION.md` to `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT`; do not archive P6 or start P7
 
 ## Validation
 
 ```bash
+./.venv312/bin/python -m unittest \
+  tests.test_manual_operator_historical_replay \
+  tests.test_manual_operator_classifier \
+  tests.test_manual_scenario_normalizer \
+  tests.test_manual_decision_events \
+  tests.test_manual_scenario_coverage \
+  tests.test_manual_trade_episode_builder \
+  tests.test_manual_trade_signal_linker \
+  tests.test_manual_trade_ground_truth_report \
+  tests.test_mexc_actual_trade_importer
+
 git diff --check -- \
-  docs/operations/ai-orchestration/CURRENT_STATE.md \
+  src/feedback/manual_operator_historical_replay.py \
+  tools/log_feedback.py \
+  tests/test_manual_operator_historical_replay.py \
   docs/operations/ai-orchestration/NEXT_ACTION.md \
-  chatgpt/specs/archive/20260710_manual_operator_classifier_offline.md \
-  chatgpt/specs/active/20260710_manual_operator_historical_replay.md
+  src/feedback/__init__.py
 ```
 
-Do not run Python tests for this docs-only task.
+## Stop / Safety / Git
 
-## Stop
+- stop for branch mismatch, spec contradiction, unavoidable out-of-scope edit, unrelated test failure, or private/generated/raw data exposure
+- do not change gates, scoring, thresholds, notifications, runtime, launchd, APIs, account/order endpoints, secrets, FORMAL_GO, or automatic-order behavior
+- do not access the frozen runtime repo, raw exchange exports, or `paper_positions.csv`
+- preserve unrelated dirty changes; no reset, checkout, delete, or stash apply/pop/drop
+- stage only task files; push none
 
-- branch is not `Ver04-v2`
-- P5 archive or P6 active spec is missing
-- more than one non-placeholder active spec exists
-- P6 requires product judgment or source changes
-- unrelated changes overlap allowed files and cannot be safely integrated
-- do not touch production, notification, runtime, API, order, secret, generated, raw-export, or frozen-runtime content
-- do not reset, checkout, delete, or use stash apply/pop/drop
-
-## Commit / Push
-
-- commit: `docs: activate historical replay phase`
-- stage only task files
-- push: none
-
-## Report
+## Commit
 
 ```text
-WORK_ID: BTCFX-20260710-MTP-HISTORICAL-REPLAY-SPEC-CHECKPOINT
-STATUS: done | partial | blocked | failed
-BRANCH: Ver04-v2
-CHANGED:
-- <file or none>
-TESTS:
-- task-file git diff --check => pass | fail
-COMMIT: <hash or none>
-PUSH: none
-IMPLEMENTED:
-- P5 archived
-- P6 active spec checkpointed
-- state and next action aligned
-REMAINING: none | <item>
-NOTES: <必要な場合のみ>
+feat: add offline historical replay
 ```
 
-Write the same compact report exactly once to:
+## Safety boundary
 
-`/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`
-
-Do not read, check, retry, recreate, watch, or poll it after writing.
+```text
+report-only / not FORMAL_GO / no automatic order / human decides manually
+```
