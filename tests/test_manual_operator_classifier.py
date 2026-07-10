@@ -201,5 +201,60 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         for statement in ("not FORMAL_GO", "no automatic order", "human decides manually", "A/B/C/STOP does not replace existing gates"):
             self.assertIn(statement, markdown)
 
+    def test_blank_quality_is_c_and_non_ok_quality_is_stop(self) -> None:
+        blank = self.run_classifier(self.fixture(quality=""))
+        self.assertEqual(blank["class_counts"].get("C_WATCH_ZONE"), 1)
+        self.assertEqual(blank["class_counts"].get("STOP_OR_EXIT", 0), 0)
+        non_ok = self.run_classifier(self.fixture(quality="stale", extra_signal={"no_trade_flags": "manual_review"}))
+        self.assertEqual(non_ok["class_counts"].get("STOP_OR_EXIT"), 1)
+        self.assertIn("stop_data_quality", self.read_rows()[0]["reason_codes"])
+        self.assertIn("stop_no_trade_flag", self.read_rows()[0]["reason_codes"])
+
+    def test_omitted_numeric_fields_validate_and_normalize(self) -> None:
+        for field in ("stop_loss", "tp1", "tp2"):
+            first = self.fixture(extra_candidate={field: "1"})
+            self.assertEqual(self.run_classifier(first)["exit_code"], 0)
+            with first["candidates"].open(newline="", encoding="utf-8") as fp:
+                row = next(csv.DictReader(fp))
+            row[field] = "1.0"
+            first["candidates"] = self.write(f"{field}-dup.csv", CANDIDATE_HEADERS, [row, {**row, field: "1.00"}])
+            self.assertEqual(self.run_classifier(first)["exit_code"], 0)
+            malformed = self.fixture(extra_candidate={field: "not-a-number"})
+            self.assertEqual(self.run_classifier(malformed)["exit_code"], 2)
+        for field in ("nearest_major_support", "nearest_major_resistance"):
+            first = self.fixture(extra_signal={field: "1"})
+            with first["signals"].open(newline="", encoding="utf-8") as fp:
+                row = next(csv.DictReader(fp))
+            first["signals"] = self.write(f"{field}-dup.csv", SIGNAL_HEADERS, [row, {**row, field: "1.00"}])
+            self.assertEqual(self.run_classifier(first)["exit_code"], 0)
+            malformed = self.fixture(extra_signal={field: "not-a-number"})
+            self.assertEqual(self.run_classifier(malformed)["exit_code"], 2)
+
+    def test_ambiguous_missing_context_and_token_forms(self) -> None:
+        fixture = self.fixture()
+        with fixture["events"].open(newline="", encoding="utf-8") as fp:
+            event = next(csv.DictReader(fp))
+        event["grouping_status"] = "ambiguous"; event["scenario_id"] = ""
+        fixture["events"] = self.write("ambiguous.csv", EVENT_HEADERS, [event])
+        fixture["candidates"] = self.write("none-candidate.csv", CANDIDATE_HEADERS, [])
+        self.assertEqual(self.run_classifier(fixture)["classification_status_counts"].get("ambiguous_grouping"), 1)
+        fixture = self.fixture(); fixture["events"] = self.write("ambiguous2.csv", EVENT_HEADERS, [event]); fixture["signals"] = self.write("none-signal.csv", SIGNAL_HEADERS, [])
+        self.assertEqual(self.run_classifier(fixture)["classification_status_counts"].get("ambiguous_grouping"), 1)
+        forms = ("a;b", "b,a", "a|b", '["b", "a"]')
+        outputs = []
+        for index, form in enumerate(forms):
+            fixture = self.fixture(extra_signal={"warning_flags": form})
+            outputs.append(self.run_classifier(fixture)["exact_duplicate_signal_rows"])
+            with fixture["signals"].open(newline="", encoding="utf-8") as fp:
+                row = next(csv.DictReader(fp))
+            fixture["signals"] = self.write(f"tokens-{index}.csv", SIGNAL_HEADERS, [row, {**row, "warning_flags": "a;b"}])
+            self.assertEqual(self.run_classifier(fixture)["exit_code"], 0)
+        self.assertEqual(outputs, [0, 0, 0, 0])
+
+    def test_setup_side_mismatch_reason(self) -> None:
+        result = self.run_classifier(self.fixture(extra_signal={"primary_setup_side": "short"}))
+        self.assertEqual(result["classification_status_counts"].get("insufficient_evidence"), 1)
+        self.assertEqual(self.read_rows()[0]["reason_codes"], "side_mismatch")
+
 
 if __name__ == "__main__": unittest.main()

@@ -43,6 +43,14 @@ SIGNAL_HEADERS = [
     "long_rr", "short_rr", "trend_flip_state", "active_level_role", "level_flip_state", "failed_breakout_state",
     "nearest_major_support", "nearest_major_resistance",
 ]
+CANDIDATE_NUMERIC_FIELDS = frozenset({
+    "entry_price", "entry_zone_low", "entry_zone_high", "stop_loss", "tp1", "tp2",
+    "rr_current_tp1", "rr_current_tp2", "rr_zone_mid_tp1", "rr_zone_mid_tp2",
+})
+SIGNAL_NUMERIC_FIELDS = frozenset({
+    "current_price", "confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow",
+    "long_rr", "short_rr", "nearest_major_support", "nearest_major_resistance",
+})
 OUTPUT_HEADERS = [
     "schema_version", "classification_id", "classifier_method_version", "scenario_event_id", "scenario_id",
     "candidate_id", "source_signal_id", "event_timestamp_utc", "event_timestamp_jst", "symbol", "side",
@@ -94,7 +102,10 @@ def _dec(value: Any) -> Decimal | None:
 
 def _dec_text(value: Any) -> str:
     parsed = _dec(value)
-    return "" if parsed is None else format(parsed, "f")
+    if parsed is None:
+        return ""
+    normalized = parsed.normalize()
+    return "0" if normalized == 0 else format(normalized, "f")
 
 
 def _tokens(value: Any) -> tuple[str, ...]:
@@ -143,7 +154,7 @@ def _fingerprint(row: dict[str, str], fields: list[str]) -> str:
         if field in {"timestamp_jst", "event_timestamp_jst", "event_timestamp_utc"}:
             parsed = _dt(value)
             value = _jst(parsed) if parsed else value
-        elif field.startswith("rr_") or field.endswith("_price") or field in {"entry_price", "entry_zone_low", "entry_zone_high", "current_price", "confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow", "long_rr", "short_rr", "nearest_major_support", "nearest_major_resistance"}:
+        elif field in CANDIDATE_NUMERIC_FIELDS or field in SIGNAL_NUMERIC_FIELDS:
             value = _dec_text(value) if value else ""
         elif field in {"no_trade_flags", "warning_flags", "risk_flags", "trade_execution_blockers", "phase1b_lite_reasons", "opportunity_reasons"}:
             value = ";".join(_tokens(value))
@@ -163,7 +174,7 @@ def _identity_rows(rows: list[dict[str, str]], identity_field: str, fields: list
             return {}, duplicates, "input_schema_mismatch"
         if "timestamp_jst" in fields and row.get("timestamp_jst") and _dt(row.get("timestamp_jst")) is None:
             return {}, duplicates, "invalid_timestamp"
-        numeric_fields = {field for field in fields if field.startswith("rr_") or field.endswith("_price") or field in {"current_price", "confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow", "long_rr", "short_rr"}}
+        numeric_fields = (CANDIDATE_NUMERIC_FIELDS | SIGNAL_NUMERIC_FIELDS) & set(fields)
         if any(row.get(field, "") and _dec(row.get(field)) is None for field in numeric_fields):
             return {}, duplicates, "invalid_numeric"
         fp = _fingerprint(row, fields)
@@ -279,7 +290,7 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
     no_trade = _tokens(signal.get("no_trade_flags"))
     candidate_status = candidate.get("candidate_status", event.get("candidate_status", "")).strip().lower()
     stop_reasons: list[str] = []
-    if quality != "ok":
+    if quality and quality != "ok":
         stop_reasons.append("stop_data_quality")
     if no_trade:
         stop_reasons.append("stop_no_trade_flag")
@@ -312,6 +323,8 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         if gate == "blocked": reasons += ("b_formal_gate_not_pass",)
         else: reasons += ("formal_evidence_incomplete",)
         return _base_row(event, candidate, signal, "classified", "B_CHECK_15M", reasons=reasons, required_check="check_15m_trigger_then_human_decides")
+    if side in {"long", "short"} and setup_side and setup_side != side:
+        return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("side_mismatch",), required_check="human_review_only")
     if entry_defined and eligible and side in {"long", "short"} and setup_side == side:
         reasons = []
         if direction < direction_min: reasons.append("c_wait_direction_below_threshold")
