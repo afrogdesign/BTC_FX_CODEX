@@ -1,40 +1,62 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-CORRECT`
+- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-FINAL-FIX`
 - mode: `BOUNDED_CODEX`
-- task_type: `P4 CORRECTION / TARGETED TEST / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT`
-- previous_status: `P4 ACTIVE SPEC COMMITTED / PUSH NONE`
+- task_type: `P4 FINAL SOURCE FIX / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-CORRECT`
+- previous_status: `MOST CORRECTIONS COMPLETE / FINAL SOURCE-REVIEW DEFECTS REMAIN / PUSH NONE`
+
+## MCP書き込み時の再構成ルール
+
+ChatGPT がこのファイルを MCP 経由で更新するときは、現在のファイル内容を再読込し、今回必要な差分だけを加えて送信データを作り直す。
+
+- 拒否された過去の下書きは再利用しない
+- 他の source / test ファイルにある具体的な値を orchestration 文書へ転記しない
+- 機微情報に見える値は具体値を使わず、一般化した説明に置き換える
+- 更新対象外の文書内容を混ぜない
+- 確認画面が出た場合は、その送信を中止し、対象ファイルを再読込して小さい差分として一度だけ作り直す
 
 ## Current goal
 
- P4のpost-implementation review correctionsに従い、scenario identity、terminal boundary、coverage input、effective decision metricsをfail-closedに修正する。P4は未完了のままレビュー待ちとする。
-
-Active spec:
+Apply the final P4 corrections defined in:
 
 ```text
 chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md
 ```
 
-## Required outputs
+Controlling section:
 
 ```text
-logs/csv/manual_scenarios.csv
-logs/csv/manual_scenario_events.csv
-logs/csv/manual_decision_events.csv
-logs/json/manual_scenario_coverage_YYYYMMDD.json
-運用資料/reports/post_eval/manual_scenario_coverage_YYYYMMDD.md
+## 25. Final source-review corrections — 2026-07-10
 ```
 
-The pipeline keeps scenario evidence, proxy market-path outcomes, and human decision/action separate. Candidate rows are not independent opportunities and are not human actions.
+## Required final fixes
 
-## Boundaries
+- covered OHLCV evidence must not be counted as missing coverage
+- resolved proxy outcomes require valid first-exit time
+- existing correction chains fail closed
+- duplicate or malformed scenario evidence fails closed in the decision recorder
+- pair-write rollback tests are present
+- CLI subprocess success and error tests are present
+- local duplicate/unused imports are removed where behavior-neutral
 
-- P4 does not implement an A/B/C/STOP classifier.
-- no Active Plan, gate, threshold, scoring, notification, mail, runtime, or launchd changes
-- no API, secret, private/account/order endpoint, real exchange export, or `paper_positions.csv`
-- `no_ohlcv` is coverage failure, never win/loss
-- decision events are append-only and do not contain hindsight results
+## Allowed edit
+
+```text
+src/feedback/manual_scenario_normalizer.py
+src/feedback/manual_decision_events.py
+src/feedback/manual_scenario_coverage.py
+tools/log_feedback.py
+tests/test_manual_scenario_normalizer.py
+tests/test_manual_decision_events.py
+tests/test_manual_scenario_coverage.py
+chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md
+docs/operations/ai-orchestration/NEXT_ACTION.md
+```
+
+## Important unrelated file
+
+`docs/operations/ai-orchestration/START_HERE.md` は Tier 0 として読む。今回の task では編集・stage・commit しない。
 
 ## Validation
 
@@ -49,7 +71,18 @@ The pipeline keeps scenario evidence, proxy market-path outcomes, and human deci
   tests.test_mexc_actual_trade_importer
 ```
 
-P4 generated CSV/JSON/Markdown remains local and is not committed. Preserve unrelated dirty and untracked files; do not reset, checkout, stash, or delete them.
+```bash
+git diff --check -- \
+  src/feedback/manual_scenario_normalizer.py \
+  src/feedback/manual_decision_events.py \
+  src/feedback/manual_scenario_coverage.py \
+  tools/log_feedback.py \
+  tests/test_manual_scenario_normalizer.py \
+  tests/test_manual_decision_events.py \
+  tests/test_manual_scenario_coverage.py \
+  chatgpt/specs/active/20260710_manual_scenario_coverage_decision_events.md \
+  docs/operations/ai-orchestration/NEXT_ACTION.md
+```
 
 ## Safety boundary
 

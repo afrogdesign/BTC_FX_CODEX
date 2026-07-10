@@ -9,7 +9,6 @@ import csv
 import hashlib
 import os
 import tempfile
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -49,6 +48,11 @@ SETUP_FAMILY_MAP = {
     "active_counter_scalp": "counter_scalp",
 }
 RESOLVED_OUTCOMES = {"tp1_first", "tp2_first", "sl_first"}
+MISSING_OHLCV_CATEGORIES = {
+    "no_ohlcv_input", "candidate_timestamp_missing", "candidate_before_ohlcv_start",
+    "candidate_after_ohlcv_end", "candidate_window_gap", "malformed_ohlcv",
+    "stale_ohlcv_range", "unknown_gap",
+}
 
 
 def _hash(*parts: Any) -> str:
@@ -156,6 +160,8 @@ def _read_outcomes(path: Path | None) -> tuple[dict[str, dict[str, str]], int, s
         for key in ("entry_reached_time", "first_exit_time", "timestamp_jst"):
             if normalized.get(key) and _dt(normalized[key]) is None:
                 return {}, 0, "invalid_input"
+        if normalized.get("outcome", "").lower() in RESOLVED_OUTCOMES and not normalized.get("first_exit_time"):
+            return {}, 0, "invalid_input"
         fingerprint = tuple(sorted(normalized.items()))
         if cid in result and fingerprints[cid] != fingerprint:
             conflicts += 1
@@ -477,7 +483,12 @@ def build_manual_scenarios(*, candidates: Path, intraperiod_outcomes: Path | Non
         outcomes_seen = [str(e.get("intraperiod_outcome", "")).strip().lower() for e in group_events]
         resolved = next((value for value in outcomes_seen if value in RESOLVED_OUTCOMES), "")
         expired = next((value for value in outcomes_seen if value in {"not_entered", "entry_not_reached", "expired"}), "")
-        no_ohlcv = any(e.get("ohlcv_coverage_status") == "no_ohlcv" or e.get("ohlcv_gap_reason") for e in group_events)
+        no_ohlcv = any(
+            e.get("intraperiod_outcome") == "no_ohlcv"
+            or e.get("ohlcv_coverage_status") in {"no_ohlcv", "coverage_missing"}
+            or e.get("ohlcv_gap_reason") in MISSING_OHLCV_CATEGORIES
+            for e in group_events
+        )
         lifecycle = "detected" if len(group) == 1 else "updated"
         if "entry_reached" in outcomes_seen:
             lifecycle = "zone_touched"

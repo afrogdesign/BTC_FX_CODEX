@@ -10,7 +10,6 @@ import hashlib
 import os
 import re
 import tempfile
-import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -86,8 +85,12 @@ def _read_existing(path: Path) -> tuple[list[dict[str, str]], str | None]:
             return [], "existing_output_schema_mismatch"
         ids.add(row["decision_event_id"])
     for row in rows:
+        status = row.get("record_status", "")
         target = row.get("supersedes_decision_event_id", "")
-        if target and (target == row.get("decision_event_id") or target not in ids or sum(1 for item in rows if item.get("supersedes_decision_event_id") == target) > 1):
+        if status not in {"active", "correction"} or (status == "active" and target) or (status == "correction" and not target):
+            return [], "existing_output_schema_mismatch"
+        target_row = next((item for item in rows if item.get("decision_event_id") == target), None) if target else None
+        if target and (target == row.get("decision_event_id") or target not in ids or target_row and target_row.get("supersedes_decision_event_id") or sum(1 for item in rows if item.get("supersedes_decision_event_id") == target) > 1):
             return [], "existing_output_schema_mismatch"
     return rows, None
 
@@ -119,23 +122,31 @@ def _scenario_check(scenarios: Path, scenario_id: str, signal_id: str, scenario_
             rows = [dict(row) for row in reader]
     except (OSError, UnicodeError, csv.Error):
         return "invalid_input"
-    match = next((row for row in rows if row.get("scenario_id") == scenario_id), None)
-    if match is None or match.get("schema_version") != "manual_scenario.v1":
+    if any(row.get("schema_version") != "manual_scenario.v1" or not row.get("scenario_id") for row in rows) or len({row.get("scenario_id") for row in rows}) != len(rows):
+        return "input_schema_mismatch"
+    matches = [row for row in rows if row.get("scenario_id") == scenario_id]
+    match = matches[0] if len(matches) == 1 else None
+    if match is None:
         return "unknown_scenario"
+    event_rows: list[dict[str, str]] = []
+    if scenario_events is not None:
+        try:
+            with scenario_events.open(newline="", encoding="utf-8") as fp:
+                event_reader = csv.DictReader(fp)
+                from src.feedback.manual_scenario_normalizer import EVENT_HEADERS
+                if (event_reader.fieldnames or []) != EVENT_HEADERS:
+                    return "input_schema_mismatch"
+                event_rows = [dict(row) for row in event_reader]
+        except (OSError, UnicodeError, csv.Error):
+            return "invalid_input"
+        known_scenarios = {item.get("scenario_id") for item in rows}
+        if any(row.get("schema_version") != "manual_scenario_event.v1" or not row.get("scenario_event_id") or not row.get("candidate_id") for row in event_rows) or len({row.get("scenario_event_id") for row in event_rows}) != len(event_rows) or len({row.get("candidate_id") for row in event_rows}) != len(event_rows):
+            return "input_schema_mismatch"
+        if any((row.get("scenario_id") and row.get("scenario_id") not in known_scenarios) or (row.get("grouping_status") == "ambiguous" and row.get("scenario_id")) or (row.get("grouping_status") != "ambiguous" and not row.get("scenario_id")) for row in event_rows):
+            return "input_schema_mismatch"
     if signal_id:
         valid_signals = {match.get("initial_signal_id", ""), match.get("latest_signal_id", "")}
         if scenario_events is not None:
-            try:
-                with scenario_events.open(newline="", encoding="utf-8") as fp:
-                    event_reader = csv.DictReader(fp)
-                    from src.feedback.manual_scenario_normalizer import EVENT_HEADERS
-                    if (event_reader.fieldnames or []) != EVENT_HEADERS:
-                        return "input_schema_mismatch"
-                    event_rows = [dict(row) for row in event_reader]
-            except (OSError, UnicodeError, csv.Error):
-                return "invalid_input"
-            if len({row.get("scenario_event_id", "") for row in event_rows}) != len(event_rows) or any(row.get("scenario_id") and row.get("scenario_id") not in {item.get("scenario_id") for item in rows} for row in event_rows):
-                return "input_schema_mismatch"
             valid_signals.update(row.get("source_signal_id", "") for row in event_rows if row.get("scenario_id") == scenario_id and row.get("grouping_status") != "ambiguous")
         if signal_id not in valid_signals:
             return "signal_not_in_scenario"

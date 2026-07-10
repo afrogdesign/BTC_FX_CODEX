@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import csv
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -107,6 +110,47 @@ class ManualDecisionEventTests(unittest.TestCase):
             result = record_manual_decision(**values)
         self.assertEqual(result["exit_code"], 4)
         self.assertEqual(before, self.output.read_bytes())
+
+    def test_scenario_validation_rejects_duplicate_and_wrong_evidence(self) -> None:
+        from src.feedback.manual_scenario_normalizer import SCENARIO_HEADERS, EVENT_HEADERS
+        scenarios = Path(self.tmp.name) / "scenarios.csv"
+        row = {key: "" for key in SCENARIO_HEADERS}; row.update(schema_version="manual_scenario.v1", scenario_id="scn_" + "1" * 24)
+        with scenarios.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=SCENARIO_HEADERS); writer.writeheader(); writer.writerows([row, row])
+        values = self.kwargs(); values["scenarios"] = scenarios
+        self.assertEqual(record_manual_decision(**values)["exit_code"], 2)
+        scenarios.unlink()
+        with scenarios.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=SCENARIO_HEADERS); writer.writeheader(); writer.writerow(row)
+        events = Path(self.tmp.name) / "events.csv"
+        event = {key: "" for key in EVENT_HEADERS}; event.update(schema_version="manual_scenario_event.v1", scenario_event_id="sce_" + "1" * 24, candidate_id="c1", grouping_status="matched_existing", scenario_id="scn_" + "f" * 24)
+        with events.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=EVENT_HEADERS); writer.writeheader(); writer.writerow(event)
+        values["scenario_events"] = events
+        self.assertEqual(record_manual_decision(**values)["exit_code"], 2)
+
+    def test_middle_signal_evidence_is_accepted(self) -> None:
+        from src.feedback.manual_scenario_normalizer import SCENARIO_HEADERS, EVENT_HEADERS
+        scenario_id = "scn_" + "1" * 24
+        scenarios = Path(self.tmp.name) / "scenarios.csv"; events = Path(self.tmp.name) / "events.csv"
+        row = {key: "" for key in SCENARIO_HEADERS}; row.update(schema_version="manual_scenario.v1", scenario_id=scenario_id, initial_signal_id="s1", latest_signal_id="s3")
+        with scenarios.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=SCENARIO_HEADERS); writer.writeheader(); writer.writerow(row)
+        event = {key: "" for key in EVENT_HEADERS}; event.update(schema_version="manual_scenario_event.v1", scenario_event_id="sce_" + "1" * 24, candidate_id="c2", source_signal_id="s2", grouping_status="matched_existing", scenario_id=scenario_id)
+        with events.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=EVENT_HEADERS); writer.writeheader(); writer.writerow(event)
+        values = self.kwargs(); values.update(scenarios=scenarios, scenario_events=events, signal_id="s2")
+        self.assertEqual(record_manual_decision(**values)["exit_code"], 0)
+
+    def test_cli_success_duplicate_and_invalid(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        command = [sys.executable, str(repo / "tools" / "log_feedback.py"), "record-manual-decision", "--scenario-id", "scn_" + "1" * 24, "--human-checked-at-jst", "2026-07-10T10:00:00+09:00", "--decision-stage", "entry", "--human-action", "watched_no_entry", "--human-side", "none", "--reason-code", "trigger_missing", "--output-csv", str(self.output), "--stdout-json"]
+        first = subprocess.run(command, cwd=repo, text=True, capture_output=True, check=False)
+        second = subprocess.run(command, cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(first.returncode, 0); self.assertEqual(second.returncode, 0)
+        self.assertEqual(len(first.stdout.strip().splitlines()), 1); self.assertTrue(json.loads(second.stdout)["duplicate_event"])
+        bad = subprocess.run([*command[:-1], "--human-action", "invalid", "--stdout-json"], cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(bad.returncode, 2); self.assertNotIn("Traceback", bad.stderr)
 
 
 if __name__ == "__main__":

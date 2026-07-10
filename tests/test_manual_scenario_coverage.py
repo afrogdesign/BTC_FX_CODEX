@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage
@@ -148,6 +151,49 @@ class ManualScenarioCoverageTests(unittest.TestCase):
         self.write("dup_e.csv", EVENT_HEADERS, [row, row])
         _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=self.root / "dup_e.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
         self.assertEqual(payload["exit_code"], 2)
+
+    def test_covered_is_not_missing(self) -> None:
+        candidates, scenarios, events = self._base()
+        with events.open(newline="", encoding="utf-8") as fp:
+            event = next(csv.DictReader(fp))
+        event["ohlcv_coverage_status"] = "covered"; event["ohlcv_gap_reason"] = "covered"
+        covered_events = self.write("covered_e.csv", EVENT_HEADERS, [event])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=covered_events, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["covered_candidate_rows"], 1)
+        self.assertEqual(payload["no_ohlcv_candidate_rows"], 0)
+
+    def test_pair_report_transaction_rolls_back(self) -> None:
+        from src.feedback.manual_scenario_coverage import _atomic_text_pair
+        report_json = self.root / "report.json"; report_md = self.root / "report.md"
+        report_json.write_bytes(b"old-json"); report_md.write_bytes(b"old-md")
+        original_replace = Path.replace
+        calls = {"count": 0}
+        def replace(path: Path, target: Path) -> Path:
+            calls["count"] += 1
+            if calls["count"] == 4:
+                raise OSError("injected second replacement failure")
+            return original_replace(path, target)
+        with patch.object(Path, "replace", replace):
+            with self.assertRaises(OSError):
+                _atomic_text_pair(report_json, "new-json", report_md, "new-md")
+        self.assertEqual(report_json.read_bytes(), b"old-json")
+        self.assertEqual(report_md.read_bytes(), b"old-md")
+        self.assertEqual(list(self.root.glob(".p4-*")), [])
+
+    def test_cli_success_and_expected_input_error(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        candidates, _, _ = self._base()
+        scenarios, events = self.root / "cli_s.csv", self.root / "cli_e.csv"
+        command = [sys.executable, str(repo / "tools" / "log_feedback.py"), "build-manual-scenarios", "--candidates", str(candidates), "--scenarios-out", str(scenarios), "--events-out", str(events), "--stdout-json"]
+        success = subprocess.run(command, cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(success.returncode, 0)
+        self.assertEqual(len(success.stdout.strip().splitlines()), 1)
+        self.assertNotIn("Traceback", success.stderr)
+        self.assertTrue(json.loads(success.stdout)["ok"])
+        bad = subprocess.run([*command[:-1], "--candidates", str(self.root / "missing.csv"), "--stdout-json"], cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(bad.returncode, 2)
+        self.assertEqual(len(bad.stdout.strip().splitlines()), 1)
+        self.assertNotIn("Traceback", bad.stderr)
 
 
 if __name__ == "__main__":

@@ -1448,3 +1448,139 @@ Safety remains:
 ```text
 report-only / not FORMAL_GO / no automatic order / human decides manually
 ```
+
+
+---
+
+## 25. Final source-review corrections — 2026-07-10
+
+This section is controlling for the final P4 fix.
+
+The correction commit `907dabc0ca9b3dd30fa3c76209945378b0930847` resolved most of section 24. P4 remains active because source review found the following remaining defects.
+
+### 25.1 Covered evidence must not become missing coverage
+
+The normalizer currently treats any non-empty OHLCV gap-reason value as missing coverage. The detailed value `covered` is non-empty, so a fully covered candidate can incorrectly make a scenario `coverage_missing`.
+
+The coverage report has the same defect and can count a fully covered candidate in `no_ohlcv_candidate_rows`.
+
+Required rule:
+
+```text
+missing coverage =
+  intraperiod_outcome == no_ohlcv
+  OR ohlcv_coverage_status in {no_ohlcv, coverage_missing}
+  OR ohlcv_gap_reason in the explicit missing/error category set
+```
+
+The explicit missing/error category set is:
+
+```text
+no_ohlcv_input
+candidate_timestamp_missing
+candidate_before_ohlcv_start
+candidate_after_ohlcv_end
+candidate_window_gap
+malformed_ohlcv
+stale_ohlcv_range
+unknown_gap
+```
+
+`covered` must never count as missing coverage.
+
+Add regression tests proving that a supplied, fully covering OHLCV input produces:
+
+```text
+event ohlcv_coverage_status = covered
+scenario_status = active unless stronger resolved/expired evidence exists
+no_ohlcv_candidate_rows = 0
+covered_candidate_rows = 1
+```
+
+### 25.2 Resolved outcomes require a deterministic terminal time
+
+For `tp1_first`, `tp2_first`, and `sl_first`, a valid `first_exit_time` is required.
+
+A resolved row with blank or malformed `first_exit_time` is invalid input and must exit `2` without output mutation.
+
+The not-entered fallback remains:
+
+```text
+candidate timestamp + max_scenario_age_hours
+```
+
+Update tests that currently construct a resolved outcome without a first-exit timestamp.
+
+### 25.3 Existing correction history must reject correction chains
+
+The recorder rejects creating a correction that supersedes another correction, but existing-file validation currently permits that chain.
+
+Coverage validation also permits it.
+
+Required existing-history rules:
+
+- correction target exists
+- correction target is not itself a correction
+- one target has at most one direct correction
+- no self-reference
+- no cycle
+- record status is consistent with whether a supersedes ID exists
+
+Malformed history fails closed:
+
+- recorder existing output -> exit `4`
+- coverage input -> exit `2`
+- no output mutation
+
+Add a test with an existing base row, a correction row, and a second row attempting to supersede that correction.
+
+### 25.4 Scenario validation must reject duplicate and malformed evidence
+
+When a scenario file is supplied to the decision recorder:
+
+- scenario IDs must be non-empty and unique
+- every scenario row must use the current schema version
+- the requested scenario must exist exactly once
+
+When scenario events are supplied:
+
+- event IDs must be non-empty and unique
+- every event row must use the current schema version
+- assigned events must reference an existing scenario
+- ambiguous events must have a blank scenario ID
+
+Duplicate or malformed scenario evidence fails closed with no decision-file mutation.
+
+### 25.5 Transaction and CLI regression coverage
+
+The current focused tests do not yet exercise pair-write rollback or CLI subprocess behavior inside the committed test files.
+
+Add focused tests for:
+
+1. scenario pair replacement failure on the second target restores both previous files
+2. coverage pair replacement failure on the second target restores both previous files
+3. no temporary or backup residue after rollback
+4. scenario CLI success and input-error exit
+5. decision CLI success, duplicate no-op, and validation-error exit
+6. coverage CLI success and input-error exit
+7. each successful CLI writes exactly one compact JSON line
+8. expected validation errors do not print a traceback
+
+### 25.6 Cleanup
+
+Remove duplicate imports and clearly unused imports in the three P4 modules when doing so is local and behavior-neutral.
+
+### 25.7 Acceptance
+
+P4 may be accepted after:
+
+- sections 25.1 through 25.5 are implemented
+- focused tests pass
+- existing P2/P3 targeted regressions pass
+- ChatGPT reviews the corrected source
+
+Safety remains:
+
+```text
+report-only / not FORMAL_GO / no automatic order / human decides manually
+```

@@ -5,17 +5,15 @@ import csv
 import json
 import os
 import tempfile
-from collections import Counter, defaultdict
-from datetime import date
+from collections import Counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from src.feedback.manual_decision_events import DECISION_HEADERS, SCHEMA_VERSION as DECISION_SCHEMA_VERSION
-from src.feedback.manual_scenario_normalizer import CANDIDATE_REQUIRED_HEADERS, EVENT_HEADERS, SCENARIO_HEADERS, SCENARIO_SCHEMA_VERSION, EVENT_SCHEMA_VERSION
+from src.feedback.manual_scenario_normalizer import CANDIDATE_REQUIRED_HEADERS, EVENT_HEADERS, MISSING_OHLCV_CATEGORIES, SCENARIO_HEADERS, SCENARIO_SCHEMA_VERSION, EVENT_SCHEMA_VERSION
 from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
 from src.feedback.manual_trade_signal_linker import LINK_HEADERS
-from src.feedback.manual_actual_trade_importer import TRADE_HEADERS, ORDER_HEADERS, POSITION_HEADERS
 
 SCHEMA_VERSION = "manual_scenario_coverage.v1"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
@@ -134,7 +132,19 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     decision_ids = [str(row.get("decision_event_id", "")).strip() for row in decision_rows]
     decision_by_id = {row.get("decision_event_id", ""): row for row in decision_rows}
     superseded_ids = {row.get("supersedes_decision_event_id", "") for row in decision_rows if row.get("supersedes_decision_event_id")}
-    if len(decision_ids) != len(set(decision_ids)) or any(row.get("supersedes_decision_event_id") == row.get("decision_event_id") or row.get("supersedes_decision_event_id") not in decision_by_id for row in decision_rows if row.get("supersedes_decision_event_id")) or any(sum(1 for row in decision_rows if row.get("supersedes_decision_event_id") == target) > 1 for target in superseded_ids):
+    correction_status_error = any(
+        row.get("record_status") not in {"active", "correction"}
+        or (row.get("record_status") == "active" and row.get("supersedes_decision_event_id"))
+        or (row.get("record_status") == "correction" and not row.get("supersedes_decision_event_id"))
+        for row in decision_rows
+    )
+    correction_status_error = correction_status_error or any(
+        row.get("supersedes_decision_event_id") == row.get("decision_event_id")
+        or row.get("supersedes_decision_event_id") not in decision_by_id
+        or bool(decision_by_id.get(row.get("supersedes_decision_event_id"), {}).get("supersedes_decision_event_id"))
+        for row in decision_rows if row.get("supersedes_decision_event_id")
+    )
+    if len(decision_ids) != len(set(decision_ids)) or correction_status_error or any(sum(1 for row in decision_rows if row.get("supersedes_decision_event_id") == target) > 1 for target in superseded_ids):
         payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
     unique_ids = {str(row.get("candidate_id", "")).strip() for row in candidate_rows if row.get("candidate_id")}
@@ -143,7 +153,7 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     source_signals = {str(row.get("source_signal_id", "")).strip() for row in candidate_rows if row.get("source_signal_id")}
     signal_scenarios = {str(row.get("source_signal_id", "")).strip() for row in event_rows if row.get("scenario_id") and row.get("source_signal_id")}
     covered = sum(1 for row in event_rows if row.get("ohlcv_coverage_status") == "covered")
-    no_ohlcv = sum(1 for row in event_rows if row.get("intraperiod_outcome") == "no_ohlcv" or row.get("ohlcv_coverage_status") in {"no_ohlcv", "coverage_missing"} or str(row.get("ohlcv_gap_reason", "")).strip())
+    no_ohlcv = sum(1 for row in event_rows if row.get("intraperiod_outcome") == "no_ohlcv" or row.get("ohlcv_coverage_status") in {"no_ohlcv", "coverage_missing"} or row.get("ohlcv_gap_reason") in MISSING_OHLCV_CATEGORIES)
     resolved = sum(1 for row in event_rows if row.get("intraperiod_outcome") in {"tp1_first", "tp2_first", "sl_first"})
     pending = sum(1 for row in event_rows if row.get("intraperiod_outcome") in {"", "pending", "timeout", "ambiguous", "entry_reached", "no_ohlcv"})
     gaps = Counter(str(row.get("ohlcv_gap_reason", "")) for row in event_rows if row.get("ohlcv_gap_reason"))

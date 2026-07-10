@@ -136,7 +136,7 @@ class ManualScenarioNormalizerTests(unittest.TestCase):
     def test_latest_blank_does_not_erase_and_resolved_precedes_coverage(self) -> None:
         headers = ["candidate_id", "source_signal_id", "timestamp_jst", "candidate_type", "side", "entry_price", "stop_loss"]
         candidates = self.write("c.csv", headers, [self.candidate("c1", "2026-07-10T10:00:00+09:00", stop_loss="59000"), self.candidate("c2", "2026-07-10T10:10:00+09:00", entry_price="60005", stop_loss="")])
-        outcomes = self.write("o.csv", ["candidate_id", "outcome"], [{"candidate_id": "c1", "outcome": "tp1_first"}, {"candidate_id": "c2", "outcome": "no_ohlcv"}])
+        outcomes = self.write("o.csv", ["candidate_id", "outcome", "first_exit_time"], [{"candidate_id": "c1", "outcome": "tp1_first", "first_exit_time": "2026-07-10T10:20:00+09:00"}, {"candidate_id": "c2", "outcome": "no_ohlcv", "first_exit_time": ""}])
         result = build_manual_scenarios(candidates=candidates, intraperiod_outcomes=outcomes, scenarios_out=self.root / "s.csv", events_out=self.root / "e.csv")
         self.assertEqual(result["exit_code"], 0)
         with (self.root / "s.csv").open(newline="", encoding="utf-8") as fp:
@@ -167,6 +167,38 @@ class ManualScenarioNormalizerTests(unittest.TestCase):
         result = build_manual_scenarios(candidates=candidates, scenarios_out=bad, events_out=self.root / "e.csv")
         self.assertEqual(result["exit_code"], 4)
         self.assertEqual(build_manual_scenarios(candidates=candidates, scenarios_out=bad, events_out=self.root / "e.csv", replace_output=True)["exit_code"], 0)
+
+    def test_fully_covered_ohlcv_stays_active_and_covered(self) -> None:
+        headers = ["candidate_id", "source_signal_id", "timestamp_jst", "candidate_type", "side", "entry_price"]
+        candidates = self.write("c.csv", headers, [self.candidate("c1", "2026-07-10T10:00:00+09:00")])
+        ohlcv = self.write("ohlcv.csv", ["timestamp", "high", "low"], [{"timestamp": "2026-07-10T10:00:00+09:00", "high": "60100", "low": "59900"}, {"timestamp": "2026-07-10T11:00:00+09:00", "high": "60200", "low": "59800"}])
+        build_manual_scenarios(candidates=candidates, ohlcv=ohlcv, scenarios_out=self.root / "s.csv", events_out=self.root / "e.csv")
+        with (self.root / "e.csv").open(newline="", encoding="utf-8") as fp:
+            event = next(csv.DictReader(fp))
+        with (self.root / "s.csv").open(newline="", encoding="utf-8") as fp:
+            scenario = next(csv.DictReader(fp))
+        self.assertEqual(event["ohlcv_coverage_status"], "covered")
+        self.assertEqual(event["ohlcv_gap_reason"], "covered")
+        self.assertEqual(scenario["scenario_status"], "active")
+        self.assertEqual(scenario["ohlcv_coverage_status"], "covered")
+
+    def test_pair_transaction_rolls_back_both_outputs(self) -> None:
+        from src.feedback.manual_scenario_normalizer import _transactional_replace
+        first = self.root / "manual_scenarios.csv"; second = self.root / "manual_scenario_events.csv"
+        first.write_bytes(b"old-scenario"); second.write_bytes(b"old-events")
+        original_replace = Path.replace
+        calls = {"count": 0}
+        def replace(path: Path, target: Path) -> Path:
+            calls["count"] += 1
+            if calls["count"] == 4:
+                raise OSError("injected second replacement failure")
+            return original_replace(path, target)
+        with patch.object(Path, "replace", replace):
+            with self.assertRaises(OSError):
+                _transactional_replace([(first, ["value"], [{"value": "new"}]), (second, ["value"], [{"value": "new"}])])
+        self.assertEqual(first.read_bytes(), b"old-scenario")
+        self.assertEqual(second.read_bytes(), b"old-events")
+        self.assertEqual(list(self.root.glob(".p4-*")), [])
 
 
 if __name__ == "__main__":
