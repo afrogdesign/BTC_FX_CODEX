@@ -840,7 +840,9 @@ No API-related arguments are permitted.
 - writes no canonical CSV
 - writes no issues CSV
 - creates no output directory
-- returns the same compact summary with `would_*` fields
+- returns `would_write_outputs` and `would_write_issues_file` planning fields without creating files or directories
+- `would_write_outputs` contains the three canonical filenames when inserts or replacements are planned; duplicate-only batches leave it empty
+- rejected/conflict issues without canonical changes set `would_write_issues_file=true`; a complete no-op leaves both planning fields empty/false
 
 ### 9.3 Exit codes
 
@@ -878,6 +880,7 @@ output_dir
 import_batch_id
 source_file_count
 category_file_counts
+sheets_read
 rows_read
 rows_accepted
 rows_rejected
@@ -888,6 +891,8 @@ rows_replaced
 outputs_written
 outputs_unchanged
 issues_file
+would_write_outputs
+would_write_issues_file
 symbols
 date_range_utc
 date_range_jst
@@ -970,7 +975,7 @@ Do not run the full suite unless a shared helper change creates a broader regres
 Import summary reports:
 
 - workbook counts by category
-- sheets read
+- `sheets_read`: count of validated worksheets selected per category; failed workbook validation is not counted
 - rows read
 - accepted rows
 - rejected rows

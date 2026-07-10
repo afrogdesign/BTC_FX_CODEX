@@ -476,6 +476,7 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
             "import_batch_id": "",
             "source_file_count": len(source_paths),
             "category_file_counts": category_counts,
+            "sheets_read": {category: 0 for category in _CATEGORY},
             "rows_read": 0,
             "rows_accepted": 0,
             "total_rows": 0,
@@ -486,6 +487,8 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
             "rows_replaced": 0,
             "outputs_written": [],
             "outputs_unchanged": [],
+            "would_write_outputs": [],
+            "would_write_issues_file": False,
             "issues_file": "",
             "symbols": [],
             "date_range_utc": {"min": "", "max": ""},
@@ -502,8 +505,10 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
         "cli_command": "import-manual-actual-trades", "cli_alias_used": bool(cli_alias_used),
         "input_dir": _repo_relative(input_dir), "output_dir": _repo_relative(output_root),
         "import_batch_id": batch_id, "source_file_count": len(source_paths), "category_file_counts": category_counts,
+        "sheets_read": {category: 0 for category in _CATEGORY},
         "rows_read": 0, "rows_accepted": 0, "total_rows": 0, "rows_rejected": 0, "duplicate_rows_skipped": 0,
         "conflicts_found": 0, "rows_inserted": 0, "rows_replaced": 0, "outputs_written": [], "outputs_unchanged": [],
+        "would_write_outputs": [], "would_write_issues_file": False,
         "issues_file": "", "symbols": [], "date_range_utc": {"min": "", "max": ""}, "date_range_jst": {"min": "", "max": ""},
         "missing_categories": [category for category, count in category_counts.items() if count == 0],
         "unsupported_files": unsupported_files, "errors": list(collection_errors), "safety_boundary": SAFETY_BOUNDARY,
@@ -532,6 +537,7 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
                 summary["errors"].append(reason)
                 continue
             summary["rows_read"] += len(raw_rows)
+            summary["sheets_read"][category] += 1
             for raw in raw_rows:
                 try:
                     accepted[category].append(_normalize_row(category, raw, path=path, sheet=sheet, source_hash=hashes[path], batch_id=batch_id))
@@ -587,6 +593,9 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
         values = [row[source_key] for row in accepted["trade_history"] + accepted["order_history"] if row.get(source_key)]
         if values:
             summary[output_key] = {"min": min(values), "max": max(values)}
+    canonical_outputs = [spec["output"] for spec in _CATEGORY.values()]
+    summary["would_write_outputs"] = canonical_outputs if summary["rows_inserted"] or summary["rows_replaced"] else []
+    summary["would_write_issues_file"] = bool(issues)
     if dry_run:
         summary["ok"] = True
         summary["outputs_unchanged"] = [spec["output"] for spec in _CATEGORY.values()]

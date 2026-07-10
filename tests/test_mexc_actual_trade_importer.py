@@ -281,6 +281,7 @@ class MexcActualTradeImporterTest(unittest.TestCase):
             summary = json.loads(result.stdout)
             self.assertEqual(summary["total_rows"], 3)
             self.assertEqual(summary["missing_categories"], [])
+            self.assertEqual(summary["sheets_read"], {"trade_history": 1, "order_history": 1, "position_history": 1})
             self.assertNotIn("trade-uid-001", result.stdout)
             self.assertNotIn("order-uid-001", result.stdout)
             self.assertNotIn("position-uid-001", result.stdout)
@@ -324,9 +325,31 @@ class MexcActualTradeImporterTest(unittest.TestCase):
             summary = json.loads(result.stdout)
             self.assertEqual(summary["dry_run"], True)
             self.assertEqual(summary["missing_categories"], ["position_history"])
+            self.assertEqual(summary["sheets_read"], {"trade_history": 0, "order_history": 0, "position_history": 0})
+            self.assertEqual(summary["would_write_outputs"], [])
+            self.assertFalse(summary["would_write_issues_file"])
             self.assertFalse(output_dir.exists())
-            self.assertNotIn("trade-uid-001", result.stdout)
-            self.assertNotIn("order-uid-001", result.stdout)
+
+    def test_dry_run_planning_fields_cover_new_duplicate_and_issue_only_batches(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            fresh = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertEqual(fresh["would_write_outputs"], ["manual_actual_trades.csv", "manual_actual_orders.csv", "manual_actual_positions.csv"])
+            self.assertFalse(fresh["would_write_issues_file"])
+            self.assertFalse(output_dir.exists())
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            duplicate = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertEqual(duplicate["would_write_outputs"], [])
+            self.assertFalse(duplicate["would_write_issues_file"])
+            bad = {**_mexc_trade_rows()[0], "UID": "bad-uid", "約定価格": "not-number"}
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, [_mexc_trade_rows()[0], bad])
+            issue_only = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertEqual(issue_only["would_write_outputs"], [])
+            self.assertTrue(issue_only["would_write_issues_file"])
 
     def test_import_function_handles_missing_category_without_crashing(self) -> None:
         with TemporaryDirectory() as tmpdir:
