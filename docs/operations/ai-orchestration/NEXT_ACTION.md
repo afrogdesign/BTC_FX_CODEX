@@ -1,23 +1,46 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-CHECKPOINT-PUSH`
-- mode: `CHECKPOINT_PUSH`
-- task_type: `GIT CHECKPOINT PUSH ONLY`
-- previous_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-ACCEPTANCE-FIX-1`
-- previous_status: `P7 IMPLEMENTATION ACCEPTANCE FIX COMMITTED / PUSH NONE`
+- current_work_id: `BTCFX-20260710-MTP-P8-HUMAN-MANUAL-TRIAL-DECISION`
+- mode: `HUMAN_CHECK`
+- task_type: `PRODUCT / TRADING / SAFETY DECISION`
+- previous_work_id: `BTCFX-20260710-MTP-P7-CLOSEOUT`
+- previous_status: `P7 COMPLETE / CHECKPOINTED / RUNTIME-APPLIED`
 
-## Goal
+## Current state
 
-Checkpoint push only for the completed P7 operator shadow-surface implementation and its acceptance corrective commit.
+P7 operator shadow surface is complete, accepted, checkpointed, and runtime-applied.
 
-Source of truth:
+Archived source of truth:
 
-`chatgpt/specs/active/20260710_manual_operator_shadow_surface.md`
+`chatgpt/specs/archive/20260710_manual_operator_shadow_surface.md`
 
-The checkpoint push contains the implementation commit plus the corrective commit and performs no source edits. Runtime apply remains blocked until checkpoint push and separate runtime-target verification. The active spec remains active; do not archive it or write local commit hashes here.
+No P8 active spec exists.
+
+## Human decision required
+
+Before any executable P8 task, the human must approve a bounded manual-trial contract covering:
+
+- trial objective and duration
+- which `A_FORMAL`, `B_CHECK_15M`, `C_WATCH_ZONE`, and `STOP_OR_EXIT` observations are included
+- required 15-minute chart checks
+- how human decisions, skips, exits, avoided losses, and missed opportunities are recorded
+- success, failure, and stop criteria
+- privacy boundary for manual records
+- confirmation that no automatic order or unapproved live extra mail is introduced
+
+## Prohibited until approval
+
+- no P8 source implementation
+- no production gate, scoring, or threshold tuning
+- no automatic order
+- no live extra notification sending
+- no runtime or launchd change
+- no API, account, private endpoint, or order endpoint work
+- no `paper_positions.csv` integration
+- no new active spec
 
 ## Safety
 
 report-only / not FORMAL_GO / no automatic order / human decides manually
 
-Do not change gates, scoring, thresholds, notifications, runtime, launchd, APIs, account/order behavior, secrets, or publish routing.
+Do not include a Codex implementation instruction inside NEXT_ACTION.

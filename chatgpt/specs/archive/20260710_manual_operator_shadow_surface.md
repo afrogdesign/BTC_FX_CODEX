@@ -1,9 +1,9 @@
-# P7 Manual Operator Shadow Surface — Active Specification
+# P7 Manual Operator Shadow Surface — Completed Specification
 
 ## Metadata
 
 - phase: P7
-- status: active specification
+- status: completed and accepted
 - implementation mode: report-only / offline / existing public HTML detail page
 - preceding accepted phase: P6 historical replay (`e870bd8`)
 - safety: not FORMAL_GO / no automatic order / human decides manually
@@ -66,3 +66,20 @@ Next implementation validation is limited to targeted classifier, shadow-surface
 ## Acceptance
 
 P7 is accepted only when the sanitized deterministic shadow panel is visible in the existing public HTML, P5/P7 share one classifier, all targeted tests and render-only validation pass, and the report-only safety boundary remains intact.
+
+## Completion record
+
+- implementation_commit: `dec4cb0`
+- acceptance_correction_commit: `74047f1`
+- accepted_checkpoint: `74047f14bceb4644ec3ab86eb5d0e5c23d97541c`
+- targeted_tests: 74 passed
+- shadow_test_methods: 10
+- render_smoke: pass
+- runtime_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- launchd_label: `com.afrog.btc-monitor`
+- runtime_apply: pass
+- verified_replacement_pid_at_apply: `18923` (process observed at apply verification time, not a permanent runtime identity)
+- real_mail_sent: false
+- live_output_boundary_violated: false
+
+P7 changed only the existing public detail HTML shadow surface. Production gate, scoring, and threshold behavior were not changed; notification subject, body, trigger, and send count were not changed; and no automatic order was introduced. P8 was not started by this closeout.

@@ -525,12 +525,19 @@ P6 historical replay implementation accepted at checkpoint `e870bd8`.
 - no production, runtime, notification, API, account, order, gate, scoring, or threshold changes
 - archived P6 spec: `chatgpt/specs/archive/20260710_manual_operator_historical_replay.md`
 
-P7 has not started and requires a separate active spec and human approval.
-
 ---
 
-## 2026-07-10 P7 activation
+## 2026-07-10 P7 completion and runtime apply
 
-P6 was accepted at `e870bd8`. The active P7 spec is `chatgpt/specs/active/20260710_manual_operator_shadow_surface.md`.
+P7 is complete at accepted checkpoint `74047f1` (`74047f14bceb4644ec3ab86eb5d0e5c23d97541c`). Implementation commit was `dec4cb0` with acceptance correction `74047f1`; reported targeted validation passed with `74 tests`, and render-only smoke passed.
 
-P7 implementation is next, targeting the existing public detail HTML through `build_notification_detail_html()`. This docs-only activation changes no mail, trigger, gate, scoring, threshold, runtime, API, account, or order behavior.
+- primary repo is the active runtime path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- existing launchd label: `com.afrog.btc-monitor`
+- controlled restart completed; replacement PID `18923` was verified at apply time, not as a permanent runtime identity
+- zero new Traceback / Exception / ERROR / fatal findings
+- no live mail or notification artifact was created by validation
+- archived spec: `chatgpt/specs/archive/20260710_manual_operator_shadow_surface.md`
+
+P7 changed only the existing public detail HTML shadow surface. Production gate, scoring, threshold, notification, runtime, API, account, and order behavior were unchanged; the posture remains report-only and human-decided.
+
+P7 is complete. P8 human manual trial has not started and requires a new active spec plus explicit human product/safety approval. P8 was not started by this closeout.
