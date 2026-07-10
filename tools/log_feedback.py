@@ -22483,7 +22483,7 @@ def _build_parser() -> argparse.ArgumentParser:
     manual_trade_link_parser.add_argument("--stdout-json", action="store_true")
     manual_trade_link_parser.add_argument("--dry-run", action="store_true")
     manual_trade_link_parser.add_argument("--max-after-minutes", type=_non_negative_int_arg, default=240)
-    manual_trade_link_parser.add_argument("--max-lookback-minutes", type=_non_negative_int_arg, default=None)
+    manual_trade_link_parser.add_argument("--max-lookback-minutes", type=int, default=None)
     manual_trade_link_parser.add_argument("--replace-output", action="store_true")
 
     episode_parser = subparsers.add_parser("build-manual-trade-episodes")

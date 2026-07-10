@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +13,8 @@ from src.feedback.manual_trade_episode_builder import (
     build_manual_trade_episode_rows,
     build_manual_trade_episodes,
 )
+from src.feedback.manual_actual_trade_importer import ORDER_HEADERS, POSITION_HEADERS, TRADE_HEADERS
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS
 
 
 def _position(position_id: str = "pos-1", side: str = "long", opened: str = "2026-07-01T10:00:00+09:00", closed: str = "2026-07-01T11:00:00+09:00") -> dict[str, str]:
@@ -58,15 +62,15 @@ class ManualTradeEpisodeBuilderTest(unittest.TestCase):
             trade_rows=[_fill("buy", "2026-07-01T10:00:00+09:00", side="unknown", action="") , _fill("sell", "2026-07-01T10:01:00+09:00", side="unknown", action="")],
             order_rows=[], position_rows=[],
         )
-        self.assertEqual({row["side"] for row in rows}, {"unknown"})
+        self.assertEqual(rows, [])
         explicit = build_manual_trade_episode_rows(
             trade_rows=[_fill("long-open", "2026-07-01T10:00:00+09:00", side="long", action="open"), _fill("long-close", "2026-07-01T10:30:00+09:00", side="long", action="close")], order_rows=[], position_rows=[],
         )
-        self.assertEqual(explicit[0]["side"], "long")
+        self.assertEqual(explicit, [])
         short = build_manual_trade_episode_rows(
             trade_rows=[_fill("short-open", "2026-07-01T10:00:00+09:00", side="short", action="open"), _fill("short-close", "2026-07-01T10:30:00+09:00", side="short", action="close")], order_rows=[], position_rows=[],
         )
-        self.assertEqual(short[0]["side"], "short")
+        self.assertEqual(short, [])
 
     def test_side_conflict_and_ids_are_deterministic(self) -> None:
         inputs = {"trade_rows": [_fill("f1", "2026-07-01T10:05:00+09:00", side="short")], "order_rows": [], "position_rows": [_position()]}
@@ -84,15 +88,38 @@ class ManualTradeEpisodeBuilderTest(unittest.TestCase):
             _write(orders, ["symbol"], [])
             _write(positions, ["symbol"], [])
             summary = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output, dry_run=True)
-            self.assertTrue(summary["ok"])
+            self.assertFalse(summary["ok"])
+            self.assertEqual(summary["exit_code"], 2)
             self.assertFalse(output.exists())
             _write(positions, ["symbol", "episode_id"], [{"symbol": "BTCUSDT", "episode_id": "legacy"}])
             _write(trades, ["symbol", "timestamp_jst"], [{"symbol": "BTCUSDT", "timestamp_jst": "bad"}])
             invalid = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output)
             self.assertEqual(invalid["exit_code"], 2)
             _write(output, ["legacy"], [{"legacy": "1"}])
-            valid = build_manual_trade_episodes(trades=trades, orders=orders, positions=positions, output_csv=output)
-            self.assertEqual(valid["exit_code"], 2)
+            self.assertTrue(output.exists())
+
+    def test_three_v2_cli_routes_emit_compact_json(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            trades = root / "trades.csv"; orders = root / "orders.csv"; positions = root / "positions.csv"
+            trade = {field: "" for field in TRADE_HEADERS}; trade.update(schema_version="manual_actual_trade.v2", actual_trade_id="t1", symbol="BTCUSDT", timestamp_jst="2026-07-01T10:05:00+09:00", fee="0", realized_pnl="0")
+            order = {field: "" for field in ORDER_HEADERS}; order.update(schema_version="manual_actual_trade.v2", actual_order_id="o1", symbol="BTCUSDT", timestamp_jst="2026-07-01T10:05:00+09:00")
+            position = {field: "" for field in POSITION_HEADERS}; position.update(schema_version="manual_actual_trade.v2", actual_position_id="p1", symbol="BTCUSDT", side="long", opened_at_jst="2026-07-01T10:00:00+09:00", closed_at_jst="2026-07-01T11:00:00+09:00", status="closed", realized_pnl="0", fee_total="0")
+            _write(trades, TRADE_HEADERS, [trade]); _write(orders, ORDER_HEADERS, [order]); _write(positions, POSITION_HEADERS, [position])
+            episodes = root / "episodes.csv"; links = root / "links.csv"; report = root / "report.md"; signals = root / "signals.csv"; outcomes = root / "outcomes.csv"
+            _write(signals, ["signal_id", "timestamp_jst", "bias", "symbol"], [{"signal_id": "s1", "timestamp_jst": "2026-07-01T09:50:00+09:00", "bias": "long", "symbol": "BTCUSDT", "notification_kind": "attention"}])
+            _write(outcomes, ["signal_id"], [{"signal_id": "s1"}])
+            script = str(Path(__file__).parents[1] / "tools" / "log_feedback.py")
+            episode_cmd = [sys.executable, script, "build-manual-trade-episodes", "--trades", str(trades), "--orders", str(orders), "--positions", str(positions), "--output-csv", str(episodes), "--stdout-json"]
+            episode_result = subprocess.run(episode_cmd, cwd=Path(__file__).parents[1], check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(episode_result.stdout)["schema_version"], "manual_trade_episode.v1")
+            link_cmd = [sys.executable, script, "link-manual-trades-to-signals", "--episodes", str(episodes), "--signals", str(signals), "--signal-outcomes", str(outcomes), "--output-csv", str(links), "--max-lookback-minutes", "240", "--stdout-json"]
+            link_result = subprocess.run(link_cmd, cwd=Path(__file__).parents[1], check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(link_result.stdout)["schema_version"], "manual_trade_signal_link.v2")
+            report_cmd = [sys.executable, script, "build-manual-trade-ground-truth-report", "--trades", str(trades), "--orders", str(orders), "--positions", str(positions), "--episodes", str(episodes), "--links", str(links), "--signal-outcomes", str(outcomes), "--output-md", str(report), "--stdout-json"]
+            report_result = subprocess.run(report_cmd, cwd=Path(__file__).parents[1], check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(report_result.stdout)["schema_version"], "manual_trade_ground_truth.v2")
+            self.assertTrue(report.exists())
 
 
 if __name__ == "__main__":

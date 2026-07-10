@@ -349,7 +349,7 @@ Initial deterministic score:
 | side unknown on one side, no conflict | +1 |
 | BTC symbol exact match | +2 |
 | entry-like notification class | +2 |
-| followup/management class in entry-link mode | -2 |
+| followup/management class in entry-link mode | excluded from entry-link candidates |
 | position/action conflict | disqualify |
 | symbol conflict | disqualify |
 
@@ -568,7 +568,8 @@ Allowed categories:
 actual_positive_with_entry_like_signal
 actual_negative_with_entry_like_signal
 actual_positive_with_defensive_signal
-actual_negative_with_direction_conflict
+actual_negative_with_defensive_signal
+ambiguous_needs_review
 ambiguous_needs_review
 ```
 
@@ -784,3 +785,183 @@ Archive destination:
 ```text
 chatgpt/specs/archive/20260710_manual_trade_linkage_ground_truth_pipeline.md
 ```
+
+
+---
+
+## 18. Post-implementation review corrections — 2026-07-10
+
+This section overrides any conflicting earlier wording in this active spec.
+
+### 18.1 Position-backed episodes only in P3 v1
+
+The first implementation grouped positionless fills by calendar date and side. That does not prove one lifecycle and can merge unrelated manual trades.
+
+P3 v1 therefore uses only:
+
+```text
+episode_source=position_backed
+```
+
+Rules:
+
+- no position lifecycle -> no canonical episode
+- do not group fills by date, side, or proximity alone
+- do not emit `derived_without_position` episodes in P3 v1
+- unmatched fills/orders remain unresolved supporting evidence and are counted in the compact summary
+- a later explicit phase may add derived lifecycle reconstruction only after a separate deterministic contract is approved
+
+### 18.2 Canonical input validation
+
+Episode builder inputs must be hardened importer v2 outputs.
+
+Required schema value for trades, orders, and positions:
+
+```text
+manual_actual_trade.v2
+```
+
+Required identity/time fields must be present and non-empty for every source row:
+
+- trade: `actual_trade_id`, `symbol`, and a parseable canonical timestamp
+- order: `actual_order_id`, `symbol`, and a parseable canonical timestamp
+- position: `actual_position_id`, `symbol`, parseable open timestamp, and status-consistent close timestamp
+
+Do not silently drop rows missing identity or required time fields.
+
+Episode and link readers must validate both required headers and exact schema-version values.
+
+### 18.3 Position-side resolution
+
+Position row side remains first priority.
+
+When position side is `unknown`:
+
+- inspect only uniquely associated fill/order rows with explicit `side=long|short` and explicit `position_action=open|close|reduce`
+- exactly one consistent explicit side -> use it
+- mixed explicit sides -> episode side remains `unknown`, association becomes `ambiguous`, reason includes `side_conflict`
+- buy/sell alone never resolves position side
+
+### 18.4 Ambiguous evidence does not erase unique evidence
+
+When an episode has both uniquely associated rows and other rows ambiguous between positions:
+
+- keep counts, fees, and evidence from uniquely associated rows
+- do not attach ambiguous rows
+- set episode `association_status=ambiguous`
+- include `competing_position_candidates`
+
+Do not zero all counts merely because another row is ambiguous.
+
+### 18.5 Zero-value preservation
+
+Numeric zero is valid evidence.
+
+- `0` realized PnL remains `0`
+- `0` fee remains `0`
+- do not use truthiness tests that convert `Decimal("0")` into blank
+
+### 18.6 Deterministic provenance timestamp
+
+`created_at_utc` must not use a fabricated epoch timestamp.
+
+For episodes:
+
+- use the maximum valid `imported_at_utc` among the position and uniquely associated rows
+- blank when source provenance time is unavailable
+
+For links:
+
+- use the maximum valid source provenance timestamp among episode `created_at_utc` and signal review/evaluation provenance timestamps
+- blank when unavailable
+
+Repeated builds with unchanged inputs must remain byte-deterministic.
+
+### 18.7 Entry notification classification
+
+Entry-link classification is fail-closed.
+
+- explicit followup/management -> excluded from entry-link candidates
+- explicit defensive/watch/wait -> `defensive`
+- explicit entry/attention/candidate class or recognized entry wording -> `entry_like`
+- otherwise -> `unknown`
+
+Missing classification must not default silently to `entry_like`.
+
+Signal/outcome merging must not overwrite a non-empty value with an empty value.
+
+Malformed non-empty signal timestamps are input errors, not silently skipped rows.
+
+`--max-lookback-minutes` must be a positive integer.
+
+### 18.8 Ground-truth monetary and win-rate semantics
+
+Fill-level totals and episode-level totals remain separate.
+
+Episode metrics:
+
+```text
+episode_gross_pnl = sum(numeric realized_pnl of closed episodes)
+episode_fee_total = sum(numeric fee_total of those closed episodes)
+episode_net_pnl   = episode_gross_pnl - episode_fee_total
+```
+
+Do not subtract global fill fees from episode PnL.
+
+Episode win-rate denominator:
+
+```text
+wins + losses + breakeven
+```
+
+Closed episodes with missing/invalid realized PnL are reported as `episode_missing_pnl_count` and excluded from the denominator.
+
+### 18.9 Actual-backed descriptive categories
+
+Only high/medium linked rows are actual-backed aggregate inputs.
+
+Canonical categories are:
+
+```text
+actual_positive_with_entry_like_signal
+actual_negative_with_entry_like_signal
+actual_positive_with_defensive_signal
+actual_negative_with_defensive_signal
+ambiguous_needs_review
+```
+
+Breakeven, missing PnL, unknown notification class, or any incompatible state goes to `ambiguous_needs_review`.
+
+Side/symbol conflicts are disqualified from linked high/medium rows and belong to link-coverage diagnostics. They are not an actual-backed category.
+
+### 18.10 Input failure and output safety
+
+V2 report generation must fail closed when required inputs are missing, malformed, wrong-schema, or wrong-version:
+
+- `ok=false`
+- exit code `2`
+- no report mutation
+
+Episode CSV, link CSV, and report Markdown writes use same-filesystem temporary-file replacement. No direct partial write is allowed.
+
+### 18.11 Required final regression coverage
+
+Add explicit tests for:
+
+1. no position rows produces zero episodes and unresolved fill/order counts
+2. calendar-date grouping is not performed
+3. position unknown side resolves only from explicit side plus position action
+4. ambiguous competing evidence does not erase unique fill/order counts
+5. zero fee and zero PnL remain zero
+6. malformed or wrong-version importer input fails
+7. missing IDs/timestamps fail instead of being dropped
+8. malformed signal timestamp fails
+9. non-positive lookback fails
+10. unknown notification class does not default to entry-like
+11. non-empty signal outcome values survive empty review fields
+12. episode net PnL uses episode-associated fee only
+13. missing episode PnL is excluded from win-rate denominator
+14. negative defensive evidence uses the corrected category
+15. missing/wrong-version report inputs fail without output mutation
+16. new episode/link/report CLI routes are exercised through subprocess
+17. atomic write failure leaves the prior generated output intact

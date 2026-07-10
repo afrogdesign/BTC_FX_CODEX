@@ -17,6 +17,9 @@ if str(BASE_DIR) not in sys.path:
 
 from tools.log_feedback import build_manual_trade_ground_truth_report  # noqa: E402
 from src.feedback.manual_trade_ground_truth import build_manual_trade_ground_truth_report_v2  # noqa: E402
+from src.feedback.manual_actual_trade_importer import ORDER_HEADERS as CANONICAL_ORDER_HEADERS, POSITION_HEADERS as CANONICAL_POSITION_HEADERS, TRADE_HEADERS as CANONICAL_TRADE_HEADERS  # noqa: E402
+from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS  # noqa: E402
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS as CANONICAL_LINK_HEADERS  # noqa: E402
 
 
 MANUAL_TRADE_HEADERS = [
@@ -311,12 +314,22 @@ class ManualTradeGroundTruthReportTest(unittest.TestCase):
     def test_v2_report_separates_fill_and_episode_metrics(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            fills = _write_csv(root / "trades.csv", MANUAL_TRADE_HEADERS, [_trade_row("f1", "2026-07-01T10:00:00+09:00", "long", "10", "1"), _trade_row("f2", "2026-07-01T10:01:00+09:00", "long", "-2", "0.5")])
-            orders = _write_headers_only(root / "orders.csv", ["actual_order_id"])
-            positions = _write_headers_only(root / "positions.csv", ["actual_position_id"])
-            episodes = _write_csv(root / "episodes.csv", ["episode_id", "status", "side", "realized_pnl"], [{"episode_id": "ep-1", "status": "closed", "side": "long", "realized_pnl": "8"}])
-            links = _write_csv(root / "links.csv", ["episode_id", "link_confidence", "link_status", "notification_class", "link_reason"], [{"episode_id": "ep-1", "link_confidence": "high", "link_status": "linked", "notification_class": "entry_like", "link_reason": "matched_unique_top_candidate"}])
-            report, payload = build_manual_trade_ground_truth_report_v2(trades=fills, orders=orders, positions=positions, episodes=episodes, links=links, output_md=root / "report.md")
+            fill_rows = []
+            for identifier, pnl, fee in (("f1", "10", "1"), ("f2", "-2", "0.5")):
+                row = {field: "" for field in CANONICAL_TRADE_HEADERS}
+                row.update(schema_version="manual_actual_trade.v2", actual_trade_id=identifier, symbol="BTCUSDT", timestamp_jst="2026-07-01T10:00:00+09:00", realized_pnl=pnl, fee=fee)
+                fill_rows.append(row)
+            fills = _write_csv(root / "trades.csv", CANONICAL_TRADE_HEADERS, fill_rows)
+            orders = _write_headers_only(root / "orders.csv", CANONICAL_ORDER_HEADERS)
+            positions = _write_headers_only(root / "positions.csv", CANONICAL_POSITION_HEADERS)
+            episode_row = {field: "" for field in EPISODE_HEADERS}
+            episode_row.update(schema_version="manual_trade_episode.v1", episode_id="ep-1", status="closed", side="long", realized_pnl="8", fee_total="0.5")
+            episodes = _write_csv(root / "episodes.csv", EPISODE_HEADERS, [episode_row])
+            link_row = {field: "" for field in CANONICAL_LINK_HEADERS}
+            link_row.update(schema_version="manual_trade_signal_link.v2", episode_id="ep-1", link_confidence="high", link_status="linked", notification_class="entry_like", link_reason="matched_unique_top_candidate")
+            links = _write_csv(root / "links.csv", CANONICAL_LINK_HEADERS, [link_row])
+            outcomes = _write_csv(root / "outcomes.csv", ["signal_id"], [])
+            report, payload = build_manual_trade_ground_truth_report_v2(trades=fills, orders=orders, positions=positions, episodes=episodes, links=links, signal_outcomes=outcomes, output_md=root / "report.md")
             self.assertEqual(payload["fill_row_count"], 2)
             self.assertEqual(payload["episode_count"], 1)
             self.assertEqual(payload["episode_win_rate"], 1.0)
