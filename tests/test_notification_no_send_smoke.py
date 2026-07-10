@@ -154,6 +154,18 @@ class NotificationNoSendSmokeTest(unittest.TestCase):
         self.assertFalse(report["approved_local_script"])
         self.assertTrue(report["unsafe_script_detected"])
 
+    def test_missing_shadow_panel_causes_failure(self) -> None:
+        detail_html = _valid_detail_html().replace("SHADOW / REPORT ONLY", "SHADOW REMOVED")
+        with mock.patch.object(render_no_send_smoke, "build_notification_detail_html", return_value=detail_html):
+            report = render_no_send_smoke._render_no_send_render_only_smoke()
+        self.assertEqual(report["status"], "fail"); self.assertFalse(report["shadow_surface_present"])
+
+    def test_missing_shadow_candidate_cards_causes_failure(self) -> None:
+        detail_html = _valid_detail_html().replace('class="shadow-card"', 'class="shadow-card-removed"')
+        with mock.patch.object(render_no_send_smoke, "build_notification_detail_html", return_value=detail_html):
+            report = render_no_send_smoke._render_no_send_render_only_smoke()
+        self.assertEqual(report["status"], "fail"); self.assertFalse(report["shadow_candidate_rows_present"])
+
 
 if __name__ == "__main__":
     unittest.main()

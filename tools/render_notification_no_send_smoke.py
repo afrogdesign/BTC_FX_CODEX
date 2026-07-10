@@ -210,11 +210,15 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
     )
     sensitive_leak_detected = bool(leaks)
     legacy_label_leak_detected = bool(legacy_version_tokens)
+    shadow_surface_present = "SHADOW / REPORT ONLY" in detail_html
+    shadow_candidate_rows_present = 'class="shadow-card"' in detail_html
     status = (
         "fail"
         if sensitive_leak_detected
         or legacy_label_leak_detected
         or inline_script_report["unsafe_script_detected"]
+        or not shadow_surface_present
+        or not shadow_candidate_rows_present
         else "pass"
     )
     return {
@@ -235,7 +239,7 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         "post_eval_recommendations_present": True,
         "sensitive_leak_detected": sensitive_leak_detected,
         "shadow_surface_present": "SHADOW / REPORT ONLY" in detail_html,
-        "shadow_candidate_rows_present": "shadow-card" in detail_html,
+        "shadow_candidate_rows_present": shadow_candidate_rows_present,
         "forbidden_tokens": leaks,
         **inline_script_report,
     }

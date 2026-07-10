@@ -742,6 +742,31 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn('class="sparkline"', html)
         self.assertNotIn("not FORMAL_GO order", html)
 
+    def test_operator_dashboard_includes_sanitized_shadow_panel(self) -> None:
+        payload = _sample_detail_payload()
+        payload["active_trade_plan"] = {"side_plans": {"long": {"bias_alignment": "primary", "market_entry_status": "allowed", "entry_mid": 65000, "stop_loss": 64000, "tp1": 66000, "tp2": 67000, "rr_zone_mid_tp1": 1.2, "rr_zone_mid_tp2": 2.0}}}
+        payload["big_chance_candidate"] = {"present": True, "score": 1, "grade": "C", "status": "armed", "headline": "shadow context", "macro_context": {}}
+        html = build_notification_detail_html(payload)
+        self.assertIn("SHADOW / REPORT ONLY", html)
+        for text in ("not FORMAL_GO", "no automatic order", "human decides manually", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT", "15分足", "64000", "66000", "67000"):
+            self.assertIn(text, html)
+        self.assertIn("shadow-card", html)
+        self.assertLess(html.find('id="active-alerts"'), html.find("SHADOW / REPORT ONLY"))
+        self.assertLess(html.find("SHADOW / REPORT ONLY"), html.find('class="workspace"'))
+        for marker in ('chart-panel', 'side-card long', 'side-card short', 'VALUE DEFENSE', 'id="big-chance"'):
+            self.assertIn(marker, html)
+        escaped = build_notification_detail_html({**payload, "active_trade_plan": {"side_plans": {"long": {"entry_mid": "<unsafe>", "stop_loss": "<sl>", "tp1": "<tp1>", "tp2": "<tp2>"}}}})
+        self.assertNotIn("<unsafe>", escaped)
+
+    def test_shadow_degradation_preserves_detail_page(self) -> None:
+        payload = _sample_detail_payload()
+        for status in ("no_current_candidate", "insufficient_evidence", "malformed"):
+            with patch("src.notification.detail_page.build_manual_operator_shadow_surface", return_value={"surface_status": status, "rows": [], "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"}):
+                html = build_notification_detail_html(payload)
+            self.assertIn('class="workspace"', html)
+            self.assertIn("chart-panel", html)
+            self.assertIn("SHADOW / REPORT ONLY", html)
+
     def test_operator_dashboard_v2_structure_prices_and_value_defense(self) -> None:
         payload = _sample_detail_payload()
         payload["current_price"] = 63197.80

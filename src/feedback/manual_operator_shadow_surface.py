@@ -22,11 +22,11 @@ def _row(result: dict[str, Any], candidate: dict[str, Any], signal: dict[str, An
     timestamp = result.get("timestamp_utc") or result.get("timestamp_jst") or signal.get("timestamp_utc") or signal.get("timestamp_jst") or ""
     event = {
         "scenario_event_id": "", "scenario_id": "", "candidate_id": "", "source_signal_id": candidate.get("source_signal_id") or signal.get("signal_id") or "",
-        "event_timestamp_utc": timestamp, "event_timestamp_jst": timestamp, "grouping_status": "new_scenario", "symbol": result.get("symbol") or "BTCUSDT", "side": side,
+        "event_timestamp_utc": timestamp, "event_timestamp_jst": timestamp, "grouping_status": "new_scenario", "symbol": result.get("symbol") or "", "side": side,
         "setup_family": candidate.get("candidate_type") or "", "candidate_status": candidate.get("candidate_status") or "", "entry_price": candidate.get("entry_price") or "", "entry_zone_low": candidate.get("entry_zone_low") or "", "entry_zone_high": candidate.get("entry_zone_high") or "",
     }
-    cand = dict(candidate); cand.setdefault("timestamp_jst", timestamp); cand.setdefault("candidate_id", "shadow"); cand.setdefault("candidate_type", candidate.get("candidate_type", "")); cand.setdefault("source_signal_id", event["source_signal_id"])
-    sig = {key: (value if value is not None else "") for key, value in dict(signal).items()}; sig["signal_id"] = sig.get("signal_id") or event["source_signal_id"]; sig["timestamp_jst"] = sig.get("timestamp_jst") or timestamp; sig["primary_setup_side"] = sig.get("primary_setup_side") or side; sig["primary_setup_status"] = sig.get("primary_setup_status") or ""; sig["data_quality_flag"] = sig.get("data_quality_flag") or ""
+    cand = dict(candidate); cand["timestamp_jst"] = cand.get("timestamp_jst") or timestamp; cand.setdefault("candidate_id", "shadow"); cand.setdefault("candidate_type", candidate.get("candidate_type", "")); cand.setdefault("source_signal_id", event["source_signal_id"])
+    sig = {key: (value if value is not None else "") for key, value in dict(signal).items()}; sig["signal_id"] = sig.get("signal_id") or event["source_signal_id"]; sig["timestamp_jst"] = sig.get("timestamp_jst") or timestamp; sig["primary_setup_status"] = sig.get("primary_setup_status") or ""; sig["data_quality_flag"] = sig.get("data_quality_flag") or ""
     classified = classify_manual_operator_candidate(event, cand, sig)
     operator_class = classified.get("operator_class", "")
     row = {field: "" for field in _FIELDS}

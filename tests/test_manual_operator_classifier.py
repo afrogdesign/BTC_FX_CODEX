@@ -15,6 +15,7 @@ from src.feedback.manual_operator_classifier import (
     OUTPUT_HEADERS,
     SIGNAL_HEADERS,
     build_manual_operator_classifier,
+    classify_manual_operator_candidate,
 )
 from src.feedback.manual_scenario_normalizer import SCENARIO_HEADERS
 
@@ -255,6 +256,17 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         result = self.run_classifier(self.fixture(extra_signal={"primary_setup_side": "short"}))
         self.assertEqual(result["classification_status_counts"].get("insufficient_evidence"), 1)
         self.assertEqual(self.read_rows()[0]["reason_codes"], "side_mismatch")
+
+    def test_public_single_candidate_helper_matches_batch(self) -> None:
+        for kwargs in ({"gate": "pass"}, {"gate": "blocked"}, {"gate": "blocked", "direction": "40"}, {"gate": "pass", "quality": "bad"}, {"gate": "blocked", "rr1": "", "rr2": ""}):
+            fixture = self.fixture(**kwargs); result = self.run_classifier(fixture)
+            with fixture["events"].open(newline="", encoding="utf-8") as fp: event = next(csv.DictReader(fp))
+            with fixture["candidates"].open(newline="", encoding="utf-8") as fp: candidate = next(csv.DictReader(fp))
+            with fixture["signals"].open(newline="", encoding="utf-8") as fp: signal = next(csv.DictReader(fp))
+            copies = (dict(event), dict(candidate), dict(signal)); direct = classify_manual_operator_candidate(event, candidate, signal); batch = self.read_rows()[0]
+            for key in ("classification_status", "operator_class", "reason_codes", "required_human_check", "warning_codes", "trade_execution_gate", "phase1b_lite_gate", "opportunity_gate", "entry_price", "entry_zone_low", "entry_zone_high", "invalidation_price", "tp1_price", "tp2_price"):
+                self.assertEqual(direct.get(key, ""), batch.get(key, ""), key)
+            self.assertEqual((event, candidate, signal), copies)
 
 
 if __name__ == "__main__": unittest.main()
