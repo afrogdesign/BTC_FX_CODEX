@@ -133,8 +133,10 @@ def _read_csv(path: Path, required: list[str]) -> tuple[list[dict[str, str]], st
 
 
 def _read_outcomes(path: Path | None) -> tuple[dict[str, dict[str, str]], int, str | None]:
-    if path is None or not path.exists():
+    if path is None:
         return {}, 0, None
+    if not path.exists():
+        return {}, 0, "missing_input"
     try:
         with path.open(newline="", encoding="utf-8") as fp:
             reader = csv.DictReader(fp)
@@ -144,15 +146,22 @@ def _read_outcomes(path: Path | None) -> tuple[dict[str, dict[str, str]], int, s
     except (OSError, UnicodeError, csv.Error):
         return {}, 0, "invalid_input"
     result: dict[str, dict[str, str]] = {}
+    fingerprints: dict[str, tuple[tuple[str, str], ...]] = {}
     conflicts = 0
     for row in rows:
         cid = str(row.get("candidate_id", "")).strip()
+        normalized = {str(key): str(value or "").strip() for key, value in row.items()}
         if not cid:
-            continue
-        if cid in result and result[cid].get("outcome", "") != row.get("outcome", ""):
+            return {}, 0, "invalid_input"
+        for key in ("entry_reached_time", "first_exit_time", "timestamp_jst"):
+            if normalized.get(key) and _dt(normalized[key]) is None:
+                return {}, 0, "invalid_input"
+        fingerprint = tuple(sorted(normalized.items()))
+        if cid in result and fingerprints[cid] != fingerprint:
             conflicts += 1
         else:
-            result[cid] = row
+            result[cid] = normalized
+            fingerprints[cid] = fingerprint
     if conflicts:
         return result, conflicts, "candidate_identity_conflict"
     return result, 0, None
@@ -287,12 +296,12 @@ def _compatible(a: dict[str, Any], b: dict[str, Any], zone_bps: int, inv_bps: in
 
 def _scenario_id(events: list[dict[str, Any]]) -> str:
     first = events[0]
-    timestamp = first.get("event_timestamp_utc") or _utc(first.get("timestamp"))
-    return "scn_" + _hash(first["symbol"], first["side"], first["setup_family"], timestamp, first["candidate_fingerprint"], METHOD_VERSION)[:24]
+    timestamp = _jst(first["timestamp"] if isinstance(first.get("timestamp"), datetime) else _dt(first.get("event_timestamp_jst") or first.get("timestamp")))
+    return "scn_" + _hash(first["symbol"], first["side"], first["setup_family"], timestamp, first.get("entry_zone_low", ""), first.get("entry_zone_high", ""), first.get("invalidation_price", ""), METHOD_VERSION)[:24]
 
 
 def _event_id(row: dict[str, Any]) -> str:
-    return "sce_" + _hash(row.get("candidate_id"), row.get("candidate_fingerprint"), row.get("event_timestamp_utc"), row.get("event_type"), row.get("scenario_id"), METHOD_VERSION)[:24]
+    return "sce_" + _hash(row.get("candidate_id"), row.get("candidate_fingerprint"), row.get("grouping_status"), METHOD_VERSION)[:24]
 
 
 def _diagnose_ohlcv(candidate: dict[str, Any], ohlcv: list[dict[str, str]] | None) -> tuple[str, str]:
@@ -312,11 +321,30 @@ def _diagnose_ohlcv(candidate: dict[str, Any], ohlcv: list[dict[str, str]] | Non
     if timestamp < parsed[0][0]:
         return "no_ohlcv", "candidate_before_ohlcv_start"
     if timestamp > parsed[-1][0]:
-        return "no_ohlcv", "candidate_after_ohlcv_end"
+        age = timestamp - parsed[-1][0]
+        return "no_ohlcv", "stale_ohlcv_range" if age > timedelta(hours=24) else "candidate_after_ohlcv_end"
     window_end = timestamp + timedelta(hours=24)
     if not any(timestamp <= ts <= window_end for ts, _, _ in parsed):
         return "no_ohlcv", "candidate_window_gap"
     return "covered", "covered"
+
+
+def _outcome_terminal_boundary(candidate: dict[str, Any], outcome: dict[str, str], max_age_hours: int) -> datetime | None:
+    name = str(outcome.get("outcome", "")).strip().lower()
+    if name not in RESOLVED_OUTCOMES and name not in {"not_entered", "entry_not_reached", "expired"}:
+        return None
+    explicit = _dt(outcome.get("first_exit_time"))
+    if explicit is not None:
+        return explicit
+    if name in {"not_entered", "entry_not_reached", "expired"}:
+        return candidate["timestamp"] + timedelta(hours=max_age_hours)
+    return None
+
+
+def _group_terminal_boundary(group: list[dict[str, Any]], outcomes: dict[str, dict[str, str]], max_age_hours: int) -> datetime | None:
+    boundaries = [_outcome_terminal_boundary(item, outcomes.get(item["candidate_id"], {}), max_age_hours) for item in group]
+    valid = [value for value in boundaries if value is not None]
+    return min(valid) if valid else None
 
 
 def build_manual_scenarios(*, candidates: Path, intraperiod_outcomes: Path | None = None, scenarios_out: Path | None = None, events_out: Path | None = None, max_update_gap_minutes: int = 360, max_scenario_age_hours: int = 24, zone_tolerance_bps: int = 25, invalidation_tolerance_bps: int = 50, ohlcv: Path | None = None, dry_run: bool = False, replace_output: bool = False) -> dict[str, Any]:
@@ -382,7 +410,8 @@ def build_manual_scenarios(*, candidates: Path, intraperiod_outcomes: Path | Non
         matches: list[int] = []
         for index, group in enumerate(scenarios):
             latest = group[-1]
-            if any(str(outcomes.get(item["candidate_id"], {}).get("outcome", "")).strip().lower() in RESOLVED_OUTCOMES | {"not_entered", "entry_not_reached", "expired"} for item in group):
+            terminal_boundary = _group_terminal_boundary(group, outcomes, max_scenario_age_hours)
+            if terminal_boundary is not None and candidate["timestamp"] > terminal_boundary:
                 continue
             age = candidate["timestamp"] - group[0]["timestamp"]
             gap = candidate["timestamp"] - latest["timestamp"]
@@ -406,15 +435,21 @@ def build_manual_scenarios(*, candidates: Path, intraperiod_outcomes: Path | Non
             summary["assigned_candidate_rows"] += 1
         coverage, gap_reason = _diagnose_ohlcv(candidate, ohlcv_rows)
         outcome = outcomes.get(candidate["candidate_id"], {})
-        if str(outcome.get("outcome", "")).strip().lower() == "no_ohlcv":
+        if str(outcome.get("outcome", "")).strip().lower() == "no_ohlcv" and ohlcv_rows is None:
             coverage, gap_reason = "no_ohlcv", "no_ohlcv_input"
         outcome_name = str(outcome.get("outcome", "")).strip().lower()
-        if outcome_name == "entry_reached":
+        if grouping == "ambiguous":
+            event_type = "ambiguous_grouping"
+        elif outcome_name == "no_ohlcv":
+            event_type = "coverage_missing"
+        elif outcome_name == "entry_reached":
             event_type = "zone_touched"
         elif outcome_name in RESOLVED_OUTCOMES:
             event_type = "proxy_resolved"
         elif outcome_name in {"not_entered", "entry_not_reached", "expired"}:
             event_type = "expired_without_touch"
+        elif outcome_name in {"", "pending", "timeout", "ambiguous"}:
+            event_type = "pending"
         event: dict[str, Any] = {
             "schema_version": EVENT_SCHEMA_VERSION, "scenario_event_id": "", "scenario_id": scenario_id,
             "candidate_id": candidate["candidate_id"], "candidate_fingerprint": candidate["candidate_fingerprint"],
@@ -441,18 +476,23 @@ def build_manual_scenarios(*, candidates: Path, intraperiod_outcomes: Path | Non
         group_events = [event for event in events if event["scenario_id"] == scenario_id]
         outcomes_seen = [str(e.get("intraperiod_outcome", "")).strip().lower() for e in group_events]
         resolved = next((value for value in outcomes_seen if value in RESOLVED_OUTCOMES), "")
-        no_ohlcv = any(e.get("ohlcv_coverage_status") == "no_ohlcv" for e in group_events)
-        pending = any(value in {"pending", "timeout", "ambiguous", "entry_reached", ""} for value in outcomes_seen)
+        expired = next((value for value in outcomes_seen if value in {"not_entered", "entry_not_reached", "expired"}), "")
+        no_ohlcv = any(e.get("ohlcv_coverage_status") == "no_ohlcv" or e.get("ohlcv_gap_reason") for e in group_events)
         lifecycle = "detected" if len(group) == 1 else "updated"
         if "entry_reached" in outcomes_seen:
             lifecycle = "zone_touched"
         status = "active"
-        if no_ohlcv: status, lifecycle = "coverage_missing", "coverage_missing"
-        elif resolved: status, lifecycle = "resolved", "proxy_resolved"
-        elif any(value in {"not_entered", "entry_not_reached", "expired"} for value in outcomes_seen): status, lifecycle = "expired", "expired_without_touch"
-        touched = next((e for e in group_events if e.get("intraperiod_outcome") == "entry_reached"), None)
-        terminal = next((e for e in group_events if e.get("intraperiod_outcome") in RESOLVED_OUTCOMES or e.get("intraperiod_outcome") in {"not_entered", "entry_not_reached", "expired"}), None)
-        row = {"schema_version": SCENARIO_SCHEMA_VERSION, "scenario_id": scenario_id, "symbol": first["symbol"], "side": first["side"], "setup_family": first["setup_family"], "scenario_status": status, "lifecycle_state": lifecycle, "initial_candidate_id": first["candidate_id"], "latest_candidate_id": last["candidate_id"], "initial_signal_id": first["source_signal_id"], "latest_signal_id": last["source_signal_id"], "detected_at_utc": _utc(first["timestamp"]), "detected_at_jst": _jst(first["timestamp"]), "last_updated_at_utc": _utc(last["timestamp"]), "last_updated_at_jst": _jst(last["timestamp"]), "entry_zone_low": last["entry_zone_low"], "entry_zone_high": last["entry_zone_high"], "invalidation_price": last.get("invalidation_price", ""), "tp1_price": last.get("tp1_price", ""), "tp2_price": last.get("tp2_price", ""), "candidate_event_count": str(len(group)), "source_signal_count": str(len({x["source_signal_id"] for x in group})), "zone_touched_at_utc": touched.get("event_timestamp_utc", "") if touched else "", "zone_touched_at_jst": touched.get("event_timestamp_jst", "") if touched else "", "terminal_at_utc": terminal.get("event_timestamp_utc", "") if terminal else "", "terminal_at_jst": terminal.get("event_timestamp_jst", "") if terminal else "", "proxy_outcome": resolved, "proxy_outcome_status": "resolved" if resolved else ("coverage_missing" if no_ohlcv else "pending"), "ohlcv_coverage_status": "no_ohlcv" if no_ohlcv else ("covered" if ohlcv_rows is not None else ""), "scenario_method_version": METHOD_VERSION, "max_update_gap_minutes": str(max_update_gap_minutes), "max_scenario_age_hours": str(max_scenario_age_hours), "zone_tolerance_bps": str(zone_tolerance_bps), "invalidation_tolerance_bps": str(invalidation_tolerance_bps)}
+        if resolved: status, lifecycle = "resolved", "proxy_resolved"
+        elif expired: status, lifecycle = "expired", "expired_without_touch"
+        elif no_ohlcv: status, lifecycle = "coverage_missing", "coverage_missing"
+        elif any(value in {"pending", "timeout", "ambiguous", ""} for value in outcomes_seen): lifecycle = "pending"
+        touched_times = [_dt(outcomes.get(item["candidate_id"], {}).get("entry_reached_time")) for item in group]
+        touched_time = min((value for value in touched_times if value is not None), default=None)
+        terminal_boundary = _group_terminal_boundary(group, outcomes, max_scenario_age_hours)
+        latest_values: dict[str, str] = {}
+        for field in ("entry_zone_low", "entry_zone_high", "invalidation_price", "tp1_price", "tp2_price"):
+            latest_values[field] = next((str(item.get(field, "")).strip() for item in reversed(group) if str(item.get(field, "")).strip()), "")
+        row = {"schema_version": SCENARIO_SCHEMA_VERSION, "scenario_id": scenario_id, "symbol": first["symbol"], "side": first["side"], "setup_family": first["setup_family"], "scenario_status": status, "lifecycle_state": lifecycle, "initial_candidate_id": first["candidate_id"], "latest_candidate_id": last["candidate_id"], "initial_signal_id": first["source_signal_id"], "latest_signal_id": last["source_signal_id"], "detected_at_utc": _utc(first["timestamp"]), "detected_at_jst": _jst(first["timestamp"]), "last_updated_at_utc": _utc(last["timestamp"]), "last_updated_at_jst": _jst(last["timestamp"]), "entry_zone_low": latest_values["entry_zone_low"], "entry_zone_high": latest_values["entry_zone_high"], "invalidation_price": latest_values["invalidation_price"], "tp1_price": latest_values["tp1_price"], "tp2_price": latest_values["tp2_price"], "candidate_event_count": str(len(group)), "source_signal_count": str(len({x["source_signal_id"] for x in group})), "zone_touched_at_utc": _utc(touched_time), "zone_touched_at_jst": _jst(touched_time), "terminal_at_utc": _utc(terminal_boundary), "terminal_at_jst": _jst(terminal_boundary), "proxy_outcome": resolved, "proxy_outcome_status": "resolved" if resolved else ("expired" if expired else ("coverage_missing" if no_ohlcv else "pending")), "ohlcv_coverage_status": "no_ohlcv" if no_ohlcv else ("covered" if ohlcv_rows is not None else ""), "scenario_method_version": METHOD_VERSION, "max_update_gap_minutes": str(max_update_gap_minutes), "max_scenario_age_hours": str(max_scenario_age_hours), "zone_tolerance_bps": str(zone_tolerance_bps), "invalidation_tolerance_bps": str(invalidation_tolerance_bps)}
         scenario_rows.append(row)
     scenario_rows.sort(key=lambda row: (row["detected_at_utc"], row["scenario_id"]))
     events.sort(key=lambda row: (row["event_timestamp_utc"], row["candidate_id"], row["scenario_event_id"]))

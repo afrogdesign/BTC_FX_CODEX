@@ -7,7 +7,10 @@ import unittest
 from pathlib import Path
 
 from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage
-from src.feedback.manual_scenario_normalizer import build_manual_scenarios
+from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, SCENARIO_HEADERS, build_manual_scenarios
+from src.feedback.manual_decision_events import DECISION_HEADERS
+from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS
 
 
 class ManualScenarioCoverageTests(unittest.TestCase):
@@ -56,6 +59,95 @@ class ManualScenarioCoverageTests(unittest.TestCase):
         self.assertEqual(payload["exit_code"], 0)
         self.assertFalse(output_json.exists())
         self.assertFalse(output_md.exists())
+
+    def _base(self) -> tuple[Path, Path, Path]:
+        candidates = self.write("c.csv", ["candidate_id", "source_signal_id", "timestamp_jst", "candidate_type", "side", "entry_price"], [{"candidate_id": "c1", "source_signal_id": "s1", "timestamp_jst": "2026-07-10T10:00:00+09:00", "candidate_type": "active_limit_retest", "side": "long", "entry_price": "60000"}])
+        scenarios, events = self.root / "s.csv", self.root / "e.csv"
+        build_manual_scenarios(candidates=candidates, scenarios_out=scenarios, events_out=events)
+        return candidates, scenarios, events
+
+    def test_missing_supplied_outcome_fails(self) -> None:
+        candidates, scenarios, events = self._base()
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, intraperiod_outcomes=self.root / "missing.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["exit_code"], 2)
+
+    def test_missing_supplied_p3_input_fails(self) -> None:
+        candidates, scenarios, events = self._base()
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, episodes=self.root / "missing.ep.csv", episode_links=self.root / "missing.link.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["exit_code"], 2)
+
+    def test_p3_inputs_must_be_supplied_together(self) -> None:
+        candidates, scenarios, events = self._base()
+        episodes = self.write("episodes.csv", EPISODE_HEADERS, [])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, episodes=episodes, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 2)
+
+    def test_pending_excludes_no_ohlcv(self) -> None:
+        candidates, scenarios, events = self._base()
+        with events.open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        row["intraperiod_outcome"] = "no_ohlcv"
+        self.write("e2.csv", EVENT_HEADERS, [row])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=self.root / "e2.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["pending_candidate_rows"], 0)
+        self.assertEqual(payload["no_ohlcv_candidate_rows"], 1)
+
+    def test_effective_decisions_and_orphan(self) -> None:
+        candidates, scenarios, events = self._base()
+        with scenarios.open(newline="", encoding="utf-8") as fp:
+            scenario_id = next(csv.DictReader(fp))["scenario_id"]
+        decisions = self.root / "d.csv"
+        rows = [{"schema_version": "manual_decision_event.v1", "decision_event_id": "mde_" + "a" * 24, "event_fingerprint": "f1", "identity_scope": "scenario", "scenario_id": scenario_id, "signal_id": "", "human_action": "skipped", "decision_stage": "entry", "supersedes_decision_event_id": "", "record_status": "active"}, {"schema_version": "manual_decision_event.v1", "decision_event_id": "mde_" + "b" * 24, "event_fingerprint": "f2", "identity_scope": "scenario", "scenario_id": scenario_id, "signal_id": "", "human_action": "watched_no_entry", "decision_stage": "entry", "supersedes_decision_event_id": "mde_" + "a" * 24, "record_status": "correction"}, {"schema_version": "manual_decision_event.v1", "decision_event_id": "mde_" + "c" * 24, "event_fingerprint": "f3", "identity_scope": "scenario", "scenario_id": "scn_" + "c" * 24, "signal_id": "", "human_action": "skipped", "decision_stage": "entry", "supersedes_decision_event_id": "", "record_status": "active"}]
+        padded = [{key: row.get(key, "") for key in DECISION_HEADERS} for row in rows]
+        with decisions.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=DECISION_HEADERS); writer.writeheader(); writer.writerows(padded)
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, decision_events=decisions, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["decision_history_row_count"], 3)
+        self.assertEqual(payload["effective_decision_event_count"], 2)
+        self.assertEqual(payload["orphan_decision_event_count"], 1)
+        self.assertEqual(payload["scenario_decision_coverage_rate"], 1.0)
+
+    def test_report_json_contains_written_true(self) -> None:
+        candidates, scenarios, events = self._base()
+        output_json, output_md = self.root / "r.json", self.root / "r.md"
+        build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, output_json=output_json, output_md=output_md)
+        self.assertTrue(json.loads(output_json.read_text(encoding="utf-8"))["report_written"])
+
+    def test_default_output_requires_report_date(self) -> None:
+        candidates, scenarios, events = self._base()
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events)
+        self.assertEqual(payload["exit_code"], 2)
+
+    def test_explicit_paths_allow_blank_report_date(self) -> None:
+        candidates, scenarios, events = self._base()
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 0)
+
+    def test_deterministic_report_bytes(self) -> None:
+        candidates, scenarios, events = self._base()
+        j, m = self.root / "r.json", self.root / "r.md"
+        build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, output_json=j, output_md=m, report_date="20260710")
+        first = (j.read_bytes(), m.read_bytes())
+        build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, output_json=j, output_md=m, report_date="20260710")
+        self.assertEqual(first, (j.read_bytes(), m.read_bytes()))
+
+    def test_duplicate_scenario_id_fails(self) -> None:
+        candidates, scenarios, events = self._base()
+        with scenarios.open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        self.write("dup_s.csv", SCENARIO_HEADERS, [row, row])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=self.root / "dup_s.csv", scenario_events=events, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 2)
+
+    def test_duplicate_event_id_fails(self) -> None:
+        candidates, scenarios, events = self._base()
+        with events.open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        self.write("dup_e.csv", EVENT_HEADERS, [row, row])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=self.root / "dup_e.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 2)
 
 
 if __name__ == "__main__":

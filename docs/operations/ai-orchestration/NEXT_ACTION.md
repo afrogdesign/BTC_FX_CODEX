@@ -1,14 +1,14 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-IMPLEMENT`
+- current_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-CORRECT`
 - mode: `BOUNDED_CODEX`
-- task_type: `P4 SOURCE / TARGETED TEST / COMMIT`
+- task_type: `P4 CORRECTION / TARGETED TEST / COMMIT`
 - previous_work_id: `BTCFX-20260710-MTP-SCENARIO-COVERAGE-DECISION-SPEC-CHECKPOINT`
 - previous_status: `P4 ACTIVE SPEC COMMITTED / PUSH NONE`
 
 ## Current goal
 
-P4 active specに従い、scenario normalizer、append-only manual decision-event recorder、deterministic scenario coverage reportをreport-only pipelineとして実装する。
+ P4のpost-implementation review correctionsに従い、scenario identity、terminal boundary、coverage input、effective decision metricsをfail-closedに修正する。P4は未完了のままレビュー待ちとする。
 
 Active spec:
 

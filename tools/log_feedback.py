@@ -21976,6 +21976,7 @@ def _build_parser() -> argparse.ArgumentParser:
     decision_parser.add_argument("--supersedes-decision-event-id", default="")
     decision_parser.add_argument("--output-csv", default="logs/csv/manual_decision_events.csv")
     decision_parser.add_argument("--scenarios")
+    decision_parser.add_argument("--scenario-events")
     decision_parser.add_argument("--dry-run", action="store_true")
     decision_parser.add_argument("--stdout-json", action="store_true")
 
@@ -23303,6 +23304,7 @@ def main() -> None:
             manual_note=args.manual_note, source=args.source,
             supersedes_decision_event_id=args.supersedes_decision_event_id,
             output_csv=Path(args.output_csv), scenarios=Path(args.scenarios) if args.scenarios else None,
+            scenario_events=Path(args.scenario_events) if args.scenario_events else None,
             dry_run=bool(args.dry_run),
         )
         if bool(getattr(args, "stdout_json", False)):

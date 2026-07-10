@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import tempfile
+import re
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -84,6 +85,10 @@ def _read_existing(path: Path) -> tuple[list[dict[str, str]], str | None]:
         if row.get("schema_version") != SCHEMA_VERSION or not row.get("decision_event_id") or row["decision_event_id"] in ids:
             return [], "existing_output_schema_mismatch"
         ids.add(row["decision_event_id"])
+    for row in rows:
+        target = row.get("supersedes_decision_event_id", "")
+        if target and (target == row.get("decision_event_id") or target not in ids or sum(1 for item in rows if item.get("supersedes_decision_event_id") == target) > 1):
+            return [], "existing_output_schema_mismatch"
     return rows, None
 
 
@@ -103,7 +108,7 @@ def _write(path: Path, rows: list[dict[str, str]]) -> None:
         raise OSError("output_io_error") from exc
 
 
-def _scenario_check(scenarios: Path, scenario_id: str, signal_id: str) -> str:
+def _scenario_check(scenarios: Path, scenario_id: str, signal_id: str, scenario_events: Path | None = None) -> str:
     try:
         with scenarios.open(newline="", encoding="utf-8") as fp:
             reader = csv.DictReader(fp)
@@ -117,12 +122,27 @@ def _scenario_check(scenarios: Path, scenario_id: str, signal_id: str) -> str:
     match = next((row for row in rows if row.get("scenario_id") == scenario_id), None)
     if match is None or match.get("schema_version") != "manual_scenario.v1":
         return "unknown_scenario"
-    if signal_id and signal_id not in {match.get("initial_signal_id", ""), match.get("latest_signal_id", "")}:
-        return "signal_not_in_scenario"
+    if signal_id:
+        valid_signals = {match.get("initial_signal_id", ""), match.get("latest_signal_id", "")}
+        if scenario_events is not None:
+            try:
+                with scenario_events.open(newline="", encoding="utf-8") as fp:
+                    event_reader = csv.DictReader(fp)
+                    from src.feedback.manual_scenario_normalizer import EVENT_HEADERS
+                    if (event_reader.fieldnames or []) != EVENT_HEADERS:
+                        return "input_schema_mismatch"
+                    event_rows = [dict(row) for row in event_reader]
+            except (OSError, UnicodeError, csv.Error):
+                return "invalid_input"
+            if len({row.get("scenario_event_id", "") for row in event_rows}) != len(event_rows) or any(row.get("scenario_id") and row.get("scenario_id") not in {item.get("scenario_id") for item in rows} for row in event_rows):
+                return "input_schema_mismatch"
+            valid_signals.update(row.get("source_signal_id", "") for row in event_rows if row.get("scenario_id") == scenario_id and row.get("grouping_status") != "ambiguous")
+        if signal_id not in valid_signals:
+            return "signal_not_in_scenario"
     return "checked"
 
 
-def record_manual_decision(*, scenario_id: str = "", signal_id: str = "", human_checked_at_jst: str, decision_stage: str, human_action: str, human_side: str, reason_codes: list[str] | None = None, reason_code: list[str] | None = None, mail_timestamp_jst: str = "", observed_price: Any = "", planned_entry_price: Any = "", planned_sl_price: Any = "", planned_tp1_price: Any = "", planned_tp2_price: Any = "", manual_note: str = "", source: str = "manual_local", supersedes_decision_event_id: str = "", output_csv: Path | None = None, scenarios: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
+def record_manual_decision(*, scenario_id: str = "", signal_id: str = "", human_checked_at_jst: str, decision_stage: str, human_action: str, human_side: str, reason_codes: list[str] | None = None, reason_code: list[str] | None = None, mail_timestamp_jst: str = "", observed_price: Any = "", planned_entry_price: Any = "", planned_sl_price: Any = "", planned_tp1_price: Any = "", planned_tp2_price: Any = "", manual_note: str = "", source: str = "manual_local", supersedes_decision_event_id: str = "", output_csv: Path | None = None, scenarios: Path | None = None, scenario_events: Path | None = None, dry_run: bool = False) -> dict[str, Any]:
     output = output_csv or Path("logs/csv/manual_decision_events.csv")
     summary: dict[str, Any] = {"ok": False, "exit_code": 2, "schema_version": SCHEMA_VERSION, "dry_run": dry_run, "event_written": False, "duplicate_event": False, "errors": [], "output_csv": output.name, "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"}
     scenario_id, signal_id = str(scenario_id or "").strip(), str(signal_id or "").strip()
@@ -170,10 +190,13 @@ def record_manual_decision(*, scenario_id: str = "", signal_id: str = "", human_
         prices[field] = parsed
     scenario_validation = "not_checked"
     if scenarios is not None and scenario_id:
-        scenario_validation = _scenario_check(scenarios, scenario_id, signal_id)
+        scenario_validation = _scenario_check(scenarios, scenario_id, signal_id, scenario_events)
         if scenario_validation not in {"checked"}:
             summary["errors"] = [scenario_validation]
             return summary
+    elif scenario_id and not re.fullmatch(r"scn_[0-9a-f]{24}", scenario_id):
+        summary["errors"] = ["invalid_scenario_id"]
+        return summary
     scope = "scenario" if scenario_id else "signal_only"
     supersedes = str(supersedes_decision_event_id or "").strip()
     fingerprint_parts = [scope, scenario_id, signal_id, str(mail_timestamp_jst or "").strip(), _jst(checked), stage, action, side, prices["observed_price"], prices["planned_entry_price"], prices["planned_sl_price"], prices["planned_tp1_price"], prices["planned_tp2_price"], ";".join(reasons), note, str(source or "").strip(), supersedes, "active" if not supersedes else "correction"]

@@ -1173,3 +1173,278 @@ Archive destination:
 ```text
 chatgpt/specs/archive/20260710_manual_scenario_coverage_decision_events.md
 ```
+
+
+---
+
+## 24. Post-implementation review corrections — 2026-07-10
+
+This section is controlling for the next P4 correction task.
+
+The initial implementation commit `d93424dce19d54519cbd975eac010be16d412c6b` established the three modules and CLI wiring, but P4 is not yet accepted. Source review found semantic gaps and the new P4 test files contain only 12 tests in total, leaving most required regression cases untested.
+
+### 24.1 Deterministic ID formulas
+
+Use the formulas already defined in sections 8 and 10.
+
+Scenario ID must depend on:
+
+```text
+symbol
+side
+setup_family
+first candidate timestamp normalized to JST
+initial normalized zone low
+initial normalized zone high
+initial normalized invalidation
+scenario method version
+```
+
+It must not depend on:
+
+```text
+source signal ID
+raw candidate type
+TP values
+candidate fingerprint
+row order
+execution time
+```
+
+Scenario event ID must depend on:
+
+```text
+candidate_id
+candidate_fingerprint
+grouping_status
+scenario method version
+```
+
+Do not use event type, scenario ID, or execution time in the event ID formula.
+
+### 24.2 Outcome-row identity
+
+For intraperiod outcome rows:
+
+- empty candidate ID is invalid input
+- exact duplicate means all normalized row fields are equal
+- same candidate ID with any differing normalized field is an identity conflict
+- comparing only the `outcome` value is insufficient
+- a provided but missing outcome path is invalid input
+- malformed optional outcome timestamps are invalid input
+
+### 24.3 Terminal boundary and timestamps
+
+A resolved or expired outcome closes a scenario only at its deterministic terminal boundary.
+
+- TP/SL resolution uses valid `first_exit_time`
+- expired-without-touch uses valid `first_exit_time` when supplied
+- if `not_entered` has no first-exit timestamp, use candidate timestamp plus the configured maximum scenario age as the deterministic expiry boundary
+- a candidate before or at the terminal boundary may still join when every other grouping condition passes
+- a candidate after the terminal boundary must create a new scenario
+- do not block every later candidate merely because an earlier candidate already has a resolved outcome row
+
+Scenario fields:
+
+- `zone_touched_at_*` comes from the earliest valid `entry_reached_time`, including resolved TP/SL rows
+- `terminal_at_*` comes from the terminal boundary, not the candidate creation timestamp
+- malformed `entry_reached_time` or `first_exit_time` fails closed
+
+### 24.4 Lifecycle and status
+
+- ambiguous multi-scenario match uses event type `ambiguous_grouping`
+- unresolved `pending`, `timeout`, and `ambiguous` proxy outcomes use an explicit pending state
+- `entry_reached` uses `zone_touched`, never a human action
+- TP1/TP2/SL remain `proxy_resolved`
+- `no_ohlcv` remains coverage evidence only
+
+Scenario-status precedence:
+
+```text
+resolved proxy evidence
+then expired evidence
+then coverage missing
+then active
+```
+
+A missing-coverage update must not erase a valid resolved or expired scenario outcome.
+
+### 24.5 Latest non-empty scenario evidence
+
+Scenario summary price fields use the latest non-empty normalized evidence across assigned events.
+
+A later blank value must not erase an earlier value for:
+
+```text
+entry zone
+invalidation
+TP1
+TP2
+```
+
+### 24.6 OHLCV root-cause preservation
+
+When a local OHLCV CSV is supplied, retain the deterministic detailed diagnosis.
+
+Do not overwrite:
+
+```text
+candidate_before_ohlcv_start
+candidate_after_ohlcv_end
+candidate_window_gap
+malformed_ohlcv
+stale_ohlcv_range
+```
+
+with generic `no_ohlcv_input` merely because the existing proxy outcome says `no_ohlcv`.
+
+Use `no_ohlcv_input` only when no local OHLCV evidence was supplied.
+
+Use a fixed 24-hour stale-range diagnostic threshold for P4 v1. This is a data-coverage threshold, not a trading threshold.
+
+### 24.7 Coverage input contracts
+
+The coverage builder must fail closed when a supplied path is missing or malformed, except that a missing decision-event file is intentionally optional.
+
+Required behavior:
+
+- supplied intraperiod outcome path missing/wrong header -> exit 2
+- supplied episode path missing/wrong schema -> exit 2
+- supplied episode-link path missing/wrong schema -> exit 2
+- P3 evidence availability requires both episodes and links, or neither
+- validate non-empty candidate identity fields used in denominators
+- validate unique scenario and event IDs and assigned-event scenario references
+
+### 24.8 Coverage denominators and categories
+
+`pending_candidate_rows` excludes `no_ohlcv` rows. Coverage failure and unresolved proxy evidence are separate counts.
+
+`no_ohlcv_candidate_rows` includes rows whose proxy outcome is `no_ohlcv` or whose coverage status/gap reason represents missing OHLCV evidence.
+
+P3 counts:
+
+```text
+scenario_signal_ids_with_high_medium_episode_link
+```
+
+means unique scenario-linked signal IDs that also have a high/medium linked P3 row. Do not count unrelated signal IDs from the entire link file.
+
+```text
+scenario_count_with_actual_episode_evidence
+```
+
+requires:
+
+- scenario signal intersection
+- high/medium linked status
+- referenced episode ID exists in the supplied episode file
+
+This remains evidence availability, not causality.
+
+### 24.9 Decision correction semantics in coverage
+
+Decision-event source history is append-only, but corrected decisions must not be double-counted as two current human decisions.
+
+Coverage must:
+
+- retain a raw history-row count as an additional diagnostic
+- compute required decision metrics from effective rows
+- exclude a row superseded by a valid correction
+- include the correction row
+- intersect scenario decision IDs with existing scenario IDs
+- report orphan decision rows separately
+- never allow scenario decision coverage to exceed 1.0 because of unknown scenario IDs
+
+### 24.10 JSON write state and deterministic date
+
+A successfully written JSON report must contain:
+
+```text
+report_written = true
+```
+
+The in-memory payload and serialized JSON must agree.
+
+Do not use the current system date implicitly for deterministic output naming.
+
+- when default output paths are needed, `report_date` is required
+- when both explicit output paths are supplied, blank report date is allowed
+- dry-run keeps `report_written=false`
+
+### 24.11 Decision scenario validation
+
+When recording a scenario decision without a scenario file, accept only a canonical scenario ID matching the generated `scn_` identity format.
+
+Add optional scenario-event evidence to decision validation so a middle signal in a multi-signal scenario can be validated, not only the initial/latest signal IDs.
+
+Unknown scenario, mismatched signal, malformed scenario/event schema, and duplicate IDs fail closed without output mutation.
+
+### 24.12 Required correction tests
+
+The correction task must add focused regression tests for at least the following cases.
+
+Scenario normalizer:
+
+1. exact scenario ID formula
+2. exact event ID formula
+3. same candidate ID with same outcome but different outcome evidence conflicts
+4. empty outcome candidate ID fails
+5. supplied missing outcome path fails
+6. update before terminal boundary joins
+7. update after terminal boundary creates a new scenario
+8. terminal time uses first-exit evidence
+9. not-entered fallback expiry boundary
+10. zone-touch time uses entry-reached evidence
+11. resolved outcome has precedence over missing coverage
+12. latest blank price evidence does not erase prior non-empty value
+13. ambiguous event type is explicit
+14. pending lifecycle is explicit
+15. local OHLCV detailed root cause is preserved
+16. stale OHLCV range category
+17. malformed outcome timestamp fails
+18. transactional rollback preserves both prior outputs
+19. wrong existing output schema handling with and without explicit replacement
+20. CLI subprocess success and expected failure exit codes
+
+Decision events:
+
+21. canonical scenario ID validation without scenario file
+22. middle signal validation through scenario events
+23. unknown scenario and signal mismatch preserve output
+24. valid correction and effective supersession chain
+25. duplicate/conflict distinction
+26. malformed existing correction history fails closed
+27. write failure preserves prior output
+28. CLI subprocess success, duplicate, validation error, and privacy-safe stdout
+
+Coverage:
+
+29. malformed/missing supplied outcome input fails
+30. malformed/missing supplied P3 inputs fail
+31. unrelated high/medium link signal is not counted
+32. linked nonexistent episode is not counted
+33. pending excludes no_ohlcv
+34. effective decisions exclude superseded rows
+35. orphan scenario decision is reported but not counted in coverage
+36. JSON file contains report_written true after success
+37. no implicit current-date output naming
+38. deterministic JSON/Markdown bytes
+39. pair-write rollback preserves both outputs
+40. CLI subprocess success and expected failure exit codes
+
+Existing P2/P3 targeted tests must continue passing.
+
+### 24.13 Acceptance
+
+P4 remains active until:
+
+- these corrections are implemented
+- focused P4 tests cover the controlling cases
+- targeted P2/P3 regressions pass
+- ChatGPT reviews the corrected source and tests
+
+Safety remains:
+
+```text
+report-only / not FORMAL_GO / no automatic order / human decides manually
+```

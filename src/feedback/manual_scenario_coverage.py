@@ -105,9 +105,37 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     decision_rows, decision_status = _read(decision_events, DECISION_HEADERS, DECISION_SCHEMA_VERSION) if decision_events is not None else ([], "missing")
     outcome_rows, outcome_status = _read(intraperiod_outcomes, required=["candidate_id", "outcome"]) if intraperiod_outcomes is not None else ([], "missing")
     input_status = {"candidates": candidate_status, "scenarios": scenario_status, "scenario_events": event_status, "decision_events": decision_status, "intraperiod_outcomes": outcome_status}
-    errors = [status for status in (scenario_status, event_status, candidate_status, decision_status if decision_events is not None else "ok") if status not in {"ok", "missing"}]
+    errors = [status for status in (scenario_status, event_status, candidate_status) if status != "ok"]
+    if intraperiod_outcomes is not None and outcome_status != "ok":
+        errors.append(outcome_status)
+    if decision_events is not None and decision_status not in {"ok", "missing"}:
+        errors.append(decision_status)
+    if (episodes is None) != (episode_links is None):
+        errors.append("input_schema_mismatch")
+    if episodes is not None and not episodes.exists():
+        errors.append("missing")
+    if episode_links is not None and not episode_links.exists():
+        errors.append("missing")
     payload: dict[str, Any] = {"schema_version": SCHEMA_VERSION, "ok": not errors, "exit_code": 2 if errors else 0, "dry_run": dry_run, "report_written": False, "errors": errors, "input_status": input_status, "safety_boundary": SAFETY}
     if errors:
+        return "", payload
+    unique_scenario_ids = [str(row.get("scenario_id", "")).strip() for row in scenario_rows]
+    unique_event_ids = [str(row.get("scenario_event_id", "")).strip() for row in event_rows]
+    scenario_id_set = {value for value in unique_scenario_ids if value}
+    if any(not str(row.get("candidate_id", "")).strip() or not str(row.get("source_signal_id", "")).strip() for row in candidate_rows):
+        payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
+        return "", payload
+    if len(unique_scenario_ids) != len(scenario_id_set) or len(unique_event_ids) != len(set(unique_event_ids)):
+        payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
+        return "", payload
+    if any(row.get("scenario_id") and row.get("scenario_id") not in scenario_id_set for row in event_rows):
+        payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
+        return "", payload
+    decision_ids = [str(row.get("decision_event_id", "")).strip() for row in decision_rows]
+    decision_by_id = {row.get("decision_event_id", ""): row for row in decision_rows}
+    superseded_ids = {row.get("supersedes_decision_event_id", "") for row in decision_rows if row.get("supersedes_decision_event_id")}
+    if len(decision_ids) != len(set(decision_ids)) or any(row.get("supersedes_decision_event_id") == row.get("decision_event_id") or row.get("supersedes_decision_event_id") not in decision_by_id for row in decision_rows if row.get("supersedes_decision_event_id")) or any(sum(1 for row in decision_rows if row.get("supersedes_decision_event_id") == target) > 1 for target in superseded_ids):
+        payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
     unique_ids = {str(row.get("candidate_id", "")).strip() for row in candidate_rows if row.get("candidate_id")}
     assigned = {str(row.get("candidate_id", "")).strip() for row in event_rows if row.get("scenario_id") and row.get("grouping_status") in {"new_scenario", "matched_existing"}}
@@ -115,46 +143,56 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     source_signals = {str(row.get("source_signal_id", "")).strip() for row in candidate_rows if row.get("source_signal_id")}
     signal_scenarios = {str(row.get("source_signal_id", "")).strip() for row in event_rows if row.get("scenario_id") and row.get("source_signal_id")}
     covered = sum(1 for row in event_rows if row.get("ohlcv_coverage_status") == "covered")
-    no_ohlcv = sum(1 for row in event_rows if row.get("ohlcv_coverage_status") in {"no_ohlcv", "coverage_missing"})
+    no_ohlcv = sum(1 for row in event_rows if row.get("intraperiod_outcome") == "no_ohlcv" or row.get("ohlcv_coverage_status") in {"no_ohlcv", "coverage_missing"} or str(row.get("ohlcv_gap_reason", "")).strip())
     resolved = sum(1 for row in event_rows if row.get("intraperiod_outcome") in {"tp1_first", "tp2_first", "sl_first"})
     pending = sum(1 for row in event_rows if row.get("intraperiod_outcome") in {"", "pending", "timeout", "ambiguous", "entry_reached", "no_ohlcv"})
     gaps = Counter(str(row.get("ohlcv_gap_reason", "")) for row in event_rows if row.get("ohlcv_gap_reason"))
-    decisions_by_scenario = {row.get("scenario_id") for row in decision_rows if row.get("scenario_id")}
+    effective_decisions = [row for row in decision_rows if row.get("decision_event_id") not in superseded_ids]
+    decisions_by_scenario = {row.get("scenario_id") for row in effective_decisions if row.get("scenario_id") in scenario_id_set}
+    orphan_decisions = sum(1 for row in effective_decisions if row.get("scenario_id") and row.get("scenario_id") not in scenario_id_set)
     high_medium_ids: set[str] = set()
     evidence_scenarios: set[str] = set()
     if episodes is not None:
-        _, episode_status = _read(episodes, EPISODE_HEADERS, "manual_trade_episode.v1")
-        if episode_status not in {"ok", "missing"}:
+        episode_rows, episode_status = _read(episodes, EPISODE_HEADERS, "manual_trade_episode.v1")
+        if episode_status != "ok":
             payload.update(ok=False, exit_code=2, errors=[episode_status])
             return "", payload
     if episode_links is not None:
         link_rows, link_status = _read(episode_links, LINK_HEADERS, "manual_trade_signal_link.v2")
-        if link_status not in {"ok", "missing"}:
+        if link_status != "ok":
             payload.update(ok=False, exit_code=2, errors=[link_status])
             return "", payload
         for link in link_rows:
             if link.get("link_status") == "linked" and link.get("link_confidence") in {"high", "medium"}:
                 signal = link.get("signal_id") or link.get("source_signal_id") or ""
-                if signal: high_medium_ids.add(signal)
+                if signal and link.get("episode_id") in {row.get("episode_id") for row in episode_rows}:
+                    high_medium_ids.add(signal)
         for row in event_rows:
             if row.get("source_signal_id") in high_medium_ids and row.get("scenario_id"):
                 evidence_scenarios.add(row["scenario_id"])
+    pending = sum(1 for row in event_rows if row.get("intraperiod_outcome") in {"", "pending", "timeout", "ambiguous", "entry_reached"})
     payload.update({
-        "candidate_input_rows": len(candidate_rows), "unique_candidate_rows": len(unique_ids), "duplicate_candidate_rows": max(0, len(candidate_rows) - len(unique_ids)), "candidate_conflict_rows": 0, "assigned_candidate_rows": len(assigned), "ambiguous_candidate_rows": ambiguous, "scenario_count": len(scenario_rows), "candidate_to_scenario_compression_ratio": _ratio(len(assigned), len(scenario_rows)), "independent_scenario_rate": _ratio(len(scenario_rows), len(assigned)), "source_signal_count": len(source_signals), "signals_with_scenario_count": len(signal_scenarios), "signal_to_scenario_coverage_rate": _ratio(len(signal_scenarios), len(source_signals)), "covered_candidate_rows": covered, "no_ohlcv_candidate_rows": no_ohlcv, "pending_candidate_rows": pending, "resolved_proxy_candidate_rows": resolved, "scenario_with_covered_evidence_count": len({row.get("scenario_id") for row in event_rows if row.get("scenario_id") and row.get("ohlcv_coverage_status") == "covered"}), "scenario_with_resolved_proxy_count": len({row.get("scenario_id") for row in event_rows if row.get("scenario_id") and row.get("intraperiod_outcome") in {"tp1_first", "tp2_first", "sl_first"}}), "ohlcv_gap_reason_counts": dict(sorted(gaps.items())), "decision_event_count": len(decision_rows), "scenario_with_decision_count": len(decisions_by_scenario), "signal_only_decision_count": sum(1 for row in decision_rows if row.get("identity_scope") == "signal_only"), "decision_action_counts": dict(sorted(Counter(row.get("human_action", "") for row in decision_rows).items())), "decision_stage_counts": dict(sorted(Counter(row.get("decision_stage", "") for row in decision_rows).items())), "scenario_decision_coverage_rate": _ratio(len(decisions_by_scenario), len(scenario_rows)), "decision_file_status": "absent" if decision_status == "missing" else decision_status, "scenario_signal_ids_with_high_medium_episode_link": len(high_medium_ids), "scenario_count_with_actual_episode_evidence": len(evidence_scenarios), "report_date": report_date or "", "episode_input_status": "not_provided" if episodes is None else "provided"})
+        "candidate_input_rows": len(candidate_rows), "unique_candidate_rows": len(unique_ids), "duplicate_candidate_rows": max(0, len(candidate_rows) - len(unique_ids)), "candidate_conflict_rows": 0, "assigned_candidate_rows": len(assigned), "ambiguous_candidate_rows": ambiguous, "scenario_count": len(scenario_rows), "candidate_to_scenario_compression_ratio": _ratio(len(assigned), len(scenario_rows)), "independent_scenario_rate": _ratio(len(scenario_rows), len(assigned)), "source_signal_count": len(source_signals), "signals_with_scenario_count": len(signal_scenarios), "signal_to_scenario_coverage_rate": _ratio(len(signal_scenarios), len(source_signals)), "covered_candidate_rows": covered, "no_ohlcv_candidate_rows": no_ohlcv, "pending_candidate_rows": pending, "resolved_proxy_candidate_rows": resolved, "scenario_with_covered_evidence_count": len({row.get("scenario_id") for row in event_rows if row.get("scenario_id") and row.get("ohlcv_coverage_status") == "covered"}), "scenario_with_resolved_proxy_count": len({row.get("scenario_id") for row in event_rows if row.get("scenario_id") and row.get("intraperiod_outcome") in {"tp1_first", "tp2_first", "sl_first"}}), "ohlcv_gap_reason_counts": dict(sorted(gaps.items())), "decision_history_row_count": len(decision_rows), "effective_decision_event_count": len(effective_decisions), "superseded_decision_event_count": len(superseded_ids), "orphan_decision_event_count": orphan_decisions, "decision_event_count": len(effective_decisions), "scenario_with_decision_count": len(decisions_by_scenario), "signal_only_decision_count": sum(1 for row in effective_decisions if row.get("identity_scope") == "signal_only"), "decision_action_counts": dict(sorted(Counter(row.get("human_action", "") for row in effective_decisions).items())), "decision_stage_counts": dict(sorted(Counter(row.get("decision_stage", "") for row in effective_decisions).items())), "scenario_decision_coverage_rate": min(1.0, _ratio(len(decisions_by_scenario), len(scenario_rows))), "decision_file_status": "absent" if decision_status == "missing" else decision_status, "scenario_signal_ids_with_high_medium_episode_link": len({row.get("source_signal_id") for row in event_rows if row.get("source_signal_id") in high_medium_ids}), "scenario_count_with_actual_episode_evidence": len(evidence_scenarios), "report_date": report_date or "", "episode_input_status": "not_provided" if episodes is None else "provided"})
     markdown = _markdown(payload)
+    explicit_json = output_json is not None
+    explicit_md = output_md is not None
+    if (not explicit_json or not explicit_md) and not report_date:
+        payload.update(ok=False, exit_code=2, errors=["missing_report_date"])
+        return "", payload
     if output_json is None:
-        output_json = Path("logs/json") / f"manual_scenario_coverage_{report_date or date.today().strftime('%Y%m%d')}.json"
+        output_json = Path("logs/json") / f"manual_scenario_coverage_{report_date}.json"
     if output_md is None:
-        output_md = Path("運用資料/reports/post_eval") / f"manual_scenario_coverage_{report_date or date.today().strftime('%Y%m%d')}.md"
+        output_md = Path("運用資料/reports/post_eval") / f"manual_scenario_coverage_{report_date}.md"
     if dry_run:
         payload["would_write_outputs"] = [output_json.name, output_md.name]
         return markdown, payload
+    payload["report_written"] = True
     try:
         _atomic_text_pair(output_json, json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", output_md, markdown)
     except OSError:
         payload.update(ok=False, exit_code=4, errors=["output_io_error"])
+        payload["report_written"] = False
         return markdown, payload
-    payload["report_written"] = True
     return markdown, payload
 
 
