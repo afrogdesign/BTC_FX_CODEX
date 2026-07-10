@@ -5,10 +5,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.feedback.manual_operator_classifier import OUTPUT_HEADERS
-from src.feedback.manual_operator_trial_evidence import TRIAL_FACT_HEADERS, build_manual_operator_trial_evidence
+from src.feedback.manual_operator_trial_evidence import TRIAL_FACT_HEADERS, _counterfactual_classification, _issue_flags, _status, build_manual_operator_trial_evidence
 from src.feedback.manual_decision_events import DECISION_HEADERS
+from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS
 from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, SCENARIO_HEADERS
 
 
@@ -42,6 +45,13 @@ class TrialEvidenceTests(unittest.TestCase):
     def build(self, fixtures: dict[str, Path], **kwargs: object) -> dict[str, object]:
         return build_manual_operator_trial_evidence(scenarios=fixtures["scenarios"], scenario_events=fixtures["events"], classifications=fixtures["classifications"], output_csv=self.root / "facts.csv", output_queue_csv=self.root / "queue.csv", output_json=self.root / "report.json", output_md=self.root / "report.md", report_date="20260710", **kwargs)
 
+    def actual_inputs(self, confidence: str = "high") -> tuple[Path, Path]:
+        episode = {key: "" for key in EPISODE_HEADERS}
+        episode.update(schema_version="manual_trade_episode.v1", episode_id="ep1", position_id="pos1", symbol="BTCUSDT", side="long", opened_at_utc="2026-07-10T00:30:00Z", closed_at_utc="2026-07-10T01:30:00Z", status="closed", realized_pnl="10", fee_total="2", association_status="matched")
+        link = {key: "" for key in LINK_HEADERS}
+        link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id="sig1", link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
+        return self.write("episodes.csv", EPISODE_HEADERS, [episode]), self.write("links.csv", LINK_HEADERS, [link])
+
     def test_resolved_proxy_only_and_schema(self) -> None:
         result = self.build(self.fixtures())
         self.assertTrue(result["ok"])
@@ -50,10 +60,50 @@ class TrialEvidenceTests(unittest.TestCase):
         with (self.root / "facts.csv").open(newline="", encoding="utf-8") as handle:
             self.assertEqual((csv.DictReader(handle).fieldnames or []), TRIAL_FACT_HEADERS)
 
+    def test_comparison_precedence_for_classes_and_outcomes(self) -> None:
+        for cls, outcome, expected in (
+            ("A_FORMAL", "tp1_first", "aligned"),
+            ("B_CHECK_15M", "tp1_first", "aligned"),
+            ("C_WATCH_ZONE", "tp1_first", "too_defensive"),
+            ("STOP_OR_EXIT", "tp1_first", "too_defensive"),
+            ("A_FORMAL", "sl_first", "too_aggressive"),
+            ("B_CHECK_15M", "sl_first", "too_aggressive"),
+            ("C_WATCH_ZONE", "sl_first", "aligned"),
+            ("STOP_OR_EXIT", "sl_first", "aligned"),
+        ):
+            row = {"selected_operator_class": cls, "normalized_outcome_status": "resolved_positive" if outcome == "tp1_first" else "resolved_negative"}
+            self.assertEqual(_status(row), expected)
+        self.assertEqual(_status({"selected_operator_class": "A_FORMAL", "normalized_outcome_status": "resolved_negative", "direction_result": ""}), "too_aggressive")
+
+    def test_wrong_side_requires_explicit_direction_evidence(self) -> None:
+        base = {"selected_operator_class": "A_FORMAL", "normalized_outcome_status": "resolved_positive", "direction_result": ""}
+        self.assertNotEqual(_status(base), "wrong_side")
+        base["direction_result"] = "wrong_side"
+        self.assertEqual(_status(base), "wrong_side")
+
+    def test_stop_proxy_flags_are_explicit(self) -> None:
+        self.assertIn("stop_useful_proxy", _issue_flags({"selected_operator_class": "STOP_OR_EXIT", "normalized_outcome_status": "resolved_negative"}, "aligned", False))
+        self.assertIn("stop_false_alarm_proxy", _issue_flags({"selected_operator_class": "STOP_OR_EXIT", "normalized_outcome_status": "resolved_positive"}, "too_defensive", False))
+
+    def test_counterfactual_requires_evidence_and_separates_b_c(self) -> None:
+        event = {"side": "short", "entry_price": "100", "candidate_status": "allowed"}
+        evidence = {"side": "short", "primary_setup_side": "short", "primary_setup_status": "watch", "candidate_status": "allowed", "data_quality_flag": "", "entry_price": "100", "confidence_direction_shadow": "80", "confidence_execution_shadow": "80", "confidence_wait_shadow": "20", "rr_tp1_used": "2", "short_direction_min": "55", "short_execution_min": "18", "short_wait_max": "75", "short_tp1_rr_min": "0.8", "short_tp2_rr_min": "1.5"}
+        self.assertEqual(_counterfactual_classification(evidence, event), "counterfactual_B")
+        evidence["confidence_direction_shadow"] = "10"
+        self.assertEqual(_counterfactual_classification(evidence, event), "counterfactual_C")
+        evidence["primary_setup_side"] = "long"
+        self.assertEqual(_counterfactual_classification(evidence, event), "not_eligible")
+
     def test_actual_optional_and_low_link_queue(self) -> None:
-        result = self.build(self.fixtures())
-        self.assertEqual(result["actual_evidence"]["status"], "missing")
-        self.assertTrue((self.root / "queue.csv").exists())
+        fixtures = self.fixtures()
+        episodes, links = self.actual_inputs("high")
+        result = self.build(fixtures, trade_episodes=episodes, episode_links=links)
+        self.assertEqual(result["actual_evidence"]["eligible_rows"], 1)
+        episodes, links = self.actual_inputs("low")
+        result = self.build(fixtures, trade_episodes=episodes, episode_links=links, replace_output=True)
+        self.assertEqual(result["actual_evidence"]["eligible_rows"], 0)
+        with (self.root / "queue.csv").open(newline="", encoding="utf-8") as handle:
+            self.assertTrue(any(row["question_type"] == "ambiguous_actual_trade_link" for row in csv.DictReader(handle)))
 
     def test_unresolved_no_ohlcv_excluded(self) -> None:
         result = self.build(self.fixtures(outcome="no_ohlcv"))
@@ -69,6 +119,14 @@ class TrialEvidenceTests(unittest.TestCase):
         result = self.build(self.fixtures())
         self.assertFalse(result["p9_readiness"]["initial"]["ready"])
         self.assertFalse(result["p9_readiness"]["practical"]["ready"])
+        self.assertEqual(result["p9_readiness"]["practical"]["validation_window_status"], "not_established")
+
+    def test_reproducibility_metadata_is_deterministic(self) -> None:
+        result = self.build(self.fixtures())
+        self.assertEqual(len(result["input_fingerprints"]), 3)
+        self.assertEqual(result["replay_method_version"], "manual_operator_historical_replay.v1")
+        self.assertEqual(result["eligible_actual_link_policy"], ["high", "medium"])
+        self.assertTrue(result["unresolved_no_ohlcv_separated"])
 
     def test_dry_run_does_not_write(self) -> None:
         result = self.build(self.fixtures(), dry_run=True)
@@ -85,6 +143,26 @@ class TrialEvidenceTests(unittest.TestCase):
         self.assertNotIn(str(self.root), report)
         self.assertNotIn("manual_note", report)
 
+    def test_atomic_rollback_preserves_all_outputs(self) -> None:
+        fixtures = self.fixtures()
+        self.build(fixtures)
+        before = tuple((self.root / name).read_bytes() for name in ("facts.csv", "queue.csv", "report.json", "report.md"))
+        original_replace = Path.replace
+        calls = {"count": 0}
+
+        def fail_second_replace(path: Path, target: Path) -> Path:
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise OSError("injected replacement failure")
+            return original_replace(path, target)
+
+        with patch("src.feedback.manual_operator_trial_evidence.Path.replace", side_effect=fail_second_replace):
+            result = self.build(fixtures, replace_output=True)
+        self.assertEqual(result["exit_code"], 4)
+        after = tuple((self.root / name).read_bytes() for name in ("facts.csv", "queue.csv", "report.json", "report.md"))
+        self.assertEqual(before, after)
+        self.assertEqual(list(self.root.glob(".p8-backup*")), [])
+
     def test_future_context_rejected(self) -> None:
         fixtures = self.fixtures()
         with fixtures["events"].open(newline="", encoding="utf-8") as handle:
@@ -94,6 +172,16 @@ class TrialEvidenceTests(unittest.TestCase):
         result = self.build(fixtures)
         self.assertFalse(result["ok"])
         self.assertEqual(result["exit_code"], 2)
+
+    def test_outcome_timestamp_before_event_is_rejected(self) -> None:
+        fixtures = self.fixtures()
+        with fixtures["events"].open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        rows[0]["first_exit_time"] = "2026-07-09T23:59:00Z"
+        fixtures["events"] = self.write("before-event.csv", EVENT_HEADERS, rows)
+        result = self.build(fixtures)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["errors"], ["future_context_rejected"])
 
 
 if __name__ == "__main__":
