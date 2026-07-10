@@ -1769,6 +1769,7 @@ from src.feedback.manual_trade_ground_truth import build_manual_trade_ground_tru
 from src.feedback.manual_scenario_normalizer import build_manual_scenarios  # noqa: E402
 from src.feedback.manual_decision_events import record_manual_decision  # noqa: E402
 from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage  # noqa: E402
+from src.feedback.manual_operator_classifier import build_manual_operator_classifier  # noqa: E402
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -21994,6 +21995,29 @@ def _build_parser() -> argparse.ArgumentParser:
     coverage_parser.add_argument("--dry-run", action="store_true")
     coverage_parser.add_argument("--stdout-json", action="store_true")
 
+    classifier_parser = subparsers.add_parser("build-manual-operator-classifier")
+    classifier_parser.add_argument("--scenarios", required=True)
+    classifier_parser.add_argument("--scenario-events", required=True)
+    classifier_parser.add_argument("--candidates", required=True)
+    classifier_parser.add_argument("--signal-context", required=True)
+    classifier_parser.add_argument("--output-csv", required=True)
+    classifier_parser.add_argument("--output-json", required=True)
+    classifier_parser.add_argument("--output-md", required=True)
+    classifier_parser.add_argument("--date", required=True)
+    classifier_parser.add_argument("--short-direction-min", default="55")
+    classifier_parser.add_argument("--short-execution-min", default="18")
+    classifier_parser.add_argument("--short-wait-max", default="75")
+    classifier_parser.add_argument("--short-tp1-rr-min", default="0.8")
+    classifier_parser.add_argument("--short-tp2-rr-min", default="1.5")
+    classifier_parser.add_argument("--long-direction-min", default="60")
+    classifier_parser.add_argument("--long-execution-min", default="22")
+    classifier_parser.add_argument("--long-wait-max", default="70")
+    classifier_parser.add_argument("--long-tp1-rr-min", default="1.0")
+    classifier_parser.add_argument("--long-tp2-rr-min", default="1.8")
+    classifier_parser.add_argument("--dry-run", action="store_true")
+    classifier_parser.add_argument("--replace-output", action="store_true")
+    classifier_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23329,6 +23353,22 @@ def main() -> None:
         else:
             print(report)
         return int(payload.get("exit_code", 0))
+
+    if args.command == "build-manual-operator-classifier":
+        threshold_names = (
+            "short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min",
+            "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min",
+        )
+        summary = build_manual_operator_classifier(
+            scenarios=Path(args.scenarios), scenario_events=Path(args.scenario_events), candidates=Path(args.candidates),
+            signal_context=Path(args.signal_context), output_csv=Path(args.output_csv), output_json=Path(args.output_json),
+            output_md=Path(args.output_md), report_date=args.date,
+            thresholds={name: getattr(args, name) for name in threshold_names}, dry_run=bool(args.dry_run),
+            replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
 
     if args.command == "build-manual-trade-episodes":
         summary = build_manual_trade_episodes(

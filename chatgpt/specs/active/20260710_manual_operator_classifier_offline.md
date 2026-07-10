@@ -707,7 +707,6 @@ missing_required_shadow_metric
 missing_required_rr
 missing_entry_definition
 side_mismatch
-future_context_rejected
 ```
 
 Missing evidence is not STOP and not a loss.
@@ -917,7 +916,7 @@ Before writing:
 3. build all classification rows and summaries in memory
 4. validate generated schemas
 5. prepare temporary files in target parent filesystems
-6. replace classification CSV and report pair
+6. replace classification CSV, JSON summary, and Markdown report
 7. on any replacement failure, restore every prior target
 8. remove temporary and backup files
 
