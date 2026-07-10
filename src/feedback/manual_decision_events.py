@@ -157,6 +157,9 @@ def record_manual_decision(*, scenario_id: str = "", signal_id: str = "", human_
     output = output_csv or Path("logs/csv/manual_decision_events.csv")
     summary: dict[str, Any] = {"ok": False, "exit_code": 2, "schema_version": SCHEMA_VERSION, "dry_run": dry_run, "event_written": False, "duplicate_event": False, "errors": [], "output_csv": output.name, "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually"}
     scenario_id, signal_id = str(scenario_id or "").strip(), str(signal_id or "").strip()
+    if scenario_events is not None and scenarios is None:
+        summary["errors"] = ["scenario_evidence_incomplete"]
+        return summary
     if not scenario_id and not signal_id:
         summary["errors"] = ["missing_identity"]
         return summary

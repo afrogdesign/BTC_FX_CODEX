@@ -142,6 +142,18 @@ class ManualDecisionEventTests(unittest.TestCase):
         values = self.kwargs(); values.update(scenarios=scenarios, scenario_events=events, signal_id="s2")
         self.assertEqual(record_manual_decision(**values)["exit_code"], 0)
 
+    def test_scenario_events_without_scenario_summary_are_rejected(self) -> None:
+        from src.feedback.manual_scenario_normalizer import EVENT_HEADERS
+        events = Path(self.tmp.name) / "events.csv"
+        event = {key: "" for key in EVENT_HEADERS}; event.update(schema_version="manual_scenario_event.v1", scenario_event_id="sce_" + "1" * 24, candidate_id="c1", grouping_status="ambiguous")
+        with events.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=EVENT_HEADERS); writer.writeheader(); writer.writerow(event)
+        values = self.kwargs(); values["scenario_events"] = events
+        result = record_manual_decision(**values)
+        self.assertEqual(result["exit_code"], 2)
+        self.assertEqual(result["errors"], ["scenario_evidence_incomplete"])
+        self.assertFalse(self.output.exists())
+
     def test_cli_success_duplicate_and_invalid(self) -> None:
         repo = Path(__file__).resolve().parents[1]
         command = [sys.executable, str(repo / "tools" / "log_feedback.py"), "record-manual-decision", "--scenario-id", "scn_" + "1" * 24, "--human-checked-at-jst", "2026-07-10T10:00:00+09:00", "--decision-stage", "entry", "--human-action", "watched_no_entry", "--human-side", "none", "--reason-code", "trigger_missing", "--output-csv", str(self.output), "--stdout-json"]

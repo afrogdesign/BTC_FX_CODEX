@@ -152,6 +152,59 @@ class ManualScenarioCoverageTests(unittest.TestCase):
         _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=self.root / "dup_e.csv", output_json=self.root / "r.json", output_md=self.root / "r.md")
         self.assertEqual(payload["exit_code"], 2)
 
+    def test_event_relationship_contracts_fail_closed(self) -> None:
+        candidates, scenarios, events = self._base()
+        with events.open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        cases = [
+            {**row, "scenario_event_id": "", "grouping_status": "new_scenario"},
+            {**row, "scenario_event_id": "sce_x", "grouping_status": "unknown"},
+            {**row, "scenario_event_id": "sce_x", "grouping_status": "ambiguous", "scenario_id": row["scenario_id"]},
+            {**row, "scenario_event_id": "sce_x", "grouping_status": "new_scenario", "scenario_id": ""},
+            {**row, "scenario_event_id": "sce_x", "grouping_status": "matched_existing", "scenario_id": "scn_" + "f" * 24},
+        ]
+        for index, case in enumerate(cases):
+            malformed = self.write(f"bad_e_{index}.csv", EVENT_HEADERS, [case])
+            _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=malformed, output_json=self.root / f"bad_{index}.json", output_md=self.root / f"bad_{index}.md")
+            self.assertEqual(payload["exit_code"], 2)
+
+    def test_valid_ambiguous_event_is_visible(self) -> None:
+        candidates, scenarios, events = self._base()
+        with events.open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        row.update(scenario_event_id="sce_" + "a" * 24, scenario_id="", grouping_status="ambiguous")
+        ambiguous = self.write("ambiguous.csv", EVENT_HEADERS, [row])
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=ambiguous, output_json=self.root / "r.json", output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 0)
+        self.assertEqual(payload["ambiguous_candidate_rows"], 1)
+
+    def test_blank_decision_id_fails_without_report_mutation(self) -> None:
+        candidates, scenarios, events = self._base()
+        decision = self.write("bad_d.csv", DECISION_HEADERS, [{"schema_version": "manual_decision_event.v1", "decision_event_id": "", "record_status": "active"}])
+        output = self.root / "r.json"
+        _, payload = build_manual_scenario_coverage(candidates=candidates, scenarios=scenarios, scenario_events=events, decision_events=decision, output_json=output, output_md=self.root / "r.md")
+        self.assertEqual(payload["exit_code"], 2)
+        self.assertFalse(output.exists())
+
+    def test_direct_coverage_cli_success_and_input_error(self) -> None:
+        repo = Path(__file__).resolve().parents[1]
+        candidates, scenarios, events = self._base()
+        output_json, output_md = self.root / "cli_report.json", self.root / "cli_report.md"
+        command = [sys.executable, str(repo / "tools" / "log_feedback.py"), "build-manual-scenario-coverage", "--candidates", str(candidates), "--scenarios", str(scenarios), "--scenario-events", str(events), "--output-json", str(output_json), "--output-md", str(output_md), "--date", "20260710", "--stdout-json"]
+        success = subprocess.run(command, cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(success.returncode, 0)
+        self.assertEqual(len([line for line in success.stdout.splitlines() if line.strip()]), 1)
+        parsed = json.loads(success.stdout)
+        self.assertTrue(parsed["ok"])
+        self.assertTrue(parsed["report_written"])
+        self.assertTrue(output_json.exists()); self.assertTrue(output_md.exists())
+        self.assertNotIn("Traceback", success.stderr)
+        bad = subprocess.run([*command[:-1], "--scenario-events", str(self.root / "missing_events.csv"), "--stdout-json"], cwd=repo, text=True, capture_output=True, check=False)
+        self.assertEqual(bad.returncode, 2)
+        self.assertFalse(output_json.stat().st_mtime_ns == 0)
+        self.assertEqual(len([line for line in bad.stdout.splitlines() if line.strip()]), 1)
+        self.assertFalse("Traceback" in bad.stderr)
+
     def test_covered_is_not_missing(self) -> None:
         candidates, scenarios, events = self._base()
         with events.open(newline="", encoding="utf-8") as fp:

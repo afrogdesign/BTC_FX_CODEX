@@ -123,10 +123,16 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     if any(not str(row.get("candidate_id", "")).strip() or not str(row.get("source_signal_id", "")).strip() for row in candidate_rows):
         payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
-    if len(unique_scenario_ids) != len(scenario_id_set) or len(unique_event_ids) != len(set(unique_event_ids)):
+    allowed_grouping = {"new_scenario", "matched_existing", "ambiguous"}
+    if len(unique_scenario_ids) != len(scenario_id_set) or any(not value for value in unique_event_ids) or len(unique_event_ids) != len(set(unique_event_ids)):
         payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
-    if any(row.get("scenario_id") and row.get("scenario_id") not in scenario_id_set for row in event_rows):
+    if any(
+        row.get("grouping_status") not in allowed_grouping
+        or (row.get("grouping_status") == "ambiguous" and row.get("scenario_id"))
+        or (row.get("grouping_status") in {"new_scenario", "matched_existing"} and (not row.get("scenario_id") or row.get("scenario_id") not in scenario_id_set))
+        for row in event_rows
+    ):
         payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
     decision_ids = [str(row.get("decision_event_id", "")).strip() for row in decision_rows]
@@ -144,7 +150,7 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
         or bool(decision_by_id.get(row.get("supersedes_decision_event_id"), {}).get("supersedes_decision_event_id"))
         for row in decision_rows if row.get("supersedes_decision_event_id")
     )
-    if len(decision_ids) != len(set(decision_ids)) or correction_status_error or any(sum(1 for row in decision_rows if row.get("supersedes_decision_event_id") == target) > 1 for target in superseded_ids):
+    if any(not value for value in decision_ids) or len(decision_ids) != len(set(decision_ids)) or correction_status_error or any(sum(1 for row in decision_rows if row.get("supersedes_decision_event_id") == target) > 1 for target in superseded_ids):
         payload.update(ok=False, exit_code=2, errors=["input_schema_mismatch"])
         return "", payload
     unique_ids = {str(row.get("candidate_id", "")).strip() for row in candidate_rows if row.get("candidate_id")}
