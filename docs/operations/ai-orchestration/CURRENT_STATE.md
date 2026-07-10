@@ -195,13 +195,7 @@ Current planning decision:
 
 This planning update does not change runtime behavior, scoring, gates, thresholds, notification triggers, or live mail sending.
 
-Current exact next task:
-
-```text
-BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC
-```
-
-The next task is active-spec creation only. Importer source implementation remains blocked until the spec is reviewed and approved.
+This earlier preparation task is complete; the P2 importer hardening and archive transition are recorded below.
 
 
 ---
@@ -219,10 +213,68 @@ Completed preparation:
 - preserved report-only / not FORMAL_GO / human-decided boundaries
 - separated exchange ground truth from later human decision-event ground truth
 
+The P2 implementation and validation were completed in the bounded Codex task recorded below; the next active phase is P3 linkage and ground-truth pipeline design.
+
+
+---
+
+## 2026-07-10 P2 completion and P3 activation
+
+Manual actual trade importer hardening is complete and reviewed.
+
+Reviewed capabilities:
+
+- canonical `import-manual-actual-trades` command with legacy alias
+- strict three-category workbook validation
+- privacy-safe UID and filename handling
+- deterministic file, batch, source-row, logical-key, row fingerprints
+- merge/idempotency and corrected-export conflict handling
+- process-level transactional replacement with rollback
+- compact safe workbook failure handling
+- dry-run planning fields and category-level worksheet counts
+- downstream linker/report compatibility tests preserved
+
+Reported local commits:
+
+```text
+d8ce83b
+01746c1
+c9b7715
+```
+
+Reported targeted validation:
+
+```text
+35 tests passed
+targeted git diff --check passed
+push: none
+```
+
+The P2 spec was archived to:
+
+```text
+chatgpt/specs/archive/20260710_manual_actual_trade_importer.md
+```
+
+New active P3 spec:
+
+```text
+chatgpt/specs/active/20260710_manual_trade_linkage_ground_truth_pipeline.md
+```
+
+P3 design correction:
+
+- `manual_actual_trades.csv` is fill-level evidence, not human trade count
+- position lifecycle is the preferred primary link target
+- episode-level performance must be separated from fill-level monetary totals
+- buy/sell must not be silently interpreted as long/short without position-action evidence
+- only high/medium signal links may contribute to actual-backed aggregate comparison
+- exchange exports cannot prove human intent, skip, watch, avoided loss, or missed opportunity
+
 Current exact next task:
 
 ```text
-BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-HARDENING
+BTCFX-20260710-MTP-LINKAGE-PIPELINE-SPEC-CHECKPOINT
 ```
 
-Git branch, dirty tree, validation result, commit, and push remain unverified because the public MCP file interface does not expose Git metadata or execute repo commands. Those checks belong at the beginning/end of the bounded Codex implementation task.
+This is a docs-only Git validation and commit task. P3 source implementation remains blocked until the new active spec is committed and reviewed.

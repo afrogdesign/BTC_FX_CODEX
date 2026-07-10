@@ -4,9 +4,9 @@
 
 - work_id: `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC`
 - created_at: `2026-07-10`
-- status: active / reviewed design baseline
-- task_type: docs-only active-spec creation
-- next implementation phase: importer hardening, not greenfield implementation
+- status: archived / reviewed implementation baseline
+- task_type: completed P2 importer hardening
+- next implementation phase: P3 linkage and ground-truth pipeline, not greenfield implementation
 - repo: `afrogdesign/BTC_FX_CODEX`
 - working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - safety: report-only / not `FORMAL_GO` / no automatic order / human decides manually
