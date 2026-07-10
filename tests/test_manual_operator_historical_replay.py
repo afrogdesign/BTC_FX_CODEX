@@ -10,6 +10,9 @@ from pathlib import Path
 
 from src.feedback.manual_operator_classifier import OUTPUT_HEADERS
 from src.feedback.manual_operator_historical_replay import REPLAY_HEADERS, build_manual_operator_historical_replay
+from src.feedback.manual_decision_events import DECISION_HEADERS
+from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
+from src.feedback.manual_trade_signal_linker import LINK_HEADERS
 from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, SCENARIO_HEADERS
 
 
@@ -35,6 +38,15 @@ class HistoricalReplayTests(unittest.TestCase):
 
     def build(self, fx: dict[str, Path], **kwargs: object) -> dict[str, object]:
         return build_manual_operator_historical_replay(scenarios=fx["scenarios"], scenario_events=fx["events"], classifications=fx["classifications"], output_csv=self.root / "replay.csv", output_json=self.root / "replay.json", output_md=self.root / "replay.md", report_date="20260710", **kwargs)
+
+    def decision(self, *, scenario_id: str = "scn_" + "1" * 24, signal_id: str = "", checked: str = "2026-07-10T01:00:00Z", event_id: str = "dec_1", action: str = "watched_no_entry", status: str = "active", target: str = "") -> dict[str, str]:
+        row = {key: "" for key in DECISION_HEADERS}; row.update(schema_version="manual_decision_event.v1", decision_event_id=event_id, identity_scope="scenario" if scenario_id else "signal_only", scenario_id=scenario_id, signal_id=signal_id, human_checked_at_utc=checked, human_checked_at_jst=checked, human_action=action, decision_stage="entry", human_side="none", record_status=status, supersedes_decision_event_id=target)
+        return row
+
+    def episode_inputs(self, *, status: str = "closed", realized: str = "10", fee: str = "2", opened: str = "2026-07-10T00:30:00Z", closed: str = "2026-07-10T01:30:00Z", confidence: str = "high", signal: str = "sig1") -> tuple[Path, Path]:
+        episode = {key: "" for key in EPISODE_HEADERS}; episode.update(schema_version="manual_trade_episode.v1", episode_id="ep1", position_id="pos1", symbol="BTCUSDT", side="long", opened_at_utc=opened, closed_at_utc=closed, status=status, realized_pnl=realized, fee_total=fee, association_status="matched")
+        link = {key: "" for key in LINK_HEADERS}; link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id=signal, link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
+        return self.write("episodes.csv", EPISODE_HEADERS, [episode]), self.write("links.csv", LINK_HEADERS, [link])
 
     def test_policy_selection_and_proxy_outcome(self) -> None:
         fx = self.fixtures(); result = self.build(fx)
@@ -80,6 +92,30 @@ class HistoricalReplayTests(unittest.TestCase):
         fx = self.fixtures(); self.build(fx)
         (self.root / "replay.json").write_text('{"schema_version":"wrong"}\n', encoding="utf-8")
         self.assertEqual(self.build(fx)["exit_code"], 4)
+
+    def test_classification_duplicate_and_status_integrity(self) -> None:
+        fx = self.fixtures(); rows = list(csv.DictReader(fx["classifications"].open(newline="", encoding="utf-8")))
+        fx["classifications"] = self.write("dup-identical.csv", OUTPUT_HEADERS, [rows[0], rows[0]]); self.assertEqual(self.build(fx)["exit_code"], 2)
+        rows = [dict(rows[0]), dict(rows[0])]; rows[1]["operator_class"] = "C_WATCH_ZONE"; fx["classifications"] = self.write("dup-conflict.csv", OUTPUT_HEADERS, rows); self.assertEqual(self.build(fx)["exit_code"], 3)
+        fx = self.fixtures(); rows = list(csv.DictReader(fx["classifications"].open(newline="", encoding="utf-8"))); rows[0]["classification_status"] = "insufficient_evidence"; rows[0]["operator_class"] = "A_FORMAL"; fx["classifications"] = self.write("bad-status.csv", OUTPUT_HEADERS, rows); self.assertEqual(self.build(fx)["exit_code"], 2)
+
+    def test_scenario_event_duplicate_assignment(self) -> None:
+        fx = self.fixtures(); event = list(csv.DictReader(fx["events"].open(newline="", encoding="utf-8")))[0]; fx["events"] = self.write("dup-events.csv", EVENT_HEADERS, [event, event]); fx["classifications"] = self.write("dup-classes.csv", OUTPUT_HEADERS, [next(csv.DictReader(fx["classifications"].open(newline="", encoding="utf-8")))] * 2); self.assertEqual(self.build(fx)["exit_code"], 2)
+        event2 = dict(event); event2["candidate_id"] = "other"; fx["events"] = self.write("conf-events.csv", EVENT_HEADERS, [event, event2]); self.assertEqual(self.build(fx)["exit_code"], 3)
+
+    def test_multiple_correction_targets_rejected(self) -> None:
+        fx = self.fixtures(); decisions = [self.decision(event_id="base"), self.decision(event_id="c1", status="correction", target="base"), self.decision(event_id="c2", status="correction", target="base")]; path = self.write("decisions.csv", DECISION_HEADERS, decisions); self.assertEqual(self.build(fx, decision_events=path)["exit_code"], 2)
+
+    def test_decision_earliest_signal_only_preselection_ambiguous_orphan(self) -> None:
+        fx = self.fixtures(); decisions = [self.decision(event_id="late", checked="2026-07-10T03:00:00Z", action="skipped"), self.decision(event_id="early", checked="2026-07-10T01:00:00Z", action="entered"), self.decision(scenario_id="", signal_id="sig1", event_id="signal", checked="2026-07-10T02:00:00Z", action="exited"), self.decision(scenario_id="", signal_id="other", event_id="orphan", checked="2026-07-10T02:00:00Z")]; path = self.write("decisions.csv", DECISION_HEADERS, decisions); result = self.build(fx, decision_events=path); self.assertEqual(result["decision_summary"]["policy_metrics"]["A_ONLY"]["entered_rows"], 1); self.assertGreaterEqual(result["decision_summary"]["policy_metrics"]["A_ONLY"]["orphan_decision_rows"], 1)
+
+    def test_actual_stop_c_blank_signal_and_bad_episode(self) -> None:
+        fx = self.fixtures(operator="STOP_OR_EXIT"); episodes, links = self.episode_inputs(); result = self.build(fx, trade_episodes=episodes, episode_links=links); self.assertEqual(result["actual_summary"]["policy_metrics"]["STOP_OVERLAY"]["linked_episode_count"], 0)
+        fx = self.fixtures(); episodes, links = self.episode_inputs(opened="bad"); self.assertEqual(self.build(fx, trade_episodes=episodes, episode_links=links)["exit_code"], 2)
+        episodes, _ = self.episode_inputs(); blank = {key: "" for key in LINK_HEADERS}; blank.update(schema_version="manual_trade_signal_link.v2", link_id="ln2", episode_id="ep1", link_status="unmatched"); links = self.write("blank-link.csv", LINK_HEADERS, [blank]); self.assertEqual(self.build(fx, trade_episodes=episodes, episode_links=links)["exit_code"], 0)
+
+    def test_actual_policy_metrics_and_markdown(self) -> None:
+        fx = self.fixtures(); episodes, links = self.episode_inputs(realized="10", fee="2"); result = self.build(fx, trade_episodes=episodes, episode_links=links); summary = result["actual_summary"]["policy_metrics"]["A_ONLY"]; self.assertEqual(summary["net_pnl"], "8"); self.assertEqual(summary["wins"], 1); self.assertIn("Human Decision Evidence", (self.root / "replay.md").read_text(encoding="utf-8")); self.assertIn("Actual Trade Evidence", (self.root / "replay.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__": unittest.main()

@@ -136,7 +136,15 @@ def _validate_integrity(scenarios: list[dict[str, str]], events: list[dict[str, 
         return "input_schema_mismatch"
     known = set(scenario_ids)
     event_ids = [row.get("scenario_event_id", "") for row in events]
-    if any(not x for x in event_ids) or len(set(event_ids)) != len(event_ids):
+    if any(not x for x in event_ids):
+        return "input_schema_mismatch"
+    if len(set(event_ids)) != len(event_ids):
+        seen_events: dict[str, dict[str, str]] = {}
+        for row in events:
+            event_id = row["scenario_event_id"]; normalized = {key: value for key, value in row.items() if key != "scenario_event_id"}
+            if event_id in seen_events and seen_events[event_id] != normalized:
+                return "classification_assignment_conflict"
+            seen_events[event_id] = normalized
         return "input_schema_mismatch"
     event_map = {row["scenario_event_id"]: row for row in events}
     for row in events:
@@ -177,7 +185,7 @@ def _validate_integrity(scenarios: list[dict[str, str]], events: list[dict[str, 
         class_utc = _dt(row.get("event_timestamp_utc")); class_jst = _dt(row.get("event_timestamp_jst")); event_utc = _dt(event.get("event_timestamp_utc")); event_jst = _dt(event.get("event_timestamp_jst"))
         if not class_utc or not class_jst or not event_utc or not event_jst or abs((class_utc - class_jst).total_seconds()) > 1 or abs((event_utc - class_utc).total_seconds()) > 1:
             return "invalid_timestamp"
-        if not row.get("classifier_method_version", "").strip() or row.get("classification_status") not in STATUSES or (row.get("operator_class") and row.get("operator_class") not in CLASSES):
+        if not row.get("classifier_method_version", "").strip() or row.get("classification_status") not in STATUSES or (row.get("operator_class") and row.get("operator_class") not in CLASSES) or (row.get("classification_status") != "classified" and row.get("operator_class")):
             return "input_schema_mismatch"
         if row.get("classification_status") == "classified" and not row.get("operator_class"):
             return "input_schema_mismatch"
@@ -214,7 +222,8 @@ def _effective_decisions(rows: list[dict[str, str]]) -> tuple[list[dict[str, str
             if target_row.get("supersedes_decision_event_id"):
                 return [], "invalid_correction_graph"
             superseded.add(target)
-    if len(superseded) != len({row.get("supersedes_decision_event_id") for row in rows if row.get("supersedes_decision_event_id")}):
+    targets = [row.get("supersedes_decision_event_id") for row in rows if row.get("supersedes_decision_event_id")]
+    if len(superseded) != len(set(targets)) or len(targets) != len(set(targets)):
         return [], "invalid_correction_graph"
     return [row for row in rows if row["decision_event_id"] not in superseded], None
 
@@ -289,7 +298,7 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                     return {"ok": False, "exit_code": 2, "errors": ["invalid_monetary_value"], "report_written": False}
     if link_rows:
         link_ids = [row.get("link_id", "") for row in link_rows]
-        if any(not value for value in link_ids) or any(not row.get("signal_id") for row in link_rows) or len(link_ids) != len(set(link_ids)) or any(row.get("episode_id") not in {item.get("episode_id") for item in episode_rows} for row in link_rows):
+        if any(not value for value in link_ids) or any(row.get("link_status") == "linked" and not row.get("signal_id") for row in link_rows) or len(link_ids) != len(set(link_ids)) or any(row.get("episode_id") not in {item.get("episode_id") for item in episode_rows} for row in link_rows):
             return {"ok": False, "exit_code": 2, "errors": ["invalid_link_reference"], "report_written": False}
     for event in event_rows:
         for field in ("mfe_r", "mae_r"):
@@ -319,7 +328,7 @@ def build_manual_operator_historical_replay(*, scenarios: Path, scenario_events:
                 if decision.get("scenario_id") == event.get("scenario_id") and decision_time and selected_at and decision_time >= selected_at:
                     replay["decision_join_status"] = "matched"; replay["first_effective_human_action"] = decision.get("human_action", ""); replay["first_human_checked_at_utc"] = _utc(decision_time); break
             if not replay["decision_join_status"] and decision_events is not None: replay["decision_join_status"] = "no_match"
-            eligible_links = [link for link in link_rows if replay["row_role"] != "observe_only" and link.get("signal_id") == event.get("source_signal_id") and link.get("link_status") == "linked" and link.get("link_confidence") in {"high", "medium"} and link.get("side_compatibility") == "match" and link.get("symbol_compatibility") == "match"]
+            eligible_links = [link for link in link_rows if replay["row_role"] == "entry_candidate" and link.get("signal_id") == event.get("source_signal_id") and link.get("link_status") == "linked" and link.get("link_confidence") in {"high", "medium"} and link.get("side_compatibility") == "match" and link.get("symbol_compatibility") == "match"]
             if eligible_links:
                 episode = next((item for item in episode_rows if item.get("episode_id") == eligible_links[0].get("episode_id")), None)
                 opened = _dt(episode.get("opened_at_utc")) if episode else None
