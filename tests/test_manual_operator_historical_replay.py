@@ -48,7 +48,7 @@ class HistoricalReplayTests(unittest.TestCase):
     def test_c_observe_and_stop_overlay(self) -> None:
         fx = self.fixtures(operator="C_WATCH_ZONE"); result = self.build(fx)
         self.assertEqual(result["policy_summaries"]["A_PLUS_B_PLUS_C_OBSERVE"]["observe_only_rows"], 1)
-        self.assertEqual(result["policy_summaries"]["A_PLUS_B_PLUS_C_OBSERVE"]["resolved_positive_rows"], 1)
+        self.assertEqual(result["policy_summaries"]["A_PLUS_B_PLUS_C_OBSERVE"]["resolved_positive_rows"], 0)
         fx = self.fixtures(operator="STOP_OR_EXIT", outcome="sl_first"); result = self.build(fx)
         self.assertEqual(result["policy_summaries"]["STOP_OVERLAY"]["selected_scenario_rows"], 1)
         self.assertEqual(result["policy_summaries"]["STOP_OVERLAY"]["entry_candidate_rows"], 0)

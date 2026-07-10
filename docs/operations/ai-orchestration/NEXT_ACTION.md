@@ -1,14 +1,14 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-2`
+- current_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-3`
 - mode: `REVIEW_ONLY`
-- task_type: `PYTHON SOURCE / CLI / TARGETED TEST / COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT`
-- previous_status: `P6 FIX-1 COMMITTED / PUSH NONE`
+- task_type: `PYTHON SOURCE / TARGETED TEST / COMMIT`
+- previous_work_id: `BTCFX-20260710-MTP-HISTORICAL-REPLAY-FIX-1`
+- previous_status: `P6 FIX-2 COMMITTED / PUSH NONE`
 
 ## Goal
 
-Review the completed P6 contract fix. P6 remains active. P7 has not started.
+Review the completed P6 attribution and metrics fix. P6 remains active; P7 has not started.
 
 Source of truth:
 
@@ -16,86 +16,64 @@ Source of truth:
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 ```
 
-Reported implementation commit:
+Reported fix commit:
 
 ```text
-6de0391
+64b7b56
 ```
 
 ## Fix
 
-### 1. Input and identity integrity
+### 1. One-to-one classification integrity
 
-Current gaps:
-- classification timestamps are not checked against scenario events
-- classified/insufficient/ambiguous status and operator-class consistency is incomplete
-- assigned/ambiguous consistency is incomplete
-- duplicate classification conflict does not return exit 3
-- classifier method/threshold snapshot values are not fully validated
-- optional episode/link IDs, references, timestamps, side/symbol compatibility, and monetary Decimals are not fail-closed
-- multiple corrections targeting one decision are not rejected
+Required:
+- exactly one classification row per scenario event
+- duplicate classification ID or duplicate event assignment with differing content => exit 3
+- missing/extra event assignment => exit 2
+- operator class must be blank unless `classification_status == classified`
+- classifier method must be non-empty
+- compare threshold snapshots as canonical finite Decimals
+- reject multiple correction rows targeting the same decision event
 
-Required behavior:
-- implement active spec section 4 exactly
-- malformed timestamps/non-finite numerics exit 2
-- differing duplicate identities exit 3
-- optional actual inputs remain valid when absent
+### 2. Entry metrics must exclude C and STOP
 
-### 2. Policy and proxy metrics
+Current behavior still counts observe-only C and STOP outcomes in `resolved_proxy_rows`, positive/negative rows, and `proxy_positive_rate`.
 
-Current gaps:
-- C observe-only rows are included in resolved entry-rate denominators
-- MFE/MAE count, average, and median are missing
-- `qualifying_events_per_selected_scenario` is missing
-- `proxy_over_suppression_candidate_rows` is hard-coded to zero
-- later C upgrade does not require a valid classified A/B row
+Required:
+- entry metrics use `row_role == entry_candidate` only
+- C and STOP retain descriptive outcome breakdowns but never enter entry denominators
+- later C upgrade requires `classification_status == classified` and class A/B
 
-Required behavior:
-- implement sections 5–7 exactly
-- C may retain descriptive outcome distribution but must be excluded from entry metrics
-- selected-event outcomes remain primary
-- unresolved/no-OHLCV remain outside resolved denominators
+### 3. Human decision attribution
 
-### 3. Human decision evidence
+Implement active spec section 8 fully:
+- deterministic earliest eligible scenario-scoped decision
+- uniquely attributable signal-only decision
+- pre-selection, ambiguous signal-only, and orphan counts
+- per-policy decision coverage and action counts
+- row-level join status reflects matched/no-match/ambiguous/pre-selection as applicable
+- no `manual_note` output
 
-Current gaps:
-- only direct scenario joins are implemented
-- file order, not earliest timestamp, chooses the displayed decision
-- signal-only unique attribution, pre-selection, ambiguous, orphan, action counts, and coverage are missing
+### 4. Actual evidence attribution and metrics
 
-Required behavior:
-- implement section 8 metrics and attribution
-- choose earliest eligible effective decision deterministically
-- never output `manual_note`
-
-### 4. Actual trade evidence
-
-Current gaps:
-- side/symbol compatibility is not enforced
-- first matching link is chosen without ambiguity handling
-- C rows can receive entry attribution
-- closed status, duplicate episode use, fee/net PnL, wins/losses/breakeven, and PF are missing
-- `actual_net_pnl_after_fee` is not populated
-
-Required behavior:
-- implement section 9 exactly
-- exclude low/ambiguous/pre-selection/conflicting/multi-scenario evidence
+Implement active spec section 9 fully:
+- validate non-empty link signal IDs and valid opened/closed timestamps
+- only closed, matched episodes with linked high/medium, side match, symbol match, and post-selection open time are eligible for monetary metrics
+- one signal mapping to multiple selected scenarios in one policy is ambiguous and excluded
 - no episode double-count within one policy
-- fee-missing rows excluded from net/PF
-- never fabricate actual R
+- multiple competing eligible links are ambiguous, not first-row-wins
+- C/STOP receive no entry attribution
+- populate row net PnL when fee exists
+- per-policy high/medium counts, gross, fee coverage, net, win/loss/breakeven, and PF
+- PF blank when no losses
 
-### 5. Output validation and tests
+### 5. Markdown and regression coverage
 
-Current gaps:
-- JSON/Markdown existing-output schema checks are marker-only
-- Markdown does not report the implemented decision/actual metrics
-- new test module has only four broad tests and does not cover the section 20 contract
-
-Required behavior:
-- exact existing schema/version validation for all outputs
-- keep three-output rollback and deterministic bytes
-- add focused synthetic tests covering every required behavior above and the active spec section 20 list
-- direct CLI success/error remains compact and privacy-safe
+Required:
+- Markdown prints the computed decision and actual summaries, not only explanatory text
+- expand focused synthetic tests for every item above
+- add tests for one-to-one classification assignment, class/status consistency, duplicate conflict exit 3, C/STOP denominator exclusion, signal-only decision attribution, decision timing categories, multiple corrections, actual ambiguity/dedup/fee/net/PF, and classified-only C upgrade
+- retain deterministic bytes, rollback, compact CLI, and privacy checks
 
 ## Allowed read
 
@@ -105,7 +83,6 @@ docs/operations/ai-orchestration/NEXT_ACTION.md
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 src/feedback/manual_operator_historical_replay.py
 tests/test_manual_operator_historical_replay.py
-tools/log_feedback.py
 active spec section 18 reference files as needed
 ```
 
@@ -114,9 +91,10 @@ active spec section 18 reference files as needed
 ```text
 src/feedback/manual_operator_historical_replay.py
 tests/test_manual_operator_historical_replay.py
-tools/log_feedback.py only if CLI behavior must change
 docs/operations/ai-orchestration/NEXT_ACTION.md
 ```
+
+`tools/log_feedback.py` only if an actual CLI defect is found.
 
 ## Validation
 
@@ -135,25 +113,25 @@ docs/operations/ai-orchestration/NEXT_ACTION.md
 git diff --check -- \
   src/feedback/manual_operator_historical_replay.py \
   tests/test_manual_operator_historical_replay.py \
-  tools/log_feedback.py \
-  docs/operations/ai-orchestration/NEXT_ACTION.md
+  docs/operations/ai-orchestration/NEXT_ACTION.md \
+  tools/log_feedback.py
 ```
 
 ## Completion transition
 
-After validation, set:
+After validation:
 
 ```text
-current_work_id: BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-2
+current_work_id: BTCFX-20260710-MTP-HISTORICAL-REPLAY-REVIEW-CHECKPOINT-3
 mode: REVIEW_ONLY
-previous_status: P6 FIX-1 COMMITTED / PUSH NONE
+previous_status: P6 FIX-2 COMMITTED / PUSH NONE
 ```
 
 Do not archive P6 or start P7.
 
 ## Stop / Safety / Git
 
-- stop for branch mismatch, spec contradiction, unavoidable scope expansion, unrelated test failure, or private/generated/raw data exposure
+- stop for branch mismatch, spec contradiction, unavoidable scope expansion, unrelated test failure, or private/generated/raw-data exposure
 - no gate/scoring/threshold/notification/runtime/launchd/API/account/order/secret/FORMAL_GO/automatic-order changes
 - no frozen runtime repo, raw exchange export, generated output commit, or `paper_positions.csv`
 - preserve unrelated dirty changes; no reset, checkout, delete, or stash apply/pop/drop
@@ -162,7 +140,7 @@ Do not archive P6 or start P7.
 ## Commit
 
 ```text
-fix: complete historical replay contract
+fix: finish replay attribution metrics
 ```
 
 ## Safety boundary
