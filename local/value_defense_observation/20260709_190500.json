@@ -7,7 +7,7 @@
       "bias": "long",
       "current_price_position_long": "inside_shallow_retest_zone",
       "current_price_position_short": "inside_shallow_retest_zone",
-      "failed_breakout_state": null,
+      "failed_breakout_state": "down_reversal",
       "level_flip_state": "resistance_to_support_confirmed",
       "long_value_defense_lifecycle_state": "shallow_retest_risk",
       "market_map_flags": [
@@ -15,17 +15,18 @@
         "short_into_major_support",
         "resistance_to_support_flip",
         "resistance_to_support_retest_confirmed",
-        "major_resistance_rejection"
+        "failed_breakout_down_reversal"
       ],
-      "market_map_primary_state": "confirmed_up",
+      "market_map_primary_state": "early_down",
       "short_value_defense_lifecycle_state": "shallow_retest_risk",
       "transition_direction": "up",
-      "trend_flip_state": "confirmed_up"
+      "trend_flip_state": "early_down"
     },
     "evidence_quality": "full",
     "evidence_source": "raw_result",
     "human_approval_required": "yes",
     "matched_tags": [
+      "trend_transition_candidate",
       "higher_timeframe_reclaim",
       "short_invalidated_by_reclaim"
     ],
@@ -44,37 +45,37 @@
     ]
   },
   "bias": "long",
-  "current_price": 63197.8,
+  "current_price": 63199.8,
   "current_price_position_long": "inside_shallow_retest_zone",
   "current_price_position_short": "inside_shallow_retest_zone",
-  "detail_page_local_path": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/attention/20260710_000501.html",
+  "detail_page_local_path": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/followup/20260709_190500.html",
   "detail_page_status": "published",
-  "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/attention/20260710_000501.html",
+  "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/followup/20260709_190500.html",
   "human_action": "次の通常通知で Value Defense Entry Layer を再確認し、浅い再検討帯と本命防衛ゾーンの位置関係を観察する。",
   "long_value_defense": {
-    "continuation_trigger": 63190.68,
+    "continuation_trigger": 63190.65,
     "defense_zone_basis": "next_support_below_shallow_zone",
     "invalidation_zone": {
-      "high": 62900.65,
-      "low": 62876.51
+      "high": 62786.66,
+      "low": 62751.14
     },
     "lifecycle_state": "shallow_retest_risk",
     "market_entry_status": "invalid",
     "operator_guidance": "浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。",
-    "reclaim_trigger": 62953.15,
+    "reclaim_trigger": 62960.45,
     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     "shallow_retest_risk": "high",
     "shallow_retest_zone": {
-      "high": 63266.52,
-      "low": 63114.83
+      "high": 63279.31,
+      "low": 63101.99
     },
     "side": "long",
     "value_defense_zone": {
-      "high": 62791.48,
-      "low": 62723.52
+      "high": 62818.91,
+      "low": 62710.49
     }
   },
-  "notification_kind": "attention",
+  "notification_kind": "followup",
   "observation_checklist": {
     "continuation_trigger_met": "unknown_pending_followup",
     "invalidation_zone_reached": "unknown_pending_followup",
@@ -110,30 +111,30 @@
     "tuning_review_allowed": "no"
   },
   "short_value_defense": {
-    "continuation_trigger": 63229.56,
+    "continuation_trigger": 63201.55,
     "defense_zone_basis": "next_resistance_above_shallow_zone",
     "invalidation_zone": {
-      "high": 63514.04,
-      "low": 63489.9
+      "high": 63639.36,
+      "low": 63603.84
     },
     "lifecycle_state": "shallow_retest_risk",
     "market_entry_status": "invalid",
     "operator_guidance": "浅い戻り売りだけで決め打ちせず、本命戻り売りと invalidation を先に確認する。",
-    "reclaim_trigger": 63303.62,
+    "reclaim_trigger": 63346.0,
     "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
     "shallow_retest_risk": "high",
     "shallow_retest_zone": {
-      "high": 63275.72,
-      "low": 63183.39
+      "high": 63288.51,
+      "low": 63114.59
     },
     "side": "short",
     "value_defense_zone": {
-      "high": 63509.74,
-      "low": 63331.52
+      "high": 63522.41,
+      "low": 63403.49
     }
   },
-  "signal_id": "20260710_000501",
+  "signal_id": "20260709_190500",
   "source_file": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/last_result.json",
-  "summary_subject": "[BTCFX Manual Trading Report] 👀 注意報 | 上方向バイアス / 見送り | BTC 63,198",
-  "timestamp_jst": "2026-07-10T09:05:01.117452+09:00"
+  "summary_subject": "[BTCFX Manual Trading Report] ⏱期限切れ | 再評価 | BTC 63,200",
+  "timestamp_jst": "2026-07-10T04:05:00.214375+09:00"
 }
