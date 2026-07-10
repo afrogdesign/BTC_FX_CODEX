@@ -526,3 +526,11 @@ P6 historical replay implementation accepted at checkpoint `e870bd8`.
 - archived P6 spec: `chatgpt/specs/archive/20260710_manual_operator_historical_replay.md`
 
 P7 has not started and requires a separate active spec and human approval.
+
+---
+
+## 2026-07-10 P7 activation
+
+P6 was accepted at `e870bd8`. The active P7 spec is `chatgpt/specs/active/20260710_manual_operator_shadow_surface.md`.
+
+P7 implementation is next, targeting the existing public detail HTML through `build_notification_detail_html()`. This docs-only activation changes no mail, trigger, gate, scoring, threshold, runtime, API, account, or order behavior.

@@ -130,23 +130,23 @@ One task must cover one phase or one narrow subtask only.
 
 P6 historical replay: complete and accepted.
 
-P7 shadow surface: not started.
+P7 shadow surface: implementation approved and next.
 
 ```text
-BTCFX-20260710-MTP-P7-SHADOW-SURFACE-HUMAN-CHECK
+BTCFX-20260710-MTP-P7-SHADOW-SURFACE-IMPLEMENTATION
 ```
 
 Task type:
 
 ```text
-HUMAN_CHECK / PRODUCT AND SCOPE DECISION
+PYTHON SOURCE / HTML RENDER / TARGETED TESTS / LOCAL COMMIT
 ```
 
 Purpose:
 
-- decide whether to create the P7 shadow-surface active spec
-- do not implement P7 source
-- do not create an active P7 spec without explicit human approval
+- user approved P7 spec, implementation, checkpoint push, and bounded runtime deployment
+- implement the active P7 shadow-surface spec in the existing public detail HTML
+- runtime apply remains a separate bounded task
 - do not change notifications, runtime, gates, thresholds, or order behavior
 
 ## Validation Rules
