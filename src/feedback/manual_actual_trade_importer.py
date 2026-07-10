@@ -130,7 +130,7 @@ def _sheet_rows(path: Path) -> tuple[str, list[dict[str, str]], list[str]]:
                 target = "xl/" + target
             visible.append((sheet.attrib.get("name", ""), target))
         if not visible:
-            raise ValueError("no_visible_sheet")
+            raise ValueError("unreadable_workbook")
         selected = next((item for item in visible if item[0].casefold() == "sheet1"), None)
         if selected is None:
             if len(visible) != 1:
@@ -419,6 +419,8 @@ def _atomic_write(paths_rows: list[tuple[Path, list[str], list[dict[str, str]]]]
     parent = paths_rows[0][0].parent
     parent.mkdir(parents=True, exist_ok=True)
     temp_paths: list[tuple[Path, Path]] = []
+    backup_paths: dict[Path, Path] = {}
+    replaced_paths: list[Path] = []
     try:
         for path, headers, rows in paths_rows:
             with tempfile.NamedTemporaryFile("w", newline="", encoding="utf-8", dir=parent, delete=False) as fp:
@@ -427,11 +429,32 @@ def _atomic_write(paths_rows: list[tuple[Path, list[str], list[dict[str, str]]]]
                 writer.writerows({field: row.get(field, "") for field in headers} for row in rows)
                 temp_paths.append((path, Path(fp.name)))
         for path, temp_path in temp_paths:
+            if path.exists():
+                with tempfile.NamedTemporaryFile(dir=parent, delete=False) as backup_fp:
+                    backup_path = Path(backup_fp.name)
+                backup_path.unlink(missing_ok=True)
+                path.replace(backup_path)
+                backup_paths[path] = backup_path
             temp_path.replace(path)
+            replaced_paths.append(path)
     except Exception:
+        for path in reversed(replaced_paths):
+            path.unlink(missing_ok=True)
+            backup_path = backup_paths.get(path)
+            if backup_path is not None and backup_path.exists():
+                backup_path.replace(path)
+        for path, backup_path in backup_paths.items():
+            if path not in replaced_paths and backup_path.exists():
+                backup_path.replace(path)
         for _, temp_path in temp_paths:
             temp_path.unlink(missing_ok=True)
+        for backup_path in backup_paths.values():
+            backup_path.unlink(missing_ok=True)
         raise
+    for _, temp_path in temp_paths:
+        temp_path.unlink(missing_ok=True)
+    for backup_path in backup_paths.values():
+        backup_path.unlink(missing_ok=True)
 
 
 def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = None, dry_run: bool = False, conflict_policy: str = "reject", cli_alias_used: bool = False) -> dict[str, Any]:
@@ -439,7 +462,40 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
     files_by_category, unsupported_files, collection_errors = _source_files(input_dir)
     category_counts = {category: len(paths) for category, paths in files_by_category.items()}
     source_paths = [path for paths in files_by_category.values() for path in paths]
-    hashes = {path: _sha256_bytes(path.read_bytes()) for path in source_paths}
+    try:
+        hashes = {path: _sha256_bytes(path.read_bytes()) for path in source_paths}
+    except (OSError, RuntimeError, NotImplementedError, ValueError):
+        return {
+            "ok": False,
+            "schema_version": SCHEMA_VERSION,
+            "dry_run": bool(dry_run),
+            "cli_command": "import-manual-actual-trades",
+            "cli_alias_used": bool(cli_alias_used),
+            "input_dir": _repo_relative(input_dir),
+            "output_dir": _repo_relative(output_root),
+            "import_batch_id": "",
+            "source_file_count": len(source_paths),
+            "category_file_counts": category_counts,
+            "rows_read": 0,
+            "rows_accepted": 0,
+            "total_rows": 0,
+            "rows_rejected": 0,
+            "duplicate_rows_skipped": 0,
+            "conflicts_found": 0,
+            "rows_inserted": 0,
+            "rows_replaced": 0,
+            "outputs_written": [],
+            "outputs_unchanged": [],
+            "issues_file": "",
+            "symbols": [],
+            "date_range_utc": {"min": "", "max": ""},
+            "date_range_jst": {"min": "", "max": ""},
+            "missing_categories": [category for category, count in category_counts.items() if count == 0],
+            "unsupported_files": unsupported_files,
+            "errors": ["unreadable_workbook"],
+            "safety_boundary": SAFETY_BOUNDARY,
+            "exit_code": 2,
+        }
     batch_id = "batch_" + _hash_parts(*sorted(f"{category}:{hashes[path]}" for category, paths in files_by_category.items() for path in paths))[:24]
     summary: dict[str, Any] = {
         "ok": False, "schema_version": SCHEMA_VERSION, "dry_run": bool(dry_run),
@@ -466,8 +522,14 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
             try:
                 sheet, raw_rows, headers = _sheet_rows(path)
                 _required_check(category, headers)
+            except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError, RuntimeError, NotImplementedError, IndexError):
+                summary["errors"].append("unreadable_workbook")
+                continue
             except ValueError as exc:
-                summary["errors"].append(str(exc))
+                reason = str(exc)
+                if reason not in {"ambiguous_sheet", "empty_sheet", "missing_required_column", "unreadable_workbook"}:
+                    reason = "unreadable_workbook"
+                summary["errors"].append(reason)
                 continue
             summary["rows_read"] += len(raw_rows)
             for raw in raw_rows:
@@ -530,18 +592,27 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
         summary["outputs_unchanged"] = [spec["output"] for spec in _CATEGORY.values()]
         return summary
     if summary["rows_inserted"] == 0 and summary["rows_replaced"] == 0:
+        if issues:
+            issue_path = output_root / "manual_actual_trade_import_issues.csv"
+            try:
+                _atomic_write([(issue_path, ISSUE_HEADERS, issues)])
+            except (OSError, RuntimeError, NotImplementedError):
+                summary.update(errors=["output_io_failure"], exit_code=4)
+                return summary
+            summary["issues_file"] = issue_path.name
         summary["ok"] = True
         summary["outputs_unchanged"] = [spec["output"] for spec in _CATEGORY.values()]
         return summary
     try:
         paths_rows = [(output_root / spec["output"], spec["headers"], merged[category]) for category, spec in _CATEGORY.items()]
+        issue_path = output_root / "manual_actual_trade_import_issues.csv"
+        if issues:
+            paths_rows.append((issue_path, ISSUE_HEADERS, issues))
         _atomic_write(paths_rows)
         summary["outputs_written"] = [spec["output"] for spec in _CATEGORY.values()]
         if issues:
-            issue_path = output_root / "manual_actual_trade_import_issues.csv"
-            _atomic_write([(issue_path, ISSUE_HEADERS, issues)])
             summary["issues_file"] = issue_path.name
-    except OSError as exc:
+    except (OSError, RuntimeError, NotImplementedError):
         summary.update(errors=["output_io_failure"], exit_code=4)
         return summary
     summary["ok"] = True

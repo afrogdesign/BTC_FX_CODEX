@@ -8,6 +8,7 @@ import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from unittest import mock
 from xml.sax.saxutils import escape
 
 import unittest
@@ -30,6 +31,7 @@ from src.feedback.manual_actual_trade_importer import (  # noqa: E402
     POSITION_HEADERS as CANONICAL_POSITION_HEADERS,
     TRADE_HEADERS as CANONICAL_TRADE_HEADERS,
 )
+import src.feedback.manual_actual_trade_importer as importer  # noqa: E402
 
 
 TRADE_HEADERS = [
@@ -133,6 +135,39 @@ def _write_minimal_xlsx(path: Path, headers: list[str], rows: list[dict[str, Any
         zf.writestr("xl/workbook.xml", workbook_xml)
         zf.writestr("xl/_rels/workbook.xml.rels", rels_xml)
         zf.writestr("xl/worksheets/sheet1.xml", sheet_xml)
+
+
+def _write_broken_xlsx(path: Path, *, missing_workbook: bool = False, malformed_sheet: bool = False) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if not missing_workbook:
+            zf.writestr(
+                "xl/workbook.xml",
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            )
+            zf.writestr(
+                "xl/_rels/workbook.xml.rels",
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+            )
+        zf.writestr("xl/worksheets/sheet1.xml", "<worksheet>" if malformed_sheet else '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>')
+
+
+def _write_ambiguous_xlsx(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> None:
+    _write_minimal_xlsx(path, headers, rows)
+    with zipfile.ZipFile(path, "r") as source:
+        members = {name: source.read(name) for name in source.namelist()}
+    members["xl/workbook.xml"] = (
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        '<sheets><sheet name="First" sheetId="1" r:id="rId1"/><sheet name="Second" sheetId="2" r:id="rId2"/></sheets></workbook>'
+    ).encode()
+    members["xl/_rels/workbook.xml.rels"] = (
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="worksheets/sheet1.xml"/></Relationships>'
+    ).encode()
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as target:
+        for name, data in members.items():
+            target.writestr(name, data)
 
 
 def _mexc_trade_rows() -> list[dict[str, str]]:
@@ -450,6 +485,155 @@ class MexcActualTradeImporterTest(unittest.TestCase):
             self.assertEqual(len(summary["unsupported_files"]), 1)
             self.assertNotIn("legacy.xls", json.dumps(summary))
             self.assertTrue(summary["ok"])
+
+    def test_malformed_zip_workbook_failure_is_safe(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            (input_dir / "Trade History.xlsx").write_bytes(b"not-a-zip")
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertEqual(summary["errors"], ["unreadable_workbook"])
+            self.assertFalse(output_dir.exists())
+
+    def test_missing_workbook_xml_and_malformed_sheet_are_safe(self) -> None:
+        for broken in ("missing_workbook", "malformed_sheet"):
+            with self.subTest(broken=broken), TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                input_dir, output_dir = self._complete_batch(root)
+                _write_broken_xlsx(input_dir / "Trade History.xlsx", missing_workbook=broken == "missing_workbook", malformed_sheet=broken == "malformed_sheet")
+                summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+                self.assertEqual(summary["exit_code"], 2)
+                self.assertEqual(summary["errors"], ["unreadable_workbook"])
+                self.assertFalse(output_dir.exists())
+
+    def test_missing_column_empty_sheet_and_ambiguous_sheet_are_input_errors(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS[:-1], _mexc_trade_rows())
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertIn("missing_required_column", summary["errors"])
+            self.assertFalse(output_dir.exists())
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, [])
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertIn("empty_sheet", summary["errors"])
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            _write_ambiguous_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, _mexc_trade_rows())
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertIn("ambiguous_sheet", summary["errors"])
+
+    def test_unrelated_unsupported_file_warns_but_missing_required_xlsx_stops(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            (input_dir / "unrelated.csv").write_text("not imported", encoding="utf-8")
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertTrue(summary["ok"])
+            self.assertEqual(len(summary["unsupported_files"]), 1)
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            (input_dir / "Trade History.xlsx").unlink()
+            (input_dir / "Trade History.xls").write_bytes(b"legacy")
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertEqual(summary["exit_code"], 2)
+            self.assertIn("trade_history", summary["missing_categories"])
+            self.assertFalse(output_dir.exists())
+
+    def test_transaction_rolls_back_existing_and_new_targets(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            original = {path.name: path.read_bytes() for path in output_dir.glob("manual_actual_*.csv")}
+            issue_path = output_dir / "manual_actual_trade_import_issues.csv"
+            replace = Path.replace
+            failed = False
+
+            def fail_orders(path: Path, target: Path) -> Path:
+                nonlocal failed
+                if target.name == "manual_actual_orders.csv" and not failed:
+                    failed = True
+                    raise OSError("intentional second-target failure")
+                return replace(path, target)
+
+            with mock.patch.object(Path, "replace", new=fail_orders):
+                with self.assertRaises(OSError):
+                    importer._atomic_write([
+                        (output_dir / "manual_actual_trades.csv", CANONICAL_TRADE_HEADERS, []),
+                        (output_dir / "manual_actual_orders.csv", CANONICAL_ORDER_HEADERS, []),
+                        (output_dir / "manual_actual_positions.csv", CANONICAL_POSITION_HEADERS, []),
+                    ])
+            self.assertEqual({path.name: path.read_bytes() for path in output_dir.glob("manual_actual_*.csv")}, original)
+            self.assertFalse(issue_path.exists())
+
+    def test_transaction_removes_new_targets_after_failure(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            output_dir = root / "output"
+            replace = Path.replace
+            failed = False
+
+            def fail_orders(path: Path, target: Path) -> Path:
+                nonlocal failed
+                if target.name == "manual_actual_orders.csv" and not failed:
+                    failed = True
+                    raise OSError("intentional second-target failure")
+                return replace(path, target)
+
+            with mock.patch.object(Path, "replace", new=fail_orders):
+                with self.assertRaises(OSError):
+                    importer._atomic_write([
+                        (output_dir / "manual_actual_trades.csv", CANONICAL_TRADE_HEADERS, []),
+                        (output_dir / "manual_actual_orders.csv", CANONICAL_ORDER_HEADERS, []),
+                        (output_dir / "manual_actual_positions.csv", CANONICAL_POSITION_HEADERS, []),
+                    ])
+            self.assertFalse(output_dir.exists() and list(output_dir.glob("manual_actual_*.csv")))
+
+    def test_duplicate_only_plus_rejection_updates_only_issues(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir, output_dir = self._complete_batch(root)
+            import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            canonical_names = {"manual_actual_trades.csv", "manual_actual_orders.csv", "manual_actual_positions.csv"}
+            before = {path.name: path.read_bytes() for path in output_dir.iterdir() if path.name in canonical_names}
+            bad = {**_mexc_trade_rows()[0], "UID": "bad-uid", "約定価格": "not-number"}
+            _write_minimal_xlsx(input_dir / "Trade History.xlsx", TRADE_HEADERS, [_mexc_trade_rows()[0], bad])
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir)
+            self.assertTrue(summary["ok"])
+            self.assertEqual(summary["rows_rejected"], 1)
+            self.assertEqual(summary["outputs_unchanged"], ["manual_actual_trades.csv", "manual_actual_orders.csv", "manual_actual_positions.csv"])
+            self.assertEqual({path.name: path.read_bytes() for path in output_dir.iterdir() if path.name in canonical_names}, before)
+            self.assertEqual(summary["issues_file"], "manual_actual_trade_import_issues.csv")
+            issue_path = output_dir / summary["issues_file"]
+            issue_before = issue_path.read_bytes()
+            issue_path.unlink()
+            dry = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertTrue(dry["ok"])
+            self.assertFalse(issue_path.exists())
+            self.assertNotEqual(issue_before, b"")
+
+    def test_position_and_partial_order_semantics(self) -> None:
+        partial = {**_mexc_order_rows()[0], "ステータス": "Partially Filled"}
+        self.assertEqual(normalize_mexc_order_history([partial], source_file="Order History.xlsx")[0]["status"], "partially_filled")
+        partial_close = {**_mexc_trade_rows()[0], "方向": "Close Short"}
+        normalized = normalize_mexc_trade_history([partial_close], source_file="Trade History.xlsx")[0]
+        self.assertEqual(normalized["side"], "short")
+        self.assertEqual(normalized["transaction_side"], "buy")
+        self.assertEqual(normalized["position_action"], "close")
+        with self.assertRaisesRegex(ValueError, "closed_position_missing_close_time"):
+            normalize_mexc_position_history([{**_mexc_position_rows()[0], "決済時刻": "", "ステータス": "Closed"}], source_file="Position History.xlsx")
+        with self.assertRaisesRegex(ValueError, "close_before_open"):
+            normalize_mexc_position_history([{**_mexc_position_rows()[0], "オープン時間(UTC+09:00)": "2026-07-01 10:00:00", "決済時刻": "2026-07-01 09:00:00"}], source_file="Position History.xlsx")
 
 
 if __name__ == "__main__":

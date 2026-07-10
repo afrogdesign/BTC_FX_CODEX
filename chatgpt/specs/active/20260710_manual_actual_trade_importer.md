@@ -156,7 +156,7 @@ futures_position_history*.xlsx
 
 A workbook matching multiple categories is rejected.
 
-Unknown `.xlsx` files are ignored and reported as `unsupported_files` without exposing their full path.
+Unknown `.xlsx` files are not read. When all three required categories have valid `.xlsx` inputs, unrelated `.xls`, `.xlsm`, CSV, PDF, and unknown `.xlsx` files are warning-only entries in `unsupported_files`; their summary names are hashed safe names. If a required category has no valid `.xlsx`, the category remains missing and the import exits `2`.
 
 ### 3.3 Required workbooks
 
@@ -183,7 +183,8 @@ P2 does not add partial-import mode. A future explicit task may add it if operat
 - if `Sheet1` is absent and the workbook has exactly one visible worksheet, use that worksheet
 - if multiple visible worksheets exist and `Sheet1` is absent, reject the workbook
 - hidden worksheets are not imported
-- macro-enabled `.xlsm`, legacy `.xls`, CSV, PDF, and password-protected workbooks are unsupported
+- macro-enabled `.xlsm`, legacy `.xls`, CSV, PDF, and unknown `.xlsx` files are never read and are warning-only when the complete valid batch exists
+- a password-protected or malformed matched `.xlsx` is an input-contract error
 
 ### 3.5 Required source columns
 
@@ -777,7 +778,9 @@ Default policy is merge with existing canonical CSVs.
 - canonical outputs are sorted deterministically by primary timestamp, category ID
 - all changed files are written to temporary files first
 - all validation and serialization must succeed before replacement
-- if any canonical output write fails, none of the three canonical outputs are replaced
+- replacement uses process-level transactional replacement with rollback: existing targets receive same-filesystem backups, targets are replaced in order, and a failure restores replaced targets or removes newly-created targets before re-raising
+- when an issues CSV is written for the batch, it is included in the same replacement transaction
+- this process-level rollback does not claim absolute crash or power-loss atomicity
 - no header-only file is created after a failed or incomplete batch
 - P2 does not add a destructive rebuild option
 
@@ -928,7 +931,7 @@ Required tests:
 14. missing required column rejects workbook
 15. empty sheet rejects workbook
 16. ambiguous multiple sheets reject workbook
-17. unsupported `.xls`, `.xlsm`, CSV, or password-protected workbook is rejected
+17. complete valid batch with unrelated `.xls`, `.xlsm`, CSV, PDF, or unknown `.xlsx` records safe warning names; missing required `.xlsx` remains exit `2`; matched malformed/password-protected workbook is rejected
 18. unsupported symbol is rejected
 19. BTC symbol aliases normalize to `BTCUSDT`
 20. side / transaction_side / position_action mapping
