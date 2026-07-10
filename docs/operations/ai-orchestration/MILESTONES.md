@@ -157,3 +157,30 @@
 - no raw exchange export commit
 - no `paper_positions.csv` integration unless explicitly approved
 - human decides manually
+
+
+## Manual trading practicality improvement route approved
+
+- approved planning date: `2026-07-10`
+- detailed plan: `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+- AI execution route: `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+- current decision is to preserve the strict formal candidate path and add future operator-action layers:
+  - `A_FORMAL`
+  - `B_CHECK_15M`
+  - `C_WATCH_ZONE`
+  - `STOP_OR_EXIT`
+- candidate rows must be normalized into scenario lifecycle before notification volume is expanded
+- actual trade ground truth and signal/scenario linking precede evidence-backed production tuning
+- this milestone does not authorize gate, threshold, notification, runtime, or automatic-order changes
+- current exact next task is `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC`
+- the next task is active-spec creation only; importer implementation follows only after review
+
+## P6 manual operator historical replay accepted
+
+- accepted checkpoint: `e870bd8`
+- reported targeted validation: `142 tests passed`
+- P6 replay test methods: `19`
+- offline deterministic replay with optional human/actual evidence support
+- no production behavior change
+- archived spec: `chatgpt/specs/archive/20260710_manual_operator_historical_replay.md`
+- P7 pending human decision

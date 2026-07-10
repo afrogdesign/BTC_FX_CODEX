@@ -1,31 +1,28 @@
 # AI Orchestration Control
 
-last_updated: 2026-07-07
+last_updated: 2026-07-10
 repo: `afrogdesign/BTC_FX_CODEX`
 primary_mcp_working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 frozen_old_runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-branch_source_rule: `read from git status --short --branch and CONTROL.md, not from chat history`
+branch_source_rule: `read from git status --short --branch and CURRENT_STATE.md, not from chat history`
 
 ## Current State
 
 - repo-local orchestration default is MCP primary
 - normal Codex task is local edit + local validation + local commit + compact report
-- routine GitHub push is wasteful and out of default scope
+- routine GitHub push is outside default scope unless checkpoint is explicitly requested
 - old runtime execution repo must not be edited, run, inspected, or synced in normal MCP tasks
-- product route has been consolidated into Ver04-v1 self-improvement loop docs
-- current Phase4 self-improvement route is `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
-- current operational posture is post-deployment observation
-- display/report-label-only implementation `d2beafe` is runtime-applied
-- Ver04-v1 runtime deployment is complete and reflected active
+- current product objective is practical human-operated BTC manual trading support
+- Ver04-v2 source/runtime observation posture remains in effect
+- display/report-label work is runtime-applied
 - notification sending behavior remains unchanged
-- no immediate implementation is required unless observation finds an issue
-- future implementation beyond display labels still requires explicit human approval
+- Phase4 tuning remains blocked
+- manual trading practicality plan and AI execution route are now active planning sources
+- planning route approval does not authorize scoring, gate, threshold, notification, or runtime changes
 
 ## Current Objective
 
 Build a practical human-operated BTC manual trading support system.
-
-Primary objective:
 
 ```text
 notification mail を受け取った人間が、
@@ -33,11 +30,49 @@ notification mail を受け取った人間が、
 攻めの姿勢で勝てる manual trading support system を作る。
 ```
 
-Immediate product objective:
+Immediate planning objective:
 
-- keep public HTML / notification mail / local dashboard aligned under single-source doctrine
-- observe the reflected Ver04-v1 runtime without changing notification sending behavior
-- resume implementation only when observation is complete or the user explicitly requests it
+```text
+厳格なA候補の品質を維持する。
+B候補で人間が15分足確認できる実践機会を増やす。
+C候補で未到達scenarioを監視する。
+STOPで新規停止・利確・撤退を支援する。
+候補行をscenarioへ圧縮する。
+actual trade ground truthでproxyを補正する。
+```
+
+## Active planning route
+
+Read in this order for manual trading practicality work:
+
+1. `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+2. `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+3. `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+4. `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
+5. `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
+6. `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
+
+## Current practicality decision
+
+The system already has strong candidate generation and safety logic.
+
+The current deficiency is primarily the conversion from internal candidates into practical human actions, together with scenario deduplication and actual-trade calibration.
+
+Approved planning model:
+
+- `A_FORMAL`: retain current strict formal candidate quality
+- `B_CHECK_15M`: conditional candidate requiring human 15m confirmation
+- `C_WATCH_ZONE`: monitor zone and promotion condition
+- `STOP_OR_EXIT`: stop new entry and prioritize exit / take-profit / protection
+
+These labels are an operator action layer only.
+
+They do not replace or relax:
+
+- `trade_execution_gate`
+- `phase1b_lite_gate`
+- `opportunity_gate`
+- current no-trade safety logic
 
 ## Safety Boundary
 
@@ -45,7 +80,7 @@ Immediate product objective:
 - Not `FORMAL_GO`.
 - No automatic order.
 - No API keys.
-- No private, account, or order endpoints.
+- No private/account/order endpoints.
 - No runtime restart during normal product work.
 - No notification send behavior change without explicit approval.
 - No raw exchange export commit.
@@ -53,14 +88,66 @@ Immediate product objective:
 - Public HTML / mail / dashboard must not diverge in trading logic.
 - Human decides manually.
 
-## Product Source-of-Truth
+## Hard product prohibitions
 
-- active route: `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
-- final self-improvement design: `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
-- manual 15m win definition: `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-- high-level integrated plan: `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
-- Phase4 control plan: `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
-- durable accepted history: `docs/operations/ai-orchestration/MILESTONES.md`
+- Do not relax `trade_execution_gate`.
+- Do not change `phase1b_lite_gate` without explicit human approval.
+- Do not relax `opportunity_gate` without explicit human approval.
+- Do not increase `paper_orders planned` as an objective.
+- Do not restore `trend_flip_confirmed_up` to strong evaluation without evidence.
+- Do not promote Phase 1B formally without approval.
+- Do not treat candidate rows as independent scenarios.
+- Do not mix unresolved / no_ohlcv rows into win-loss claims.
+- Do not convert review cues into entry rules.
+- Do not tune from a single example.
+
+## Active spec rule
+
+- Check `chatgpt/specs/active/` before implementation.
+- If active spec is empty, do not implement source.
+- Create one next-phase active spec only.
+- If an active spec exists, treat it as the implementation source of truth.
+- If the active spec conflicts with current planning route or state, create a spec-correction task instead of implementing.
+- Archive completed specs.
+
+## Current phase route
+
+```text
+P1 actual trade importer spec
+→ P2 importer implementation
+→ P3 actual trade to signal/scenario linking
+→ P4 coverage and scenario normalization
+→ P5 offline A/B/C/STOP classifier
+→ P6 historical replay
+→ P7 shadow surface
+→ P8 human manual trial
+→ P9 evidence-backed tuning review
+```
+
+One task must cover one phase or one narrow subtask only.
+
+## Current next task
+
+P6 historical replay: complete and accepted.
+
+P7 shadow surface: not started.
+
+```text
+BTCFX-20260710-MTP-P7-SHADOW-SURFACE-HUMAN-CHECK
+```
+
+Task type:
+
+```text
+HUMAN_CHECK / PRODUCT AND SCOPE DECISION
+```
+
+Purpose:
+
+- decide whether to create the P7 shadow-surface active spec
+- do not implement P7 source
+- do not create an active P7 spec without explicit human approval
+- do not change notifications, runtime, gates, thresholds, or order behavior
 
 ## Validation Rules
 
@@ -68,56 +155,55 @@ Immediate product objective:
 - Docs-only changes: `git diff --check`.
 - Python code changes: targeted `./.venv312/bin/python -m unittest <tests>`.
 - CLI/report builder changes: relevant CLI/report validation only.
-- `git diff --name-only` is not default; use it only when changed-file confirmation is needed or ambiguity remains.
-- Repeated status checks are not implied; use `git status --short --branch` when starting edit/commit tasks and again only when committing or when dirty-tree ambiguity exists.
+- Repeated status checks are not implied.
 - Exchange export import work must be local-file only and must not call exchange APIs.
+- Raw exchange files must not be committed.
 
 ## Operation Mode
 
-- default implementation mode for fixed-scope work: `BOUNDED_CODEX`
-- `LIGHT_CODEX`, `NORMAL_CODEX`, or `REVIEW_ONLY` only when task scope warrants it
-- ChatGPT が実行用 Codex prompt を出すときは `AUTO_SEND` で始める
-- `HUMAN_CHECK` は送信前停止の合図で、実行用 prompt を出す前に人間へ相談する
+- default fixed-scope implementation mode: `BOUNDED_CODEX`
+- ChatGPT decides scope and writes the next exact task
+- Codex performs implementation and validation only
+- ChatGPT executable Codex prompts start with `AUTO_SEND`
+- `HUMAN_CHECK` means stop before issuing an executable prompt
 - local commit is allowed when checks pass
-- push is reserved for `CHECKPOINT_PUSH` tasks only
-- product docs should stay concise and route through `PRODUCT_IMPLEMENTATION_ROUTE.md`
-- runtime repo remains off-limits during normal MCP tasks
-- normal tasks should avoid orchestration doc updates unless posture, next action, safety, or runtime actually changes
+- push is checkpoint-only unless explicitly requested
+- normal tasks avoid orchestration doc updates unless posture, next action, safety, or route actually changes
 
-## Current Phase4 decision gate
+## Phase4 relation
 
-- Phase4 tuning remains blocked
-- display/report-label only implementation requires human approval
-- source/runtime/scoring changes remain forbidden without explicit approval
-- report-only / not FORMAL_GO / no automatic order / human decides manually
+- Phase4 post-deployment observation continues
+- display/report-label implementation remains complete
+- no scoring, gate, threshold, trading logic, or notification trigger changes are authorized
+- new practicality planning route does not override Phase4 human approval gates
+- actual trade ground truth and scenario normalization are prerequisites for evidence-backed tuning
 
-## Next Decision
+## Evidence reminders
 
-Default next implementation candidate is:
-
-```text
-BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER
-```
-
-Current operational next posture remains post-deployment observation, not immediate implementation.
-
-## Deferred Follow-up
-
-- Add manual actual trade import schema after observation / explicit implementation request.
-- Add actual trade to signal linking after import schema is stable.
-- Add biweekly ground truth report after linking is stable.
-- Restore AI post review only as optional qualitative enrichment after deterministic loop is reliable.
-
-## Evidence Pointers
-
-- durable accepted history: `docs/operations/ai-orchestration/MILESTONES.md`
-- active product route: `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
-- active handoff context only: `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
-- latest reviewed workflow metadata as needed: `docs/operations/ai-orchestration/TASK_LEDGER.md`
+- strict `ENTRY_OK` proxy showed high but small-sample quality
+- broader `RISKY_ENTRY` / `SWEEP_WAIT` sets contain possible manual-review opportunities
+- Active Plan candidate rows greatly exceed strict main candidates
+- candidate rows contain substantial duplication and are not independent opportunities
+- `no_ohlcv` / unresolved coverage remains a major blocker
+- short and long must be evaluated separately
+- long active limit retest requires stronger location and defense-zone review
 
 ## Completed History
 
+- P6 manual operator historical replay accepted at checkpoint `e870bd8`; spec archived; P7 pending human decision
+
 - post-eval asset health audit completed
 - daily proxy evaluator implemented and tested
-- implementation readiness package created
-- Ver04-v1 runtime deployment complete
+- Ver04 runtime deployment and display/report-label work completed
+- judgment self-review and Phase4 observation route established
+- manual trading practicality improvement plan created
+- manual trading practicality AI execution route created
+
+## Deferred follow-up
+
+- importer implementation after P1 spec approval
+- actual trade linking after importer stabilization
+- scenario normalization after linking contract is clear
+- offline A/B/C/STOP classifier after coverage work
+- shadow surface only after replay evidence
+- production tuning only after adequate ground truth and explicit human approval

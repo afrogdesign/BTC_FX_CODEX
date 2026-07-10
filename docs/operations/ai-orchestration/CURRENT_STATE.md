@@ -502,7 +502,7 @@ The active P6 source of truth is:
 chatgpt/specs/active/20260710_manual_operator_historical_replay.md
 ```
 
-P6 remains offline/report-only and is not connected to production gates, notifications, runtime, APIs, or orders. P6 source implementation has not started.
+P6 remains offline/report-only and is not connected to production gates, notifications, runtime, APIs, or orders. P6 source implementation is complete and accepted.
 
 Current exact next task:
 
@@ -510,4 +510,25 @@ Current exact next task:
 BTCFX-20260710-MTP-HISTORICAL-REPLAY-IMPLEMENT
 ```
 
-This is the bounded implementation task for the active P6 spec.
+The next task is a human checkpoint before any P7 specification is created.
+
+---
+
+## 2026-07-10 P6 completion
+
+P6 historical replay implementation accepted at checkpoint `e870bd8`.
+
+- reported targeted validation: `142 tests passed`
+- P6 replay test methods: `19`
+- event-time scenario-deduplicated policy replay
+- `CURRENT_STRICT` / `A_ONLY` / `A_PLUS_B` / `A_PLUS_B_PLUS_C_OBSERVE` / `STOP_OVERLAY`
+- C observation-only and STOP separate from entry policy
+- selected-event proxy outcomes
+- deterministic human decision attribution
+- eligible closed actual-trade evidence
+- per-policy monetary metrics
+- deterministic CSV / JSON / Markdown transaction
+- no production, runtime, notification, API, account, order, gate, scoring, or threshold changes
+- archived P6 spec: `chatgpt/specs/archive/20260710_manual_operator_historical_replay.md`
+
+P7 has not started and requires a separate active spec and human approval.

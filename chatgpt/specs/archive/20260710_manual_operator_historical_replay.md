@@ -3,12 +3,18 @@
 ## Metadata
 
 - phase: P6
-- status: active specification
+- status: completed / ChatGPT accepted
 - work family: manual trading practicality
 - implementation mode: report-only / offline / local generated outputs
 - preceding accepted phase: P5 offline A/B/C/STOP classifier
 - accepted P5 implementation reviewed through reported commit: `57d6151`
 - safety: not FORMAL_GO / no automatic order / human decides manually
+- accepted implementation checkpoint: `e870bd8`
+- reported targeted validation: `142 tests passed`
+- P6 replay test methods: `19`
+- push: none
+- accepted through actual ChatGPT source/test review
+- P7 is not authorized by P6 acceptance
 
 ## 1. Purpose
 
