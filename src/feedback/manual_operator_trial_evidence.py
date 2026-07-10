@@ -21,6 +21,7 @@ from src.feedback.manual_operator_historical_replay import (
     METHOD_VERSION as REPLAY_METHOD_VERSION,
     build_manual_operator_historical_replay,
 )
+from src.feedback.manual_operator_classifier import classify_manual_operator_candidate
 
 SCHEMA_VERSION = "manual_operator_trial_evidence.v1"
 METHOD_VERSION = "manual_operator_trial_evidence.v1"
@@ -111,10 +112,10 @@ def _status(row: dict[str, str]) -> str:
     outcome = row.get("normalized_outcome_status", "")
     cls = row.get("selected_operator_class", "")
     direction = str(row.get("direction_result", "")).strip().lower()
-    if direction in {"wrong", "wrong_side", "conflict", "opposite"}:
-        return "wrong_side"
     if outcome in {"pending", "coverage_missing", "ambiguous", "unknown", "entry_reached_unresolved"}:
         return "unresolved"
+    if direction in {"wrong", "wrong_side", "conflict", "opposite"}:
+        return "wrong_side"
     if outcome == "resolved_positive":
         if cls in {"STOP_OR_EXIT", "C_WATCH_ZONE"}:
             return "too_defensive"
@@ -143,32 +144,51 @@ def _issue_flags(row: dict[str, str], status: str, opposite_available: bool) -> 
 
 
 def _counterfactual_classification(class_row: dict[str, str], event_row: dict[str, str]) -> str:
-    """Evaluate the opposite-side snapshot with only global no-trade flags removed."""
+    """Reuse P5's classifier after clearing only global no-trade flags."""
     side = str(class_row.get("side") or event_row.get("side") or "").strip().lower()
-    setup_side = str(class_row.get("primary_setup_side", "")).strip().lower()
-    setup_status = str(class_row.get("primary_setup_status", "")).strip().lower()
-    candidate_status = str(class_row.get("candidate_status") or event_row.get("candidate_status") or "").strip().lower()
-    quality = str(class_row.get("data_quality_flag", "")).strip().lower()
-    if quality and quality != "ok":
+    candidate = {
+        "candidate_id": class_row.get("candidate_id", event_row.get("candidate_id", "")),
+        "source_signal_id": class_row.get("source_signal_id", event_row.get("source_signal_id", "")),
+        "timestamp_jst": event_row.get("event_timestamp_jst", ""),
+        "candidate_status": class_row.get("candidate_status", event_row.get("candidate_status", "")),
+        "side": side,
+        "entry_price": class_row.get("entry_price", event_row.get("entry_price", "")),
+        "entry_zone_low": class_row.get("entry_zone_low", event_row.get("entry_zone_low", "")),
+        "entry_zone_high": class_row.get("entry_zone_high", event_row.get("entry_zone_high", "")),
+        "rr_zone_mid_tp1": class_row.get("rr_tp1_used", ""),
+        "rr_zone_mid_tp2": class_row.get("rr_tp2_used", ""),
+    }
+    signal = {
+        "signal_id": class_row.get("source_signal_id", event_row.get("source_signal_id", "")),
+        "timestamp_jst": event_row.get("event_timestamp_jst", ""),
+        "primary_setup_side": class_row.get("primary_setup_side", ""),
+        "primary_setup_status": class_row.get("primary_setup_status", ""),
+        "confidence_direction_shadow": class_row.get("confidence_direction_shadow", ""),
+        "confidence_execution_shadow": class_row.get("confidence_execution_shadow", ""),
+        "confidence_wait_shadow": class_row.get("confidence_wait_shadow", ""),
+        "trade_execution_gate": class_row.get("trade_execution_gate", ""),
+        "phase1b_lite_gate": class_row.get("phase1b_lite_gate", ""),
+        "opportunity_gate": class_row.get("opportunity_gate", ""),
+        "data_quality_flag": class_row.get("data_quality_flag", ""),
+        "no_trade_flags": "",
+        "warning_flags": class_row.get("warning_codes", ""),
+        "risk_flags": class_row.get("risk_flags", ""),
+        "long_rr": class_row.get("rr_tp1_used", "") if side == "long" else "",
+        "short_rr": class_row.get("rr_tp1_used", "") if side == "short" else "",
+    }
+    threshold_fields = ("short_direction_min", "short_execution_min", "short_wait_max", "short_tp1_rr_min", "short_tp2_rr_min", "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min")
+    thresholds = {key: class_row.get(key, "") for key in threshold_fields}
+    try:
+        result = classify_manual_operator_candidate({**event_row, "side": side, "grouping_status": event_row.get("grouping_status", "new_scenario")}, candidate, signal, thresholds)
+    except (ValueError, KeyError, TypeError):
         return "not_eligible"
-    if side not in {"long", "short"} or setup_side != side or candidate_status not in {"allowed", "conditional", "armed", "watch"}:
+    if result.get("classification_status") != "classified":
         return "not_eligible"
-    entry_defined = any(class_row.get(key) or event_row.get(key) for key in ("entry_price", "entry_zone_low", "entry_zone_high"))
-    shadows = [_dec(class_row.get(key)) for key in ("confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow")]
-    rr_values = [_dec(class_row.get("rr_tp1_used")), _dec(class_row.get("rr_tp2_used"))]
-    if not entry_defined or any(value is None for value in shadows) or not any(value is not None for value in rr_values):
-        return "not_eligible"
-    threshold_fields = (f"{side}_direction_min", f"{side}_execution_min", f"{side}_wait_max", f"{side}_tp1_rr_min", f"{side}_tp2_rr_min")
-    thresholds = [_dec(class_row.get(key)) for key in threshold_fields]
-    if any(value is None for value in thresholds):
-        return "not_eligible"
-    direction, execution, wait = shadows
-    direction_min, execution_min, wait_max, tp1_min, tp2_min = thresholds
-    rr_ok = (rr_values[0] is not None and rr_values[0] >= tp1_min) or (rr_values[1] is not None and rr_values[1] >= tp2_min)
-    non_gate_b = bool(direction >= direction_min and execution >= execution_min and wait <= wait_max and rr_ok and (side != "long" or setup_status == "ready") and (side != "short" or setup_status in {"ready", "watch"}))
-    if non_gate_b:
+    if result.get("operator_class") == "B_CHECK_15M":
         return "counterfactual_B"
-    return "counterfactual_C"
+    if result.get("operator_class") == "C_WATCH_ZONE":
+        return "counterfactual_C"
+    return "not_eligible"
 
 
 def _issue_summary(rows: list[dict[str, str]], key: str, *, status: str, severity: str, confidence: str, tuning: str) -> dict[str, Any]:
@@ -178,7 +198,7 @@ def _issue_summary(rows: list[dict[str, str]], key: str, *, status: str, severit
         "first_evidence_timestamp": timestamps[0] if timestamps else "",
         "last_evidence_timestamp": timestamps[-1] if timestamps else "",
         "occurrence_count": len(affected),
-        "resolved_evidence_count": sum(row.get("outcome_status") != "unresolved" for row in affected),
+        "resolved_evidence_count": sum(row.get("outcome_status") in {"resolved_positive", "resolved_negative"} for row in affected),
         "actual_backed_count": sum(row.get("evidence_tier") == "actual_high_medium" for row in affected),
         "affected_side_counts": dict(sorted(Counter(row.get("side", "") for row in affected).items())),
         "affected_regime_counts": dict(sorted(Counter(row.get("market_regime", "") for row in affected).items())),
@@ -320,14 +340,20 @@ def build_manual_operator_trial_evidence(
             comparison = _status(comparison_row)
             opposite_available = bool(opposite_events)
             flags = _issue_flags(replay_row, comparison, opposite_available)
-            if replay_row.get("selected_operator_class") == "STOP_OR_EXIT":
-                if "counterfactual_B" in opposite_levels or "counterfactual_C" in opposite_levels:
-                    flags.append("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY")
-                    issue_counts["opposite_side_exists"] += 1
-                    issue_counts["opposite_side_counterfactual_B"] += int("counterfactual_B" in opposite_levels)
-                    issue_counts["opposite_side_counterfactual_C"] += int("counterfactual_C" in opposite_levels)
-                elif opposite_events:
+            global_stop = replay_row.get("selected_operator_class") == "STOP_OR_EXIT" and (
+                "stop_no_trade_flag" in set(filter(None, cls.get("reason_codes", "").split(";")))
+                or bool(cls.get("no_trade_flags", "").strip())
+            )
+            for level in opposite_levels:
+                issue_counts["opposite_side_exists"] += 1
+                if level == "counterfactual_B":
+                    issue_counts["opposite_side_counterfactual_B"] += 1
+                elif level == "counterfactual_C":
+                    issue_counts["opposite_side_counterfactual_C"] += 1
+                else:
                     issue_counts["opposite_side_not_eligible"] += 1
+            if global_stop and any(level in {"counterfactual_B", "counterfactual_C"} for level in opposite_levels):
+                flags.append("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY")
             flags = sorted(set(flags))
             for flag in flags:
                 issue_counts[flag] += 1
@@ -351,7 +377,7 @@ def build_manual_operator_trial_evidence(
                 operator_class=replay_row.get("selected_operator_class", ""), classifier_method_version=cls.get("classifier_method_version", ""),
                 trade_execution_gate=replay_row.get("trade_execution_gate", ""), phase1b_lite_gate=cls.get("phase1b_lite_gate", ""), opportunity_gate=cls.get("opportunity_gate", ""),
                 reason_codes=cls.get("reason_codes", ""), warning_codes=cls.get("warning_codes", ""), no_trade_flags=cls.get("no_trade_flags", ""), risk_flags=cls.get("risk_flags", ""),
-                outcome_status=comparison, intraperiod_outcome=replay_row.get("intraperiod_outcome", ""), first_exit_reason=replay_row.get("first_exit_reason", ""),
+                outcome_status=replay_row.get("normalized_outcome_status", ""), intraperiod_outcome=replay_row.get("intraperiod_outcome", ""), first_exit_reason=replay_row.get("first_exit_reason", ""),
                 mfe_r=replay_row.get("mfe_r", ""), mae_r=replay_row.get("mae_r", ""), ohlcv_coverage_status=replay_row.get("ohlcv_coverage_status", ""), ohlcv_gap_reason=replay_row.get("ohlcv_gap_reason", ""),
                 zone_result=("useful" if comparison in {"aligned", "too_defensive"} and replay_row.get("normalized_outcome_status") == "resolved_positive" else ("failed" if comparison == "too_aggressive" else "")),
                 direction_result=(explicit_direction or ""), comparison_status=comparison,
@@ -371,10 +397,6 @@ def build_manual_operator_trial_evidence(
         rows.sort(key=lambda row: (row.get("event_timestamp_utc", ""), row.get("scenario_event_id", ""), row.get("trial_fact_id", "")))
         queue.sort(key=lambda row: (row.get("question_type", ""), row.get("review_item_id", "")))
         actual_rows = [row for row in rows if row.get("evidence_tier") == "actual_high_medium"]
-        readiness = {
-            "initial": {"resolved_events": resolved, "actual_entry_episodes": len({r.get("actual_episode_id") for r in actual_rows if r.get("actual_episode_id")}), "ready": resolved >= 100 and len(actual_rows) >= 30 and len(set(class_counts) & {"A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT"}) == 4 and len(set(side_counts) & {"long", "short"}) == 2 and no_ohlcv >= 0},
-            "practical": {"resolved_events": resolved, "actual_entry_episodes": len({r.get("actual_episode_id") for r in actual_rows if r.get("actual_episode_id")}), "ready": resolved >= 200 and len(actual_rows) >= 50 and len(set(side_counts) & {"long", "short"}) == 2},
-        }
         issue_summary = {
             "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY": _issue_summary(rows, "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", status="open hypothesis", severity="medium", confidence="proxy", tuning="not_eligible"),
             "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": _issue_summary(rows, "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY", status="confirmed usability issue", severity="medium", confidence="human_observation", tuning="not_eligible"),
@@ -393,7 +415,8 @@ def build_manual_operator_trial_evidence(
             "initial": {"resolved_events": resolved, "actual_entry_episodes": actual_episode_count, "class_segmentation_available": {"A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT"}.issubset(class_values), "side_segmentation_available": {"long", "short"}.issubset(side_values), "regime_segmentation_available": regime_available, "setup_segmentation_available": setup_available, "reproducibility_metadata_available": True, "ready": resolved >= 100 and actual_episode_count >= 30 and {"A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT"}.issubset(class_values) and {"long", "short"}.issubset(side_values) and regime_available and setup_available},
             "practical": {"resolved_events": resolved, "actual_entry_episodes": actual_episode_count, "validation_window_status": "not_established", "ready": False},
         }
-        report = {"schema_version": SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "method_version": METHOD_VERSION, "classifier_method_version": "manual_operator_classifier.v1", "replay_method_version": REPLAY_METHOD_VERSION, "input_fingerprints": fingerprints, "max_evaluated_event_timestamp": max_event_timestamp, "report_cutoff": report_date, "eligible_actual_link_policy": ["high", "medium"], "unresolved_no_ohlcv_separated": True, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided", "actual": "provided" if trade_episodes else "missing"}, "cutoff": report_date, "counts": {"trial_fact_rows": len(rows), "resolved_rows": resolved, "unresolved_rows": unresolved, "no_ohlcv_rows": no_ohlcv, "ambiguous_rows": sum("ambiguous" in r.get("outcome_status", "") for r in rows), "scenario_count": len({r.get("scenario_id") for r in rows if r.get("scenario_id")}), "review_queue_size": len(queue)}, "class_distribution": dict(sorted(class_counts.items())), "comparison": dict(sorted(comparisons.items())), "zone_result_counts": dict(sorted(Counter(r.get("zone_result", "") for r in rows if r.get("zone_result")).items())), "breakdowns": {"side": dict(sorted(side_counts.items())), "regime": dict(sorted(regime_counts.items())), "setup_family": dict(sorted(setup_counts.items()))}, "actual_evidence": {"status": "provided" if trade_episodes else "missing", "eligible_rows": len(actual_rows), "unique_episode_count": actual_episode_count, "high_confidence_rows": sum(r.get("actual_link_confidence") == "high" for r in actual_rows), "medium_confidence_rows": sum(r.get("actual_link_confidence") == "medium" for r in actual_rows)}, "link_confidence_coverage": dict(sorted(Counter(r.get("actual_link_confidence", "") for r in rows if r.get("actual_link_confidence")).items())), "issue_flags": dict(sorted(issue_counts.items())), "issue_summary": issue_summary, "review_queue_size": len(queue), "p9_readiness": readiness, "global_stop_opportunity": {"global_stop_present": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows) > 0, "stop_rows": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows), "opposite_side_exists": issue_counts.get("opposite_side_exists", 0), "counterfactual_B": issue_counts.get("opposite_side_counterfactual_B", 0), "counterfactual_C": issue_counts.get("opposite_side_counterfactual_C", 0), "not_eligible": issue_counts.get("opposite_side_not_eligible", 0), "issue_001_qualified_rows": issue_counts.get("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", 0)}, "no_automatic_tuning": True}
+        classifier_method_version = replay.get("classifier_method_version") or next((value.get("classifier_method_version") for value in class_by_event.values() if value.get("classifier_method_version")), "")
+        report = {"schema_version": SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "method_version": METHOD_VERSION, "classifier_method_version": classifier_method_version, "replay_method_version": REPLAY_METHOD_VERSION, "input_fingerprints": fingerprints, "max_evaluated_event_timestamp": max_event_timestamp, "report_cutoff": report_date, "eligible_actual_link_policy": ["high", "medium"], "unresolved_no_ohlcv_separated": True, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided", "actual": "provided" if trade_episodes else "missing"}, "cutoff": report_date, "counts": {"trial_fact_rows": len(rows), "resolved_rows": resolved, "unresolved_rows": unresolved, "no_ohlcv_rows": no_ohlcv, "ambiguous_rows": sum("ambiguous" in r.get("outcome_status", "") for r in rows), "scenario_count": len({r.get("scenario_id") for r in rows if r.get("scenario_id")}), "review_queue_size": len(queue)}, "class_distribution": dict(sorted(class_counts.items())), "comparison": dict(sorted(comparisons.items())), "zone_result_counts": dict(sorted(Counter(r.get("zone_result", "") for r in rows if r.get("zone_result")).items())), "breakdowns": {"side": dict(sorted(side_counts.items())), "regime": dict(sorted(regime_counts.items())), "setup_family": dict(sorted(setup_counts.items()))}, "actual_evidence": {"status": "provided" if trade_episodes else "missing", "eligible_rows": len(actual_rows), "unique_episode_count": actual_episode_count, "high_confidence_rows": sum(r.get("actual_link_confidence") == "high" for r in actual_rows), "medium_confidence_rows": sum(r.get("actual_link_confidence") == "medium" for r in actual_rows)}, "link_confidence_coverage": dict(sorted(Counter(r.get("actual_link_confidence", "") for r in rows if r.get("actual_link_confidence")).items())), "issue_flags": dict(sorted(issue_counts.items())), "issue_summary": issue_summary, "review_queue_size": len(queue), "p9_readiness": readiness, "global_stop_opportunity": {"global_stop_present": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows) > 0, "stop_rows": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows), "opposite_side_exists": issue_counts.get("opposite_side_exists", 0), "counterfactual_B": issue_counts.get("opposite_side_counterfactual_B", 0), "counterfactual_C": issue_counts.get("opposite_side_counterfactual_C", 0), "not_eligible": issue_counts.get("opposite_side_not_eligible", 0), "issue_001_qualified_rows": issue_counts.get("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", 0)}, "no_automatic_tuning": True}
         csv_text = _csv_text(TRIAL_FACT_HEADERS, rows)
         queue_text = _csv_text(QUEUE_HEADERS, queue)
         report["ok"] = True; report["exit_code"] = 0

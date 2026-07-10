@@ -58,7 +58,18 @@ class TrialEvidenceTests(unittest.TestCase):
         self.assertEqual(result["counts"]["resolved_rows"], 1)
         self.assertEqual(result["actual_evidence"]["status"], "missing")
         with (self.root / "facts.csv").open(newline="", encoding="utf-8") as handle:
-            self.assertEqual((csv.DictReader(handle).fieldnames or []), TRIAL_FACT_HEADERS)
+            reader = csv.DictReader(handle)
+            self.assertEqual((reader.fieldnames or []), TRIAL_FACT_HEADERS)
+            row = next(reader)
+        self.assertEqual(row["outcome_status"], "resolved_positive")
+        self.assertEqual(row["comparison_status"], "aligned")
+
+    def test_resolved_negative_keeps_outcome_separate_from_comparison(self) -> None:
+        self.build(self.fixtures(outcome="sl_first"))
+        with (self.root / "facts.csv").open(newline="", encoding="utf-8") as handle:
+            row = next(csv.DictReader(handle))
+        self.assertEqual(row["outcome_status"], "resolved_negative")
+        self.assertEqual(row["comparison_status"], "too_aggressive")
 
     def test_comparison_precedence_for_classes_and_outcomes(self) -> None:
         for cls, outcome, expected in (
@@ -80,14 +91,16 @@ class TrialEvidenceTests(unittest.TestCase):
         self.assertNotEqual(_status(base), "wrong_side")
         base["direction_result"] = "wrong_side"
         self.assertEqual(_status(base), "wrong_side")
+        base["normalized_outcome_status"] = "pending"
+        self.assertEqual(_status(base), "unresolved")
 
     def test_stop_proxy_flags_are_explicit(self) -> None:
         self.assertIn("stop_useful_proxy", _issue_flags({"selected_operator_class": "STOP_OR_EXIT", "normalized_outcome_status": "resolved_negative"}, "aligned", False))
         self.assertIn("stop_false_alarm_proxy", _issue_flags({"selected_operator_class": "STOP_OR_EXIT", "normalized_outcome_status": "resolved_positive"}, "too_defensive", False))
 
     def test_counterfactual_requires_evidence_and_separates_b_c(self) -> None:
-        event = {"side": "short", "entry_price": "100", "candidate_status": "allowed"}
-        evidence = {"side": "short", "primary_setup_side": "short", "primary_setup_status": "watch", "candidate_status": "allowed", "data_quality_flag": "", "entry_price": "100", "confidence_direction_shadow": "80", "confidence_execution_shadow": "80", "confidence_wait_shadow": "20", "rr_tp1_used": "2", "short_direction_min": "55", "short_execution_min": "18", "short_wait_max": "75", "short_tp1_rr_min": "0.8", "short_tp2_rr_min": "1.5"}
+        event = {"side": "short", "entry_price": "100", "candidate_status": "allowed", "event_timestamp_utc": "2026-07-10T00:00:00Z", "event_timestamp_jst": "2026-07-10T09:00:00+09:00", "grouping_status": "new_scenario"}
+        evidence = {"side": "short", "primary_setup_side": "short", "primary_setup_status": "watch", "candidate_status": "allowed", "data_quality_flag": "ok", "trade_execution_gate": "blocked", "entry_price": "100", "confidence_direction_shadow": "80", "confidence_execution_shadow": "80", "confidence_wait_shadow": "20", "rr_tp1_used": "2", "short_direction_min": "55", "short_execution_min": "18", "short_wait_max": "75", "short_tp1_rr_min": "0.8", "short_tp2_rr_min": "1.5"}
         self.assertEqual(_counterfactual_classification(evidence, event), "counterfactual_B")
         evidence["confidence_direction_shadow"] = "10"
         self.assertEqual(_counterfactual_classification(evidence, event), "counterfactual_C")
