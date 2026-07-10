@@ -23,6 +23,7 @@ from src.notification.followup import (
     build_followup_notification_context,
 )
 from src.notification.intraperiod_breakout import build_intraperiod_breakout_alert_candidate
+from src.feedback.manual_operator_shadow_surface import build_manual_operator_shadow_surface
 
 
 _SETUP_STATUS_LABELS = {
@@ -3917,6 +3918,17 @@ def _operator_dashboard_v2_css() -> str:
     .diagnostic { padding:11px; border:1px solid var(--line); border-radius:11px; background:#081521; }
     .diagnostic span { display:block; color:var(--faint); font-size:8px; }
     .diagnostic strong { display:block; margin-top:3px; font-size:11px; color:#c7d6e4; }
+    .shadow-panel { margin-top:12px; padding:16px; border:1px solid #355a78; border-radius:16px; background:linear-gradient(135deg,#0b1d2d,#0a1723); }
+    .shadow-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .shadow-badge { color:#8fd6ff; font-size:10px; font-weight:900; letter-spacing:.08em; }
+    .shadow-head h2 { margin:5px 0 0; font-size:18px; }
+    .shadow-safety { color:#b6c8d9; font-size:10px; text-align:right; }
+    .shadow-legend { margin-top:10px; color:#8fa9bd; font-size:10px; font-weight:800; }
+    .shadow-body { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .shadow-card { padding:11px; border:1px solid #29445d; border-radius:11px; background:#081521; }
+    .shadow-card strong { color:#e7f1fb; font-size:12px; }
+    .shadow-card p { margin:5px 0; color:#b9cada; font-size:11px; }
+    .shadow-card small { color:#8ea5ba; overflow-wrap:anywhere; }
     footer { padding:20px 4px 0; color:var(--faint); font-size:9px; text-align:center; }
 
     /* SVG chart */
@@ -3976,6 +3988,7 @@ def _operator_dashboard_v2_css() -> str:
       }
       .alert-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .hero-action { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .shadow-body { grid-template-columns:1fr; }
     }
     @media (max-width:860px) {
       .shell { width:min(100% - 18px, 760px); padding-top:10px; }
@@ -4293,6 +4306,36 @@ def _operator_dashboard_v2_script() -> str:
     </script>"""
 
 
+def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
+    try:
+        surface = build_manual_operator_shadow_surface(result)
+    except Exception:
+        surface = {"surface_status": "malformed", "rows": []}
+    status = str(surface.get("surface_status", "malformed"))
+    labels = {
+        "A_FORMAL": "現行の厳格条件を通過したshadow候補。15分足確認後も人間が判断する。",
+        "B_CHECK_15M": "15分足確認候補。エントリー許可ではない。",
+        "C_WATCH_ZONE": "監視専用。条件改善またはupgrade待ち。",
+        "STOP_OR_EXIT": "新規停止・利確・撤退・保護を人間が確認する。自動決済ではない。",
+    }
+    rows = surface.get("rows") if isinstance(surface.get("rows"), list) else []
+    if status == "no_current_candidate":
+        body = "現在スナップショットにshadow候補はありません。"
+    elif status == "malformed":
+        body = "shadow判定は利用できません。既存レポートの判断と診断を優先してください。"
+    elif not rows:
+        body = "shadow候補はありますが、分類に必要な証拠が不足しています。"
+    else:
+        cards = []
+        for row in rows:
+            cls = str(row.get("operator_class") or "insufficient_evidence")
+            detail = " / ".join(filter(None, [row.get("side"), row.get("candidate_type"), row.get("candidate_status"), row.get("reason_codes")]))
+            price = " / ".join(filter(None, [row.get("entry_price"), row.get("entry_zone_low"), row.get("entry_zone_high"), row.get("invalidation_price"), row.get("tp1_price"), row.get("tp2_price")]))
+            cards.append(f'<div class="shadow-card"><strong>{html.escape(cls)}</strong><p>{html.escape(labels.get(cls, "分類に必要な証拠が不足しています。"))}</p><small>{html.escape(detail or "未記録")} / {html.escape(price or "価格未記録")}</small></div>')
+        body = "".join(cards)
+    return f'<section class="shadow-panel" aria-label="SHADOW REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">SHADOW / REPORT ONLY</span><h2>Operator Shadow Surface</h2></div><span class="shadow-safety">not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend">A_FORMAL / B_CHECK_15M / C_WATCH_ZONE / STOP_OR_EXIT</div><div class="shadow-body">{body}</div></section>'
+
+
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
     display = build_display_context(result)
     context = _notification_context_for_result(result)
@@ -4313,6 +4356,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
   <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>{html.escape(timestamp)}</span><span>signal {html.escape(str(result.get('signal_id') or ''))}</span><span>{html.escape(kind)}</span></div></div>
   <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
   {_operator_dashboard_v2_alerts(result, context, display)}
+  {_operator_dashboard_shadow_panel_html(result)}
   <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>
   <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div>{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
   {_operator_dashboard_v2_details(result, context, display, reasons, safety, base_dir)}

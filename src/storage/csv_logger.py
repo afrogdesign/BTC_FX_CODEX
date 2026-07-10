@@ -480,6 +480,16 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_current_result_signal_context(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a fresh read-only signal context for report surfaces."""
+    return dict(_row_from_payload(dict(payload)))
+
+
+def build_current_result_candidate_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return fresh current candidate rows without writing or mutating payload."""
+    return [dict(row) for row in _active_plan_candidate_rows(dict(payload))]
+
+
 def _paper_position_setup_fields(payload: dict[str, Any]) -> dict[str, Any]:
     opportunity_type = str(payload.get("opportunity_type", "")).strip()
     bias = str(payload.get("bias", "")).strip()

@@ -336,6 +336,21 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
     return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("missing_entry_definition",))
 
 
+def classify_manual_operator_candidate(
+    event: dict[str, str],
+    candidate: dict[str, str],
+    signal: dict[str, str],
+    thresholds: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Pure single-candidate adapter shared by P5 batch and P7 shadow surface."""
+    resolved = _threshold_defaults()
+    for key, value in (thresholds or {}).items():
+        parsed = value if isinstance(value, Decimal) else _dec(value)
+        if parsed is not None and key in resolved:
+            resolved[key] = parsed
+    return _classify(dict(event), dict(candidate), dict(signal), resolved)
+
+
 def _atomic_three(paths_text: list[tuple[Path, str]]) -> None:
     temps: list[tuple[Path, Path]] = []
     backups: list[tuple[Path, Path]] = []
@@ -403,7 +418,7 @@ def build_manual_operator_classifier(*, scenarios: Path, scenario_events: Path, 
         if _dt(event.get("event_timestamp_utc") or event.get("event_timestamp_jst")) is None or (candidate and _dt(candidate.get("timestamp_jst")) is None) or (signal and _dt(signal.get("timestamp_jst")) is None):
             return {"ok": False, "exit_code": 2, "errors": ["invalid_timestamp"], "report_written": False, "safety_boundary": SAFETY}
         try:
-            row = _classify(event, candidate, signal, threshold_values)
+            row = classify_manual_operator_candidate(event, candidate, signal, threshold_values)
         except ValueError as exc:
             if str(exc) == "future_context":
                 return {"ok": False, "exit_code": 2, "errors": ["future_context"], "report_written": False, "safety_boundary": SAFETY}

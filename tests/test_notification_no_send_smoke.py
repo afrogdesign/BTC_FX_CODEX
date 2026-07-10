@@ -87,6 +87,8 @@ class NotificationNoSendSmokeTest(unittest.TestCase):
         self.assertEqual(report["inline_script_count"], 1)
         self.assertTrue(report["approved_local_script"])
         self.assertFalse(report["unsafe_script_detected"])
+        self.assertTrue(report["shadow_surface_present"])
+        self.assertTrue(report["shadow_candidate_rows_present"])
 
     def test_helper_does_not_touch_send_email_or_save_pending_email(self) -> None:
         fake_main = types.SimpleNamespace(

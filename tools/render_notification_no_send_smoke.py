@@ -141,6 +141,7 @@ def _synthetic_result_payload(post_eval_payload: dict[str, Any] | None = None) -
             "automatic_order": False,
         },
         "post_eval_recommendations": post_eval_payload or _synthetic_post_eval_payload(),
+        "active_trade_plan": {"side_plans": {"short": {"bias_alignment": "primary", "market_entry_status": "allowed", "entry_mid": 70765.2, "stop_loss": 70950, "tp1": 70500, "tp2": 70200, "limit_entry_status": "", "breakout_status": "watch", "counter_scalp_status": "", "candidate_status": "allowed"}}},
     }
     return payload
 
@@ -233,6 +234,8 @@ def _render_no_send_render_only_smoke(result_payload: dict[str, Any] | None = No
         "legacy_label_tokens": legacy_version_tokens,
         "post_eval_recommendations_present": True,
         "sensitive_leak_detected": sensitive_leak_detected,
+        "shadow_surface_present": "SHADOW / REPORT ONLY" in detail_html,
+        "shadow_candidate_rows_present": "shadow-card" in detail_html,
         "forbidden_tokens": leaks,
         **inline_script_report,
     }

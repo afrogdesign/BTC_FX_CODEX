@@ -1,20 +1,20 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-IMPLEMENTATION`
-- mode: `BOUNDED_CODEX`
-- task_type: `PYTHON SOURCE / HTML RENDER / TARGETED TESTS / LOCAL COMMIT`
-- previous_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-SPEC`
-- previous_status: `P7 SPEC CREATED / PUSH NONE`
+- current_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-CHECKPOINT-PUSH`
+- mode: `CHECKPOINT_PUSH`
+- task_type: `GIT CHECKPOINT PUSH ONLY`
+- previous_work_id: `BTCFX-20260710-MTP-P7-SHADOW-SURFACE-IMPLEMENTATION`
+- previous_status: `P7 IMPLEMENTATION COMMITTED / PUSH NONE`
 
 ## Goal
 
-Implement the active P7 operator shadow-surface specification in the existing public detail HTML.
+Checkpoint push only for the completed P7 operator shadow-surface implementation.
 
 Source of truth:
 
 `chatgpt/specs/active/20260710_manual_operator_shadow_surface.md`
 
-Implementation task only. Push is none for this task. Runtime and notification behavior remain out of scope.
+This next task performs no source edits. Runtime apply remains blocked until checkpoint push and separate runtime-target verification.
 
 ## Safety
 
