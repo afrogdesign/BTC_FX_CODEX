@@ -3929,6 +3929,25 @@ def _operator_dashboard_v2_css() -> str:
     .shadow-card strong { color:#e7f1fb; font-size:12px; }
     .shadow-card p { margin:5px 0; color:#b9cada; font-size:11px; }
     .shadow-card small { color:#8ea5ba; overflow-wrap:anywhere; }
+    .balance-meter { margin-top:12px; padding:16px 18px 18px; border:1px solid var(--line); border-radius:16px; background:rgba(11,22,34,.96); }
+    .balance-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+    .balance-kicker { color:var(--muted); font-size:9px; font-weight:900; letter-spacing:.1em; }
+    .balance-head h2 { margin:4px 0 0; font-size:18px; }
+    .balance-head p { margin:0; color:var(--muted); font-size:11px; text-align:right; }
+    .balance-labels, .balance-shares { display:flex; justify-content:space-between; }
+    .balance-labels { margin:14px 0 2px; color:var(--text); font-size:11px; font-weight:900; }
+    .balance-labels > div { display:flex; align-items:baseline; gap:8px; }
+    .balance-labels > div:first-child strong { color:var(--long); }
+    .balance-label-short { justify-content:flex-end; }
+    .balance-label-short strong { color:var(--short); }
+    .balance-labels span { color:var(--muted); font-variant-numeric:tabular-nums; }
+    .balance-shares { margin-bottom:7px; color:var(--text); font-size:14px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .balance-track { position:relative; display:flex; height:16px; overflow:hidden; border-radius:999px; background:#182839; }
+    .balance-long { display:block; height:100%; background:var(--long); }
+    .balance-short { display:block; height:100%; background:var(--short); }
+    .balance-center { position:absolute; left:50%; top:-2px; bottom:-2px; width:2px; transform:translateX(-1px); background:#f8fafc; box-shadow:0 0 0 1px rgba(15,23,42,.45); }
+    .balance-track-insufficient { align-items:center; justify-content:center; background:#475569; }
+    .balance-insufficient { color:#e2e8f0; font-size:10px; font-weight:900; letter-spacing:.08em; }
     footer { padding:20px 4px 0; color:var(--faint); font-size:9px; text-align:center; }
 
     /* SVG chart */
@@ -4006,6 +4025,9 @@ def _operator_dashboard_v2_css() -> str:
       .score-mini-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
     }
     @media (max-width:590px) {
+      .balance-head { align-items:flex-start; flex-direction:column; gap:6px; }
+      .balance-head p { text-align:left; }
+      .balance-meter { padding-left:13px; padding-right:13px; }
       .hero-main, .hero-side { padding:18px 16px; }
       .status-line { margin-bottom:12px; }
       .decision-copy h1 { font-size:25px; }
@@ -4026,6 +4048,44 @@ def _operator_dashboard_v2_css() -> str:
 
 def _operator_dashboard_score(value: Any) -> int:
     return int(round(_clamp(_safe_float(value))))
+
+
+def _operator_dashboard_relative_balance(result: dict[str, Any]) -> dict[str, Any]:
+    long_score = _operator_dashboard_score(result.get("long_display_score"))
+    short_score = _operator_dashboard_score(result.get("short_display_score"))
+    total = long_score + short_score
+    if total <= 0:
+        return {"state": "insufficient", "long_score": long_score, "short_score": short_score, "long_share": "", "short_share": ""}
+    long_share = round(long_score / total * 100, 1)
+    short_share = round(100 - long_share, 1)
+
+    def format_share(value: float) -> str:
+        return f"{value:.1f}".rstrip("0").rstrip(".")
+
+    return {"state": "relative", "long_score": long_score, "short_score": short_score, "long_share": format_share(long_share), "short_share": format_share(short_share)}
+
+
+def _operator_dashboard_relative_balance_html(result: dict[str, Any]) -> str:
+    balance = _operator_dashboard_relative_balance(result)
+    state = balance["state"]
+    long_score = balance["long_score"]
+    short_score = balance["short_score"]
+    if state == "relative":
+        long_share = balance["long_share"]
+        short_share = balance["short_share"]
+        aria = f"LONGスコア{long_score}、相対比率{long_share}%。SHORTスコア{short_score}、相対比率{short_share}%。"
+        track = f'<div class="balance-track" role="img" aria-label="{html.escape(aria)}"><span class="balance-long" style="width:{long_share}%"></span><span class="balance-short" style="width:{short_share}%"></span><i class="balance-center" aria-hidden="true"></i></div>'
+        attrs = f' data-long-share="{html.escape(long_share)}" data-short-share="{html.escape(short_share)}"'
+    else:
+        aria = f"LONGスコア{long_score}、SHORTスコア{short_score}、相対バランスは判定材料不足。"
+        track = f'<div class="balance-track balance-track-insufficient" role="img" aria-label="{html.escape(aria)}"><span class="balance-insufficient">判定材料不足</span></div>'
+        attrs = ' data-long-share="" data-short-share=""'
+    return f'''<section class="balance-meter" data-balance-state="{state}"{attrs} role="group" aria-label="現在の相対優勢。LONGスコア{long_score}、SHORTスコア{short_score}">
+      <div class="balance-head"><div><span class="balance-kicker">DISPLAY SCORE / RELATIVE VIEW</span><h2>現在の相対優勢</h2></div><p>機械評価上の相対バランス。最終判断ではありません。</p></div>
+      <div class="balance-labels"><div><strong>LONG</strong><span>{long_score}</span></div><div class="balance-label-short"><strong>SHORT</strong><span>{short_score}</span></div></div>
+      <div class="balance-shares"><span>{html.escape(balance["long_share"] or "—")}%</span><span>{html.escape(balance["short_share"] or "—")}%</span></div>
+      {track}
+    </section>'''
 
 
 def _operator_dashboard_zone(value: Any) -> str:
@@ -4357,6 +4417,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
   <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
   {_operator_dashboard_v2_alerts(result, context, display)}
   {_operator_dashboard_shadow_panel_html(result)}
+  {_operator_dashboard_relative_balance_html(result)}
   <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>
   <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div>{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
   {_operator_dashboard_v2_details(result, context, display, reasons, safety, base_dir)}

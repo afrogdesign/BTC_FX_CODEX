@@ -28,6 +28,7 @@ from src.notification.detail_page import (
     detail_page_enabled,
     detail_page_paths,
     publish_notification_detail,
+    _operator_dashboard_relative_balance,
 )
 
 
@@ -766,6 +767,41 @@ class NotificationDetailPageTests(unittest.TestCase):
             self.assertIn('class="workspace"', html)
             self.assertIn("chart-panel", html)
             self.assertIn("SHADOW / REPORT ONLY", html)
+
+    def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
+        cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
+        for long_score, short_score, long_share, short_share in cases:
+            with self.subTest(long_score=long_score, short_score=short_score):
+                payload = _sample_detail_payload(); payload.update(long_display_score=long_score, short_display_score=short_score)
+                balance = _operator_dashboard_relative_balance(payload)
+                html = build_notification_detail_html(payload)
+                self.assertEqual(balance["state"], "relative")
+                self.assertIn(f'data-long-share="{long_share}"', html)
+                self.assertIn(f'data-short-share="{short_share}"', html)
+                self.assertIn(f'>{long_share}%</span>', html)
+                self.assertIn(f'>{short_share}%</span>', html)
+
+    def test_relative_balance_zero_scores_is_insufficient(self) -> None:
+        payload = _sample_detail_payload(); payload.update(long_display_score=0, short_display_score=0)
+        html = build_notification_detail_html(payload)
+        self.assertIn('data-balance-state="insufficient"', html)
+        self.assertIn("判定材料不足", html)
+        self.assertIn("balance-track-insufficient", html)
+        self.assertNotIn('data-long-share="50"', html)
+        self.assertNotIn('data-short-share="50"', html)
+
+    def test_relative_balance_is_between_shadow_and_workspace(self) -> None:
+        html = build_notification_detail_html(_sample_detail_payload())
+        self.assertLess(html.find('class="shadow-panel"'), html.find('class="balance-meter"'))
+        self.assertLess(html.find('class="balance-meter"'), html.find('class="workspace"'))
+
+    def test_relative_balance_preserves_side_card_absolute_scores_and_safety(self) -> None:
+        payload = _sample_detail_payload(); payload.update(long_display_score=45, short_display_score=15)
+        html = build_notification_detail_html(payload)
+        self.assertIn('<div class="side-score"><strong>45</strong>', html)
+        self.assertIn('<div class="side-score"><strong>15</strong>', html)
+        self.assertIn("機械評価上の相対バランス。最終判断ではありません。", html)
+        self.assertIn('aria-label="現在の相対優勢', html)
 
     def test_operator_dashboard_v2_structure_prices_and_value_defense(self) -> None:
         payload = _sample_detail_payload()
