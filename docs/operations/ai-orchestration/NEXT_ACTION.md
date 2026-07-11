@@ -44,6 +44,8 @@ Operate P8 through `run-p8-operating-cycle` and collect evidence. Do not manuall
 
 The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. On the next meaningful evidence window, run the single runner with the same deterministic inputs; add episode/link inputs only when both validate. Compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
 
+Accepted runner commit: `9bee53a`. Generated outputs remain local and uncommitted; P9 remains blocked pending readiness evidence and explicit approval.
+
 ## P9 entry rule
 
 P9 remains blocked until the P8 report demonstrates the required readiness evidence.

@@ -1,4 +1,4 @@
-# P8 Operating Cycle Runner — Active Specification
+# P8 Operating Cycle Runner — Archived Specification
 
 ## Metadata
 
@@ -50,8 +50,11 @@ Implementation uses `src/feedback/manual_operator_operating_cycle.py`, the bound
 
 - implementation: `src/feedback/manual_operator_operating_cycle.py`
 - CLI route: `run-p8-operating-cycle`
-- targeted tests: 26 operating-cycle tests; 25 P5 tests; 23 P8 tests; 63 directly affected P4/intraperiod tests
+- targeted tests: 26 operating-cycle tests; 25 P5 tests; 23 P8 tests; 43 directly affected P4/intraperiod tests
+- combined targeted tests: 117 passed
 - local smoke: pass with corrected baseline counts (206 candidates, 108 signals, 97 trial facts, 84 resolved, no-OHLCV 0)
+- smoke metrics: `C_WATCH_ZONE=1`, `STOP_OR_EXIT=96`, `ISSUE-001=45`, review queue `41`, P9 initial/practical readiness `false/false`
+- git diff --check: pass
 - safety: report-only / not FORMAL_GO / no automatic order / human decides manually
 - production classifier, gates, thresholds, notification, runtime, and order behavior: unchanged
-- implementation commit: recorded by the closeout commit
+- implementation commit: `9bee53a`

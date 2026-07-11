@@ -608,6 +608,8 @@ The single-cycle runner is implemented and locally smoke-validated. It uses the 
 - first baseline remains diagnostic-only; corrected baseline is the current operating baseline
 - no production classifier, gate, scoring, threshold, notification, runtime, API, account, order, or automatic-tuning behavior changed
 
+Final runner acceptance record: implementation commit `9bee53a` is accepted; 26 operating-cycle, 25 P5, 23 P8, and 43 directly affected P4/intraperiod tests passed (117 combined). Generated smoke outputs remain local and uncommitted. Future cycles use `run-p8-operating-cycle`; P8 collection remains active and P9 remains blocked.
+
 ## 2026-07-11 first P8 baseline (input-lineage diagnostic)
 
 The first local generated-evidence baseline completed successfully, but it is retained as an input-lineage diagnostic only and is not tuning-valid. P4/P5/P8 outputs were generated without source, runtime, notification, or order changes.

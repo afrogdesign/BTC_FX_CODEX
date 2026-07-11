@@ -103,6 +103,7 @@ source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_
 - first_seen: 2026-07-11
 - evidence: the first baseline mixed an unsuitable candidate source with stale OHLCV, and the corrected baseline required manual reconstruction of candidate, signal, outcome, P4, P5, and P8 paths
 - resolution: `run-p8-operating-cycle` now performs deterministic slicing, freshness validation, accepted stage calls, cross-stage identity checks, manifest fingerprints, and atomic promotion in one report-only cycle
+- resolution commit: `9bee53a`
 - validation: local no-fetch smoke passed with the accepted corrected inputs (206 candidates, 108 signals, 97 trial facts, 84 resolved, no-OHLCV 0)
 - production change: none; no trading logic, notification, runtime, or automatic tuning behavior changed
 
