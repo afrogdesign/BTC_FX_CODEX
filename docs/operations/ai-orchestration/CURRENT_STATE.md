@@ -596,7 +596,17 @@ Current posture:
 - production classifier, gates, thresholds, notification behavior, runtime, API, account, and order behavior remain unchanged
 - safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
 
-Current next work is corrected P8 operating evidence collection from deterministic current-candidate lineage. No tuning is authorized from a single case.
+Current next work is corrected P8 operating evidence collection through the deterministic operating-cycle runner. No tuning is authorized from a single case.
+
+## 2026-07-11 P8 operating-cycle runner
+
+The single-cycle runner is implemented and locally smoke-validated. It uses the current candidate source, referenced signal context, fresh 15-minute OHLCV, accepted P4/P5/P8 functions, identity checks, manifest fingerprints, and an atomic all-output transaction. P8 evidence collection remains active and P9 remains blocked.
+
+- command: `run-p8-operating-cycle`
+- corrected baseline smoke: 206 candidate rows, 108 signals, 97 trial facts, 84 resolved, no-OHLCV 0
+- ISSUE-001 qualified rows: 45; initial/practical P9 readiness: false/false
+- first baseline remains diagnostic-only; corrected baseline is the current operating baseline
+- no production classifier, gate, scoring, threshold, notification, runtime, API, account, order, or automatic-tuning behavior changed
 
 ## 2026-07-11 first P8 baseline (input-lineage diagnostic)
 

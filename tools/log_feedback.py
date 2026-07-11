@@ -1772,6 +1772,7 @@ from src.feedback.manual_scenario_coverage import build_manual_scenario_coverage
 from src.feedback.manual_operator_classifier import build_manual_operator_classifier  # noqa: E402
 from src.feedback.manual_operator_historical_replay import build_manual_operator_historical_replay  # noqa: E402
 from src.feedback.manual_operator_trial_evidence import build_manual_operator_trial_evidence  # noqa: E402
+from src.feedback.manual_operator_operating_cycle import run_p8_operating_cycle  # noqa: E402
 
 
 def _mexc_link_normalize_side(value: Any) -> str:
@@ -22051,6 +22052,22 @@ def _build_parser() -> argparse.ArgumentParser:
     trial_parser.add_argument("--replace-output", action="store_true")
     trial_parser.add_argument("--stdout-json", action="store_true")
 
+    cycle_parser = subparsers.add_parser("run-p8-operating-cycle")
+    cycle_parser.add_argument("--date", required=True)
+    cycle_parser.add_argument("--candidates", default="logs/csv/active_plan_candidates.csv")
+    cycle_parser.add_argument("--signal-context", default="logs/csv/trades.csv")
+    cycle_parser.add_argument("--ohlcv", default="logs/csv/active_plan_intraperiod_ohlcv.csv")
+    cycle_parser.add_argument("--output-root", default="logs/p8_operating_cycle")
+    cycle_parser.add_argument("--decision-events")
+    cycle_parser.add_argument("--actual-episodes")
+    cycle_parser.add_argument("--actual-links")
+    cycle_parser.add_argument("--fetch-public-ohlcv", action="store_true")
+    cycle_parser.add_argument("--ohlcv-limit", type=int, default=500)
+    cycle_parser.add_argument("--max-ohlcv-lag-minutes", type=int, default=60)
+    cycle_parser.add_argument("--dry-run", action="store_true")
+    cycle_parser.add_argument("--replace-output", action="store_true")
+    cycle_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23425,6 +23442,21 @@ def main() -> None:
             trade_episodes=Path(args.trade_episodes) if args.trade_episodes else None,
             episode_links=Path(args.episode_links) if args.episode_links else None,
             dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "run-p8-operating-cycle":
+        summary = run_p8_operating_cycle(
+            candidates=Path(args.candidates), signal_context=Path(args.signal_context), ohlcv=Path(args.ohlcv),
+            report_date=args.date, output_root=Path(args.output_root),
+            decision_events=Path(args.decision_events) if args.decision_events else None,
+            actual_episodes=Path(args.actual_episodes) if args.actual_episodes else None,
+            actual_links=Path(args.actual_links) if args.actual_links else None,
+            fetch_public_ohlcv=bool(args.fetch_public_ohlcv), ohlcv_limit=int(args.ohlcv_limit),
+            max_ohlcv_lag_minutes=int(args.max_ohlcv_lag_minutes), dry_run=bool(args.dry_run),
+            replace_output=bool(args.replace_output),
         )
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")

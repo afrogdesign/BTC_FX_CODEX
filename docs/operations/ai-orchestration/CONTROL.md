@@ -20,7 +20,7 @@ branch_source_rule: `read from git status --short --branch and CURRENT_STATE.md,
 - manual trading practicality plan and AI execution route are now active planning sources
 - planning route approval does not authorize scoring, gate, threshold, notification, or runtime changes
 - P7 shadow surface is complete, checkpointed and runtime-applied
-- P8 evidence pipeline implementation is active under the approved P8/P9 operating doctrine
+- P8 evidence pipeline implementation is complete; operating evidence collection uses the bounded cycle runner under the approved P8/P9 operating doctrine
 
 ## Current Objective
 
@@ -223,7 +223,7 @@ State:
 - The completed spec is archived at `chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md`.
 - `chatgpt/specs/active/` is intentionally empty except for `.gitkeep`.
 - Current operating mode is `HUMAN_CHECK`, not source implementation.
-- Current work is P8 evidence collection and the first real baseline report from local generated artifacts.
+- Current work is P8 evidence collection through `run-p8-operating-cycle`; the corrected baseline is recorded and the first baseline remains diagnostic-only.
 - P9 remains blocked until deterministic readiness evidence exists and the human explicitly approves a proposal.
 - P9 readiness never authorizes automatic application or production mutation.
 - No production classifier, gate, threshold, notification, runtime, API, account, or order behavior changed during P8.

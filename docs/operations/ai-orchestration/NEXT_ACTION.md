@@ -40,9 +40,9 @@ chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
 
 ## Current exact next action
 
-Operate P8 and collect evidence. Do not begin P9 implementation yet.
+Operate P8 through `run-p8-operating-cycle` and collect evidence. Do not manually reconstruct candidate, signal, OHLCV, P4, P5, or P8 lineage. Do not begin P9 implementation yet.
 
-The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. Continue collecting subsequent local evidence windows with the same deterministic lineage, preserving optional actual-evidence pairs only when both episode and link inputs validate. Re-run the P8 report after the next evidence window and compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
+The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. On the next meaningful evidence window, run the single runner with the same deterministic inputs; add episode/link inputs only when both validate. Compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
 
 ## P9 entry rule
 

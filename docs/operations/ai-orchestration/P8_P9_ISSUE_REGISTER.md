@@ -96,6 +96,16 @@ source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_
 - corrected baseline: the unmodified 108-row signal context completed P4/P5/P8 with no no-OHLCV rows
 - production change: none; A/B/C/STOP decisions, thresholds, gates, scoring, notification, and runtime behavior are unchanged
 
+### P8-ISSUE-007 — Manual operating-cycle lineage drift
+
+- category: evidence operations / lineage
+- status: resolved
+- first_seen: 2026-07-11
+- evidence: the first baseline mixed an unsuitable candidate source with stale OHLCV, and the corrected baseline required manual reconstruction of candidate, signal, outcome, P4, P5, and P8 paths
+- resolution: `run-p8-operating-cycle` now performs deterministic slicing, freshness validation, accepted stage calls, cross-stage identity checks, manifest fingerprints, and atomic promotion in one report-only cycle
+- validation: local no-fetch smoke passed with the accepted corrected inputs (206 candidates, 108 signals, 97 trial facts, 84 resolved, no-OHLCV 0)
+- production change: none; no trading logic, notification, runtime, or automatic tuning behavior changed
+
 ## P9 proposal eligibility
 
 An issue may become `eligible for P9 proposal` only when:
