@@ -182,11 +182,20 @@ def _structured_level_text(value: Any) -> str | None:
     if not isinstance(parsed, dict):
         return None
 
+    def finite_number(item: Any) -> Decimal | None:
+        if isinstance(item, bool) or not isinstance(item, (int, float, Decimal)):
+            return None
+        try:
+            number = Decimal(str(item))
+        except (InvalidOperation, ValueError):
+            return None
+        return number if number.is_finite() else None
+
     def canonical(item: Any) -> Any:
         if isinstance(item, bool) or item is None or isinstance(item, str):
             return item
         if isinstance(item, (int, float)):
-            normalized = _dec(item)
+            normalized = finite_number(item)
             if normalized is None:
                 raise ValueError("non_finite_json_number")
             return {"__decimal__": _dec_text(normalized)}
@@ -200,7 +209,7 @@ def _structured_level_text(value: Any) -> str | None:
     for key in ("low", "high", "mid"):
         if key not in parsed:
             continue
-        number = _dec(parsed[key])
+        number = finite_number(parsed[key])
         if number is None:
             return None
         usable[key] = number
