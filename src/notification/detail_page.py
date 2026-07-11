@@ -137,6 +137,16 @@ def _humanize_visible_status_text(value: Any) -> str:
     return text
 
 
+def _operator_dashboard_decision_word(action: str, kind: str) -> tuple[str, str]:
+    """Return a compact hero token without changing the underlying action label."""
+    wait_markers = ("監視継続", "実行不可", "見送り", "待機", "未記録")
+    if kind in {"attention", "followup"} or any(marker in action for marker in wait_markers):
+        return "WAIT", ""
+    displayed = action.upper()
+    compact_class = " compact" if len(displayed) > 12 else ""
+    return displayed, compact_class
+
+
 def _sentence_join(parts: list[str]) -> str:
     sentences = [str(part).strip().strip("。") for part in parts if str(part).strip()]
     if not sentences:
@@ -3767,10 +3777,13 @@ def _operator_dashboard_v2_css() -> str:
       border-radius:999px; background:var(--wait-soft); color:#ffd68f; font-size:12px; font-weight:950; letter-spacing:.06em;
     }
     .safety { color:var(--faint); font-size:11px; font-weight:800; }
-    .decision-grid { display:grid; grid-template-columns:auto minmax(0,1fr); gap:20px; align-items:center; }
-    .decision-word { color:var(--wait); font-size:clamp(52px,8vw,104px); line-height:.9; font-weight:1000; letter-spacing:-.065em; }
-    .decision-copy h1 { margin:0 0 8px; font-size:clamp(25px,3.2vw,43px); line-height:1.15; letter-spacing:-.035em; }
-    .decision-copy p { margin:0; max-width:760px; color:#b8c8d7; font-size:15px; font-weight:700; }
+    .decision-grid { display:grid; grid-template-columns:auto minmax(0,1fr); gap:20px; align-items:center; min-width:0; }
+    .decision-grid > * { min-width:0; }
+    .decision-word { min-width:0; color:var(--wait); font-size:clamp(52px,8vw,104px); line-height:.9; font-weight:1000; letter-spacing:-.065em; overflow-wrap:anywhere; }
+    .decision-word.compact { max-width:100%; font-size:clamp(28px,4vw,52px); line-height:1.05; letter-spacing:-.035em; white-space:normal; }
+    .decision-copy { min-width:0; }
+    .decision-copy h1 { min-width:0; margin:0 0 8px; font-size:clamp(25px,3.2vw,43px); line-height:1.15; letter-spacing:-.035em; overflow-wrap:anywhere; }
+    .decision-copy p { min-width:0; margin:0; max-width:760px; color:#b8c8d7; font-size:15px; font-weight:700; overflow-wrap:anywhere; }
     .hero-action {
       display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; margin-top:22px;
       border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
@@ -4404,7 +4417,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
     safety = _normalize_detail_page_safety_boundary(context.get("followup_safety_boundary") or context.get("safety_boundary") or result.get("actionability_safety"))
     reasons = [str(item).strip() for item in (context.get("reason_labels_full") or _build_wait_reasons(display, result)) if str(item).strip()]
     action = _humanize_visible_status_text(context.get("execution_label", "")).strip() or "見送り"
-    decision_word = "WAIT" if kind in {"attention", "followup"} or action in {"見送り", "未記録"} else action.upper()
+    decision_word, decision_word_class = _operator_dashboard_decision_word(action, kind)
     conclusion = _operator_v3_conclusion_text(result, context)
     metric_specs = (("方向", "direction", result.get("confidence_direction_shadow")), ("実行", "execution", result.get("confidence_execution_shadow")), ("待機", "wait", result.get("confidence_wait_shadow")))
     metrics = "".join(f'<div class="metric"><span class="metric-label">{label}</span><div class="metric-track"><div class="metric-fill {tone}" style="width:{_operator_dashboard_score(value)}%"></div></div><strong class="metric-value">{_operator_dashboard_score(value)}</strong></div>' for label, tone, value in metric_specs)
@@ -4414,7 +4427,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(STABLE_DETAIL_PAGE_PRODUCT_LABEL)}</title><style>{_operator_dashboard_v2_css()}</style></head>
 <body class="v2-report operator-dashboard"><div class="shell">
   <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>{html.escape(timestamp)}</span><span>signal {html.escape(str(result.get('signal_id') or ''))}</span><span>{html.escape(kind)}</span></div></div>
-  <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
+  <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word{decision_word_class}">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
   {_operator_dashboard_v2_alerts(result, context, display)}
   {_operator_dashboard_shadow_panel_html(result)}
   {_operator_dashboard_relative_balance_html(result)}

@@ -803,6 +803,42 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("機械評価上の相対バランス。最終判断ではありません。", html)
         self.assertIn('aria-label="現在の相対優勢', html)
 
+    def test_non_executable_execution_label_uses_wait_hero_token(self) -> None:
+        payload = _sample_detail_payload()
+        with patch(
+            "src.notification.detail_page._notification_context_for_result",
+            return_value={
+                "execution_label": "監視継続（実行不可）",
+                "reason_labels_full": ["15分足で確認"],
+                "active_market_entry_now": {},
+                "active_limit_retest_entry": {},
+                "active_breakout_follow_entry": {},
+                "active_countertrend_scalp_entry": {},
+            },
+        ):
+            html = build_notification_detail_html(payload)
+        self.assertIn('<div class="decision-word">WAIT</div>', html)
+        self.assertNotIn('<div class="decision-word">監視継続（実行不可）</div>', html)
+        self.assertIn('class="decision-copy"', html)
+
+    def test_long_unexpected_hero_token_gets_compact_class(self) -> None:
+        payload = _sample_detail_payload()
+        with patch(
+            "src.notification.detail_page._notification_context_for_result",
+            return_value={
+                "execution_label": "UNEXPECTEDLY_LONG_STATUS_TOKEN",
+                "reason_labels_full": [],
+                "active_market_entry_now": {},
+                "active_limit_retest_entry": {},
+                "active_breakout_follow_entry": {},
+                "active_countertrend_scalp_entry": {},
+            },
+        ):
+            html = build_notification_detail_html(payload)
+        self.assertIn('class="decision-word compact"', html)
+        self.assertIn("min-width:0", html)
+        self.assertIn(".decision-copy { min-width:0;", html)
+
     def test_operator_dashboard_v2_structure_prices_and_value_defense(self) -> None:
         payload = _sample_detail_payload()
         payload["current_price"] = 63197.80
