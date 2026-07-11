@@ -41,6 +41,8 @@ source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_
   - side/regime/setup split
   - actual-backed count
   - current-B/C-without-global-STOP counterfactual
+- first baseline (2026-07-11): 364 STOP rows, 449 opposite-side candidates, 0 counterfactual B, 0 counterfactual C, 0 qualified rows; no actual evidence supplied
+- baseline status remains `open hypothesis`; a single baseline does not establish tuning eligibility
 - next action: P8 evidence pipeline measures; P9 may propose side-aware STOP only after adequate evidence
 - production change: prohibited until P9 approval
 

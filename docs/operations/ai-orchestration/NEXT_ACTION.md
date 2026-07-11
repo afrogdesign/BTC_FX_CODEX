@@ -42,15 +42,7 @@ chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
 
 Operate P8 and collect evidence. Do not begin P9 implementation yet.
 
-The next bounded execution, when requested, is the first real P8 baseline report using current local generated artifacts:
-
-1. resolve current scenario, scenario-event, classification, optional decision-event, episode, and link paths
-2. run the P8 report builder once
-3. report resolved/unresolved/no-OHLCV coverage
-4. report A/B/C/STOP and Long/Short distributions
-5. report actual-evidence coverage and exception-queue size
-6. report ISSUE-001 counts and P9 readiness
-7. do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders
+The first real baseline was recorded on 2026-07-11. Continue collecting subsequent local evidence windows, preserving scenario-deduplicated event-time inputs and optional actual-evidence pairs. Re-run the P8 report after the next evidence window and compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
 
 ## P9 entry rule
 

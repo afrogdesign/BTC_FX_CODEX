@@ -597,3 +597,19 @@ Current posture:
 - safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
 
 Current next work is the first real P8 baseline report from local generated evidence, followed by ongoing evidence collection. No tuning is authorized from a single case.
+
+## 2026-07-11 first real P8 baseline
+
+The first local generated-evidence baseline completed successfully. P4/P5/P8 outputs were generated without source, runtime, notification, or order changes.
+
+- trial facts: 364 rows; resolved 22; unresolved 6; no-OHLCV 336
+- scenario-deduplicated count: 364
+- classes: `A_FORMAL=0`, `B_CHECK_15M=0`, `C_WATCH_ZONE=0`, `STOP_OR_EXIT=364`
+- sides: `Long=200`, `Short=164`
+- comparison: `aligned=12`, `too_defensive=10`, `too_aggressive=0`, `wrong_side=0`
+- eligible actual rows: 0; unique actual episodes: 0; review queue: 10
+- ISSUE-001 qualified rows: 0; opposite-side counterfactual B: 0; C: 0
+- P9 initial readiness: false; practical readiness: false; validation window: not established
+- maximum evaluated event timestamp: `2026-07-10T15:05:00.672704Z`
+
+The five requested recent signals (`20260710_140501`, `20260710_170500`, `20260710_190500`, `20260710_210500`, `20260711_000500`) were all missing from the scenario-deduplicated trial facts. P8 operating evidence collection remains active; this single baseline does not authorize tuning or P9.
