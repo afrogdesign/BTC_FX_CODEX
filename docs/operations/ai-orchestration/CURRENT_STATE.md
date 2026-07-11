@@ -596,11 +596,11 @@ Current posture:
 - production classifier, gates, thresholds, notification behavior, runtime, API, account, and order behavior remain unchanged
 - safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
 
-Current next work is the first real P8 baseline report from local generated evidence, followed by ongoing evidence collection. No tuning is authorized from a single case.
+Current next work is corrected P8 operating evidence collection from deterministic current-candidate lineage. No tuning is authorized from a single case.
 
-## 2026-07-11 first real P8 baseline
+## 2026-07-11 first P8 baseline (input-lineage diagnostic)
 
-The first local generated-evidence baseline completed successfully. P4/P5/P8 outputs were generated without source, runtime, notification, or order changes.
+The first local generated-evidence baseline completed successfully, but it is retained as an input-lineage diagnostic only and is not tuning-valid. P4/P5/P8 outputs were generated without source, runtime, notification, or order changes.
 
 - trial facts: 364 rows; resolved 22; unresolved 6; no-OHLCV 336
 - scenario-deduplicated count: 364
@@ -612,4 +612,20 @@ The first local generated-evidence baseline completed successfully. P4/P5/P8 out
 - P9 initial readiness: false; practical readiness: false; validation window: not established
 - maximum evaluated event timestamp: `2026-07-10T15:05:00.672704Z`
 
-The five requested recent signals (`20260710_140501`, `20260710_170500`, `20260710_190500`, `20260710_210500`, `20260711_000500`) were all missing from the scenario-deduplicated trial facts. P8 operating evidence collection remains active; this single baseline does not authorize tuning or P9.
+The five requested recent signals were absent from this older scenario-deduplicated fact set. The later corrected baseline below establishes that the absence was a candidate-lineage and OHLCV-freshness diagnostic, not a signal disappearance. This single baseline does not authorize tuning or P9.
+
+## 2026-07-11 corrected P8 operating baseline
+
+The first corrected run used the current candidate source, public 15-minute OHLCV, and an unmodified structured-major-level signal context. The preceding attempt stopped safely because P5 incorrectly validated structured support/resistance objects as scalar Decimals; commits `00c227d` and `0bd5d76` corrected validation and identity normalization without changing classification decisions, thresholds, gates, or scoring.
+
+- candidate slice: 206 rows across 108 signals; OHLCV `2026-07-05T19:45:00+00:00` through `2026-07-11T00:15:00+00:00`
+- outcome input: resolved TP/SL 181; pending 7; other unresolved 18; no-OHLCV 0
+- scenario-deduplicated trial facts: 97; resolved 84; unresolved 13; no-OHLCV 0
+- classes: `A_FORMAL=0`, `B_CHECK_15M=0`, `C_WATCH_ZONE=1`, `STOP_OR_EXIT=96`
+- sides: `Long=48`, `Short=49`; comparison: `aligned=43`, `too_defensive=41`, `too_aggressive=0`, `wrong_side=0`
+- eligible actual rows: 0; unique actual episodes: 0; review queue: 41
+- ISSUE-001: 45 qualified proxy rows; counterfactual B 10; C 35; not eligible 46
+- P9 initial readiness: false; practical readiness: false; validation window: not established
+- maximum evaluated event timestamp: `2026-07-10T21:05:00.688162Z`
+
+All five requested recent signals exist in candidate and scenario-event evidence. Where a signal was matched into an earlier scenario, the selected fact records that scenario's deterministic representative rather than treating the later signal as missing. P8 operating evidence collection remains active; P9 remains blocked and no tuning is authorized.

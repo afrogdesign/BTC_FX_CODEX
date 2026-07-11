@@ -43,6 +43,7 @@ source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_
   - current-B/C-without-global-STOP counterfactual
 - first baseline (2026-07-11): 364 STOP rows, 449 opposite-side candidates, 0 counterfactual B, 0 counterfactual C, 0 qualified rows; no actual evidence supplied
 - baseline status remains `open hypothesis`; a single baseline does not establish tuning eligibility
+- corrected baseline (2026-07-11): 45 qualified proxy rows, counterfactual B 10, counterfactual C 35, not eligible 46, and no actual evidence; status remains `open hypothesis`
 - next action: P8 evidence pipeline measures; P9 may propose side-aware STOP only after adequate evidence
 - production change: prohibited until P9 approval
 
@@ -83,6 +84,17 @@ source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_
   - actual trades are imported and linked from local exports
   - human input is limited to ambiguous intent and exceptional cases
 - resolution source: `P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
+
+### P8-ISSUE-006 — P5 structured major-level contract mismatch
+
+- category: evidence validation / identity
+- status: resolved
+- first_seen: 2026-07-11
+- evidence: `trades.csv` intentionally stores `nearest_major_support` and `nearest_major_resistance` as JSON level objects, but P5 initially validated them as scalar Decimals
+- safe blocked behavior: the first corrected run refused silent coercion of 108 relevant signal rows
+- resolution: commits `00c227d` and `0bd5d76` accept canonical structured objects and legacy finite scalars for validation and fingerprint identity only
+- corrected baseline: the unmodified 108-row signal context completed P4/P5/P8 with no no-OHLCV rows
+- production change: none; A/B/C/STOP decisions, thresholds, gates, scoring, notification, and runtime behavior are unchanged
 
 ## P9 proposal eligibility
 

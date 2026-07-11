@@ -42,7 +42,7 @@ chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
 
 Operate P8 and collect evidence. Do not begin P9 implementation yet.
 
-The first real baseline was recorded on 2026-07-11. Continue collecting subsequent local evidence windows, preserving scenario-deduplicated event-time inputs and optional actual-evidence pairs. Re-run the P8 report after the next evidence window and compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
+The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. Continue collecting subsequent local evidence windows with the same deterministic lineage, preserving optional actual-evidence pairs only when both episode and link inputs validate. Re-run the P8 report after the next evidence window and compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
 
 ## P9 entry rule
 
