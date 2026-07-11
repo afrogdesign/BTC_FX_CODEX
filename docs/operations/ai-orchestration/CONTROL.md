@@ -22,6 +22,7 @@ branch_source_rule: `read from git status --short --branch and CURRENT_STATE.md,
 - P7 shadow surface is complete, checkpointed and runtime-applied
 - P8 evidence pipeline implementation is complete; operating evidence collection uses the bounded cycle runner under the approved P8/P9 operating doctrine
 - P8 daily cycle wrapper and canonical launchd plist are repo-implemented; runtime installation remains a separate approved task
+- Operator relative balance meter commit `4b33ed6` is runtime-applied in the primary repo; existing static pages remain unchanged and future generated detail pages contain the display-only meter
 
 ## Current Objective
 

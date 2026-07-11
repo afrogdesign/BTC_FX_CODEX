@@ -649,3 +649,7 @@ All five requested recent signals exist in candidate and scenario-event evidence
 ## 2026-07-11 P8 daily runtime apply
 
 `com.afrog.btc-p8-operating-cycle` is installed and loaded in the primary iMac GUI domain with the daily 11:30 JST trigger. One manual proxy-only cycle succeeded: 206 candidates, 80 resolved, 13 unresolved, 2 no-OHLCV, 94 STOP and 1 C rows, ISSUE-001 44, review queue 39, and P9 readiness false/false. Generated evidence remains local and uncommitted. Scheduled-cycle verification and the 11:45 JST AI review remain pending; P9 is blocked and no production behavior changed.
+
+## 2026-07-11 operator relative balance meter runtime apply
+
+The display-only relative LONG/SHORT balance meter from implementation commit `4b33ed6` was applied to the active primary runtime at `2026-07-11T18:21:58+0900`; replacement PID `16144` is running under `com.afrog.btc-monitor`. Existing static HTML was not regenerated. Future generated detail pages contain the meter. No manual mail, notification cycle, classifier, gate, threshold, scoring, notification behavior, or order behavior changed. P8 evidence collection continues and P9 remains evidence-gated.
