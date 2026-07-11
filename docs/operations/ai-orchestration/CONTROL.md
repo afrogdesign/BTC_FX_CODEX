@@ -240,4 +240,6 @@ Safety remains:
 
 ```text
 report-only / not FORMAL_GO / no automatic order / human decides manually
+
+The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary repo at `2026-07-11T19:12:16+0900` with replacement PID `18822` running. Long non-executable labels use the `WAIT` hero token; the relative balance meter is unchanged, static pages were not regenerated, and no manual mail or notification cycle was triggered. P8 evidence collection continues and P9 remains evidence-gated.
 ```

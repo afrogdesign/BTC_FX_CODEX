@@ -653,3 +653,7 @@ All five requested recent signals exist in candidate and scenario-event evidence
 ## 2026-07-11 operator relative balance meter runtime apply
 
 The display-only relative LONG/SHORT balance meter from implementation commit `4b33ed6` was applied to the active primary runtime at `2026-07-11T18:21:58+0900`; replacement PID `16144` is running under `com.afrog.btc-monitor`. Existing static HTML was not regenerated. Future generated detail pages contain the meter. No manual mail, notification cycle, classifier, gate, threshold, scoring, notification behavior, or order behavior changed. P8 evidence collection continues and P9 remains evidence-gated.
+
+## 2026-07-11 operator hero layout hotfix runtime apply
+
+The display-only hero layout fix from implementation commit `129cbba` was applied at `2026-07-11T19:12:16+0900` in the active primary repo `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`; replacement PID `18822` is running under `com.afrog.btc-monitor`. The non-executable execution label now renders as the compact hero token `WAIT`, while the full label remains in normal context text. The relative balance meter is unchanged, existing static HTML remains unchanged, and no manual mail or notification cycle was triggered. No notification behavior, scoring, classifier, gate, threshold, or order behavior changed. P8 evidence collection continues and P9 remains evidence-gated.
