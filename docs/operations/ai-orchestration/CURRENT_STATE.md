@@ -645,3 +645,7 @@ The first corrected run used the current candidate source, public 15-minute OHLC
 - maximum evaluated event timestamp: `2026-07-10T21:05:00.688162Z`
 
 All five requested recent signals exist in candidate and scenario-event evidence. Where a signal was matched into an earlier scenario, the selected fact records that scenario's deterministic representative rather than treating the later signal as missing. P8 operating evidence collection remains active; P9 remains blocked and no tuning is authorized.
+
+## 2026-07-11 P8 daily runtime apply
+
+`com.afrog.btc-p8-operating-cycle` is installed and loaded in the primary iMac GUI domain with the daily 11:30 JST trigger. One manual proxy-only cycle succeeded: 206 candidates, 80 resolved, 13 unresolved, 2 no-OHLCV, 94 STOP and 1 C rows, ISSUE-001 44, review queue 39, and P9 readiness false/false. Generated evidence remains local and uncommitted. Scheduled-cycle verification and the 11:45 JST AI review remain pending; P9 is blocked and no production behavior changed.

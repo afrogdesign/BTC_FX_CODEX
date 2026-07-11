@@ -224,7 +224,7 @@ State:
 - The completed spec is archived at `chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md`.
 - `chatgpt/specs/active/` is intentionally empty except for `.gitkeep`.
 - Current operating mode is `HUMAN_CHECK`, not source implementation.
-- Current work is P8 evidence collection through `run-p8-operating-cycle`; the corrected baseline is recorded and the first baseline remains diagnostic-only.
+- Daily P8 automation is runtime-applied through `com.afrog.btc-p8-operating-cycle`; first manual cycle succeeded and scheduled-cycle verification is pending.
 - P9 remains blocked until deterministic readiness evidence exists and the human explicitly approves a proposal.
 - P9 readiness never authorizes automatic application or production mutation.
 - No production classifier, gate, threshold, notification, runtime, API, account, or order behavior changed during P8.

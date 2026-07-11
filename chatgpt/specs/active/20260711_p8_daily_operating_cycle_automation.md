@@ -3,7 +3,7 @@
 ## Metadata
 
 - work_id: `BTCFX-20260711-P8-DAILY-CYCLE-AUTOMATION`
-- status: active / bounded implementation
+- status: runtime-applied / first scheduled-cycle verification pending
 - phase: P8 operating evidence collection
 - runner: `run-p8-operating-cycle`
 - schedule: daily 11:30 JST (`Asia/Tokyo`)
@@ -36,7 +36,7 @@ Expected runner failures write a compact failed last-result and return nonzero. 
 
 ## Acceptance and archive condition
 
-Targeted wrapper/runner tests, plist lint, and a wrapper dry-run must pass. Generated evidence remains local and uncommitted. This spec may be archived only after a separate runtime apply and first scheduled-cycle confirmation; this implementation task does not install or bootstrap launchd.
+Targeted wrapper/runner tests, plist lint, and a wrapper dry-run passed. Runtime apply completed with target label `com.afrog.btc-p8-operating-cycle` loaded in the GUI domain and one successful manual proxy-only cycle on 2026-07-11. Generated evidence remains local and uncommitted. This spec remains active until the next scheduled 11:30 JST cycle and its 11:45 JST evidence review are verified.
 
 ## Safety boundary
 

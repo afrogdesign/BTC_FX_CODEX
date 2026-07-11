@@ -46,7 +46,7 @@ The corrected baseline was recorded on 2026-07-11 using current-candidate lineag
 
 Accepted runner commit: `9bee53a`. Generated outputs remain local and uncommitted; P9 remains blocked pending readiness evidence and explicit approval.
 
-Repo automation is implemented; runtime install/bootstrap is not performed. Next task: `BTCFX-20260711-P8-DAILY-CYCLE-RUNTIME-APPLY`.
+Daily runtime automation is installed and the first manual cycle succeeded. Next task: `BTCFX-20260712-P8-DAILY-CYCLE-SCHEDULED-VERIFY` after the next 11:30 JST cycle; confirm its compact result and the 11:45 JST AI review. P9 remains blocked.
 
 ## P9 entry rule
 
