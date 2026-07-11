@@ -49,8 +49,9 @@ CANDIDATE_NUMERIC_FIELDS = frozenset({
 })
 SIGNAL_NUMERIC_FIELDS = frozenset({
     "current_price", "confidence_direction_shadow", "confidence_execution_shadow", "confidence_wait_shadow",
-    "long_rr", "short_rr", "nearest_major_support", "nearest_major_resistance",
+    "long_rr", "short_rr",
 })
+STRUCTURED_LEVEL_FIELDS = frozenset({"nearest_major_support", "nearest_major_resistance"})
 OUTPUT_HEADERS = [
     "schema_version", "classification_id", "classifier_method_version", "scenario_event_id", "scenario_id",
     "candidate_id", "source_signal_id", "event_timestamp_utc", "event_timestamp_jst", "symbol", "side",
@@ -156,12 +157,59 @@ def _fingerprint(row: dict[str, str], fields: list[str]) -> str:
             value = _jst(parsed) if parsed else value
         elif field in CANDIDATE_NUMERIC_FIELDS or field in SIGNAL_NUMERIC_FIELDS:
             value = _dec_text(value) if value else ""
+        elif field in STRUCTURED_LEVEL_FIELDS:
+            value = _structured_level_text(value) if value else ""
         elif field in {"no_trade_flags", "warning_flags", "risk_flags", "trade_execution_blockers", "phase1b_lite_reasons", "opportunity_reasons"}:
             value = ";".join(_tokens(value))
         else:
             value = str(value or "").strip().lower()
         values.append(value)
     return _hash(*values)[:32]
+
+
+def _structured_level_text(value: Any) -> str | None:
+    """Canonicalize persisted major-level evidence without using it for decisions."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    scalar = _dec(text)
+    if scalar is not None:
+        return f"scalar:{_dec_text(text)}"
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    def canonical(item: Any) -> Any:
+        if isinstance(item, bool) or item is None or isinstance(item, str):
+            return item
+        if isinstance(item, (int, float)):
+            normalized = _dec(item)
+            if normalized is None:
+                raise ValueError("non_finite_json_number")
+            return {"__decimal__": _dec_text(normalized)}
+        if isinstance(item, list):
+            return [canonical(child) for child in item]
+        if isinstance(item, dict):
+            return {str(key): canonical(child) for key, child in item.items()}
+        raise ValueError("unsupported_json_value")
+
+    usable: dict[str, Decimal] = {}
+    for key in ("low", "high", "mid"):
+        if key not in parsed:
+            continue
+        number = _dec(parsed[key])
+        if number is None:
+            return None
+        usable[key] = number
+    if not usable or ("low" in usable and "high" in usable and usable["low"] > usable["high"]):
+        return None
+    try:
+        return "object:" + json.dumps(canonical(parsed), ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    except ValueError:
+        return None
 
 
 def _identity_rows(rows: list[dict[str, str]], identity_field: str, fields: list[str]) -> tuple[dict[str, dict[str, str]], int, str | None]:
@@ -176,6 +224,8 @@ def _identity_rows(rows: list[dict[str, str]], identity_field: str, fields: list
             return {}, duplicates, "invalid_timestamp"
         numeric_fields = (CANDIDATE_NUMERIC_FIELDS | SIGNAL_NUMERIC_FIELDS) & set(fields)
         if any(row.get(field, "") and _dec(row.get(field)) is None for field in numeric_fields):
+            return {}, duplicates, "invalid_numeric"
+        if any(row.get(field, "") and _structured_level_text(row.get(field)) is None for field in STRUCTURED_LEVEL_FIELDS & set(fields)):
             return {}, duplicates, "invalid_numeric"
         fp = _fingerprint(row, fields)
         if identity in result:

@@ -417,6 +417,10 @@ Use Decimal parsing and canonical fixed-point text.
 
 Malformed non-empty numerics are invalid input, exit 2.
 
+### 8.2.1 Structured major levels
+
+`nearest_major_support` and `nearest_major_resistance` are structured level evidence, not scalar Decimal fields. Accept the current JSON object form and legacy finite scalar form; canonicalize valid JSON objects with sorted compact keys for validation and identity. JSON objects must contain at least one finite `low`, `high`, or `mid` price, and `low <= high` when both are present. These fields affect validation and fingerprint identity only, never A/B/C/STOP classification decisions.
+
 ### 8.3 List-like fields
 
 Normalize reason, warning, risk, blocker, and no-trade fields from supported delimiters into sorted unique tokens.

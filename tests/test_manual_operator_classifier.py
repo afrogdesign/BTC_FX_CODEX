@@ -211,7 +211,7 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         self.assertIn("stop_data_quality", self.read_rows()[0]["reason_codes"])
         self.assertIn("stop_no_trade_flag", self.read_rows()[0]["reason_codes"])
 
-    def test_omitted_numeric_fields_validate_and_normalize(self) -> None:
+    def test_scalar_numeric_fields_validate_and_normalize(self) -> None:
         for field in ("stop_loss", "tp1", "tp2"):
             first = self.fixture(extra_candidate={field: "1"})
             self.assertEqual(self.run_classifier(first)["exit_code"], 0)
@@ -222,14 +222,34 @@ class ManualOperatorClassifierTests(unittest.TestCase):
             self.assertEqual(self.run_classifier(first)["exit_code"], 0)
             malformed = self.fixture(extra_candidate={field: "not-a-number"})
             self.assertEqual(self.run_classifier(malformed)["exit_code"], 2)
+
+    def test_structured_major_levels_validate_and_canonicalize(self) -> None:
+        support = '{"low":1,"high":2,"mid":1.5,"kind":"support","sources":["15m"]}'
+        resistance = '{"low":3,"high":4,"mid":3.5,"kind":"resistance","source":"15m"}'
+        fixture = self.fixture(extra_signal={"nearest_major_support": support, "nearest_major_resistance": resistance})
+        self.assertEqual(self.run_classifier(fixture)["exit_code"], 0)
+        with fixture["signals"].open(newline="", encoding="utf-8") as fp:
+            row = next(csv.DictReader(fp))
+        reordered = '{"sources":["15m"],"kind":"support","mid":1.5,"high":2,"low":1}'
+        fixture["signals"] = self.write("structured-duplicate.csv", SIGNAL_HEADERS, [row, {**row, "nearest_major_support": reordered}])
+        duplicate = self.run_classifier(fixture)
+        self.assertEqual(duplicate["exit_code"], 0)
+        self.assertEqual(duplicate["exact_duplicate_signal_rows"], 1)
+
         for field in ("nearest_major_support", "nearest_major_resistance"):
-            first = self.fixture(extra_signal={field: "1"})
-            with first["signals"].open(newline="", encoding="utf-8") as fp:
-                row = next(csv.DictReader(fp))
-            first["signals"] = self.write(f"{field}-dup.csv", SIGNAL_HEADERS, [row, {**row, field: "1.00"}])
-            self.assertEqual(self.run_classifier(first)["exit_code"], 0)
-            malformed = self.fixture(extra_signal={field: "not-a-number"})
-            self.assertEqual(self.run_classifier(malformed)["exit_code"], 2)
+            with self.subTest(field=field, form="legacy_scalar"):
+                self.assertEqual(self.run_classifier(self.fixture(extra_signal={field: "1.00"}))["exit_code"], 0)
+            with self.subTest(field=field, form="blank"):
+                self.assertEqual(self.run_classifier(self.fixture(extra_signal={field: ""}))["exit_code"], 0)
+            for invalid in ("{bad", "[]", '"level"', '{"low":NaN}', '{"low":2,"high":1}', '{"kind":"support"}'):
+                with self.subTest(field=field, invalid=invalid):
+                    self.assertEqual(self.run_classifier(self.fixture(extra_signal={field: invalid}))["exit_code"], 2)
+
+    def test_structured_major_level_metadata_does_not_change_classification(self) -> None:
+        first = self.fixture(extra_signal={"nearest_major_support": '{"low":1,"high":2,"mid":1.5,"kind":"support"}'})
+        second = self.fixture(extra_signal={"nearest_major_support": '{"kind":"support","mid":1.5,"high":2,"low":1}'})
+        self.assertEqual(self.run_classifier(first)["class_counts"], self.run_classifier(second)["class_counts"])
+        self.assertEqual(self.read_rows()[0]["operator_class"], "B_CHECK_15M")
 
     def test_ambiguous_missing_context_and_token_forms(self) -> None:
         fixture = self.fixture()
