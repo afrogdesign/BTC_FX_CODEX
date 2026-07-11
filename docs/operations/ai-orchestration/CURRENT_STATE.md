@@ -610,6 +610,10 @@ The single-cycle runner is implemented and locally smoke-validated. It uses the 
 
 Final runner acceptance record: implementation commit `9bee53a` is accepted; 26 operating-cycle, 25 P5, 23 P8, and 43 directly affected P4/intraperiod tests passed (117 combined). Generated smoke outputs remain local and uncommitted. Future cycles use `run-p8-operating-cycle`; P8 collection remains active and P9 remains blocked.
 
+## 2026-07-11 P8 daily cycle automation
+
+Repo-side daily automation is implemented and committed, but not installed or bootstrapped. `tools/run_p8_daily_cycle.py` invokes the accepted `run-p8-operating-cycle` once per JST date, writes date-scoped evidence and compact atomic latest status, and fails closed on incomplete actual episode/link pairs. The canonical plist schedules 11:30 JST; runtime apply is a separate task. P9 remains blocked and no automatic tuning is enabled.
+
 ## 2026-07-11 first P8 baseline (input-lineage diagnostic)
 
 The first local generated-evidence baseline completed successfully, but it is retained as an input-lineage diagnostic only and is not tuning-valid. P4/P5/P8 outputs were generated without source, runtime, notification, or order changes.

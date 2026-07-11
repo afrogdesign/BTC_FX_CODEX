@@ -78,7 +78,7 @@ zsh tools/sync_ver021_prod_status.sh
 - これは archive や旧版本番を確認したいときだけ使う手動入口です。
 - 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
 - そのあと `tmp/status/prod_status_summary.json` と `tmp/status/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
-- 現行運用では `launchd` 常設ジョブは使いません。
+- P8の日次report-only evidence cycleはcanonicalな`launchd` job（11:30 JST）として別途runtime applyできます。配置・bootstrapはruntime taskで実施し、repo実装だけでは常駐化しません。
 
 ### 本番 Ver02.1 ログをフル取得する
 

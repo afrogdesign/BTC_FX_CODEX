@@ -21,6 +21,7 @@ branch_source_rule: `read from git status --short --branch and CURRENT_STATE.md,
 - planning route approval does not authorize scoring, gate, threshold, notification, or runtime changes
 - P7 shadow surface is complete, checkpointed and runtime-applied
 - P8 evidence pipeline implementation is complete; operating evidence collection uses the bounded cycle runner under the approved P8/P9 operating doctrine
+- P8 daily cycle wrapper and canonical launchd plist are repo-implemented; runtime installation remains a separate approved task
 
 ## Current Objective
 

@@ -40,11 +40,13 @@ chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
 
 ## Current exact next action
 
-Operate P8 through `run-p8-operating-cycle` and collect evidence. Do not manually reconstruct candidate, signal, OHLCV, P4, P5, or P8 lineage. Do not begin P9 implementation yet.
+Operate P8 through the daily wrapper `tools/run_p8_daily_cycle.py`, which calls `run-p8-operating-cycle` at the canonical 11:30 JST schedule. Do not manually reconstruct candidate, signal, OHLCV, P4, P5, or P8 lineage. Do not begin P9 implementation yet.
 
 The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. On the next meaningful evidence window, run the single runner with the same deterministic inputs; add episode/link inputs only when both validate. Compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
 
 Accepted runner commit: `9bee53a`. Generated outputs remain local and uncommitted; P9 remains blocked pending readiness evidence and explicit approval.
+
+Repo automation is implemented; runtime install/bootstrap is not performed. Next task: `BTCFX-20260711-P8-DAILY-CYCLE-RUNTIME-APPLY`.
 
 ## P9 entry rule
 
