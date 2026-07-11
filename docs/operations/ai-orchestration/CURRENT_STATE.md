@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-10
+last_updated: 2026-07-11
 
 ## Safety boundary
 
@@ -540,4 +540,60 @@ P7 is complete at accepted checkpoint `74047f1` (`74047f14bceb4644ec3ab86eb5d0e5
 
 P7 changed only the existing public detail HTML shadow surface. Production gate, scoring, threshold, notification, runtime, API, account, and order behavior were unchanged; the posture remains report-only and human-decided.
 
-P7 is complete. P8 evidence pipeline implementation is active under `chatgpt/specs/active/20260711_manual_operator_trial_evidence_pipeline.md`, following the approved automatic-evaluation doctrine. P8 remains report-only / not `FORMAL_GO` / human-decided; no production behavior is changed.
+P7 is complete. P8 evidence-pipeline implementation is complete and accepted; operating evidence collection follows the approved automatic-evaluation doctrine and the archived implementation spec. P8 remains report-only / not `FORMAL_GO` / human-decided; no production behavior is changed.
+
+
+---
+
+## 2026-07-11 P8 evidence pipeline completion and operating transition
+
+P8 evidence-pipeline implementation is complete and accepted.
+
+Accepted commit chain:
+
+```text
+850ab24
+759370b
+29e0a39
+0397fa8
+```
+
+Reported final validation:
+
+```text
+80 directly affected tests passed
+P8 acceptance module: 23 tests
+git diff --check: pass
+push: none
+```
+
+Accepted capabilities:
+
+- deterministic trial facts from P4/P5/P6 evidence
+- P6 market outcome kept separate from P8 comparison status
+- eligible high/medium actual trade episode evidence
+- exception-only human review queue
+- global no-trade STOP versus opposite-side P5 B/C counterfactual measurement
+- unique-episode actual counts
+- reproducibility fingerprints and method versions
+- initial and practical P9 readiness fields
+- atomic outputs, rollback, dry-run, deterministic rerun, and privacy-safe summaries
+
+Archived P8 implementation spec:
+
+```text
+chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
+```
+
+Current posture:
+
+- P8 source implementation is complete
+- P8 operating evidence collection is active
+- `chatgpt/specs/active/` is empty except for `.gitkeep`
+- P9 implementation has not started
+- P9 remains evidence-gated and human-approved
+- readiness is proposal eligibility only, not production authorization
+- production classifier, gates, thresholds, notification behavior, runtime, API, account, and order behavior remain unchanged
+- safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
+
+Current next work is the first real P8 baseline report from local generated evidence, followed by ongoing evidence collection. No tuning is authorized from a single case.

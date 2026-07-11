@@ -1,6 +1,6 @@
 # AI Orchestration Control
 
-last_updated: 2026-07-10
+last_updated: 2026-07-11
 repo: `afrogdesign/BTC_FX_CODEX`
 primary_mcp_working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 frozen_old_runtime_execution_repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
@@ -210,5 +210,32 @@ State:
 - actual trade linking after importer stabilization
 - scenario normalization after linking contract is clear
 - offline A/B/C/STOP classifier after coverage work
-- P8 evidence pipeline implementation and review remain bounded by the active P8 spec; P9 tuning still requires explicit product/safety approval
+- P8 evidence-pipeline implementation is complete; operating evidence collection follows the approved doctrine and archived implementation spec; P9 tuning still requires explicit product/safety approval
 - production tuning only after adequate ground truth and explicit human approval
+
+
+---
+
+## P8 completion control update — 2026-07-11
+
+- P8 evidence-pipeline source implementation is complete and accepted.
+- Accepted commit chain: `850ab24` -> `759370b` -> `29e0a39` -> `0397fa8`.
+- The completed spec is archived at `chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md`.
+- `chatgpt/specs/active/` is intentionally empty except for `.gitkeep`.
+- Current operating mode is `HUMAN_CHECK`, not source implementation.
+- Current work is P8 evidence collection and the first real baseline report from local generated artifacts.
+- P9 remains blocked until deterministic readiness evidence exists and the human explicitly approves a proposal.
+- P9 readiness never authorizes automatic application or production mutation.
+- No production classifier, gate, threshold, notification, runtime, API, account, or order behavior changed during P8.
+
+Current next work ID:
+
+```text
+BTCFX-20260711-MTP-P8-OPERATING-EVIDENCE-COLLECTION
+```
+
+Safety remains:
+
+```text
+report-only / not FORMAL_GO / no automatic order / human decides manually
+```

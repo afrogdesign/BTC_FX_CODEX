@@ -360,3 +360,27 @@ P8 implementation is complete when:
 8. tests and diff check pass.
 9. implementation is locally committed.
 10. this spec remains active until ChatGPT review and closeout.
+
+
+---
+
+## Closeout — 2026-07-11
+
+- status: completed / accepted / archived
+- initial implementation commit: `850ab24`
+- correction commits: `759370b`, `29e0a39`
+- acceptance-test commit: `0397fa8`
+- reported final validation: `80` directly affected tests passed; P8 acceptance module `23` tests; `git diff --check` passed
+- accepted capabilities:
+  - deterministic prediction / market-path / eligible actual-trade evidence joining
+  - P6 outcome semantics preserved separately from P8 comparison semantics
+  - exception-only human review queue
+  - global no-trade STOP versus opposite-side B/C counterfactual measurement using the accepted P5 classifier
+  - unique episode-based actual evidence
+  - reproducibility fingerprints and method metadata
+  - initial/practical P9 readiness reporting
+  - atomic output replacement, rollback, dry-run, deterministic rerun, and privacy-safe summaries
+- safety unchanged: report-only / not `FORMAL_GO` / no automatic order / human decides manually
+- production classifier, gates, thresholds, notification behavior, runtime, API, account, and order behavior were not changed
+- P8 implementation is complete; P8 operating evidence collection continues
+- P9 remains blocked until readiness evidence and explicit human approval

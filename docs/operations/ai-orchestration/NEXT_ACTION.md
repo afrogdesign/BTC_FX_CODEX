@@ -1,72 +1,91 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260711-MTP-P8-EVIDENCE-PIPELINE`
-- mode: `BOUNDED_CODEX`
-- task_type: `P8 SOURCE IMPLEMENTATION / REPORT-ONLY`
-- previous_work_id: `BTCFX-20260710-MTP-P8-HUMAN-MANUAL-TRIAL-DECISION`
-- previous_status: `PRODUCT DECISION COMPLETE / P8 CONTRACT APPROVED`
+- current_work_id: `BTCFX-20260711-MTP-P8-OPERATING-EVIDENCE-COLLECTION`
+- mode: `HUMAN_CHECK`
+- task_type: `P8 OPERATING TRIAL / EVIDENCE COLLECTION`
+- previous_work_id: `BTCFX-20260711-MTP-P8-EVIDENCE-PIPELINE-ACCEPTANCE-TESTS`
+- previous_status: `DONE / ACCEPTED / ARCHIVED`
 
 ## Current state
 
-P7 operator shadow surface is complete, checkpointed, and runtime-applied.
+P8 evidence-pipeline implementation is complete and accepted.
 
-P8 product decision is now fixed:
+Accepted implementation chain:
 
-- P8 is not full manual logging.
-- market-path outcomes are evaluated automatically.
-- actual trades are imported from local exchange exports and linked automatically.
-- human input is limited to ambiguous intent and exceptional cases.
-- AI explains and proposes; it does not automatically mutate production behavior.
-- P9 remains proposal-first and requires explicit human approval.
+```text
+850ab24
+759370b
+29e0a39
+0397fa8
+```
+
+The implementation spec is archived at:
+
+```text
+chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
+```
+
+`chatgpt/specs/active/` is intentionally empty except for `.gitkeep`.
+
+## What P8 now does
+
+- evaluates market-path outcomes deterministically
+- preserves P6 outcome semantics separately from P8 comparison status
+- joins eligible actual trade episodes using high/medium link evidence
+- excludes unresolved, no-OHLCV, low-confidence, and ambiguous evidence from performance claims
+- measures global no-trade STOP versus opposite-side B/C opportunities offline
+- produces an exception-only human review queue
+- reports reproducibility metadata and P9 readiness
+- never applies automatic tuning
+
+## Current exact next action
+
+Operate P8 and collect evidence. Do not begin P9 implementation yet.
+
+The next bounded execution, when requested, is the first real P8 baseline report using current local generated artifacts:
+
+1. resolve current scenario, scenario-event, classification, optional decision-event, episode, and link paths
+2. run the P8 report builder once
+3. report resolved/unresolved/no-OHLCV coverage
+4. report A/B/C/STOP and Long/Short distributions
+5. report actual-evidence coverage and exception-queue size
+6. report ISSUE-001 counts and P9 readiness
+7. do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders
+
+## P9 entry rule
+
+P9 remains blocked until the P8 report demonstrates the required readiness evidence.
+
+Initial proposal eligibility requires at least:
+
+- 100 resolved events
+- 30 unique eligible actual trade episodes
+- all four operator classes represented
+- Long and Short represented
+- non-empty regime and setup segmentation
+- reproducibility metadata present
+
+Practical readiness also requires a distinct validation window and explicit human approval.
+
+A readiness result authorizes only a P9 proposal. It never authorizes production changes.
 
 ## Active sources of truth
 
-Operating specification:
-
-`docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
-
-Issue register:
-
-`docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
-
-Active implementation specification:
-
-`chatgpt/specs/active/20260711_manual_operator_trial_evidence_pipeline.md`
-
-## Next exact task
-
-Implement the bounded P8 evidence pipeline described by the active specification.
-
-The implementation must:
-
-- reuse P2-P7 accepted evidence semantics
-- build deterministic trial facts and a human exception queue
-- compare prediction, market-path outcome, and eligible actual trades
-- measure the global-STOP/opposite-side-opportunity hypothesis without changing classifier behavior
-- produce reproducible P9 readiness fields
-- keep all outputs report-only
+- `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
+- `docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
+- `chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md`
 
 ## Prohibited
 
-- no P5 classifier threshold change
-- no production side-specific STOP change
-- no gate/scoring change
-- no notification/mail behavior change
-- no public HTML redesign in the P8 source task
+- no automatic tuning
+- no P5 classifier mutation
+- no threshold, scoring, or gate change
+- no notification or mail behavior change
 - no runtime or launchd change
-- no exchange API, account, private, or order endpoint
-- no secrets or raw export commit
+- no exchange API, private, account, or order endpoint
+- no secrets or raw exchange export commit
 - no `paper_positions.csv` integration
-- no automatic recommendation application
-- no P9 implementation in the same task
-
-## Validation
-
-```text
-./.venv312/bin/python -m unittest <targeted P8 and directly affected feedback tests>
-<relevant sanitized CLI smoke once>
-git diff --check
-```
+- no automatic order
 
 ## Safety
 
