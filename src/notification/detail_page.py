@@ -3891,26 +3891,30 @@ def _operator_dashboard_v2_css() -> str:
     .condition-label b { padding:3px 6px; border-radius:6px; background:#15273a; color:var(--text); }
     .condition strong { display:block; font-size:13px; margin-bottom:4px; }
     .condition p { margin:0; color:var(--muted); font-size:10px; }
+    .opportunity-stack { display:grid; gap:0; }
     .big-chance {
-      display:grid; grid-template-columns:82px 1fr; gap:15px; padding:18px;
+      display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:15px; padding:16px;
       border:1px solid rgba(103,169,255,.28); border-radius:var(--radius);
       background:linear-gradient(145deg,rgba(17,43,69,.9),rgba(9,23,36,.97));
     }
-    .big-score { display:grid; place-items:center; align-content:center; min-height:90px; border-radius:14px; background:#081624; border:1px solid #294562; }
-    .big-score strong { font-size:32px; line-height:1; }
-    .big-score span { color:var(--blue); font-size:12px; font-weight:1000; }
+    .big-score { grid-column:2; grid-row:1; display:grid; place-items:center; align-content:center; width:96px; min-height:64px; max-height:76px; border-radius:12px; background:#081624; border:1px solid #294562; }
+    .big-score strong { font-size:28px; line-height:1; }
+    .big-score span { color:var(--blue); font-size:10px; font-weight:1000; text-align:center; }
+    .big-chance-content { grid-column:1; grid-row:1; min-width:0; }
     .big-chance h3 { margin:0 0 6px; font-size:16px; }
+    .big-chance-kicker { display:block; margin-bottom:4px; color:#8fd6ff; font-size:9px; font-weight:1000; letter-spacing:.08em; }
     .big-chance p { margin:0; color:#b1c4d6; font-size:11px; }
     .timeline { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:12px; }
     .timeline span { padding:5px 8px; border-radius:8px; background:#0c1c2b; border:1px solid #27405a; font-size:9px; font-weight:900; }
     .timeline i { color:var(--faint); font-style:normal; }
     .context-bar {
-      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin-top:12px;
+      display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin-top:0;
       border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);
     }
     .context-cell { padding:13px; background:#0a1723; }
     .context-cell span { display:block; color:var(--faint); font-size:9px; font-weight:900; letter-spacing:.08em; }
     .context-cell strong { display:block; margin-top:3px; font-size:13px; }
+    .big-chance + .context-bar { border-top:0; border-radius:0 0 14px 14px; }
     .details-panel { margin-top:12px; overflow:hidden; }
     details { border-top:1px solid var(--line); }
     details:first-of-type { border-top:0; }
@@ -3935,13 +3939,25 @@ def _operator_dashboard_v2_css() -> str:
     .shadow-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
     .shadow-badge { color:#8fd6ff; font-size:10px; font-weight:900; letter-spacing:.08em; }
     .shadow-head h2 { margin:5px 0 0; font-size:18px; }
+    .shadow-intro { margin:6px 0 0; color:#b9cada; font-size:11px; line-height:1.5; }
     .shadow-safety { color:#b6c8d9; font-size:10px; text-align:right; }
-    .shadow-legend { margin-top:10px; color:#8fa9bd; font-size:10px; font-weight:800; }
+    .shadow-legend { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+    .shadow-stage { padding:5px 8px; border:1px solid #29445d; border-radius:999px; background:#0b1927; color:#c6d8e8; font-size:10px; font-weight:900; }
+    .shadow-note { margin:10px 0 0; color:#8fa9bd; font-size:10px; }
+    .shadow-summary { margin:12px 0 0; padding:9px 11px; border-left:3px solid var(--wait); background:#081521; color:#d5e3ef; font-size:12px; font-weight:900; }
     .shadow-body { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
-    .shadow-card { padding:11px; border:1px solid #29445d; border-radius:11px; background:#081521; }
+    .shadow-card { padding:12px; border:1px solid #29445d; border-radius:11px; background:#081521; min-width:0; }
+    .shadow-card-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .shadow-side { padding:3px 7px; border-radius:999px; background:#153044; color:#e7f1fb; font-size:10px; font-weight:1000; }
     .shadow-card strong { color:#e7f1fb; font-size:12px; }
-    .shadow-card p { margin:5px 0; color:#b9cada; font-size:11px; }
-    .shadow-card small { color:#8ea5ba; overflow-wrap:anywhere; }
+    .shadow-card p { margin:5px 0 9px; color:#b9cada; font-size:11px; line-height:1.45; }
+    .shadow-facts { display:grid; gap:4px; }
+    .shadow-fact { display:grid; grid-template-columns:72px minmax(0,1fr); gap:8px; padding-top:4px; border-top:1px solid #1b3042; font-size:10px; }
+    .shadow-fact span { color:#8ea5ba; }
+    .shadow-fact b { color:#d5e3ef; overflow-wrap:anywhere; }
+    .shadow-raw { margin-top:8px; border-top:1px solid #1b3042; }
+    .shadow-raw summary { padding:7px 0 0; color:#8ea5ba; font-size:10px; }
+    .shadow-raw p { margin:5px 0 0; color:#8ea5ba; font-size:9px; overflow-wrap:anywhere; }
     .balance-meter { margin-top:12px; padding:16px 18px 18px; border:1px solid var(--line); border-radius:16px; background:rgba(11,22,34,.96); }
     .balance-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
     .balance-kicker { color:var(--muted); font-size:9px; font-weight:900; letter-spacing:.1em; }
@@ -4051,7 +4067,8 @@ def _operator_dashboard_v2_css() -> str:
       .chart-controls { justify-content:flex-start; margin-top:10px; }
       .chart-scroll { padding-left:8px; padding-right:8px; }
       .condition-grid { grid-template-columns:1fr; }
-      .big-chance { grid-template-columns:68px 1fr; }
+      .big-chance { grid-template-columns:minmax(0,1fr) 88px; }
+      .big-score { width:88px; }
       .context-bar { grid-template-columns:1fr; }
       .score-mini-grid, .diagnostic-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .topbar { margin-left:4px; }
@@ -4251,14 +4268,16 @@ def _operator_dashboard_v2_big_chance(result: dict[str, Any]) -> str:
     if not isinstance(candidate, dict) or not candidate.get("present"):
         return ""
     status = str(candidate.get("status") or "未記録")
+    status_labels = {"armed": "監視中", "follow_through": "継続確認", "invalidated": "失効"}
+    status_label = status_labels.get(status.lower(), "未記録")
     invalid = status.lower() in {"invalidated", "expired"}
     macro = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
     summary = str(candidate.get("operator_summary") or candidate.get("headline") or "未記録")
     warning = "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません" if invalid else "通常のLong / Short判断を上書きしません"
     return f"""
     <section class="big-chance{' invalidated' if invalid else ''}" id="big-chance">
-      <div class="big-score"><strong>{html.escape(str(candidate.get('score', '—')))}</strong><span>{html.escape(str(candidate.get('grade') or '—'))} / {html.escape(status.upper())}</span></div>
-      <div><h3>{html.escape(str(candidate.get('headline') or 'Big Chance / Failed Thesis'))}</h3>
+      <div class="big-score"><strong>{html.escape(str(candidate.get('score', '—')))}</strong><span>{html.escape(str(candidate.get('grade') or '—'))} / {html.escape(status_label)}</span></div>
+      <div class="big-chance-content"><h3><span class="big-chance-kicker">大転換候補 / 補助監視</span>{html.escape(str(candidate.get('headline') or 'Big Chance / Failed Thesis'))}</h3>
         <p>{html.escape(summary)} <strong>{html.escape(warning)}</strong></p>
         <div class="timeline"><span>4H {html.escape(str(macro.get('signals_4h', '—')))}</span><i>→</i><span>1H {html.escape(str(macro.get('signals_1h', '—')))}</span><i>→</i><span>15M {html.escape(str(macro.get('signals_15m', '—')))}</span></div>
       </div>
@@ -4386,12 +4405,34 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
         surface = {"surface_status": "malformed", "rows": []}
     status = str(surface.get("surface_status", "malformed"))
     labels = {
-        "A_FORMAL": "現行の厳格条件を通過したshadow候補。15分足確認後も人間が判断する。",
-        "B_CHECK_15M": "15分足確認候補。エントリー許可ではない。",
-        "C_WATCH_ZONE": "監視専用。条件改善またはupgrade待ち。",
-        "STOP_OR_EXIT": "新規停止・利確・撤退・保護を人間が確認する。自動決済ではない。",
+        "A_FORMAL": ("最終確認候補", "必要条件が揃った候補です。人間が最終確認します。"),
+        "B_CHECK_15M": ("15分足の確認待ち", "15分足の形を確認するまで実行判断へ進みません。"),
+        "C_WATCH_ZONE": ("価格帯を監視", "対象価格帯へ近づくまで監視します。"),
+        "STOP_OR_EXIT": ("新規停止・保護確認", "新規では入らず、保有中なら利確・撤退・保護を確認します。"),
+        "insufficient_evidence": ("判定材料不足", "分類に必要な証拠が不足しています。"),
     }
+    type_labels = {"limit_retest": "押し目・戻り待ち", "counter_scalp": "逆方向短期", "breakout_follow": "ブレイク追随", "market": "成行候補"}
+    status_labels = {"allowed": "候補条件あり", "conditional": "条件付き候補", "blocked": "停止", "watch": "監視中"}
     rows = surface.get("rows") if isinstance(surface.get("rows"), list) else []
+
+    def value(raw: Any) -> str:
+        return html.escape(str(raw)) if raw not in (None, "") else "—"
+
+    def price(raw: Any) -> str:
+        return html.escape(_format_operator_price(raw)) if raw not in (None, "") else "—"
+
+    def entry(row: dict[str, Any]) -> str:
+        low, high = row.get("entry_zone_low"), row.get("entry_zone_high")
+        if low not in (None, "") and high not in (None, ""):
+            return f"{price(low)}–{price(high)}"
+        return price(row.get("entry_price"))
+
+    def side_summary(side: str) -> str:
+        side_rows = [row for row in rows if str(row.get("side") or "").upper() == side]
+        cls = str(side_rows[0].get("operator_class") or "insufficient_evidence") if side_rows else "STOP_OR_EXIT"
+        return labels.get(cls, labels["insufficient_evidence"])[0]
+
+    summary = f"現在：ロングは{side_summary('LONG')}、ショートは{side_summary('SHORT')}"
     if status == "no_current_candidate":
         body = "現在スナップショットにshadow候補はありません。"
     elif status == "malformed":
@@ -4402,11 +4443,15 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
         cards = []
         for row in rows:
             cls = str(row.get("operator_class") or "insufficient_evidence")
-            detail = " / ".join(filter(None, [row.get("side"), row.get("candidate_type"), row.get("candidate_status"), row.get("reason_codes")]))
-            price = " / ".join(filter(None, [row.get("entry_price"), row.get("entry_zone_low"), row.get("entry_zone_high"), row.get("invalidation_price"), row.get("tp1_price"), row.get("tp2_price")]))
-            cards.append(f'<div class="shadow-card"><strong>{html.escape(cls)}</strong><p>{html.escape(labels.get(cls, "分類に必要な証拠が不足しています。"))}</p><small>{html.escape(detail or "未記録")} / {html.escape(price or "価格未記録")}</small></div>')
+            label, explanation = labels.get(cls, labels["insufficient_evidence"])
+            side = str(row.get("side") or "").upper() or "—"
+            raw = " / ".join(f"{key}={row.get(key) or '—'}" for key in ("operator_class", "candidate_type", "candidate_status", "reason_codes", "warning_codes"))
+            facts = (("候補", type_labels.get(str(row.get("candidate_type") or ""), "未記録")), ("候補状態", status_labels.get(str(row.get("candidate_status") or ""), "未記録")), ("エントリー", entry(row)), ("無効化", price(row.get("invalidation_price"))), ("TP1", price(row.get("tp1_price"))), ("TP2", price(row.get("tp2_price"))))
+            fact_html = "".join(f'<div class="shadow-fact"><span>{name}</span><b>{val}</b></div>' for name, val in facts)
+            cards.append(f'<article class="shadow-card"><div class="shadow-card-head"><span class="shadow-side">{html.escape(side)}</span><strong>{html.escape(label)}</strong></div><p>{html.escape(explanation)}</p><div class="shadow-facts">{fact_html}</div><details class="shadow-raw"><summary>内部判定値</summary><p>{html.escape(raw)}</p></details></article>')
         body = "".join(cards)
-    return f'<section class="shadow-panel" aria-label="SHADOW REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">SHADOW / REPORT ONLY</span><h2>Operator Shadow Surface</h2></div><span class="shadow-safety">not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend">A_FORMAL / B_CHECK_15M / C_WATCH_ZONE / STOP_OR_EXIT</div><div class="shadow-body">{body}</div></section>'
+    stages = "".join(f'<span class="shadow-stage">{text}</span>' for text in ("A 最終確認候補", "B 15分足確認", "C 価格帯監視", "STOP 新規停止・保護確認"))
+    return f'<section class="shadow-panel" aria-label="SHADOW REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">安全判定 / REPORT ONLY / SHADOW / REPORT ONLY</span><h2>現在の売買プラン判定</h2><p class="shadow-intro">ロング・ショート候補を、どこまで確認してよいか分類する補助表示です。注文や最終決定は行いません。</p></div><span class="shadow-safety">not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend" data-shadow-classes="A_FORMAL B_CHECK_15M C_WATCH_ZONE STOP_OR_EXIT">{stages}</div><p class="shadow-note">A判定でも正式GOや自動実行ではありません。最終判断は人間が行います。</p><div class="shadow-summary">{html.escape(summary)}</div><div class="shadow-body">{body}</div></section>'
 
 
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
@@ -4432,7 +4477,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
   {_operator_dashboard_shadow_panel_html(result)}
   {_operator_dashboard_relative_balance_html(result)}
   <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>
-  <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div>{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
+  <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div class="opportunity-stack">{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
   {_operator_dashboard_v2_details(result, context, display, reasons, safety, base_dir)}
   <footer>report-only / not FORMAL_GO / no automatic order / human decides manually</footer>
 </div>{_operator_dashboard_v2_script()}</body></html>"""

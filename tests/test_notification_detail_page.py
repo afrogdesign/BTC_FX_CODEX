@@ -749,7 +749,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         payload["big_chance_candidate"] = {"present": True, "score": 1, "grade": "C", "status": "armed", "headline": "shadow context", "macro_context": {}}
         html = build_notification_detail_html(payload)
         self.assertIn("SHADOW / REPORT ONLY", html)
-        for text in ("not FORMAL_GO", "no automatic order", "human decides manually", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT", "15分足", "64000", "66000", "67000"):
+        for text in ("not FORMAL_GO", "no automatic order", "human decides manually", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT", "15分足", "64,000", "66,000", "67,000"):
             self.assertIn(text, html)
         self.assertIn("shadow-card", html)
         self.assertLess(html.find('id="active-alerts"'), html.find("SHADOW / REPORT ONLY"))
@@ -758,6 +758,28 @@ class NotificationDetailPageTests(unittest.TestCase):
             self.assertIn(marker, html)
         escaped = build_notification_detail_html({**payload, "active_trade_plan": {"side_plans": {"long": {"entry_mid": "<unsafe>", "stop_loss": "<sl>", "tp1": "<tp1>", "tp2": "<tp2>"}}}})
         self.assertNotIn("<unsafe>", escaped)
+
+    def test_shadow_panel_uses_japanese_stages_and_named_facts(self) -> None:
+        payload = _sample_detail_payload()
+        payload["big_chance_candidate"] = {"present": True, "score": 68, "grade": "B", "status": "armed", "headline": "ショート失敗→ロング候補", "operator_summary": "補助監視", "macro_context": {}}
+        surface = {
+            "surface_status": "ready",
+            "rows": [
+                {"operator_class": "STOP_OR_EXIT", "side": "LONG", "candidate_type": "limit_retest", "candidate_status": "blocked", "reason_codes": "stop", "warning_codes": "protect", "entry_zone_low": 64000, "entry_zone_high": 64100, "invalidation_price": 63900, "tp1_price": 64500, "tp2_price": 65000},
+                {"operator_class": "B_CHECK_15M", "side": "SHORT", "candidate_type": "counter_scalp", "candidate_status": "conditional", "reason_codes": "wait", "warning_codes": "15m", "entry_price": 66000, "invalidation_price": 66500, "tp1_price": 65500, "tp2_price": 65000},
+            ],
+        }
+        with patch("src.notification.detail_page.build_manual_operator_shadow_surface", return_value=surface):
+            html = build_notification_detail_html(payload)
+        for text in ("安全判定 / REPORT ONLY", "現在の売買プラン判定", "A 最終確認候補", "B 15分足確認", "C 価格帯監視", "STOP 新規停止・保護確認", "正式GOや自動実行ではありません", "新規停止・保護確認", "LONG", "SHORT", "押し目・戻り待ち", "逆方向短期", "候補", "候補状態", "エントリー", "無効化", "TP1", "TP2", "現在：ロングは新規停止・保護確認"):
+            self.assertIn(text, html)
+        self.assertIn('class="shadow-raw"', html)
+        self.assertIn('<summary>内部判定値</summary>', html)
+        self.assertNotIn("LONG / limit_retest / blocked / stop", html)
+        self.assertIn('class="balance-meter"', html)
+        self.assertLess(html.find('class="shadow-panel"'), html.find('class="balance-meter"'))
+        self.assertLess(html.find('class="balance-meter"'), html.find('class="workspace"'))
+        self.assertIn("通常のLong / Short判断を上書きしません", html)
 
     def test_shadow_degradation_preserves_detail_page(self) -> None:
         payload = _sample_detail_payload()
