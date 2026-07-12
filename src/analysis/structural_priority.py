@@ -91,22 +91,30 @@ def _turning_watch(current: dict[str, Any], structural_side: str) -> dict[str, A
         "trend_flip_state", "level_flip_state", "failed_breakout_state",
     )
     tokens = {token for field in fields for token in _tokens(current.get(field))}
-    matched: dict[str, list[str]] = {"long": [], "short": []}
+    matched: dict[str, dict[str, list[str]]] = {
+        "long": {"confirmed": [], "early": []},
+        "short": {"confirmed": [], "early": []},
+    }
     for side in ("long", "short"):
         for strength in ("confirmed", "early"):
-            matched[side].extend(sorted(tokens & _TURNING[side][strength]))
-    sides = [side for side in ("long", "short") if matched[side]]
-    if not sides:
-        direction, strength = "none", "none"
-    elif len(sides) > 1:
+            matched[side][strength] = sorted(tokens & _TURNING[side][strength])
+    confirmed_sides = [side for side in ("long", "short") if matched[side]["confirmed"]]
+    early_sides = [side for side in ("long", "short") if matched[side]["early"]]
+    if len(confirmed_sides) == 2:
+        direction, strength = "mixed", "confirmed"
+    elif len(confirmed_sides) == 1:
+        direction, strength = confirmed_sides[0], "confirmed"
+    elif len(early_sides) == 2:
         direction, strength = "mixed", "early"
+    elif len(early_sides) == 1:
+        direction, strength = early_sides[0], "early"
     else:
-        direction = sides[0]
-        strength = "confirmed" if any(code in _TURNING[direction]["confirmed"] for code in matched[direction]) else "early"
+        direction, strength = "none", "none"
+    reason_codes = sorted({code for side in matched.values() for values in side.values() for code in values})
     return {
         "direction": direction,
         "strength": strength,
-        "reason_codes": sorted(set(matched.get("long", []) + matched.get("short", []))),
+        "reason_codes": reason_codes,
         "against_structural_priority": bool(direction in {"long", "short"} and structural_side and direction != structural_side),
     }
 
@@ -126,15 +134,34 @@ def build_structural_priority(current: dict[str, Any]) -> dict[str, Any]:
     weighted_net = 0.75 * net_4h + 0.25 * net_1h
     long_points = int(round(_clamp(50 + 40 * weighted_net, 10, 90))) if present else 50
     short_points = 100 - long_points
-    if 45 <= long_points <= 55:
-        primary_side = ""
-        priority_label = "neutral / Long-leaning" if long_points > 50 else "neutral / Short-leaning" if long_points < 50 else "neutral"
-    elif long_points > 55:
-        primary_side, priority_label = "long", "Long priority"
-    else:
-        primary_side, priority_label = "short", "Short priority"
     if not present:
-        priority_label = "neutral / insufficient structural evidence"
+        primary_side = ""
+        strength = "insufficient"
+        priority_label = "判定材料不足"
+    elif 45 <= long_points <= 55:
+        primary_side = ""
+        strength = "neutral"
+        priority_label = "中立圏（Long寄り）" if long_points > 50 else "中立圏（Short寄り）" if long_points < 50 else "中立"
+    elif long_points > 55:
+        primary_side = "long"
+        if long_points <= 64:
+            strength, priority_label = "slight", "Long やや優勢"
+        elif long_points <= 74:
+            strength, priority_label = "clear", "Long 明確優勢"
+        elif long_points <= 84:
+            strength, priority_label = "strong", "Long 強い優勢"
+        else:
+            strength, priority_label = "very_strong", "Long 非常に強い優勢"
+    else:
+        primary_side = "short"
+        if short_points <= 64:
+            strength, priority_label = "slight", "Short やや優勢"
+        elif short_points <= 74:
+            strength, priority_label = "clear", "Short 明確優勢"
+        elif short_points <= 84:
+            strength, priority_label = "strong", "Short 強い優勢"
+        else:
+            strength, priority_label = "very_strong", "Short 非常に強い優勢"
     turning = _turning_watch(current, primary_side)
     action = current.get("side_aware_mtf_action") if isinstance(current.get("side_aware_mtf_action"), dict) else {}
     execution = action.get("execution_context") if isinstance(action.get("execution_context"), dict) else {}
@@ -153,6 +180,7 @@ def build_structural_priority(current: dict[str, Any]) -> dict[str, Any]:
         "long_points": long_points,
         "short_points": short_points,
         "primary_side": primary_side,
+        "strength": strength,
         "priority_label": priority_label,
         "weighting": {"4h": 0.75, "1h": 0.25, "4h_max": 53, "1h_max": 12},
         "components": {

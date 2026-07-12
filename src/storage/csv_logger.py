@@ -460,7 +460,7 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "structural_priority_long": structural.get("long_points", ""),
         "structural_priority_short": structural.get("short_points", ""),
         "structural_priority_side": structural.get("primary_side", ""),
-        "structural_priority_strength": structural.get("priority_label", ""),
+        "structural_priority_strength": structural.get("strength", ""),
         "structural_turning_direction": turning.get("direction", ""),
         "structural_turning_strength": turning.get("strength", ""),
         "structural_alignment_state": structural.get("alignment_state", ""),

@@ -313,6 +313,12 @@ Restart only the existing normal monitor process so future generated reports use
 - runtime application requires a separate controlled approval; no restart or production cycle was run
 - numeric audit passed on 336 rows and bounded previews retained 47/53 structural output for the three latest cases
 
+## Structural priority review fix — bounded validation complete
+
+- structural strength now uses stable `insufficient` / `neutral` / `slight` / `clear` / `strong` / `very_strong` tokens with Japanese display labels
+- confirmed turning evidence takes precedence over opposite early evidence; canonical previews attach side-aware action before structural context
+- 14:05 remains Short late with visible `追いかけ禁止`; runtime apply remains a separate task
+
 
 ---
 
@@ -344,3 +350,33 @@ The current `0 / 68 -> 0% / 100%` meter is an expected consequence of normalizin
 - no mail or notification behavior change
 - no scoring/config/gate/market-map/order mutation
 - runtime application requires separate review
+
+
+---
+
+# Current next action — 2026-07-12 structural-priority review fix
+
+- current_work_id: `BTCFX-20260712-P8-STRUCTURAL-PRIORITY-REVIEW-FIX`
+- mode: `BOUNDED_CODEX_FIX`
+- parent_commit: `9c9a631`
+- active_spec: `chatgpt/specs/active/20260712_structural_priority_review_fix.md`
+
+## Review finding
+
+The 4H/1H numeric audit and fixed 75/25 formula are accepted, but final source/artifact review found incomplete acceptance:
+
+- qualitative strength buckets from the approved spec are missing,
+- `structural_priority_strength` logs a human label instead of a stable strength token,
+- confirmed turning evidence does not outrank opposite early evidence,
+- bounded previews contain `side_aware_action: null`, so the 14:05 `追いかけ禁止` coexistence was not validated.
+
+## Goal
+
+Complete these narrow report/display corrections, prove canonical side-aware-before-structural attachment order, and regenerate bounded previews with non-null side-aware actions.
+
+## Boundary
+
+- no formula or config change
+- no scoring, gate, market-map, Active Plan, notification, mail, runtime, API, account, position, or order behavior change
+- local tests and local commit only
+- no push or runtime restart

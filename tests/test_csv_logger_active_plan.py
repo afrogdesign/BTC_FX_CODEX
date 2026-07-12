@@ -153,6 +153,7 @@ class CsvLoggerActivePlanTests(unittest.TestCase):
         self.assertEqual(row["structural_priority_long"], "")
         payload["structural_priority"] = {
             "long_points": 47, "short_points": 53, "primary_side": "",
+            "strength": "neutral",
             "priority_label": "neutral / Short-leaning",
             "turning_watch": {"direction": "short", "strength": "early"},
             "alignment_state": "neutral",
@@ -161,6 +162,7 @@ class CsvLoggerActivePlanTests(unittest.TestCase):
             base_dir = Path(tmp); append_trade_log(base_dir, payload); row = self._read_first_row(base_dir)
         self.assertEqual(row["structural_priority_long"], "47")
         self.assertEqual(row["structural_priority_short"], "53")
+        self.assertEqual(row["structural_priority_strength"], "neutral")
         self.assertEqual(row["structural_turning_direction"], "short")
 
 

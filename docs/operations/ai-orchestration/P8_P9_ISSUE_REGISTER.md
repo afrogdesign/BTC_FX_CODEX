@@ -317,3 +317,24 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - 4H 75% / 1H 25% structural points, turning overlay and alignment are separate from 15M tactical scores and side-aware action.
 - 13:05, 14:05 and 15:05 remain 47/53 neutral / Short-leaning while tactical values stay unchanged; 55 targeted tests and bounded previews passed.
 - status: source-only bounded validation complete; runtime apply not authorized in this task.
+
+#### Structural priority review fix — 2026-07-12
+
+- explicit qualitative strength tokens and mirrored Japanese labels are now emitted; CSV stores the lowercase token rather than the display label.
+- turning precedence is deterministic: confirmed Long/Short evidence wins over opposite early evidence, with mixed output only when both sides share the same strength tier.
+- canonical 040500/050500/060500 previews attach side-aware action before structural priority; 14:05 remains Short late with visible `追いかけ禁止`.
+- status: bounded source/display correction complete; no production behavior or runtime apply changed.
+
+
+---
+
+## 2026-07-12 P8-ISSUE-009 structural-priority review evidence
+
+Parent implementation commit `9c9a631` passed the fixed-formula audit and removed false structural 0/100 saturation. Final review found four bounded completion defects:
+
+- approved qualitative strength buckets were not emitted,
+- CSV `structural_priority_strength` used the display label rather than a stable token,
+- a confirmed turning side could be reduced to `mixed / early` by one opposite early warning,
+- preview summaries had null side-aware actions and did not prove the 14:05 no-chase display.
+
+The active review-fix spec requires exact confirmed-over-early precedence, mirrored strength buckets, canonical attachment-order evidence, and regenerated side-aware previews. This remains report/display-only and does not authorize scoring, gate, notification, mail, runtime, API, account, position, or order changes.
