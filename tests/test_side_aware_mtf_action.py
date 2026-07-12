@@ -24,19 +24,19 @@ class SideAwareMtfActionTests(unittest.TestCase):
         self.assertEqual(result["execution_context"]["chase_status"], "not_late")
 
     def test_mirrored_short_stop_long_armed(self) -> None:
-        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"
+        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "thesis_invalidated"
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["short"]["action_class"], "STOP_OR_EXIT")
         self.assertEqual(result["long"]["action_class"], "B_CHECK_15M")
 
     def test_both_sides_watch_without_activation(self) -> None:
-        current = payload(); current["primary_setup_status"] = "watch"; current["primary_setup_side"] = ""; current["signals_1h"] = "wait"; current["signals_15m"] = "wait"; current["transition_direction"] = ""
+        current = payload(); current["primary_setup_status"] = "watch"; current["primary_setup_side"] = ""; current["signals_1h"] = "wait"; current["signals_15m"] = "wait"; current["transition_direction"] = ""; current["market_map_primary_state"] = ""; current["trend_flip_state"] = ""; current["level_flip_state"] = ""; current["failed_breakout_state"] = ""; current["market_map_flags"] = []; current["risk_flags"] = []; current["no_trade_flags"] = []; current["active_trade_plan"]["side_plans"]["long"]["zone_position"] = "outside_zone"; current["active_trade_plan"]["side_plans"]["short"]["zone_position"] = "outside_zone"
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["long"]["action_class"], "C_WATCH_ZONE")
         self.assertEqual(result["short"]["action_class"], "C_WATCH_ZONE")
 
     def test_formal_a_is_preserved(self) -> None:
-        current = payload(); current["trade_execution_gate"] = "pass"; current["primary_setup_status"] = "ready"; current["active_trade_plan"]["side_plans"]["long"]["market_entry_status"] = "allowed"
+        current = payload(); current["trade_execution_gate"] = "pass"; current["primary_setup_status"] = "ready"; current["active_trade_plan"]["side_plans"]["long"]["market_entry_status"] = "allowed"; current["no_trade_flags"] = []; current["risk_flags"] = []
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["long"]["action_class"], "A_FORMAL")
 
@@ -59,6 +59,30 @@ class SideAwareMtfActionTests(unittest.TestCase):
         result = evaluate_side_aware_mtf_action(current)
         self.assertFalse(result["present"])
         self.assertEqual(result["long"]["action_class"], "NONE")
+
+    def test_readiness_invalidity_does_not_create_opposite_direction(self) -> None:
+        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "confidence_below_min"; current["market_map_flags"] = []; current["transition_direction"] = ""; current["trend_flip_state"] = ""
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertNotIn("opposite_thesis_invalid", result["long"]["reason_codes"])
+
+    def test_json_flags_and_direction_terms_are_normalized(self) -> None:
+        current = payload(); current["market_map_flags"] = '["CONFIRMED_DOWN"]'; current["trend_flip_state"] = "early_down"; current["no_trade_flags"] = '["short_at_major_support_wait_only"]'; current["risk_flags"] = []
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertIn(result["short"]["action_class"], {"B_CHECK_15M", "C_WATCH_ZONE"})
+        self.assertNotEqual(result["short"]["reason_codes"], ["global_fatal"])
+
+    def test_zone_activation_is_independent_evidence(self) -> None:
+        current = payload(); current["primary_setup_side"] = ""; current["primary_setup_status"] = "watch"; current["market_map_flags"] = []; current["risk_flags"] = []; current["no_trade_flags"] = []
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["short"]["action_class"], "B_CHECK_15M")
+        self.assertIn("zone_plan_activation", result["short"]["reason_codes"])
+
+    def test_previous_opposite_stop_crossing_keeps_late_side_primary(self) -> None:
+        current = json.loads((ROOT / "logs/signals/20260712_050500.json").read_text()); previous = payload()
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["short"]["state"], "late")
+        self.assertEqual(result["execution_context"]["primary_side"], "short")
+        self.assertIn(result["short"]["chase_status"], {"late_no_chase", "tp1_reached_no_chase"})
 
 
 if __name__ == "__main__":

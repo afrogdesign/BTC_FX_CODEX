@@ -11,10 +11,20 @@ SIDES = ("long", "short")
 
 
 def _tokens(value: Any) -> set[str]:
-    if isinstance(value, list):
-        return {str(item).strip().lower() for item in value if str(item).strip()}
     if isinstance(value, str):
-        return {item.strip().lower() for item in value.replace("|", ",").split(",") if item.strip()}
+        text = value.strip()
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return {str(item).strip().strip("'\"").lower() for item in parsed if str(item).strip()}
+            except json.JSONDecodeError:
+                pass
+        value = text.strip("[]")
+    if isinstance(value, list):
+        return {str(item).strip().strip("'\"").lower() for item in value if str(item).strip()}
+    if isinstance(value, str):
+        return {item.strip().strip("'\"").lower() for item in value.replace("|", ",").split(",") if item.strip()}
     return set()
 
 
@@ -38,8 +48,13 @@ def _plan(value: Any) -> dict[str, Any] | None:
 
 
 def _matches_side(value: Any, side: str) -> bool:
+    terms = {
+        "long": {"long", "buy", "up", "early_up", "confirmed_up"},
+        "short": {"short", "sell", "down", "early_down", "confirmed_down"},
+    }[side]
     tokens = _tokens(value)
-    return side in tokens or f"{side}_" in str(value).lower() or f"_{side}" in str(value).lower()
+    text = str(value).lower()
+    return bool(tokens & terms) or any(term in text for term in terms)
 
 
 def _progress(side: str, plan: dict[str, Any], current_price: float | None) -> str:
@@ -58,12 +73,14 @@ def _progress(side: str, plan: dict[str, Any], current_price: float | None) -> s
     return "not_late"
 
 
-def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], global_fatal: bool) -> dict[str, Any]:
+def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], global_fatal: bool, previous: dict[str, Any] | None = None) -> dict[str, Any]:
     other = "short" if side == "long" else "long"
     flags = _tokens(current.get("no_trade_flags")) | _tokens(current.get("risk_flags"))
     setup_side = str(current.get("primary_setup_side", "")).strip().lower()
-    setup_invalid = setup_side == side and str(current.get("primary_setup_status", "")).strip().lower() in {"invalid", "expired"}
-    opposite_invalid = setup_side == other and str(current.get("primary_setup_status", "")).strip().lower() in {"invalid", "expired"}
+    setup_reason = str(current.get("primary_setup_reason", "")).strip().lower()
+    readiness_only = any(token in setup_reason for token in ("confidence_below_min", "setup_not_ready", "entry_zone_not_reached", "near_entry_zone_waiting_trigger", "rr_below_min"))
+    setup_invalid = setup_side == side and str(current.get("primary_setup_status", "")).strip().lower() in {"invalid", "expired"} and not readiness_only
+    opposite_invalid = setup_side == other and str(current.get("primary_setup_status", "")).strip().lower() in {"invalid", "expired"} and not readiness_only
     market_status = str(plan.get("market_entry_status", "")).strip().lower()
     limit_status = str(plan.get("limit_entry_status", "")).strip().lower()
     counter_status = str(plan.get("counter_scalp_status", "")).strip().lower()
@@ -74,8 +91,18 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     side_wait = f"{side}_at_major_" in " ".join(flags) and "wait_only" in " ".join(flags)
     signals_15m, signals_1h = current.get("signals_15m"), current.get("signals_1h")
     match_15m, match_1h = _matches_side(signals_15m, side), _matches_side(signals_1h, side)
-    transition = _matches_side(current.get("transition_direction"), side) or _matches_side(current.get("trend_flip_state"), side)
+    transition = any(_matches_side(current.get(key), side) for key in ("transition_direction", "trend_flip_state", "level_flip_state", "failed_breakout_state", "market_map_primary_state", "market_map_flags"))
     in_zone = str(plan.get("zone_position", "")).strip().lower() == "inside_zone"
+    next_condition = bool(str(plan.get("next_condition", "")).strip())
+    zone_activation = supported and in_zone and next_condition
+    previous_cross = False
+    if isinstance(previous, dict):
+        prior_plan = _plan(previous.get("active_trade_plan"))
+        prior_side = (prior_plan or {}).get("side_plans", {}).get(other) if prior_plan else None
+        prior_price, current_price = _number(previous.get("current_price")), _number(current.get("current_price"))
+        prior_stop = _number(prior_side.get("stop_loss")) if isinstance(prior_side, dict) else None
+        if prior_price is not None and current_price is not None and prior_stop is not None:
+            previous_cross = (side == "short" and prior_price > prior_stop >= current_price) or (side == "long" and prior_price < prior_stop <= current_price)
     reasons: list[str] = []
     if global_fatal:
         reasons.append("global_fatal")
@@ -86,13 +113,16 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     elif setup_invalid:
         reasons.append("own_primary_setup_invalid")
         action, state = "STOP_OR_EXIT", "invalidated"
+    elif side_wait and setup_side == side and not previous_cross:
+        reasons.append("side_wait_only")
+        action, state = "STOP_OR_EXIT", "invalidated"
     elif str(current.get("trade_execution_gate", "")).strip().lower() == "pass" and setup_side == side and market_status == "allowed":
         reasons.append("existing_formal_gate_pass")
         action, state = "A_FORMAL", "triggered"
     elif supported:
-        activation = opposite_invalid or match_15m or match_1h or transition
+        activation = zone_activation or previous_cross or match_15m or match_1h or transition
         if activation:
-            reasons.append("opposite_thesis_invalid" if opposite_invalid else "timeframe_or_transition_support")
+            reasons.append("zone_plan_activation" if zone_activation else "previous_opposite_stop_crossed" if previous_cross else "opposite_thesis_invalid" if opposite_invalid else "timeframe_or_transition_support")
             action = "B_CHECK_15M"
             state = "follow_through" if match_15m and match_1h else "triggered" if match_15m else "armed"
         else:
@@ -135,8 +165,8 @@ def evaluate_side_aware_mtf_action(current: dict, previous: dict | None = None) 
     flags = _tokens(current.get("no_trade_flags")) | _tokens(current.get("risk_flags"))
     data_quality = str(current.get("data_quality_flag", "")).strip().lower()
     global_fatal = data_quality in {"invalid", "failed", "error"} or "atr_extreme" in flags or "funding_prohibited" in flags or {"funding_prohibited_long", "funding_prohibited_short"}.issubset(flags)
-    long = _side_result("long", current, side_plans["long"], global_fatal)
-    short = _side_result("short", current, side_plans["short"], global_fatal)
+    long = _side_result("long", current, side_plans["long"], global_fatal, previous=previous)
+    short = _side_result("short", current, side_plans["short"], global_fatal, previous=previous)
     previous_plan = _plan(previous.get("active_trade_plan")) if isinstance(previous, dict) else None
     if previous_plan is not None:
         for side, value in (("long", long), ("short", short)):
@@ -149,7 +179,7 @@ def evaluate_side_aware_mtf_action(current: dict, previous: dict | None = None) 
                         value["state"] = "late"
                     value["reason_codes"].append(prior_chase)
     priority = {"A_FORMAL": 5, "B_CHECK_15M": 4, "C_WATCH_ZONE": 3, "STOP_OR_EXIT": 2, "NONE": 1}
-    state_priority = {"follow_through": 4, "triggered": 3, "armed": 2, "watch": 1, "late": 0, "invalidated": 0, "dormant": 0}
+    state_priority = {"late": 6, "follow_through": 5, "triggered": 4, "armed": 2, "watch": 1, "invalidated": 0, "dormant": 0}
     candidates = [(side, value) for side, value in (("long", long), ("short", short))]
     primary_side, primary = max(candidates, key=lambda item: (priority[item[1]["action_class"]], state_priority.get(item[1]["state"], 0), int(item[1]["plan_support"]), item[0] == "short"))
     if primary["action_class"] in {"NONE", "STOP_OR_EXIT"}:

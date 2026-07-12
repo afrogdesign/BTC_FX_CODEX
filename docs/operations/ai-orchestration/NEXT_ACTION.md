@@ -103,3 +103,30 @@ The subsequent moved signal must be classified as late/no-chase when at least 70
 - side-aware MTF source implementation is complete and awaiting review/runtime-apply approval
 - no runtime apply, monitor restart, notification trigger, mail, score, gate, or order behavior change is authorized by this task
 - the first scheduled shadow-enabled P8 cycle remains an independent runtime acceptance event
+
+
+---
+
+# Current next action — 2026-07-12 side-aware MTF review fix
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-OPERATOR-ACTION-REVIEW-FIX`
+- mode: `BOUNDED_CODEX_FIX`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_operator_action_review_fix.md`
+- parent_commit: `2e6cde5`
+
+## Review finding
+
+The pinned 13:05 case is correct, but the bounded 14:05 preview incorrectly promotes `LONG B_CHECK_15M` while the completed Short move is only recorded as `STOP_OR_EXIT / late_no_chase`.
+
+The fix must preserve Short as the primary directional no-chase action in the moved case, distinguish readiness invalidity from directional thesis invalidity, implement zone activation, normalize up/down states, parse JSON-list flags, and enforce side-specific wait-only behavior.
+
+## Boundary
+
+- source/test correction only
+- no score, market-map, gate, notification trigger, mail, runtime, launchd, API, or order behavior change
+- no runtime apply until review passes
+## Side-aware MTF review fix completed
+
+- 13:05 pinned case remains Long STOP / Short B armed / primary Short
+- 14:05 moved case remains Short primary with late/no-chase state
+- future review should use the archived side-aware review-fix spec; no runtime apply is authorized by this source fix

@@ -265,3 +265,9 @@ Related issues:
 Pinned evidence signal `20260712_040500` already contained a Short limit-retest candidate and conditional Short counter-scalp candidate while the Long primary setup was invalid. The new layer must surface Long STOP and Short B-check independently.
 
 This approval authorizes source, targeted tests, future-result evidence fields, and display hierarchy only. It does not authorize scoring, market-map, gate, notification trigger, mail sending, runtime restart, launchd, API, account, order, or automatic trading changes.
+#### Side-aware MTF review fix — 2026-07-12
+
+- readiness-only setup invalidity is no longer treated as opposite thesis failure
+- zone/next-condition activation and previous opposite-stop crossing are independent evidence groups
+- 13:05 remains Long STOP / Short B armed; 14:05 now keeps Short primary and late/no-chase
+- no score, gate, market-map, notification, mail, runtime, or order behavior changed
