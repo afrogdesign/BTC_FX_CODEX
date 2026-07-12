@@ -1,62 +1,62 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-SHADOW-RUNTIME-ENABLE`
-- mode: `RUNTIME_TASK`
-- task_type: `P8 REPORT-ONLY SHADOW RUNTIME ENABLE`
-- human_approval: explicit approval received on 2026-07-12
+- current_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-SHADOW-RUNTIME-DIAGNOSE`
+- mode: `RUNTIME_DIAGNOSIS`
+- task_type: `TARGET-LABEL LAUNCHD REGISTRATION DIAGNOSIS`
+- previous_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-SHADOW-RUNTIME-ENABLE-RETRY`
+- previous_status: `PARTIAL / SOURCE PUSHED / RUNTIME ROLLED BACK`
 
 ## Current state
 
-The opt-in daily turning precursor shadow integration is implemented at commit `f39375f` and bounded validation passed.
+Repository source is pushed through commit `72d1733` and the repository plist contains `--include-turning-precursor-shadow` exactly once.
 
-Current runtime posture:
+Installed runtime remains disabled:
 
-- launchd label: `com.afrog.btc-p8-operating-cycle`
-- schedule: daily 11:30 JST
-- installed shadow flag: not yet enabled
-- notification/mail behavior: unchanged
-- P9: blocked
-- recommendation: `continue_shadow_collection`
+- target label: `com.afrog.btc-p8-operating-cycle`
+- installed plist restored to original SHA-256: `bfbf6020567ca957a7bb5d204e22cdc61217875f9c7206f8a3a248e62890e0a7`
+- installed shadow flag count: 0
+- label state: unloaded
+- schedule contract: 11:30 JST
+- backup preserved at `/Users/marupro/Library/LaunchAgents/_btc_monitor_backup_20260712_turning_shadow/com.afrog.btc-p8-operating-cycle.plist`
+
+The new plist passed unit tests and `plutil`, but `launchctl bootstrap gui/<uid>` returned `Input/output error`. Rollback restored the original plist; no production P8 cycle was run.
 
 ## Current exact next action
 
-Apply the approved runtime specification:
+Perform a bounded read-mostly diagnosis of the target label only.
 
-```text
-chatgpt/specs/active/20260712_turning_precursor_shadow_runtime_enable.md
-```
+Collect:
 
-The only intended runtime change is adding:
+- GUI/user launchd domain availability
+- target-label registration state in relevant domains
+- exact installed plist ownership, mode, ACL and extended attributes
+- executable, working-directory and log-path existence/access
+- exact bootstrap stderr and matching launchd unified-log entry
+- whether the restored original plist also fails for the same environmental reason
 
-```text
---include-turning-precursor-shadow
-```
+Do not edit source, notification, mail, scoring, gates, schedule, or other LaunchAgents. Do not retry repeatedly. One controlled target-only repair/bootstrap is allowed only when the diagnostic evidence identifies a deterministic safe cause.
 
-to `com.afrog.btc-p8-operating-cycle` ProgramArguments.
+## Runtime boundary
 
-Repository plist, focused test, commit, push, one installed-plist backup, bootout/bootstrap of this label only, and loaded-contract verification are included in one bounded runtime task.
+- repository flag: enabled in source
+- installed runtime flag: disabled
+- target label: unloaded
+- normal monitor: unchanged
+- mail/notification behavior: unchanged
+- manual P8 cycle: not run
 
-Do not manually start a P8 cycle during the apply task. The first normal 11:30 JST scheduled cycle is the runtime acceptance event.
+## Next acceptance event
 
-## After runtime apply
-
-HUMAN_CHECK after the first normal scheduled cycle:
-
-- core P8 status success
-- turning precursor shadow status success
-- date-scoped shadow outputs present
-- no second OHLCV fetch
-- no mail or notification change
-
-## Prohibited
-
-- no scoring, market-map, threshold, gate, notification, mail, UI, or order change
-- no normal monitor restart
-- no other LaunchAgent change
-- no frozen old runtime repo access
-- no private/account/order endpoint
-- no automatic order
+After a successful target-label load, the first normal 11:30 JST scheduled shadow-enabled cycle is the evidence acceptance event.
 
 ## Safety
 
 report-only / not FORMAL_GO / no automatic order / human decides manually
+# Current next action — 2026-07-12
+
+- mode: `HUMAN_CHECK`
+- next task: verify the first normal 11:30 JST shadow-enabled scheduled cycle
+- target label: `com.afrog.btc-p8-operating-cycle`
+- runtime shadow flag is enabled in the installed target plist; no manual cycle was run
+- inspect only compact daily status and date-scoped shadow manifest after the scheduled event
+- P9 remains blocked and no live notification proposal is authorized

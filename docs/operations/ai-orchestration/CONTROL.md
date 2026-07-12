@@ -305,3 +305,20 @@ The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary re
 - Do not manually execute the P8 cycle during apply.
 - Do not restart `com.afrog.btc-monitor` or change mail/notification behavior.
 - First normal scheduled cycle is the acceptance checkpoint.
+
+## 2026-07-12 — P8 precursor shadow launchd diagnosis boundary
+
+- repository source is ahead through pushed commit `72d1733`
+- installed target plist is rolled back and shadow flag is disabled
+- target label `com.afrog.btc-p8-operating-cycle` is unloaded
+- next task is target-only read-mostly launchd diagnosis
+- do not repeat bootstrap without collecting exact domain, registration, path, permission, ACL, xattr and launchd-log evidence
+- one repair/bootstrap attempt is allowed only for a deterministic target-local cause
+- no other LaunchAgent, normal monitor, notification, mail, scoring, gate, API, account or order behavior may change
+## 2026-07-12 turning precursor shadow runtime boundary
+
+- runtime enablement completed for `com.afrog.btc-p8-operating-cycle` only
+- stale GUI-domain registration was cleared with a target-only bootout; committed plist is registered with the shadow flag once
+- daily schedule remains 11:30 JST and all paths remain in the primary repo
+- first normal scheduled cycle is the acceptance event; no manual P8 cycle, mail, notification, monitor restart, or other LaunchAgent operation occurred
+- report-only / not FORMAL_GO / no automatic order / no automatic tuning; P9 remains blocked

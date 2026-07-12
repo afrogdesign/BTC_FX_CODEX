@@ -214,3 +214,19 @@ Never combine these in one tuning task without explicit approval:
 - this approval does not authorize notification, scoring, market-map, gate, threshold, mail, UI, or order changes
 - production proposal status remains `continue_shadow_collection`
 - first normal 11:30 JST cycle after apply is the runtime verification checkpoint
+
+#### Runtime enable attempt 1 — rollback / diagnosis pending
+
+- source commit `72d1733` is pushed and repository validation passed
+- installed target bootstrap failed with `Input/output error`
+- original installed plist was restored; installed shadow flag count is `0`
+- target label remains unloaded
+- runtime shadow collection is not enabled yet
+- no manual P8 cycle or production behavior change occurred
+- next action: target-only launchd registration diagnosis before any further bootstrap attempt
+#### Runtime shadow collection enabled — 2026-07-12
+
+- `com.afrog.btc-p8-operating-cycle` runtime shadow collection enabled with the committed flag exactly once
+- root cause of the prior bootstrap failure: stale target registration in the GUI domain after rollback
+- target-only repair and verification completed; installed plist uses primary repo paths and the unchanged 11:30 JST schedule
+- first scheduled verification is pending; no production notification conclusion is drawn

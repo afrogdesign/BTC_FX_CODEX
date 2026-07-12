@@ -743,3 +743,24 @@ Human explicitly approved enabling the already validated turning precursor shado
 - no manual P8 cycle during apply
 - first normal scheduled cycle is the runtime acceptance event
 - notification, mail, scoring, market map, thresholds, gates, UI, normal monitor runtime, API, account, and order behavior remain unchanged
+
+## 2026-07-12 — Turning precursor shadow runtime enable partial / rollback
+
+- source/runtime-enable commit `72d1733` is pushed to `origin/Ver04-v2`
+- repository plist contains `--include-turning-precursor-shadow`
+- repository tests and plist lint passed
+- target `launchctl bootstrap gui/<uid>` failed with `Input/output error`
+- target-only rollback restored the original installed plist SHA-256 `bfbf6020567ca957a7bb5d204e22cdc61217875f9c7206f8a3a248e62890e0a7`
+- target label remains unloaded and installed shadow flag remains disabled
+- normal monitor, notification, mail, scoring, gates and schedule were not changed
+- active spec remains open pending bounded launchd registration diagnosis
+## 2026-07-12 turning precursor shadow runtime enable
+
+- source/runtime-enable commit: `72d1733`; origin matches local
+- root cause was a stale registration of `com.afrog.btc-p8-operating-cycle` in the GUI domain after rollback
+- target-only bootout and diagnostic re-registration resolved the state; committed shadow-enabled plist is now registered
+- installed plist SHA-256: `843185cf3a8c4ba6c70f154c4566ec5b544146ecb466d7a8592cf0499403b92c`
+- backup retained at `/Users/marupro/Library/LaunchAgents/_btc_monitor_backup_20260712_turning_shadow/com.afrog.btc-p8-operating-cycle.plist`
+- loaded contract: primary repo paths, shadow flag exactly once, daily 11:30 JST, unchanged stdout/stderr
+- first normal 11:30 JST shadow-enabled cycle remains pending; no manual P8 cycle was run
+- P8 evidence collection continues; P9 remains blocked; no notification, mail, monitor, scoring, gate, threshold, API, account, order, or other LaunchAgent change
