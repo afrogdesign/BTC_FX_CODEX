@@ -1,101 +1,62 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-DAILY-SHADOW`
-- mode: `BOUNDED_CODEX`
-- task_type: `P8 REPORT-ONLY DAILY SHADOW INTEGRATION`
-- previous_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-REPLAY-CORRECTION`
-- previous_status: `DONE / ACCEPTED / ARCHIVED`
+- current_work_id: `BTCFX-20260712-P8-TURNING-PRECURSOR-SHADOW-RUNTIME-ENABLE`
+- mode: `RUNTIME_TASK`
+- task_type: `P8 REPORT-ONLY SHADOW RUNTIME ENABLE`
+- human_approval: explicit approval received on 2026-07-12
 
 ## Current state
 
-The corrected turning / volatility precursor replay is implemented and accepted at commit `9f4f6a1`.
+The opt-in daily turning precursor shadow integration is implemented at commit `f39375f` and bounded validation passed.
 
-Corrected evidence:
+Current runtime posture:
 
-- signal rows: 2,872
-- independent realized-move opportunities: 28
-- current notification recall: 0.392857
-- Combined precursor recall: 0.214286
-- Combined precision: 0.307692
-- Combined false rate: 0.384615
-- Combined opposite rate: 0.192308
-- Combined median lead: about 70 minutes
-- Combined validation resolved: 6
-- validation UP resolved: 0
-- validation DOWN resolved: 6
-- validation false rate: 0.666667
-- pinned 07:05 case: caught before move
-- actual-backed count: 0
+- launchd label: `com.afrog.btc-p8-operating-cycle`
+- schedule: daily 11:30 JST
+- installed shadow flag: not yet enabled
+- notification/mail behavior: unchanged
+- P9: blocked
 - recommendation: `continue_shadow_collection`
-
-The result does not authorize live notification behavior or production tuning.
 
 ## Current exact next action
 
-Implement the active opt-in daily shadow collection specification:
+Apply the approved runtime specification:
 
 ```text
-chatgpt/specs/active/20260712_turning_precursor_daily_shadow_collection.md
+chatgpt/specs/active/20260712_turning_precursor_shadow_runtime_enable.md
 ```
 
-Goal:
+The only intended runtime change is adding:
 
-- connect the accepted precursor replay to the existing daily P8 operating cycle
-- reuse the same public OHLCV fetch
-- use a bounded signal slice matching OHLCV coverage
-- write date-scoped generated shadow evidence
-- expose compact status in the daily result
-- keep the feature disabled by default
-- do not edit or enable the installed launchd job
+```text
+--include-turning-precursor-shadow
+```
 
-## Runtime boundary
+to `com.afrog.btc-p8-operating-cycle` ProgramArguments.
 
-This source task must not enable the feature in the scheduled runtime.
+Repository plist, focused test, commit, push, one installed-plist backup, bootout/bootstrap of this label only, and loaded-contract verification are included in one bounded runtime task.
 
-The installed daily invocation remains unchanged because the new integration requires an explicit opt-in flag.
+Do not manually start a P8 cycle during the apply task. The first normal 11:30 JST scheduled cycle is the runtime acceptance event.
 
-After bounded source validation, runtime enablement requires a separate human-approved task.
+## After runtime apply
 
-## P9 entry rule
+HUMAN_CHECK after the first normal scheduled cycle:
 
-P9 remains blocked.
-
-No production proposal is authorized because:
-
-- Combined validation is one-sided
-- validation UP resolved count is zero
-- validation false rate is above the proposal-quality limit
-- actual-backed count is zero
-
-## Active sources of truth
-
-- `chatgpt/specs/active/20260712_turning_precursor_daily_shadow_collection.md`
-- `chatgpt/specs/archive/20260712_turning_volatility_precursor_replay.md`
-- `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
-- `docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
+- core P8 status success
+- turning precursor shadow status success
+- date-scoped shadow outputs present
+- no second OHLCV fetch
+- no mail or notification change
 
 ## Prohibited
 
-- no scoring or market-map tuning
-- no threshold or gate change
-- no notification trigger or mail behavior change
-- no HTML production integration
-- no launchd or schedule change
-- no runtime restart
-- no automatic tuning
-- no exchange private/account/order endpoint
-- no raw export commit
-- no `paper_positions.csv` integration
+- no scoring, market-map, threshold, gate, notification, mail, UI, or order change
+- no normal monitor restart
+- no other LaunchAgent change
+- no frozen old runtime repo access
+- no private/account/order endpoint
 - no automatic order
 
 ## Safety
 
 report-only / not FORMAL_GO / no automatic order / human decides manually
-# Current next action — 2026-07-12
-
-- mode: `HUMAN_CHECK`
-- next task: runtime-enable proposal review for opt-in turning precursor shadow collection
-- bounded source integration is complete; archived spec: `chatgpt/specs/archive/20260712_turning_precursor_daily_shadow_collection.md`
-- installed schedule remains unchanged and does not pass `--include-turning-precursor-shadow`
-- any runtime enablement requires explicit approval; future review must use the date-scoped shadow status and preserve report-only behavior
-- P9 remains blocked and no production notification proposal is authorized

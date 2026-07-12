@@ -8,6 +8,7 @@
   <array>
     <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/.venv312/bin/python</string>
     <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/tools/run_p8_daily_cycle.py</string>
+    <string>--include-turning-precursor-shadow</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor</string>

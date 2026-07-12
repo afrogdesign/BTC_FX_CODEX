@@ -294,3 +294,14 @@ The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary re
 - validation is one-sided (UP=0, DOWN=6), recommendation remains `continue_shadow_collection`, and actual-backed count is 0
 - next posture: `HUMAN_CHECK` / runtime-enable proposal review
 - no production scoring, gate, threshold, notification, mail, runtime, API, account, order, or automatic tuning change occurred
+
+## 2026-07-12 — Approved runtime boundary for precursor shadow
+
+- HUMAN approval received to enable daily turning precursor shadow collection.
+- Only `com.afrog.btc-p8-operating-cycle` may be changed.
+- Only ProgramArguments addition allowed: `--include-turning-precursor-shadow`.
+- Keep 11:30 JST schedule, primary repo paths, stdout/stderr, no RunAtLoad, and no KeepAlive.
+- Back up the installed plist once, commit and push before runtime replacement, then bootout/bootstrap this label only.
+- Do not manually execute the P8 cycle during apply.
+- Do not restart `com.afrog.btc-monitor` or change mail/notification behavior.
+- First normal scheduled cycle is the acceptance checkpoint.

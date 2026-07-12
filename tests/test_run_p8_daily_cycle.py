@@ -100,6 +100,14 @@ class RunP8DailyCycleTests(unittest.TestCase):
     def test_plist_contract(self) -> None:
         path = Path(__file__).resolve().parents[1] / "deploy/com.afrog.btc-p8-operating-cycle.plist"
         payload = plistlib.loads(path.read_bytes()); self.assertEqual(payload["Label"], "com.afrog.btc-p8-operating-cycle")
+        self.assertEqual(payload["ProgramArguments"], [
+            "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/.venv312/bin/python",
+            "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/tools/run_p8_daily_cycle.py",
+            "--include-turning-precursor-shadow",
+        ])
+        self.assertEqual(payload["ProgramArguments"].count("--include-turning-precursor-shadow"), 1)
+        self.assertTrue(all("/Users/marupro/CODEX/100_MCP_Server/btc_monitor" in value for value in payload["ProgramArguments"][:2]))
+        self.assertNotIn("01_active/BTC_FX_CODEX", " ".join(payload["ProgramArguments"]))
         self.assertEqual(payload["StartCalendarInterval"], {"Hour": 11, "Minute": 30}); self.assertNotIn("RunAtLoad", payload); self.assertNotIn("KeepAlive", payload)
         self.assertIn("p8_daily_cycle.launchd.out", payload["StandardOutPath"]); self.assertIn("p8_daily_cycle.launchd.err", payload["StandardErrorPath"])
 

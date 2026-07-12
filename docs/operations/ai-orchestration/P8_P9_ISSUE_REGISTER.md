@@ -204,3 +204,13 @@ Never combine these in one tuning task without explicit approval:
 - actual-backed count: 0; no production conclusion is drawn from this bounded shadow run
 - source integration status: resolved for the approved opt-in collection scope
 - installed schedule remains disabled; runtime enablement requires separate HUMAN_CHECK approval
+
+#### Runtime collection approval — 2026-07-12
+
+- human approved enabling the opt-in daily shadow collector for `P8-ISSUE-008`
+- approved target: `com.afrog.btc-p8-operating-cycle`
+- approved argument: `--include-turning-precursor-shadow`
+- purpose: collect additional Long/Short precursor evidence only
+- this approval does not authorize notification, scoring, market-map, gate, threshold, mail, UI, or order changes
+- production proposal status remains `continue_shadow_collection`
+- first normal 11:30 JST cycle after apply is the runtime verification checkpoint

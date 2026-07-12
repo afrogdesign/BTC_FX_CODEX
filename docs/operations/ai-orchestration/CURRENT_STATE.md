@@ -729,3 +729,17 @@ The next source task will reuse the existing daily P8 public OHLCV fetch and wri
 - archived spec: `chatgpt/specs/archive/20260712_turning_precursor_daily_shadow_collection.md`
 - P8 evidence collection continues; P9 remains blocked; runtime enablement requires separate HUMAN_CHECK approval
 - no production scoring, notification, mail, launchd, runtime, API, account, order, or automatic-tuning behavior changed
+
+## 2026-07-12 — Turning precursor shadow runtime enable approved
+
+Human explicitly approved enabling the already validated turning precursor shadow in the installed daily P8 LaunchAgent.
+
+- approved work: `BTCFX-20260712-P8-TURNING-PRECURSOR-SHADOW-RUNTIME-ENABLE`
+- active spec: `chatgpt/specs/active/20260712_turning_precursor_shadow_runtime_enable.md`
+- target label: `com.afrog.btc-p8-operating-cycle`
+- intended change: add `--include-turning-precursor-shadow` exactly once
+- schedule remains 11:30 JST
+- source baseline: commit `f39375f`
+- no manual P8 cycle during apply
+- first normal scheduled cycle is the runtime acceptance event
+- notification, mail, scoring, market map, thresholds, gates, UI, normal monitor runtime, API, account, and order behavior remain unchanged
