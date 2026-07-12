@@ -65,6 +65,7 @@ from src.trade.opportunity_gate import (
 )
 from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
+from src.feedback.turning_volatility_precursor_replay import replay_turning_volatility_precursors
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22068,6 +22069,20 @@ def _build_parser() -> argparse.ArgumentParser:
     cycle_parser.add_argument("--replace-output", action="store_true")
     cycle_parser.add_argument("--stdout-json", action="store_true")
 
+    turning_parser = subparsers.add_parser("replay-turning-volatility-precursors")
+    turning_parser.add_argument("--signals", required=True)
+    turning_parser.add_argument("--ohlcv")
+    turning_parser.add_argument("--fetch-public-ohlcv", action="store_true")
+    turning_parser.add_argument("--ohlcv-limit", type=int, default=500)
+    turning_parser.add_argument("--output-csv", required=True)
+    turning_parser.add_argument("--output-json", required=True)
+    turning_parser.add_argument("--output-md", required=True)
+    turning_parser.add_argument("--actual-episodes")
+    turning_parser.add_argument("--actual-links")
+    turning_parser.add_argument("--cutoff-utc")
+    turning_parser.add_argument("--replace-output", action="store_true")
+    turning_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23457,6 +23472,19 @@ def main() -> None:
             fetch_public_ohlcv=bool(args.fetch_public_ohlcv), ohlcv_limit=int(args.ohlcv_limit),
             max_ohlcv_lag_minutes=int(args.max_ohlcv_lag_minutes), dry_run=bool(args.dry_run),
             replace_output=bool(args.replace_output),
+        )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "replay-turning-volatility-precursors":
+        summary = replay_turning_volatility_precursors(
+            signals=Path(args.signals), ohlcv=Path(args.ohlcv) if args.ohlcv else None,
+            output_csv=Path(args.output_csv), output_json=Path(args.output_json), output_md=Path(args.output_md),
+            fetch_public_ohlcv=bool(args.fetch_public_ohlcv), ohlcv_limit=int(args.ohlcv_limit),
+            actual_episodes=Path(args.actual_episodes) if args.actual_episodes else None,
+            actual_links=Path(args.actual_links) if args.actual_links else None,
+            cutoff_utc=args.cutoff_utc, replace_output=bool(args.replace_output),
         )
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")

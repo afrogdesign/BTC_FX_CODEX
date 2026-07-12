@@ -7905,5 +7905,38 @@ class LogFeedbackTest(unittest.TestCase):
             self.assertIn("BTCFX Ver03-v4 Active Plan 候補別 intraperiod 評価", output_md.read_text(encoding="utf-8"))
 
 
+class TurningVolatilityPrecursorCliTests(unittest.TestCase):
+    def _fixtures(self, root: Path) -> tuple[Path, Path]:
+        signals = root / "signals.csv"
+        signals.write_text(
+            "signal_id,timestamp_utc,timestamp_jst,was_notified,current_price,bias,phase,market_map_flags\n"
+            's1,2026-07-01T00:00:00Z,2026-07-01T09:00:00+09:00,false,100,long,reversal_risk,"long_into_major_resistance,major_resistance_rejection"\n',
+            encoding="utf-8",
+        )
+        ohlcv = root / "ohlcv.csv"
+        with ohlcv.open("w", newline="", encoding="utf-8") as fp:
+            writer = csv.DictWriter(fp, fieldnames=["timestamp_utc", "open", "high", "low", "close", "interval"])
+            writer.writeheader()
+            for index in range(20):
+                writer.writerow({"timestamp_utc": f"2026-07-01T{1 + index // 4:02d}:{(index % 4) * 15:02d}:00Z", "open": "100", "high": "100", "low": "100", "close": "100", "interval": "15m"})
+        return signals, ohlcv
+
+    def test_success_stdout_is_compact_and_privacy_safe(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); signals, ohlcv = self._fixtures(root)
+            result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-turning-volatility-precursors", "--signals", str(signals), "--ohlcv", str(ohlcv), "--output-csv", str(root / "events.csv"), "--output-json", str(root / "report.json"), "--output-md", str(root / "report.md"), "--replace-output", "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(result.stdout.strip().splitlines()), 1)
+            self.assertNotIn(str(root), result.stdout); self.assertNotIn("current_price", result.stdout)
+            self.assertTrue((root / "events.csv").exists())
+
+    def test_actual_pair_incomplete_fails_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); signals, ohlcv = self._fixtures(root)
+            result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-turning-volatility-precursors", "--signals", str(signals), "--ohlcv", str(ohlcv), "--actual-episodes", str(root / "episodes.csv"), "--output-csv", str(root / "events.csv"), "--output-json", str(root / "report.json"), "--output-md", str(root / "report.md"), "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("actual_pair_incomplete", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
