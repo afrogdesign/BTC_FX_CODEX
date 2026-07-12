@@ -773,3 +773,12 @@ Human explicitly approved enabling the already validated turning precursor shado
 - monitor.err delta contained no Traceback, Exception, fatal, or ERROR findings
 - no score, gate, notification trigger, mail, schedule, API, account, position, or order behavior changed
 - P8 evidence remains report-only; P9 remains evidence-gated
+
+## 2026-07-12 structural-priority runtime apply
+
+- accepted source commit `9a32e42` applied at `2026-07-12T17:18:21+09:00`; target-only kickstart replaced PID `659` with PID `15029` and state remains running
+- primary runtime path remains `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- top meter uses 4H 75% / 1H 25% structural priority, bounded to 10–90 with a 45–55 neutral band; turning-watch and structural/15M alignment remain separate
+- tactical scores remain independent short-term execution scores and side-aware 15-minute action, zones, SL, TP1, TP2 and no-chase remain unchanged
+- future naturally generated HTML/CSV rows use the new output; historical artifacts were not regenerated
+- monitor.err remained 0 bytes with no restart error; no scoring, gate, notification, mail, schedule, API or order behavior changed

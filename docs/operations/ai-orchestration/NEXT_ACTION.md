@@ -380,3 +380,38 @@ Complete these narrow report/display corrections, prove canonical side-aware-bef
 - no scoring, gate, market-map, Active Plan, notification, mail, runtime, API, account, position, or order behavior change
 - local tests and local commit only
 - no push or runtime restart
+
+
+---
+
+# Current next action — 2026-07-12 structural-priority runtime apply
+
+- current_work_id: `BTCFX-20260712-P8-STRUCTURAL-PRIORITY-RUNTIME-APPLY`
+- mode: `CONTROLLED_RUNTIME_APPLY`
+- task_type: `TARGET-ONLY NORMAL MONITOR RESTART`
+- accepted_source_commit: `9a32e42`
+- active_spec: `chatgpt/specs/active/20260712_structural_priority_runtime_apply.md`
+- target_label: `com.afrog.btc-monitor`
+- human_approval: received
+
+## Accepted source state
+
+- 4H 75% / 1H 25% structural meter is bounded to 10–90
+- neutral band is 45–55
+- qualitative strength, confirmed-turn precedence and CSV strength tokens are complete
+- canonical previews preserve side-aware 15-minute action and visible no-chase wording
+- production scoring, gates, notification and order behavior are unchanged
+
+## Exact next action
+
+Perform one controlled target-only restart of the already registered normal monitor, verify the replacement process and bounded error-log delta, then return to observation posture.
+
+Do not edit or re-register the plist, run a manual cycle, regenerate historical artifacts, send mail, or operate another LaunchAgent.
+
+After success, observe the first naturally generated detail HTML and CSV row. Do not tune from one result.
+
+## Structural-priority runtime observation
+
+- runtime apply completed at 2026-07-12 17:18 JST; replacement PID `15029` is running from the primary repo
+- active spec is archived; observe the first naturally generated detail HTML and CSV row for structural points, Japanese label, turning badge, tactical scores and side-aware action together
+- do not tune from one result; no additional restart or manual cycle is authorized
