@@ -103,6 +103,15 @@ CSV_HEADER = [
     "active_position_management_long",
     "active_position_management_short",
     "active_trade_plan_json",
+    "side_aware_primary_side",
+    "side_aware_primary_class",
+    "side_aware_primary_state",
+    "side_aware_long_class",
+    "side_aware_long_state",
+    "side_aware_short_class",
+    "side_aware_short_state",
+    "side_aware_chase_status",
+    "side_aware_reason_codes",
     "funding_rate",
     "funding_rate_raw",
     "funding_rate_pct",
@@ -343,6 +352,10 @@ def _active_plan_candidate_rows(payload: dict[str, Any]) -> list[dict[str, Any]]
 def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     support_zone = _first_zone(payload.get("support_zones"))
     resistance_zone = _first_zone(payload.get("resistance_zones"))
+    side_aware = _dict_or_empty(payload.get("side_aware_mtf_action"))
+    execution_context = _dict_or_empty(side_aware.get("execution_context"))
+    long_action = _dict_or_empty(side_aware.get("long"))
+    short_action = _dict_or_empty(side_aware.get("short"))
     return {
         "signal_id": payload.get("signal_id"),
         "timestamp_utc": payload.get("timestamp_utc"),
@@ -426,6 +439,15 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "opportunity_reasons": _json_dumps(payload.get("opportunity_reasons")),
         "paper_order_status": payload.get("paper_order_status"),
         **_active_plan_row_fields(payload),
+        "side_aware_primary_side": execution_context.get("primary_side", ""),
+        "side_aware_primary_class": execution_context.get("primary_action_class", ""),
+        "side_aware_primary_state": execution_context.get("primary_state", ""),
+        "side_aware_long_class": long_action.get("action_class", ""),
+        "side_aware_long_state": long_action.get("state", ""),
+        "side_aware_short_class": short_action.get("action_class", ""),
+        "side_aware_short_state": short_action.get("state", ""),
+        "side_aware_chase_status": execution_context.get("chase_status", ""),
+        "side_aware_reason_codes": _json_dumps(execution_context.get("reason_codes")),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
         "funding_rate_pct": payload.get("funding_rate_pct"),

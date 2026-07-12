@@ -794,6 +794,25 @@ class NotificationDetailPageTests(unittest.TestCase):
             self.assertIn("安全判定 / REPORT ONLY", html)
             self.assertNotIn("安全判定 / REPORT ONLY / SHADOW / REPORT ONLY", html)
 
+    def test_side_aware_action_is_primary_and_big_chance_stays_auxiliary(self) -> None:
+        payload = _sample_detail_payload()
+        payload["side_aware_mtf_action"] = {
+            "present": True,
+            "structural_context": {"signals_4h": "wait"},
+            "tactical_context": {"signals_1h": "wait"},
+            "execution_context": {"primary_side": "short", "primary_action_class": "B_CHECK_15M", "primary_state": "armed"},
+            "long": {"action_class": "STOP_OR_EXIT", "state": "invalidated", "next_condition": "保護確認"},
+            "short": {"action_class": "B_CHECK_15M", "state": "armed", "next_condition": "戻り売り確認"},
+        }
+        payload["big_chance_candidate"] = {"present": True, "side": "long", "score": 68, "grade": "B", "status": "armed", "headline": "補助候補", "macro_context": {}}
+        html = build_notification_detail_html(payload)
+        self.assertIn('class="side-aware-action"', html)
+        self.assertIn("SHORT B_CHECK_15M", html)
+        self.assertIn("15M: armed", html)
+        self.assertIn("LONG", html); self.assertIn("STOP_OR_EXIT", html)
+        self.assertLess(html.find('class="side-aware-action"'), html.find('class="shadow-panel"'))
+        self.assertIn("補助表示 / stale", html)
+
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
         for long_score, short_score, long_share, short_share in cases:

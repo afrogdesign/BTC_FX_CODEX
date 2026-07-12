@@ -34,6 +34,7 @@ from src.analysis.qualitative import build_qualitative_context
 from src.analysis.regime import classify_market_regime
 from src.analysis.rr import build_setup, choose_primary_setup, refine_execution_precision
 from src.analysis.scoring import compute_scores
+from src.analysis.side_aware_mtf_action import evaluate_side_aware_mtf_action
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
 from src.analysis.support_resistance import (
     build_all_support_resistance,
@@ -100,6 +101,11 @@ from src.presentation.sanitize import (
     build_display_context,
     build_notification_context,
 )
+
+
+def _attach_side_aware_mtf_action(result: dict[str, Any], previous: dict[str, Any] | None) -> None:
+    """Attach the report-only side-aware view after Active Plan assembly."""
+    result["side_aware_mtf_action"] = evaluate_side_aware_mtf_action(result, previous=previous)
 
 
 def _base_dir() -> Path:
@@ -1257,6 +1263,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result.update(_runtime_actionability_fields(core_result=core_result, active_trade_plan=active_trade_plan))
 
     last_result = load_json(get_last_result_path(base_dir))
+    _attach_side_aware_mtf_action(core_result, last_result)
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
     last_followup_notified = load_json(get_last_followup_notified_path(base_dir))

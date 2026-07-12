@@ -137,6 +137,15 @@ class CsvLoggerActivePlanTests(unittest.TestCase):
         self.assertEqual(row["active_subject_label"], "")
         self.assertEqual(row["active_trade_plan_json"], "")
 
+    def test_side_aware_fields_and_blank_fallback(self) -> None:
+        payload = self._base_payload()
+        payload["side_aware_mtf_action"] = {"execution_context": {"primary_side": "short", "primary_action_class": "B_CHECK_15M", "primary_state": "armed", "chase_status": "not_late", "reason_codes": ["opposite_thesis_invalid"]}, "long": {"action_class": "STOP_OR_EXIT", "state": "invalidated"}, "short": {"action_class": "B_CHECK_15M", "state": "armed"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp); append_trade_log(base_dir, payload); row = self._read_first_row(base_dir)
+        self.assertEqual(row["side_aware_primary_side"], "short")
+        self.assertEqual(row["side_aware_short_state"], "armed")
+        self.assertIn("opposite_thesis_invalid", row["side_aware_reason_codes"])
+
 
 if __name__ == "__main__":
     unittest.main()

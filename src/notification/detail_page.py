@@ -3806,6 +3806,17 @@ def _operator_dashboard_v2_css() -> str:
     .alert-strip {
       display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:12px 0;
     }
+    .side-aware-action { margin:12px 0; padding:18px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(135deg,rgba(11,28,43,.98),rgba(9,19,30,.98)); }
+    .side-aware-head { display:grid; gap:3px; }
+    .side-aware-head > span { color:var(--wait); font-size:11px; font-weight:900; letter-spacing:.1em; }
+    .side-aware-head h2 { margin:0; font-size:clamp(24px,3vw,38px); }
+    .side-aware-head p,.side-aware-note { margin:0; color:var(--muted); font-weight:700; }
+    .side-aware-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .side-aware-card { min-width:0; padding:14px; border:1px solid var(--line); border-radius:14px; background:rgba(4,13,22,.5); }
+    .side-aware-card.long { border-color:rgba(66,211,146,.35); } .side-aware-card.short { border-color:rgba(255,111,120,.35); }
+    .side-aware-card span { color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.1em; }
+    .side-aware-card strong,.side-aware-card b { display:block; margin-top:3px; } .side-aware-card p { margin:8px 0 0; color:var(--muted); font-size:12px; }
+    .side-aware-note { margin-top:12px; font-size:12px; }
     .alert-item {
       display:grid; grid-template-columns:28px 1fr; gap:9px; align-items:start; padding:12px 13px;
       border:1px solid var(--line); border-radius:14px; background:rgba(12,27,42,.9);
@@ -4271,11 +4282,16 @@ def _operator_dashboard_v2_big_chance(result: dict[str, Any]) -> str:
     status_labels = {"armed": "監視中", "follow_through": "継続確認", "invalidated": "失効"}
     status_label = status_labels.get(status.lower(), "未記録")
     invalid = status.lower() in {"invalidated", "expired"}
+    side_aware = result.get("side_aware_mtf_action") if isinstance(result.get("side_aware_mtf_action"), dict) else {}
+    execution = side_aware.get("execution_context") if isinstance(side_aware.get("execution_context"), dict) else {}
+    primary_side = str(execution.get("primary_side") or "").lower()
+    candidate_side = str(candidate.get("side") or candidate.get("direction") or "").lower()
+    auxiliary_stale = invalid or (bool(primary_side and candidate_side) and primary_side != candidate_side)
     macro = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
     summary = str(candidate.get("operator_summary") or candidate.get("headline") or "未記録")
-    warning = "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません" if invalid else "通常のLong / Short判断を上書きしません"
+    warning = "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません" if invalid else ("補助表示 / stale。通常のLong / Short判断を上書きしません" if auxiliary_stale else "補助表示。通常のLong / Short判断を上書きしません")
     return f"""
-    <section class="big-chance{' invalidated' if invalid else ''}" id="big-chance">
+    <section class="big-chance{' invalidated' if invalid else ''}{' auxiliary-stale' if auxiliary_stale else ''}" id="big-chance">
       <div class="big-score"><strong>{html.escape(str(candidate.get('score', '—')))}</strong><span>{html.escape(str(candidate.get('grade') or '—'))} / {html.escape(status_label)}</span></div>
       <div class="big-chance-content"><h3><span class="big-chance-kicker">大転換候補 / 補助監視</span>{html.escape(str(candidate.get('headline') or 'Big Chance / Failed Thesis'))}</h3>
         <p>{html.escape(summary)} <strong>{html.escape(warning)}</strong></p>
@@ -4454,6 +4470,21 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
     return f'<section class="shadow-panel" aria-label="SHADOW REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">安全判定 / REPORT ONLY</span><h2>現在の売買プラン判定</h2><p class="shadow-intro">ロング・ショート候補を、どこまで確認してよいか分類する補助表示です。注文や最終決定は行いません。</p></div><span class="shadow-safety">not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend" data-shadow-classes="A_FORMAL B_CHECK_15M C_WATCH_ZONE STOP_OR_EXIT">{stages}</div><p class="shadow-note">A判定でも正式GOや自動実行ではありません。最終判断は人間が行います。</p><div class="shadow-summary">{html.escape(summary)}</div><div class="shadow-body">{body}</div></section>'
 
 
+def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
+    action = result.get("side_aware_mtf_action")
+    if not isinstance(action, dict) or not action.get("present"):
+        return ""
+    execution = action.get("execution_context") if isinstance(action.get("execution_context"), dict) else {}
+    structural = action.get("structural_context") if isinstance(action.get("structural_context"), dict) else {}
+    tactical = action.get("tactical_context") if isinstance(action.get("tactical_context"), dict) else {}
+    cards = []
+    for side in ("long", "short"):
+        value = action.get(side) if isinstance(action.get(side), dict) else {}
+        cards.append(f'<article class="side-aware-card {side}"><span>{side.upper()}</span><strong>{html.escape(str(value.get("action_class") or "NONE"))}</strong><b>15M: {html.escape(str(value.get("state") or "dormant"))}</b><p>{html.escape(str(value.get("next_condition") or "既存プランなし"))}</p></article>')
+    primary = f'{str(execution.get("primary_side") or "—").upper()} {execution.get("primary_action_class") or "NONE"}'
+    return f'<section class="side-aware-action" aria-label="現在のoperator action"><div class="side-aware-head"><span>現在の行動 / REPORT ONLY</span><h2>{html.escape(primary)}</h2><p>15M: {html.escape(str(execution.get("primary_state") or "dormant"))}　1H: {html.escape(str(tactical.get("signals_1h") or "—"))}　4H: {html.escape(str(structural.get("signals_4h") or "—"))}</p></div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存Long / Shortスコアは構造コンテキストであり、最終行動や注文許可ではありません。</p></section>'
+
+
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
     display = build_display_context(result)
     context = _notification_context_for_result(result)
@@ -4474,6 +4505,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
   <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>{html.escape(timestamp)}</span><span>signal {html.escape(str(result.get('signal_id') or ''))}</span><span>{html.escape(kind)}</span></div></div>
   <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word{decision_word_class}">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
   {_operator_dashboard_v2_alerts(result, context, display)}
+  {_side_aware_operator_action_html(result)}
   {_operator_dashboard_shadow_panel_html(result)}
   {_operator_dashboard_relative_balance_html(result)}
   <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>

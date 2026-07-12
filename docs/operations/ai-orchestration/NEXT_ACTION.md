@@ -60,3 +60,46 @@ report-only / not FORMAL_GO / no automatic order / human decides manually
 - runtime shadow flag is enabled in the installed target plist; no manual cycle was run
 - inspect only compact daily status and date-scoped shadow manifest after the scheduled event
 - P9 remains blocked and no live notification proposal is authorized
+
+
+---
+
+# Current next action — 2026-07-12 side-aware MTF implementation
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-OPERATOR-ACTION`
+- mode: `BOUNDED_CODEX`
+- task_type: `SIDE-AWARE OPERATOR ACTION / SOURCE + TEST + DISPLAY`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_multi_timeframe_operator_action.md`
+- human_approval: received
+
+## Goal
+
+Implement an independent Long/Short operator-action layer that can surface `LONG STOP_OR_EXIT + SHORT B_CHECK_15M` without changing existing scores, formal gates, notification triggers, mail behavior, runtime, or order behavior.
+
+## Pinned acceptance
+
+Signal `20260712_040500` must produce:
+
+- Long: `STOP_OR_EXIT`
+- Short: `B_CHECK_15M`
+- Short state: `armed`
+- primary operator side: `short`
+- existing `bias=long`, score `76/12`, and blocked formal gate remain unchanged
+
+The subsequent moved signal must be classified as late/no-chase when at least 70% of entry-to-TP1 distance is already consumed.
+
+## Runtime boundary
+
+- source implementation only
+- local targeted validation and local commit
+- no push
+- no monitor restart
+- no launchd change
+- no mail/notification behavior change
+- scheduled Turning Precursor shadow acceptance remains independent and unchanged
+
+## Implementation completed
+
+- side-aware MTF source implementation is complete and awaiting review/runtime-apply approval
+- no runtime apply, monitor restart, notification trigger, mail, score, gate, or order behavior change is authorized by this task
+- the first scheduled shadow-enabled P8 cycle remains an independent runtime acceptance event

@@ -230,3 +230,38 @@ Never combine these in one tuning task without explicit approval:
 - root cause of the prior bootstrap failure: stale target registration in the GUI domain after rollback
 - target-only repair and verification completed; installed plist uses primary repo paths and the unchanged 11:30 JST schedule
 - first scheduled verification is pending; no production notification conclusion is drawn
+
+#### Side-aware MTF operator action completion — 2026-07-12
+
+- pinned `20260712_040500`: Long `STOP_OR_EXIT`; Short `B_CHECK_15M` / `armed`; primary Short; formal bias, scores and blocked gate preserved
+- moved `20260712_050500`: prior-plan Short progress is `late_no_chase`
+- result fields, future CSV evidence columns and public detail hierarchy are source-only additions
+- no scoring, market-map, gate, notification, mail, runtime, API, account, order, or automatic-tuning behavior changed
+
+
+---
+
+## 2026-07-12 approved side-aware multi-timeframe implementation
+
+The user approved bounded source implementation for the recurring over-suppression pattern where one side is safely stopped but an opposite-side Active Plan opportunity is hidden.
+
+Active spec:
+
+```text
+chatgpt/specs/active/20260712_side_aware_multi_timeframe_operator_action.md
+```
+
+Work ID:
+
+```text
+BTCFX-20260712-P8-SIDE-AWARE-MTF-OPERATOR-ACTION
+```
+
+Related issues:
+
+- `P8-ISSUE-001` global STOP masks side-specific opportunity
+- `P8-ISSUE-008` turning / volatility precursor alert is late or absent
+
+Pinned evidence signal `20260712_040500` already contained a Short limit-retest candidate and conditional Short counter-scalp candidate while the Long primary setup was invalid. The new layer must surface Long STOP and Short B-check independently.
+
+This approval authorizes source, targeted tests, future-result evidence fields, and display hierarchy only. It does not authorize scoring, market-map, gate, notification trigger, mail sending, runtime restart, launchd, API, account, order, or automatic trading changes.
