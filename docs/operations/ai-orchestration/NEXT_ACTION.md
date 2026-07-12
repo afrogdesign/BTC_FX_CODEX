@@ -130,3 +130,38 @@ The fix must preserve Short as the primary directional no-chase action in the mo
 - 13:05 pinned case remains Long STOP / Short B armed / primary Short
 - 14:05 moved case remains Short primary with late/no-chase state
 - future review should use the archived side-aware review-fix spec; no runtime apply is authorized by this source fix
+
+
+---
+
+# Current next action — 2026-07-12 side-aware MTF final review fix
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-TOKEN-NO-CHASE-FIX`
+- mode: `BOUNDED_CODEX`
+- task_type: `DIRECTION TOKEN SAFETY + NO-CHASE DISPLAY`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_token_and_no_chase_fix.md`
+- parent_commits: `2e6cde5`, `eaa4733`
+
+## Review finding
+
+The accepted 13:05 and 14:05 directional previews are preserved, but final source review found an unsafe raw-substring direction matcher: `up` can match inside `support`. The current late candidate headline also does not visibly prohibit chasing.
+
+## Goal
+
+- replace substring direction matching with exact tokens and explicit semantic mappings
+- make `late_no_chase` / `tp1_reached_no_chase` visibly say `追いかけ禁止`
+- ensure genuine opposite `triggered` / `follow_through` evidence outranks a merely late candidate
+- preserve 13:05 Short armed and 14:05 Short late primary acceptance
+
+## Runtime boundary
+
+- source/test/display fix only
+- local commit only
+- no push
+- no runtime restart
+- no scoring, gate, trigger, mail, launchd, API, or order change
+## Side-aware token/no-chase fix completed
+
+- exact directional token and semantic mapping correction is complete
+- late primary action now displays `追いかけ禁止`
+- next review remains report-only; no runtime or notification change is authorized

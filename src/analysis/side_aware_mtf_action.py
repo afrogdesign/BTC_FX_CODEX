@@ -20,7 +20,7 @@ def _tokens(value: Any) -> set[str]:
                     return {str(item).strip().strip("'\"").lower() for item in parsed if str(item).strip()}
             except json.JSONDecodeError:
                 pass
-        value = text.strip("[]")
+        value = text.replace("[", "").replace("]", "")
     if isinstance(value, list):
         return {str(item).strip().strip("'\"").lower() for item in value if str(item).strip()}
     if isinstance(value, str):
@@ -52,9 +52,11 @@ def _matches_side(value: Any, side: str) -> bool:
         "long": {"long", "buy", "up", "early_up", "confirmed_up"},
         "short": {"short", "sell", "down", "early_down", "confirmed_down"},
     }[side]
-    tokens = _tokens(value)
-    text = str(value).lower()
-    return bool(tokens & terms) or any(term in text for term in terms)
+    semantic = {
+        "long": {"resistance_to_support_flip", "resistance_to_support_confirmed", "resistance_to_support_retest_confirmed", "trend_flip_early_up", "trend_flip_confirmed_up", "failed_breakout_up_reversal", "major_support_rejection"},
+        "short": {"support_to_resistance_flip", "support_to_resistance_confirmed", "support_to_resistance_retest_confirmed", "trend_flip_early_down", "trend_flip_confirmed_down", "failed_breakout_down_reversal", "major_resistance_rejection"},
+    }
+    return bool(_tokens(value) & (terms | semantic[side]))
 
 
 def _progress(side: str, plan: dict[str, Any], current_price: float | None) -> str:
@@ -88,7 +90,7 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     price = _number(current.get("current_price"))
     stop = _number(plan.get("stop_loss"))
     crossed = bool(stop is not None and price is not None and ((side == "long" and price <= stop) or (side == "short" and price >= stop)))
-    side_wait = f"{side}_at_major_" in " ".join(flags) and "wait_only" in " ".join(flags)
+    side_wait = f"{side}_at_major_resistance_wait_only" in flags or f"{side}_at_major_support_wait_only" in flags
     signals_15m, signals_1h = current.get("signals_15m"), current.get("signals_1h")
     match_15m, match_1h = _matches_side(signals_15m, side), _matches_side(signals_1h, side)
     transition = any(_matches_side(current.get(key), side) for key in ("transition_direction", "trend_flip_state", "level_flip_state", "failed_breakout_state", "market_map_primary_state", "market_map_flags"))
@@ -139,11 +141,12 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     if action in {"A_FORMAL", "B_CHECK_15M"} and chase in {"late_no_chase", "tp1_reached_no_chase"}:
         state = "late"
         reasons.append(chase)
+    trigger_strength = 2 if match_15m and match_1h else 1 if (previous_cross or match_15m or match_1h or transition) else 0
     return {
         "action_class": action, "state": state, "plan_support": supported,
         "zone": {"low": plan.get("entry_zone_low", ""), "high": plan.get("entry_zone_high", ""), "mid": plan.get("entry_mid", "")},
         "invalidation": plan.get("stop_loss", ""), "tp1": plan.get("tp1", ""), "tp2": plan.get("tp2", ""),
-        "next_condition": plan.get("next_condition", ""), "chase_status": chase, "reason_codes": reasons,
+        "next_condition": plan.get("next_condition", ""), "chase_status": chase, "trigger_strength": trigger_strength, "reason_codes": reasons,
     }
 
 
@@ -181,11 +184,13 @@ def evaluate_side_aware_mtf_action(current: dict, previous: dict | None = None) 
     priority = {"A_FORMAL": 5, "B_CHECK_15M": 4, "C_WATCH_ZONE": 3, "STOP_OR_EXIT": 2, "NONE": 1}
     state_priority = {"late": 6, "follow_through": 5, "triggered": 4, "armed": 2, "watch": 1, "invalidated": 0, "dormant": 0}
     candidates = [(side, value) for side, value in (("long", long), ("short", short))]
-    primary_side, primary = max(candidates, key=lambda item: (priority[item[1]["action_class"]], state_priority.get(item[1]["state"], 0), int(item[1]["plan_support"]), item[0] == "short"))
+    primary_side, primary = max(candidates, key=lambda item: (priority[item[1]["action_class"]], int(item[1].get("trigger_strength", 0)), state_priority.get(item[1]["state"], 0), int(item[1]["plan_support"]), item[0] == "short"))
     if primary["action_class"] in {"NONE", "STOP_OR_EXIT"}:
         primary_side = ""
     primary_chase = primary["chase_status"] if primary_side else "unknown"
     headline = "判定材料不足" if not primary_side else f"{primary_side.upper()} {primary['action_class']}"
+    if primary_side and primary_chase in {"late_no_chase", "tp1_reached_no_chase"}:
+        headline += " / 追いかけ禁止"
     return {
         "schema_version": SCHEMA_VERSION, "present": True, "signal_id": current.get("signal_id", ""),
         "structural_context": {key: current.get(key, "") for key in ("signals_4h", "long_display_score", "short_display_score", "bias", "market_regime", "phase")},

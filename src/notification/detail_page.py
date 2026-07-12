@@ -4482,7 +4482,8 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
         value = action.get(side) if isinstance(action.get(side), dict) else {}
         cards.append(f'<article class="side-aware-card {side}"><span>{side.upper()}</span><strong>{html.escape(str(value.get("action_class") or "NONE"))}</strong><b>15M: {html.escape(str(value.get("state") or "dormant"))}</b><p>{html.escape(str(value.get("next_condition") or "既存プランなし"))}</p></article>')
     primary = f'{str(execution.get("primary_side") or "—").upper()} {execution.get("primary_action_class") or "NONE"}'
-    return f'<section class="side-aware-action" aria-label="現在のoperator action"><div class="side-aware-head"><span>現在の行動 / REPORT ONLY</span><h2>{html.escape(primary)}</h2><p>15M: {html.escape(str(execution.get("primary_state") or "dormant"))}　1H: {html.escape(str(tactical.get("signals_1h") or "—"))}　4H: {html.escape(str(structural.get("signals_4h") or "—"))}</p></div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存Long / Shortスコアは構造コンテキストであり、最終行動や注文許可ではありません。</p></section>'
+    headline = str(execution.get("headline") or primary)
+    return f'<section class="side-aware-action" aria-label="現在のoperator action"><div class="side-aware-head"><span>現在の行動 / REPORT ONLY</span><h2>{html.escape(primary)}</h2><strong class="side-aware-headline">{html.escape(headline)}</strong><p>15M: {html.escape(str(execution.get("primary_state") or "dormant"))}　1H: {html.escape(str(tactical.get("signals_1h") or "—"))}　4H: {html.escape(str(structural.get("signals_4h") or "—"))}</p></div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存Long / Shortスコアは構造コンテキストであり、最終行動や注文許可ではありません。</p></section>'
 
 
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:

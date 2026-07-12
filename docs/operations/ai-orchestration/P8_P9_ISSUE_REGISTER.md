@@ -271,3 +271,9 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - zone/next-condition activation and previous opposite-stop crossing are independent evidence groups
 - 13:05 remains Long STOP / Short B armed; 14:05 now keeps Short primary and late/no-chase
 - no score, gate, market-map, notification, mail, runtime, or order behavior changed
+#### Side-aware token/no-chase fix — 2026-07-12
+
+- direction matching now uses exact normalized tokens and explicit semantic mappings; `support_to_resistance_confirmed` cannot create Long evidence
+- side-specific wait-only flags are matched individually
+- late primary actions visibly state `追いかけ禁止`; genuine trigger strength outranks a merely late candidate
+- 13:05 and 14:05 acceptance previews pass; no production behavior changed

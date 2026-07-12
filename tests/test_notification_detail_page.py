@@ -813,6 +813,19 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertLess(html.find('class="side-aware-action"'), html.find('class="shadow-panel"'))
         self.assertIn("補助表示 / stale", html)
 
+    def test_side_aware_late_hero_shows_no_chase(self) -> None:
+        payload = _sample_detail_payload()
+        payload["side_aware_mtf_action"] = {
+            "present": True,
+            "structural_context": {"signals_4h": "wait"},
+            "tactical_context": {"signals_1h": "wait"},
+            "execution_context": {"primary_side": "short", "primary_action_class": "B_CHECK_15M", "primary_state": "late", "chase_status": "late_no_chase", "headline": "SHORT B_CHECK_15M / 追いかけ禁止"},
+            "long": {"action_class": "STOP_OR_EXIT", "state": "invalidated"},
+            "short": {"action_class": "B_CHECK_15M", "state": "late"},
+        }
+        html = build_notification_detail_html(payload)
+        self.assertIn("追いかけ禁止", html)
+
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
         for long_score, short_score, long_share, short_share in cases:

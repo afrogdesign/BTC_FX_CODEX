@@ -84,6 +84,23 @@ class SideAwareMtfActionTests(unittest.TestCase):
         self.assertEqual(result["execution_context"]["primary_side"], "short")
         self.assertIn(result["short"]["chase_status"], {"late_no_chase", "tp1_reached_no_chase"})
 
+    def test_direction_tokens_are_exact_and_semantic(self) -> None:
+        current = payload(); current["market_map_flags"] = ["support_to_resistance_confirmed"]; current["market_map_primary_state"] = ""; current["trend_flip_state"] = ""; current["level_flip_state"] = ""; current["failed_breakout_state"] = ""; current["transition_direction"] = ""; current["primary_setup_side"] = ""; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = []; current["risk_flags"] = []; current["active_trade_plan"]["side_plans"]["long"]["zone_position"] = "outside_zone"; current["active_trade_plan"]["side_plans"]["short"]["zone_position"] = "outside_zone"
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertNotIn("timeframe_or_transition_support", result["long"]["reason_codes"])
+        self.assertIn("timeframe_or_transition_support", result["short"]["reason_codes"])
+
+    def test_pipe_and_json_flags_and_wait_only_are_individual(self) -> None:
+        current = payload(); current["no_trade_flags"] = '["long_at_major_resistance_wait_only"]|short_at_major_support_wait_only'; current["market_map_flags"] = []
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertIn("side_wait_only", result["long"]["reason_codes"])
+        self.assertIn("side_wait_only", result["short"]["reason_codes"])
+
+    def test_moved_headline_contains_no_chase_instruction(self) -> None:
+        current = json.loads((ROOT / "logs/signals/20260712_050500.json").read_text()); previous = payload()
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertIn("追いかけ禁止", result["execution_context"]["headline"])
+
 
 if __name__ == "__main__":
     unittest.main()
