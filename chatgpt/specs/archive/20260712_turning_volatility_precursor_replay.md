@@ -1,4 +1,4 @@
-# P8 Turning / Volatility Precursor Replay — Active Specification
+# P8 Turning / Volatility Precursor Replay — Archived Specification
 
 ## Metadata
 
@@ -9,6 +9,21 @@
 - created_at: `2026-07-12`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - safety: report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## Acceptance correction and completion record
+
+- status: completed / accepted by bounded validation
+- implementation checkpoint: `c80b4a9` followed by the correction commit recorded in the repository
+- corrected public replay: completed once after OHLCV continuity and policy-contract corrections
+- all pre-correction replay metrics are invalid and discarded
+- corrected metrics: 2,872 signal rows; 28 independent realized opportunities; 2,194 precursor episodes; Combined 238 episodes / 26 resolved; Combined all precision `0.307692`, recall `0.214286`, false rate `0.384615`, opposite rate `0.192308`, whipsaw `0.115385`, median lead `69.9885` minutes
+- Combined validation: 6 resolved episodes (UP 0 / DOWN 6), precision `0.333333`, recall `0.5`, false rate `0.666667`, opposite rate `0`, median lead `77.4875` minutes; validation established but proposal gate failed
+- pinned signal `20260711_220501`: caught before move; exclusion gate pass
+- actual-backed precursor count: `0`
+- recommendation: `continue_shadow_collection`
+- generated outputs remain local and uncommitted
+- no production scoring, market-map, gate, notification, mail, runtime, API, account, or order behavior changed
+- report-only / not FORMAL_GO / no automatic order / human decides manually
 
 ## 1. Objective
 

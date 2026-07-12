@@ -243,3 +243,30 @@ report-only / not FORMAL_GO / no automatic order / human decides manually
 
 The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary repo at `2026-07-11T19:12:16+0900` with replacement PID `18822` running. Long non-executable labels use the `WAIT` hero token; the relative balance meter is unchanged, static pages were not regenerated, and no manual mail or notification cycle was triggered. P8 evidence collection continues and P9 remains evidence-gated.
 ```
+
+
+---
+
+## 2026-07-12 control update — turning / volatility precursor replay
+
+- P8 daily automation completed its first scheduled 11:30 JST cycle successfully and its active spec is archived.
+- P8-ISSUE-008 is now collecting evidence for late or absent turning / volatility precursor alerts.
+- active spec: `chatgpt/specs/active/20260712_turning_volatility_precursor_replay.md`
+- current work ID: `BTCFX-20260712-P8-TURNING-VOLATILITY-PRECURSOR-REPLAY`
+- mode: `BOUNDED_CODEX`
+- task class: deterministic offline replay only
+- required comparison: current notifications versus symmetric Long/Short precursor policies
+- required metrics: large-move recall, precision, lead time, false-warning burden, whipsaw, Long/Short split, regime/phase split, validation window
+- pinned case: signal `20260711_220501`, used as a regression example but not as sole tuning evidence
+- no production scoring, market-map, classifier, threshold, gate, notification, mail, runtime, API, account, or order behavior change is authorized
+- P9 remains blocked; an eligible replay result authorizes only a separate human-approved proposal
+- safety: report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## 2026-07-12 corrected turning precursor replay
+
+- corrected replay completed once after discarding all pre-correction metrics
+- 2,872 signal rows; 28 independent realized opportunities; Combined 238 episodes / 26 resolved
+- Combined validation has 6 resolved episodes (UP 0 / DOWN 6) and fails proposal eligibility; recommendation remains `continue_shadow_collection`
+- pinned 07:05 case was caught before the move; actual-backed count is 0
+- next posture: HUMAN_CHECK / ChatGPT review
+- no production scoring, market-map, gate, notification, mail, runtime, API, account, or order behavior changed

@@ -657,3 +657,50 @@ The display-only relative LONG/SHORT balance meter from implementation commit `4
 ## 2026-07-11 operator hero layout hotfix runtime apply
 
 The display-only hero layout fix from implementation commit `129cbba` was applied at `2026-07-11T19:12:16+0900` in the active primary repo `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`; replacement PID `18822` is running under `com.afrog.btc-monitor`. The non-executable execution label now renders as the compact hero token `WAIT`, while the full label remains in normal context text. The relative balance meter is unchanged, existing static HTML remains unchanged, and no manual mail or notification cycle was triggered. No notification behavior, scoring, classifier, gate, threshold, or order behavior changed. P8 evidence collection continues and P9 remains evidence-gated.
+
+
+## 2026-07-12 P8 scheduled-cycle verification and turning-precursor investigation
+
+The first scheduled P8 daily cycle completed successfully at 11:30 JST.
+
+- candidate rows: 207
+- candidate signals: 107
+- scenarios: 84
+- resolved: 74
+- unresolved: 10
+- no-OHLCV: 0
+- review queue: 38
+- ISSUE-001 qualified rows: 38
+- P9 readiness: false / false
+- errors: none
+
+The completed daily-automation spec is archived at:
+
+```text
+chatgpt/specs/archive/20260711_p8_daily_operating_cycle_automation.md
+```
+
+A new P8 investigation is active for a missed turning / volatility precursor case observed at 2026-07-12 07:05 JST. The system correctly blocked formal execution but did not provide an early opposite-side chart-check warning before a material move.
+
+Active spec:
+
+```text
+chatgpt/specs/active/20260712_turning_volatility_precursor_replay.md
+```
+
+The next task is deterministic offline replay only. It compares current notifications with symmetric Long/Short precursor hypotheses and measures lead time, large-move recall, false-warning burden, whipsaw, regime/phase splits, and validation-window results.
+
+No scoring, market-map, classifier, threshold, gate, notification, mail, runtime, API, account, or order behavior is authorized to change. P9 remains blocked. Safety remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+
+## 2026-07-12 corrected turning / volatility precursor replay
+
+The corrected replay discarded all pre-correction metrics and completed one public-OHLCV run after policy, episode, continuity, opportunity-denominator, and validation fixes.
+
+- 2,872 signal rows; 28 independent realized-move opportunities; 2,194 precursor episodes
+- current notification baseline: 637 episodes; independent large-move recall 0.392857
+- Combined: 238 episodes / 26 resolved; precision 0.307692; independent recall 0.214286; false rate 0.384615; opposite rate 0.192308; whipsaw 0.115385; median lead 69.9885 minutes
+- Combined validation: 6 resolved (UP 0 / DOWN 6); precision 0.333333; recall 0.5; false rate 0.666667; opposite rate 0; median lead 77.4875 minutes
+- validation established, pinned case caught before move, exclusion gate pass, actual-backed count 0
+- recommendation: `continue_shadow_collection`; P9 remains blocked and HUMAN_CHECK / ChatGPT review is next
+- archived spec: `chatgpt/specs/archive/20260712_turning_volatility_precursor_replay.md`
+- no production scoring, market-map, gate, notification, mail, runtime, API, account, or order behavior changed

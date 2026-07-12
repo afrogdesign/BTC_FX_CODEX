@@ -130,3 +130,48 @@ Never combine these in one tuning task without explicit approval:
 5. production gate
 6. notification behavior
 7. runtime behavior
+
+
+### P8-ISSUE-008 — Turning / volatility precursor alert is late or absent
+
+- category: direction-state interpretation / notification behavior / missed opportunity
+- status: collecting evidence
+- first_seen: 2026-07-12
+- observed case:
+  - signal `20260711_220501` at 2026-07-12 07:05 JST
+  - primary bias remained Long with display score 81 / 19
+  - phase was `reversal_risk`
+  - major-resistance rejection, conflicting bullish role-flip evidence, high wait pressure, and high location risk were present
+  - current notification was suppressed by low confidence, invalid setup, and multiple no-trade flags
+  - the market subsequently moved materially downward before the later Short attention
+- risk:
+  - a correct no-entry decision can still hide an important opposite-side chart-check opportunity
+  - the operator may receive the warning only after most of the high-volatility move has occurred
+- required evidence:
+  - large-move recall and false-warning rate
+  - Long/Short symmetry
+  - lead time before 1h/2h/4h expansion
+  - regime and phase split
+  - notification burden after episode deduplication
+  - separation of market-map interpretation errors from notification-trigger gaps
+  - validation-window performance
+- active evidence spec:
+  - `chatgpt/specs/archive/20260712_turning_volatility_precursor_replay.md`
+- current action:
+  - HUMAN_CHECK / ChatGPT review of corrected replay evidence
+  - preserve current scoring, gates, and notification behavior
+- production change:
+  - prohibited until replay evidence is reviewed and a separate human-approved proposal is created
+
+#### Corrected replay result — 2026-07-12
+
+- all pre-correction replay metrics are invalid and discarded
+- corrected input: `2,872` signal rows, `28` independent realized-move opportunities, `2,194` deduplicated precursor episodes
+- current notification baseline: `637` episodes, independent large-move recall `0.392857`
+- Combined precursor: `238` episodes, `26` resolved, all precision `0.307692`, independent recall `0.214286`, false rate `0.384615`, opposite rate `0.192308`, whipsaw `0.115385`, median lead `69.9885` minutes
+- Combined validation: `6` resolved (`UP=0`, `DOWN=6`), precision `0.333333`, recall `0.5`, false rate `0.666667`, opposite rate `0`, median lead `77.4875` minutes; validation established but proposal gate failed
+- pinned `20260711_220501`: caught before move; exclusion gate pass
+- actual-backed precursor count: `0`
+- recommendation: `continue_shadow_collection`
+- policy direction, Combined agreement, independent evidence groups, state transitions, stable IDs, continuity, opportunity denominator, validation and malformed-list fail-closed contracts were corrected
+- production change: none; no pre-correction conclusion is retained

@@ -7937,6 +7937,39 @@ class TurningVolatilityPrecursorCliTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("actual_pair_incomplete", result.stdout)
 
+    def test_missing_required_signal_column_fails_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); _, ohlcv = self._fixtures(root); signals = root / "bad.csv"; signals.write_text("signal_id,timestamp_utc\ns,2026-07-01T00:00:00Z\n", encoding="utf-8")
+            result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-turning-volatility-precursors", "--signals", str(signals), "--ohlcv", str(ohlcv), "--output-csv", str(root / "e.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "m.md"), "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0); self.assertIn("signals_schema_mismatch", result.stdout)
+
+    def test_malformed_structured_list_fails_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); _, ohlcv = self._fixtures(root); signals = root / "bad.csv"
+            signals.write_text("signal_id,timestamp_utc,timestamp_jst,was_notified,current_price,bias,phase,market_map_flags\ns,2026-07-01T00:00:00Z,2026-07-01T09:00:00+09:00,false,100,long,reversal_risk,\"[broken\"\n", encoding="utf-8")
+            result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-turning-volatility-precursors", "--signals", str(signals), "--ohlcv", str(ohlcv), "--output-csv", str(root / "e.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "m.md"), "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0); self.assertIn("malformed_structured_list", result.stdout)
+
+    def test_replace_output_refusal_and_success(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); signals, ohlcv = self._fixtures(root); args = [sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-turning-volatility-precursors", "--signals", str(signals), "--ohlcv", str(ohlcv), "--output-csv", str(root / "e.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "m.md"), "--replace-output", "--stdout-json"]
+            self.assertEqual(subprocess.run(args, cwd=BASE_DIR, capture_output=True, text=True).returncode, 0)
+            no_replace = [part for part in args if part != "--replace-output"]
+            self.assertNotEqual(subprocess.run(no_replace, cwd=BASE_DIR, capture_output=True, text=True).returncode, 0)
+            self.assertEqual(subprocess.run(args, cwd=BASE_DIR, capture_output=True, text=True).returncode, 0)
+
+    def test_public_fetch_argument_uses_mocked_fetcher(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); signals, _ = self._fixtures(root)
+            def fake_fetch(path: Path, limit: int) -> None:
+                path.write_text("timestamp_utc,open,high,low,close,interval\n2026-07-01T01:00:00Z,100,100,100,100,15m\n2026-07-01T01:15:00Z,100,100,100,100,15m\n2026-07-01T01:30:00Z,100,100,100,100,15m\n2026-07-01T01:45:00Z,100,100,100,100,15m\n", encoding="utf-8")
+            argv = ["log_feedback.py", "replay-turning-volatility-precursors", "--signals", str(signals), "--fetch-public-ohlcv", "--output-csv", str(root / "e.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "m.md"), "--replace-output", "--stdout-json"]
+            with patch.object(sys, "argv", argv), patch("src.feedback.turning_volatility_precursor_replay._fetch_ohlcv", side_effect=fake_fetch), patch("sys.stdout", new_callable=StringIO) as out:
+                self.assertEqual(main(), 0)
+                self.assertIn('"ok":true', out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

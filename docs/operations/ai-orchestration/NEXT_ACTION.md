@@ -1,85 +1,82 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260711-MTP-P8-OPERATING-EVIDENCE-COLLECTION`
-- mode: `HUMAN_CHECK`
-- task_type: `P8 OPERATING TRIAL / EVIDENCE COLLECTION`
-- previous_work_id: `BTCFX-20260711-MTP-P8-EVIDENCE-PIPELINE-ACCEPTANCE-TESTS`
-- previous_status: `DONE / ACCEPTED / ARCHIVED`
+- current_work_id: `BTCFX-20260712-P8-TURNING-VOLATILITY-PRECURSOR-REPLAY`
+- mode: `BOUNDED_CODEX`
+- task_type: `P8 OFFLINE EVIDENCE / TURNING AND VOLATILITY PRECURSOR REPLAY`
+- previous_work_id: `BTCFX-20260712-P8-DAILY-CYCLE-SCHEDULED-VERIFY`
+- previous_status: `DONE / VERIFIED / ARCHIVED`
 
 ## Current state
 
-P8 evidence-pipeline implementation is complete and accepted.
+P8 evidence collection remains active. The daily operating-cycle automation completed its first scheduled 11:30 JST run successfully on 2026-07-12.
 
-Accepted implementation chain:
+Verified scheduled result:
+
+- candidate rows: 207
+- candidate signals: 107
+- scenarios: 84
+- resolved: 74
+- unresolved: 10
+- no-OHLCV: 0
+- ISSUE-001 qualified rows: 38
+- P9 readiness: false
+- error codes: none
+
+The completed automation spec is archived at:
 
 ```text
-850ab24
-759370b
-29e0a39
-0397fa8
+chatgpt/specs/archive/20260711_p8_daily_operating_cycle_automation.md
 ```
 
-The implementation spec is archived at:
+## New observed issue
+
+The 2026-07-12 07:05 JST signal remained strongly Long-biased and sent no notification, despite reversal-risk and major-resistance rejection evidence before a material downward move. A later Short attention arrived after the main move.
+
+This is recorded as:
 
 ```text
-chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md
+P8-ISSUE-008 — Turning / volatility precursor alert is late or absent
 ```
 
-`chatgpt/specs/active/` is intentionally empty except for `.gitkeep`.
-
-## What P8 now does
-
-- evaluates market-path outcomes deterministically
-- preserves P6 outcome semantics separately from P8 comparison status
-- joins eligible actual trade episodes using high/medium link evidence
-- excludes unresolved, no-OHLCV, low-confidence, and ambiguous evidence from performance claims
-- measures global no-trade STOP versus opposite-side B/C opportunities offline
-- produces an exception-only human review queue
-- reports reproducibility metadata and P9 readiness
-- never applies automatic tuning
+This single case is not sufficient for production tuning.
 
 ## Current exact next action
 
-Operate P8 through the daily wrapper `tools/run_p8_daily_cycle.py`, which calls `run-p8-operating-cycle` at the canonical 11:30 JST schedule. Do not manually reconstruct candidate, signal, OHLCV, P4, P5, or P8 lineage. Do not begin P9 implementation yet.
+HUMAN_CHECK / ChatGPT review of corrected turning / volatility precursor replay.
 
-The corrected baseline was recorded on 2026-07-11 using current-candidate lineage and fresh public 15-minute OHLCV. On the next meaningful evidence window, run the single runner with the same deterministic inputs; add episode/link inputs only when both validate. Compare coverage, ISSUE-001, and readiness metrics; do not modify thresholds, gates, classifier behavior, notifications, runtime, or orders.
-
-Accepted runner commit: `9bee53a`. Generated outputs remain local and uncommitted; P9 remains blocked pending readiness evidence and explicit approval.
-
-Daily runtime automation is installed and the first manual cycle succeeded. Next task: `BTCFX-20260712-P8-DAILY-CYCLE-SCHEDULED-VERIFY` after the next 11:30 JST cycle; confirm its compact result and the 11:45 JST AI review. P9 remains blocked.
+- corrected replay is recorded in local generated outputs and the archived spec
+- pre-correction metrics are invalid and discarded
+- recommendation is `continue_shadow_collection`; no production proposal is authorized
+- no further replay or public fetch occurs without a separately approved task
 
 ## P9 entry rule
 
-P9 remains blocked until the P8 report demonstrates the required readiness evidence.
+P9 remains blocked.
 
-Initial proposal eligibility requires at least:
+This replay may conclude only:
 
-- 100 resolved events
-- 30 unique eligible actual trade episodes
-- all four operator classes represented
-- Long and Short represented
-- non-empty regime and setup segmentation
-- reproducibility metadata present
+- `insufficient_evidence`
+- `continue_shadow_collection`
+- `eligible_for_notification_proposal`
 
-Practical readiness also requires a distinct validation window and explicit human approval.
-
-A readiness result authorizes only a P9 proposal. It never authorizes production changes.
+Even an eligible result authorizes only a separate proposal. It does not authorize production code or configuration changes.
 
 ## Active sources of truth
 
+- `chatgpt/specs/archive/20260712_turning_volatility_precursor_replay.md`
 - `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
 - `docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
-- `chatgpt/specs/archive/20260711_manual_operator_trial_evidence_pipeline.md`
+- `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
 
 ## Prohibited
 
-- no automatic tuning
-- no P5 classifier mutation
-- no threshold, scoring, or gate change
-- no notification or mail behavior change
+- no scoring or market-map tuning
+- no threshold or gate change
+- no notification trigger or mail behavior change
 - no runtime or launchd change
+- no automatic tuning
 - no exchange API, private, account, or order endpoint
-- no secrets or raw exchange export commit
+- no raw export commit
 - no `paper_positions.csv` integration
 - no automatic order
 
