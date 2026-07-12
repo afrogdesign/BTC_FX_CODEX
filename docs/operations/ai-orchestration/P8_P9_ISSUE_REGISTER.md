@@ -283,3 +283,9 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - true thesis invalidation activates the supported opposite side; readiness-only invalidity does not
 - own wait-only blockers remain side-specific; 13:05 and 14:05 previews remain accepted
 - no score, gate, market-map, notification, mail, runtime, or order behavior changed
+#### Side-aware wait-only and priority contract completion — 2026-07-12
+
+- exact wait-only blockers now degrade non-fresh zone/direction B candidates while allowing fresh trigger exceptions
+- B ordering is follow-through > triggered > late > armed > watch
+- 13:05 and 14:05 real-artifact previews remain accepted
+- no score, gate, market-map, notification, mail, runtime, or order behavior changed

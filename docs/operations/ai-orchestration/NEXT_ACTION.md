@@ -197,3 +197,46 @@ Complete deterministic fresh-trigger lifecycle, primary ordering, true-thesis in
 - fresh trigger lifecycle and primary ordering are corrected
 - 13:05 and 14:05 acceptance remains stable
 - no runtime apply or production notification change is authorized
+
+
+---
+
+# Current next action — 2026-07-12 side-aware wait-only / priority final contract fix
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-WAIT-ONLY-PRIORITY-FIX`
+- mode: `BOUNDED_CODEX`
+- task_type: `FINAL CONTRACT FIX / SOURCE + TEST`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_wait_only_and_priority_contract_fix.md`
+- parent_commit: `75b6413`
+
+## Review finding
+
+The real 13:05 and 14:05 previews pass, but the implementation still violates two approved edge contracts:
+
+- exact side-specific wait-only can be bypassed by zone-only activation or can incorrectly suppress a genuine matching 15M trigger,
+- B-candidate state priority still ranks `late` above fresh `triggered` / `follow_through` when trigger strength ties.
+
+## Goal
+
+Correct wait-only degradation/exception behavior and enforce:
+
+```text
+follow_through > triggered > late > armed > watch
+```
+
+Preserve the accepted real previews and all safety boundaries.
+
+## Runtime boundary
+
+- source/test only
+- no push
+- no runtime apply
+- no monitor restart
+- no launchd change
+- no mail/notification trigger change
+- no score, market-map, gate, API, or order behavior change
+## Side-aware wait-only and priority contract completed
+
+- wait-only degradation and fresh-trigger exceptions are finalized
+- B primary ordering is finalized and pinned previews remain stable
+- no runtime apply or production notification change is authorized

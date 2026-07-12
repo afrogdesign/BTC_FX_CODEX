@@ -24,7 +24,7 @@ class SideAwareMtfActionTests(unittest.TestCase):
         self.assertEqual(result["execution_context"]["chase_status"], "not_late")
 
     def test_mirrored_short_stop_long_armed(self) -> None:
-        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "thesis_invalidated"
+        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "thesis_invalidated"; current["active_trade_plan"]["side_plans"]["long"]["counter_scalp_status"] = "conditional"
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["short"]["action_class"], "STOP_OR_EXIT")
         self.assertEqual(result["long"]["action_class"], "B_CHECK_15M")
@@ -106,6 +106,42 @@ class SideAwareMtfActionTests(unittest.TestCase):
         result = evaluate_side_aware_mtf_action(current, previous=previous)
         self.assertEqual(result["short"]["state"], "triggered")
         self.assertEqual(result["short"]["trigger_strength"], 1)
+
+    def test_wait_only_zone_non_primary_degrades_to_watch(self) -> None:
+        current = payload(); current["active_trade_plan"]["side_plans"]["short"]["counter_scalp_status"] = "blocked"; current["primary_setup_side"] = "long"; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = ["short_at_major_support_wait_only"]
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["short"]["action_class"], "C_WATCH_ZONE")
+
+    def test_wait_only_matching_15m_remains_triggered(self) -> None:
+        current = payload(); current["signals_15m"] = "short"; current["primary_setup_side"] = "long"; current["primary_setup_status"] = "watch"
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["short"]["action_class"], "B_CHECK_15M")
+        self.assertEqual(result["short"]["state"], "triggered")
+
+    def test_wait_only_previous_cross_remains_triggered(self) -> None:
+        current = payload(); previous = payload(); current["current_price"] = 64150; previous["current_price"] = 64500; previous["active_trade_plan"]["side_plans"]["long"]["stop_loss"] = 64200
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["short"]["action_class"], "B_CHECK_15M")
+        self.assertEqual(result["short"]["state"], "triggered")
+
+    def test_wait_only_blocker_is_named_side_only(self) -> None:
+        current = payload(); current["no_trade_flags"] = ["long_at_major_resistance_wait_only"]; current["active_trade_plan"]["side_plans"]["short"]["counter_scalp_status"] = "blocked"; current["primary_setup_side"] = ""
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertIn(result["long"]["action_class"], {"STOP_OR_EXIT", "C_WATCH_ZONE"})
+        self.assertEqual(result["short"]["action_class"], "B_CHECK_15M")
+
+    def test_fresh_trigger_outranks_late_candidate(self) -> None:
+        current = json.loads((ROOT / "logs/signals/20260712_050500.json").read_text()); previous = payload(); current["signals_15m"] = "long"; current["primary_setup_side"] = ""; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = []
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["short"]["state"], "late")
+        self.assertEqual(result["long"]["state"], "triggered")
+        self.assertEqual(result["execution_context"]["primary_side"], "long")
+
+    def test_follow_through_outranks_late_candidate(self) -> None:
+        current = json.loads((ROOT / "logs/signals/20260712_050500.json").read_text()); previous = payload(); current["signals_15m"] = "long"; current["signals_1h"] = "long"; current["primary_setup_side"] = ""; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = []
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["long"]["state"], "follow_through")
+        self.assertEqual(result["execution_context"]["primary_side"], "long")
 
     def test_true_thesis_invalidation_arms_supported_opposite(self) -> None:
         current = payload(); current["primary_setup_reason"] = "thesis_invalidated"; current["primary_setup_status"] = "invalid"; current["active_trade_plan"]["side_plans"]["short"]["zone_position"] = "outside_zone"

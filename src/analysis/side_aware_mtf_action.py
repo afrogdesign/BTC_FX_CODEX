@@ -106,6 +106,7 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
         if prior_price is not None and current_price is not None and prior_stop is not None:
             previous_cross = (side == "short" and prior_price > prior_stop >= current_price) or (side == "long" and prior_price < prior_stop <= current_price)
     reasons: list[str] = []
+    fresh_trigger = bool(match_15m or previous_cross)
     if global_fatal:
         reasons.append("global_fatal")
         action, state = "STOP_OR_EXIT", "invalidated"
@@ -115,7 +116,7 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     elif setup_invalid:
         reasons.append("own_primary_setup_invalid")
         action, state = "STOP_OR_EXIT", "invalidated"
-    elif side_wait and setup_side == side and not previous_cross:
+    elif side_wait and setup_side == side and not fresh_trigger:
         reasons.append("side_wait_only")
         action, state = "STOP_OR_EXIT", "invalidated"
     elif str(current.get("trade_execution_gate", "")).strip().lower() == "pass" and setup_side == side and market_status == "allowed":
@@ -132,7 +133,9 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
             action, state = "C_WATCH_ZONE", "watch"
         if side_wait:
             reasons.append("side_wait_only")
-            if action == "C_WATCH_ZONE":
+            if not fresh_trigger and counter_status != "conditional":
+                action, state = "C_WATCH_ZONE", "watch"
+            elif action == "C_WATCH_ZONE":
                 state = "watch"
     else:
         action, state = "NONE", "dormant"
@@ -182,7 +185,7 @@ def evaluate_side_aware_mtf_action(current: dict, previous: dict | None = None) 
                         value["state"] = "late"
                     value["reason_codes"].append(prior_chase)
     priority = {"A_FORMAL": 5, "B_CHECK_15M": 4, "C_WATCH_ZONE": 3, "STOP_OR_EXIT": 2, "NONE": 1}
-    state_priority = {"late": 6, "follow_through": 5, "triggered": 4, "armed": 2, "watch": 1, "invalidated": 0, "dormant": 0}
+    state_priority = {"follow_through": 5, "triggered": 4, "late": 3, "armed": 2, "watch": 1, "invalidated": 0, "dormant": 0}
     candidates = [(side, value) for side, value in (("long", long), ("short", short))]
     primary_side, primary = max(candidates, key=lambda item: (priority[item[1]["action_class"]], int(item[1].get("trigger_strength", 0)), state_priority.get(item[1]["state"], 0), int(item[1]["plan_support"]), item[0] == "short"))
     if primary["action_class"] in {"NONE", "STOP_OR_EXIT"}:
