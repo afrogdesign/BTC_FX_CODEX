@@ -1,111 +1,84 @@
 # PRACTICAL_TRADING_SYSTEM_COMPLETION_ROADMAP
 
-## Purpose
+status: historical / superseded as active execution route
+last_reviewed: 2026-07-10
 
-MCP-primary の実運用を前提に、手動取引 surface から evidence 品質、handoff、将来の自動化までを短く整理する。
+## Current source of truth
 
-## Current completion status
+この文書は、2026-06-30時点のevidence-quality phaseを整理した旧ロードマップである。
 
-- orchestration baseline: complete
-- MCP-primary workflow: complete
-- dashboard parity: complete
-- checkpoint push: reported complete
-- source-of-truth consolidation: complete
-- runtime repo reflection: not required unless explicitly reopened
-- evidence / intraperiod / win-rate diagnostics: current
-- semi-automatic approval path: not started
-- automatic trading readiness: not started
+現在のmanual trading practicality作業では、次を正本とする。
 
-practical trading system is now in the evidence-quality phase.
+1. `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+2. `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+3. `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+4. `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
-## Completion phases
+この文書に残っていた旧`Next 5 recommended tasks`は、すでに後続のevidence / OHLCV / self-review作業へ展開されているため、current next taskとして使わない。
+
+## Historical purpose
+
+MCP-primaryの実運用を前提に、手動取引surface、evidence品質、handoff、将来の自動化までを段階化した。
+
+## Historical phase summary
 
 ### Phase A: operation and orchestration baseline
 
 - status: complete
-- purpose: MCP-primary で安全に回る最小運用を固定する。
-- required next evidence or gate: current docs alignment と checkpoint push report.
+- MCP-primaryで安全に回る最小運用を固定した。
 
 ### Phase B: manual-trading surfaces
 
 - status: complete
-- purpose: public HTML / notification mail / local dashboard を同一判断ソースで揃える。
-- required next evidence or gate: surface parity と report-only safety の明示。
+- public HTML / notification mail / local dashboardのsingle-source方針を整えた。
 
 ### Phase C: source-of-truth consolidation
 
 - status: complete
-- purpose: MCP repo が current source of truth であり、old runtime pull handoff が不要であることを確認する。
-- required next evidence or gate: source-of-truth 宣言と runtime pull handoff closed の記録。
+- MCP repoをcurrent source of truthとして整理した。
 
 ### Phase D: evidence / intraperiod / win-rate diagnostics
 
-- status: current
-- purpose: 実運用データから entry, timeout, TP/SL, expectancy を評価する。
-- required next evidence or gate: intraperiod evidence と win-rate diagnostics の再開。
+- status: evolved into current self-review and practicality route
+- no_ohlcv、valid sample、entry outcome、candidate side breakdownを扱った。
 
 ### Phase E: semi-automatic approval path
 
-- status: not started
-- purpose: human review 前提の承認補助を検討する。
-- required next evidence or gate: explicit safety design と承認基準。
+- status: not approved
+- current practicality routeではmanual human decisionを維持する。
 
 ### Phase F: automatic trading readiness
 
 - status: not started
-- purpose: automatic trading の可否を別途厳格に判断する。
-- required next evidence or gate: proven metrics, explicit `FORMAL_GO`, separate approval.
+- explicit `FORMAL_GO`と別承認が必要。
 
-## Phase acceptance gates
+## Current replacement phase sequence
 
-- no separate decision path
-- report-only safety remains visible
-- public HTML / mail / dashboard stay aligned
-- runtime pull is reviewed before execution
-- no private/account/order endpoints before explicit safety design
-- automatic trading requires explicit `FORMAL_GO` and separate approval
+```text
+P1 importer active spec
+→ P2 importer implementation
+→ P3 trade-to-signal/scenario linking
+→ P4 coverage and scenario normalization
+→ P5 offline A/B/C/STOP classifier
+→ P6 historical replay
+→ P7 shadow surface
+→ P8 human manual trial
+→ P9 evidence-backed tuning review
+```
 
-## Next 5 recommended tasks
-
-1. `BTCFX-20260630-NO-OHLCV-COVERAGE-DIAGNOSTIC`
-   - Goal: no_ohlcv が支配的な理由を見つけ、valid sample の分母を明確にする。
-   - Stop condition: report-only で no_ohlcv 率の扱いが固定されたら止める。
-2. `BTCFX-20260630-VALID-SAMPLE-WINRATE-REPORT`
-   - Goal: valid sample に限定した win-rate report を整える。
-   - Stop condition: no_ohlcv 除外の分母が明示されたら止める。
-3. `BTCFX-20260630-ENTRY-REACHED-OUTCOME-BREAKDOWN`
-   - Goal: entry-reached subset の outcome 分布を整理する。
-   - Stop condition: entry 後の outcome 分布が report-only で見えるようになったら止める。
-4. `BTCFX-20260630-CANDIDATE-TYPE-SIDE-BREAKDOWN`
-   - Goal: candidate_type / side / active_primary_action の分布を揃える。
-   - Stop condition: 3 軸の breakdown が一致した基準で出たら止める。
-5. `BTCFX-20260630-MAJOR-TURN-CANDIDATE-REVIEW`
-   - Goal: potential_fakeout / potential_missed_turn / bad_entry_timing を review-only で整理する。
-   - Stop condition: human review 用の候補一覧が揃ったら止める。
-
-## Safety boundaries
+## Current safety boundaries
 
 - report-only
 - not `FORMAL_GO`
 - no automatic order
 - no API keys
 - no private/account/order endpoints
+- no raw export commit
+- no gate relaxation without human approval
 - human decides manually
 
-## What is not complete yet
+## Historical value
 
-- system is not an automatic trading system yet
-- runtime repo reflection is not required unless explicitly reopened
-- no live/private/order endpoint work is approved
-- win-rate / expectancy improvement is not complete
-- evidence-based tuning is the next major product work
+この文書は、evidence-quality phaseへ移行した経緯の参照として保持する。
 
-## Mini Codex task-shaping notes
-
-- prefer 1 to 3 edit files
-- explicit read/edit/do-not-edit lists
-- no broad repo exploration
-- no product judgment delegated to Codex
-- all runtime/pull/push tasks must be explicit
-- validation at task end
-- compact report to `response.txt` exactly once
+future AIは、この文書からnext taskを決めず、`START_HERE.md`と`NEXT_ACTION.md`を使う。

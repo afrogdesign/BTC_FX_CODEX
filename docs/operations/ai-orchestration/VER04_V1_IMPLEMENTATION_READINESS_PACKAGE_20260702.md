@@ -109,3 +109,26 @@ No runtime/deploy/source trading logic files unless explicitly approved.
 - verify branch `Ver04-v1`
 - do not use the old runtime repo
 - do not commit raw MEXC exports
+
+
+---
+
+## 2026-07-10 route update
+
+This readiness package remains an input reference, not the current immediate implementation instruction.
+
+Current route:
+
+- `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+- `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+- `docs/operations/ai-orchestration/NEXT_ACTION.md`
+
+The next task is now:
+
+```text
+BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC
+```
+
+The importer must not be implemented before the active spec is created and reviewed.
+
+The P1 spec must also reconcile the raw-input path difference between this package's `docs/mexc_csv/` and the later final design's `local/manual_trade_imports/YYYYMMDD/` using actual repo and `.gitignore` evidence.

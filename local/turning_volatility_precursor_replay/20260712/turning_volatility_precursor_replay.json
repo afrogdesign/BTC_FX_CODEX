@@ -1,0 +1,123 @@
+{
+  "actual_backed_count": 0,
+  "episode_rows": 1727,
+  "evaluation_cutoff": "2026-07-12T02:45:00+00:00",
+  "input_fingerprints": {
+    "ohlcv": "2d7d58e4a5449dfb3e534634823ebe43982b1cd74c95ea88b6f98685ebe23766",
+    "signals": "36de634d7d50f2363a0176d0339b1a3a5447efbf4bdc913a14781fad36cdc947"
+  },
+  "method_parameters": {
+    "horizons_bars": {
+      "1h": 4,
+      "2h": 8,
+      "4h": 16
+    },
+    "material_move_multiplier_atr": 2.0,
+    "material_move_percent": 0.005
+  },
+  "method_version": "turning_volatility_precursor_replay.v1",
+  "metrics": {
+    "POLICY_COMBINED_PRECURSOR": {
+      "clean_directional_precision": 0.475962,
+      "false_precursor_rate": 0.052885,
+      "matching_large_moves": 198,
+      "median_lead_minutes": 27969.993000000002,
+      "opposite_move_rate": 0.454327,
+      "precursor_episodes": 417,
+      "resolved_episodes": 416,
+      "unresolved_rate": 0.002398,
+      "whipsaw_rate": 0.016827
+    },
+    "POLICY_CURRENT_NOTIFICATION": {
+      "clean_directional_precision": 0.561508,
+      "false_precursor_rate": 0.027778,
+      "matching_large_moves": 283,
+      "median_lead_minutes": 79449.993,
+      "opposite_move_rate": 0.396825,
+      "precursor_episodes": 505,
+      "resolved_episodes": 504,
+      "unresolved_rate": 0.00198,
+      "whipsaw_rate": 0.013889
+    },
+    "POLICY_FAILED_FLIP_GUARD": {
+      "clean_directional_precision": 0.435028,
+      "false_precursor_rate": 0.067797,
+      "matching_large_moves": 77,
+      "median_lead_minutes": 24009.986,
+      "opposite_move_rate": 0.474576,
+      "precursor_episodes": 178,
+      "resolved_episodes": 177,
+      "unresolved_rate": 0.005618,
+      "whipsaw_rate": 0.022599
+    },
+    "POLICY_LEVEL_REJECTION": {
+      "clean_directional_precision": 0.4689,
+      "false_precursor_rate": 0.057416,
+      "matching_large_moves": 98,
+      "median_lead_minutes": 26619.991,
+      "opposite_move_rate": 0.454545,
+      "precursor_episodes": 210,
+      "resolved_episodes": 209,
+      "unresolved_rate": 0.004762,
+      "whipsaw_rate": 0.019139
+    },
+    "POLICY_THESIS_STRESS": {
+      "clean_directional_precision": 0.475962,
+      "false_precursor_rate": 0.052885,
+      "matching_large_moves": 198,
+      "median_lead_minutes": 27969.993000000002,
+      "opposite_move_rate": 0.454327,
+      "precursor_episodes": 417,
+      "resolved_episodes": 416,
+      "unresolved_rate": 0.002398,
+      "whipsaw_rate": 0.016827
+    }
+  },
+  "no_automatic_tuning": true,
+  "pinned_case": {
+    "signal_id": "20260711_220501",
+    "status": "caught_before_move"
+  },
+  "recommendation_status": "continue_shadow_collection",
+  "regime_phase_metrics": {
+    "phase": {
+      "breakout": 87,
+      "pullback": 249,
+      "range": 1114,
+      "reversal_risk": 275,
+      "trend_following": 2
+    },
+    "regime": {
+      "downtrend": 260,
+      "range": 774,
+      "transition": 638,
+      "uptrend": 52,
+      "volatile": 3
+    }
+  },
+  "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+  "schema_version": "turning_volatility_precursor_replay.v1",
+  "side_metrics": {
+    "BOTH": {
+      "episodes": 0,
+      "resolved": 0
+    },
+    "DOWN": {
+      "episodes": 613,
+      "resolved": 613
+    },
+    "UP": {
+      "episodes": 1114,
+      "resolved": 1109
+    }
+  },
+  "signal_rows": 2872,
+  "unresolved_counts": {
+    "large_down": 966,
+    "large_up": 645,
+    "no_large_move": 82,
+    "unresolved": 5,
+    "whipsaw_both": 29
+  },
+  "validation_status": "established"
+}

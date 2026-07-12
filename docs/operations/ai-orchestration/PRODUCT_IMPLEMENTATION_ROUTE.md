@@ -1,17 +1,15 @@
 # PRODUCT_IMPLEMENTATION_ROUTE
 
-last_updated: 2026-07-02
+last_updated: 2026-07-10
 repo: `afrogdesign/BTC_FX_CODEX`
 primary_mcp_working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 status: active product route for future AI / ChatGPT / Codex work
 
 ## Purpose
 
-このファイルは、今後 AI が迷わず btc_monitor の実装を進めるための導線です。
+このファイルは、今後のAIがbtc_monitorのproduct作業を迷わず進めるための上位導線である。
 
-Ver04-v1 は major product-direction branch です。Ver03-v4 は prior baseline / history として扱います。
-
-現時点の最優先目的は、自動売買ではありません。
+現時点の最優先目的は自動売買ではない。
 
 ```text
 notification mail を受け取った人間が、
@@ -19,163 +17,256 @@ notification mail を受け取った人間が、
 攻めの姿勢で勝てる manual trading support system を作る。
 ```
 
-## Source-of-truth documents
+## Product source of truth
 
-今後の product / evaluation / implementation 判断は、次の順で読む。
+product / evaluation / practicality / implementation判断は次の順で読む。
 
-1. `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
-   - Ver04-v1 の上位計画。
-   - Ver03-v4 を prior baseline として引き継ぎつつ、Ver04-v1 の active direction を定義する。
+1. `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+   - future AIがphaseを飛ばさず実行するための制御文書。
 
-2. `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
-   - 今回の最終設計正本。
-   - daily proxy / weekly review / biweekly actual trade import の自己改善ループを定義する。
+2. `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+   - 本採用候補の少なさ、operator action、scenario lifecycle、ground truthを統合した詳細改善計画。
 
-3. `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-   - 「15分足で人間が勝てる」の定義正本。
-   - entry だけでなく watch / skip / exit / take-profit / avoided_loss / missed_opportunity / over_suppression / turning_point を評価対象にする。
+3. `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
+   - daily proxy / weekly review / biweekly actual trade importの自己改善設計。
 
-4. `docs/operations/ai-orchestration/MILESTONES.md`
-   - durable accepted history。
-   - 今回の product direction milestone もここへ集約する。
+4. `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
+   - entryだけでなくwatch / skip / exit / take-profitを含む評価定義。
 
-5. `docs/operations/ai-orchestration/NEXT_ACTION.md`
-   - 次に Codex / future AI が実行すべき narrow task。
+5. `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
+   - 高位product direction。
+
+6. `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
+   - Phase4 observation / cue / approval gate。
+
+7. `docs/operations/ai-orchestration/MILESTONES.md`
+   - accepted history。
+
+8. `docs/operations/ai-orchestration/NEXT_ACTION.md`
+   - immediate next task。
 
 ## Current product doctrine
 
 ### What the system is
 
-- 人間の manual trading support system。
-- notification mail は triage / entry point。
-- public HTML report は current main manual-trading UI。
-- local dashboard / app surface は confirmation / future automation foundation。
-- 3 surface は single-source doctrine を守る。
+- 人間のmanual trading support system。
+- notification mailはtriage / chart-check trigger。
+- public HTML reportはmain operator UI。
+- local dashboardはconfirmation / future automation foundation。
+- mail / HTML / dashboardはsingle-source doctrineを守る。
+- human decides manually。
 
 ### What the system is not yet
 
-- 自動売買システムではない。
-- `FORMAL_GO` ではない。
-- automatic order はしない。
-- private/account/order endpoint は触らない。
-- API key / secret は読まない、表示しない。
+- automatic trading systemではない。
+- `FORMAL_GO`ではない。
+- `ACTIVE_*`は注文許可ではない。
+- private/account/order endpointを使わない。
+- API key / secretを扱わない。
 
-## Product direction
+## Current practicality decision
 
-守りすぎる通知から、攻めるためのレーダーへ変更する。
+現在の問題は、候補生成能力そのものより、候補からoperator actionへ変換する層にある。
 
-ただし、long / short の両方を常に検出する。
-現在の regime に合わせて優先方向だけ変える。
+既存の厳格判定は残す。
 
-entry は人間が15分足で判断する。
-turning point risk が高いときだけ強制ブレーキをかける。
+```text
+A_FORMAL
+  現行の厳格な最高品質候補。
 
-## Self-improvement loop
+B_CHECK_15M
+  人間が15分足でtriggerを確認する条件付き候補。
 
-今後の評価/改善は3層で進める。
+C_WATCH_ZONE
+  価格帯・scenarioを監視する候補。
+
+STOP_OR_EXIT
+  新規停止・利確・撤退を優先する局面。
+```
+
+重要:
+
+- A/B/C/STOPは既存gateの置換ではない。
+- `trade_execution_gate`は緩和しない。
+- `phase1b_lite_gate`を勝手に変更しない。
+- `opportunity_gate`を勝手に緩和しない。
+- `trend_flip_confirmed_up`単独を強評価へ戻さない。
+- planning routeの追加はproduction tuning承認ではない。
+
+## Scenario doctrine
+
+candidate row数と独立した機会数を混同しない。
+
+将来は次のlifecycleへ統合する。
+
+```text
+detected
+→ approaching_zone
+→ zone_touched
+→ trigger_wait
+→ confirmed
+→ entered / skipped / watched
+→ tp1 / tp2 / manual_exit / invalidated / expired
+```
+
+`signal_id`と`scenario_id`を分ける。
+
+同一scenarioの小幅更新は新しい機会として数えず、重要なstate transitionだけを通知候補にする。
+
+## Self-improvement layers
 
 ```text
 Layer 1: Daily Proxy Loop
-  毎日自動で回る。
-  実取引Excelなしで、通知・方向・攻め候補・守りすぎ・転換警戒を評価する。
+  actual tradeなしでも方向、候補、over-suppression、turning riskを評価する。
 
 Layer 2: Weekly Review Loop
-  週次で傾向を見る。
-  short / long の偏り、regime変化、守りすぎ、転換見落としを確認する。
+  long/short、regime、通知過多、守りすぎの傾向を見る。
 
 Layer 3: Biweekly Ground Truth Loop
-  2週間に1回の実取引Excelインポート。
-  実際の人間の損益を ground truth として、daily proxy のズレを補正する。
+  actual trade exportを取り込み、proxyを実損益で補正する。
 ```
 
-## Implementation route
+actual trade ground truthが入るまで、proxyを実績として断定しない。
 
-### Phase V1-1: Post-eval asset health audit
+## Active implementation route
 
-Completed history for Ver04-v1.
+### P0: Plan and AI routing
 
-Goal:
+Status: planning route created.
 
-- 既存の事後評価資産を棚卸しする。
-- deterministic daily proxy evaluator に使えるデータを確定する。
-- AI post review / runtime logs / old path / stopped_after_failures の状態を安全に確認する。
+Outputs:
 
-Allowed:
+- `MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+- `MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+- startup / control / next-action routing
 
-- read-only repo/local audit
-- docs-only report
-- narrow CSV schema inspection
-- runtime log summary if explicitly scoped
+### P1: Manual actual trade import active spec
 
-Not allowed:
+Current next task:
 
-- API call
-- secret read/print
-- runtime restart
-- launchctl modification
-- notification sending
-- trading logic change
-- exchange fetch
-- private/account/order endpoint
-
-### Phase V1-2: Daily proxy evaluator
-
-Implemented.
-
-- `tools/log_feedback.py` now provides `build-daily-proxy-evaluator-report`
-- output path is `運用資料/reports/post_eval/daily_proxy_evaluator_YYYYMMDD.md`
-- report-only safety boundary is preserved
-
-### Phase V1-3: Manual actual trade import schema
-
-Next active implementation phase.
-
-- local MEXC xlsx import schema
-- raw exports stay local only
-- normalize into generated CSVs for later linking / ground truth
-
-### Phase V1-4: Actual trade to signal linking
+```text
+BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC
+```
 
 Goal:
 
-- actual trade と notification/signal を heuristic で紐づける。
-- confidence: high / medium / low / manual_confirmed / ambiguous。
+- 既存の `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER` を新しいpracticality routeへ接続するactive specを作る。
+- source実装前にschema、安全境界、test、idempotency、privacyを確定する。
 
-### Phase V1-5: Biweekly ground truth report
+P1では実装しない。
 
-Goal:
+### P2: Actual trade importer implementation
 
-- 実取引ベースの損益、manual short/long 成績、proxy-vs-actual calibration を出す。
-
-### Phase V1-6: Recommendation engine
-
-Goal:
-
-- evidence から改善候補を ranking する。
-- subject / label / NO_TRADE split / turning brake / long-short regime weighting の改善候補を出す。
-
-### Phase V1-7: Surface integration
-
-Goal:
-
-- post-eval status を public HTML / mail / dashboard に report-only で表示する。
-- single-source doctrine を維持する。
-
-## Default next task
-
-Unless the user says otherwise, the next implementation task is:
+Implementation candidate:
 
 ```text
 BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER
 ```
 
-This is the first implementation task after the readiness package.
+Rules:
 
-## Boundary reminders
+- local xlsx only
+- raw exports remain local
+- no API
+- normalized generated CSV
+- no `paper_positions.csv` mixing
 
-- Do not use old runtime repo for normal work.
-- Do not commit raw exchange exports.
-- Do not mix actual manual trades into `paper_positions.csv`.
-- Do not treat `ACTIVE_*` labels as `FORMAL_GO`.
-- Do not let AI post review failure block deterministic evaluation.
-- Keep product docs concise and route through this file, not scattered intermediate drafts.
+### P3: Actual trade to signal/scenario linking
+
+- timestamp
+- side
+- price context
+- competing signals
+- manual confirmation
+- confidence
+
+### P4: Coverage and scenario normalization
+
+- no_ohlcv root cause
+- resolved coverage
+- scenario identity
+- duplicate compression
+- lifecycle outcome
+
+### P5: Offline A/B/C/STOP classifier
+
+- report-only
+- existing gates unchanged
+- side-aware
+- regime-aware
+- thresholds are comparison parameters only
+
+### P6: Historical replay
+
+Compare:
+
+- current strict baseline
+- A only
+- A+B
+- A+B+C observation
+- long/short
+- regime
+- notification frequency
+- TP1-first / SL-first
+- MFE / MAE
+- over-suppression / missed opportunity
+
+### P7: Shadow surface
+
+- local report or render-only HTML
+- no live sending change
+- no runtime change without explicit task
+
+### P8: Human manual trial
+
+- A: high-quality candidate
+- B: enter only after human 15m confirmation
+- C: watch only
+- STOP: no new entry / take-profit / exit
+
+### P9: Evidence-backed tuning review
+
+Requires:
+
+- actual ground truth
+- stable linking
+- scenario normalization
+- adequate sample
+- explicit human approval
+
+P9 first produces a proposal. It does not automatically change production behavior.
+
+## Active spec rule
+
+- `chatgpt/specs/active/`が空ならsource実装へ進まない。
+- next phaseのactive specを1本だけ作る。
+- active specがある場合は、それを実装正本とする。
+- plan / current stateとの矛盾時はspec修正taskにする。
+- completed specはarchiveへ移す。
+
+## Success model
+
+The product is successful when:
+
+1. strict A candidate quality is retained.
+2. B candidates add useful human-review opportunities.
+3. C candidates preserve early opportunities without notification noise.
+4. STOP improves exits and loss avoidance.
+5. candidate rows are compressed into independent scenarios.
+6. actual trades calibrate proxy evaluation.
+7. A/B, long/short, and regime performance are measured separately.
+8. over-suppression and turning misses are visible.
+9. production tuning is evidence-backed, human-approved, and reversible.
+
+## Safety boundary
+
+- report-only
+- not `FORMAL_GO`
+- no automatic order
+- no private/account/order endpoints
+- no API keys or secrets
+- no raw exchange export commit
+- no runtime restart during normal product work
+- no notification behavior change without explicit approval
+- no threshold auto-mutation
+- human decides manually

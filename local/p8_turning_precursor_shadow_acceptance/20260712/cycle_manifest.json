@@ -1,0 +1,148 @@
+{
+  "actual_evidence": {
+    "eligible_rows": 0,
+    "high_confidence_rows": 0,
+    "medium_confidence_rows": 0,
+    "status": "missing",
+    "unique_episode_count": 0
+  },
+  "class_counts": {
+    "C_WATCH_ZONE": 2,
+    "STOP_OR_EXIT": 81
+  },
+  "comparison": {
+    "aligned": 36,
+    "too_defensive": 38
+  },
+  "counts": {
+    "ambiguous_rows": 1,
+    "candidate_rows": 207,
+    "candidate_signals": 107,
+    "no_ohlcv_rows": 0,
+    "outcome_counts": {
+      "ambiguous": 3,
+      "entry_reached": 3,
+      "not_entered": 7,
+      "pending": 1,
+      "sl_first": 92,
+      "timeout": 2,
+      "tp1_first": 93,
+      "tp2_first": 6
+    },
+    "resolved_rows": 74,
+    "review_queue_size": 38,
+    "scenario_count": 83,
+    "trial_fact_rows": 83,
+    "unresolved_rows": 9
+  },
+  "generated_at_utc": "2026-07-12T03:15:00+00:00",
+  "input_fingerprints": {
+    "candidates": "41e7a9cfbb2c4dd6bc11800b2148ee7be8bc6b5bb4d52c40e9371044e0396d59",
+    "ohlcv": "8144148ce3fd1e908f81af904e17861c814d193297155128edeffcfe6138c9ca",
+    "signal_context": "36de634d7d50f2363a0176d0339b1a3a5447efbf4bdc913a14781fad36cdc947"
+  },
+  "issue_001": {
+    "counterfactual_B": 9,
+    "counterfactual_C": 28,
+    "global_stop_present": true,
+    "issue_001_qualified_rows": 37,
+    "not_eligible": 40,
+    "opposite_side_exists": 77,
+    "stop_rows": 81
+  },
+  "lineage": {
+    "candidate_rows": 207,
+    "candidate_signals": 107,
+    "signal_duplicates": 0,
+    "signal_rows": 107,
+    "source_candidate_fingerprint": "41e7a9cfbb2c4dd6bc11800b2148ee7be8bc6b5bb4d52c40e9371044e0396d59",
+    "source_signal_fingerprint": "36de634d7d50f2363a0176d0339b1a3a5447efbf4bdc913a14781fad36cdc947"
+  },
+  "method_version": "manual_operator_operating_cycle.v1",
+  "no_automatic_tuning": true,
+  "output_fingerprints": {
+    "candidate_slice.csv": "452cacd871e5810c23ca486cd81a8d6335a0eee3c9db88892f0eb8805f670a72",
+    "intraperiod_outcomes.csv": "2e56dcec111ba193df2ccd8f2d85708d9d97e392fdfc3bdbd6456cb9851edf65",
+    "manual_operator_classifications.csv": "dcd894e2cd428a0994ea32f73fe82070ca418d4b962dd267bf638576c4eb3839",
+    "manual_operator_classifications.json": "10290a0855a44ba475251397b9e90181a69e4b386105d2ff4b9dd08aa197ab65",
+    "manual_operator_classifications.md": "dc59566e88829bcae4beda92c9047acaebec81ca062feb2138d8d8eba0619e6b",
+    "manual_operator_trial_evidence.json": "0acb0ac77871261b3c68d40d7ef36cd2a571648265a14a2afb4fae2bead2b01c",
+    "manual_operator_trial_evidence.md": "79690c48c7f85ebe3efae70a2fed2566ad170303b87150547e78335d18d94866",
+    "manual_operator_trial_facts.csv": "283a55f9cdeb6ff7e02873fda40d91f7940b7fb0298b523d7604fbaf31b620c9",
+    "manual_operator_trial_review_queue.csv": "2f3259749459d31cdb9312b9fd3fc17637e43b74537b0957addca2e892a7a518",
+    "manual_scenario_events.csv": "bd53544d35dabf25edc66dfe3fbcb677bb9fb373746ae64e48e936d5daf452df",
+    "manual_scenarios.csv": "825db99091e7588dd4734194f7275bd276de79a710d902d7cf2dd13b402aa5de",
+    "signal_context_slice.csv": "ef353349b31a6795c81a11e9131621edf3b8ad184d8363d6f31fb6e3ebe823c7"
+  },
+  "p9_readiness": {
+    "initial": {
+      "actual_entry_episodes": 0,
+      "class_segmentation_available": false,
+      "ready": false,
+      "regime_segmentation_available": true,
+      "reproducibility_metadata_available": true,
+      "resolved_events": 74,
+      "setup_segmentation_available": true,
+      "side_segmentation_available": true
+    },
+    "practical": {
+      "actual_entry_episodes": 0,
+      "ready": false,
+      "resolved_events": 74,
+      "validation_window_status": "not_established"
+    }
+  },
+  "report_date": "20260712",
+  "review_queue_size": 38,
+  "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+  "schema_version": "manual_operator_operating_cycle.v1",
+  "side_counts": {
+    "long": 42,
+    "short": 41
+  },
+  "source": {
+    "candidates": "active_plan_candidates.csv",
+    "interval": "15m",
+    "max_timestamp": "2026-07-12T03:15:00+00:00",
+    "min_timestamp": "2026-07-06T22:45:00+00:00",
+    "ohlcv": "public_fetch",
+    "ohlcv_freshness": "valid",
+    "rows": 499,
+    "signal_context": "trades.csv",
+    "source": "exchange-auto-public",
+    "symbol": "BTC_USDT"
+  },
+  "stage_statuses": {
+    "candidate_slice": "ok",
+    "intraperiod_outcomes": "ok",
+    "p4": "ok",
+    "p5": "ok",
+    "p8": "ok",
+    "signal_context_slice": "ok",
+    "turning_precursor_shadow": "success"
+  },
+  "turning_precursor_shadow": {
+    "actual_backed_count": 0,
+    "combined_false_rate": 0.384615,
+    "combined_median_lead_minutes": 69.9885,
+    "combined_opposite_rate": 0.192308,
+    "combined_precision": 0.307692,
+    "combined_recall": 0.25,
+    "combined_whipsaw_rate": 0.115385,
+    "current_notification_recall": 0.428571,
+    "enabled": true,
+    "error_codes": [],
+    "method_version": "turning_volatility_precursor_replay.v1",
+    "output_subdir": "turning_precursor_shadow",
+    "pinned_case_status": "caught_before_move",
+    "precursor_episodes": 175,
+    "realized_move_opportunities": 28,
+    "recommendation_status": "continue_shadow_collection",
+    "resolved_episodes": 26,
+    "signal_slice_rows": 127,
+    "status": "success",
+    "validation_down_resolved": 6,
+    "validation_status": "established",
+    "validation_up_resolved": 0
+  }
+}

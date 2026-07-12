@@ -1,0 +1,178 @@
+{
+  "actual_evidence": {
+    "eligible_rows": 0,
+    "high_confidence_rows": 0,
+    "medium_confidence_rows": 0,
+    "status": "missing",
+    "unique_episode_count": 0
+  },
+  "breakdowns": {
+    "regime": {
+      "range": 33,
+      "transition": 50
+    },
+    "setup_family": {
+      "counter_scalp": 37,
+      "limit_retest": 44,
+      "market": 2
+    },
+    "side": {
+      "long": 42,
+      "short": 41
+    }
+  },
+  "class_distribution": {
+    "C_WATCH_ZONE": 2,
+    "STOP_OR_EXIT": 81
+  },
+  "classifier_method_version": "manual_operator_classifier.v1",
+  "comparison": {
+    "aligned": 36,
+    "too_defensive": 38
+  },
+  "counts": {
+    "ambiguous_rows": 1,
+    "no_ohlcv_rows": 0,
+    "resolved_rows": 74,
+    "review_queue_size": 38,
+    "scenario_count": 83,
+    "trial_fact_rows": 83,
+    "unresolved_rows": 9
+  },
+  "cutoff": "20260712",
+  "eligible_actual_link_policy": [
+    "high",
+    "medium"
+  ],
+  "exit_code": 0,
+  "global_stop_opportunity": {
+    "counterfactual_B": 9,
+    "counterfactual_C": 28,
+    "global_stop_present": true,
+    "issue_001_qualified_rows": 37,
+    "not_eligible": 40,
+    "opposite_side_exists": 77,
+    "stop_rows": 81
+  },
+  "input_fingerprints": {
+    "classifications": "dcd894e2cd428a0994ea32f73fe82070ca418d4b962dd267bf638576c4eb3839",
+    "scenario_events": "bd53544d35dabf25edc66dfe3fbcb677bb9fb373746ae64e48e936d5daf452df",
+    "scenarios": "825db99091e7588dd4734194f7275bd276de79a710d902d7cf2dd13b402aa5de"
+  },
+  "input_status": {
+    "actual": "missing",
+    "classifications": "provided",
+    "scenario_events": "provided",
+    "scenarios": "provided"
+  },
+  "issue_flags": {
+    "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY": 37,
+    "high_value_missed_opportunity_proxy": 38,
+    "opposite_side_counterfactual_B": 9,
+    "opposite_side_counterfactual_C": 28,
+    "opposite_side_exists": 77,
+    "opposite_side_not_eligible": 40,
+    "stop_false_alarm_proxy": 36,
+    "stop_useful_proxy": 36
+  },
+  "issue_summary": {
+    "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY": {
+      "actual_backed_count": 0,
+      "affected_regime_counts": {
+        "range": 15,
+        "transition": 22
+      },
+      "affected_setup_counts": {
+        "counter_scalp": 37
+      },
+      "affected_side_counts": {
+        "long": 21,
+        "short": 16
+      },
+      "evidence_confidence": "proxy",
+      "first_evidence_timestamp": "2026-07-07T01:05:00.281305Z",
+      "last_evidence_timestamp": "2026-07-12T02:05:00.513429Z",
+      "occurrence_count": 37,
+      "resolved_evidence_count": 33,
+      "severity": "medium",
+      "status": "open hypothesis",
+      "tuning_eligibility": "not_eligible"
+    },
+    "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": {
+      "actual_backed_count": 0,
+      "affected_regime_counts": {},
+      "affected_setup_counts": {},
+      "affected_side_counts": {},
+      "evidence_confidence": "human_observation",
+      "first_evidence_timestamp": "",
+      "last_evidence_timestamp": "",
+      "occurrence_count": 0,
+      "resolved_evidence_count": 0,
+      "severity": "medium",
+      "status": "confirmed usability issue",
+      "tuning_eligibility": "not_eligible"
+    },
+    "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED": {
+      "actual_backed_count": 0,
+      "affected_regime_counts": {},
+      "affected_setup_counts": {},
+      "affected_side_counts": {},
+      "evidence_confidence": "human_observation",
+      "first_evidence_timestamp": "",
+      "last_evidence_timestamp": "",
+      "occurrence_count": 0,
+      "resolved_evidence_count": 0,
+      "severity": "medium",
+      "status": "confirmed usability issue",
+      "tuning_eligibility": "not_eligible"
+    },
+    "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY": {
+      "actual_backed_count": 0,
+      "affected_regime_counts": {},
+      "affected_setup_counts": {},
+      "affected_side_counts": {},
+      "evidence_confidence": "human_observation",
+      "first_evidence_timestamp": "",
+      "last_evidence_timestamp": "",
+      "occurrence_count": 0,
+      "resolved_evidence_count": 0,
+      "severity": "medium",
+      "status": "confirmed usability issue",
+      "tuning_eligibility": "not_eligible"
+    }
+  },
+  "link_confidence_coverage": {},
+  "max_evaluated_event_timestamp": "2026-07-12T02:05:00.513429Z",
+  "method_version": "manual_operator_trial_evidence.v1",
+  "no_automatic_tuning": true,
+  "ok": true,
+  "p9_readiness": {
+    "initial": {
+      "actual_entry_episodes": 0,
+      "class_segmentation_available": false,
+      "ready": false,
+      "regime_segmentation_available": true,
+      "reproducibility_metadata_available": true,
+      "resolved_events": 74,
+      "setup_segmentation_available": true,
+      "side_segmentation_available": true
+    },
+    "practical": {
+      "actual_entry_episodes": 0,
+      "ready": false,
+      "resolved_events": 74,
+      "validation_window_status": "not_established"
+    }
+  },
+  "replay_method_version": "manual_operator_historical_replay.v1",
+  "report_cutoff": "20260712",
+  "report_date": "20260712",
+  "report_written": true,
+  "review_queue_size": 38,
+  "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+  "schema_version": "manual_operator_trial_evidence.v1",
+  "unresolved_no_ohlcv_separated": true,
+  "zone_result_counts": {
+    "useful": 38
+  }
+}

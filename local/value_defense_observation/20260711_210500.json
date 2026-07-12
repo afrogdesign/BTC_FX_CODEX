@@ -1,0 +1,142 @@
+{
+  "actionability_label": "watch_only",
+  "actionability_safety": "report-only / not_FORMAL_GO / no automatic order / human decides manually",
+  "attack_review_flags": {
+    "evidence": {
+      "active_level_role": "support",
+      "bias": "long",
+      "current_price_position_long": "above_zones",
+      "current_price_position_short": "inside_shallow_retest_zone",
+      "failed_breakout_state": null,
+      "level_flip_state": "resistance_to_support_confirmed",
+      "long_value_defense_lifecycle_state": "continuation_candidate",
+      "market_map_flags": [
+        "long_into_major_resistance",
+        "resistance_to_support_flip",
+        "resistance_to_support_retest_confirmed",
+        "trend_flip_early_up"
+      ],
+      "market_map_primary_state": "early_up",
+      "short_value_defense_lifecycle_state": "shallow_retest_risk",
+      "transition_direction": "up",
+      "trend_flip_state": "early_up"
+    },
+    "evidence_quality": "full",
+    "evidence_source": "raw_result",
+    "human_approval_required": "yes",
+    "matched_tags": [
+      "trend_transition_candidate",
+      "higher_timeframe_reclaim",
+      "breakout_extension_candidate",
+      "short_invalidated_by_reclaim",
+      "runner_should_have_been_considered",
+      "micro_profit_trap_risk"
+    ],
+    "phase4_tuning_allowed": "no",
+    "review_only": true,
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "schema_version": "value_defense_attack_review_flags.v1",
+    "watch_tags": [
+      "trend_transition_candidate",
+      "higher_timeframe_reclaim",
+      "breakout_extension_candidate",
+      "tp_too_conservative",
+      "short_invalidated_by_reclaim",
+      "runner_should_have_been_considered",
+      "micro_profit_trap_risk"
+    ]
+  },
+  "bias": "long",
+  "current_price": 64353.2,
+  "current_price_position_long": "above_zones",
+  "current_price_position_short": "inside_shallow_retest_zone",
+  "detail_page_local_path": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/notifications_html/manual-trading/followup/20260711_210500.html",
+  "detail_page_status": "published",
+  "detail_page_url": "https://server.afrog.jp/btc-monitor/notifications/manual-trading/followup/20260711_210500.html",
+  "human_action": "次の通常通知で Value Defense Entry Layer を再確認し、浅い再検討帯と本命防衛ゾーンの位置関係を観察する。",
+  "long_value_defense": {
+    "continuation_trigger": 64258.1,
+    "defense_zone_basis": "next_support_below_shallow_zone",
+    "invalidation_zone": {
+      "high": 64107.35,
+      "low": 64093.99
+    },
+    "lifecycle_state": "continuation_candidate",
+    "market_entry_status": "invalid",
+    "operator_guidance": "浅い押し目だけで決め打ちせず、本命押し目と invalidation を先に確認する。",
+    "reclaim_trigger": 64199.77,
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "shallow_retest_risk": "high",
+    "shallow_retest_zone": {
+      "high": 64290.23,
+      "low": 64225.97
+    },
+    "side": "long",
+    "value_defense_zone": {
+      "high": 64173.57,
+      "low": 64109.43
+    }
+  },
+  "notification_kind": "followup",
+  "observation_checklist": {
+    "continuation_trigger_met": "unknown_pending_followup",
+    "invalidation_zone_reached": "unknown_pending_followup",
+    "reclaim_trigger_met": "unknown_pending_followup",
+    "shallow_retest_touched_first": "unknown_pending_followup",
+    "value_defense_zone_touched": "unknown_pending_followup",
+    "wait_or_enter_hindsight": "unknown_pending_followup"
+  },
+  "operator_label_status": {
+    "checked_fields": [
+      "summary_subject",
+      "detail_page_url",
+      "detail_page_local_path"
+    ],
+    "html_title_expected": "BTCFX Manual Trading Report",
+    "legacy_operator_label_leak_visible": false,
+    "path_slug_expected": "manual-trading"
+  },
+  "phase4_status": "blocked_until_observation_review_and_human_approval",
+  "primary_setup_reason": "confidence_below_min",
+  "primary_setup_side": "long",
+  "primary_setup_status": "watch",
+  "schema_version": "value_defense_observation_snapshot.v1",
+  "self_review_readiness": {
+    "change_readiness_level": "high",
+    "change_readiness_status": "tuning_review_candidate",
+    "human_approval_required": "yes",
+    "report_fingerprint": "jsr_47f3974e829ff589",
+    "review_queue_count": 10,
+    "run_metadata_fingerprint": "jsr_47f3974e829ff589",
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "schema_version": "judgment_self_review.v1",
+    "tuning_review_allowed": "no"
+  },
+  "short_value_defense": {
+    "continuation_trigger": 64369.35,
+    "defense_zone_basis": "next_resistance_above_shallow_zone",
+    "invalidation_zone": {
+      "high": 64539.97,
+      "low": 64526.61
+    },
+    "lifecycle_state": "shallow_retest_risk",
+    "market_entry_status": "invalid",
+    "operator_guidance": "浅い戻り売りだけで決め打ちせず、本命戻り売りと invalidation を先に確認する。",
+    "reclaim_trigger": 64432.62,
+    "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    "shallow_retest_risk": "high",
+    "shallow_retest_zone": {
+      "high": 64407.99,
+      "low": 64330.72
+    },
+    "side": "short",
+    "value_defense_zone": {
+      "high": 64521.74,
+      "low": 64457.26
+    }
+  },
+  "signal_id": "20260711_210500",
+  "source_file": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/last_result.json",
+  "summary_subject": "[BTCFX Manual Trading Report] ⏱期限切れ | 再評価 | BTC 64,353",
+  "timestamp_jst": "2026-07-12T06:05:00.317144+09:00"
+}
