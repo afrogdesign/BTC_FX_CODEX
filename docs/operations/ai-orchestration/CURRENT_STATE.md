@@ -764,3 +764,12 @@ Human explicitly approved enabling the already validated turning precursor shado
 - loaded contract: primary repo paths, shadow flag exactly once, daily 11:30 JST, unchanged stdout/stderr
 - first normal 11:30 JST shadow-enabled cycle remains pending; no manual P8 cycle was run
 - P8 evidence collection continues; P9 remains blocked; no notification, mail, monitor, scoring, gate, threshold, API, account, order, or other LaunchAgent change
+## 2026-07-12 side-aware MTF runtime apply
+
+- accepted source commit `b805439` is applied to the existing primary monitor runtime
+- target-only restart replaced PID `64053` with PID `82099`; launchd state remains running
+- runtime path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- future generated detail HTML and CSV rows now use side-aware action output; historical artifacts were not regenerated
+- monitor.err delta contained no Traceback, Exception, fatal, or ERROR findings
+- no score, gate, notification trigger, mail, schedule, API, account, position, or order behavior changed
+- P8 evidence remains report-only; P9 remains evidence-gated

@@ -270,3 +270,39 @@ The accepted 13:05 and 14:05 cases remain correct. One generic contract defect r
 - conditional counter-scalp no longer bypasses wait-only degradation
 - fresh trigger exceptions and pinned previews remain stable
 - no runtime apply or production notification change is authorized
+
+
+---
+
+# Current next action — 2026-07-12 side-aware MTF runtime apply
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-RUNTIME-APPLY`
+- mode: `CONTROLLED_RUNTIME_APPLY`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_runtime_apply.md`
+- accepted_source_commit: `b805439`
+- target_label: `com.afrog.btc-monitor`
+- human_approval: received
+
+## Goal
+
+Restart only the existing normal monitor process so future generated reports use the accepted side-aware operator-action source.
+
+## Boundary
+
+- one target-only restart
+- no plist change or re-registration
+- no manual monitor cycle
+- no historical report regeneration
+- no scoring, gate, trigger, schedule, or order change
+
+## Acceptance
+
+- replacement process runs from the primary repo
+- bounded error-log delta has no new source-related failure
+- return to observation posture after recording the runtime milestone
+## Side-aware MTF runtime observation
+
+- observe the first naturally generated future detail page and CSV row
+- verify side-aware fields and rendering are present
+- do not regenerate historical artifacts or tune from one case
+- no additional runtime restart or manual monitor cycle is authorized
