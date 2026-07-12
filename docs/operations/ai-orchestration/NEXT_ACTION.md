@@ -240,3 +240,33 @@ Preserve the accepted real previews and all safety boundaries.
 - wait-only degradation and fresh-trigger exceptions are finalized
 - B primary ordering is finalized and pinned previews remain stable
 - no runtime apply or production notification change is authorized
+
+
+---
+
+# Current next action — 2026-07-12 wait-only conditional contract fix
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-WAIT-ONLY-CONDITIONAL-FIX`
+- mode: `BOUNDED_CODEX`
+- task_type: `SIDE-AWARE WAIT-ONLY CONDITIONAL REGRESSION FIX`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_wait_only_conditional_fix.md`
+- parent_commit: `5d23001`
+
+## Review finding
+
+The accepted 13:05 and 14:05 cases remain correct. One generic contract defect remains: a non-primary side with an exact wait-only blocker and no fresh trigger can stay `B_CHECK_15M` when `counter_scalp_status=conditional`. The approved behavior requires `C_WATCH_ZONE / watch` regardless of conditional counter-scalp status unless matching 15M or previous opposite-stop crossing supplies fresh trigger evidence.
+
+## Runtime boundary
+
+- source/test fix only
+- local commit only
+- no push
+- no monitor restart
+- no mail/notification behavior change
+- no score/gate/Active Plan change
+- no automatic order behavior
+## Side-aware wait-only conditional fix completed
+
+- conditional counter-scalp no longer bypasses wait-only degradation
+- fresh trigger exceptions and pinned previews remain stable
+- no runtime apply or production notification change is authorized

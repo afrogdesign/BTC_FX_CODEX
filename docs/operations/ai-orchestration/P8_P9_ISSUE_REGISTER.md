@@ -289,3 +289,8 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - B ordering is follow-through > triggered > late > armed > watch
 - 13:05 and 14:05 real-artifact previews remain accepted
 - no score, gate, market-map, notification, mail, runtime, or order behavior changed
+#### Side-aware wait-only conditional fix — 2026-07-12
+
+- conditional counter-scalp status no longer bypasses exact side-specific wait-only degradation
+- fresh 15M/previous-cross exceptions remain available; 13:05 and 14:05 previews remain accepted
+- no score, gate, market-map, notification, mail, runtime, or order behavior changed

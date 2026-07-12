@@ -133,7 +133,7 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
             action, state = "C_WATCH_ZONE", "watch"
         if side_wait:
             reasons.append("side_wait_only")
-            if not fresh_trigger and counter_status != "conditional":
+            if not fresh_trigger:
                 action, state = "C_WATCH_ZONE", "watch"
             elif action == "C_WATCH_ZONE":
                 state = "watch"

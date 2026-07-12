@@ -24,7 +24,7 @@ class SideAwareMtfActionTests(unittest.TestCase):
         self.assertEqual(result["execution_context"]["chase_status"], "not_late")
 
     def test_mirrored_short_stop_long_armed(self) -> None:
-        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "thesis_invalidated"; current["active_trade_plan"]["side_plans"]["long"]["counter_scalp_status"] = "conditional"
+        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "invalid"; current["primary_setup_reason"] = "thesis_invalidated"; current["active_trade_plan"]["side_plans"]["long"]["counter_scalp_status"] = "conditional"; current["no_trade_flags"] = []
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["short"]["action_class"], "STOP_OR_EXIT")
         self.assertEqual(result["long"]["action_class"], "B_CHECK_15M")
@@ -111,6 +111,18 @@ class SideAwareMtfActionTests(unittest.TestCase):
         current = payload(); current["active_trade_plan"]["side_plans"]["short"]["counter_scalp_status"] = "blocked"; current["primary_setup_side"] = "long"; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = ["short_at_major_support_wait_only"]
         result = evaluate_side_aware_mtf_action(current)
         self.assertEqual(result["short"]["action_class"], "C_WATCH_ZONE")
+
+    def test_wait_only_conditional_short_zone_still_degrades(self) -> None:
+        current = payload(); current["primary_setup_side"] = "long"; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = ["short_at_major_support_wait_only"]; current["signals_15m"] = "wait"; current["active_trade_plan"]["side_plans"]["short"]["counter_scalp_status"] = "conditional"
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["short"]["action_class"], "C_WATCH_ZONE")
+        self.assertEqual(result["short"]["state"], "watch")
+
+    def test_wait_only_conditional_long_zone_still_degrades_mirrored(self) -> None:
+        current = payload(); current["primary_setup_side"] = "short"; current["primary_setup_status"] = "watch"; current["no_trade_flags"] = ["long_at_major_resistance_wait_only"]; current["signals_15m"] = "wait"; current["active_trade_plan"]["side_plans"]["long"]["counter_scalp_status"] = "conditional"
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["long"]["action_class"], "C_WATCH_ZONE")
+        self.assertEqual(result["long"]["state"], "watch")
 
     def test_wait_only_matching_15m_remains_triggered(self) -> None:
         current = payload(); current["signals_15m"] = "short"; current["primary_setup_side"] = "long"; current["primary_setup_status"] = "watch"
