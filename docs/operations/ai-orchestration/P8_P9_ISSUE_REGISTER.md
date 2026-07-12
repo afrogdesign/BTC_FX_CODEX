@@ -277,3 +277,9 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - side-specific wait-only flags are matched individually
 - late primary actions visibly state `追いかけ禁止`; genuine trigger strength outranks a merely late candidate
 - 13:05 and 14:05 acceptance previews pass; no production behavior changed
+#### Side-aware trigger priority final fix — 2026-07-12
+
+- fresh 15M and previous-stop triggers now retain `triggered`/`follow_through` lifecycle strength before late conversion
+- true thesis invalidation activates the supported opposite side; readiness-only invalidity does not
+- own wait-only blockers remain side-specific; 13:05 and 14:05 previews remain accepted
+- no score, gate, market-map, notification, mail, runtime, or order behavior changed

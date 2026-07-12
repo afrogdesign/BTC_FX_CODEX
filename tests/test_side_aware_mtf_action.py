@@ -101,6 +101,25 @@ class SideAwareMtfActionTests(unittest.TestCase):
         result = evaluate_side_aware_mtf_action(current, previous=previous)
         self.assertIn("追いかけ禁止", result["execution_context"]["headline"])
 
+    def test_previous_cross_is_triggered_before_late_conversion(self) -> None:
+        current = payload(); previous = payload(); current["current_price"] = 64150; previous["current_price"] = 64500; previous["active_trade_plan"]["side_plans"]["long"]["stop_loss"] = 64200
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["short"]["state"], "triggered")
+        self.assertEqual(result["short"]["trigger_strength"], 1)
+
+    def test_true_thesis_invalidation_arms_supported_opposite(self) -> None:
+        current = payload(); current["primary_setup_reason"] = "thesis_invalidated"; current["primary_setup_status"] = "invalid"; current["active_trade_plan"]["side_plans"]["short"]["zone_position"] = "outside_zone"
+        result = evaluate_side_aware_mtf_action(current)
+        self.assertEqual(result["short"]["action_class"], "B_CHECK_15M")
+        self.assertIn("opposite_thesis_invalid", result["short"]["reason_codes"])
+
+    def test_fresh_trigger_outranks_late_opposite(self) -> None:
+        current = payload(); current["signals_15m"] = "short"; current["signals_1h"] = "wait"; current["primary_setup_side"] = ""
+        previous = payload(); previous["current_price"] = 64500
+        result = evaluate_side_aware_mtf_action(current, previous=previous)
+        self.assertEqual(result["short"]["state"], "triggered")
+        self.assertEqual(result["execution_context"]["primary_side"], "short")
+
 
 if __name__ == "__main__":
     unittest.main()

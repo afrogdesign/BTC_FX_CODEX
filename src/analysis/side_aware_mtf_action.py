@@ -122,11 +122,11 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
         reasons.append("existing_formal_gate_pass")
         action, state = "A_FORMAL", "triggered"
     elif supported:
-        activation = zone_activation or previous_cross or match_15m or match_1h or transition
+        activation = zone_activation or previous_cross or match_15m or match_1h or transition or opposite_invalid
         if activation:
-            reasons.append("zone_plan_activation" if zone_activation else "previous_opposite_stop_crossed" if previous_cross else "opposite_thesis_invalid" if opposite_invalid else "timeframe_or_transition_support")
+            reasons.append("previous_opposite_stop_crossed" if previous_cross else "opposite_thesis_invalid" if opposite_invalid else "zone_plan_activation" if zone_activation else "timeframe_or_transition_support")
             action = "B_CHECK_15M"
-            state = "follow_through" if match_15m and match_1h else "triggered" if match_15m else "armed"
+            state = "follow_through" if match_15m and match_1h else "triggered" if match_15m or previous_cross else "armed"
         else:
             reasons.append("plan_zone_watch")
             action, state = "C_WATCH_ZONE", "watch"
@@ -141,7 +141,7 @@ def _side_result(side: str, current: dict[str, Any], plan: dict[str, Any], globa
     if action in {"A_FORMAL", "B_CHECK_15M"} and chase in {"late_no_chase", "tp1_reached_no_chase"}:
         state = "late"
         reasons.append(chase)
-    trigger_strength = 2 if match_15m and match_1h else 1 if (previous_cross or match_15m or match_1h or transition) else 0
+    trigger_strength = 2 if match_15m and match_1h else 1 if (previous_cross or match_15m) else 0
     return {
         "action_class": action, "state": state, "plan_support": supported,
         "zone": {"low": plan.get("entry_zone_low", ""), "high": plan.get("entry_zone_high", ""), "mid": plan.get("entry_mid", "")},

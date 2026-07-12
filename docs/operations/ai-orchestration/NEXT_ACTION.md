@@ -165,3 +165,35 @@ The accepted 13:05 and 14:05 directional previews are preserved, but final sourc
 - exact directional token and semantic mapping correction is complete
 - late primary action now displays `追いかけ禁止`
 - next review remains report-only; no runtime or notification change is authorized
+
+
+---
+
+# Current next action — 2026-07-12 side-aware MTF final lifecycle fix
+
+- current_work_id: `BTCFX-20260712-P8-SIDE-AWARE-MTF-TRIGGER-PRIORITY-FINAL-FIX`
+- mode: `BOUNDED_CODEX`
+- task_type: `FINAL LIFECYCLE / PRIMARY-SELECTION CORRECTION`
+- active_spec: `chatgpt/specs/active/20260712_side_aware_mtf_trigger_priority_final_fix.md`
+
+## Review finding
+
+The 13:05 and 14:05 direct previews pass, but source review found that a genuinely fresh opposite trigger can still lose to a merely late candidate when both share the same trigger-strength value. Previous opposite-stop crossing also does not produce `triggered` before late conversion, and true thesis invalidation is computed but not independently included in activation.
+
+## Goal
+
+Complete deterministic fresh-trigger lifecycle, primary ordering, true-thesis invalidation activation, and own-side wait-only degradation while preserving all accepted previews and safety boundaries.
+
+## Runtime boundary
+
+- source and targeted tests only
+- no push
+- no monitor restart
+- no launchd change
+- no mail or notification behavior change
+- no score, gate, market-map, or order behavior change
+## Side-aware trigger priority final fix completed
+
+- fresh trigger lifecycle and primary ordering are corrected
+- 13:05 and 14:05 acceptance remains stable
+- no runtime apply or production notification change is authorized
