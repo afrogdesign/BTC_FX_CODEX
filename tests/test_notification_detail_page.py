@@ -832,12 +832,14 @@ class NotificationDetailPageTests(unittest.TestCase):
             with self.subTest(long_score=long_score, short_score=short_score):
                 payload = _sample_detail_payload(); payload.update(long_display_score=long_score, short_display_score=short_score)
                 balance = _operator_dashboard_relative_balance(payload)
-                html = build_notification_detail_html(payload)
                 self.assertEqual(balance["state"], "relative")
-                self.assertIn(f'data-long-share="{long_share}"', html)
-                self.assertIn(f'data-short-share="{short_share}"', html)
-                self.assertIn(f'>{long_share}%</span>', html)
-                self.assertIn(f'>{short_share}%</span>', html)
+
+        payload = _sample_detail_payload(); payload["structural_priority"] = {"present": True, "long_points": 47, "short_points": 53, "priority_label": "neutral / Short-leaning", "turning_watch": {}, "alignment_state": "neutral"}
+        html = build_notification_detail_html(payload)
+        self.assertIn('data-long-share="47"', html)
+        self.assertIn('data-short-share="53"', html)
+        self.assertIn("4H / 1H STRUCTURAL PRIORITY", html)
+        self.assertIn("中期の優先方向", html)
 
     def test_relative_balance_zero_scores_is_insufficient(self) -> None:
         payload = _sample_detail_payload(); payload.update(long_display_score=0, short_display_score=0)
@@ -859,7 +861,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn('<div class="side-score"><strong>45</strong>', html)
         self.assertIn('<div class="side-score"><strong>15</strong>', html)
         self.assertIn("機械評価上の相対バランス。最終判断ではありません。", html)
-        self.assertIn('aria-label="現在の相対優勢', html)
+        self.assertIn('aria-label="4H / 1H STRUCTURAL PRIORITY', html)
 
     def test_non_executable_execution_label_uses_wait_hero_token(self) -> None:
         payload = _sample_detail_payload()

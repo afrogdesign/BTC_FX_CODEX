@@ -306,3 +306,41 @@ Restart only the existing normal monitor process so future generated reports use
 - verify side-aware fields and rendering are present
 - do not regenerate historical artifacts or tune from one case
 - no additional runtime restart or manual monitor cycle is authorized
+
+## Structural priority meter — bounded validation complete
+
+- 4H/1H structural meter implementation is locally validated; tactical 15M scores and side-aware actions remain separate
+- runtime application requires a separate controlled approval; no restart or production cycle was run
+- numeric audit passed on 336 rows and bounded previews retained 47/53 structural output for the three latest cases
+
+
+---
+
+# Current next action — 2026-07-12 structural priority meter rebalance
+
+- current_work_id: `BTCFX-20260712-P8-STRUCTURAL-PRIORITY-METER-REBALANCE`
+- mode: `BOUNDED_CODEX`
+- task_type: `NUMERIC BALANCE AUDIT + 4H/1H DISPLAY SEPARATION`
+- active_spec: `chatgpt/specs/active/20260712_structural_priority_meter_rebalance.md`
+- human_approval: received
+
+## Audit decision
+
+The current `0 / 68 -> 0% / 100%` meter is an expected consequence of normalizing tactical display scores by their sum, not proof of 100-percent market certainty. The tactical score also mixes structural, turning, location, 15M and execution-risk factors, and recent rows repeatedly saturate at `0 / 100` or `100 / 0`.
+
+## Goal
+
+- keep existing tactical scoring, gates, thresholds and 15M action unchanged
+- replace the top meter with deterministic 4H 75% / 1H 25% structural priority
+- preserve tactical scores on side cards with clear short-term labeling
+- add turning-watch and structural/15M alignment context
+- audit the latest 336 rows before acceptance
+
+## Runtime boundary
+
+- source, tests and local render/audit only
+- no push
+- no runtime restart
+- no mail or notification behavior change
+- no scoring/config/gate/market-map/order mutation
+- runtime application requires separate review

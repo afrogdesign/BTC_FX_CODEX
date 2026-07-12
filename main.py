@@ -35,6 +35,7 @@ from src.analysis.regime import classify_market_regime
 from src.analysis.rr import build_setup, choose_primary_setup, refine_execution_precision
 from src.analysis.scoring import compute_scores
 from src.analysis.side_aware_mtf_action import evaluate_side_aware_mtf_action
+from src.analysis.structural_priority import build_structural_priority
 from src.analysis.structure import calc_tf_signal, classify_structure, detect_swings
 from src.analysis.support_resistance import (
     build_all_support_resistance,
@@ -106,6 +107,11 @@ from src.presentation.sanitize import (
 def _attach_side_aware_mtf_action(result: dict[str, Any], previous: dict[str, Any] | None) -> None:
     """Attach the report-only side-aware view after Active Plan assembly."""
     result["side_aware_mtf_action"] = evaluate_side_aware_mtf_action(result, previous=previous)
+
+
+def _attach_structural_priority(result: dict[str, Any]) -> None:
+    """Attach the report-only 4H/1H priority after tactical action assembly."""
+    result["structural_priority"] = build_structural_priority(result)
 
 
 def _base_dir() -> Path:
@@ -1264,6 +1270,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
 
     last_result = load_json(get_last_result_path(base_dir))
     _attach_side_aware_mtf_action(core_result, last_result)
+    _attach_structural_priority(core_result)
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
     last_followup_notified = load_json(get_last_followup_notified_path(base_dir))

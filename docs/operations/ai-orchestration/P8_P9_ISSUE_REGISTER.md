@@ -294,3 +294,26 @@ This approval authorizes source, targeted tests, future-result evidence fields, 
 - conditional counter-scalp status no longer bypasses exact side-specific wait-only degradation
 - fresh 15M/previous-cross exceptions remain available; 13:05 and 14:05 previews remain accepted
 - no score, gate, market-map, notification, mail, runtime, or order behavior changed
+
+
+---
+
+### P8-ISSUE-009 — Tactical relative meter creates false structural certainty
+
+- observed signal: `20260712_060500`
+- observed display: Long `0`, Short `68`, normalized to `0% / 100%`
+- root cause: the top meter divides tactical display scores by their sum; a clipped zero therefore becomes a false 100-percent-looking result
+- broader audit: tactical scores combine 4H/1H structure, market-map turning/location, 15M activity and execution-risk penalties; recent rows repeatedly saturate at both extremes
+- product impact: a human can mistake a short-term execution score for medium-term market priority
+- approved correction: separate a 4H 75% / 1H 25% structural priority meter from the existing 15M tactical score and action layer
+- turning evidence remains a separate warning overlay; 15M zones, SL, TP and no-chase remain execution guidance
+- production scoring, config, gates, notification behavior and orders remain unchanged
+- active spec: `chatgpt/specs/active/20260712_structural_priority_meter_rebalance.md`
+- status: implementation approved / runtime apply not yet authorized
+
+#### Structural priority meter bounded completion — 2026-07-12
+
+- 336-row numeric audit passed: old tactical normalization had 41/336 (12.20%) 0/100 saturation, p90 step 47.6, max 88, flips 73; structural output had zero saturation, p90 10, max 18, flips 10.
+- 4H 75% / 1H 25% structural points, turning overlay and alignment are separate from 15M tactical scores and side-aware action.
+- 13:05, 14:05 and 15:05 remain 47/53 neutral / Short-leaning while tactical values stay unchanged; 55 targeted tests and bounded previews passed.
+- status: source-only bounded validation complete; runtime apply not authorized in this task.

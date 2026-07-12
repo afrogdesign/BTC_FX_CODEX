@@ -3988,6 +3988,8 @@ def _operator_dashboard_v2_css() -> str:
     .balance-center { position:absolute; left:50%; top:-2px; bottom:-2px; width:2px; transform:translateX(-1px); background:#f8fafc; box-shadow:0 0 0 1px rgba(15,23,42,.45); }
     .balance-track-insufficient { align-items:center; justify-content:center; background:#475569; }
     .balance-insufficient { color:#e2e8f0; font-size:10px; font-weight:900; letter-spacing:.08em; }
+    .balance-structural-meta { display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px; color:var(--muted); font-size:10px; }
+    .balance-structural-meta strong { color:var(--text); }
     footer { padding:20px 4px 0; color:var(--faint); font-size:9px; text-align:center; }
 
     /* SVG chart */
@@ -4129,6 +4131,34 @@ def _operator_dashboard_relative_balance_html(result: dict[str, Any]) -> str:
     </section>'''
 
 
+def _operator_dashboard_structural_balance_html(result: dict[str, Any]) -> str:
+    structural = result.get("structural_priority") if isinstance(result.get("structural_priority"), dict) else {}
+    long_score = _operator_dashboard_score(structural.get("long_points")) if structural else 50
+    short_score = _operator_dashboard_score(structural.get("short_points")) if structural else 50
+    present = bool(structural.get("present"))
+    state = "relative" if present else "insufficient"
+    label = str(structural.get("priority_label") or "neutral / insufficient structural evidence")
+    turning = structural.get("turning_watch") if isinstance(structural.get("turning_watch"), dict) else {}
+    turning_text = f"転換監視: {turning.get('direction', 'none')} / {turning.get('strength', 'none')}"
+    alignment = str(structural.get("alignment_state") or "neutral")
+    if present:
+        long_share = f"{long_score}"
+        short_share = f"{short_score}"
+        aria = f"構造優先度。LONG {long_score}点、SHORT {short_score}点。"
+        track = f'<div class="balance-track" role="img" aria-label="{html.escape(aria)}"><span class="balance-long" style="width:{long_score}%"></span><span class="balance-short" style="width:{short_score}%"></span><i class="balance-center" aria-hidden="true"></i></div>'
+    else:
+        long_share = short_share = ""
+        aria = "構造優先度は判定材料不足。"
+        track = '<div class="balance-track balance-track-insufficient" role="img" aria-label="構造優先度は判定材料不足"><span class="balance-insufficient">判定材料不足</span><i class="balance-center" aria-hidden="true"></i></div>'
+    return f'''<section class="balance-meter" data-balance-state="{state}" data-structural-primary="{html.escape(str(structural.get("primary_side") or ""))}" data-long-share="{long_share}" data-short-share="{short_share}" role="group" aria-label="4H / 1H STRUCTURAL PRIORITY。{html.escape(aria)}">
+      <div class="balance-head"><div><span class="balance-kicker">4H / 1H STRUCTURAL PRIORITY</span><h2>中期の優先方向</h2></div><p>4時間足75%・1時間足25%。15分足の実行判断は下のアクション欄で確認します。</p></div>
+      <div class="balance-labels"><div><strong>LONG</strong><span>{long_score}</span></div><div class="balance-label-short"><strong>SHORT</strong><span>{short_score}</span></div></div>
+      <div class="balance-shares"><span>{(long_share + "%") if long_share else "—"}</span><span>{(short_share + "%") if short_share else "—"}</span></div>
+      {track}
+      <div class="balance-structural-meta"><strong>{html.escape(label)}</strong><span>{html.escape(turning_text)}</span><span>構造 / 15M: {html.escape(alignment)}</span><span>機械評価上の相対バランス。最終判断ではありません。</span></div>
+    </section>'''
+
+
 def _operator_dashboard_zone(value: Any) -> str:
     if not isinstance(value, dict):
         return "—"
@@ -4246,7 +4276,7 @@ def _operator_dashboard_v2_plan_card(result: dict[str, Any], side: str) -> str:
     <section class="panel side-card {side}" aria-label="{label} trade plan">
       <div class="side-head">
         <div class="side-title"><span class="side-pill">{label}</span><span class="side-state">{html.escape(_setup_status_label(setup.get('status')))}</span></div>
-        <div class="side-score"><strong>{_operator_dashboard_score(result.get(f'{side}_display_score'))}</strong><small>SCORE / 100</small></div>
+        <div class="side-score"><strong>{_operator_dashboard_score(result.get(f'{side}_display_score'))}</strong><small>短期実行スコア / 100</small></div>
       </div>
       <div class="levels">{rows_html}</div>
       <div class="side-guidance">{html.escape(_operator_dashboard_execution_guidance(result, side))}</div>
@@ -4508,7 +4538,7 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
   {_operator_dashboard_v2_alerts(result, context, display)}
   {_side_aware_operator_action_html(result)}
   {_operator_dashboard_shadow_panel_html(result)}
-  {_operator_dashboard_relative_balance_html(result)}
+  {_operator_dashboard_structural_balance_html(result)}
   <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>
   <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div class="opportunity-stack">{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
   {_operator_dashboard_v2_details(result, context, display, reasons, safety, base_dir)}

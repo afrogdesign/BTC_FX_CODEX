@@ -112,6 +112,13 @@ CSV_HEADER = [
     "side_aware_short_state",
     "side_aware_chase_status",
     "side_aware_reason_codes",
+    "structural_priority_long",
+    "structural_priority_short",
+    "structural_priority_side",
+    "structural_priority_strength",
+    "structural_turning_direction",
+    "structural_turning_strength",
+    "structural_alignment_state",
     "funding_rate",
     "funding_rate_raw",
     "funding_rate_pct",
@@ -356,6 +363,8 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     execution_context = _dict_or_empty(side_aware.get("execution_context"))
     long_action = _dict_or_empty(side_aware.get("long"))
     short_action = _dict_or_empty(side_aware.get("short"))
+    structural = _dict_or_empty(payload.get("structural_priority"))
+    turning = _dict_or_empty(structural.get("turning_watch"))
     return {
         "signal_id": payload.get("signal_id"),
         "timestamp_utc": payload.get("timestamp_utc"),
@@ -448,6 +457,13 @@ def _row_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "side_aware_short_state": short_action.get("state", ""),
         "side_aware_chase_status": execution_context.get("chase_status", ""),
         "side_aware_reason_codes": _json_dumps(execution_context.get("reason_codes")),
+        "structural_priority_long": structural.get("long_points", ""),
+        "structural_priority_short": structural.get("short_points", ""),
+        "structural_priority_side": structural.get("primary_side", ""),
+        "structural_priority_strength": structural.get("priority_label", ""),
+        "structural_turning_direction": turning.get("direction", ""),
+        "structural_turning_strength": turning.get("strength", ""),
+        "structural_alignment_state": structural.get("alignment_state", ""),
         "funding_rate": payload.get("funding_rate"),
         "funding_rate_raw": payload.get("funding_rate_raw"),
         "funding_rate_pct": payload.get("funding_rate_pct"),

@@ -146,6 +146,23 @@ class CsvLoggerActivePlanTests(unittest.TestCase):
         self.assertEqual(row["side_aware_short_state"], "armed")
         self.assertIn("opposite_thesis_invalid", row["side_aware_reason_codes"])
 
+    def test_structural_priority_fields_and_blank_fallback(self) -> None:
+        payload = self._base_payload()
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp); append_trade_log(base_dir, payload); row = self._read_first_row(base_dir)
+        self.assertEqual(row["structural_priority_long"], "")
+        payload["structural_priority"] = {
+            "long_points": 47, "short_points": 53, "primary_side": "",
+            "priority_label": "neutral / Short-leaning",
+            "turning_watch": {"direction": "short", "strength": "early"},
+            "alignment_state": "neutral",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            base_dir = Path(tmp); append_trade_log(base_dir, payload); row = self._read_first_row(base_dir)
+        self.assertEqual(row["structural_priority_long"], "47")
+        self.assertEqual(row["structural_priority_short"], "53")
+        self.assertEqual(row["structural_turning_direction"], "short")
+
 
 if __name__ == "__main__":
     unittest.main()
