@@ -12,6 +12,7 @@ from src.feedback.turning_volatility_precursor_replay import (
     _metric,
     _outcome,
     _realized_opportunities,
+    build_bounded_signal_slice,
     replay_turning_volatility_precursors,
     classify_precursor_row,
 )
@@ -165,6 +166,16 @@ class TurningVolatilityPrecursorReplayTests(unittest.TestCase):
             result = replay_turning_volatility_precursors(signals=signals, ohlcv=ohlcv, output_csv=root / "events.csv", output_json=root / "report.json", output_md=root / "report.md", replace_output=True)
             self.assertTrue(result["ok"])
             self.assertIn(",unresolved,unresolved,unresolved,", (root / "events.csv").read_text())
+
+    def test_bounded_signal_slice_keeps_three_hour_context_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); source = root / "signals.csv"; output = root / "slice.csv"
+            rows = [self._row("old", "2026-07-01T20:00:00Z"), self._row("ctx", "2026-07-01T22:30:00Z"), self._row("in", "2026-07-02T00:00:00Z"), self._row("future", "2026-07-02T01:00:00Z")]
+            with source.open("w", newline="") as fp:
+                writer = csv.DictWriter(fp, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
+            meta = build_bounded_signal_slice(signals=source, output=output, min_timestamp="2026-07-02T00:00:00Z", max_timestamp="2026-07-02T00:30:00Z")
+            self.assertEqual(meta["rows"], 2); self.assertEqual(meta["context_rows"], 1)
+            sliced = list(csv.DictReader(output.open(newline=""))); self.assertEqual([row["signal_id"] for row in sliced], ["ctx", "in"]); self.assertEqual(sliced[0]["shadow_boundary"], "left_boundary_context")
 
 
 if __name__ == "__main__":

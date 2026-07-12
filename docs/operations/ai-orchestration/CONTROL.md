@@ -270,3 +270,27 @@ The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary re
 - pinned 07:05 case was caught before the move; actual-backed count is 0
 - next posture: HUMAN_CHECK / ChatGPT review
 - no production scoring, market-map, gate, notification, mail, runtime, API, account, or order behavior changed
+
+
+## 2026-07-12 turning precursor daily shadow control
+
+- corrected precursor replay commit `9f4f6a1` is accepted as offline evidence only
+- pinned 07:05 case was caught before the move
+- evidence does not authorize live notification behavior
+- Combined validation is one-sided (`UP=0`, `DOWN=6`) and validation false rate is 0.666667
+- actual-backed count is 0
+- current recommendation is `continue_shadow_collection`
+- active spec: `chatgpt/specs/active/20260712_turning_precursor_daily_shadow_collection.md`
+- next implementation is opt-in and disabled by default
+- one existing public OHLCV fetch must be reused; no second fetch
+- installed launchd invocation, schedule, notification and mail behavior remain unchanged
+- runtime enablement requires a separate explicit human-approved task
+- P8 continues; P9 remains blocked
+- safety remains report-only / not FORMAL_GO / no automatic order / human decides manually
+## 2026-07-12 opt-in precursor shadow integration
+
+- source integration is bounded-validated; the feature remains disabled in the installed daily schedule
+- one core P8 cycle and one auxiliary precursor shadow reused the same public OHLCV fetch
+- validation is one-sided (UP=0, DOWN=6), recommendation remains `continue_shadow_collection`, and actual-backed count is 0
+- next posture: `HUMAN_CHECK` / runtime-enable proposal review
+- no production scoring, gate, threshold, notification, mail, runtime, API, account, order, or automatic tuning change occurred

@@ -83,6 +83,20 @@ class RunP8DailyCycleTests(unittest.TestCase):
         for forbidden in ("threshold", "gate", "tuning", "order", "mail", "notification"):
             self.assertNotIn(forbidden, command)
 
+    def test_opt_in_shadow_flag_is_forwarded(self) -> None:
+        with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed('{"ok":true,"turning_precursor_shadow":{"enabled":true,"status":"success"}}')) as run:
+            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow")), 0)
+        self.assertIn("--include-turning-precursor-shadow", run.call_args.args[0])
+        status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text())
+        self.assertEqual(status["turning_precursor_shadow"]["status"], "success")
+
+    def test_dry_run_reports_shadow_disabled_or_enabled(self) -> None:
+        with patch("tools.run_p8_daily_cycle.subprocess.run") as run, patch("builtins.print") as output:
+            run_p8_daily_cycle.main(self.args("--dry-run", "--include-turning-precursor-shadow"))
+        run.assert_not_called()
+        payload = json.loads(output.call_args.args[0])
+        self.assertTrue(payload["turning_precursor_shadow_enabled"])
+
     def test_plist_contract(self) -> None:
         path = Path(__file__).resolve().parents[1] / "deploy/com.afrog.btc-p8-operating-cycle.plist"
         payload = plistlib.loads(path.read_bytes()); self.assertEqual(payload["Label"], "com.afrog.btc-p8-operating-cycle")

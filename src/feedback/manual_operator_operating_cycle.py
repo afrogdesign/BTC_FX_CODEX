@@ -207,6 +207,45 @@ def _stage_ids(path: Path, field: str) -> set[str]:
     return {row.get(field, "") for row in rows if row.get(field, "")}
 
 
+def _shadow_summary(*, enabled: bool, status: str, output_subdir: str = "turning_precursor_shadow", error_codes: list[str] | None = None, slice_rows: int = 0, replay: dict[str, Any] | None = None) -> dict[str, Any]:
+    from src.feedback.turning_volatility_precursor_replay import METHOD_VERSION as turning_method_version
+    replay = replay or {}
+    metrics = replay.get("metrics", {})
+    current = metrics.get("POLICY_CURRENT_NOTIFICATION", {})
+    combined = metrics.get("POLICY_COMBINED_PRECURSOR", {})
+    validation = combined.get("validation", {})
+    actual = replay.get("actual_evidence", {})
+    return {
+        "enabled": enabled, "status": status, "method_version": turning_method_version if enabled else "",
+        "signal_slice_rows": slice_rows, "precursor_episodes": replay.get("episode_rows", 0),
+        "resolved_episodes": combined.get("resolved_episodes", 0), "realized_move_opportunities": replay.get("realized_move_opportunities", 0),
+        "current_notification_recall": current.get("large_move_recall"), "combined_recall": combined.get("large_move_recall"),
+        "combined_precision": combined.get("clean_directional_precision"), "combined_false_rate": combined.get("false_precursor_rate"),
+        "combined_opposite_rate": combined.get("opposite_move_rate"), "combined_whipsaw_rate": combined.get("whipsaw_rate"),
+        "combined_median_lead_minutes": combined.get("median_lead_minutes"), "validation_status": replay.get("validation_status", "none"),
+        "validation_up_resolved": validation.get("UP", 0), "validation_down_resolved": validation.get("DOWN", 0),
+        "pinned_case_status": replay.get("pinned_case", {}).get("status", "none"),
+        "actual_backed_count": actual.get("actual_backed_count", 0), "recommendation_status": replay.get("recommendation_status", "none"),
+        "output_subdir": output_subdir, "error_codes": list(error_codes or []),
+    }
+
+
+def _promote_shadow(stage: Path, output_root: Path, replace: bool) -> None:
+    target = output_root / "turning_precursor_shadow"
+    if target.exists() and not replace:
+        raise OSError("existing_output_schema_mismatch")
+    backup = output_root / ".turning_precursor_shadow-backup"
+    try:
+        if target.exists():
+            backup.unlink(missing_ok=True); target.replace(backup)
+        (stage / "turning_precursor_shadow").replace(target)
+        backup.unlink(missing_ok=True)
+    except Exception as exc:
+        if target.exists(): shutil.rmtree(target, ignore_errors=True)
+        if backup.exists(): backup.replace(target)
+        raise OSError("output_transaction_failed") from exc
+
+
 def _validate_stage_identity(stage: Path) -> None:
     candidate_ids = _stage_ids(stage / "candidate_slice.csv", "candidate_id")
     outcome_ids = _stage_ids(stage / "intraperiod_outcomes.csv", "candidate_id")
@@ -233,11 +272,11 @@ def _validate_stage_identity(stage: Path) -> None:
 
 def _summary_markdown(report: dict[str, Any]) -> str:
     counts = report["counts"]
-    lines = ["# P8 Operating Cycle", "", "## Cycle status", "completed", "", "## Source coverage/freshness", json.dumps(report["source"], sort_keys=True), "", "## Resolved/unresolved/no-OHLCV", json.dumps(counts, sort_keys=True), "", "## A/B/C/STOP", json.dumps(report["class_counts"], sort_keys=True), "", "## Long/Short", json.dumps(report["side_counts"], sort_keys=True), "", "## Comparison results", json.dumps(report["comparison"], sort_keys=True), "", "## Actual-evidence coverage", json.dumps(report["actual_evidence"], sort_keys=True), "", "## Exception queue", str(report["review_queue_size"]), "", "## ISSUE-001", json.dumps(report["issue_001"], sort_keys=True), "", "## P9 readiness", json.dumps(report["p9_readiness"], sort_keys=True), "", "## Limitations", "Unresolved, no-OHLCV, low-confidence, and ambiguous evidence are excluded from performance claims.", "", "## Safety boundary", SAFETY, "No automatic tuning occurred.", ""]
+    lines = ["# P8 Operating Cycle", "", "## Cycle status", "completed", "", "## Source coverage/freshness", json.dumps(report["source"], sort_keys=True), "", "## Resolved/unresolved/no-OHLCV", json.dumps(counts, sort_keys=True), "", "## A/B/C/STOP", json.dumps(report["class_counts"], sort_keys=True), "", "## Long/Short", json.dumps(report["side_counts"], sort_keys=True), "", "## Comparison results", json.dumps(report["comparison"], sort_keys=True), "", "## Actual-evidence coverage", json.dumps(report["actual_evidence"], sort_keys=True), "", "## Exception queue", str(report["review_queue_size"]), "", "## ISSUE-001", json.dumps(report["issue_001"], sort_keys=True), "", "## P9 readiness", json.dumps(report["p9_readiness"], sort_keys=True), "", "## Turning precursor shadow", json.dumps(report["turning_precursor_shadow"], sort_keys=True), "", "## Limitations", "Unresolved, no-OHLCV, low-confidence, and ambiguous evidence are excluded from performance claims.", "", "## Safety boundary", SAFETY, "No automatic tuning occurred.", ""]
     return "\n".join(lines)
 
 
-def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Path, report_date: str, output_root: Path, decision_events: Path | None = None, actual_episodes: Path | None = None, actual_links: Path | None = None, fetch_public_ohlcv: bool = False, ohlcv_limit: int = 500, max_ohlcv_lag_minutes: int = 60, dry_run: bool = False, replace_output: bool = False) -> dict[str, Any]:
+def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Path, report_date: str, output_root: Path, decision_events: Path | None = None, actual_episodes: Path | None = None, actual_links: Path | None = None, fetch_public_ohlcv: bool = False, ohlcv_limit: int = 500, max_ohlcv_lag_minutes: int = 60, dry_run: bool = False, replace_output: bool = False, include_turning_precursor_shadow: bool = False) -> dict[str, Any]:
     if (actual_episodes is None) != (actual_links is None):
         return {"ok": False, "exit_code": 2, "errors": ["optional_actual_inputs_must_be_together"], "report_written": False}
     if not report_date.isdigit() or len(report_date) != 8:
@@ -275,20 +314,43 @@ def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Pat
             return {"ok": False, "exit_code": int(p8.get("exit_code", 2)), "errors": p8.get("errors", ["p8_failed"]), "report_written": False}
         _validate_stage_identity(stage)
         outcome_counts = dict(sorted(Counter(str(row.get("outcome", "")) for row in outcome_df.to_dict(orient="records")).items()))
+        shadow = _shadow_summary(enabled=False, status="disabled")
+        shadow_stage = stage / "turning_precursor_shadow"
+        if include_turning_precursor_shadow:
+            try:
+                from src.feedback.turning_volatility_precursor_replay import build_bounded_signal_slice, replay_turning_volatility_precursors
+                shadow_stage.mkdir(parents=True, exist_ok=True)
+                slice_meta = build_bounded_signal_slice(signals=signal_context, output=shadow_stage / "turning_signal_slice.csv", min_timestamp=ohlcv_meta["min_timestamp"], max_timestamp=ohlcv_meta["max_timestamp"], context_hours=3)
+                replay = replay_turning_volatility_precursors(signals=shadow_stage / "turning_signal_slice.csv", ohlcv=ohlcv_input, output_csv=shadow_stage / "turning_volatility_precursor_events.csv", output_json=shadow_stage / "turning_volatility_precursor_replay.json", output_md=shadow_stage / "turning_volatility_precursor_replay.md", actual_episodes=actual_episodes, actual_links=actual_links, replace_output=True)
+                if replay.get("ok"):
+                    shadow = _shadow_summary(enabled=True, status="success", slice_rows=int(slice_meta.get("rows", 0)), replay=replay)
+                else:
+                    shadow = _shadow_summary(enabled=True, status="failed", error_codes=list(replay.get("error_codes", ["turning_precursor_shadow_failed"])), slice_rows=int(slice_meta.get("rows", 0)))
+                    shutil.rmtree(shadow_stage, ignore_errors=True)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                shadow = _shadow_summary(enabled=True, status="failed", error_codes=[str(exc) or "turning_precursor_shadow_failed"])
+                shutil.rmtree(shadow_stage, ignore_errors=True)
         report = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "report_date": report_date, "source": {"candidates": candidates.name, "signal_context": signal_context.name, "ohlcv": ohlcv.name if not fetch_public_ohlcv else "public_fetch", "ohlcv_freshness": "valid", **ohlcv_meta}, "lineage": lineage, "counts": {"candidate_rows": lineage["candidate_rows"], "candidate_signals": lineage["candidate_signals"], "outcome_counts": outcome_counts, **p8.get("counts", {})}, "class_counts": p8.get("class_distribution", {}), "side_counts": p8.get("breakdowns", {}).get("side", {}), "comparison": p8.get("comparison", {}), "actual_evidence": p8.get("actual_evidence", {}), "review_queue_size": p8.get("review_queue_size", 0), "issue_001": p8.get("global_stop_opportunity", {}), "p9_readiness": p8.get("p9_readiness", {}), "input_fingerprints": {"candidates": _sha256(candidates), "signal_context": _sha256(signal_context), "ohlcv": _sha256(ohlcv_input)}, "no_automatic_tuning": True, "safety_boundary": SAFETY}
-        manifest = dict(report); manifest["generated_at_utc"] = ohlcv_meta["max_timestamp"]; manifest["stage_statuses"] = {"candidate_slice": "ok", "signal_context_slice": "ok", "intraperiod_outcomes": "ok", "p4": "ok", "p5": "ok", "p8": "ok"}; manifest["output_fingerprints"] = {}
+        report["turning_precursor_shadow"] = shadow
+        manifest = dict(report); manifest["generated_at_utc"] = ohlcv_meta["max_timestamp"]; manifest["stage_statuses"] = {"candidate_slice": "ok", "signal_context_slice": "ok", "intraperiod_outcomes": "ok", "p4": "ok", "p5": "ok", "p8": "ok", "turning_precursor_shadow": shadow["status"]}; manifest["output_fingerprints"] = {}
         for name in OUTPUT_NAMES:
             if name in {"cycle_manifest.json", "cycle_summary.md"}: continue
             manifest["output_fingerprints"][name] = _sha256(stage / name)
         (stage / "cycle_manifest.json").write_text(_json_text(manifest), encoding="utf-8")
         (stage / "cycle_summary.md").write_text(_summary_markdown(report), encoding="utf-8")
         if dry_run:
-            return {"ok": True, "exit_code": 0, "dry_run": True, "report_written": False, "counts": report["counts"], "class_counts": report["class_counts"], "issue_001": report["issue_001"], "p9_readiness": report["p9_readiness"], "safety_boundary": SAFETY}
+            return {"ok": True, "exit_code": 0, "dry_run": True, "report_written": False, "counts": report["counts"], "class_counts": report["class_counts"], "issue_001": report["issue_001"], "p9_readiness": report["p9_readiness"], "turning_precursor_shadow": shadow, "safety_boundary": SAFETY}
         try:
             _promote(stage, output_root, list(OUTPUT_NAMES), replace_output)
         except OSError as exc:
             return {"ok": False, "exit_code": 4, "errors": [str(exc)], "report_written": False}
-        return {"ok": True, "exit_code": 0, "report_written": True, "output_root": output_root.name, "outputs": list(OUTPUT_NAMES), "lineage": report["lineage"], "counts": report["counts"], "class_counts": report["class_counts"], "side_counts": report["side_counts"], "comparison": report["comparison"], "issue_001": report["issue_001"], "review_queue_size": report["review_queue_size"], "p9_readiness": report["p9_readiness"], "safety_boundary": SAFETY}
+        if shadow["status"] == "success":
+            try:
+                _promote_shadow(stage, output_root, replace_output)
+            except OSError:
+                shadow = _shadow_summary(enabled=True, status="failed", error_codes=["turning_precursor_shadow_failed"])
+        warnings = ["turning_precursor_shadow_failed"] if shadow["status"] == "failed" else []
+        return {"ok": True, "exit_code": 0, "report_written": True, "output_root": output_root.name, "outputs": list(OUTPUT_NAMES), "lineage": report["lineage"], "counts": report["counts"], "class_counts": report["class_counts"], "side_counts": report["side_counts"], "comparison": report["comparison"], "issue_001": report["issue_001"], "review_queue_size": report["review_queue_size"], "p9_readiness": report["p9_readiness"], "turning_precursor_shadow": shadow, "warnings": warnings, "safety_boundary": SAFETY}
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return {"ok": False, "exit_code": 2, "errors": [str(exc) or "input_invalid"], "report_written": False}
     finally:

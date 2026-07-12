@@ -366,6 +366,33 @@ def _actual_summary(episodes: Path | None, links: Path | None) -> dict[str, Any]
     return {"status": "paired", "actual_backed_count": len(eligible), "unique_trade_episodes": len(episode_ids), "eligible_linked_episodes": len(eligible)}
 
 
+def build_bounded_signal_slice(*, signals: Path, output: Path, min_timestamp: str, max_timestamp: str, context_hours: int = 3) -> dict[str, Any]:
+    """Write a deterministic coverage slice, retaining only bounded context before it."""
+    rows, headers, error = _read_csv(signals)
+    if error:
+        raise ValueError(error)
+    low, high = _dt(min_timestamp), _dt(max_timestamp)
+    if low is None or high is None:
+        raise ValueError("ohlcv_coverage_invalid")
+    context_low = low.timestamp() - context_hours * 3600
+    selected: list[dict[str, str]] = []
+    for row in rows:
+        timestamp = _dt(row.get("timestamp_utc"))
+        if timestamp is None or timestamp > high or timestamp.timestamp() < context_low:
+            continue
+        copied = dict(row)
+        copied["shadow_boundary"] = "left_boundary_context" if timestamp < low else "in_window"
+        selected.append(copied)
+    selected.sort(key=lambda row: (_dt(row.get("timestamp_utc")) or datetime.min.replace(tzinfo=timezone.utc), row.get("signal_id", "")))
+    fields = list(headers)
+    if "shadow_boundary" not in fields:
+        fields.append("shadow_boundary")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", newline="", encoding="utf-8") as fp:
+        writer = csv.DictWriter(fp, fieldnames=fields, lineterminator="\n"); writer.writeheader(); writer.writerows({field: row.get(field, "") for field in fields} for row in selected)
+    return {"rows": len(selected), "context_rows": sum(row.get("shadow_boundary") == "left_boundary_context" for row in selected), "in_window_rows": sum(row.get("shadow_boundary") == "in_window" for row in selected)}
+
+
 def replay_turning_volatility_precursors(*, signals: Path, ohlcv: Path | None, output_csv: Path, output_json: Path, output_md: Path, fetch_public_ohlcv: bool = False, ohlcv_limit: int = 500, actual_episodes: Path | None = None, actual_links: Path | None = None, cutoff_utc: str | None = None, replace_output: bool = False) -> dict[str, Any]:
     if (actual_episodes is None) != (actual_links is None):
         return {"ok": False, "exit_code": 2, "error_codes": ["actual_pair_incomplete"], "report_written": False}
@@ -405,8 +432,13 @@ def replay_turning_volatility_precursors(*, signals: Path, ohlcv: Path | None, o
                 if side not in {"UP", "DOWN", "BOTH"}:
                     active = None
                     continue
+                is_context = row.get("shadow_boundary") == "left_boundary_context"
                 if active is None or active["side"] != side or (timestamp and (timestamp - active["timestamp"]).total_seconds() >= 3 * 3600):
-                    active = {"row": row, "policy": policy, "side": side, "reasons": result.get("reasons", []), "timestamp": timestamp, "source_signal_count": 1}
+                    active = {"row": row, "policy": policy, "side": side, "reasons": result.get("reasons", []), "timestamp": timestamp, "source_signal_count": 1, "context_only": is_context}
+                    if not is_context:
+                        normalized.append(active)
+                elif active.get("context_only") and not is_context:
+                    active = {"row": row, "policy": policy, "side": side, "reasons": result.get("reasons", []), "timestamp": timestamp, "source_signal_count": 1, "context_only": False}
                     normalized.append(active)
                 else:
                     active["source_signal_count"] += 1
@@ -450,7 +482,7 @@ def replay_turning_volatility_precursors(*, signals: Path, ohlcv: Path | None, o
         notification_none = sum(_classify(row)["POLICY_CURRENT_NOTIFICATION"].get("side") is None for row in notification_rows)
         summary = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "input_fingerprints": {"signals": _sha256(signals), "ohlcv": _sha256(ohlcv_path)}, "evaluation_cutoff": cutoff.isoformat() if cutoff else ohlcv_meta.get("max_timestamp"), "method_parameters": {"horizons_bars": {"1h": 4, "2h": 8, "4h": 16}, "material_move_multiplier_atr": 2.0, "material_move_percent": .005, "calibration_fraction": .8}, "signal_rows": len(rows), "realized_move_opportunities": len(opportunities), "episode_rows": len(output_rows), "metrics": metrics, "side_metrics": side_metrics, "regime_phase_metrics": {"regime": dict(Counter(row.get("regime", "") for row in output_rows)), "phase": dict(Counter(row.get("phase", "") for row in output_rows))}, "unresolved_counts": dict(Counter(row.get("outcome_4h", "") for row in output_rows)), "current_notification_burden": {"notified_rows": len(notification_rows), "nondirectional_rows": notification_none}, "pinned_case": {"status": "caught_before_move" if pinned and pinned.get("comparison_status") == "caught_before_move" else "failed" if pinned else "unavailable", "signal_id": "20260711_220501", "exclusion_gate": "pass" if combined_excl.get("resolved_episodes", 0) >= 20 else "fail"}, "validation_status": validation_status, "actual_evidence": actual, "recommendation_status": recommendation, "no_automatic_tuning": True, "safety_boundary": SAFETY}
         _atomic_outputs(output_rows, summary, output_csv, output_json, output_md, replace_output)
-        return {"ok": True, "exit_code": 0, "report_written": True, "signal_rows": len(rows), "episode_rows": len(output_rows), "metrics": metrics, "side_metrics": side_metrics, "validation_status": validation_status, "pinned_case": summary["pinned_case"], "recommendation_status": recommendation, "safety_boundary": SAFETY}
+        return {"ok": True, "exit_code": 0, "report_written": True, "signal_rows": len(rows), "episode_rows": len(output_rows), "realized_move_opportunities": len(opportunities), "metrics": metrics, "side_metrics": side_metrics, "validation_status": validation_status, "pinned_case": summary["pinned_case"], "actual_evidence": actual, "recommendation_status": recommendation, "safety_boundary": SAFETY}
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return {"ok": False, "exit_code": 2, "error_codes": [str(exc) or "input_invalid"], "report_written": False}
     finally:

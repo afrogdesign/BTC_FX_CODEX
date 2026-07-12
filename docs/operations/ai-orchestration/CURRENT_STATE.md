@@ -704,3 +704,28 @@ The corrected replay discarded all pre-correction metrics and completed one publ
 - recommendation: `continue_shadow_collection`; P9 remains blocked and HUMAN_CHECK / ChatGPT review is next
 - archived spec: `chatgpt/specs/archive/20260712_turning_volatility_precursor_replay.md`
 - no production scoring, market-map, gate, notification, mail, runtime, API, account, or order behavior changed
+
+
+## 2026-07-12 turning precursor replay acceptance and next shadow phase
+
+The corrected turning / volatility precursor replay is accepted at commit `9f4f6a1`. All pre-correction metrics are invalid and discarded.
+
+Corrected evidence shows that the pinned 07:05 missed-turn case is detectable offline, but the Combined policy is not ready for live notification use: overall recall is below the current notification baseline, validation has only six resolved Combined episodes, validation UP count is zero, validation false rate is 0.666667, and actual-backed count is zero. Recommendation remains `continue_shadow_collection`.
+
+A new active spec now defines opt-in daily shadow collection:
+
+```text
+chatgpt/specs/active/20260712_turning_precursor_daily_shadow_collection.md
+```
+
+The next source task will reuse the existing daily P8 public OHLCV fetch and write date-scoped precursor evidence. The feature must remain disabled by default and must not modify launchd, schedule, mail, notifications, scoring, market-map, gates, thresholds, runtime, APIs, accounts, or orders. P8 collection continues and P9 remains blocked.
+## 2026-07-12 opt-in turning precursor daily shadow completion
+
+- opt-in shadow integration is implemented and bounded-validated through the P8 operating-cycle runner
+- core cycle and precursor shadow succeeded with one reused public OHLCV fetch; signal slice 127, precursor episodes 175, resolved 26, realized opportunities 28
+- Combined recall 0.25, precision 0.307692, false rate 0.384615, opposite rate 0.192308, whipsaw 0.115385, median lead 69.9885 minutes
+- validation is established but one-sided (UP=0, DOWN=6); recommendation remains `continue_shadow_collection`; actual-backed count is 0
+- installed daily schedule remains unchanged and the feature is disabled by default
+- archived spec: `chatgpt/specs/archive/20260712_turning_precursor_daily_shadow_collection.md`
+- P8 evidence collection continues; P9 remains blocked; runtime enablement requires separate HUMAN_CHECK approval
+- no production scoring, notification, mail, launchd, runtime, API, account, order, or automatic-tuning behavior changed

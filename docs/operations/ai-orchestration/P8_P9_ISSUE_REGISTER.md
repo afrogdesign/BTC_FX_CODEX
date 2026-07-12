@@ -175,3 +175,32 @@ Never combine these in one tuning task without explicit approval:
 - recommendation: `continue_shadow_collection`
 - policy direction, Combined agreement, independent evidence groups, state transitions, stable IDs, continuity, opportunity denominator, validation and malformed-list fail-closed contracts were corrected
 - production change: none; no pre-correction conclusion is retained
+
+
+#### ChatGPT acceptance decision — 2026-07-12
+
+- replay implementation commit `9f4f6a1` is accepted
+- the 07:05 pinned case confirms that an opposite-side chart-check precursor can exist while the formal setup remains invalid
+- the current Combined policy is not eligible for a live notification proposal
+- reasons:
+  - overall Combined recall `0.214286` is below current notification recall `0.392857`
+  - validation has only `6` resolved Combined episodes
+  - validation side split is `UP=0`, `DOWN=6`
+  - validation false rate is `0.666667`
+  - actual-backed count is `0`
+- next evidence action:
+  - implement opt-in daily shadow collection under `chatgpt/specs/active/20260712_turning_precursor_daily_shadow_collection.md`
+  - reuse the existing daily public OHLCV fetch
+  - keep the feature disabled in the installed schedule until separate approval
+- status remains: `collecting evidence`
+- no scoring, market-map, threshold, gate, notification, mail, runtime, API, account, or order change is authorized
+#### Daily shadow integration — 2026-07-12
+
+- opt-in `--include-turning-precursor-shadow` is implemented and bounded-validated
+- core P8 and precursor shadow both succeeded in one wrapper cycle; the same validated public OHLCV path was reused
+- signal slice: 127 rows; precursor episodes: 175; resolved: 26; realized opportunities: 28
+- Combined recall 0.25, precision 0.307692, false rate 0.384615, opposite rate 0.192308, whipsaw 0.115385, median lead 69.9885 minutes
+- validation established with UP=0 and DOWN=6; recommendation remains `continue_shadow_collection`
+- actual-backed count: 0; no production conclusion is drawn from this bounded shadow run
+- source integration status: resolved for the approved opt-in collection scope
+- installed schedule remains disabled; runtime enablement requires separate HUMAN_CHECK approval

@@ -199,6 +199,34 @@ class OperatingCycleTests(unittest.TestCase):
         with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3]: result = self._run()
         self.assertTrue(result["ok"]); self.assertEqual(result["exit_code"], 0)
 
+    def test_shadow_is_disabled_by_default(self) -> None:
+        with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3]:
+            result = self._run()
+        self.assertEqual(result["turning_precursor_shadow"]["status"], "disabled")
+        self.assertFalse((self.root / "out" / "turning_precursor_shadow").exists())
+
+    def test_opt_in_shadow_reuses_core_ohlcv_and_promotes_four_outputs(self) -> None:
+        def slice_side_effect(**kwargs):
+            kwargs["output"].parent.mkdir(parents=True, exist_ok=True)
+            kwargs["output"].write_text("signal_id,timestamp_utc,shadow_boundary\ns1,2026-07-10T01:00:00Z,in_window\n", encoding="utf-8")
+            return {"rows": 1, "context_rows": 0, "in_window_rows": 1}
+        def replay_side_effect(**kwargs):
+            for key in ("output_csv", "output_json", "output_md"):
+                path = kwargs[key]; path.write_text("{}\n", encoding="utf-8")
+            return {"ok": True, "episode_rows": 2, "realized_move_opportunities": 1, "metrics": {"POLICY_CURRENT_NOTIFICATION": {"large_move_recall": 0.1}, "POLICY_COMBINED_PRECURSOR": {"resolved_episodes": 1, "large_move_recall": 0.2, "clean_directional_precision": 0.3, "false_precursor_rate": 0.4, "opposite_move_rate": 0.1, "whipsaw_rate": 0.0, "median_lead_minutes": 15, "validation": {"UP": 0, "DOWN": 1}}}, "validation_status": "not_established", "pinned_case": {"status": "unavailable"}, "actual_evidence": {"actual_backed_count": 0}, "recommendation_status": "continue_shadow_collection"}
+        with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3], patch("src.feedback.turning_volatility_precursor_replay.build_bounded_signal_slice", side_effect=slice_side_effect), patch("src.feedback.turning_volatility_precursor_replay.replay_turning_volatility_precursors", side_effect=replay_side_effect):
+            result = self._run(include_turning_precursor_shadow=True)
+        self.assertEqual(result["turning_precursor_shadow"]["status"], "success")
+        shadow = self.root / "out" / "turning_precursor_shadow"
+        self.assertEqual({p.name for p in shadow.iterdir()}, {"turning_signal_slice.csv", "turning_volatility_precursor_events.csv", "turning_volatility_precursor_replay.json", "turning_volatility_precursor_replay.md"})
+
+    def test_shadow_failure_preserves_core_outputs(self) -> None:
+        with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3], patch("src.feedback.turning_volatility_precursor_replay.build_bounded_signal_slice", side_effect=ValueError("shadow_invalid")):
+            result = self._run(include_turning_precursor_shadow=True)
+        self.assertTrue(result["ok"]); self.assertEqual(result["turning_precursor_shadow"]["status"], "failed")
+        self.assertIn("turning_precursor_shadow_failed", result["warnings"])
+        self.assertTrue((self.root / "out" / "cycle_manifest.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

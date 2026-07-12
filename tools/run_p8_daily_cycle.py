@@ -28,6 +28,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--python-bin", default="", help=argparse.SUPPRESS)
     parser.add_argument("--status-path", default=DEFAULT_STATUS, help=argparse.SUPPRESS)
     parser.add_argument("--output-base", default="logs/p8_operating_cycles", help=argparse.SUPPRESS)
+    parser.add_argument("--include-turning-precursor-shadow", action="store_true")
     return parser
 
 
@@ -53,10 +54,12 @@ def _relative(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def _build_argv(root: Path, report_date: str, output_root: Path, python_bin: str, episodes: Path | None, links: Path | None) -> list[str]:
+def _build_argv(root: Path, report_date: str, output_root: Path, python_bin: str, episodes: Path | None, links: Path | None, include_turning_precursor_shadow: bool = False) -> list[str]:
     argv = [python_bin, "tools/log_feedback.py", "run-p8-operating-cycle", "--date", report_date, "--candidates", DEFAULT_CANDIDATES, "--signal-context", DEFAULT_SIGNAL_CONTEXT, "--ohlcv", DEFAULT_OHLCV, "--output-root", _relative(output_root, root), "--fetch-public-ohlcv", "--replace-output", "--stdout-json"]
     if episodes is not None and links is not None:
         argv.extend(["--actual-episodes", _relative(episodes, root), "--actual-links", _relative(links, root)])
+    if include_turning_precursor_shadow:
+        argv.append("--include-turning-precursor-shadow")
     return argv
 
 
@@ -77,9 +80,9 @@ def run_daily_cycle(args: argparse.Namespace) -> int:
         else:
             print(json.dumps({"status": "dry_run", "actual_input_status": "actual_pair_incomplete"}, separators=(",", ":")))
         return 2
-    argv = _build_argv(root, report_date, output_root, python_bin, episodes if episodes_exists else None, links if links_exists else None)
+    argv = _build_argv(root, report_date, output_root, python_bin, episodes if episodes_exists else None, links if links_exists else None, bool(args.include_turning_precursor_shadow))
     if args.dry_run:
-        print(json.dumps({"status": "dry_run", "command": argv}, ensure_ascii=False, separators=(",", ":")))
+        print(json.dumps({"status": "dry_run", "command": argv, "turning_precursor_shadow_enabled": bool(args.include_turning_precursor_shadow)}, ensure_ascii=False, separators=(",", ":")))
         return 0
     completed = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding="utf-8")
     finished = datetime.now(JST).isoformat()
@@ -102,10 +105,11 @@ def run_daily_cycle(args: argparse.Namespace) -> int:
         "actual_input_status": "provided" if episodes_exists else "missing",
         "counts": parsed.get("counts", {}), "readiness": parsed.get("p9_readiness", {}),
         "issue_001": parsed.get("issue_001", {}), "error_codes": parsed.get("errors", []) if not success else [],
+        "turning_precursor_shadow": parsed.get("turning_precursor_shadow", {"enabled": bool(args.include_turning_precursor_shadow), "status": "disabled"}),
         "safety_boundary": SAFETY,
     }
     _atomic_json(status_path, payload)
-    print(json.dumps({"status": status, "report_date": report_date, "returncode": int(completed.returncode), "output_root": payload["output_root"], "actual_input_status": payload["actual_input_status"], "counts": payload["counts"], "readiness": payload["readiness"]}, ensure_ascii=False, separators=(",", ":")))
+    print(json.dumps({"status": status, "report_date": report_date, "returncode": int(completed.returncode), "output_root": payload["output_root"], "actual_input_status": payload["actual_input_status"], "counts": payload["counts"], "readiness": payload["readiness"], "turning_precursor_shadow": payload["turning_precursor_shadow"]}, ensure_ascii=False, separators=(",", ":")))
     return 0 if success else (completed.returncode or 1)
 
 
