@@ -748,12 +748,14 @@ class NotificationDetailPageTests(unittest.TestCase):
         payload["active_trade_plan"] = {"side_plans": {"long": {"bias_alignment": "primary", "market_entry_status": "allowed", "entry_mid": 65000, "stop_loss": 64000, "tp1": 66000, "tp2": 67000, "rr_zone_mid_tp1": 1.2, "rr_zone_mid_tp2": 2.0}}}
         payload["big_chance_candidate"] = {"present": True, "score": 1, "grade": "C", "status": "armed", "headline": "shadow context", "macro_context": {}}
         html = build_notification_detail_html(payload)
-        self.assertIn("SHADOW / REPORT ONLY", html)
+        self.assertIn('class="shadow-panel"', html)
+        self.assertIn("安全判定 / REPORT ONLY", html)
+        self.assertNotIn("安全判定 / REPORT ONLY / SHADOW / REPORT ONLY", html)
         for text in ("not FORMAL_GO", "no automatic order", "human decides manually", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE", "STOP_OR_EXIT", "15分足", "64,000", "66,000", "67,000"):
             self.assertIn(text, html)
         self.assertIn("shadow-card", html)
-        self.assertLess(html.find('id="active-alerts"'), html.find("SHADOW / REPORT ONLY"))
-        self.assertLess(html.find("SHADOW / REPORT ONLY"), html.find('class="workspace"'))
+        self.assertLess(html.find('id="active-alerts"'), html.find('class="shadow-panel"'))
+        self.assertLess(html.find('class="shadow-panel"'), html.find('class="workspace"'))
         for marker in ('chart-panel', 'side-card long', 'side-card short', 'VALUE DEFENSE', 'id="big-chance"'):
             self.assertIn(marker, html)
         escaped = build_notification_detail_html({**payload, "active_trade_plan": {"side_plans": {"long": {"entry_mid": "<unsafe>", "stop_loss": "<sl>", "tp1": "<tp1>", "tp2": "<tp2>"}}}})
@@ -788,7 +790,9 @@ class NotificationDetailPageTests(unittest.TestCase):
                 html = build_notification_detail_html(payload)
             self.assertIn('class="workspace"', html)
             self.assertIn("chart-panel", html)
-            self.assertIn("SHADOW / REPORT ONLY", html)
+            self.assertIn('class="shadow-panel"', html)
+            self.assertIn("安全判定 / REPORT ONLY", html)
+            self.assertNotIn("安全判定 / REPORT ONLY / SHADOW / REPORT ONLY", html)
 
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
