@@ -71,6 +71,41 @@ _VISIBLE_STATUS_LABELS = {
     "none": "なし",
 }
 
+_OPERATOR_ACTION_LABELS = {
+    "A_FORMAL": "正式条件に近い",
+    "B_CHECK_15M": "15分足を確認",
+    "C_WATCH_ZONE": "価格帯を監視",
+    "STOP_OR_EXIT": "新規見送り・保護確認",
+    "NONE": "判定待ち",
+}
+_OPERATOR_STATE_LABELS = {
+    "follow_through": "継続確認",
+    "triggered": "条件成立",
+    "late": "追いかけ禁止",
+    "armed": "条件待ち",
+    "watch": "監視中",
+    "invalidated": "無効化",
+    "wait": "様子見",
+    "dormant": "判定待ち",
+}
+
+
+def _operator_action_label(value: Any) -> str:
+    return _OPERATOR_ACTION_LABELS.get(str(value or "").strip().upper(), "判定待ち")
+
+
+def _operator_state_label(value: Any) -> str:
+    return _OPERATOR_STATE_LABELS.get(str(value or "").strip().lower(), "判定待ち")
+
+
+def _operator_side_label(side: Any) -> str:
+    return "ロング" if str(side or "").strip().lower() == "long" else "ショート"
+
+
+def _operator_signal_label(value: Any) -> str:
+    token = str(value or "").strip().lower()
+    return {"wait": "様子見", "long": "ロング方向", "short": "ショート方向", "up": "上方向", "down": "下方向"}.get(token, "判定待ち")
+
 
 def _format_price(value: Any) -> str:
     try:
@@ -3806,16 +3841,22 @@ def _operator_dashboard_v2_css() -> str:
     .alert-strip {
       display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:12px 0;
     }
-    .side-aware-action { margin:12px 0; padding:18px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(135deg,rgba(11,28,43,.98),rgba(9,19,30,.98)); }
+    .side-aware-action { margin:12px 0; padding:20px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(135deg,rgba(11,28,43,.98),rgba(9,19,30,.98)); }
     .side-aware-head { display:grid; gap:3px; }
     .side-aware-head > span { color:var(--wait); font-size:11px; font-weight:900; letter-spacing:.1em; }
-    .side-aware-head h2 { margin:0; font-size:clamp(24px,3vw,38px); }
+    .side-aware-head h2 { margin:0; color:#f4d58a; font-size:clamp(24px,3vw,38px); }
     .side-aware-head p,.side-aware-note { margin:0; color:var(--muted); font-weight:700; }
+    .side-aware-chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; }
+    .side-aware-chip { padding:6px 10px; border:1px solid #34516b; border-radius:999px; background:#0a1b2b; color:#cbddec; font-size:11px; font-weight:900; }
+    .side-aware-chip.no-chase { border-color:rgba(243,180,79,.7); background:rgba(243,180,79,.14); color:#ffd98f; }
     .side-aware-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
-    .side-aware-card { min-width:0; padding:14px; border:1px solid var(--line); border-radius:14px; background:rgba(4,13,22,.5); }
+    .side-aware-card { position:relative; min-width:0; padding:14px; border:1px solid var(--line); border-radius:14px; background:rgba(4,13,22,.5); }
+    .side-aware-card.primary { border-color:var(--wait); background:linear-gradient(145deg,rgba(243,180,79,.14),rgba(4,13,22,.6)); box-shadow:0 0 0 1px rgba(243,180,79,.18); }
+    .side-aware-card-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .side-aware-card-top b { color:var(--wait); font-size:10px; }
     .side-aware-card.long { border-color:rgba(66,211,146,.35); } .side-aware-card.short { border-color:rgba(255,111,120,.35); }
     .side-aware-card span { color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.1em; }
-    .side-aware-card strong,.side-aware-card b { display:block; margin-top:3px; } .side-aware-card p { margin:8px 0 0; color:var(--muted); font-size:12px; }
+    .side-aware-card strong { display:block; margin-top:6px; color:#eef6ff; font-size:15px; } .side-aware-card small { display:block; margin-top:4px; color:#f3c96b; font-weight:900; } .side-aware-card p { margin:8px 0 0; color:var(--muted); font-size:12px; } .side-aware-card em { display:inline-block; margin-top:10px; padding:4px 7px; border-radius:6px; background:rgba(243,180,79,.18); color:#ffd98f; font-size:10px; font-style:normal; font-weight:900; }
     .side-aware-note { margin-top:12px; font-size:12px; }
     .alert-item {
       display:grid; grid-template-columns:28px 1fr; gap:9px; align-items:start; padding:12px 13px;
@@ -3953,7 +3994,8 @@ def _operator_dashboard_v2_css() -> str:
     .shadow-intro { margin:6px 0 0; color:#b9cada; font-size:11px; line-height:1.5; }
     .shadow-safety { color:#b6c8d9; font-size:10px; text-align:right; }
     .shadow-legend { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
-    .shadow-stage { padding:5px 8px; border:1px solid #29445d; border-radius:999px; background:#0b1927; color:#c6d8e8; font-size:10px; font-weight:900; }
+    .shadow-stage { display:grid; gap:2px; padding:7px 10px; border:1px solid #29445d; border-radius:11px; background:#0b1927; color:#c6d8e8; font-size:10px; font-weight:900; }
+    .shadow-stage small { color:#8fa9bd; font-size:9px; font-weight:700; }
     .shadow-note { margin:10px 0 0; color:#8fa9bd; font-size:10px; }
     .shadow-summary { margin:12px 0 0; padding:9px 11px; border-left:3px solid var(--wait); background:#081521; color:#d5e3ef; font-size:12px; font-weight:900; }
     .shadow-body { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
@@ -4080,6 +4122,9 @@ def _operator_dashboard_v2_css() -> str:
       .chart-controls { justify-content:flex-start; margin-top:10px; }
       .chart-scroll { padding-left:8px; padding-right:8px; }
       .condition-grid { grid-template-columns:1fr; }
+      .side-aware-cards { grid-template-columns:1fr; }
+      .shadow-head { display:block; }
+      .shadow-safety { margin-top:8px; text-align:left; }
       .big-chance { grid-template-columns:minmax(0,1fr) 88px; }
       .big-score { width:88px; }
       .context-bar { grid-template-columns:1fr; }
@@ -4451,10 +4496,10 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
         surface = {"surface_status": "malformed", "rows": []}
     status = str(surface.get("surface_status", "malformed"))
     labels = {
-        "A_FORMAL": ("最終確認候補", "必要条件が揃った候補です。人間が最終確認します。"),
-        "B_CHECK_15M": ("15分足の確認待ち", "15分足の形を確認するまで実行判断へ進みません。"),
-        "C_WATCH_ZONE": ("価格帯を監視", "対象価格帯へ近づくまで監視します。"),
-        "STOP_OR_EXIT": ("新規停止・保護確認", "新規では入らず、保有中なら利確・撤退・保護を確認します。"),
+        "A_FORMAL": ("正式条件に近い", "成立に最も近い状態"),
+        "B_CHECK_15M": ("15分足を確認", "戻り・タイミングを確認"),
+        "C_WATCH_ZONE": ("価格帯を監視", "価格帯の推移を観察"),
+        "STOP_OR_EXIT": ("新規見送り・保護確認", "新規は見送り、保護を優先"),
         "insufficient_evidence": ("判定材料不足", "分類に必要な証拠が不足しています。"),
     }
     type_labels = {"limit_retest": "押し目・戻り待ち", "counter_scalp": "逆方向短期", "breakout_follow": "ブレイク追随", "market": "成行候補"}
@@ -4478,7 +4523,7 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
         cls = str(side_rows[0].get("operator_class") or "insufficient_evidence") if side_rows else "STOP_OR_EXIT"
         return labels.get(cls, labels["insufficient_evidence"])[0]
 
-    summary = f"現在：ロングは{side_summary('LONG')}、ショートは{side_summary('SHORT')}"
+    summary = f"現在の判断：ロングは{side_summary('LONG')}、ショートは{side_summary('SHORT')}"
     if status == "no_current_candidate":
         body = "現在スナップショットにshadow候補はありません。"
     elif status == "malformed":
@@ -4492,12 +4537,12 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
             label, explanation = labels.get(cls, labels["insufficient_evidence"])
             side = str(row.get("side") or "").upper() or "—"
             raw = " / ".join(f"{key}={row.get(key) or '—'}" for key in ("operator_class", "candidate_type", "candidate_status", "reason_codes", "warning_codes"))
-            facts = (("候補", type_labels.get(str(row.get("candidate_type") or ""), "未記録")), ("候補状態", status_labels.get(str(row.get("candidate_status") or ""), "未記録")), ("エントリー", entry(row)), ("無効化", price(row.get("invalidation_price"))), ("TP1", price(row.get("tp1_price"))), ("TP2", price(row.get("tp2_price"))))
+            facts = (("想定動き", type_labels.get(str(row.get("candidate_type") or ""), "未記録")), ("候補状態", status_labels.get(str(row.get("candidate_status") or ""), "未記録")), ("エントリー帯", entry(row)), ("無効化ライン", price(row.get("invalidation_price"))), ("利確目安1", price(row.get("tp1_price"))), ("利確目安2", price(row.get("tp2_price"))))
             fact_html = "".join(f'<div class="shadow-fact"><span>{name}</span><b>{val}</b></div>' for name, val in facts)
             cards.append(f'<article class="shadow-card"><div class="shadow-card-head"><span class="shadow-side">{html.escape(side)}</span><strong>{html.escape(label)}</strong></div><p>{html.escape(explanation)}</p><div class="shadow-facts">{fact_html}</div><details class="shadow-raw"><summary>内部判定値</summary><p>{html.escape(raw)}</p></details></article>')
         body = "".join(cards)
-    stages = "".join(f'<span class="shadow-stage">{text}</span>' for text in ("A 最終確認候補", "B 15分足確認", "C 価格帯監視", "STOP 新規停止・保護確認"))
-    return f'<section class="shadow-panel" aria-label="SHADOW REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">安全判定 / REPORT ONLY</span><h2>現在の売買プラン判定</h2><p class="shadow-intro">ロング・ショート候補を、どこまで確認してよいか分類する補助表示です。注文や最終決定は行いません。</p></div><span class="shadow-safety">not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend" data-shadow-classes="A_FORMAL B_CHECK_15M C_WATCH_ZONE STOP_OR_EXIT">{stages}</div><p class="shadow-note">A判定でも正式GOや自動実行ではありません。最終判断は人間が行います。</p><div class="shadow-summary">{html.escape(summary)}</div><div class="shadow-body">{body}</div></section>'
+    stages = "".join(f'<span class="shadow-stage"><strong>{label}</strong><small>{explanation}</small></span>' for label, explanation in (("A：正式条件に近い", "成立に最も近い状態"), ("B：15分足を確認", "戻り・タイミングを確認"), ("C：価格帯を監視", "価格帯の推移を観察"), ("STOP：新規見送り・保護確認", "新規は見送り、保護を優先")))
+    return f'<section class="shadow-panel" aria-label="現在の売買判断 / REPORT ONLY"><div class="shadow-head"><div><span class="shadow-badge">安全判定 / REPORT ONLY</span><h2>現在の売買判断</h2><p class="shadow-intro">相場判断を支援するための情報です。最終判断と注文は人間が行います。</p></div><span class="shadow-safety">report-only / not FORMAL_GO / no automatic order / human decides manually</span></div><div class="shadow-legend" data-shadow-classes="A_FORMAL B_CHECK_15M C_WATCH_ZONE STOP_OR_EXIT">{stages}</div><p class="shadow-note">A判定でも正式GOや自動実行ではありません。最終判断は人間が行います。</p><div class="shadow-summary">{html.escape(summary)}</div><div class="shadow-body">{body}</div></section>'
 
 
 def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
@@ -4507,13 +4552,36 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
     execution = action.get("execution_context") if isinstance(action.get("execution_context"), dict) else {}
     structural = action.get("structural_context") if isinstance(action.get("structural_context"), dict) else {}
     tactical = action.get("tactical_context") if isinstance(action.get("tactical_context"), dict) else {}
+    primary_side = str(execution.get("primary_side") or "").lower()
+    primary_class = str(execution.get("primary_action_class") or "NONE")
+    primary_state = str(execution.get("primary_state") or "dormant")
+    chase_status = str(execution.get("chase_status") or "")
+    side_name = _operator_side_label(primary_side)
+    if primary_class == "B_CHECK_15M":
+        headline = f"{side_name}優先：15分足で戻りを確認" if primary_side == "short" else f"{side_name}優先：15分足で押し目を確認"
+    elif primary_class == "STOP_OR_EXIT":
+        headline = f"{side_name}：新規見送り・保護確認"
+    else:
+        headline = f"{side_name}優先：{_operator_action_label(primary_class)}"
+    if chase_status in {"late_no_chase", "tp1_reached_no_chase"} and "追いかけ禁止" not in headline:
+        headline = f"{headline}（追いかけ禁止）"
+    chips = []
+    for label, value, extra in (("15分足", _operator_state_label(primary_state), "no-chase" if chase_status in {"late_no_chase", "tp1_reached_no_chase"} else ""), ("1時間足", _operator_signal_label(tactical.get("signals_1h")), ""), ("4時間足", _operator_signal_label(structural.get("signals_4h")), "")):
+        chips.append(f'<span class="side-aware-chip {html.escape(extra)}">{label}：{html.escape(value)}</span>')
     cards = []
     for side in ("long", "short"):
         value = action.get(side) if isinstance(action.get(side), dict) else {}
-        cards.append(f'<article class="side-aware-card {side}"><span>{side.upper()}</span><strong>{html.escape(str(value.get("action_class") or "NONE"))}</strong><b>15M: {html.escape(str(value.get("state") or "dormant"))}</b><p>{html.escape(str(value.get("next_condition") or "既存プランなし"))}</p></article>')
-    primary = f'{str(execution.get("primary_side") or "—").upper()} {execution.get("primary_action_class") or "NONE"}'
-    headline = str(execution.get("headline") or primary)
-    return f'<section class="side-aware-action" aria-label="現在のoperator action"><div class="side-aware-head"><span>現在の行動 / REPORT ONLY</span><h2>{html.escape(primary)}</h2><strong class="side-aware-headline">{html.escape(headline)}</strong><p>15M: {html.escape(str(execution.get("primary_state") or "dormant"))}　1H: {html.escape(str(tactical.get("signals_1h") or "—"))}　4H: {html.escape(str(structural.get("signals_4h") or "—"))}</p></div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存Long / Shortスコアは構造コンテキストであり、最終行動や注文許可ではありません。</p></section>'
+        action_class = str(value.get("action_class") or "NONE")
+        state = str(value.get("state") or "dormant")
+        side_label = _operator_side_label(side)
+        if action_class == "STOP_OR_EXIT":
+            card_heading = f"{side_label}：監視のみ"
+        else:
+            card_heading = f"{side_label}：{_operator_action_label(action_class)}"
+        priority = "高" if side == primary_side else "低"
+        next_condition = str(value.get("next_condition") or "既存プランなし")
+        cards.append(f'<article class="side-aware-card {side}{" primary" if side == primary_side else ""}"><div class="side-aware-card-top"><span>{side_label}</span><b>優先度：{priority}</b></div><strong>{html.escape(card_heading)}</strong><small>{html.escape(_operator_state_label(state))}</small><p>{html.escape(next_condition)}</p>{"<em>今の優先</em>" if side == primary_side else ""}</article>')
+    return f'<section class="side-aware-action" aria-label="現在の行動方針 / レポート専用"><div class="side-aware-head"><span>現在の行動方針 / レポート専用</span><h2>{html.escape(headline)}</h2><strong class="side-aware-headline">{html.escape(_operator_state_label(primary_state))}{" / 追いかけ禁止" if chase_status in {"late_no_chase", "tp1_reached_no_chase"} and "追いかけ禁止" not in headline else ""}</strong><p>現在の優先方向と15分足の確認状態を表示します。注文や最終判断は行いません。</p></div><div class="side-aware-chips">{"".join(chips)}</div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存のスコアやゲートを変更せず、人間が確認するためのレポート専用表示です。</p></section>'
 
 
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:

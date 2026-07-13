@@ -773,7 +773,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         }
         with patch("src.notification.detail_page.build_manual_operator_shadow_surface", return_value=surface):
             html = build_notification_detail_html(payload)
-        for text in ("安全判定 / REPORT ONLY", "現在の売買プラン判定", "A 最終確認候補", "B 15分足確認", "C 価格帯監視", "STOP 新規停止・保護確認", "正式GOや自動実行ではありません", "新規停止・保護確認", "LONG", "SHORT", "押し目・戻り待ち", "逆方向短期", "候補", "候補状態", "エントリー", "無効化", "TP1", "TP2", "現在：ロングは新規停止・保護確認"):
+        for text in ("安全判定 / REPORT ONLY", "現在の売買判断", "相場判断を支援するための情報です。最終判断と注文は人間が行います。", "A：正式条件に近い", "B：15分足を確認", "C：価格帯を監視", "STOP：新規見送り・保護確認", "成立に最も近い状態", "戻り・タイミングを確認", "価格帯の推移を観察", "新規は見送り、保護を優先", "正式GOや自動実行ではありません", "新規見送り・保護確認", "LONG", "SHORT", "押し目・戻り待ち", "逆方向短期", "想定動き", "候補状態", "エントリー帯", "無効化ライン", "利確目安1", "利確目安2", "現在の判断：ロングは新規見送り・保護確認"):
             self.assertIn(text, html)
         self.assertIn('class="shadow-raw"', html)
         self.assertIn('<summary>内部判定値</summary>', html)
@@ -807,11 +807,30 @@ class NotificationDetailPageTests(unittest.TestCase):
         payload["big_chance_candidate"] = {"present": True, "side": "long", "score": 68, "grade": "B", "status": "armed", "headline": "補助候補", "macro_context": {}}
         html = build_notification_detail_html(payload)
         self.assertIn('class="side-aware-action"', html)
-        self.assertIn("SHORT B_CHECK_15M", html)
-        self.assertIn("15M: armed", html)
-        self.assertIn("LONG", html); self.assertIn("STOP_OR_EXIT", html)
+        self.assertIn("ショート優先：15分足で戻りを確認", html)
+        self.assertIn("15分足：条件待ち", html)
+        self.assertIn("1時間足：様子見", html)
+        self.assertIn("4時間足：様子見", html)
+        self.assertIn("ロング：監視のみ", html); self.assertIn("新規見送り・保護確認", html)
+        side_block = html[html.find('<section class="side-aware-action"'):html.find('</section>', html.find('<section class="side-aware-action"'))]
+        self.assertNotIn("SHORT B_CHECK_15M", side_block)
+        self.assertNotIn("C_WATCH_ZONE", side_block)
         self.assertLess(html.find('class="side-aware-action"'), html.find('class="shadow-panel"'))
         self.assertIn("補助表示 / stale", html)
+
+    def test_side_aware_dynamic_condition_is_escaped(self) -> None:
+        payload = _sample_detail_payload()
+        payload["side_aware_mtf_action"] = {
+            "present": True,
+            "execution_context": {"primary_side": "short", "primary_action_class": "B_CHECK_15M", "primary_state": "armed"},
+            "long": {"action_class": "C_WATCH_ZONE", "state": "watch", "next_condition": "<unsafe-long>"},
+            "short": {"action_class": "B_CHECK_15M", "state": "armed", "next_condition": "<unsafe-short>"},
+        }
+        html = build_notification_detail_html(payload)
+        self.assertNotIn("<unsafe-long>", html)
+        self.assertNotIn("<unsafe-short>", html)
+        self.assertIn("&lt;unsafe-long&gt;", html)
+        self.assertIn("&lt;unsafe-short&gt;", html)
 
     def test_side_aware_late_hero_shows_no_chase(self) -> None:
         payload = _sample_detail_payload()
