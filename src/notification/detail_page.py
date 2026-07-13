@@ -99,7 +99,12 @@ def _operator_state_label(value: Any) -> str:
 
 
 def _operator_side_label(side: Any) -> str:
-    return "ロング" if str(side or "").strip().lower() == "long" else "ショート"
+    token = str(side or "").strip().lower()
+    if token == "long":
+        return "ロング"
+    if token == "short":
+        return "ショート"
+    return "判定待ち"
 
 
 def _operator_signal_label(value: Any) -> str:
@@ -4535,7 +4540,7 @@ def _operator_dashboard_shadow_panel_html(result: dict[str, Any]) -> str:
         for row in rows:
             cls = str(row.get("operator_class") or "insufficient_evidence")
             label, explanation = labels.get(cls, labels["insufficient_evidence"])
-            side = str(row.get("side") or "").upper() or "—"
+            side = _operator_side_label(row.get("side"))
             raw = " / ".join(f"{key}={row.get(key) or '—'}" for key in ("operator_class", "candidate_type", "candidate_status", "reason_codes", "warning_codes"))
             facts = (("想定動き", type_labels.get(str(row.get("candidate_type") or ""), "未記録")), ("候補状態", status_labels.get(str(row.get("candidate_status") or ""), "未記録")), ("エントリー帯", entry(row)), ("無効化ライン", price(row.get("invalidation_price"))), ("利確目安1", price(row.get("tp1_price"))), ("利確目安2", price(row.get("tp2_price"))))
             fact_html = "".join(f'<div class="shadow-fact"><span>{name}</span><b>{val}</b></div>' for name, val in facts)
@@ -4563,7 +4568,8 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
         headline = f"{side_name}：新規見送り・保護確認"
     else:
         headline = f"{side_name}優先：{_operator_action_label(primary_class)}"
-    if chase_status in {"late_no_chase", "tp1_reached_no_chase"} and "追いかけ禁止" not in headline:
+    no_chase = chase_status in {"late_no_chase", "tp1_reached_no_chase"}
+    if no_chase and primary_state != "late" and "追いかけ禁止" not in headline:
         headline = f"{headline}（追いかけ禁止）"
     chips = []
     for label, value, extra in (("15分足", _operator_state_label(primary_state), "no-chase" if chase_status in {"late_no_chase", "tp1_reached_no_chase"} else ""), ("1時間足", _operator_signal_label(tactical.get("signals_1h")), ""), ("4時間足", _operator_signal_label(structural.get("signals_4h")), "")):
@@ -4575,13 +4581,16 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
         state = str(value.get("state") or "dormant")
         side_label = _operator_side_label(side)
         if action_class == "STOP_OR_EXIT":
-            card_heading = f"{side_label}：監視のみ"
+            card_heading = f"{side_label}：新規見送り・保護確認"
         else:
             card_heading = f"{side_label}：{_operator_action_label(action_class)}"
         priority = "高" if side == primary_side else "低"
         next_condition = str(value.get("next_condition") or "既存プランなし")
         cards.append(f'<article class="side-aware-card {side}{" primary" if side == primary_side else ""}"><div class="side-aware-card-top"><span>{side_label}</span><b>優先度：{priority}</b></div><strong>{html.escape(card_heading)}</strong><small>{html.escape(_operator_state_label(state))}</small><p>{html.escape(next_condition)}</p>{"<em>今の優先</em>" if side == primary_side else ""}</article>')
-    return f'<section class="side-aware-action" aria-label="現在の行動方針 / レポート専用"><div class="side-aware-head"><span>現在の行動方針 / レポート専用</span><h2>{html.escape(headline)}</h2><strong class="side-aware-headline">{html.escape(_operator_state_label(primary_state))}{" / 追いかけ禁止" if chase_status in {"late_no_chase", "tp1_reached_no_chase"} and "追いかけ禁止" not in headline else ""}</strong><p>現在の優先方向と15分足の確認状態を表示します。注文や最終判断は行いません。</p></div><div class="side-aware-chips">{"".join(chips)}</div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存のスコアやゲートを変更せず、人間が確認するためのレポート専用表示です。</p></section>'
+    status_label = _operator_state_label(primary_state)
+    if no_chase and "追いかけ禁止" not in status_label:
+        status_label = f"{status_label} / 追いかけ禁止"
+    return f'<section class="side-aware-action" aria-label="現在の行動方針 / レポート専用"><div class="side-aware-head"><span>現在の行動方針 / レポート専用</span><h2>{html.escape(headline)}</h2><strong class="side-aware-headline">{html.escape(status_label)}</strong><p>現在の優先方向と15分足の確認状態を表示します。注文や最終判断は行いません。</p></div><div class="side-aware-chips">{"".join(chips)}</div><div class="side-aware-cards">{"".join(cards)}</div><p class="side-aware-note">既存のスコアやゲートを変更せず、人間が確認するためのレポート専用表示です。</p></section>'
 
 
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:

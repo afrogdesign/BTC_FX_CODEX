@@ -243,3 +243,38 @@ Archive this spec only after:
 - implementation diff is reviewed by ChatGPT
 - targeted tests pass
 - no safety or scope regression is found
+
+
+---
+
+## ChatGPT review findings — 2026-07-13
+
+Implementation commit reported by Codex: `93c301a`.
+
+The implementation is not yet accepted. The following display-only corrections are required before archive/runtime apply:
+
+1. `STOP_OR_EXIT` side card semantics
+   - Current source routes `STOP_OR_EXIT` to a card heading equivalent to `監視のみ`.
+   - This weakens the approved meaning and conflicts with the mapping contract.
+   - Required visible wording: `新規見送り・保護確認`.
+
+2. Japanese side labels in the shadow/detail block
+   - Current source uppercases the row side and visibly renders `LONG` / `SHORT`.
+   - Required primary visible wording: `ロング` / `ショート`.
+   - Internal values may remain unchanged in payloads and hidden diagnostic data.
+
+3. Fail-closed unknown side handling
+   - The side-label helper currently treats every non-`long` value as `ショート`.
+   - Unknown, empty, or malformed values must display a neutral fallback such as `判定待ち`; they must not imply a Short direction.
+
+4. Duplicate no-chase wording
+   - For `primary_state=late` plus a no-chase chase status, the current hero status can render `追いかけ禁止 / 追いかけ禁止`.
+   - Render the no-chase wording once while keeping it clearly visible.
+
+5. Tests
+   - Replace assertions that lock `STOP_OR_EXIT` to `監視のみ`.
+   - Replace primary visible `LONG` / `SHORT` assertions with Japanese labels within the redesigned block.
+   - Add coverage for unknown-side fail-closed behavior.
+   - Add an assertion that the late/no-chase hero does not duplicate `追いかけ禁止`.
+
+All corrections remain display-only. Do not change classifier tokens, action/state payloads, scores, gates, thresholds, notification behavior, runtime, mail, APIs, accounts, positions, or orders.

@@ -1,36 +1,37 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260713-OPERATOR-ACTION-JAPANESE-UI-REDESIGN`
-- mode: `BOUNDED_CODEX`
-- task_type: `PUBLIC DETAIL HTML DISPLAY / JAPANESE UI REDESIGN`
+- current_work_id: `BTCFX-20260713-OPERATOR-ACTION-JAPANESE-UI-REVIEW-FIX`
+- mode: `BOUNDED_CODEX_FIX`
+- task_type: `PUBLIC DETAIL HTML DISPLAY / REVIEW CORRECTION`
 - branch: `Ver04-v2`
+- parent_commit: `93c301a`
 - active_spec: `chatgpt/specs/active/20260713_operator_action_japanese_ui_redesign.md`
-- human_approval: received
 
-## Goal
+## Review result
 
-Public detail HTMLの次の2ブロックを、承認済みデザインへ変更する。
+The first Japanese UI implementation is not yet accepted.
 
-1. 現在の行動方針
-2. 現在の売買判断
+MCP source review confirmed four display defects:
 
-内部変数のような英語tokenを主要表示から外し、ロング・ショートの優先度、15分足確認、様子見、追いかけ禁止、新規見送り・保護確認を自然な日本語で即座に理解できる表示にする。
+1. `STOP_OR_EXIT` can be displayed as `監視のみ`, weakening the required `新規見送り・保護確認` meaning.
+2. The shadow/detail cards still visibly render raw `LONG` / `SHORT` side labels instead of `ロング` / `ショート`.
+3. Unknown or empty side values are treated as Short rather than failing closed to `判定待ち`.
+4. A late no-chase state can display `追いかけ禁止` twice in the same hero status.
 
-## Allowed source scope
+## Exact next action
+
+Correct only the display helpers, target render functions, and matching tests in:
 
 - `src/notification/detail_page.py`
 - `tests/test_notification_detail_page.py`
 
-## Required behavior
+Required results:
 
-- `SHORT B_CHECK_15M`、`C_WATCH_ZONE`、`15M: late`、`1H: wait`、`4H: wait`を主要表示へ出さない
-- dynamic internal values are preserved; visible labels use deterministic Japanese mappings
-- primary side is visually emphasized
-- Long / Short cards and timeframe chips are readable at a glance
-- A/B/C/STOP guide and plan detail labels use clear Japanese
-- late/no-chase visibly says `追いかけ禁止`
-- entry zone, invalidation, TP1 and TP2 values remain unchanged
-- report-only safety wording remains visible
+- `STOP_OR_EXIT` side card visibly says `新規見送り・保護確認`
+- primary side labels in the redesigned shadow/detail block use `ロング` / `ショート`
+- unknown side displays `判定待ち`
+- `追いかけ禁止` appears once in the late/no-chase hero status
+- all existing numeric values and safety wording remain unchanged
 
 ## Validation
 
@@ -39,18 +40,10 @@ Public detail HTMLの次の2ブロックを、承認済みデザインへ変更�
 git diff --check
 ```
 
-One existing-fixture local render smoke is allowed if needed.
+## Boundary
 
-## Runtime boundary
-
-- source/test/local commit only
-- pushなし
-- runtime restartなし
-- historical artifact regenerationなし
-- mail送信なし
-- notification behavior変更なし
-- scoring、gate、threshold、classifier、API、account、position、order変更なし
-
-## After implementation
-
-ChatGPTがdiffとtargeted test結果をreviewする。runtime applyはreview後の別承認taskとする。
+- display/test correction only
+- no classifier, score, gate, threshold, entry, SL, TP, notification, mail, runtime, launchd, API, account, position, or order change
+- no push
+- no runtime apply
+- active spec remains active until ChatGPT accepts the corrected diff
