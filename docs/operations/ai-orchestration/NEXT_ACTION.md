@@ -1,53 +1,56 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260713-OPERATOR-ACTION-JAPANESE-UI-UNKNOWN-SIDE-FIX`
+- current_work_id: `BTCFX-20260713-OPERATOR-ACTION-JAPANESE-UI-GENERIC-UNKNOWN-SIDE-FIX`
 - mode: `BOUNDED_CODEX`
-- task_type: `DISPLAY-ONLY FAIL-CLOSED CORRECTION`
+- task_type: `FINAL DISPLAY-ONLY FAIL-CLOSED CORRECTION`
 - branch: `Ver04-v2`
-- parent_commit: `a6e7dea`
+- parent_commit: `95b56e7`
 - active_spec: `chatgpt/specs/active/20260713_operator_action_japanese_ui_redesign.md`
 
 ## Review result
 
-The first review fix corrected:
-
-- STOP card semantics
-- Japanese side labels
-- unknown-side label fallback
-- duplicate no-chase wording
-
-One display defect remains.
-
-For `primary_action_class=B_CHECK_15M` with an unknown or empty `primary_side`, the headline currently becomes:
-
-```text
-判定待ち優先：15分足で押し目を確認
-```
-
-This is not fail-closed because `押し目` implies a Long-side assumption.
-
-## Exact next action
-
-Change only the headline selection logic so unknown or empty side does not imply either Long or Short.
-
-Required unknown-side headline:
+The B_CHECK_15M unknown-side headline is corrected:
 
 ```text
 方向判定待ち：15分足を確認
 ```
 
-or an equivalent neutral Japanese phrase with no `押し目`, `戻り`, `ロング`, `ショート`, or `優先` wording.
+Known Long and Short B headlines remain correct.
+
+One generic non-B fail-closed defect remains.
+
+Current generic branch:
+
+```python
+headline = f"{side_name}優先：{_operator_action_label(primary_class)}"
+```
+
+For unknown or malformed side this can render:
+
+```text
+判定待ち優先：<action label>
+```
+
+An unknown side must not use `優先` or imply a selected direction.
+
+## Exact next action
+
+Change only the generic non-B headline selection:
+
+- known `long` or `short`: preserve current side-priority wording
+- unknown / empty / malformed side: `方向判定待ち：<日本語action label>`
+
+Add a targeted unknown-side regression test using `C_WATCH_ZONE` or `A_FORMAL` so the generic branch is exercised. Do not use `STOP_OR_EXIT` as the sole fixture because STOP has a dedicated headline branch.
 
 Preserve:
 
-- known Long headline
-- known Short headline
-- all action/state payload values
-- report-only safety wording
+- all B_CHECK_15M headline behavior
+- STOP semantics
+- Japanese side labels
 - no-chase behavior
+- HTML escaping
 - entry / invalidation / TP values
-
-Add a targeted regression test that rejects the current `判定待ち優先：15分足で押し目を確認` output.
+- report-only safety wording
 
 ## Validation
 
@@ -59,8 +62,10 @@ git diff --check
 ## Runtime boundary
 
 - source/test/local commit only
-- no push
-- no runtime restart
-- no historical artifact regeneration
-- no mail or notification behavior change
-- no score, gate, threshold, classifier, API, account, position or order change
+- pushなし
+- runtime restartなし
+- historical artifact regenerationなし
+- mail・notification behavior変更なし
+- score、gate、threshold、classifier、API、account、position、order変更なし
+
+Runtime apply remains blocked until this final correction is reviewed and accepted.

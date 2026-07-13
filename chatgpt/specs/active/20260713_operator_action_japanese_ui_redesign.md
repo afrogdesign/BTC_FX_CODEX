@@ -307,3 +307,46 @@ Required correction:
 - preserve internal payload and all trading semantics
 
 Acceptance remains blocked until this correction and targeted tests pass. Runtime apply is not authorized.
+
+
+---
+
+## ChatGPT final review finding — generic unknown-side headline
+
+Codex report for commit `95b56e7` states the B_CHECK_15M unknown-side headline was corrected. MCP source inspection confirms:
+
+- known Short B headline: `ショート優先：15分足で戻りを確認`
+- known Long B headline: `ロング優先：15分足で押し目を確認`
+- unknown B headline: `方向判定待ち：15分足を確認`
+- the previous incorrect B headline is absent
+- matching B unknown-side regression assertions exist
+
+One fail-closed defect remains in the generic non-B branch:
+
+```python
+headline = f"{side_name}優先：{_operator_action_label(primary_class)}"
+```
+
+Because `_operator_side_label` returns `判定待ち` for unknown or malformed side, a non-B action with unknown side can still render:
+
+```text
+判定待ち優先：<action label>
+```
+
+This violates the approved contract that an unknown side must not use `優先` or imply a selected direction.
+
+Required correction:
+
+- for known `long` or `short`, preserve the existing generic headline
+- for unknown/empty/malformed side, use a neutral headline such as `方向判定待ち：<action label>`
+- do not include `優先`, `ロング`, `ショート`, `押し目`, or `戻り` in the unknown-side generic headline
+- add a non-B regression test, preferably with `STOP_OR_EXIT` or `C_WATCH_ZONE`
+- preserve all payload values and trading semantics
+
+Acceptance and runtime apply remain blocked until this final generic branch correction passes targeted tests.
+
+
+Implementation-test clarification:
+
+- exercise the generic branch with `C_WATCH_ZONE` or `A_FORMAL`
+- do not use `STOP_OR_EXIT` as the sole regression fixture because it has a dedicated headline branch and would not prove the generic fallback

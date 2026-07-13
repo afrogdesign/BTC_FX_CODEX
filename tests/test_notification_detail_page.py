@@ -869,6 +869,20 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("ショート優先", side_block)
         self.assertNotIn("ショート優先：15分足で戻りを確認", side_block)
 
+    def test_side_aware_generic_unknown_side_headline_is_neutral(self) -> None:
+        payload = _sample_detail_payload()
+        payload["side_aware_mtf_action"] = {
+            "present": True,
+            "execution_context": {"primary_side": "unknown", "primary_action_class": "C_WATCH_ZONE", "primary_state": "watch"},
+            "long": {"action_class": "C_WATCH_ZONE", "state": "watch"},
+            "short": {"action_class": "C_WATCH_ZONE", "state": "watch"},
+        }
+        html = build_notification_detail_html(payload)
+        side_block = html[html.find('<section class="side-aware-action"'):html.find('</section>', html.find('<section class="side-aware-action"'))]
+        self.assertIn("方向判定待ち：価格帯を監視", side_block)
+        for text in ("判定待ち優先", "ロング優先", "ショート優先", "押し目", "戻り"):
+            self.assertNotIn(text, side_block)
+
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
         for long_score, short_score, long_share, short_share in cases:

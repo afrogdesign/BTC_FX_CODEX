@@ -4572,7 +4572,8 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
     elif primary_class == "STOP_OR_EXIT":
         headline = f"{side_name}：新規見送り・保護確認"
     else:
-        headline = f"{side_name}優先：{_operator_action_label(primary_class)}"
+        action_label = _operator_action_label(primary_class)
+        headline = f"{side_name}優先：{action_label}" if primary_side in {"long", "short"} else f"方向判定待ち：{action_label}"
     no_chase = chase_status in {"late_no_chase", "tp1_reached_no_chase"}
     if no_chase and primary_state != "late" and "追いかけ禁止" not in headline:
         headline = f"{headline}（追いかけ禁止）"
