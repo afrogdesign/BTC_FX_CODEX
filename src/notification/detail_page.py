@@ -4563,7 +4563,12 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
     chase_status = str(execution.get("chase_status") or "")
     side_name = _operator_side_label(primary_side)
     if primary_class == "B_CHECK_15M":
-        headline = f"{side_name}優先：15分足で戻りを確認" if primary_side == "short" else f"{side_name}優先：15分足で押し目を確認"
+        if primary_side == "short":
+            headline = "ショート優先：15分足で戻りを確認"
+        elif primary_side == "long":
+            headline = "ロング優先：15分足で押し目を確認"
+        else:
+            headline = "方向判定待ち：15分足を確認"
     elif primary_class == "STOP_OR_EXIT":
         headline = f"{side_name}：新規見送り・保護確認"
     else:

@@ -860,8 +860,14 @@ class NotificationDetailPageTests(unittest.TestCase):
             "short": {"action_class": "C_WATCH_ZONE", "state": "watch"},
         }
         html = build_notification_detail_html(payload)
-        self.assertIn("判定待ち優先：15分足で押し目を確認", html)
-        self.assertNotIn("ショート優先：15分足で戻りを確認", html)
+        side_block = html[html.find('<section class="side-aware-action"'):html.find('</section>', html.find('<section class="side-aware-action"'))]
+        self.assertIn("方向判定待ち：15分足を確認", side_block)
+        self.assertNotIn("判定待ち優先：15分足で押し目を確認", side_block)
+        self.assertNotIn("押し目", side_block)
+        self.assertNotIn("戻り", side_block)
+        self.assertNotIn("ロング優先", side_block)
+        self.assertNotIn("ショート優先", side_block)
+        self.assertNotIn("ショート優先：15分足で戻りを確認", side_block)
 
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))

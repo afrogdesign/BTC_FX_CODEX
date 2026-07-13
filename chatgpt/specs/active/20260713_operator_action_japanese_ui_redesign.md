@@ -278,3 +278,32 @@ The implementation is not yet accepted. The following display-only corrections a
    - Add an assertion that the late/no-chase hero does not duplicate `追いかけ禁止`.
 
 All corrections remain display-only. Do not change classifier tokens, action/state payloads, scores, gates, thresholds, notification behavior, runtime, mail, APIs, accounts, positions, or orders.
+
+
+---
+
+## ChatGPT Review Finding — unknown-side headline fail-closed correction
+
+Codex report for commit `a6e7dea` states the first review fix completed. MCP source inspection confirms the following corrections are present:
+
+- `STOP_OR_EXIT` card heading now preserves `新規見送り・保護確認`
+- shadow/detail visible side labels use Japanese
+- `_operator_side_label` returns `判定待ち` for unknown or empty side
+- late/no-chase hero status avoids duplicate `追いかけ禁止`
+
+One remaining defect blocks acceptance:
+
+- when `primary_action_class=B_CHECK_15M` and `primary_side` is unknown or empty, headline construction uses the non-short branch and renders `判定待ち優先：15分足で押し目を確認`
+- this incorrectly implies Long-side pullback semantics for an unknown side and uses `優先` despite no side being selected
+- the current matching test explicitly accepts this incorrect string
+
+Required correction:
+
+- known `short`: `ショート優先：15分足で戻りを確認`
+- known `long`: `ロング優先：15分足で押し目を確認`
+- unknown/empty/malformed side: `方向判定待ち：15分足を確認`
+- unknown side must not contain `優先`, `押し目`, or `戻り`
+- apply the same fail-closed principle to non-B headline construction: unknown side must not produce `判定待ち優先：...`
+- preserve internal payload and all trading semantics
+
+Acceptance remains blocked until this correction and targeted tests pass. Runtime apply is not authorized.
