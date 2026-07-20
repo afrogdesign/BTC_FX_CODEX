@@ -259,8 +259,8 @@ def _reliability(level: dict[str, Any], state: dict[str, Any], at: datetime) -> 
 
 def _structure(price: float, levels: list[dict[str, Any]], candles4: list[dict[str, Any]], at: datetime, pivots4: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     reliable = [x for x in levels if x["reliability_band"] in {"medium", "high"}]
-    below = sorted((x for x in reliable if x["center"] < price), key=lambda x: (price - x["center"], x["level_id"]))
-    above = sorted((x for x in reliable if x["center"] > price), key=lambda x: (x["center"] - price, x["level_id"]))
+    below = sorted((x for x in reliable if x.get("role") == "support" and x["low"] <= price), key=lambda x: (max(0.0, price - x["high"]), x["level_id"]))
+    above = sorted((x for x in reliable if x.get("role") == "resistance" and x["high"] >= price), key=lambda x: (max(0.0, x["low"] - price), x["level_id"]))
     support, resistance = (below[0] if below else None), (above[0] if above else None)
     if not support or not resistance:
         return {"state": "insufficient", "location": "insufficient", "support": support, "resistance": resistance, "target_up": None, "target_down": None, "obstruction": "insufficient", "range_low": "", "range_high": "", "percentile": ""}
@@ -375,7 +375,7 @@ def _turning_fired(signal: dict[str, str]) -> bool:
         return False
 
 
-def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, Any]], levels: list[dict[str, Any]]) -> dict[str, Any]:
+def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, Any]], levels: list[dict[str, Any]], activation: str | None = None, target: dict[str, Any] | None = None, selected_level: dict[str, Any] | None = None, candles1: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     future = [c for c in candles15 if c["timestamp"] + timedelta(minutes=15) > at]
     result: dict[str, Any] = {}
     threshold = max(2 * atr, price * .005)
@@ -389,7 +389,7 @@ def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, 
     ranges = [_tr(c, future[i - 1] if i else None) for i, c in enumerate(future[:4])]
     up_distance = max((c["high"] - price for c in future[:96]), default=0); down_distance = max((price - c["low"] for c in future[:96]), default=0)
     result["large_move_side"] = "UP" if up_distance >= threshold and down_distance < threshold else "DOWN" if down_distance >= threshold and up_distance < threshold else "NONE"
-    side = "UP" if up_distance >= threshold and down_distance < threshold else "DOWN" if down_distance >= threshold and up_distance < threshold else "NONE"
+    side = activation if activation in {"UP", "DOWN"} else "UP" if up_distance >= threshold and down_distance < threshold else "DOWN" if down_distance >= threshold and up_distance < threshold else "NONE"
     directional_mfe = up_distance if side == "UP" else down_distance if side == "DOWN" else max(up_distance, down_distance)
     directional_mae = down_distance if side == "UP" else up_distance if side == "DOWN" else min(up_distance, down_distance)
     result["mfe_atr"] = round(directional_mfe / atr, 8) if atr else ""
@@ -398,12 +398,6 @@ def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, 
     result["downward_excursion"] = round(down_distance, 8)
     first = next((c for c in future[:96] if max(c["high"] - price, price - c["low"]) >= threshold), None)
     result["first_material_move_timestamp"] = first["timestamp"].isoformat() if first else ""
-    target = None
-    for level in levels:
-        if side == "UP" and level.get("side") == "high" and level["center"] > price:
-            target = level; break
-        if side == "DOWN" and level.get("side") == "low" and level["center"] < price:
-            target = level; break
     if target and side == "UP":
         target_bar = next((c for c in future[:96] if c["high"] >= target["center"]), None)
     elif target and side == "DOWN":
@@ -413,7 +407,28 @@ def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, 
     result["target_touch"] = target_bar["timestamp"].isoformat() if target_bar else "unresolved" if target else "not_available"
     result["adverse_before_target"] = bool(target_bar and ((max((price - c["low"] for c in future[:future.index(target_bar) + 1]), default=0) >= max(atr, price * .002)) if side == "UP" else (max((c["high"] - price for c in future[:future.index(target_bar) + 1]), default=0) >= max(atr, price * .002)))) if target_bar else "unresolved"
     result["whipsaw"] = any(result.get(f"outcome_{hours}h") == "whipsaw_both" for hours in (1, 3, 6, 12, 24))
-    result["level_behavior"] = "target_touch" if target_bar else "unresolved" if target else "not_available"
+    behavior_level = selected_level or target
+    if not future:
+        result["level_behavior"] = "unresolved"
+    elif behavior_level is None:
+        result["level_behavior"] = "not_tested"
+    elif not candles1:
+        result["level_behavior"] = "not_tested"
+    else:
+        future_at = min(at + timedelta(hours=24), candles1[-1]["timestamp"] + timedelta(hours=1))
+        lifecycle = _level_events(behavior_level, candles1, future_at)
+        recent = [item for item in lifecycle["interactions"] if item["timestamp"] + timedelta(hours=1) > at]
+        kinds = {item["kind"] for item in recent}
+        if "false_break_reclaim" in kinds:
+            result["level_behavior"] = "false_break_reclaim"
+        elif "accepted_break" in kinds:
+            result["level_behavior"] = "level_break_accept"
+        elif "clean_rejection" in kinds:
+            result["level_behavior"] = "level_hold_reject"
+        elif any(bar["high"] >= behavior_level["low"] and bar["low"] <= behavior_level["high"] for bar in future[:96]):
+            result["level_behavior"] = "unresolved"
+        else:
+            result["level_behavior"] = "not_tested"
     result["large_move_side"] = side
     result["jump_like"] = bool(ranges and ranges[0] >= max(3 * atr, price * .01))
     return result
@@ -464,13 +479,16 @@ def _realized_inventory(candles15: list[dict[str, Any]], signal_rows: list[dict[
 
 
 def _policy_side(event: dict[str, Any], policy: str, signal: dict[str, str] | None = None) -> str | None:
+    def normalize(value: Any) -> str | None:
+        token = str(value or "").strip().upper()
+        return {"UP": "UP", "LONG": "UP", "BUY": "UP", "BULLISH": "UP", "DOWN": "DOWN", "SHORT": "DOWN", "SELL": "DOWN", "BEARISH": "DOWN", "BOTH": "BOTH"}.get(token)
     family = set(str(event.get("event_family", "")).split("|"))
     if policy == "current_notification":
-        return str(event.get("current_tactical_side", "")).upper() if str(event.get("was_notified", "")).lower() in {"1", "true", "yes", "y"} else None
+        return normalize(event.get("current_tactical_side")) if str(event.get("was_notified", "")).lower() in {"1", "true", "yes", "y"} else None
     if policy == "turning_precursor_combined" and signal:
         try:
             from src.feedback.turning_volatility_precursor_replay import classify_precursor_row
-            return classify_precursor_row(signal).get("POLICY_COMBINED_PRECURSOR", {}).get("side")
+            return normalize(classify_precursor_row(signal).get("POLICY_COMBINED_PRECURSOR", {}).get("side"))
         except (KeyError, TypeError, ValueError):
             return None
     if policy == "compression_only":
@@ -521,8 +539,9 @@ def _policy_metrics(opportunities: list[dict[str, Any]], policy: str, episodes: 
     false = [row for row in resolved if row.get("outcome") == "balanced_no_expansion"]
     opposite = [row for row in resolved if row.get("outcome") in {"large_up", "large_down"} and row not in correct]
     matched = {row.get("opportunity_id") for row in fired if row.get("opportunity_id") and (sides.get(id(row)) == "BOTH" or row.get("opportunity_direction") == sides.get(id(row)))}
+    move_opportunities = [item for item in opportunities if item.get("direction") in {"UP", "DOWN", "BOTH"}]
     leads = [row.get("lead_minutes") for row in correct if row.get("lead_minutes") is not None]
-    return {"episodes": len(fired), "resolved_episodes": len(resolved), "directional_precision": round(len(correct) / len(resolved), 8) if resolved else None, "large_move_recall": round(len(matched) / len(opportunities), 8) if opportunities else None, "expansion_precision": round(len(correct) / len(resolved), 8) if resolved else None, "expansion_recall": round(len(matched) / len(opportunities), 8) if opportunities else None, "false_warning_rate": round(len(false) / len(resolved), 8) if resolved else None, "opposite_move_rate": round(len(opposite) / len(resolved), 8) if resolved else None, "whipsaw_rate": round(sum(row.get("outcome") == "whipsaw_both" for row in resolved) / len(resolved), 8) if resolved else None, "unresolved_rate": round((len(fired) - len(resolved)) / len(fired), 8) if fired else None, "median_lead_minutes": median(leads) if leads else None, "median_favorable_excursion_atr": median([row["mfe"] for row in correct if row.get("mfe") is not None]) if correct else None, "median_adverse_excursion_atr": median([row["mae"] for row in resolved if row.get("mae") is not None]) if any(row.get("mae") is not None for row in resolved) else None, "burden_per_jst_day": round(len(fired) / max(1, len({(_dt(row["timestamp"]) + timedelta(hours=9)).date() for row in fired})), 8) if fired else 0}
+    return {"episodes": len(fired), "resolved_episodes": len(resolved), "directional_precision": round(len(correct) / len(resolved), 8) if resolved else None, "large_move_recall": round(len(matched) / len(move_opportunities), 8) if move_opportunities else None, "expansion_precision": round(len(correct) / len(resolved), 8) if resolved else None, "expansion_recall": round(len(matched) / len(move_opportunities), 8) if move_opportunities else None, "false_warning_rate": round(len(false) / len(resolved), 8) if resolved else None, "opposite_move_rate": round(len(opposite) / len(resolved), 8) if resolved else None, "whipsaw_rate": round(sum(row.get("outcome") == "whipsaw_both" for row in resolved) / len(resolved), 8) if resolved else None, "unresolved_rate": round((len(fired) - len(resolved)) / len(fired), 8) if fired else None, "median_lead_minutes": median(leads) if leads else None, "median_favorable_excursion_atr": median([row["mfe"] for row in correct if row.get("mfe") is not None]) if correct else None, "median_adverse_excursion_atr": median([row["mae"] for row in resolved if row.get("mae") is not None]) if any(row.get("mae") is not None for row in resolved) else None, "burden_per_jst_day": round(len(fired) / max(1, len({(_dt(row["timestamp"]) + timedelta(hours=9)).date() for row in fired})), 8) if fired else 0, "denominators": {"resolved_fired_episodes": len(resolved), "independent_realized_opportunities": len(move_opportunities)}}
 
 
 def _split(signals: list[dict[str, str]]) -> dict[str, Any]:
@@ -543,19 +562,26 @@ def _policy_episodes(events: list[dict[str, Any]], signals: list[dict[str, str]]
     return result
 
 
-def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[str, Any], metrics: dict[str, Any] | None = None, opportunities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[str, Any], metrics: dict[str, Any] | None = None, opportunities: list[dict[str, Any]] | None = None, episodes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     reasons = []
     if split["status"] != "established": reasons.append("validation_not_established")
     if len(split.get("validation", [])) < 3: reasons.append("validation_jst_dates_lt_3")
-    validation_dates = set(split.get("validation", [])); v = [e for e in events if (_dt(e["event_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
-    up = sum(e.get("outcome_6h") == "large_up" for e in v); down = sum(e.get("outcome_6h") == "large_down" for e in v)
+    validation_dates = set(split.get("validation", [])); episodes = episodes or [{"event": event, "timestamp": event.get("event_timestamp_utc"), "outcome": event.get("outcome_6h", "unresolved")} for event in events]
+    v = [row for row in episodes if _dt(row.get("timestamp")) and (_dt(row["timestamp"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
+    validation_opportunities = [item for item in (opportunities or []) if _dt(item.get("start_timestamp_utc")) and (_dt(item["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
+    up = sum(item.get("direction") == "UP" for item in validation_opportunities); down = sum(item.get("direction") == "DOWN" for item in validation_opportunities)
     if up < 10: reasons.append("validation_up_resolved_lt_10")
     if down < 10: reasons.append("validation_down_resolved_lt_10")
-    location_counts = Counter(e.get("price_location") for e in v if e.get("price_location") not in {None, "", "insufficient"})
+    location_counts = Counter((row.get("event") or {}).get("price_location") for row in v if (row.get("event") or {}).get("price_location") not in {None, "", "insufficient"} and row.get("outcome") != "unresolved")
     if sum(value >= 10 for value in location_counts.values()) < 2: reasons.append("price_location_groups_lt_2")
     if not coverage.get("continuity_pass"): reasons.append("continuity_or_coverage_failed")
-    if not events: reasons.append("no_comparable_opportunities")
-    if not any(e.get("level_reliability_band") in {"medium", "high"} for e in v): reasons.append("level_reliability_calibration_unavailable")
+    if not validation_opportunities or not v: reasons.append("no_comparable_opportunities")
+    bands = [(row.get("event") or {}).get("level_reliability_band") for row in v]
+    calibration = [row for row in episodes if _dt(row.get("timestamp")) and (_dt(row["timestamp"]) + timedelta(hours=9)).date().isoformat() in set(split.get("calibration", []))]
+    calibration_share = sum((row.get("event") or {}).get("level_reliability_band") in {"medium", "high"} for row in calibration) / len(calibration) if calibration else None
+    validation_share = sum(band in {"medium", "high"} for band in bands) / len(bands) if bands else None
+    if calibration_share is None or validation_share is None: reasons.append("level_reliability_calibration_unavailable")
+    elif abs(calibration_share - validation_share) > .25: reasons.append("level_reliability_calibration_unstable")
     current = (metrics or {}).get("current_notification", {}); candidate = (metrics or {}).get("reliable_level_acceptance_corridor", {})
     if candidate.get("large_move_recall") is None or current.get("large_move_recall") is None or candidate.get("large_move_recall") <= current.get("large_move_recall"):
         reasons.append("primary_objective_improvement_not_established")
@@ -563,9 +589,12 @@ def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[st
         reasons.append("false_warning_degradation")
     if candidate.get("opposite_move_rate") is not None and current.get("opposite_move_rate") is not None and candidate["opposite_move_rate"] > current["opposite_move_rate"] + .05:
         reasons.append("opposite_move_degradation")
-    if opportunities and max(Counter((_dt(item["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for item in opportunities).values(), default=0) > len(opportunities) * .5:
+    if validation_opportunities and max(Counter((_dt(item["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for item in validation_opportunities).values(), default=0) > len(validation_opportunities) * .5:
         reasons.append("single_jst_date_concentration")
-    if any(e.get("data_quality_status") != "ok" for e in v): reasons.append("validation_unresolved_data")
+    candidate_ids = {row.get("opportunity_id") for row in v if row.get("opportunity_id") and _policy_side(row.get("event") or {}, "reliable_level_acceptance_corridor", row.get("signal"))}
+    current_ids = {row.get("opportunity_id") for row in v if row.get("opportunity_id") and _policy_side(row.get("event") or {}, "current_notification", row.get("signal"))}
+    if len(candidate_ids - current_ids) <= 1: reasons.append("single_opportunity_dependence")
+    if any((row.get("event") or {}).get("data_quality_status") != "ok" for row in v): reasons.append("validation_unresolved_data")
     return {"status": "eligible_for_next_design_proposal" if not reasons else "continue_shadow_collection" if split["status"] == "established" else "insufficient_evidence", "reasons": sorted(set(reasons)) or ["all_declared_gate_conditions_pass"]}
 
 
@@ -614,6 +643,7 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         known = [p for p in pivots if p["confirmation_timestamp"] <= at]; levels = build_levels(known)
         for level in levels:
             state = _level_state(level, candles1, at); level_rows[level["level_id"]] = _reliability(level, state, at); level["reliability_band"] = level_rows[level["level_id"]]["reliability_band"]; level["center"] = level_rows[level["level_id"]]["center"]
+            level["role"] = state["role"]
         structure = _structure(price, levels, candles4, at, [p for p in known if p["source_timeframe"] == "4h"]); vol = _volatility(candles15, at)
         reliable = [level for level in levels if level.get("reliability_band") in {"medium", "high"}]
         nearest = min(reliable, key=lambda level: (abs(level["center"] - price), level["level_id"])) if reliable else None
@@ -636,7 +666,7 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         if activation and target:
             lo, hi = sorted((price, target["center"]))
             obstruction = next((level for level in reliable if level["level_id"] != target["level_id"] and lo < level["center"] < hi), None)
-            if abs(target["center"] - price) >= max(1.0 * (vol.get("atr") or 0), price * .005) and obstruction is None:
+            if abs(target["center"] - price) >= 1.0 * (vol.get("atr") or 0) and obstruction is None:
                 families.append("OPEN_TRAVEL_CORRIDOR_UP" if activation == "UP" else "OPEN_TRAVEL_CORRIDOR_DOWN")
         if activation == "UP" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_UP")
         if activation == "DOWN" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_DOWN")
@@ -646,7 +676,7 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         pressure["false_break_reclaim"] = "present" if lifecycle.get("reclaim") else "absent"
         pressure["target_obstruction"] = "present" if obstruction else "absent" if target else "unavailable"
         pressure["open_corridor"] = "present" if "OPEN_TRAVEL_CORRIDOR_UP" in families or "OPEN_TRAVEL_CORRIDOR_DOWN" in families else "absent"
-        outcome = _outcomes(price, at, vol.get("atr", 0), candles15, levels)
+        outcome = _outcomes(price, at, vol.get("atr", 0), candles15, levels, activation, target, nearest, candles1)
         signal_id = str(signal.get("signal_id")); event_id = hashlib.sha256(f"{METHOD_VERSION}|{signal_id}|{at.isoformat()}".encode()).hexdigest()[:20]
         event = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "event_id": event_id, "signal_id": signal_id, "event_timestamp_utc": at.isoformat(), "event_timestamp_jst": (at + timedelta(hours=9)).isoformat(), "event_price": round(price, 10), "was_notified": str(signal.get("was_notified", "")), "current_tactical_side": str(signal.get("bias") or signal.get("primary_setup_side") or "NONE").upper(), "structural_state": structure["state"], "price_location": structure["location"], "nearest_support_id": structure["support"]["level_id"] if structure.get("support") else "", "nearest_resistance_id": structure["resistance"]["level_id"] if structure.get("resistance") else "", "next_upside_target_id": structure["target_up"]["level_id"] if structure.get("target_up") else "", "next_downside_target_id": structure["target_down"]["level_id"] if structure.get("target_down") else "", "event_family": "|".join(sorted(set(families))), "structural_direction": structural_direction, "expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "first_reliable_target": target["level_id"] if target else "", "intervening_obstruction": obstruction["level_id"] if obstruction else "none" if target else "insufficient", "volatility_state": vol["state"], "volatility_persistence": vol["persistence"], "volatility_bars_used": vol["bars_used"], "level_reliability_band": level_rows.get(nearest["level_id"], {}).get("reliability_band", "") if nearest else "", "pressure_evidence_json": _json(pressure), "forecast_json": _json({"structural_direction": structural_direction, "volatility_expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "current_tactical_side": str(signal.get("bias") or "NONE").upper(), "next_regime_candidate": activation or "NONE"}), "data_quality_status": "unresolved" if vol["state"] == "insufficient" or any(meta["gap_count"] for meta in (meta15, meta1, meta4)) else "ok", "reason_codes": "|".join(sorted(set(["equilibrium_descriptive_only"] + (["microstructure_unavailable"] if unavailable else []))))}
         event.update(outcome); events.append(event)
@@ -668,10 +698,20 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
     policies = ("current_notification", "turning_precursor_combined", "reliable_level_rejection", "reliable_level_break_acceptance", "false_break_reclaim", "compression_only", "reliable_level_pressure", "reliable_level_acceptance_corridor")
     policy_metrics = {policy: _policy_metrics(opportunities, policy, policy_episodes) for policy in policies}
     def split_metrics(key: str) -> dict[str, Any]:
-        values = sorted({str((item.get("event") or {}).get(key, "insufficient")) for item in opportunities})
-        return {value: {policy: _policy_metrics([item for item in opportunities if str((item.get("event") or {}).get(key, "insufficient")) == value], policy) for policy in policies} for value in values}
-    split_data = {"direction": {direction: {policy: _policy_metrics([item for item in opportunities if item["direction"] == direction], policy) for policy in policies} for direction in ("UP", "DOWN", "BOTH")}, "regime": split_metrics("structural_state"), "volatility_state": split_metrics("volatility_state"), "reliability": split_metrics("level_reliability_band"), "price_location": split_metrics("price_location")}
-    gate = _gate(events, dates, coverage, policy_metrics, opportunities)
+        values = sorted({str((row.get("event") or {}).get(key, "insufficient")) for row in policy_episodes})
+        result = {}
+        for value in values:
+            subset = [row for row in policy_episodes if str((row.get("event") or {}).get(key, "insufficient")) == value]
+            ids = {row.get("opportunity_id") for row in subset if row.get("opportunity_id")}
+            matched = [item for item in opportunities if item.get("opportunity_id") in ids]
+            result[value] = {policy: _policy_metrics(matched, policy, subset) for policy in policies}
+        return result
+    def direction_metrics(direction: str) -> dict[str, Any]:
+        subset = [row for row in policy_episodes if row.get("opportunity_direction") == direction]
+        matched = [item for item in opportunities if item["direction"] == direction]
+        return {policy: _policy_metrics(matched, policy, subset) for policy in policies}
+    split_data = {"direction": {direction: direction_metrics(direction) for direction in ("UP", "DOWN", "BOTH")}, "regime": split_metrics("structural_state"), "volatility_state": split_metrics("volatility_state"), "reliability": split_metrics("level_reliability_band"), "price_location": split_metrics("price_location")}
+    gate = _gate(events, dates, coverage, policy_metrics, opportunities, policy_episodes)
     summary = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "generated_at_utc": max((m["max_timestamp"] for m in (meta15, meta1, meta4)), default=""), "input_fingerprints": {"signals": _sha(signals), "ohlcv_15m": _sha(ohlcv_15m), "ohlcv_1h": _sha(ohlcv_1h), "ohlcv_4h": _sha(ohlcv_4h)}, "coverage": coverage, "method_parameters": {"left_window": left_window, "right_window": right_window, "cluster_tolerance": "max(0.30*ATR_confirmation,pivot_price*0.0015)", "material_move": "max(2*ATR_15M,event_price*0.005)", "jump_like": "max(3*ATR_15M,event_price*0.01)", "corridor_minimum_atr": 1.0}, "counts": {"signals": len(signal_rows), "events": len(events), "levels": len(level_list), "missed_moves": len(misses), "independent_opportunities": len(opportunities)}, "level_summary": dict(Counter(row["reliability_band"] for row in level_list)), "metrics": policy_metrics, "baselines": policy_metrics, "splits": split_data, "location_metrics": split_data["price_location"], "missed_move_counts": dict(Counter(row["root_cause"] for row in misses)), "false_warning_counts": {policy: metric.get("false_warning_rate") for policy, metric in policy_metrics.items()}, "walk_forward": dates, "recommendation_gate": gate, "recommendation_status": gate["status"], "missed_move_root_causes": dict(Counter(row["root_cause"] for row in misses)), "no_automatic_tuning": True, "safety_boundary": SAFETY}
     csv_bytes = _csv_bytes(events, EVENT_FIELDS); level_bytes = _csv_bytes(level_list, LEVEL_FIELDS); miss_bytes = _csv_bytes(misses, MISS_FIELDS); json_bytes = (json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(); md_bytes = _markdown(summary).encode()
     _atomic({output_events_csv: csv_bytes, output_levels_csv: level_bytes, output_misses_csv: miss_bytes, output_json: json_bytes, output_md: md_bytes}, replace_output)

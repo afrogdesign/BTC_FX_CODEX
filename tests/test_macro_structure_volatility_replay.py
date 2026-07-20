@@ -13,8 +13,11 @@ from src.feedback.macro_structure_volatility_replay import (
     _micro_value,
     _outcomes,
     _pressure,
+    _policy_metrics,
+    _policy_side,
     _realized_inventory,
     _split,
+    _structure,
     build_levels,
     confirmed_pivots,
     replay_macro_structure_volatility,
@@ -70,6 +73,45 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         self.assertEqual(_micro_value("1.2", "aggressive_buy_ratio"), ("unavailable", None))
         self.assertEqual(_micro_value("0.8", "aggressive_buy_ratio"), ("present", "UP"))
         self.assertEqual(_micro_value("-2", "order_flow_imbalance"), ("present", "DOWN"))
+
+    def test_policy_sides_normalize_notification_and_turning_vocabularies(self) -> None:
+        notified = {"was_notified": "true", "current_tactical_side": "LONG", "event_family": ""}
+        self.assertEqual(_policy_side(notified, "current_notification"), "UP")
+        notified["current_tactical_side"] = "short"
+        self.assertEqual(_policy_side(notified, "current_notification"), "DOWN")
+
+    def test_policy_metrics_use_policy_episodes_for_false_warning_and_splits(self) -> None:
+        event = {"was_notified": "true", "current_tactical_side": "LONG", "event_family": ""}
+        episodes = [{"event": event, "signal": None, "outcome": "balanced_no_expansion", "timestamp": "2026-01-01T00:00:00+00:00", "mfe": 1.0, "mae": .4, "opportunity_id": "", "opportunity_direction": "", "lead_minutes": None}]
+        metrics = _policy_metrics([], "current_notification", episodes)
+        self.assertEqual(metrics["episodes"], 1)
+        self.assertEqual(metrics["resolved_episodes"], 1)
+        self.assertEqual(metrics["false_warning_rate"], 1.0)
+
+    def test_structure_uses_event_time_roles_not_geometry(self) -> None:
+        support = {"level_id": "s", "low": 99.0, "high": 100.0, "center": 99.5, "role": "support", "reliability_band": "high"}
+        resistance = {"level_id": "r", "low": 101.0, "high": 102.0, "center": 101.5, "role": "resistance", "reliability_band": "high"}
+        wrong_role = {"level_id": "x", "low": 98.0, "high": 99.0, "center": 98.5, "role": "resistance", "reliability_band": "high"}
+        structure = _structure(100.5, [support, resistance, wrong_role], [], datetime(2026, 1, 2, tzinfo=timezone.utc), [])
+        self.assertEqual(structure["support"]["level_id"], "s")
+        self.assertEqual(structure["resistance"]["level_id"], "r")
+
+    def test_outcome_keeps_the_selected_directional_target(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        candles = [{"timestamp": start + timedelta(minutes=15 * i), "open": 100, "high": 101, "low": 99.9, "close": 100, "interval": "15m"} for i in range(96)]
+        selected = {"level_id": "selected", "side": "high", "low": 99.8, "high": 100.2, "center": 100.0}
+        target = {"level_id": "target", "side": "high", "low": 101.9, "high": 102.1, "center": 102.0}
+        result = _outcomes(100, start, .1, candles, [selected], "UP", target, selected)
+        self.assertEqual(result["target_touch"], "unresolved")
+
+    def test_gate_uses_validation_opportunities_and_reports_comparative_reasons(self) -> None:
+        split = {"status": "established", "calibration": ["2026-01-01"], "validation": ["2026-01-02", "2026-01-03", "2026-01-04"], "holdout": []}
+        events = [{"event_timestamp_utc": "2026-01-02T00:00:00+00:00"}]
+        opportunities = [{"opportunity_id": "o1", "direction": "UP", "start_timestamp_utc": "2026-01-02T00:00:00+00:00"}]
+        episodes = [{"event": {"level_reliability_band": "high", "data_quality_status": "ok", "event_family": ""}, "timestamp": "2026-01-01T00:00:00+00:00", "outcome": "large_up", "opportunity_id": ""}, {"event": {"level_reliability_band": "low", "data_quality_status": "ok", "event_family": ""}, "timestamp": "2026-01-02T00:00:00+00:00", "outcome": "large_up", "opportunity_id": "o1"}]
+        gate = _gate(events, split, {"continuity_pass": True}, {"current_notification": {"large_move_recall": .5}, "reliable_level_acceptance_corridor": {"large_move_recall": .5}}, opportunities, episodes)
+        self.assertIn("primary_objective_improvement_not_established", gate["reasons"])
+        self.assertIn("single_opportunity_dependence", gate["reasons"])
 
     def test_outcome_uses_bar_open_equal_to_event_and_resolves_excursions(self) -> None:
         start = datetime(2026, 1, 1, tzinfo=timezone.utc)
