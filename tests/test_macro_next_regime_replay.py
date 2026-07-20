@@ -27,16 +27,17 @@ def _event(signal_id: str, at: str, **overrides: object) -> dict[str, object]:
 
 
 class MacroNextRegimeReplayTests(unittest.TestCase):
-    def test_weakening_without_activation_is_watch_and_non_directional(self) -> None:
+    def test_baseline_alone_does_not_create_candidate_watch_or_weakening(self) -> None:
         forecast = _forecast({}, _event("a", "2026-01-01T00:00:00+00:00", directional_activation="NONE", event_family=""), {"level-1"}, {"present": True, "side": "short", "status": "armed", "grade": "C"})
-        self.assertEqual((forecast["status"], forecast["next_regime_side"]), ("watch", "NONE"))
+        self.assertEqual((forecast["status"], forecast["next_regime_side"], forecast["weakening_thesis"]), ("none", "NONE", "none"))
 
     def test_matching_activation_requires_target_and_clear_corridor(self) -> None:
         good = _forecast({}, _event("a", "2026-01-01T00:00:00+00:00"), {"level-1"}, {})
         self.assertEqual((good["status"], good["next_regime_side"]), ("activated", "UP"))
         self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", first_reliable_target=""), {"level-1"}, {})["status"], "armed")
-        self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", intervening_obstruction="block"), {"level-1"}, {})["status"], "armed")
+        self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", intervening_obstruction="level-1"), {"level-1"}, {})["status"], "none")
         self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", event_family="RELIABLE_LEVEL_REJECTION_DOWN"), {"level-1"}, {})["status"], "none")
+        self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", first_reliable_target="unknown"), {"level-1"}, {})["status"], "none")
 
     def test_forecast_fields_are_separate_and_outcomes_do_not_change_episode(self) -> None:
         event = _event("a", "2026-01-01T00:00:00+00:00")
@@ -46,6 +47,15 @@ class MacroNextRegimeReplayTests(unittest.TestCase):
         self.assertEqual(forecast["next_regime_side"], "UP")
         records = [{"event": event, "forecast": forecast}, {"event": {**event, "event_timestamp_utc": "2026-01-01T01:00:00+00:00", "outcome_3h": "large_down"}, "forecast": forecast}]
         self.assertEqual(len(_episode_rows(records, "candidate")), 1)
+
+    def test_episode_boundaries_use_start_time_and_pre_outcome_evidence_only(self) -> None:
+        event = _event("a", "2026-01-01T00:00:00+00:00")
+        forecast = _forecast({}, event, {"level-1"}, {})
+        def record(hours: int, **changes: object) -> dict[str, object]:
+            return {"event": {**event, "signal_id": f"a{hours}", "event_id": f"e{hours}", "event_timestamp_utc": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=hours)).isoformat(), **changes}, "forecast": {**forecast, **changes}}
+        self.assertEqual(len(_episode_rows([record(0), record(2), record(2, outcome_3h="large_down")], "candidate")), 1)
+        self.assertEqual(len(_episode_rows([record(0), record(3)], "candidate")), 2)
+        self.assertEqual(len(_episode_rows([record(0), record(1, status="armed")], "candidate")), 2)
 
     def test_baseline_adapter_does_not_mutate_rows(self) -> None:
         current = {"signal_id": "a", "bias": "long", "current_price": "100"}; previous = {"signal_id": "p", "bias": "short"}
@@ -62,6 +72,9 @@ class MacroNextRegimeReplayTests(unittest.TestCase):
             outputs = [root / "out-events.csv", root / "episodes.csv", root / "out.json", root / "out.md"]
             result = replay_macro_next_regime(signals=signals, macro_events=events, macro_levels=levels, macro_replay_json=replay, output_events_csv=outputs[0], output_episodes_csv=outputs[1], output_json=outputs[2], output_md=outputs[3], replace_output=True)
             self.assertEqual(result["counts"]["events"], 1); self.assertEqual(json.loads(outputs[2].read_text())["recommendation"]["status"], "continue_shadow_collection")
+            report = json.loads(outputs[2].read_text())
+            self.assertEqual(set(report["metrics"]["candidate"]), {"3h", "6h", "12h", "24h"})
+            self.assertEqual(set(report["splits"]["candidate"]), {"side", "structural_state", "price_location", "volatility_state", "level_reliability_band"})
             first = [path.read_bytes() for path in outputs]
             replay_macro_next_regime(signals=signals, macro_events=events, macro_levels=levels, macro_replay_json=replay, output_events_csv=outputs[0], output_episodes_csv=outputs[1], output_json=outputs[2], output_md=outputs[3], replace_output=True)
             self.assertEqual(first, [path.read_bytes() for path in outputs])

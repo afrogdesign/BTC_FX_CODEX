@@ -84,42 +84,47 @@ def baseline_adapter(current: dict[str, Any], previous: dict[str, Any] | None) -
 
 
 def _forecast(signal: dict[str, str], event: dict[str, str], levels: set[str], baseline: dict[str, Any]) -> dict[str, Any]:
-    activation = _side(event.get("directional_activation"))
+    raw_activation = str(event.get("directional_activation", "")).strip().upper()
+    activation = _side(raw_activation) if raw_activation in {"UP", "DOWN", "NONE"} else "NONE"
     families = _families(event.get("event_family", ""))
     matching = _matching_family(activation, families) if activation != "NONE" else ()
     target = str(event.get("first_reliable_target", "")).strip()
     obstruction = str(event.get("intervening_obstruction", "")).strip().lower()
-    data_ok = str(event.get("data_quality_status", "")).strip().lower() == "ok"
     current = _side(event.get("current_tactical_side") or signal.get("bias"))
     structural = str(event.get("structural_direction") or event.get("structural_state") or "insufficient").upper()
     baseline_present = bool(baseline.get("present"))
-    weakening = "baseline_failed_thesis" if baseline_present else "none"
+    weakening = "explicit_failed_thesis" if any("failed" in str(signal.get(key, "")).lower() for key in ("failed_breakout_state", "level_flip_state", "trend_flip_state")) else "none"
     side, status, reasons = "NONE", "none", []
-    if data_ok and activation != "NONE" and matching:
+    explicit_obstruction = obstruction not in {"", "none", "insufficient", "unavailable"}
+    unavailable_corridor = obstruction in {"", "insufficient", "unavailable"}
+    if raw_activation not in {"UP", "DOWN", "NONE"}:
+        invalidation = ["malformed_directional_activation"]
+    elif activation != "NONE" and matching and target and target in levels and obstruction == "none":
         side = activation
         reasons = list(matching)
-        if target and target in levels and obstruction == "none":
-            status = "activated"
-        else:
-            status = "armed"
-    elif baseline_present and data_ok:
+        status = "activated"; invalidation = []
+    elif activation != "NONE" and matching and not explicit_obstruction and (not target or unavailable_corridor):
+        side = activation; reasons = list(matching); status = "armed"; invalidation = ["target_or_corridor_incomplete"]
+    elif activation == "NONE" and weakening != "none":
         status = "watch"
-    invalidation: list[str] = []
-    if activation == "NONE": invalidation.append("directional_activation_missing")
-    if activation != "NONE" and not matching: invalidation.append("directional_family_conflict")
-    if not data_ok: invalidation.append("data_quality_unavailable")
-    if status == "activated" and not target: invalidation.append("target_missing")
+        invalidation = ["directional_activation_missing"]
+    else:
+        invalidation = []
+        if activation == "NONE": invalidation.append("directional_activation_missing")
+        if activation != "NONE" and not matching: invalidation.append("directional_family_conflict")
+        if target and target not in levels: invalidation.append("target_reference_invalid")
+        if explicit_obstruction: invalidation.append("explicit_obstruction")
     baseline_side = _side(baseline.get("side"))
     category = "neither"
     if side != "NONE" and baseline_present: category = "agreement" if side == baseline_side else "disagreement"
     elif side != "NONE": category = "candidate_only"
     elif baseline_present: category = "baseline_only"
-    return {"current_tactical_side": current, "current_structural_thesis": structural, "weakening_thesis": weakening, "next_regime_side": side, "status": status, "activation_families": "|".join(matching), "reason_codes": "|".join(reasons), "invalidation_reason_codes": "|".join(sorted(set(invalidation))), "first_reliable_target": target, "intervening_obstruction": obstruction or "insufficient", "baseline_present": baseline_present, "baseline_side": baseline_side, "baseline_status": str(baseline.get("status", "none")), "baseline_grade": str(baseline.get("grade", "none")), "comparison_category": category, "forecast_evidence": {"activation": activation, "compatible_families": list(matching), "target_is_reliable": bool(target and target in levels), "obstruction": obstruction, "baseline_reason_codes": list(baseline.get("reason_codes", []))}}
+    return {"current_tactical_side": current, "current_structural_thesis": structural, "weakening_thesis": weakening, "next_regime_side": side, "status": status, "activation_families": "|".join(matching), "reason_codes": "|".join(reasons), "invalidation_reason_codes": "|".join(sorted(set(invalidation))), "first_reliable_target": target, "intervening_obstruction": obstruction or "insufficient", "baseline_present": baseline_present, "baseline_side": baseline_side, "baseline_status": str(baseline.get("status", "none")), "baseline_grade": str(baseline.get("grade", "none")), "comparison_category": category, "forecast_evidence": {"activation": activation, "compatible_families": list(matching), "target_is_reliable": bool(target and target in levels), "obstruction": obstruction, "weakening_thesis": weakening}}
 
 
 def _episode_rows(records: list[dict[str, Any]], policy: str) -> list[dict[str, Any]]:
     chosen: list[dict[str, Any]] = []
-    previous_fired = False; previous_key = ""; previous_at: datetime | None = None
+    previous_fired = False; previous_key = ""; episode_start: datetime | None = None
     for record in records:
         forecast = record["forecast"]
         if policy == "candidate":
@@ -127,43 +132,53 @@ def _episode_rows(records: list[dict[str, Any]], policy: str) -> list[dict[str, 
         else:
             fired = forecast["baseline_present"]; side = forecast["baseline_side"]; status = forecast["baseline_status"]; evidence = forecast["baseline_grade"]
         at = _dt(record["event"]["event_timestamp_utc"]); key = f"{side}|{status}|{evidence}"
-        fresh = fired and (not previous_fired or key != previous_key or previous_at is None or at - previous_at >= timedelta(hours=3))
+        fresh = fired and (not previous_fired or key != previous_key or episode_start is None or at - episode_start >= timedelta(hours=3))
         if fresh:
             event = record["event"]
             eid = hashlib.sha256(f"{METHOD_VERSION}|{policy}|{event['signal_id']}|{at.isoformat()}|{key}".encode()).hexdigest()[:20]
             chosen.append({"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "episode_id": eid, "policy": policy, "signal_id": event["signal_id"], "event_id": event["event_id"], "start_timestamp_utc": at.isoformat(), "side": side, "status": status, "evidence_key": evidence, "outcome_3h": event.get("outcome_3h", ""), "outcome_6h": event.get("outcome_6h", ""), "outcome_12h": event.get("outcome_12h", ""), "outcome_24h": event.get("outcome_24h", ""), "first_material_move_timestamp": event.get("first_material_move_timestamp", ""), "data_quality_status": event.get("data_quality_status", "")})
-        previous_fired, previous_key, previous_at = fired, key, at
+            episode_start = at
+        if not fired: episode_start = None
+        previous_fired, previous_key = fired, key
     return chosen
 
 
-def _metrics(episodes: list[dict[str, Any]]) -> dict[str, Any]:
-    resolved = [row for row in episodes if row["outcome_3h"] and row["outcome_3h"] != "unresolved"]
+def _metrics(episodes: list[dict[str, Any]], horizon: str) -> dict[str, Any]:
+    field = "outcome_" + horizon
+    resolved = [row for row in episodes if row.get(field) and row.get(field) != "unresolved"]
     directional = [row for row in resolved if row["side"] in {"UP", "DOWN"}]
-    correct = [row for row in directional if (row["side"] == "UP" and row["outcome_3h"] == "large_up") or (row["side"] == "DOWN" and row["outcome_3h"] == "large_down")]
-    opposite = [row for row in directional if (row["side"] == "UP" and row["outcome_3h"] == "large_down") or (row["side"] == "DOWN" and row["outcome_3h"] == "large_up")]
+    correct = [row for row in directional if (row["side"] == "UP" and row[field] == "large_up") or (row["side"] == "DOWN" and row[field] == "large_down")]
+    opposite = [row for row in directional if (row["side"] == "UP" and row[field] == "large_down") or (row["side"] == "DOWN" and row[field] == "large_up")]
     dates = {(_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in episodes}
     leads = []
     for row in resolved:
         if row["first_material_move_timestamp"]:
             leads.append((_dt(row["first_material_move_timestamp"]) - _dt(row["start_timestamp_utc"])).total_seconds() / 60)
     ratio = lambda n, d: round(n / d, 8) if d else None
-    return {"fired_episodes": len(episodes), "resolved_episodes": len(resolved), "directional_precision": ratio(len(correct), len(directional)), "opposite_move_rate": ratio(len(opposite), len(directional)), "balanced_no_expansion_rate": ratio(sum(row["outcome_3h"] == "balanced_no_expansion" for row in resolved), len(resolved)), "whipsaw_rate": ratio(sum(row["outcome_3h"] == "whipsaw_both" for row in resolved), len(resolved)), "unresolved_rate": ratio(len(episodes) - len(resolved), len(episodes)), "median_lead_minutes": round(median(leads), 8) if leads else None, "burden_per_jst_day": ratio(len(episodes), len(dates)), "event_based_coverage": "not_independent_large_move_recall", "up_episodes": sum(row["side"] == "UP" for row in episodes), "down_episodes": sum(row["side"] == "DOWN" for row in episodes)}
+    return {"fired_episodes": len(episodes), "resolved_episodes": len(resolved), "directional_precision": ratio(len(correct), len(directional)), "opposite_move_rate": ratio(len(opposite), len(directional)), "balanced_no_expansion_rate": ratio(sum(row[field] == "balanced_no_expansion" for row in resolved), len(resolved)), "whipsaw_rate": ratio(sum(row[field] == "whipsaw_both" for row in resolved), len(resolved)), "unresolved_rate": ratio(len(episodes) - len(resolved), len(episodes)), "median_lead_minutes": round(median(leads), 8) if leads else None, "burden_per_jst_day": ratio(len(episodes), len(dates)), "event_based_coverage": "not_independent_large_move_recall", "resolved_up_count": sum(row["side"] == "UP" for row in directional), "resolved_down_count": sum(row["side"] == "DOWN" for row in directional)}
 
 
-def _gate(candidate: dict[str, Any], baseline: dict[str, Any], episodes: list[dict[str, Any]], source_ok: bool) -> dict[str, Any]:
-    dates = sorted({(_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in episodes if row["policy"] == "candidate"})
+def _horizons(episodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {horizon: _metrics(episodes, horizon) for horizon in ("3h", "6h", "12h", "24h")}
+
+
+def _gate(candidate: dict[str, dict[str, Any]], baseline: dict[str, dict[str, Any]], episodes: list[dict[str, Any]], source_ok: bool) -> dict[str, Any]:
+    dates = sorted({(_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in episodes})
     validation = dates[math.floor(len(dates) * .6):] if len(dates) >= 5 else []
-    validation_rows = [row for row in episodes if row["policy"] == "candidate" and (_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation]
-    counts = _metrics(validation_rows); reasons = []
+    validation_rows = [row for row in episodes if (_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation]
+    validation_candidate = _horizons([row for row in validation_rows if row["policy"] == "candidate"])
+    validation_baseline = _horizons([row for row in validation_rows if row["policy"] == "baseline"])
+    counts = validation_candidate["3h"]; reasons = []
     if not validation: reasons.append("validation_not_established")
-    if counts["up_episodes"] < 10: reasons.append("validation_up_resolved_lt_10")
-    if counts["down_episodes"] < 10: reasons.append("validation_down_resolved_lt_10")
-    if candidate.get("directional_precision") is None or baseline.get("directional_precision") is None or candidate["directional_precision"] <= baseline["directional_precision"]: reasons.append("candidate_precision_not_above_baseline")
-    if candidate.get("opposite_move_rate") is None or baseline.get("opposite_move_rate") is None or candidate["opposite_move_rate"] > baseline["opposite_move_rate"]: reasons.append("candidate_opposite_move_degraded")
-    if candidate.get("balanced_no_expansion_rate") is None or baseline.get("balanced_no_expansion_rate") is None or candidate["balanced_no_expansion_rate"] > baseline["balanced_no_expansion_rate"]: reasons.append("candidate_balanced_warning_degraded")
+    if counts["resolved_up_count"] < 10: reasons.append("validation_up_resolved_lt_10")
+    if counts["resolved_down_count"] < 10: reasons.append("validation_down_resolved_lt_10")
+    for key, reason, worse in (("directional_precision", "candidate_precision_not_above_baseline", lambda a,b: a <= b), ("opposite_move_rate", "candidate_opposite_move_degraded", lambda a,b: a > b), ("balanced_no_expansion_rate", "candidate_balanced_warning_degraded", lambda a,b: a > b), ("whipsaw_rate", "candidate_whipsaw_degraded", lambda a,b: a > b)):
+        left, right = counts.get(key), validation_baseline["3h"].get(key)
+        if left is None or right is None or worse(left, right): reasons.append(reason)
     if not source_ok: reasons.append("source_coverage_or_continuity_failed")
+    if any(row.get("data_quality_status") not in {"ok", ""} for row in validation_rows): reasons.append("validation_data_quality_unresolved")
     if validation_rows and max(Counter((_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in validation_rows).values()) / len(validation_rows) > .5: reasons.append("single_jst_date_concentration")
-    return {"status": "eligible_for_m4_render_shadow" if not reasons else "continue_shadow_collection", "reason_codes": sorted(set(reasons)), "validation_dates": validation, "validation_candidate_metrics": counts}
+    return {"status": "eligible_for_m4_render_shadow" if not reasons else "continue_shadow_collection", "reason_codes": sorted(set(reasons)), "validation_dates": validation, "validation_candidate_metrics": validation_candidate, "validation_baseline_metrics": validation_baseline, "resolved_validation_up_count": counts["resolved_up_count"], "resolved_validation_down_count": counts["resolved_down_count"]}
 
 
 def _csv(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> bytes:
@@ -206,6 +221,17 @@ def replay_macro_next_regime(*, signals: Path, macro_events: Path, macro_levels:
     except (OSError, json.JSONDecodeError) as exc: raise ValueError("input_schema_invalid") from exc
     if summary.get("schema_version") != "macro_structure_volatility_replay.v1" or summary.get("method_version") != "macro_structure_volatility_replay.v1": raise ValueError("incompatible_macro_replay_version")
     signal_map, event_map, level_map = _unique(signal_rows, "signal_id"), _unique(event_rows, "signal_id"), _unique(levels, "level_id")
+    _unique(event_rows, "event_id")
+    if any(row.get("schema_version") != "macro_structure_volatility_replay.v1" or row.get("method_version") != "macro_structure_volatility_replay.v1" for row in event_rows): raise ValueError("event_version_mismatch")
+    if any(row.get("schema_version") != "level_reliability.v1" or row.get("method_version") != "macro_structure_volatility_replay.v1" for row in levels): raise ValueError("level_version_mismatch")
+    if not isinstance(summary.get("coverage"), dict) or "continuity_pass" not in summary["coverage"]: raise ValueError("replay_coverage_contract_invalid")
+    for event in event_rows:
+        target, obstruction = str(event.get("first_reliable_target", "")).strip(), str(event.get("intervening_obstruction", "")).strip().lower()
+        if target and target not in level_map: raise ValueError("target_reference_invalid")
+        if obstruction not in {"", "none", "insufficient", "unavailable"} and obstruction not in level_map: raise ValueError("obstruction_reference_invalid")
+        raw = str(event.get("directional_activation", "")).strip().upper()
+        families = _families(event.get("event_family", ""))
+        if raw in {"UP", "DOWN"} and any(item.endswith("_UP") or item.endswith("_DOWN") for item in families) and not _matching_family(raw, families): raise ValueError("directional_family_conflict")
     performance = {key: row for key, row in signal_map.items() if not _truthy(row.get("macro_context_only"))}
     if set(event_map) != set(performance): raise ValueError("signal_event_mismatch")
     records: list[dict[str, Any]] = []; previous: dict[str, str] | None = None
@@ -218,9 +244,15 @@ def replay_macro_next_regime(*, signals: Path, macro_events: Path, macro_levels:
         records.append({"event": event, "forecast": record}); previous = signal
     event_output = [record["forecast"] for record in records]
     episodes = sorted(_episode_rows(records, "baseline") + _episode_rows(records, "candidate"), key=lambda row: (row["start_timestamp_utc"], row["policy"], row["episode_id"]))
-    candidate_metrics, baseline_metrics = _metrics([row for row in episodes if row["policy"] == "candidate"]), _metrics([row for row in episodes if row["policy"] == "baseline"])
+    candidate_metrics, baseline_metrics = _horizons([row for row in episodes if row["policy"] == "candidate"]), _horizons([row for row in episodes if row["policy"] == "baseline"])
     gate = _gate(candidate_metrics, baseline_metrics, episodes, bool(summary.get("coverage", {}).get("continuity_pass", False)))
-    output = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "safety_boundary": SAFETY, "counts": {"events": len(event_output), "candidate_episodes": candidate_metrics["fired_episodes"], "baseline_episodes": baseline_metrics["fired_episodes"]}, "metrics": {"candidate": candidate_metrics, "baseline": baseline_metrics}, "recommendation": gate, "input_versions": {"macro_schema_version": summary.get("schema_version"), "macro_method_version": summary.get("method_version")}, "context_only_excluded": len(signal_rows) - len(performance)}
-    markdown = "# Macro Next-Regime Offline Shadow\n\n## Result\n\n- recommendation: %s\n- events: %d\n- candidate episodes: %d\n- baseline episodes: %d\n\n## Safety Boundary\n\n- %s\n" % (gate["status"], len(event_output), candidate_metrics["fired_episodes"], baseline_metrics["fired_episodes"], SAFETY)
+    def splits(policy: str) -> dict[str, Any]:
+        source = [row for row in episodes if row["policy"] == policy]
+        return {key: {value: _horizons([row for row in source if row.get(key, "insufficient") == value]) for value in sorted({str(row.get(key, "insufficient")) for row in source})} for key in ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band")}
+    # Episode-only fields retain event-time categories without allowing source-only categories.
+    for row in episodes:
+        event = event_map[row["signal_id"]]; row.update({"structural_state": event.get("structural_state", "insufficient"), "price_location": event.get("price_location", "insufficient"), "volatility_state": event.get("volatility_state", "insufficient"), "level_reliability_band": event.get("level_reliability_band", "low")})
+    output = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "safety_boundary": SAFETY, "counts": {"events": len(event_output), "candidate_episodes": candidate_metrics["3h"]["fired_episodes"], "baseline_episodes": baseline_metrics["3h"]["fired_episodes"]}, "metrics": {"candidate": candidate_metrics, "baseline": baseline_metrics}, "splits": {"candidate": splits("candidate"), "baseline": splits("baseline")}, "recommendation": gate, "data_quality": {"coverage_continuity_pass": bool(summary["coverage"]["continuity_pass"]), "context_only_excluded": len(signal_rows) - len(performance)}, "input_versions": {"macro_schema_version": summary.get("schema_version"), "macro_method_version": summary.get("method_version")}}
+    markdown = "# Macro Next-Regime Offline Shadow\n\n## Counts\n\n- events: %d\n\n## Baseline and Candidate Horizons\n\n%s\n\n## Split Highlights\n\n- dimensions: direction, structural_state, price_location, volatility_state, level_reliability_band\n\n## Validation Comparison\n\n- dates: %s\n\n## Recommendation\n\n- status: %s\n- reason_codes: %s\n\n## Source Coverage\n\n- continuity_pass: %s\n\n## Limitations\n\n- event-based coverage only; not independent large-move recall\n\n## Safety Boundary\n\n- %s\n" % (len(event_output), json.dumps({"candidate": candidate_metrics, "baseline": baseline_metrics}, sort_keys=True), ", ".join(gate["validation_dates"]), gate["status"], ", ".join(gate["reason_codes"]), summary["coverage"]["continuity_pass"], SAFETY)
     _atomic({output_events_csv: _csv(event_output, EVENT_FIELDS), output_episodes_csv: _csv(episodes, EPISODE_FIELDS), output_json: (json.dumps(output, sort_keys=True, indent=2) + "\n").encode(), output_md: markdown.encode()}, replace_output)
     return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "counts": output["counts"], "recommendation": gate["status"]}
