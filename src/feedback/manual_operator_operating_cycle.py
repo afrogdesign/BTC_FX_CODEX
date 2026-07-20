@@ -88,7 +88,7 @@ def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
-def _validate_ohlcv(path: Path, expected_interval: str = "15m") -> tuple[pd.DataFrame | None, dict[str, Any], str | None]:
+def _validate_ohlcv(path: Path, expected_interval: str = "15m", strict_continuity: bool = False) -> tuple[pd.DataFrame | None, dict[str, Any], str | None]:
     rows, headers, error = _read_csv(path)
     if error:
         return None, {}, error
@@ -114,7 +114,7 @@ def _validate_ohlcv(path: Path, expected_interval: str = "15m") -> tuple[pd.Data
                 return None, {}, "malformed_ohlcv"
     if parsed != sorted(parsed) or len(parsed) != len(set(parsed)):
         return None, {}, "ohlcv_not_monotonic"
-    if any(later - earlier != INTERVALS[expected_interval] for earlier, later in zip(parsed, parsed[1:])):
+    if strict_continuity and any(later - earlier != INTERVALS[expected_interval] for earlier, later in zip(parsed, parsed[1:])):
         return None, {}, "ohlcv_gap"
     frame = pd.DataFrame(rows)
     metadata = {
@@ -328,12 +328,14 @@ def _run_macro_shadow(*, stage: Path, signals: Path, ohlcv_15m: Path, ohlcv_meta
         paths = {"1h": macro_stage / "ohlcv_1h.csv", "4h": macro_stage / "ohlcv_4h.csv"}
         for interval, path in paths.items():
             _fetch_ohlcv(path, ohlcv_limit, interval)
-        _, meta1, error1 = _validate_ohlcv(paths["1h"], "1h"); _, meta4, error4 = _validate_ohlcv(paths["4h"], "4h")
+        _, meta1, error1 = _validate_ohlcv(paths["1h"], "1h", strict_continuity=True); _, meta4, error4 = _validate_ohlcv(paths["4h"], "4h", strict_continuity=True)
         if error1 or error4:
             raise ValueError(error1 or error4 or "macro_ohlcv_invalid")
         ohlcv = {"15m": {**ohlcv_meta, "fingerprint": _sha256(ohlcv_15m)}, "1h": {**meta1, "fingerprint": _sha256(paths["1h"])}, "4h": {**meta4, "fingerprint": _sha256(paths["4h"])} }
         slice_meta = _macro_signal_slice(signals=signals, ohlcv_15m=ohlcv_15m, coverage=ohlcv, output=macro_stage / "macro_signal_slice.csv")
-        replay_macro_structure_volatility(signals=macro_stage / "macro_signal_slice.csv", ohlcv_15m=ohlcv_15m, ohlcv_1h=paths["1h"], ohlcv_4h=paths["4h"], output_events_csv=macro_stage / "macro_structure_volatility_events.csv", output_levels_csv=macro_stage / "macro_level_reliability.csv", output_misses_csv=macro_stage / "macro_missed_move_diagnostics.csv", output_json=macro_stage / "macro_structure_volatility_replay.json", output_md=macro_stage / "macro_structure_volatility_replay.md", replace_output=True)
+        replay_macro_structure_volatility(signals=macro_stage / "macro_signal_slice.csv", ohlcv_15m=ohlcv_15m, ohlcv_1h=paths["1h"], ohlcv_4h=paths["4h"], output_events_csv=macro_stage / "macro_structure_volatility_events.csv", output_levels_csv=macro_stage / "macro_level_reliability.csv", output_misses_csv=macro_stage / "macro_missed_move_diagnostics.csv", output_json=macro_stage / "macro_structure_volatility_replay.json", output_md=macro_stage / "macro_structure_volatility_replay.md", replace_output=True, performance_start_utc=slice_meta["common_min_timestamp"], performance_end_utc=slice_meta["common_max_closed_timestamp"])
+        if {path.name for path in macro_stage.iterdir()} != set(MACRO_OUTPUT_NAMES):
+            raise ValueError("macro_output_set_incomplete")
         replay = json.loads((macro_stage / "macro_structure_volatility_replay.json").read_text(encoding="utf-8"))
         return _macro_shadow_summary(enabled=True, status="success", slice_rows=int(slice_meta["rows"]), ohlcv=ohlcv, replay=replay)
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
@@ -356,6 +358,19 @@ def _promote_macro_shadow(stage: Path, output_root: Path, replace: bool) -> None
         if target.exists(): shutil.rmtree(target, ignore_errors=True)
         if backup.exists(): backup.replace(target)
         raise OSError("output_transaction_failed") from exc
+
+
+def _refresh_auxiliary_metadata(output_root: Path, report: dict[str, Any], turning: dict[str, Any], macro: dict[str, Any]) -> None:
+    manifest_path = output_root / "cycle_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["turning_precursor_shadow"] = turning; manifest["macro_structure_shadow"] = macro
+    manifest.setdefault("stage_statuses", {})["turning_precursor_shadow"] = turning["status"]
+    manifest["stage_statuses"]["macro_structure_shadow"] = macro["status"]
+    temporary = manifest_path.with_name(".cycle_manifest.aux.tmp")
+    temporary.write_text(_json_text(manifest), encoding="utf-8"); temporary.replace(manifest_path)
+    final_report = dict(report); final_report["turning_precursor_shadow"] = turning; final_report["macro_structure_shadow"] = macro
+    summary = output_root / "cycle_summary.md"; temporary = summary.with_name(".cycle_summary.aux.tmp")
+    temporary.write_text(_summary_markdown(final_report), encoding="utf-8"); temporary.replace(summary)
 
 
 def _validate_stage_identity(stage: Path) -> None:
@@ -470,6 +485,7 @@ def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Pat
                 _promote_macro_shadow(stage, output_root, replace_output)
             except OSError:
                 macro_shadow = _macro_shadow_summary(enabled=True, status="failed", error_codes=["macro_structure_shadow_failed"], ohlcv={"15m": ohlcv_meta})
+        _refresh_auxiliary_metadata(output_root, report, shadow, macro_shadow)
         warnings = (["turning_precursor_shadow_failed"] if shadow["status"] == "failed" else []) + (["macro_structure_shadow_failed"] if macro_shadow["status"] == "failed" else [])
         return {"ok": True, "exit_code": 0, "report_written": True, "output_root": output_root.name, "outputs": list(OUTPUT_NAMES), "lineage": report["lineage"], "counts": report["counts"], "class_counts": report["class_counts"], "side_counts": report["side_counts"], "comparison": report["comparison"], "issue_001": report["issue_001"], "review_queue_size": report["review_queue_size"], "p9_readiness": report["p9_readiness"], "turning_precursor_shadow": shadow, "macro_structure_shadow": macro_shadow, "warnings": warnings, "safety_boundary": SAFETY}
     except (OSError, ValueError, KeyError, TypeError) as exc:

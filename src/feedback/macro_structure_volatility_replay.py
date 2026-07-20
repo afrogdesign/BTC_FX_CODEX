@@ -446,12 +446,14 @@ def _episodes(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def _realized_inventory(candles15: list[dict[str, Any]], signal_rows: list[dict[str, str]], events: list[dict[str, Any]], horizon_bars: int = 96) -> list[dict[str, Any]]:
+def _realized_inventory(candles15: list[dict[str, Any]], signal_rows: list[dict[str, str]], events: list[dict[str, Any]], horizon_bars: int = 96, performance_start: datetime | None = None, performance_end: datetime | None = None) -> list[dict[str, Any]]:
     """Discover opportunities from OHLCV, independently of signal rows."""
     ordered = sorted(candles15, key=lambda candle: candle["timestamp"]); inventory: list[dict[str, Any]] = []; last_by_side: dict[str, datetime] = {}
     event_by_signal = {str(event["signal_id"]): event for event in events}; signals = sorted(signal_rows, key=lambda row: _dt(row["timestamp_utc"]))
     for index in range(14, len(ordered)):
         anchor = ordered[index]; at = anchor["timestamp"]; atr = _atr(ordered, index - 1, 14)
+        if (performance_start and at < performance_start) or (performance_end and at > performance_end):
+            continue
         if not atr or index + 1 >= len(ordered):
             continue
         future = ordered[index:index + horizon_bars]
@@ -533,7 +535,7 @@ def _policy_fired(opportunity: dict[str, Any], policy: str) -> bool:
 
 def _policy_metrics(opportunities: list[dict[str, Any]], policy: str, episodes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     episodes = episodes if episodes is not None else [{"event": item.get("event") or {}, "signal": item.get("signal"), "outcome": "large_" + item["direction"].lower() if item["direction"] in {"UP", "DOWN"} else "whipsaw_both", "timestamp": item["start_timestamp_utc"], "mfe": item.get("move_size_atr"), "mae": None} for item in opportunities]
-    fired = _dedup_policy_episodes(episodes, policy)
+    fired = [row for row in _dedup_policy_episodes(episodes, policy) if not (row.get("event") or {}).get("_context_only")]
     resolved = [row for row in fired if row.get("outcome") != "unresolved"]
     sides = {id(row): _policy_side(row["event"], policy, row.get("signal")) for row in resolved}
     correct = [row for row in resolved if sides[id(row)] in {"UP", "DOWN"} and row.get("outcome") == "large_" + str(sides[id(row)]).lower()]
@@ -617,7 +619,7 @@ def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[st
     reasons = []
     if split["status"] != "established": reasons.append("validation_not_established")
     if len(split.get("validation", [])) < 3: reasons.append("validation_jst_dates_lt_3")
-    validation_dates = set(split.get("validation", [])); episodes = episodes or [{"event": event, "timestamp": event.get("event_timestamp_utc"), "outcome": event.get("outcome_6h", "unresolved")} for event in events]
+    validation_dates = set(split.get("validation", [])); episodes = [row for row in (episodes or [{"event": event, "timestamp": event.get("event_timestamp_utc"), "outcome": event.get("outcome_6h", "unresolved")} for event in events]) if not (row.get("event") or {}).get("_context_only")]
     v = [row for row in episodes if _dt(row.get("timestamp")) and (_dt(row["timestamp"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
     validation_opportunities = [item for item in (opportunities or []) if _dt(item.get("start_timestamp_utc")) and (_dt(item["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
     up = sum(item.get("direction") == "UP" for item in validation_opportunities); down = sum(item.get("direction") == "DOWN" for item in validation_opportunities)
@@ -682,14 +684,17 @@ def _atomic(outputs: dict[Path, bytes], replace: bool) -> None:
         shutil.rmtree(temp, ignore_errors=True)
 
 
-def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Path, ohlcv_4h: Path, output_events_csv: Path, output_levels_csv: Path, output_misses_csv: Path, output_json: Path, output_md: Path, cutoff_utc: str | None = None, left_window: int = 2, right_window: int = 2, replace_output: bool = False) -> dict[str, Any]:
+def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Path, ohlcv_4h: Path, output_events_csv: Path, output_levels_csv: Path, output_misses_csv: Path, output_json: Path, output_md: Path, cutoff_utc: str | None = None, left_window: int = 2, right_window: int = 2, replace_output: bool = False, performance_start_utc: str | None = None, performance_end_utc: str | None = None) -> dict[str, Any]:
     """Run the bounded M1 replay and atomically publish exactly five outputs."""
     signal_rows = _load_signals(signals)
     candles15, meta15 = _load_ohlcv(ohlcv_15m, "15m"); candles1, meta1 = _load_ohlcv(ohlcv_1h, "1h"); candles4, meta4 = _load_ohlcv(ohlcv_4h, "4h")
     cutoff = _dt(cutoff_utc) if cutoff_utc else None
     if cutoff: signal_rows = [row for row in signal_rows if _dt(row["timestamp_utc"]) <= cutoff]
+    performance_start = _dt(performance_start_utc); performance_end = _dt(performance_end_utc)
+    performance_rows = [row for row in signal_rows if str(row.get("macro_context_only", "")).lower() not in {"1", "true", "yes"} and (performance_start is None or _dt(row["timestamp_utc"]) >= performance_start) and (performance_end is None or _dt(row["timestamp_utc"]) <= performance_end)]
     pivots = confirmed_pivots(candles1, "1h", left_window, right_window) + confirmed_pivots(candles4, "4h", left_window, right_window)
     all_levels = build_levels(pivots); level_rows: dict[str, dict[str, Any]] = {}; events = []
+    state_events = []
     for signal in signal_rows:
         at, price = _dt(signal["timestamp_utc"]), _num(signal["current_price"]); assert at is not None and price is not None
         known = [p for p in pivots if p["confirmation_timestamp"] <= at]; levels = build_levels(known)
@@ -731,10 +736,12 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         outcome = _outcomes(price, at, vol.get("atr", 0), candles15, levels, activation, target, nearest, candles1)
         signal_id = str(signal.get("signal_id")); event_id = hashlib.sha256(f"{METHOD_VERSION}|{signal_id}|{at.isoformat()}".encode()).hexdigest()[:20]
         event = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "event_id": event_id, "signal_id": signal_id, "event_timestamp_utc": at.isoformat(), "event_timestamp_jst": (at + timedelta(hours=9)).isoformat(), "event_price": round(price, 10), "was_notified": str(signal.get("was_notified", "")), "current_tactical_side": str(signal.get("bias") or signal.get("primary_setup_side") or "NONE").upper(), "structural_state": structure["state"], "price_location": structure["location"], "nearest_support_id": structure["support"]["level_id"] if structure.get("support") else "", "nearest_resistance_id": structure["resistance"]["level_id"] if structure.get("resistance") else "", "next_upside_target_id": structure["target_up"]["level_id"] if structure.get("target_up") else "", "next_downside_target_id": structure["target_down"]["level_id"] if structure.get("target_down") else "", "event_family": "|".join(sorted(set(families))), "structural_direction": structural_direction, "expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "first_reliable_target": target["level_id"] if target else "", "intervening_obstruction": obstruction["level_id"] if obstruction else "none" if target else "insufficient", "volatility_state": vol["state"], "volatility_persistence": vol["persistence"], "volatility_bars_used": vol["bars_used"], "level_reliability_band": level_rows.get(nearest["level_id"], {}).get("reliability_band", "") if nearest else "", "pressure_evidence_json": _json(pressure), "forecast_json": _json({"structural_direction": structural_direction, "volatility_expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "current_tactical_side": str(signal.get("bias") or "NONE").upper(), "next_regime_candidate": activation or "NONE", "corridor_distance_atr": round(abs(target["center"] - price) / vol["atr"], 8) if target and vol.get("atr") else None}), "data_quality_status": "unresolved" if vol["state"] == "insufficient" or any(meta["gap_count"] for meta in (meta15, meta1, meta4)) else "ok", "reason_codes": "|".join(sorted(set(["equilibrium_descriptive_only"] + (["microstructure_unavailable"] if unavailable else []))))}
-        event.update(outcome); events.append(event)
-    events.sort(key=lambda row: (row["event_timestamp_utc"], row["event_id"]))
+        event["_context_only"] = signal not in performance_rows
+        event.update(outcome); state_events.append(event)
+    state_events.sort(key=lambda row: (row["event_timestamp_utc"], row["event_id"]))
+    events = [row for row in state_events if not row.get("_context_only")]
     level_list = sorted(level_rows.values(), key=lambda row: (row["first_seen_at"], row["level_id"]))
-    opportunities = _realized_inventory(candles15, signal_rows, events)
+    opportunities = _realized_inventory(candles15, performance_rows, events, performance_start=performance_start, performance_end=performance_end)
     misses = []
     for opportunity in opportunities:
         row = opportunity.get("event") or {}; current = _policy_fired(opportunity, "current_notification"); turning = _policy_fired(opportunity, "turning_precursor_combined")
@@ -742,11 +749,11 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
             continue
         root = _diagnose_miss(row, opportunity, current, turning)
         misses.append({"opportunity_id": opportunity["opportunity_id"], "direction": opportunity["direction"], "start_timestamp_utc": opportunity["start_timestamp_utc"], "material_move_timestamp_utc": opportunity["material_move_timestamp_utc"], "move_size_atr": opportunity["move_size_atr"], "structure_state": row.get("structural_state", "insufficient"), "price_location": row.get("price_location", "insufficient"), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(current).lower(), "turning_precursor_fired": str(turning).lower(), "root_cause": root, "reason_codes": root, "data_quality_status": opportunity.get("data_quality_status", "")})
-    policy_episodes = _policy_episodes(events, signal_rows, opportunities)
-    evidence_dates = signal_rows + [{"timestamp_utc": item["start_timestamp_utc"]} for item in opportunities]
+    policy_episodes = _policy_episodes(state_events, signal_rows, opportunities)
+    evidence_dates = performance_rows + [{"timestamp_utc": item["start_timestamp_utc"]} for item in opportunities]
     dates = _split(evidence_dates); coverage = {"signals": len(signal_rows), "ohlcv_15m": meta15, "ohlcv_1h": meta1, "ohlcv_4h": meta4, "continuity_pass": all(not m["gap_count"] for m in (meta15, meta1, meta4))}
-    notified_count = sum(str(signal.get("was_notified", "")).strip().lower() in {"1", "true", "yes", "y"} for signal in signal_rows)
-    turning_count = sum(_turning_fired(signal) for signal in signal_rows)
+    notified_count = sum(str(signal.get("was_notified", "")).strip().lower() in {"1", "true", "yes", "y"} for signal in performance_rows)
+    turning_count = sum(_turning_fired(signal) for signal in performance_rows)
     policies = ("current_notification", "turning_precursor_combined", "reliable_level_rejection", "reliable_level_break_acceptance", "false_break_reclaim", "compression_only", "reliable_level_pressure", "reliable_level_acceptance_corridor")
     policy_metrics = {policy: _policy_metrics(opportunities, policy, policy_episodes) for policy in policies}
     def split_metrics(key: str) -> dict[str, Any]:
