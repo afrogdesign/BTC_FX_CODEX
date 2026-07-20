@@ -20,6 +20,7 @@ from src.feedback.macro_structure_volatility_replay import (
     _policy_metrics,
     _policy_side,
     _realized_inventory,
+    ROOT_CAUSES,
     _split,
     _structure,
     build_levels,
@@ -98,8 +99,10 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
             return {"event": dict(event), "signal": None, "outcome": "unresolved", "timestamp": f"2026-01-01T{hour:02d}:00:00+00:00", "mfe": None, "mae": None}
         repeated = _dedup_policy_episodes([row(0), row(1)], "current_notification")
         changed = _dedup_policy_episodes([row(0), row(1, {**base, "current_tactical_side": "SHORT"})], "current_notification")
+        reset = _dedup_policy_episodes([row(0), row(1, {**base, "was_notified": "false"}), row(2)], "current_notification")
         self.assertEqual(len(repeated), 1)
         self.assertEqual(len(changed), 2)
+        self.assertEqual(len(reset), 2)
         self.assertEqual(_policy_metrics([], "current_notification", [row(0), row(1)])["episodes"], 1)
 
     def test_resolved_future_outcome_does_not_split_event_time_episode(self) -> None:
@@ -112,6 +115,26 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         self.assertEqual(_diagnose_miss(row, {"data_quality_status": "ok"}, False, False), "rejection_event_missing")
         ambiguous = {**row, "pressure_evidence_json": '{"rejection":"present","directional_microstructure":{"order_flow_imbalance":"UP"},"microstructure_status":"available"}'}
         self.assertEqual(_diagnose_miss(ambiguous, {"data_quality_status": "ok"}, False, False), "data_unresolved")
+
+    def test_miss_diagnosis_requires_declared_event_time_evidence(self) -> None:
+        base = {"data_quality_status": "ok", "structural_state": "range", "nearest_support_id": "s", "nearest_resistance_id": "r", "level_reliability_band": "medium", "pressure_evidence_json": '{"microstructure_status":"available"}', "forecast_json": "{}", "event_family": "", "volatility_state": "ordinary", "expansion_risk": "low", "directional_activation": "NONE", "first_reliable_target": "", "intervening_obstruction": "insufficient"}
+        cases = (
+            ("unavailable_without_pressure_setup", {"pressure_evidence_json": '{"microstructure_status":"unavailable"}', "directional_activation": "UP"}, "data_unresolved"),
+            ("qualifying_unavailable_pressure", {"pressure_evidence_json": '{"microstructure_status":"unavailable","repeated_tests":"present"}', "directional_activation": "UP"}, "pressure_or_imbalance_unavailable"),
+            ("supplied_unrecognized_pressure", {"pressure_evidence_json": '{"microstructure_status":"available","directional_microstructure":{"order_flow_imbalance":"UP"}}'}, "pressure_or_imbalance_not_recognized"),
+            ("valid_missing_corridor", {"directional_activation": "UP", "first_reliable_target": "target", "intervening_obstruction": "none", "forecast_json": '{"corridor_distance_atr":1.0}'}, "travel_corridor_not_recognized"),
+            ("short_corridor", {"directional_activation": "UP", "first_reliable_target": "target", "intervening_obstruction": "none", "forecast_json": '{"corridor_distance_atr":0.99}'}, "data_unresolved"),
+            ("unselected_precursor", {"event_family": "RELIABLE_LEVEL_REJECTION_UP"}, "precursor_policy_too_strict"),
+            ("clean_no_candidate", {}, "correct_no_signal"),
+            ("compression_blocks_clean_no_signal", {"volatility_state": "compressed"}, "data_unresolved"),
+            ("rejection_evidence", {"pressure_evidence_json": '{"microstructure_status":"available","rejection":"present"}'}, "rejection_event_missing"),
+            ("ambiguous_evidence", {"pressure_evidence_json": '{"microstructure_status":"available","rejection":"present","directional_microstructure":{"order_flow_imbalance":"UP"}}'}, "data_unresolved"),
+        )
+        for name, changes, expected in cases:
+            with self.subTest(name=name):
+                diagnosis = _diagnose_miss({**base, **changes}, {"data_quality_status": "ok"}, False, False)
+                self.assertEqual(diagnosis, expected)
+                self.assertIn(diagnosis, ROOT_CAUSES)
 
     def test_compression_only_requires_expansion_and_has_no_directional_precision(self) -> None:
         event = {"volatility_state": "compressed", "event_family": ""}
@@ -251,6 +274,7 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
             first, second = run("-a"), run("-b")
             self.assertEqual(first, second)
             summary = json.loads(first[3]); self.assertIn(summary["recommendation_status"], {"insufficient_evidence", "continue_shadow_collection", "eligible_for_next_design_proposal"})
+            self.assertIn("future outcomes and implicit resolution excluded", summary["method_parameters"]["policy_episode_dedup"])
 
     def test_missing_continuity_is_reported_without_future_imputation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
