@@ -88,6 +88,23 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         self.assertEqual(metrics["resolved_episodes"], 1)
         self.assertEqual(metrics["false_warning_rate"], 1.0)
 
+    def test_compression_only_requires_expansion_and_has_no_directional_precision(self) -> None:
+        event = {"volatility_state": "compressed", "event_family": ""}
+        episode = {"event": event, "signal": None, "outcome": "balanced_no_expansion", "timestamp": "2026-01-01T00:00:00+00:00", "mfe": 0.0, "mae": 0.0, "opportunity_id": "", "opportunity_direction": "", "lead_minutes": None}
+        metrics = _policy_metrics([], "compression_only", [episode])
+        self.assertIsNone(metrics["directional_precision"])
+        self.assertEqual(metrics["expansion_precision"], 0.0)
+
+    def test_lifecycle_records_multiple_completed_episodes_and_reaction_atr(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        level = {"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}
+        closes = [101.0, 101.0, 99.9, 99.9, 101.0, 101.0]
+        bars = [{"timestamp": start + timedelta(hours=i), "open": close, "high": close + .1, "low": close - .1, "close": close, "interval": "1h"} for i, close in enumerate(closes)]
+        lifecycle = _level_events(level, bars, start + timedelta(hours=7))
+        completed = [item for item in lifecycle["interactions"] if item["kind"] != "break"]
+        self.assertGreaterEqual(len(completed), 2)
+        self.assertTrue(all(item["reaction_atr"] > 0 for item in completed))
+
     def test_structure_uses_event_time_roles_not_geometry(self) -> None:
         support = {"level_id": "s", "low": 99.0, "high": 100.0, "center": 99.5, "role": "support", "reliability_band": "high"}
         resistance = {"level_id": "r", "low": 101.0, "high": 102.0, "center": 101.5, "role": "resistance", "reliability_band": "high"}
