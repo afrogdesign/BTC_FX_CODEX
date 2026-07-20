@@ -11,6 +11,8 @@ from unittest.mock import patch
 from src.feedback.macro_next_regime_replay import (
     _episode_rows,
     _forecast,
+    baseline_evidence_key,
+    candidate_evidence_key,
     baseline_adapter,
     replay_macro_next_regime,
 )
@@ -57,6 +59,22 @@ class MacroNextRegimeReplayTests(unittest.TestCase):
         self.assertEqual(len(_episode_rows([record(0), record(3)], "candidate")), 2)
         self.assertEqual(len(_episode_rows([record(0), record(1, status="armed")], "candidate")), 2)
 
+    def test_complete_candidate_and_baseline_keys_drive_transitions_only(self) -> None:
+        event = _event("a", "2026-01-01T00:00:00+00:00")
+        base = _forecast({}, event, {"level-1"}, {"present": True, "side": "short", "status": "armed", "grade": "C", "type": "x", "reason_codes": ["a"]})
+        self.assertNotIn("outcome", candidate_evidence_key(base)); self.assertNotIn("baseline", candidate_evidence_key(base))
+        self.assertIn("baseline_type", baseline_evidence_key(base)); self.assertIn("baseline_reason_codes", baseline_evidence_key(base))
+        def record(hour: int, forecast: dict[str, object]) -> dict[str, object]:
+            return {"event": {**event, "signal_id": str(hour), "event_id": str(hour), "event_timestamp_utc": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=hour)).isoformat()}, "forecast": forecast}
+        changed_target = {**base, "first_reliable_target": "level-2"}
+        changed_obstruction = {**base, "intervening_obstruction": "none2"}
+        changed_reason = {**base, "reason_codes": "other"}
+        self.assertEqual(len(_episode_rows([record(0, base), record(1, changed_target)], "candidate")), 2)
+        self.assertEqual(len(_episode_rows([record(0, base), record(1, changed_obstruction)], "candidate")), 2)
+        self.assertEqual(len(_episode_rows([record(0, base), record(1, changed_reason)], "candidate")), 2)
+        changed_baseline = {**base, "baseline_type": "y", "baseline_reason_codes": "b"}
+        self.assertEqual(len(_episode_rows([record(0, base), record(1, changed_baseline)], "baseline")), 2)
+
     def test_baseline_adapter_does_not_mutate_rows(self) -> None:
         current = {"signal_id": "a", "bias": "long", "current_price": "100"}; previous = {"signal_id": "p", "bias": "short"}
         original = (json.dumps(current, sort_keys=True), json.dumps(previous, sort_keys=True))
@@ -78,7 +96,13 @@ class MacroNextRegimeReplayTests(unittest.TestCase):
             first = [path.read_bytes() for path in outputs]
             replay_macro_next_regime(signals=signals, macro_events=events, macro_levels=levels, macro_replay_json=replay, output_events_csv=outputs[0], output_episodes_csv=outputs[1], output_json=outputs[2], output_md=outputs[3], replace_output=True)
             self.assertEqual(first, [path.read_bytes() for path in outputs])
-            with patch("src.feedback.macro_next_regime_replay.os.replace", side_effect=OSError("boom")):
+            import os
+            calls = {"count": 0}; real_replace = os.replace
+            def fail_after_first_promotion(source: object, destination: object) -> None:
+                calls["count"] += 1
+                if calls["count"] == 6: raise OSError("boom")
+                real_replace(source, destination)
+            with patch("src.feedback.macro_next_regime_replay.os.replace", side_effect=fail_after_first_promotion):
                 with self.assertRaises(OSError): replay_macro_next_regime(signals=signals, macro_events=events, macro_levels=levels, macro_replay_json=replay, output_events_csv=outputs[0], output_episodes_csv=outputs[1], output_json=outputs[2], output_md=outputs[3], replace_output=True)
             self.assertEqual(first, [path.read_bytes() for path in outputs])
 

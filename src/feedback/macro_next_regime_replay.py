@@ -20,7 +20,7 @@ from src.analysis.big_chance import evaluate_big_chance
 SCHEMA_VERSION = "macro_next_regime_replay.v1"
 METHOD_VERSION = "macro_next_regime_replay.v1"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
-EVENT_FIELDS = ("schema_version", "method_version", "record_id", "signal_id", "event_id", "event_timestamp_utc", "event_timestamp_jst", "current_tactical_side", "current_structural_thesis", "weakening_thesis", "next_regime_side", "status", "activation_families", "reason_codes", "invalidation_reason_codes", "first_reliable_target", "intervening_obstruction", "price_location", "volatility_state", "expansion_risk", "level_reliability_band", "baseline_present", "baseline_side", "baseline_status", "baseline_grade", "comparison_category", "forecast_evidence_json", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "first_material_move_timestamp", "data_quality_status", "safety_boundary")
+EVENT_FIELDS = ("schema_version", "method_version", "record_id", "signal_id", "event_id", "event_timestamp_utc", "event_timestamp_jst", "current_tactical_side", "current_structural_thesis", "weakening_thesis", "next_regime_side", "status", "activation_families", "reason_codes", "invalidation_reason_codes", "first_reliable_target", "intervening_obstruction", "price_location", "volatility_state", "expansion_risk", "level_reliability_band", "baseline_present", "baseline_side", "baseline_status", "baseline_grade", "baseline_type", "baseline_reason_codes", "comparison_category", "forecast_evidence_json", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "first_material_move_timestamp", "data_quality_status", "safety_boundary")
 EPISODE_FIELDS = ("schema_version", "method_version", "episode_id", "policy", "signal_id", "event_id", "start_timestamp_utc", "side", "status", "evidence_key", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "first_material_move_timestamp", "data_quality_status")
 COMPATIBLE_PREFIXES = ("RELIABLE_LEVEL_REJECTION_", "LEVEL_BREAK_ACCEPTANCE_", "FALSE_BREAK_RECLAIM_", "ORDER_FLOW_PRESSURE_", "OPEN_TRAVEL_CORRIDOR_")
 
@@ -74,6 +74,18 @@ def _matching_family(activation: str, families: tuple[str, ...]) -> tuple[str, .
     return tuple(item for item in families if item.startswith(COMPATIBLE_PREFIXES) and item.endswith("_" + activation))
 
 
+def _codes(value: Any) -> tuple[str, ...]:
+    return tuple(sorted({part.strip() for part in (value if isinstance(value, list) else str(value or "").split("|")) if str(part).strip()}))
+
+
+def candidate_evidence_key(forecast: dict[str, Any]) -> str:
+    return json.dumps({"activation_families": list(_families(forecast.get("activation_families", ""))), "invalidation_reason_codes": list(_codes(forecast.get("invalidation_reason_codes"))), "next_regime_side": _side(forecast.get("next_regime_side")), "reason_codes": list(_codes(forecast.get("reason_codes"))), "status": str(forecast.get("status", "none")).strip().lower(), "target": str(forecast.get("first_reliable_target", "")).strip(), "obstruction": str(forecast.get("intervening_obstruction", "")).strip().lower()}, sort_keys=True, separators=(",", ":"))
+
+
+def baseline_evidence_key(forecast: dict[str, Any]) -> str:
+    return json.dumps({"baseline_grade": str(forecast.get("baseline_grade", "none")).strip(), "baseline_reason_codes": list(_codes(forecast.get("baseline_reason_codes", ""))), "baseline_side": _side(forecast.get("baseline_side")), "baseline_status": str(forecast.get("baseline_status", "none")).strip().lower(), "baseline_type": str(forecast.get("baseline_type", "none")).strip().lower()}, sort_keys=True, separators=(",", ":"))
+
+
 def baseline_adapter(current: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
     """Call the frozen evaluator on copies, keeping upstream signal rows immutable."""
     before_current, before_previous = copy.deepcopy(current), copy.deepcopy(previous)
@@ -119,7 +131,7 @@ def _forecast(signal: dict[str, str], event: dict[str, str], levels: set[str], b
     if side != "NONE" and baseline_present: category = "agreement" if side == baseline_side else "disagreement"
     elif side != "NONE": category = "candidate_only"
     elif baseline_present: category = "baseline_only"
-    return {"current_tactical_side": current, "current_structural_thesis": structural, "weakening_thesis": weakening, "next_regime_side": side, "status": status, "activation_families": "|".join(matching), "reason_codes": "|".join(reasons), "invalidation_reason_codes": "|".join(sorted(set(invalidation))), "first_reliable_target": target, "intervening_obstruction": obstruction or "insufficient", "baseline_present": baseline_present, "baseline_side": baseline_side, "baseline_status": str(baseline.get("status", "none")), "baseline_grade": str(baseline.get("grade", "none")), "comparison_category": category, "forecast_evidence": {"activation": activation, "compatible_families": list(matching), "target_is_reliable": bool(target and target in levels), "obstruction": obstruction, "weakening_thesis": weakening}}
+    return {"current_tactical_side": current, "current_structural_thesis": structural, "weakening_thesis": weakening, "next_regime_side": side, "status": status, "activation_families": "|".join(matching), "reason_codes": "|".join(reasons), "invalidation_reason_codes": "|".join(sorted(set(invalidation))), "first_reliable_target": target, "intervening_obstruction": obstruction or "insufficient", "baseline_present": baseline_present, "baseline_side": baseline_side, "baseline_status": str(baseline.get("status", "none")), "baseline_grade": str(baseline.get("grade", "none")), "baseline_type": str(baseline.get("type", "none")), "baseline_reason_codes": "|".join(_codes(baseline.get("reason_codes", []))), "comparison_category": category, "forecast_evidence": {"activation": activation, "compatible_families": list(matching), "target_is_reliable": bool(target and target in levels), "obstruction": obstruction, "weakening_thesis": weakening}}
 
 
 def _episode_rows(records: list[dict[str, Any]], policy: str) -> list[dict[str, Any]]:
@@ -128,10 +140,10 @@ def _episode_rows(records: list[dict[str, Any]], policy: str) -> list[dict[str, 
     for record in records:
         forecast = record["forecast"]
         if policy == "candidate":
-            fired = forecast["status"] in {"armed", "activated"}; side = forecast["next_regime_side"]; status = forecast["status"]; evidence = forecast["activation_families"]
+            fired = forecast["status"] in {"armed", "activated"}; side = forecast["next_regime_side"]; status = forecast["status"]; evidence = candidate_evidence_key(forecast)
         else:
-            fired = forecast["baseline_present"]; side = forecast["baseline_side"]; status = forecast["baseline_status"]; evidence = forecast["baseline_grade"]
-        at = _dt(record["event"]["event_timestamp_utc"]); key = f"{side}|{status}|{evidence}"
+            fired = forecast["baseline_present"]; side = forecast["baseline_side"]; status = forecast["baseline_status"]; evidence = baseline_evidence_key(forecast)
+        at = _dt(record["event"]["event_timestamp_utc"]); key = evidence
         fresh = fired and (not previous_fired or key != previous_key or episode_start is None or at - episode_start >= timedelta(hours=3))
         if fresh:
             event = record["event"]
