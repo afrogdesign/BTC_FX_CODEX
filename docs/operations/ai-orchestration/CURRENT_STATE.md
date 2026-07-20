@@ -1029,3 +1029,22 @@ BTCFX-20260721-MACRO-STRUCTURE-P8-AUXILIARY-SHADOW
 ```
 
 Safety remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+
+
+---
+
+## 2026-07-21 M2 macro-structure auxiliary shadow acceptance
+
+M2 is accepted at source commit `8aee427`.
+
+- archived spec: `chatgpt/specs/archive/20260721_macro_structure_p8_auxiliary_shadow.md`
+- the optional macro shadow remains disabled by default
+- context rows are used only for event-time episode continuity
+- published events, levels, counts, metrics, splits, dates, diagnostics, gates, and denominators are performance-only
+- the fresh bounded wrapper run succeeded with 124 events, 94 levels, and 33 independent opportunities
+- wrapper status, cycle manifest, and cycle summary agreed on macro shadow `success`
+- recommendation remains `continue_shadow_collection`
+- generated artifacts remain local and uncommitted
+- M3 has not started; no active spec is open
+- no runtime, launchd, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, or order behavior changed
+- safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually

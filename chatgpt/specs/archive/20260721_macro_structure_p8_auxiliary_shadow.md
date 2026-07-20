@@ -387,3 +387,30 @@ After M2 acceptance, ChatGPT reviews collected evidence before deciding whether 
 - no runtime restart or launchd change
 - no API keys, secrets, private, account, position, or order endpoints
 - human decides all trades and all production adoption
+
+
+---
+
+## 18. Acceptance record — 2026-07-21
+
+M2 is accepted at source commit `8aee427`.
+
+Accepted evidence:
+
+- targeted replay, operating-cycle, daily-wrapper, and macro-CLI tests passed
+- context rows preserve event-time episode continuity only
+- published events, performance counts, persisted levels, split keys, metrics, dates, diagnostics, gates, and opportunity denominators use performance rows only
+- replay summary records deterministic performance bounds and total/context/performance signal counts
+- one fresh bounded wrapper cycle completed successfully
+- wrapper status, cycle manifest, and cycle summary agree on macro shadow `success`
+- complete date-scoped macro output set was published
+- generated local artifacts remained uncommitted
+
+Observed bounded result:
+
+- events: `124`
+- levels: `94`
+- independent opportunities: `33`
+- recommendation: `continue_shadow_collection`
+
+Acceptance authorizes the optional disabled-by-default report-only M2 auxiliary shadow only. It does not authorize installed runtime enablement, M3 implementation, notification or mail changes, production scoring/gate/threshold/classifier changes, or automatic production mutation.

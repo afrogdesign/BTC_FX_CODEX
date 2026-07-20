@@ -402,3 +402,21 @@ This section supersedes the older `Current next task` block above.
 - no installed flag, plist, schedule, runtime, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, or order change is authorized
 - M3 remains blocked until M2 source implementation and ChatGPT acceptance
 - report-only / not FORMAL_GO / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-21 M2 macro shadow acceptance control
+
+- accepted M2 commit: `8aee427`
+- archived M2 spec: `chatgpt/specs/archive/20260721_macro_structure_p8_auxiliary_shadow.md`
+- active spec: none
+- current mode: `OBSERVE`
+- current work ID: `BTCFX-20260721-MACRO-STRUCTURE-P8-SHADOW-COLLECTION`
+- bounded result: macro shadow `success`, 124 events, 94 levels, 33 independent opportunities
+- recommendation: `continue_shadow_collection`
+- M3 remains blocked pending sufficient accumulated evidence, a separate active spec, and human approval
+- future bounded Codex work should default to `GPT-5.4-mini Medium`, use the active spec as source of truth, and add only missing regression coverage
+- acceptance blockers must be separated from non-blocking improvement candidates; successful targeted validation must not be repeated without need
+- no runtime enablement, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, order, or automatic-tuning change is authorized
+- report-only / not `FORMAL_GO` / no automatic order / human decides manually
