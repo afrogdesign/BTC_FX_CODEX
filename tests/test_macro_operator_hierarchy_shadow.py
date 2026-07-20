@@ -78,6 +78,34 @@ class MacroOperatorHierarchyShadowTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "tactical_geometry_invalid"):
                 render_macro_operator_hierarchy_shadow(signal_context_csv=paths["signals"], tactical_candidates_csv=paths["tactical"], macro_events_csv=paths["macro"], macro_levels_csv=paths["levels"], next_regime_events_csv=paths["m3"], ohlcv_1h_csv=paths["one"], signal_id="s1", output_html=outputs[0], output_json=outputs[1], output_md=outputs[2], replace_output=True)
 
+    def test_grouped_secondary_wording_trace_and_tactical_safety(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); paths = self._fixture(root)
+            rows = list(csv.DictReader(paths["tactical"].open()))
+            second = {**rows[0], "candidate_id": "c2", "candidate_status": "allowed", "next_condition": "different condition"}
+            _write(paths["tactical"], [rows[0], second])
+            _, _, outputs = self._render_with(paths, root)
+            manifest = json.loads(outputs[1].read_text()); detail = manifest["secondary_operator_detail_model"]
+            self.assertEqual(detail["active_headlines"], [{"text": "<b>headline</b>", "candidate_ids": ["c1", "c2"]}])
+            self.assertEqual(len(detail["next_conditions"]), 2)
+            self.assertIn("operator_detail.active_headlines.<b>headline</b>", manifest["source_trace_map"])
+            trace = manifest["source_trace_map"]["operator_detail.active_headlines.<b>headline</b>"]
+            self.assertEqual(trace["natural_key"], ["c1", "c2"])
+            page = outputs[0].read_text()
+            self.assertEqual(page.count("&lt;b&gt;headline&lt;/b&gt; <small>[c1, c2]</small>"), 1)
+            self.assertIn("candidate status is source evidence, not execution permission", page)
+            self.assertIn("candidate_status</b>: allowed", page)
+            self.assertIn("no winner selected", page)
+
+    def test_none_next_regime_is_explicitly_non_directional(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); paths = self._fixture(root)
+            rows = list(csv.DictReader(paths["m3"].open())); rows[0]["next_regime_side"] = "NONE"; _write(paths["m3"], rows)
+            _, _, outputs = self._render_with(paths, root)
+            page = outputs[0].read_text()
+            self.assertIn("no directional next-regime claim", page)
+            self.assertIn("no execution permission.", page)
+
     def test_zero_tactical_candidates_and_required_future_level_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); paths, result, outputs = self._render(root, tactical=False)
@@ -100,6 +128,11 @@ class MacroOperatorHierarchyShadowTests(unittest.TestCase):
             with patch("src.feedback.macro_operator_hierarchy_shadow.os.replace", side_effect=fail), self.assertRaises(OSError):
                 render_macro_operator_hierarchy_shadow(signal_context_csv=paths["signals"], tactical_candidates_csv=paths["tactical"], macro_events_csv=paths["macro"], macro_levels_csv=paths["levels"], next_regime_events_csv=paths["m3"], ohlcv_1h_csv=paths["one"], signal_id="s1", output_html=outputs[0], output_json=outputs[1], output_md=outputs[2], replace_output=True)
             self.assertEqual(before, [path.read_bytes() for path in outputs])
+
+    def _render_with(self, paths: dict[str, Path], root: Path) -> tuple[dict[str, Path], dict[str, object], list[Path]]:
+        outputs = [root / "out.html", root / "out.json", root / "out.md"]
+        result = render_macro_operator_hierarchy_shadow(signal_context_csv=paths["signals"], tactical_candidates_csv=paths["tactical"], macro_events_csv=paths["macro"], macro_levels_csv=paths["levels"], next_regime_events_csv=paths["m3"], ohlcv_1h_csv=paths["one"], ohlcv_4h_csv=paths["four"], signal_id="s1", output_html=outputs[0], output_json=outputs[1], output_md=outputs[2], replace_output=True)
+        return paths, result, outputs
 
 
 if __name__ == "__main__":

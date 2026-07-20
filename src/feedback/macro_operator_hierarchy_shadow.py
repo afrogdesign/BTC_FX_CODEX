@@ -64,6 +64,15 @@ def _number(value: Any, code: str) -> float:
     return result
 
 
+def _group_wording(rows: list[dict[str, Any]], field: str) -> list[dict[str, Any]]:
+    """Group normalized tactical wording without letting candidate tags defeat deduplication."""
+    groups: dict[str, set[str]] = {}
+    for row in rows:
+        text = _norm(row.get(field))
+        groups.setdefault(text, set()).add(str(row["candidate_id"]))
+    return [{"text": text, "candidate_ids": sorted(candidate_ids)} for text, candidate_ids in sorted(groups.items())] or [{"text": "insufficient", "candidate_ids": []}]
+
+
 def _fingerprint(path: Path) -> str: return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -182,11 +191,10 @@ def render_macro_operator_hierarchy_shadow(*, signal_context_csv: Path, tactical
         if item["entry_zone_low"] > item["entry_zone_high"]: raise ValueError("tactical_geometry_invalid")
         tactical.append(item); trace[f"tactical.{item['candidate_id']}"] = {"logical_source": "tactical_candidates", "source_field": "display allowlist", "natural_key": item["candidate_id"], "included": True}
     if not tactical: flags.append("tactical:no_candidate_rows")
-    detail_values: dict[str, list[str]] = {"active_headlines": [], "next_conditions": []}
-    for row in tactical:
-        for key, output in (("active_headline", "active_headlines"), ("next_condition", "next_conditions")):
-            detail_values[output].append(f"{row[key]} [{row['candidate_id']}]")
-    detail = {"primary_setup_side": _norm(signal["primary_setup_side"]), "primary_setup_status": _norm(signal["primary_setup_status"]), "prelabel": _norm(signal["prelabel"]), **{key: sorted(set(value)) or ["insufficient"] for key, value in detail_values.items()}}
+    detail = {"primary_setup_side": _norm(signal["primary_setup_side"]), "primary_setup_status": _norm(signal["primary_setup_status"]), "prelabel": _norm(signal["prelabel"]), "active_headlines": _group_wording(tactical, "active_headline"), "next_conditions": _group_wording(tactical, "next_condition")}
+    for field in ("active_headlines", "next_conditions"):
+        for group in detail[field]:
+            trace[f"operator_detail.{field}.{group['text']}"] = {"logical_source": "tactical_candidates", "source_field": "active_headline" if field == "active_headlines" else "next_condition", "natural_key": group["candidate_ids"], "included": True, "derived_rule": "normalized text grouping; candidate IDs unique and sorted"}
     macro_strip = {key: _norm(macro[key]) for key in ("structural_state", "structural_direction", "price_location", "volatility_state", "expansion_risk")}; macro_strip["references"] = references
     card = {key: _norm(m3[key], "reference" if key in {"first_reliable_target", "intervening_obstruction"} else "evidence") for key in ("current_tactical_side", "current_structural_thesis", "weakening_thesis", "next_regime_side", "status", "activation_families", "reason_codes", "invalidation_reason_codes", "first_reliable_target", "intervening_obstruction", "baseline_side", "baseline_status", "baseline_grade", "baseline_type", "comparison_category")}
     if card["next_regime_side"] == "NONE": card["direction_display"] = "no directional next-regime claim"
@@ -199,7 +207,8 @@ def render_macro_operator_hierarchy_shadow(*, signal_context_csv: Path, tactical
     json_text = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
     def table(values: dict[str, Any]) -> str: return "".join(f"<li><b>{html.escape(str(k))}</b>: {html.escape(json.dumps(v, ensure_ascii=False, sort_keys=True) if isinstance(v, (dict, list)) else str(v))}</li>" for k, v in values.items())
     chart = _svg(candles, manifest["chart_model"]["event_price"], overlays, tactical, event_at.isoformat())
-    html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section,details{{margin:18px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520}}.hierarchy{{white-space:pre-line}}</style></head><body><h1>Macro Operator Hierarchy Shadow</h1><p class="safety">evidence confidence, not execution permission · report-only · human decides manually</p><section id="hierarchy"><h2>Hierarchy comparison</h2><p class="hierarchy">Baseline hierarchy approximation: {html.escape(" > ".join(BASELINE_ORDER))}\nM4 challenger: {html.escape(" > ".join(CHALLENGER_ORDER))}\nchallenger chart precedes operator wording: true</p></section><section id="chart">{chart}</section><section id="macro"><h2>Macro strip</h2><ul>{table(macro_strip)}</ul></section><section id="next-regime"><h2>Next-regime card</h2><ul>{table(card)}</ul><p class="safety">{"tactical and next-regime sides disagree; no winner selected." if disagreement else "no execution permission."}</p></section><section id="tactical"><h2>Tactical execution price map</h2>{"".join("<ul>"+table(row)+"</ul>" for row in tactical) or "<p>no tactical candidate rows</p>"}</section><details id="operator-detail"><summary>Operator action detail</summary><ul>{table(detail)}</ul></details><footer class="safety">{html.escape(SAFETY)}</footer></body></html>'
+    grouped_detail = "".join(f'<li>{html.escape(group["text"])} <small>[{html.escape(", ".join(group["candidate_ids"]))}]</small></li>' for field in ("active_headlines", "next_conditions") for group in detail[field])
+    html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section,details{{margin:18px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520}}.hierarchy{{white-space:pre-line}}</style></head><body><h1>Macro Operator Hierarchy Shadow</h1><p class="safety">evidence confidence, not execution permission · report-only · human decides manually</p><section id="hierarchy"><h2>Hierarchy comparison</h2><p class="hierarchy">Baseline hierarchy approximation: {html.escape(" > ".join(BASELINE_ORDER))}\nM4 challenger: {html.escape(" > ".join(CHALLENGER_ORDER))}\nchallenger chart precedes operator wording: true</p></section><section id="chart">{chart}</section><section id="macro"><h2>Macro strip</h2><ul>{table(macro_strip)}</ul></section><section id="next-regime"><h2>Next-regime card</h2><ul>{table(card)}</ul><p class="safety">{"tactical and next-regime sides disagree; no winner selected." if disagreement else "no execution permission."}</p></section><section id="tactical"><h2>Tactical execution price map</h2><p class="safety">candidate status is source evidence, not execution permission</p>{"".join("<ul>"+table(row)+"</ul>" for row in tactical) or "<p>no tactical candidate rows</p>"}</section><details id="operator-detail"><summary>Operator action detail</summary><ul>{table({k:v for k,v in detail.items() if k not in {"active_headlines", "next_conditions"}})}{grouped_detail}</ul></details><footer class="safety">{html.escape(SAFETY)}</footer></body></html>'
     md = f"# Macro Operator Hierarchy Shadow\n\n## Selected event facts\n\n- signal: {signal_id}\n- timestamp: {event_at.isoformat()}\n\n## Section orders\n\n- baseline: {' > '.join(BASELINE_ORDER)}\n- challenger: {' > '.join(CHALLENGER_ORDER)}\n- challenger chart precedes operator wording: true\n\n## Macro strip\n\n{json.dumps(macro_strip, ensure_ascii=False, sort_keys=True)}\n\n## Missing-data flags\n\n- {'; '.join(sorted(set(flags))) or 'none'}\n\n## Future-field audit\n\n- JSON/HTML/Markdown: passed\n\n## Source trace summary\n\n- groups: {len(trace)}\n\n## Event-time level exclusions\n\n- {sum(1 for item in references.values() if item and item['status'] != 'available')}\n\n## Visual review checklist\n\n- chart first; macro/tactical geometry separate; operator detail final\n\n## Limitations\n\n- local hierarchy artifact only; no production UI reproduction\n\n## Safety boundary\n\n- {SAFETY}\n"
     # The manifest records the audit vocabulary itself, so audit only the
     # source-derived display model rather than rejecting its own checklist.

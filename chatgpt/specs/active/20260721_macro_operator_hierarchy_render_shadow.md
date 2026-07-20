@@ -444,3 +444,5 @@ The remaining reviewed blockers are:
 M4 remains report-only, not FORMAL_GO, human-decided, and incapable of automatic orders.
 
 FIX-01 implementation note: the local renderer validates complete input schemas, preserves event-time-safe level references only, deduplicates included geometry by level ID, records 4H validation metadata, and publishes the three review outputs atomically across independently supplied parent directories. Acceptance remains pending review.
+
+FIX-02 implementation note: secondary tactical wording is grouped by normalized text with sorted contributing candidate IDs, including per-group source traces; tactical source statuses remain visible but are explicitly not execution permission. Acceptance remains pending review.
