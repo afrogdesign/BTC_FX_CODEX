@@ -556,7 +556,10 @@ def _dedup_policy_episodes(episodes: list[dict[str, Any]], policy: str, separati
             previous = None; previous_key = None; continue
         event = row.get("event") or {}; stamp = _dt(row.get("timestamp"))
         key = (side, event.get("event_family", ""), event.get("structural_state", ""), event.get("volatility_state", ""), event.get("price_location", ""))
-        new = previous is None or previous_key != key or previous.get("outcome") != "unresolved" or stamp is None or _dt(previous.get("timestamp")) is None or stamp - _dt(previous["timestamp"]) >= separation
+        # Future replay outcome is deliberately excluded: only a snapshot-time
+        # invalidation/completion marker may end the preceding episode early.
+        resolved_at = _dt(previous.get("event_time_resolution_utc")) if previous else None
+        new = previous is None or previous_key != key or (resolved_at is not None and stamp is not None and resolved_at <= stamp) or stamp is None or _dt(previous.get("timestamp")) is None or stamp - _dt(previous["timestamp"]) >= separation
         if new:
             item = dict(row); item["policy_episode_id"] = hashlib.sha256(f"{METHOD_VERSION}|{policy}|{key}|{row.get('timestamp')}".encode()).hexdigest()[:20]
             result.append(item); previous = item; previous_key = key
@@ -579,6 +582,31 @@ def _policy_episodes(events: list[dict[str, Any]], signals: list[dict[str, str]]
         outcome = event.get("outcome_6h", "unresolved")
         result.append({"event": event, "signal": signal_by_id.get(str(event.get("signal_id"))), "outcome": outcome, "timestamp": event["event_timestamp_utc"], "mfe": _num(event.get("mfe_atr")), "mae": _num(event.get("mae_atr")), "opportunity_id": match.get("opportunity_id") if match else "", "opportunity_direction": match.get("direction") if match else "", "lead_minutes": ((_dt(match["material_move_timestamp_utc"]) - timestamp).total_seconds() / 60) if match and timestamp and _dt(match["material_move_timestamp_utc"]) else None})
     return result
+
+
+def _diagnose_miss(row: dict[str, Any], opportunity: dict[str, Any], current: bool, turning: bool) -> str:
+    """Return one root cause only when its positive event-time predicate is unique."""
+    pressure = json.loads(row.get("pressure_evidence_json") or "{}") if row else {}
+    family = str(row.get("event_family") or "")
+    if opportunity.get("data_quality_status") != "ok" or row.get("data_quality_status") not in {"", "ok"}:
+        return "data_unresolved"
+    candidates: list[str] = []
+    if row.get("structural_state") == "insufficient": candidates.append("structure_not_established")
+    elif not row.get("nearest_support_id") and not row.get("nearest_resistance_id"): candidates.append("reliable_level_missing")
+    elif row.get("level_reliability_band") == "low": candidates.append("level_reliability_miscalibrated")
+    if pressure.get("rejection") == "present" and "RELIABLE_LEVEL_REJECTION" not in family: candidates.append("rejection_event_missing")
+    if pressure.get("break") == "present" and pressure.get("closed_candle_acceptance") == "present" and "LEVEL_BREAK_ACCEPTANCE" not in family: candidates.append("break_acceptance_missing")
+    if pressure.get("break") == "present" and pressure.get("false_break_reclaim") == "present" and "FALSE_BREAK_RECLAIM" not in family: candidates.append("false_break_reclaim_missing")
+    directional = pressure.get("directional_microstructure") or {}
+    if pressure.get("microstructure_status") == "unavailable" and row.get("directional_activation") in {"UP", "DOWN"}: candidates.append("pressure_or_imbalance_unavailable")
+    if directional and "ORDER_FLOW_PRESSURE" not in family: candidates.append("pressure_or_imbalance_not_recognized")
+    if row.get("directional_activation") in {"UP", "DOWN"} and row.get("first_reliable_target") and row.get("intervening_obstruction") == "none" and "OPEN_TRAVEL_CORRIDOR" not in family: candidates.append("travel_corridor_not_recognized")
+    if row.get("volatility_state") in {"ordinary", "compressed"} and row.get("expansion_risk") == "high": candidates.append("volatility_regime_misclassified")
+    precursor = any(token in family for token in ("RELIABLE_LEVEL_REJECTION", "LEVEL_BREAK_ACCEPTANCE", "FALSE_BREAK_RECLAIM", "ORDER_FLOW_PRESSURE"))
+    if precursor and not current and not turning: candidates.append("precursor_policy_too_strict")
+    clean_no_candidate = not candidates and row.get("structural_state") not in {"", "insufficient"} and pressure.get("microstructure_status") != "unavailable" and row.get("volatility_state") not in {"", "insufficient"}
+    if clean_no_candidate: candidates.append("correct_no_signal")
+    return candidates[0] if len(candidates) == 1 and candidates[0] in ROOT_CAUSES else "data_unresolved"
 
 
 def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[str, Any], metrics: dict[str, Any] | None = None, opportunities: list[dict[str, Any]] | None = None, episodes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -708,30 +736,7 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         row = opportunity.get("event") or {}; current = _policy_fired(opportunity, "current_notification"); turning = _policy_fired(opportunity, "turning_precursor_combined")
         if current or turning:
             continue
-        family = str(row.get("event_family") or "")
-        pressure = json.loads(row.get("pressure_evidence_json") or "{}") if row else {}
-        if opportunity.get("data_quality_status") != "ok" or row.get("data_quality_status") not in {"", "ok"}:
-            root = "data_unresolved"
-        elif row.get("structural_state") == "insufficient":
-            root = "structure_not_established"
-        elif not row.get("nearest_support_id") and not row.get("nearest_resistance_id"):
-            root = "reliable_level_missing"
-        elif row.get("level_reliability_band") == "low":
-            root = "level_reliability_miscalibrated"
-        elif row.get("directional_activation") in {"UP", "DOWN"} and "OPEN_TRAVEL_CORRIDOR" not in family and row.get("first_reliable_target"):
-            root = "travel_corridor_not_recognized"
-        elif pressure.get("microstructure_status") == "unavailable":
-            root = "pressure_or_imbalance_unavailable"
-        elif row.get("volatility_state") == "insufficient":
-            root = "volatility_regime_misclassified"
-        elif "RELIABLE_LEVEL_REJECTION" not in family and row.get("nearest_support_id"):
-            root = "rejection_event_missing"
-        elif "LEVEL_BREAK_ACCEPTANCE" not in family and row.get("nearest_resistance_id"):
-            root = "break_acceptance_missing"
-        elif "FALSE_BREAK_RECLAIM" not in family and row.get("directional_activation") in {"UP", "DOWN"}:
-            root = "false_break_reclaim_missing"
-        else:
-            root = "data_unresolved"
+        root = _diagnose_miss(row, opportunity, current, turning)
         misses.append({"opportunity_id": opportunity["opportunity_id"], "direction": opportunity["direction"], "start_timestamp_utc": opportunity["start_timestamp_utc"], "material_move_timestamp_utc": opportunity["material_move_timestamp_utc"], "move_size_atr": opportunity["move_size_atr"], "structure_state": row.get("structural_state", "insufficient"), "price_location": row.get("price_location", "insufficient"), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(current).lower(), "turning_precursor_fired": str(turning).lower(), "root_cause": root, "reason_codes": root, "data_quality_status": opportunity.get("data_quality_status", "")})
     policy_episodes = _policy_episodes(events, signal_rows, opportunities)
     evidence_dates = signal_rows + [{"timestamp_utc": item["start_timestamp_utc"]} for item in opportunities]

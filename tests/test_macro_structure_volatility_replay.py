@@ -12,6 +12,7 @@ from src.feedback.macro_structure_volatility_replay import (
     _gate,
     _atomic,
     _dedup_policy_episodes,
+    _diagnose_miss,
     _level_events,
     _micro_value,
     _outcomes,
@@ -100,6 +101,17 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         self.assertEqual(len(repeated), 1)
         self.assertEqual(len(changed), 2)
         self.assertEqual(_policy_metrics([], "current_notification", [row(0), row(1)])["episodes"], 1)
+
+    def test_resolved_future_outcome_does_not_split_event_time_episode(self) -> None:
+        event = {"was_notified": "true", "current_tactical_side": "LONG", "event_family": "", "structural_state": "range", "volatility_state": "ordinary", "price_location": "lower_half"}
+        rows = [{"event": event, "signal": None, "outcome": "large_up", "timestamp": f"2026-01-01T0{hour}:00:00+00:00"} for hour in (0, 1)]
+        self.assertEqual(len(_dedup_policy_episodes(rows, "current_notification")), 1)
+
+    def test_miss_diagnosis_uses_positive_predicates_and_fails_closed(self) -> None:
+        row = {"data_quality_status": "ok", "structural_state": "range", "nearest_support_id": "s", "nearest_resistance_id": "r", "pressure_evidence_json": '{"rejection":"present","microstructure_status":"available"}', "event_family": "", "volatility_state": "ordinary"}
+        self.assertEqual(_diagnose_miss(row, {"data_quality_status": "ok"}, False, False), "rejection_event_missing")
+        ambiguous = {**row, "pressure_evidence_json": '{"rejection":"present","directional_microstructure":{"order_flow_imbalance":"UP"},"microstructure_status":"available"}'}
+        self.assertEqual(_diagnose_miss(ambiguous, {"data_quality_status": "ok"}, False, False), "data_unresolved")
 
     def test_compression_only_requires_expansion_and_has_no_directional_precision(self) -> None:
         event = {"volatility_state": "compressed", "event_family": ""}
