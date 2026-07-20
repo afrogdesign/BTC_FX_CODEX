@@ -55,7 +55,7 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         support = {"side": "low", "center": 100.0, "low": 99.8, "high": 100.2}
         rejection = _level_events(support, [candle(0, 100.0, 100.2, 99.8), candle(1, 101.0, 101.1, 100.9)], start + timedelta(hours=3))
         self.assertEqual(rejection["family"], "RELIABLE_LEVEL_REJECTION_UP")
-        accepted = _level_events({"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}, [candle(0, 101.0, 101.1, 100.9), candle(1, 101.0, 101.1, 100.9), candle(2, 101.0, 101.1, 100.9)], start + timedelta(hours=4))
+        accepted = _level_events({"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}, [candle(0, 101.0, 101.1, 100.9), candle(1, 101.0, 101.1, 100.9)], start + timedelta(hours=3))
         self.assertEqual(accepted["family"], "LEVEL_BREAK_ACCEPTANCE_UP")
         reclaimed = _level_events({"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}, [candle(0, 101.0, 101.1, 100.9), candle(1, 99.9, 100.0, 99.8)], start + timedelta(hours=3))
         self.assertEqual(reclaimed["family"], "FALSE_BREAK_RECLAIM_DOWN")
@@ -104,6 +104,20 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         completed = [item for item in lifecycle["interactions"] if item["kind"] != "break"]
         self.assertGreaterEqual(len(completed), 2)
         self.assertTrue(all(item["reaction_atr"] > 0 for item in completed))
+
+    def test_lifecycle_does_not_repeat_historical_family_or_rearm_continuous_acceptance(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        level = {"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}
+        bars = [{"timestamp": start + timedelta(hours=i), "open": 101, "high": 101.1, "low": 100.9, "close": 101, "interval": "1h"} for i in range(4)]
+        lifecycle = _level_events(level, bars, start + timedelta(hours=5))
+        self.assertEqual(lifecycle["family"], "")
+        self.assertEqual(sum(item["kind"] == "break" for item in lifecycle["interactions"]), 1)
+
+    def test_realized_move_side_is_not_overwritten_by_activation(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        candles = [{"timestamp": start + timedelta(minutes=15 * i), "open": 100, "high": 100.1, "low": 98.5, "close": 99, "interval": "15m"} for i in range(96)]
+        result = _outcomes(100, start, .1, candles, [], "UP")
+        self.assertEqual(result["large_move_side"], "DOWN")
 
     def test_structure_uses_event_time_roles_not_geometry(self) -> None:
         support = {"level_id": "s", "low": 99.0, "high": 100.0, "center": 99.5, "role": "support", "reliability_band": "high"}

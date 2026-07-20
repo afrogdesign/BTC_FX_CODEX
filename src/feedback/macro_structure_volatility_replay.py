@@ -234,14 +234,15 @@ def _closed(candles: list[dict[str, Any]], timestamp: datetime) -> list[dict[str
 def _level_state(level: dict[str, Any], candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
     bars = [c for c in candles if c["timestamp"] + timedelta(hours=1) <= at and c["timestamp"] >= level["first_confirmed"]]
     lifecycle = _level_events(level, bars, at)
-    touches = [bar["timestamp"] for index, bar in enumerate(bars) if bar["high"] >= level["low"] and bar["low"] <= level["high"] and (index == 0 or not (bars[index - 1]["high"] >= level["low"] and bars[index - 1]["low"] <= level["high"]))]
+    touches = lifecycle["touch_timestamps"]
     rejections = [item["reaction_atr"] for item in lifecycle["interactions"] if item["kind"] == "clean_rejection"]
     breaks = sum(item["kind"] == "break" for item in lifecycle["interactions"]); reclaims = sum(item["kind"] == "false_break_reclaim" for item in lifecycle["interactions"]); accepted = lifecycle["accepted"]
     eligible = len(rejections) + breaks
     hold = (len(rejections) + reclaims) / eligible if eligible else 0.0
     reaction = min((median(rejections) if rejections else 0.0) / 2.0, 1.0)
     confluence = 1.0 if len({m["source_timeframe"] for m in level["members"]}) >= 2 else .5
-    last = max(touches) if touches else level["first_confirmed"]
+    completed = [item["timestamp"] for item in lifecycle["interactions"] if item["kind"] != "break"]
+    last = max(completed or touches or [level["first_confirmed"]])
     recency = math.exp(-max(0.0, (at - last).total_seconds() / 86400) / 14)
     score = 100 * (.45 * hold + .20 * reaction + .20 * confluence + .15 * recency)
     band = "high" if score >= 70 and eligible >= 3 else "medium" if score >= 50 and eligible >= 2 else "low"
@@ -283,16 +284,17 @@ def _structure(price: float, levels: list[dict[str, Any]], candles4: list[dict[s
 def _level_events(level: dict[str, Any], candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
     """Resolve closed-candle level behaviour without using bars after *at*."""
     bars = [bar for bar in candles if bar["timestamp"] + timedelta(hours=1) <= at]
-    touches: list[int] = []; interactions: list[dict[str, Any]] = []; active: dict[str, Any] | None = None
+    touches: list[int] = []; interactions: list[dict[str, Any]] = []; active: dict[str, Any] | None = None; armed = True
     role = level.get("role") or ("support" if level["side"] == "low" else "resistance")
     for index, bar in enumerate(bars):
         if bar["high"] >= level["low"] and bar["low"] <= level["high"]:
             if not touches or index - touches[-1] >= 3:
                 touches.append(index)
+            armed = True
         atr = _atr(bars, index) or max(level["center"] * .001, 1e-9)
         side = "UP" if bar["close"] >= level["high"] + .10 * atr else "DOWN" if bar["close"] <= level["low"] - .10 * atr else None
         if active is None and touches and touches[-1] >= 0 and index > touches[-1] and index - touches[-1] <= 3:
-            rejection_side = "UP" if level["side"] == "low" and bar["close"] >= level["center"] + .50 * atr else "DOWN" if level["side"] == "high" and bar["close"] <= level["center"] - .50 * atr else None
+            rejection_side = "UP" if role == "support" and bar["close"] >= level["center"] + .50 * atr else "DOWN" if role == "resistance" and bar["close"] <= level["center"] - .50 * atr else None
             if rejection_side:
                 interactions.append({"kind": "clean_rejection", "timestamp": bar["timestamp"], "side": rejection_side, "reaction_atr": abs(bar["close"] - level["center"]) / atr}); touches[-1] = -10**9
                 continue
@@ -302,25 +304,26 @@ def _level_events(level: dict[str, Any], candles: list[dict[str, Any]], at: date
             if reclaimed and index - started <= 3:
                 interactions.append({"kind": "false_break_reclaim", "timestamp": bar["timestamp"], "side": "DOWN" if prior == "UP" else "UP", "reaction_atr": abs(bar["close"] - level["center"]) / atr}); active = None
             elif index == started + 1 and side == prior:
-                interactions.append({"kind": "accepted_break", "timestamp": bar["timestamp"], "side": prior, "reaction_atr": abs(bar["close"] - level["center"]) / atr}); role = "support" if prior == "UP" else "resistance"; active = None
+                interactions.append({"kind": "accepted_break", "timestamp": bar["timestamp"], "side": prior, "reaction_atr": abs(bar["close"] - level["center"]) / atr}); role = "support" if prior == "UP" else "resistance"; active = None; armed = False
             elif index - started >= 3:
                 active = None
-        if side and active is None and not (interactions and interactions[-1]["timestamp"] == bar["timestamp"] and interactions[-1]["kind"] in {"accepted_break", "false_break_reclaim"}):
+        if side and armed and active is None and not (interactions and interactions[-1]["timestamp"] == bar["timestamp"] and interactions[-1]["kind"] in {"accepted_break", "false_break_reclaim"}):
             active = {"side": side, "index": index}
             interactions.append({"kind": "break", "timestamp": bar["timestamp"], "side": side, "reaction_atr": abs(bar["close"] - level["center"]) / atr})
         if touches and active is None:
             touch_index = touches[-1]
             if index > touch_index and index - touch_index <= 3:
-                if level["side"] == "low" and bar["close"] >= level["center"] + .50 * atr:
+                if role == "support" and bar["close"] >= level["center"] + .50 * atr:
                     interactions.append({"kind": "clean_rejection", "timestamp": bar["timestamp"], "side": "UP", "reaction_atr": abs(bar["close"] - level["center"]) / atr}); touches[-1] = -10**9
-                elif level["side"] == "high" and bar["close"] <= level["center"] - .50 * atr:
+                elif role == "resistance" and bar["close"] <= level["center"] - .50 * atr:
                     interactions.append({"kind": "clean_rejection", "timestamp": bar["timestamp"], "side": "DOWN", "reaction_atr": abs(bar["close"] - level["center"]) / atr}); touches[-1] = -10**9
     completed = [item for item in interactions if item["kind"] != "break"]
     latest = completed[-1] if completed else None
+    current = bool(latest and bars and latest["timestamp"] == bars[-1]["timestamp"])
     family = "RELIABLE_LEVEL_APPROACH" if any(x >= 0 for x in touches) and latest is None else ""
-    if latest:
+    if latest and current:
         family = {"clean_rejection": "RELIABLE_LEVEL_REJECTION", "accepted_break": "LEVEL_BREAK_ACCEPTANCE", "false_break_reclaim": "FALSE_BREAK_RECLAIM"}[latest["kind"]] + "_" + latest["side"]
-    return {"touches": sum(x >= 0 for x in touches), "family": family, "activation": latest["side"] if latest else None, "rejection": latest["side"] if latest and latest["kind"] == "clean_rejection" else None, "break_side": active["side"] if active else next((item["side"] for item in reversed(interactions) if item["kind"] == "break"), None), "accepted": bool(latest and latest["kind"] == "accepted_break"), "reclaim": bool(latest and latest["kind"] == "false_break_reclaim"), "role": role, "interactions": interactions}
+    return {"touches": sum(x >= 0 for x in touches), "touch_timestamps": [bars[x]["timestamp"] for x in touches if x >= 0], "family": family, "activation": latest["side"] if latest and current else None, "rejection": latest["side"] if latest and current and latest["kind"] == "clean_rejection" else None, "break_side": active["side"] if active else None, "accepted": bool(latest and latest["kind"] == "accepted_break"), "reclaim": bool(latest and latest["kind"] == "false_break_reclaim"), "role": role, "interactions": interactions}
 
 
 def _volatility(candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
@@ -426,7 +429,6 @@ def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, 
             result["level_behavior"] = "unresolved"
         else:
             result["level_behavior"] = "not_tested"
-    result["large_move_side"] = side
     result["jump_like"] = bool(ranges and ranges[0] >= max(3 * atr, price * .01))
     return result
 
@@ -464,10 +466,11 @@ def _realized_inventory(candles15: list[dict[str, Any]], signal_rows: list[dict[
             direction = "UP"; material = up_bar["timestamp"]; move = up_bar["high"] - price; whipsaw = False
         else:
             direction = "DOWN"; material = down_bar["timestamp"]; move = price - down_bar["low"]; whipsaw = False
-        if direction in {"UP", "DOWN"} and direction in last_by_side and at - last_by_side[direction] < timedelta(hours=3):
+        dedup_sides = ("UP", "DOWN") if direction == "BOTH" else (direction,)
+        if any(side in last_by_side and at - last_by_side[side] < timedelta(hours=3) for side in dedup_sides):
             continue
-        if direction in {"UP", "DOWN"}:
-            last_by_side[direction] = at
+        for side in dedup_sides:
+            last_by_side[side] = at
         associated = next((row for row in reversed(signals) if (_dt(row["timestamp_utc"]) or at) <= at and at - (_dt(row["timestamp_utc"]) or at) <= timedelta(hours=3)), None)
         event = event_by_signal.get(str(associated.get("signal_id"))) if associated else None
         opportunity_id = hashlib.sha256(f"{METHOD_VERSION}|opportunity|{direction}|{at.isoformat()}".encode()).hexdigest()[:20]
@@ -688,7 +691,26 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         row = opportunity.get("event") or {}; current = _policy_fired(opportunity, "current_notification"); turning = _policy_fired(opportunity, "turning_precursor_combined")
         if current or turning:
             continue
-        root = "reliable_level_missing" if not row.get("nearest_support_id") and not row.get("nearest_resistance_id") else "data_unresolved" if opportunity.get("data_quality_status") != "ok" else "travel_corridor_not_recognized" if opportunity["direction"] in {"UP", "DOWN"} and row.get("directional_activation") == opportunity["direction"] and "OPEN_TRAVEL_CORRIDOR" not in row.get("event_family", "") else "precursor_policy_too_strict"
+        family = str(row.get("event_family") or "")
+        pressure = json.loads(row.get("pressure_evidence_json") or "{}") if row else {}
+        if opportunity.get("data_quality_status") != "ok" or row.get("data_quality_status") not in {"", "ok"}:
+            root = "data_unresolved"
+        elif row.get("structural_state") == "insufficient":
+            root = "structure_not_established"
+        elif not row.get("nearest_support_id") and not row.get("nearest_resistance_id"):
+            root = "reliable_level_missing"
+        elif row.get("level_reliability_band") == "low":
+            root = "level_reliability_miscalibrated"
+        elif opportunity["direction"] in {"UP", "DOWN"} and row.get("directional_activation") == opportunity["direction"] and "OPEN_TRAVEL_CORRIDOR" not in family:
+            root = "travel_corridor_not_recognized"
+        elif pressure.get("microstructure_status") == "unavailable":
+            root = "pressure_or_imbalance_unavailable"
+        elif row.get("volatility_state") == "insufficient":
+            root = "volatility_regime_misclassified"
+        elif "RELIABLE_LEVEL_REJECTION" not in family and "LEVEL_BREAK_ACCEPTANCE" not in family and "FALSE_BREAK_RECLAIM" not in family:
+            root = "rejection_event_missing" if opportunity["direction"] == "UP" else "break_acceptance_missing"
+        else:
+            root = "precursor_policy_too_strict"
         misses.append({"opportunity_id": opportunity["opportunity_id"], "direction": opportunity["direction"], "start_timestamp_utc": opportunity["start_timestamp_utc"], "material_move_timestamp_utc": opportunity["material_move_timestamp_utc"], "move_size_atr": opportunity["move_size_atr"], "structure_state": row.get("structural_state", "insufficient"), "price_location": row.get("price_location", "insufficient"), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(current).lower(), "turning_precursor_fired": str(turning).lower(), "root_cause": root, "reason_codes": root, "data_quality_status": opportunity.get("data_quality_status", "")})
     policy_episodes = _policy_episodes(events, signal_rows, opportunities)
     evidence_dates = signal_rows + [{"timestamp_utc": item["start_timestamp_utc"]} for item in opportunities]
