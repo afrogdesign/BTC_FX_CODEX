@@ -66,6 +66,7 @@ from src.trade.opportunity_gate import (
 from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.feedback.turning_volatility_precursor_replay import replay_turning_volatility_precursors
+from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22084,6 +22085,22 @@ def _build_parser() -> argparse.ArgumentParser:
     turning_parser.add_argument("--replace-output", action="store_true")
     turning_parser.add_argument("--stdout-json", action="store_true")
 
+    macro_parser = subparsers.add_parser("replay-macro-structure-volatility")
+    macro_parser.add_argument("--signals", required=True)
+    macro_parser.add_argument("--ohlcv-15m", required=True)
+    macro_parser.add_argument("--ohlcv-1h", required=True)
+    macro_parser.add_argument("--ohlcv-4h", required=True)
+    macro_parser.add_argument("--output-events-csv", required=True)
+    macro_parser.add_argument("--output-levels-csv", required=True)
+    macro_parser.add_argument("--output-misses-csv", required=True)
+    macro_parser.add_argument("--output-json", required=True)
+    macro_parser.add_argument("--output-md", required=True)
+    macro_parser.add_argument("--cutoff-utc")
+    macro_parser.add_argument("--left-window", type=int, default=2)
+    macro_parser.add_argument("--right-window", type=int, default=2)
+    macro_parser.add_argument("--replace-output", action="store_true")
+    macro_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23488,6 +23505,23 @@ def main() -> None:
             actual_links=Path(args.actual_links) if args.actual_links else None,
             cutoff_utc=args.cutoff_utc, replace_output=bool(args.replace_output),
         )
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "replay-macro-structure-volatility":
+        try:
+            summary = replay_macro_structure_volatility(
+                signals=Path(args.signals), ohlcv_15m=Path(args.ohlcv_15m), ohlcv_1h=Path(args.ohlcv_1h),
+                ohlcv_4h=Path(args.ohlcv_4h), output_events_csv=Path(args.output_events_csv),
+                output_levels_csv=Path(args.output_levels_csv), output_misses_csv=Path(args.output_misses_csv),
+                output_json=Path(args.output_json), output_md=Path(args.output_md), cutoff_utc=args.cutoff_utc,
+                left_window=int(args.left_window), right_window=int(args.right_window),
+                replace_output=bool(args.replace_output),
+            )
+        except (OSError, ValueError) as exc:
+            sys.stdout.write(json.dumps({"ok": False, "exit_code": 2, "error_code": str(exc)}, separators=(",", ":")) + "\n")
+            return 2
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
         return int(summary.get("exit_code", 0))

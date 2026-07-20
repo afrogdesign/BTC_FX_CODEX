@@ -7971,5 +7971,25 @@ class TurningVolatilityPrecursorCliTests(unittest.TestCase):
                 self.assertIn('"ok":true', out.getvalue())
 
 
+class MacroStructureVolatilityCliTests(unittest.TestCase):
+    def test_explicit_fixture_route_is_compact_and_privacy_safe(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fixture = BASE_DIR / "tests" / "fixtures" / "macro_structure_volatility"
+            args = [sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-macro-structure-volatility", "--signals", str(fixture / "signals.csv"), "--ohlcv-15m", str(fixture / "ohlcv_15m.csv"), "--ohlcv-1h", str(fixture / "ohlcv_1h.csv"), "--ohlcv-4h", str(fixture / "ohlcv_4h.csv"), "--output-events-csv", str(root / "events.csv"), "--output-levels-csv", str(root / "levels.csv"), "--output-misses-csv", str(root / "misses.csv"), "--output-json", str(root / "replay.json"), "--output-md", str(root / "replay.md"), "--replace-output", "--stdout-json"]
+            result = subprocess.run(args, cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(result.stdout.strip().splitlines()), 1)
+            self.assertNotIn(str(root), result.stdout)
+            self.assertTrue((root / "events.csv").exists())
+
+    def test_missing_timeframe_input_fails_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); fixture = BASE_DIR / "tests" / "fixtures" / "macro_structure_volatility"
+            result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-macro-structure-volatility", "--signals", str(fixture / "signals.csv"), "--ohlcv-15m", str(fixture / "ohlcv_15m.csv"), "--ohlcv-1h", str(root / "missing.csv"), "--ohlcv-4h", str(fixture / "ohlcv_4h.csv"), "--output-events-csv", str(root / "e.csv"), "--output-levels-csv", str(root / "l.csv"), "--output-misses-csv", str(root / "m.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "r.md"), "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("input_file_missing", result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
