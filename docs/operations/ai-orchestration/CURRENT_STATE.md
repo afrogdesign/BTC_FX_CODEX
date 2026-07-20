@@ -1111,3 +1111,12 @@ Current correction:
 - M4 FIX-01 and M5 are blocked until M3 FIX-05 acceptance.
 - the recommendation remains `continue_shadow_collection`.
 - no production, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.
+
+
+## 2026-07-21 — M3 FIX-05 accepted; M4 FIX-01 active
+
+M3 FIX-05 is accepted as the final offline/report-only next-regime comparison contract. The accepted bounded replay contains 124 eligible events, 12 candidate episodes, 46 frozen-baseline episodes, 7 eligible JST observation days, and 49 clean eligible validation events. Overall, validation, non-side split, and policy-side burden denominators now use explicit eligible-event date sets; fired episodes with a zero denominator fail closed.
+
+The recommendation remains `continue_shadow_collection`. No production Big Chance, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.
+
+M3 is archived at `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`. M4 is active again only for bounded FIX-01 work against preserved implementation base `5574a2e`. M4 is not accepted, live UI deployment is not authorized, and M5 has not started.

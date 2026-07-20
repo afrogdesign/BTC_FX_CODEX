@@ -408,3 +408,39 @@ This section supersedes Section 19's active authorization.
 The current renderer remains useful local work, but it is not accepted because unique level geometry, reference/role consistency, complete macro-strip content, full displayed-fact traceability, tactical entry-zone bands, required focused regressions, actual CLI proof, and multi-parent atomic publication still require review and correction.
 
 Do not delete or reset commit `5574a2e`. Reactivate this specification only after M3 FIX-05 acceptance.
+
+
+---
+
+## 22. Reactivation after M3 FIX-05 acceptance — controlling status
+
+This section supersedes earlier inactive-draft and pre-FIX-05 status notes.
+
+- current status: approved for bounded M4 FIX-01 implementation
+- accepted M3 head reported for FIX-05: `d576862`
+- accepted M3 spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
+- accepted M3 recommendation: `continue_shadow_collection`
+- preserved M4 implementation base: `5574a2e`
+- M4 acceptance: pending FIX-01
+- live UI deployment: not authorized
+- M5 start: blocked until M4 acceptance
+
+FIX-01 must complete the existing local renderer contract without changing production HTML, notification, mail, scoring, thresholds, gates, classifiers, runtime, APIs, accounts, positions, or orders.
+
+The remaining reviewed blockers are:
+
+- actual CLI parser and dispatch coverage
+- unique geometry for duplicate semantic references
+- fail-closed handling of reference-semantic versus level-role mismatch
+- complete macro strip geometry, reliability, and unavailable states
+- tactical entry-zone bands
+- displayed-fact source traceability
+- secondary operator headline and next-condition retention
+- visible baseline/challenger hierarchy comparison
+- complete source schema/method and optional 4H fingerprint metadata
+- required fail-closed regressions
+- atomic publication across independently located output parent directories
+
+M4 remains report-only, not FORMAL_GO, human-decided, and incapable of automatic orders.
+
+FIX-01 implementation note: the local renderer validates complete input schemas, preserves event-time-safe level references only, deduplicates included geometry by level ID, records 4H validation metadata, and publishes the three review outputs atomically across independently supplied parent directories. Acceptance remains pending review.

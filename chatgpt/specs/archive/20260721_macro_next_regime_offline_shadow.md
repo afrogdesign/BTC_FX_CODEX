@@ -326,3 +326,37 @@ FIX-05 requirements:
 - An unresolved validation event-quality issue must fail the render-eligibility gate without retroactively changing forecasts or episode identity.
 
 The recommendation remains report-only. FIX-05 must not change candidate semantics, Big Chance baseline behavior, episode boundaries, thresholds, notifications, runtime, or orders.
+
+Implementation clarification: non-side split denominators are derived from eligible source macro-event values; policy-side split denominators use the full eligible performance-event JST-date set. Every metric exposes its date basis and day count, and publication fails closed if a fired metric has no burden denominator.
+
+
+---
+
+## 19. Final ChatGPT acceptance after FIX-05 — 2026-07-21
+
+M3 FIX-05 is accepted as the final offline, report-only next-regime comparison contract.
+
+Accepted implementation head reported for FIX-05: `d576862`.
+
+Accepted evidence:
+
+- focused M3 tests: 15 passing
+- task-scoped `git diff --check`: passing
+- fresh bounded replay: exactly four outputs
+- eligible performance events: 124
+- candidate episodes: 12
+- frozen-baseline episodes: 46
+- eligible JST observation days: 7
+- validation dates: `2026-07-19`, `2026-07-20`, `2026-07-21`
+- candidate overall 3H burden: `1.71428571` over 7 eligible days
+- baseline overall 3H burden: `6.57142857` over the same 7 eligible days
+- candidate validation 3H burden: `1.0` over 3 validation days
+- baseline validation 3H burden: `7.66666667` over the same 3 validation days
+- validation data-quality audit covers all 49 eligible validation events and reports `{"ok": 49}`
+- non-side split denominators come from matching eligible macro-event dates
+- policy-side split denominators use all 7 eligible performance-event dates for both policies
+- publication fails closed when fired episodes have a zero-day burden denominator
+
+The bounded recommendation remains `continue_shadow_collection`. M3 is accepted only as an offline comparison and evidence-collection contract. It is not accepted for production Big Chance behavior, notification, mail, scoring, thresholds, gates, classifiers, runtime, APIs, accounts, positions, or orders.
+
+M4 may resume only as a local render-only hierarchy shadow. Live UI deployment remains unauthorized.

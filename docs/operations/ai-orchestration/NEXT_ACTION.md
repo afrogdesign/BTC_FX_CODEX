@@ -1,31 +1,38 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-05`
+- current_work_id: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW-FIX-01`
 - mode: `BOUNDED_CODEX`
-- task_type: `M3 ELIGIBLE-DATE BURDEN AND VALIDATION-QUALITY CORRECTION`
+- task_type: `M4 LOCAL RENDER-SHADOW ACCEPTANCE FIX`
 - branch: `Ver04-v2`
-- active_spec: `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`
-- m3_implementation_head_before_fix: `3ae30f4`
+- active_spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
+- accepted_m3_head_reported: `d576862`
+- accepted_m3_spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
 - m3_recommendation: `continue_shadow_collection`
-- preserved_unaccepted_m4_commit: `5574a2e`
-- preserved_inactive_m4_draft: `chatgpt/specs/archive/20260721_macro_operator_hierarchy_render_shadow_draft.md`
+- preserved_m4_base: `5574a2e`
 - runtime_change: none
 
 ## Exact next action
 
-Correct M3 burden denominators and validation-period data-quality coverage, run one fresh bounded replay, and obtain ChatGPT M3 acceptance.
+Complete M4 FIX-01 against the preserved local renderer implementation.
 
 Required posture:
 
-- overall candidate and baseline burden use the same all-eligible-event JST-date denominator
-- validation candidate and baseline burden use the same validation-date denominator, including zero-episode dates
-- split burden uses the same split-specific eligible-event date denominator for both policies
-- validation data-quality checks include eligible events with no episode
-- candidate policy, baseline behavior, episode identity, thresholds, CLI contract, production behavior, and runtime remain unchanged
+- add and prove the actual offline CLI route
+- deduplicate one level geometry referenced by multiple semantic roles
+- fail closed or explicitly exclude reference/level-role mismatches
+- render event-time-safe support, resistance, target, obstruction, and reliability in the macro strip
+- draw tactical entry-zone bands separately from macro geometry
+- trace every displayed fact to logical source and field
+- retain tactical headline and next-condition wording as secondary detail
+- render visible baseline/challenger hierarchy comparison
+- preserve future-field exclusion and event-time boundaries
+- publish three outputs atomically even when their parent directories differ
 
 ## Completion posture
 
-M4 commit `5574a2e` is preserved but unaccepted. M4 FIX-01 may begin only after M3 FIX-05 acceptance. M5 is blocked.
+After M4 FIX-01, ChatGPT reviews source, focused tests, actual CLI output, and fresh bounded artifacts. M5 remains blocked until M4 is accepted.
+
+M4 does not authorize live UI deployment, notification or mail changes, runtime reflection, policy promotion, or automatic production mutation.
 
 Future bounded Codex work defaults to `GPT-5.4-mini Medium`.
 

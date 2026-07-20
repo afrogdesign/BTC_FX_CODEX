@@ -45,11 +45,38 @@ class MacroOperatorHierarchyShadowTests(unittest.TestCase):
             self.assertEqual(result["closed_1h_candle_count"], 1)
             self.assertEqual(result["tactical_candidate_count"], 1)
             self.assertTrue(result["chart_first_confirmation"])
-            self.assertIn("nearest_resistance:referenced ID / event-time geometry unavailable", manifest["missing_data_flags"])
+            self.assertIn("nearest_resistance:event_time_geometry_unavailable", manifest["missing_data_flags"])
             self.assertNotIn("future", {row["level_id"] for row in manifest["chart_model"]["macro_overlays"]})
             for output in outputs:
                 self.assertNotIn("FUTURE_SENTINEL", output.read_text())
             self.assertIn("&lt;script&gt;future-sentinel&lt;/script&gt;", outputs[0].read_text())
+
+    def test_role_mismatch_deduplicates_safe_target_and_tactical_zones(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); paths = self._fixture(root)
+            levels = list(csv.DictReader(paths["levels"].open()))
+            for row in levels:
+                if row["level_id"] == "support": row["role"] = "resistance"
+            _write(paths["levels"], levels)
+            outputs = [root / "html" / "out.html", root / "json" / "out.json", root / "md" / "out.md"]
+            result = render_macro_operator_hierarchy_shadow(signal_context_csv=paths["signals"], tactical_candidates_csv=paths["tactical"], macro_events_csv=paths["macro"], macro_levels_csv=paths["levels"], next_regime_events_csv=paths["m3"], ohlcv_1h_csv=paths["one"], ohlcv_4h_csv=paths["four"], signal_id="s1", output_html=outputs[0], output_json=outputs[1], output_md=outputs[2], replace_output=True)
+            manifest = json.loads(outputs[1].read_text())
+            self.assertEqual(result["event_time_safe_macro_overlay_count"], 1)
+            self.assertEqual(result["nearest_support_role_mismatch_count"], 1)
+            self.assertEqual(result["tactical_entry_zone_count"], 1)
+            self.assertEqual(manifest["chart_model"]["macro_overlays"][0]["semantic_labels"], ["target"])
+            support = manifest["macro_strip_model"]["references"]["nearest_support"]
+            self.assertEqual((support["status"], support["actual_level_role"]), ("reference_role_mismatch", "resistance"))
+            self.assertTrue(all(path.exists() for path in outputs))
+            self.assertIn('class="tactical-zone"', outputs[0].read_text())
+
+    def test_required_columns_and_tactical_geometry_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); paths = self._fixture(root)
+            rows = list(csv.DictReader(paths["tactical"].open())); rows[0]["entry_zone_low"] = "101"; rows[0]["entry_zone_high"] = "100"; _write(paths["tactical"], rows)
+            outputs = [root / "out.html", root / "out.json", root / "out.md"]
+            with self.assertRaisesRegex(ValueError, "tactical_geometry_invalid"):
+                render_macro_operator_hierarchy_shadow(signal_context_csv=paths["signals"], tactical_candidates_csv=paths["tactical"], macro_events_csv=paths["macro"], macro_levels_csv=paths["levels"], next_regime_events_csv=paths["m3"], ohlcv_1h_csv=paths["one"], signal_id="s1", output_html=outputs[0], output_json=outputs[1], output_md=outputs[2], replace_output=True)
 
     def test_zero_tactical_candidates_and_required_future_level_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

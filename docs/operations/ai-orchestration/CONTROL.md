@@ -499,3 +499,18 @@ Directive:
 - keep 3H as the primary gate horizon
 - do not change policy semantics, thresholds, production, runtime, notification, mail, or orders
 - do not start M4 FIX-01 or M5 before ChatGPT accepts FIX-05
+
+
+## M3 FIX-05 acceptance and M4 FIX-01 control — 2026-07-21
+
+- M3 FIX-05 accepted as offline/report-only only.
+- accepted M3 head reported: `d576862`
+- accepted M3 recommendation: `continue_shadow_collection`
+- active spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
+- current work: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW-FIX-01`
+- preserved M4 implementation base: `5574a2e`
+- M4 acceptance: pending
+- M5: not started
+- live UI deployment: prohibited
+- production notification, mail, scoring, thresholds, gates, classifiers, runtime, APIs, accounts, positions, and orders: unchanged
+- safety: report-only / not FORMAL_GO / no automatic order / human decides manually
