@@ -391,3 +391,20 @@ Required handling:
 For the bounded signal `20260719_130500`, the tactical candidate rows are intentionally multi-row and must be joined by `source_signal_id`; this is not a duplicate-key error. Candidate identity remains `candidate_id`.
 
 This section supersedes any broader reading that permits final cumulative level rows to be used without an event-time check.
+
+---
+
+## 21. Acceptance hold after M3 FIX-05 review — controlling status
+
+This section supersedes Section 19's active authorization.
+
+- implementation base preserved: `5574a2e`
+- current status: implementation present, acceptance withheld, inactive draft
+- M3 prerequisite: `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-05` and ChatGPT acceptance
+- M4 follow-up after M3 acceptance: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW-FIX-01`
+- M5: blocked
+- live UI deployment: prohibited
+
+The current renderer remains useful local work, but it is not accepted because unique level geometry, reference/role consistency, complete macro-strip content, full displayed-fact traceability, tactical entry-zone bands, required focused regressions, actual CLI proof, and multi-parent atomic publication still require review and correction.
+
+Do not delete or reset commit `5574a2e`. Reactivate this specification only after M3 FIX-05 acceptance.

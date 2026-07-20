@@ -12,6 +12,7 @@ from src.feedback.macro_next_regime_replay import (
     _episode_rows,
     _forecast,
     _gate,
+    _horizons,
     baseline_evidence_key,
     candidate_evidence_key,
     baseline_adapter,
@@ -30,6 +31,31 @@ def _event(signal_id: str, at: str, **overrides: object) -> dict[str, object]:
 
 
 class MacroNextRegimeReplayTests(unittest.TestCase):
+    def test_burden_uses_common_explicit_eligible_dates(self) -> None:
+        def episode(policy: str, day: int) -> dict[str, object]:
+            return {"policy": policy, "start_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00", "side": "UP", "outcome_3h": "large_up", "outcome_6h": "large_up", "outcome_12h": "large_up", "outcome_24h": "large_up", "first_material_move_timestamp": "", "data_quality_status": "ok"}
+        dates = {"2026-01-01", "2026-01-02", "2026-01-03"}
+        candidate, baseline = _horizons([episode("candidate", 1)], dates, "eligible_performance_event_dates"), _horizons([episode("baseline", 2), episode("baseline", 2)], dates, "eligible_performance_event_dates")
+        self.assertEqual(candidate["3h"]["burden_per_jst_day"], round(1 / 3, 8))
+        self.assertEqual(baseline["3h"]["burden_per_jst_day"], round(2 / 3, 8))
+        for metrics in (candidate, baseline):
+            for horizon in metrics.values(): self.assertEqual((horizon["burden_jst_day_count"], horizon["burden_date_basis"]), (3, "eligible_performance_event_dates"))
+
+    def test_gate_audits_zero_episode_validation_event_quality(self) -> None:
+        def episode(policy: str, day: int) -> dict[str, object]:
+            return {"policy": policy, "start_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00", "side": "UP", "outcome_3h": "large_up", "outcome_6h": "large_up", "outcome_12h": "large_up", "outcome_24h": "large_up", "first_material_move_timestamp": "", "data_quality_status": "ok"}
+        eligible = [{"event_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00", "data_quality_status": "ok"} for day in range(1, 5)] + [{"event_timestamp_utc": "2026-01-05T00:00:00+00:00", "data_quality_status": ""}]
+        gate = _gate([episode("candidate", 4), episode("baseline", 4)], eligible, True)
+        self.assertEqual(gate["validation_dates"], ["2026-01-04", "2026-01-05"])
+        self.assertEqual(gate["validation_eligible_event_count"], 2)
+        self.assertFalse(gate["validation_data_quality_pass"])
+        self.assertEqual(gate["validation_data_quality_status_counts"], {"missing": 1, "ok": 1})
+        self.assertEqual(gate["validation_data_quality_issue_event_count"], 1)
+        self.assertIn("validation_data_quality_unresolved", gate["reason_codes"])
+        for policy in ("validation_candidate_metrics", "validation_baseline_metrics"):
+            self.assertEqual(gate[policy]["3h"]["burden_jst_day_count"], 2)
+            self.assertEqual(gate[policy]["3h"]["burden_date_basis"], "eligible_validation_event_dates")
+
     def test_candidate_owned_failed_thesis_is_non_directional_watch(self) -> None:
         signal = {"failed_breakout_state": "failed_long_breakout"}
         event = _event("a", "2026-01-01T00:00:00+00:00", directional_activation="NONE", event_family="")

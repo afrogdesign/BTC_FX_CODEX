@@ -158,23 +158,22 @@ def _episode_rows(records: list[dict[str, Any]], policy: str) -> list[dict[str, 
     return chosen
 
 
-def _metrics(episodes: list[dict[str, Any]], horizon: str) -> dict[str, Any]:
+def _metrics(episodes: list[dict[str, Any]], horizon: str, observation_dates: set[str], burden_date_basis: str) -> dict[str, Any]:
     field = "outcome_" + horizon
     resolved = [row for row in episodes if row.get(field) and row.get(field) != "unresolved"]
     directional = [row for row in resolved if row["side"] in {"UP", "DOWN"}]
     correct = [row for row in directional if (row["side"] == "UP" and row[field] == "large_up") or (row["side"] == "DOWN" and row[field] == "large_down")]
     opposite = [row for row in directional if (row["side"] == "UP" and row[field] == "large_down") or (row["side"] == "DOWN" and row[field] == "large_up")]
-    dates = {(_dt(row["start_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in episodes}
     leads = []
     for row in resolved:
         if row["first_material_move_timestamp"]:
             leads.append((_dt(row["first_material_move_timestamp"]) - _dt(row["start_timestamp_utc"])).total_seconds() / 60)
     ratio = lambda n, d: round(n / d, 8) if d else None
-    return {"fired_episodes": len(episodes), "resolved_episodes": len(resolved), "directional_precision": ratio(len(correct), len(directional)), "opposite_move_rate": ratio(len(opposite), len(directional)), "balanced_no_expansion_rate": ratio(sum(row[field] == "balanced_no_expansion" for row in resolved), len(resolved)), "whipsaw_rate": ratio(sum(row[field] == "whipsaw_both" for row in resolved), len(resolved)), "unresolved_rate": ratio(len(episodes) - len(resolved), len(episodes)), "median_lead_minutes": round(median(leads), 8) if leads else None, "burden_per_jst_day": ratio(len(episodes), len(dates)), "event_based_coverage": "not_independent_large_move_recall", "resolved_up_count": sum(row["side"] == "UP" for row in directional), "resolved_down_count": sum(row["side"] == "DOWN" for row in directional)}
+    return {"fired_episodes": len(episodes), "resolved_episodes": len(resolved), "directional_precision": ratio(len(correct), len(directional)), "opposite_move_rate": ratio(len(opposite), len(directional)), "balanced_no_expansion_rate": ratio(sum(row[field] == "balanced_no_expansion" for row in resolved), len(resolved)), "whipsaw_rate": ratio(sum(row[field] == "whipsaw_both" for row in resolved), len(resolved)), "unresolved_rate": ratio(len(episodes) - len(resolved), len(episodes)), "median_lead_minutes": round(median(leads), 8) if leads else None, "burden_per_jst_day": ratio(len(episodes), len(observation_dates)), "burden_jst_day_count": len(observation_dates), "burden_date_basis": burden_date_basis, "event_based_coverage": "not_independent_large_move_recall", "resolved_up_count": sum(row["side"] == "UP" for row in directional), "resolved_down_count": sum(row["side"] == "DOWN" for row in directional)}
 
 
-def _horizons(episodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {horizon: _metrics(episodes, horizon) for horizon in ("3h", "6h", "12h", "24h")}
+def _horizons(episodes: list[dict[str, Any]], observation_dates: set[str], burden_date_basis: str) -> dict[str, dict[str, Any]]:
+    return {horizon: _metrics(episodes, horizon, observation_dates, burden_date_basis) for horizon in ("3h", "6h", "12h", "24h")}
 
 
 def _jst_date(timestamp: Any) -> str:
@@ -185,9 +184,10 @@ def _gate(episodes: list[dict[str, Any]], eligible_events: list[dict[str, Any]],
     """Gate on all eligible event dates, not only dates where a policy fired."""
     dates = sorted({_jst_date(row["event_timestamp_utc"]) for row in eligible_events})
     validation = dates[math.floor(len(dates) * .6):] if len(dates) >= 5 else []
-    validation_rows = [row for row in episodes if _jst_date(row["start_timestamp_utc"]) in validation]
-    validation_candidate = _horizons([row for row in validation_rows if row["policy"] == "candidate"])
-    validation_baseline = _horizons([row for row in validation_rows if row["policy"] == "baseline"])
+    validation_dates = set(validation)
+    validation_rows = [row for row in episodes if _jst_date(row["start_timestamp_utc"]) in validation_dates]
+    validation_candidate = _horizons([row for row in validation_rows if row["policy"] == "candidate"], validation_dates, "eligible_validation_event_dates")
+    validation_baseline = _horizons([row for row in validation_rows if row["policy"] == "baseline"], validation_dates, "eligible_validation_event_dates")
     counts = validation_candidate["3h"]; reasons = []
     if not validation: reasons.append("validation_not_established")
     if counts["resolved_up_count"] < 10: reasons.append("validation_up_resolved_lt_10")
@@ -196,11 +196,14 @@ def _gate(episodes: list[dict[str, Any]], eligible_events: list[dict[str, Any]],
         left, right = counts.get(key), validation_baseline["3h"].get(key)
         if left is None or right is None or worse(left, right): reasons.append(reason)
     if not source_ok: reasons.append("source_coverage_or_continuity_failed")
-    if any(row.get("data_quality_status") not in {"ok", ""} for row in validation_rows): reasons.append("validation_data_quality_unresolved")
+    validation_events = [row for row in eligible_events if _jst_date(row["event_timestamp_utc"]) in validation_dates]
+    quality_counts = Counter((str(row.get("data_quality_status", "")).strip() or "missing") for row in validation_events)
+    quality_pass = bool(validation_events) and set(quality_counts) == {"ok"}
+    if not quality_pass: reasons.append("validation_data_quality_unresolved")
     candidate_dates = [_jst_date(row["start_timestamp_utc"]) for row in validation_rows if row["policy"] == "candidate"]
     if candidate_dates and max(Counter(candidate_dates).values()) / len(candidate_dates) > .5:
         reasons.append("single_jst_date_concentration")
-    return {"status": "eligible_for_m4_render_shadow" if not reasons else "continue_shadow_collection", "reason_codes": sorted(set(reasons)), "primary_gate_horizon": "3h", "validation_date_basis": "eligible_performance_events", "eligible_event_jst_dates": dates, "validation_dates": validation, "validation_candidate_metrics": validation_candidate, "validation_baseline_metrics": validation_baseline, "resolved_validation_up_count": counts["resolved_up_count"], "resolved_validation_down_count": counts["resolved_down_count"]}
+    return {"status": "eligible_for_m4_render_shadow" if not reasons else "continue_shadow_collection", "reason_codes": sorted(set(reasons)), "primary_gate_horizon": "3h", "validation_date_basis": "eligible_performance_events", "eligible_event_jst_dates": dates, "validation_dates": validation, "validation_candidate_metrics": validation_candidate, "validation_baseline_metrics": validation_baseline, "resolved_validation_up_count": counts["resolved_up_count"], "resolved_validation_down_count": counts["resolved_down_count"], "validation_eligible_event_count": len(validation_events), "validation_data_quality_pass": quality_pass, "validation_data_quality_status_counts": dict(sorted(quality_counts.items())), "validation_data_quality_issue_event_count": sum(count for status, count in quality_counts.items() if status != "ok")}
 
 
 def _csv(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> bytes:
@@ -266,15 +269,18 @@ def replay_macro_next_regime(*, signals: Path, macro_events: Path, macro_levels:
         records.append({"event": event, "forecast": record}); previous = signal
     event_output = [record["forecast"] for record in records]
     episodes = sorted(_episode_rows(records, "baseline") + _episode_rows(records, "candidate"), key=lambda row: (row["start_timestamp_utc"], row["policy"], row["episode_id"]))
-    candidate_metrics, baseline_metrics = _horizons([row for row in episodes if row["policy"] == "candidate"]), _horizons([row for row in episodes if row["policy"] == "baseline"])
+    eligible_dates = {_jst_date(row["event_timestamp_utc"]) for row in event_output}
+    candidate_metrics, baseline_metrics = _horizons([row for row in episodes if row["policy"] == "candidate"], eligible_dates, "eligible_performance_event_dates"), _horizons([row for row in episodes if row["policy"] == "baseline"], eligible_dates, "eligible_performance_event_dates")
     gate = _gate(episodes, event_output, bool(summary.get("coverage", {}).get("continuity_pass", False)))
     def splits(policy: str) -> dict[str, Any]:
         source = [row for row in episodes if row["policy"] == policy]
-        return {key: {value: _horizons([row for row in source if row.get(key, "insufficient") == value]) for value in sorted({str(row.get(key, "insufficient")) for row in source})} for key in ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band")}
+        event_values = {"side": {row["signal_id"]: str(event_map[row["signal_id"]].get("directional_activation", "NONE")) for row in event_output}, **{key: {row["signal_id"]: str(row.get(key, "insufficient")) for row in event_output} for key in ("structural_state", "price_location", "volatility_state", "level_reliability_band")}}
+        values = {key: sorted(set(event_values[key].values()) | {str(row.get(key, "insufficient")) for row in source}) for key in event_values}
+        return {key: {value: _horizons([row for row in source if row.get(key, "insufficient") == value], {_jst_date(event_map[sid]["event_timestamp_utc"]) for sid, event_value in event_values[key].items() if event_value == value}, "eligible_split_event_dates") for value in values[key]} for key in event_values}
     # Episode-only fields retain event-time categories without allowing source-only categories.
     for row in episodes:
         event = event_map[row["signal_id"]]; row.update({"structural_state": event.get("structural_state", "insufficient"), "price_location": event.get("price_location", "insufficient"), "volatility_state": event.get("volatility_state", "insufficient"), "level_reliability_band": event.get("level_reliability_band", "low")})
     output = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "primary_gate_horizon": "3h", "safety_boundary": SAFETY, "counts": {"events": len(event_output), "candidate_episodes": candidate_metrics["3h"]["fired_episodes"], "baseline_episodes": baseline_metrics["3h"]["fired_episodes"]}, "metrics": {"candidate": candidate_metrics, "baseline": baseline_metrics}, "splits": {"candidate": splits("candidate"), "baseline": splits("baseline")}, "recommendation": gate, "data_quality": {"coverage_continuity_pass": bool(summary["coverage"]["continuity_pass"]), "context_only_excluded": len(signal_rows) - len(performance), "eligible_event_jst_date_count": len(gate["eligible_event_jst_dates"])}, "input_versions": {"macro_schema_version": summary.get("schema_version"), "macro_method_version": summary.get("method_version")}}
-    markdown = "# Macro Next-Regime Offline Shadow\n\n## Counts\n\n- events: %d\n\n## Baseline and Candidate Horizons\n\n- Primary M3 proposal-gate horizon: 3H. The 6H, 12H, and 24H horizons are descriptive diagnostics only; none authorize production behavior.\n\n%s\n\n## Split Highlights\n\n- dimensions: direction, structural_state, price_location, volatility_state, level_reliability_band\n\n## Validation Comparison\n\n- date basis: eligible performance events (JST)\n- primary gate horizon: 3H\n- dates: %s\n\n## Recommendation\n\n- status: %s\n- reason_codes: %s\n\n## Source Coverage\n\n- continuity_pass: %s\n\n## Limitations\n\n- event-based coverage only; not independent large-move recall\n\n## Safety Boundary\n\n- %s\n" % (len(event_output), json.dumps({"candidate": candidate_metrics, "baseline": baseline_metrics}, sort_keys=True), ", ".join(gate["validation_dates"]), gate["status"], ", ".join(gate["reason_codes"]), summary["coverage"]["continuity_pass"], SAFETY)
+    markdown = "# Macro Next-Regime Offline Shadow\n\n## Counts\n\n- events: %d\n- overall eligible JST days: %d\n\n## Baseline and Candidate Horizons\n\n- Primary M3 proposal-gate horizon: 3H. The 6H, 12H, and 24H horizons are descriptive diagnostics only; none authorize production behavior.\n- candidate 3H burden: %s / %d\n- baseline 3H burden: %s / %d\n\n## Split Highlights\n\n- dimensions: direction, structural_state, price_location, volatility_state, level_reliability_band\n\n## Validation Comparison\n\n- date basis: eligible performance events (JST)\n- validation eligible JST days: %d\n- candidate 3H burden: %s / %d\n- baseline 3H burden: %s / %d\n- validation data quality pass: %s\n- validation data quality statuses: %s\n- primary gate horizon: 3H\n- dates: %s\n\n## Recommendation\n\n- status: %s\n- reason_codes: %s\n\n## Source Coverage\n\n- continuity_pass: %s\n\n## Limitations\n\n- event-based coverage only; not independent large-move recall\n\n## Safety Boundary\n\n- %s\n" % (len(event_output), len(eligible_dates), candidate_metrics["3h"]["burden_per_jst_day"], candidate_metrics["3h"]["burden_jst_day_count"], baseline_metrics["3h"]["burden_per_jst_day"], baseline_metrics["3h"]["burden_jst_day_count"], len(gate["validation_dates"]), gate["validation_candidate_metrics"]["3h"]["burden_per_jst_day"], gate["validation_candidate_metrics"]["3h"]["burden_jst_day_count"], gate["validation_baseline_metrics"]["3h"]["burden_per_jst_day"], gate["validation_baseline_metrics"]["3h"]["burden_jst_day_count"], gate["validation_data_quality_pass"], json.dumps(gate["validation_data_quality_status_counts"], sort_keys=True), ", ".join(gate["validation_dates"]), gate["status"], ", ".join(gate["reason_codes"]), summary["coverage"]["continuity_pass"], SAFETY)
     _atomic({output_events_csv: _csv(event_output, EVENT_FIELDS), output_episodes_csv: _csv(episodes, EPISODE_FIELDS), output_json: (json.dumps(output, sort_keys=True, indent=2) + "\n").encode(), output_md: markdown.encode()}, replace_output)
     return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "counts": output["counts"], "recommendation": gate["status"]}

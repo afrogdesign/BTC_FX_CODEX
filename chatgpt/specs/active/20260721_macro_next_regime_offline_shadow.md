@@ -269,6 +269,12 @@ FIX-04 corrects the chronological validation date basis to all eligible performa
 
 The M3 proposal gate uses `3h` as its explicit primary horizon. The `6h`, `12h`, and `24h` metrics and splits remain required descriptive diagnostics only. Any future eligibility remains render-only M4 design eligibility and never authorizes production behavior.
 
+## 17. FIX-05 burden and validation-quality contract
+
+`burden_per_jst_day` uses explicit eligible performance-event JST observation dates: common full-period dates, common validation dates, and common split-specific eligible-event dates. Dates with zero policy episodes remain in each applicable denominator.
+
+Validation data quality is audited from every eligible validation event. Only `ok` passes; blank or non-`ok` values are normalized and fail closed. This correction does not change forecasts, episode identity, family policy, thresholds, or production behavior.
+
 ---
 
 ## 17. Final ChatGPT acceptance after FIX-04 — 2026-07-21
@@ -301,3 +307,22 @@ Final accepted evidence:
 The final bounded recommendation is `continue_shadow_collection`. M3 is accepted only as an offline, report-only comparison contract. It is not accepted for production Big Chance behavior, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order changes.
 
 M4 may proceed only as a local render-only hierarchy shadow. No live UI deployment is authorized.
+
+---
+
+## 18. Correction — FIX-05 burden denominator and validation quality review
+
+The final acceptance recorded in Section 17 is withdrawn pending FIX-05 review. M3 is active again. M4 implementation commit `5574a2e` is preserved as unaccepted local render work, but M4 acceptance and M5 start are blocked until this correction is accepted.
+
+FIX-05 requirements:
+
+- `burden_per_jst_day` must use an explicit eligible-performance-event JST-date denominator for the relevant evaluation window, not only dates on which an episode fired.
+- Candidate and frozen baseline metrics must use the same denominator date set.
+- Overall metrics use all eligible performance-event JST dates.
+- Chronological validation metrics use the common validation JST dates, including dates with zero candidate or baseline episodes.
+- Split burden metrics use the same split-specific eligible-event date set for candidate and baseline.
+- Output metrics must expose the denominator basis and denominator date count so the burden calculation is auditable.
+- Validation data-quality checks must inspect all eligible performance events in the validation dates, including dates and rows with no policy episode.
+- An unresolved validation event-quality issue must fail the render-eligibility gate without retroactively changing forecasts or episode identity.
+
+The recommendation remains report-only. FIX-05 must not change candidate semantics, Big Chance baseline behavior, episode boundaries, thresholds, notifications, runtime, or orders.

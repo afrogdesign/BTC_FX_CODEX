@@ -1094,3 +1094,20 @@ M2 is accepted at source commit `8aee427`.
 - M4 render-only hierarchy shadow is active at `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`.
 - M4 implementation has not yet started.
 - No production UI, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.
+
+
+---
+
+## 2026-07-21 M3 FIX-05 reactivation and M4 acceptance hold
+
+A subsequent acceptance review found that M3 `burden_per_jst_day` still used episode-bearing dates rather than the eligible-performance-event date set, and validation data-quality checks did not cover eligible validation events with no policy episode.
+
+Current correction:
+
+- M3 is active again at `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`.
+- next work is `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-05`.
+- M4 implementation commit `5574a2e` is preserved but not accepted.
+- M4 specification is preserved inactive at `chatgpt/specs/archive/20260721_macro_operator_hierarchy_render_shadow_draft.md`.
+- M4 FIX-01 and M5 are blocked until M3 FIX-05 acceptance.
+- the recommendation remains `continue_shadow_collection`.
+- no production, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.

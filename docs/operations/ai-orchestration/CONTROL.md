@@ -479,3 +479,23 @@ This section supersedes the older `Current next task` block above.
 - active M4 spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
 - M4 authorization is local render-only hierarchy shadow; live UI deployment is not authorized
 - current next work ID: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW`
+
+
+---
+
+## M3 FIX-05 directive — eligible-date burden and validation quality
+
+- active work: `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-05`
+- active spec: `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`
+- preserved M4 base: commit `5574a2e`
+- preserved M4 draft: `chatgpt/specs/archive/20260721_macro_operator_hierarchy_render_shadow_draft.md`
+
+Directive:
+
+- pass explicit eligible-event JST date sets into M3 burden metrics
+- use common denominators for candidate and baseline
+- include zero-episode eligible dates
+- include no-episode eligible validation rows in data-quality gating
+- keep 3H as the primary gate horizon
+- do not change policy semantics, thresholds, production, runtime, notification, mail, or orders
+- do not start M4 FIX-01 or M5 before ChatGPT accepts FIX-05
