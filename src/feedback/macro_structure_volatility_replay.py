@@ -647,7 +647,7 @@ def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[st
     current_ids = {row.get("opportunity_id") for row in v if row.get("opportunity_id") and _policy_side(row.get("event") or {}, "current_notification", row.get("signal"))}
     if len(candidate_ids - current_ids) <= 1: reasons.append("single_opportunity_dependence")
     if any((row.get("event") or {}).get("data_quality_status") != "ok" for row in v): reasons.append("validation_unresolved_data")
-    return {"status": "eligible_for_next_design_proposal" if not reasons else "continue_shadow_collection" if split["status"] == "established" else "insufficient_evidence", "reasons": sorted(set(reasons)) or ["all_declared_gate_conditions_pass"], "validation_policy_metrics": validation_metrics}
+    return {"status": "eligible_for_next_design_proposal" if not reasons else "continue_shadow_collection" if split["status"] == "established" else "insufficient_evidence", "reasons": sorted(set(reasons)) or ["all_declared_gate_conditions_pass"], "validation_policy_metrics": validation_metrics, "validation_up_resolved": up, "validation_down_resolved": down}
 
 
 def _markdown(summary: dict[str, Any]) -> str:

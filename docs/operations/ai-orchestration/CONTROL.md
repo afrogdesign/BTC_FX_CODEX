@@ -322,3 +322,83 @@ The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary re
 - daily schedule remains 11:30 JST and all paths remain in the primary repo
 - first normal scheduled cycle is the acceptance event; no manual P8 cycle, mail, notification, monitor restart, or other LaunchAgent operation occurred
 - report-only / not FORMAL_GO / no automatic order / no automatic tuning; P9 remains blocked
+
+
+---
+
+## 2026-07-20 control refresh
+
+This section supersedes the older `Current next task` block above.
+
+- current work ID: `BTCFX-20260720-MTP-P8-OPERATING-EVIDENCE-COLLECTION`
+- mode: `OBSERVE`
+- active spec: none
+- Japanese operator-action UI source and runtime artifact acceptance are complete
+- current monitor evidence extends through signal `20260720_090500`; current process identity was not directly queried
+- scheduled P8 cycle `20260720` completed successfully with 86 resolved, 8 unresolved and 0 no-OHLCV rows
+- turning precursor shadow remains report-only with recommendation `continue_shadow_collection`
+- actual-backed episode count remains 0 and P9 readiness remains false / false
+- no source, runtime, notification or tuning task is currently authorized
+- next action is continued automatic evidence collection and exception-only review
+- safety remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-20 control update — macro structure / volatility evidence
+
+- human live-trading feedback identifies higher-timeframe location and reliable support/resistance as the next product priority
+- current structural priority remains a useful trend vote but is not a full range-location or volatility-expansion model
+- new plan: `docs/operations/strategy/MACRO_STRUCTURE_VOLATILITY_SELF_IMPROVEMENT_PLAN_20260720.md`
+- active spec: `chatgpt/specs/active/20260720_macro_structure_volatility_evidence_layer.md`
+- current work ID: `BTCFX-20260720-MACRO-STRUCTURE-VOLATILITY-EVIDENCE-SPEC`
+- mode: `HUMAN_CHECK`
+- next implementation, if approved, is M1 offline evidence only
+- no production structural-priority, Big Chance, HTML, scoring, gate, threshold, notification, mail, runtime, API, account, position, or order change is authorized
+- normal monitor and P8 daily evidence collection continue unchanged
+- safety remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## 2026-07-20 macro structure improvement implementation authorization
+
+- current_work_id: `BTCFX-20260720-MACRO-STRUCTURE-VOLATILITY-EVIDENCE-IMPLEMENTATION`
+- mode: `CODEX_EXEC`
+- current active spec: `chatgpt/specs/active/20260720_macro_structure_volatility_evidence_layer.md`
+- M1 source implementation is human-authorized.
+- broader thread milestone is M5 shadow/self-improvement completion, but each phase requires ChatGPT acceptance and a separate bounded active spec.
+- M1 must remain offline, deterministic, event-time, report-only, and must not edit production analysis, UI, notification, mail, runtime, scoring, gates, classifiers, or thresholds.
+- the thread must stop before M6 runtime apply or any automatic production adoption.
+- normal monitor and daily P8 operation continue unchanged during implementation.
+- report-only / not FORMAL_GO / no automatic order / human decides manually.
+
+
+## 2026-07-20 M1 research-backed scope correction
+
+- current work remains `BTCFX-20260720-MACRO-STRUCTURE-VOLATILITY-EVIDENCE-IMPLEMENTATION`
+- source implementation is authorized only under the corrected active-spec Section 23
+- mandatory foundation: reliable 1H/4H structural levels, lifecycle, and prior-only reliability
+- expansion risk and direction are separate outputs
+- compression is a state variable, not proof of imminent expansion
+- midpoint/equilibrium is optional exploratory context only
+- order-flow, aggressive-side, depth, liquidity, repeated-test, rejection, break, acceptance, and reclaim evidence must remain independently inspectable
+- missing microstructure inputs fail closed
+- no production structural-priority, Big Chance, HTML, score, gate, threshold, notification, mail, or runtime change in M1
+- next phases still require separate active specs and ChatGPT acceptance
+- report-only / not FORMAL_GO / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-21 M1 acceptance / M2 control update
+
+- accepted M1 commit: `663288b`
+- archived M1 spec: `chatgpt/specs/archive/20260720_macro_structure_volatility_evidence_layer.md`
+- current active spec: `chatgpt/specs/active/20260721_macro_structure_p8_auxiliary_shadow.md`
+- current work ID: `BTCFX-20260721-MACRO-STRUCTURE-P8-AUXILIARY-SHADOW`
+- mode: `CODEX_EXEC`
+- M1 acceptance covers deterministic offline macro evidence only
+- M2 scope is an optional, disabled-by-default P8 auxiliary shadow
+- M2 may reuse the core validated 15-minute OHLCV and fetch bounded public 1-hour and 4-hour OHLCV through the accepted fetcher
+- M2 must preserve core P8 and turning-shadow success independently from macro-shadow failure
+- no installed flag, plist, schedule, runtime, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, or order change is authorized
+- M3 remains blocked until M2 source implementation and ChatGPT acceptance
+- report-only / not FORMAL_GO / no automatic order / human decides manually

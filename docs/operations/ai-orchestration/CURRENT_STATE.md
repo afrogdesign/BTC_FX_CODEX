@@ -782,3 +782,250 @@ Human explicitly approved enabling the already validated turning precursor shado
 - tactical scores remain independent short-term execution scores and side-aware 15-minute action, zones, SL, TP1, TP2 and no-chase remain unchanged
 - future naturally generated HTML/CSV rows use the new output; historical artifacts were not regenerated
 - monitor.err remained 0 bytes with no restart error; no scoring, gate, notification, mail, schedule, API or order behavior changed
+
+
+---
+
+## 2026-07-12 current checkpoint correction
+
+- structural-priority source commit `9a32e42` is deployed to the active primary monitor runtime
+- runtime apply completed at `2026-07-12T17:18:21+09:00`
+- runtime path is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- the first naturally generated normal post-apply signal remains the acceptance event
+- latest inspected signal `20260712_080500` was generated at `2026-07-12T17:05:00.635403+09:00`, before the apply, and is not an acceptance sample
+- no manual cycle, additional restart, historical regeneration, or tuning is authorized
+- safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
+
+
+## 2026-07-13 operator-action Japanese UI source acceptance
+
+The public detail HTML redesign for the operator-action and current trading-decision blocks is accepted by ChatGPT MCP source review through Codex-reported commit `03ec916`.
+
+- primary visible wording is Japanese rather than raw action/state tokens
+- known Long / Short B headlines remain directional
+- unknown-side B and generic non-B headlines fail closed without implying Long or Short
+- STOP remains `新規見送り・保護確認`
+- no-chase wording is not duplicated
+- matching regression assertions are present
+- Codex reported the targeted notification detail-page unittest and `git diff --check` passed
+- implementation spec archived to `chatgpt/specs/archive/20260713_operator_action_japanese_ui_redesign.md`
+- runtime apply has not been performed and requires separate explicit human approval
+- no notification, mail, classifier, score, gate, threshold, API, account, position or order behavior changed
+
+
+---
+
+## 2026-07-14 structural-priority acceptance
+
+- first post-apply normal cycle: `20260712_090501`, `2026-07-12T18:05:01.094661+09:00`; not notified, so no detail HTML
+- first complete CSV / signal / HTML sample: `20260712_100500`, `2026-07-12T19:05:00.322398+09:00`
+- structural priority: Long 43 / Short 57; side `short`; strength `slight`; label `Short やや優勢`
+- turning: `short / confirmed`; alignment: `countertrend`
+- side-aware primary action: `LONG B_CHECK_15M / armed`; Short: `STOP_OR_EXIT / invalidated`
+- CSV check passed: required structural and side-aware fields, 10–90 points, lower-case strength, no pre-apply `Short priority` wording in the acceptance row
+- HTML check passed: structural heading, Japanese direction heading, 4H 75% / 1H 25% note, structural points and label, turning, alignment, side-aware action, short-term scores, entry zones, SL, TP1, and TP2
+- later natural late sample `20260713_020500` displayed `追いかけ禁止`
+- no source defect found; no tuning is authorized from one case
+
+
+---
+
+## 2026-07-14 operator-action Japanese UI runtime apply
+
+Human deployment report:
+
+- target: `com.afrog.btc-monitor`
+- old PID: `15029`; replacement PID: `90160`
+- execution path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- UI source: commit `03ec916`
+- no mail send, manual cycle, or other-service operation
+- no post-restart `monitor.err` addition reported
+
+Directly verified through AFROG MCP:
+
+- `logs/runtime/startup_status.json` records PID `90160`, timezone `Asia/Tokyo`, and startup timestamp `2026-07-14T00:57:07.931511+09:00`
+- the first scheduled post-restart cycle completed naturally as signal `20260713_160500` at `2026-07-14T01:05:00.662420+09:00`
+- that cycle was `signal_tier=normal`, `was_notified=false`, and `detail_page_status=disabled`
+
+Assessment:
+
+- replacement startup and continued scheduled execution are confirmed
+- the first post-restart cycle produced no notification HTML, so the Japanese UI runtime rendering is not yet artifact-accepted
+- wait for the first naturally notified post-restart detail HTML; do not run a manual cycle or regenerate historical artifacts
+- runtime remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-20 current operational refresh
+
+Direct AFROG MCP verification:
+
+- `chatgpt/specs/active/` is empty except for `.gitkeep`; no source implementation task is active
+- normal monitor artifacts continue through signal `20260720_090500` at `2026-07-20T18:05:00.302090+09:00`; that latest inspected cycle was non-notified
+- a current notified main artifact exists for signal `20260720_080500` at `2026-07-20T17:05:00.912813+09:00`
+- generated HTML: `logs/notifications_html/manual-trading/main/20260720_080500.html`
+- Japanese operator-action runtime rendering is accepted from natural artifacts:
+  - directional Japanese headline and Long / Short cards are present
+  - timeframe chips and A / B / C / STOP guide are Japanese
+  - safety wording, entry zones, invalidation, TP1 and TP2 are preserved
+  - `SHORT B_CHECK_15M` is absent from the primary UI of the inspected main artifact
+  - natural late follow-up `20260720_070500` displays `追いかけ禁止`; the duplicate form `追いかけ禁止 / 追いかけ禁止` is absent
+- `monitor.err` and `p8_daily_cycle.launchd.err` are currently zero bytes
+- `logs/runtime/startup_status.json` still records the 2026-07-14 startup PID `90160`; this is a startup record, not a newly verified current process identity
+- `logs/runtime/monitor.pid` contains an older inconsistent value, so it is not used as current runtime evidence
+
+Latest P8 scheduled evidence cycle:
+
+- report date: `20260720`; status: success; finished `2026-07-20T11:30:03.866119+09:00`
+- 212 candidate rows / 114 signals / 94 scenarios; 86 resolved / 8 unresolved / 0 no-OHLCV
+- class output: `STOP_OR_EXIT=94`; comparison: aligned 50 / too defensive 36
+- ISSUE-001 qualified rows: 45; counterfactual B 6 / C 39
+- turning precursor shadow is enabled and succeeded; recommendation remains `continue_shadow_collection`
+- turning precursor validation remains thin and asymmetric: UP 1 / DOWN 4; actual-backed count 0
+- actual input status is missing; eligible actual episodes 0
+- P9 initial and practical readiness remain false; no tuning is authorized
+
+Assessment:
+
+- Japanese UI runtime acceptance is complete
+- P8 automatic report-only evidence collection is operating normally
+- no source defect or immediate Codex task is identified
+- current posture returns to normal observation and evidence collection
+- safety remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-20 macro structure / volatility product-design activation
+
+Human live-trading feedback confirms that the current notification HTML is useful, especially the 15-minute chart with Entry / SL / TP and the Big Chance block as an approximate next-regime cue. The main usability and prediction gap is now more specific:
+
+- the current structural-priority score is useful as a trend vote but does not show a complete higher-timeframe market location
+- the operator needs reliable broad support/resistance, range edges, midpoint/equilibrium, and expected travel to the next major level
+- repeated large moves around broad structural midpoint conditions are not directly represented in the current replay contract
+- current tactical direction and later next-regime risk need separate explicit forecasts
+- the large operator-action block is difficult to scan; its redesign is deferred until the underlying macro evidence is improved
+
+New strategy plan:
+
+```text
+docs/operations/strategy/MACRO_STRUCTURE_VOLATILITY_SELF_IMPROVEMENT_PLAN_20260720.md
+```
+
+New active specification:
+
+```text
+chatgpt/specs/active/20260720_macro_structure_volatility_evidence_layer.md
+```
+
+The planned route is:
+
+```text
+M1 offline macro structure / reliable-level / midpoint / expansion evidence
+→ M2 optional P8 auxiliary shadow
+→ M3 Big Chance next-regime contract
+→ M4 chart-first operator hierarchy shadow UI
+→ M5 bounded P9 champion/challenger proposal engine
+→ M6 separate human-reviewed runtime proposal
+```
+
+No source, scoring, gate, threshold, notification, mail, runtime, API, account, position, or order behavior changed during this planning update. M1 remains report-only and implementation requires a separate bounded approval/task.
+
+
+## 2026-07-20 macro-structure research correction
+
+The M1 plan was corrected before source implementation.
+
+User clarification:
+
+- midpoint-driven expansion was a personal hypothesis, not a confident product requirement
+- reliable higher-timeframe support/resistance remains mandatory
+- the design should use stronger research and measurable mechanisms for directional pressure and large moves
+
+Research review established:
+
+- support/resistance can contain predictive information, but level quality varies and must be measured
+- clustered orders provide a plausible mechanism for reversal near levels and momentum after crossing
+- order-flow imbalance and market depth are relevant to short-horizon price impact
+- realized volatility is persistent and regime dependent
+- low volatility does not guarantee immediate expansion
+- Bitcoin jump evidence supports order-flow imbalance, aggressive participation, and spread/liquidity conditions as auxiliary precursors in the studied sample
+- all transfer to MEXC BTC_USDT requires local event-time walk-forward validation
+
+Created:
+
+- `docs/operations/strategy/MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
+
+Updated:
+
+- parent macro-structure plan with a reliable-level-first correction
+- active M1 spec with precedence Section 23
+- `NEXT_ACTION.md` for corrected Codex execution
+
+Corrected M1 doctrine:
+
+```text
+reliable structural levels
+→ reliability history
+→ structural location
+→ volatility state
+→ pressure / imbalance evidence
+→ rejection, break, acceptance, or reclaim activation
+→ next reliable target
+→ outcome evaluation
+```
+
+Midpoint/equilibrium is optional and cannot independently determine direction or expansion.
+
+No source, scoring, gate, notification, mail, runtime, API, account, position, or order behavior changed in this correction.
+
+
+---
+
+## 2026-07-21 M1 macro evidence acceptance and M2 activation
+
+M1 macro structure / volatility evidence is accepted after ChatGPT source and focused-test review through reported commit `663288b`.
+
+Accepted M1 capabilities:
+
+- event-time confirmed 1H/4H structural levels
+- stable level identity and role-aware lifecycle
+- prior-only reliability history
+- separate volatility state, expansion risk, directional activation, and reliable target
+- independent realized-move opportunities
+- same-opportunity policy comparison and chronological validation
+- event-time policy episode deduplication
+- fail-closed missed-move diagnosis
+- deterministic atomic five-output replay
+
+Reported final validation:
+
+- macro replay tests: 26 passed
+- macro CLI tests: 4 passed
+- bounded FIX-10 replay: passed
+- `git diff --check`: passed
+
+M1 remains offline and report-only. No production scoring, gate, threshold, classifier, Big Chance, structural-priority, HTML, notification, mail, runtime, API, account, position, or order behavior changed.
+
+Archived M1 spec:
+
+```text
+chatgpt/specs/archive/20260720_macro_structure_volatility_evidence_layer.md
+```
+
+New active M2 spec:
+
+```text
+chatgpt/specs/active/20260721_macro_structure_p8_auxiliary_shadow.md
+```
+
+M2 is an optional, disabled-by-default P8 auxiliary shadow integration. It may collect date-scoped macro evidence but may not change the installed schedule, plist, runtime, notifications, mail, production analysis, scoring, gates, thresholds, classifiers, APIs, accounts, positions, or orders.
+
+Current next task:
+
+```text
+BTCFX-20260721-MACRO-STRUCTURE-P8-AUXILIARY-SHADOW
+```
+
+Safety remains report-only / not FORMAL_GO / no automatic order / human decides manually.

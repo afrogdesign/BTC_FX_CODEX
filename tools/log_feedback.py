@@ -22070,6 +22070,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cycle_parser.add_argument("--replace-output", action="store_true")
     cycle_parser.add_argument("--stdout-json", action="store_true")
     cycle_parser.add_argument("--include-turning-precursor-shadow", action="store_true")
+    cycle_parser.add_argument("--include-macro-structure-shadow", action="store_true")
 
     turning_parser = subparsers.add_parser("replay-turning-volatility-precursors")
     turning_parser.add_argument("--signals", required=True)
@@ -23491,6 +23492,7 @@ def main() -> None:
             max_ohlcv_lag_minutes=int(args.max_ohlcv_lag_minutes), dry_run=bool(args.dry_run),
             replace_output=bool(args.replace_output),
             include_turning_precursor_shadow=bool(args.include_turning_precursor_shadow),
+            include_macro_structure_shadow=bool(args.include_macro_structure_shadow),
         )
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")

@@ -90,12 +90,29 @@ class RunP8DailyCycleTests(unittest.TestCase):
         status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text())
         self.assertEqual(status["turning_precursor_shadow"]["status"], "success")
 
+    def test_macro_shadow_flag_is_optional_and_coexists_with_turning(self) -> None:
+        response = '{"ok":true,"macro_structure_shadow":{"enabled":true,"status":"success"},"turning_precursor_shadow":{"enabled":true,"status":"success"}}'
+        with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed(response)) as run:
+            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow", "--include-macro-structure-shadow")), 0)
+        argv = run.call_args.args[0]
+        self.assertEqual(argv.count("--include-macro-structure-shadow"), 1)
+        self.assertEqual(argv.count("--include-turning-precursor-shadow"), 1)
+        status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text())
+        self.assertEqual(status["macro_structure_shadow"]["status"], "success")
+
     def test_dry_run_reports_shadow_disabled_or_enabled(self) -> None:
         with patch("tools.run_p8_daily_cycle.subprocess.run") as run, patch("builtins.print") as output:
             run_p8_daily_cycle.main(self.args("--dry-run", "--include-turning-precursor-shadow"))
         run.assert_not_called()
         payload = json.loads(output.call_args.args[0])
         self.assertTrue(payload["turning_precursor_shadow_enabled"])
+        self.assertFalse(payload["macro_structure_shadow_enabled"])
+
+    def test_dry_run_reports_macro_shadow_enabled(self) -> None:
+        with patch("builtins.print") as output:
+            run_p8_daily_cycle.main(self.args("--dry-run", "--include-macro-structure-shadow"))
+        payload = json.loads(output.call_args.args[0])
+        self.assertTrue(payload["macro_structure_shadow_enabled"])
 
     def test_plist_contract(self) -> None:
         path = Path(__file__).resolve().parents[1] / "deploy/com.afrog.btc-p8-operating-cycle.plist"

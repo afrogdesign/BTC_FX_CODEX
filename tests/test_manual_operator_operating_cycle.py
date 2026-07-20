@@ -11,7 +11,10 @@ import pandas as pd
 
 from src.feedback.manual_operator_classifier import SIGNAL_HEADERS
 from src.feedback.manual_operator_operating_cycle import (
+    MACRO_OUTPUT_NAMES,
     OUTPUT_NAMES,
+    _macro_shadow_summary,
+    _run_macro_shadow,
     run_p8_operating_cycle,
 )
 from src.feedback.manual_scenario_normalizer import (
@@ -203,7 +206,50 @@ class OperatingCycleTests(unittest.TestCase):
         with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3]:
             result = self._run()
         self.assertEqual(result["turning_precursor_shadow"]["status"], "disabled")
+        self.assertEqual(result["macro_structure_shadow"]["status"], "disabled")
         self.assertFalse((self.root / "out" / "turning_precursor_shadow").exists())
+        self.assertFalse((self.root / "out" / "macro_structure_shadow").exists())
+
+    def test_macro_shadow_fetches_each_auxiliary_timeframe_once_and_writes_complete_stage(self) -> None:
+        core = self._write("macro-15m.csv", ["timestamp_utc", "open", "high", "low", "close", "interval"], [{"timestamp_utc": f"2026-07-10T0{hour}:00:00Z", "open": "100", "high": "101", "low": "99", "close": "100", "interval": "15m"} for hour in range(9)])
+        signal = {key: "" for key in SIGNAL_HEADERS}; signal.update(signal_id="s1", timestamp_jst="2026-07-10T13:00:00+09:00", primary_setup_side="long")
+        signals = self._write("macro-signals.csv", SIGNAL_HEADERS, [signal])
+        calls = []
+        def fetch(path, limit, interval="15m"):
+            calls.append(interval)
+            rows = [{"timestamp_utc": f"2026-07-10T{hour:02d}:00:00Z", "open": "100", "high": "101", "low": "99", "close": "100", "interval": interval} for hour in (range(9) if interval == "1h" else (0, 4))]
+            self._write_path(path, list(rows[0]), rows)
+        def replay(**kwargs):
+            for key in ("output_events_csv", "output_levels_csv", "output_misses_csv"):
+                kwargs[key].write_text("header\n", encoding="utf-8")
+            kwargs["output_json"].write_text(json.dumps({"counts": {"events": 1, "levels": 1, "missed_moves": 0, "independent_opportunities": 1}, "metrics": {}, "recommendation_gate": {"reasons": []}, "walk_forward": {"status": "not_established"}, "coverage": {"continuity_pass": True}, "recommendation_status": "insufficient_evidence"}) + "\n", encoding="utf-8")
+            kwargs["output_md"].write_text("report\n", encoding="utf-8")
+            return {"ok": True}
+        stage = self.root / "stage"; stage.mkdir()
+        meta = {"rows": 9, "min_timestamp": "2026-07-10T00:00:00+00:00", "max_timestamp": "2026-07-10T08:00:00+00:00", "interval": "15m"}
+        with patch("src.feedback.manual_operator_operating_cycle._fetch_ohlcv", side_effect=fetch), patch("src.feedback.macro_structure_volatility_replay.replay_macro_structure_volatility", side_effect=replay):
+            result = _run_macro_shadow(stage=stage, signals=signals, ohlcv_15m=core, ohlcv_meta=meta, ohlcv_limit=10)
+        self.assertEqual(result["status"], "success"); self.assertEqual(calls, ["1h", "4h"])
+        self.assertEqual({path.name for path in (stage / "macro_structure_shadow").iterdir()}, set(MACRO_OUTPUT_NAMES))
+
+    def test_macro_failure_is_auxiliary_and_preserves_core_outputs(self) -> None:
+        with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3], patch("src.feedback.manual_operator_operating_cycle._run_macro_shadow", return_value=_macro_shadow_summary(enabled=True, status="failed", error_codes=["macro_structure_shadow_failed"])):
+            result = self._run(include_macro_structure_shadow=True)
+        self.assertTrue(result["ok"]); self.assertEqual(result["macro_structure_shadow"]["status"], "failed")
+        self.assertIn("macro_structure_shadow_failed", result["warnings"])
+        self.assertTrue((self.root / "out" / "cycle_manifest.json").exists())
+
+    def test_macro_shadow_promotes_only_a_complete_replacement_directory(self) -> None:
+        old = self.root / "out" / "macro_structure_shadow"; old.mkdir(parents=True); (old / "stale.txt").write_text("old", encoding="utf-8")
+        def macro_success(**kwargs):
+            directory = kwargs["stage"] / "macro_structure_shadow"; directory.mkdir()
+            for name in MACRO_OUTPUT_NAMES:
+                (directory / name).write_text("new\n", encoding="utf-8")
+            return _macro_shadow_summary(enabled=True, status="success", slice_rows=1)
+        with self._fake_stages()[0], self._fake_stages()[1], self._fake_stages()[2], self._fake_stages()[3], patch("src.feedback.manual_operator_operating_cycle._run_macro_shadow", side_effect=macro_success):
+            result = self._run(include_macro_structure_shadow=True)
+        self.assertTrue(result["ok"])
+        self.assertEqual({path.name for path in old.iterdir()}, set(MACRO_OUTPUT_NAMES))
 
     def test_opt_in_shadow_reuses_core_ohlcv_and_promotes_four_outputs(self) -> None:
         def slice_side_effect(**kwargs):
