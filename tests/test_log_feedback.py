@@ -8028,5 +8028,20 @@ class MacroNextRegimeCliTests(unittest.TestCase):
                 self.assertNotIn(str(root), out.getvalue())
 
 
+class MacroOperatorHierarchyShadowCliTests(unittest.TestCase):
+    def test_parser_dispatches_explicit_render_paths_compactly(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            argv = ["log_feedback.py", "render-macro-operator-hierarchy-shadow", "--signal-context-csv", "signals.csv", "--tactical-candidates-csv", "candidates.csv", "--macro-events-csv", "macro.csv", "--macro-levels-csv", "levels.csv", "--next-regime-events-csv", "m3.csv", "--ohlcv-1h-csv", "one.csv", "--signal-id", "s1", "--output-html", str(root / "out.html"), "--output-json", str(root / "out.json"), "--output-md", str(root / "out.md"), "--replace-output"]
+            summary = {"ok": True, "exit_code": 0, "selected_signal": "s1", "challenger_section_order": ["chart"], "chart_first_confirmation": True, "missing_data_flags": []}
+            with patch.object(sys, "argv", argv), patch("tools.log_feedback.render_macro_operator_hierarchy_shadow", return_value=summary) as render, patch("sys.stdout", new_callable=StringIO) as out:
+                self.assertEqual(main(), 0)
+                self.assertEqual(render.call_count, 1)
+                self.assertIn('"selected_signal":"s1"', out.getvalue())
+                self.assertNotIn(str(root), out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

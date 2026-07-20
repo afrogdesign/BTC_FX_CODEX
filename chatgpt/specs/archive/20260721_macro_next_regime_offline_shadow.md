@@ -268,3 +268,36 @@ The historical acceptance record above is withdrawn pending FIX-04 review. M3 re
 FIX-04 corrects the chronological validation date basis to all eligible performance events (including dates with no policy episode), evaluates candidate and baseline on that same date set, and applies single-date concentration to candidate validation episodes only.
 
 The M3 proposal gate uses `3h` as its explicit primary horizon. The `6h`, `12h`, and `24h` metrics and splits remain required descriptive diagnostics only. Any future eligibility remains render-only M4 design eligibility and never authorizes production behavior.
+
+---
+
+## 17. Final ChatGPT acceptance after FIX-04 — 2026-07-21
+
+The validation-window correction is accepted. The withdrawal recorded in Section 16 is resolved by commit `3ae30f4`.
+
+Final accepted M3 implementation chain:
+
+- initial implementation: `04d205a`
+- evaluation completion: `8639162`
+- episode identity completion: `1f4ea67`
+- family conflict boundary completion: `4f97a55`
+- validation-window contract completion: `3ae30f4`
+
+Final accepted evidence:
+
+- focused M3 tests: 11 passing
+- fresh bounded replay: 124 eligible performance events
+- candidate episodes: 12
+- frozen baseline episodes: 46
+- eligible-event JST date basis: 7 dates
+- chronological validation dates: `2026-07-19`, `2026-07-20`, `2026-07-21`
+- validation candidate and baseline metrics use the same eligible-event-derived date set
+- single-date concentration is calculated from candidate validation episodes only
+- `3h` is explicit as the primary M3 proposal-gate horizon
+- `6h`, `12h`, and `24h` remain descriptive diagnostic horizons
+- candidate-owned failed-thesis evidence can produce a non-directional `watch` independently of the frozen baseline
+- four bounded outputs are complete and consistent
+
+The final bounded recommendation is `continue_shadow_collection`. M3 is accepted only as an offline, report-only comparison contract. It is not accepted for production Big Chance behavior, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order changes.
+
+M4 may proceed only as a local render-only hierarchy shadow. No live UI deployment is authorized.

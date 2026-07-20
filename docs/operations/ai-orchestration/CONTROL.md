@@ -463,3 +463,19 @@ This section supersedes the older `Current next task` block above.
 - M4 is an inactive preserved draft and implementation is not authorized
 - current recommendation remains `continue_shadow_collection`
 - FIX-04 is offline/report-only only; no production, runtime, notification, mail, scoring, gate, threshold, classifier, API, account, position, or order change is authorized
+
+
+---
+
+## 2026-07-21 M3 final acceptance / M4 control update
+
+- accepted M3 head: `3ae30f4`
+- accepted M3 spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
+- accepted M3 scope: offline, deterministic, report-only next-regime comparison
+- accepted bounded evidence: 124 events, 12 candidate episodes, 46 baseline episodes, 7 eligible JST dates
+- primary proposal-gate horizon: `3h`
+- M3 recommendation: `continue_shadow_collection`
+- M3 does not authorize production Big Chance, notification, mail, scoring, thresholds, gates, classifiers, runtime, APIs, accounts, positions, or orders
+- active M4 spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
+- M4 authorization is local render-only hierarchy shadow; live UI deployment is not authorized
+- current next work ID: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW`

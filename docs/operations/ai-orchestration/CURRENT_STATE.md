@@ -1076,3 +1076,21 @@ M2 is accepted at source commit `8aee427`.
 - M4 is preserved only as inactive draft `chatgpt/specs/archive/20260721_macro_operator_hierarchy_render_shadow_draft.md`; implementation has not started
 - FIX-04 covers eligible-event JST validation dates, candidate-only concentration, and explicit 3H primary gate reporting
 - no runtime, production, notification, mail, scoring, gate, threshold, classifier, API, account, position, or order behavior changed
+
+
+---
+
+## 2026-07-21 M3 final acceptance and M4 reactivation
+
+- M3 FIX-04 commit `3ae30f4` is accepted.
+- Final accepted M3 commit chain: `04d205a` -> `8639162` -> `1f4ea67` -> `4f97a55` -> `3ae30f4`.
+- Final bounded M3 replay: 124 eligible events, 12 candidate episodes, 46 frozen-baseline episodes.
+- Eligible-event JST date count: 7.
+- Validation dates: `2026-07-19`, `2026-07-20`, `2026-07-21`.
+- M3 primary gate horizon is explicit `3h`; longer horizons remain descriptive diagnostics.
+- Final recommendation remains `continue_shadow_collection` because validation direction counts are insufficient and candidate validation evidence is concentrated/degraded on declared dimensions.
+- M3 is accepted only as an offline report-only comparison contract.
+- M3 spec is archived at `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`.
+- M4 render-only hierarchy shadow is active at `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`.
+- M4 implementation has not yet started.
+- No production UI, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.

@@ -355,3 +355,39 @@ M4 source completion requires:
 After ChatGPT acceptance, archive this spec and create a separate M5 active specification for the deterministic bounded champion/challenger proposal engine.
 
 M4 acceptance does not authorize live UI deployment.
+
+---
+
+## 19. Reactivation after final M3 acceptance — controlling status
+
+This section supersedes the preserved-draft status and reactivation warning in the title and Metadata above.
+
+- current status: approved for bounded M4 source implementation
+- accepted M3 head: `3ae30f4`
+- accepted M3 spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
+- accepted M3 recommendation: `continue_shadow_collection`
+- authorization: local deterministic render-only hierarchy shadow
+- production UI deployment: not authorized
+- notification, mail, scoring, thresholds, gates, classifiers, runtime, APIs, accounts, positions, and orders: unchanged and out of scope
+
+The remaining sections are the active implementation contract. The first bounded render remains a hierarchy/usability artifact only and must not be treated as evidence that the M3 policy is production-ready.
+
+---
+
+## 20. Pre-implementation event-time level correction — controlling requirement
+
+The accepted level-reliability CSV is a cumulative bounded replay output and may contain confirmations later than the selected M4 event. M4 must not display future-updated level geometry or reliability as if it were event-time evidence.
+
+Required handling:
+
+- A 1-hour candle is eligible only when `timestamp_utc + 1 hour <= selected_event_timestamp_utc`.
+- A level row is event-time safe only when its confirmation metadata contains no confirmation timestamp after the selected event.
+- If `last_confirmed_at` or any parsed `member_confirmation_timestamps` value is later than the event, do not use that row's low/high/center/reliability/lifecycle fields.
+- A target or explicit obstruction required by the selected M3 contract must exist and be event-time safe; otherwise reject before publication.
+- A nearest support/resistance reference that exists but is not event-time safe may be rendered only as `referenced ID / event-time geometry unavailable`; it must not produce a chart band or reliability claim.
+- Record all excluded future-confirmed references in `missing_data_flags` and the trace map.
+- Do not reconstruct unavailable event-time geometry from later cumulative values.
+
+For the bounded signal `20260719_130500`, the tactical candidate rows are intentionally multi-row and must be joined by `source_signal_id`; this is not a duplicate-key error. Candidate identity remains `candidate_id`.
+
+This section supersedes any broader reading that permits final cumulative level rows to be used without an event-time check.

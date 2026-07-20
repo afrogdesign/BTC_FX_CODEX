@@ -68,6 +68,7 @@ from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.feedback.turning_volatility_precursor_replay import replay_turning_volatility_precursors
 from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
 from src.feedback.macro_next_regime_replay import replay_macro_next_regime
+from src.feedback.macro_operator_hierarchy_shadow import render_macro_operator_hierarchy_shadow
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22115,6 +22116,20 @@ def _build_parser() -> argparse.ArgumentParser:
     next_regime_parser.add_argument("--replace-output", action="store_true")
     next_regime_parser.add_argument("--stdout-json", action="store_true")
 
+    hierarchy_parser = subparsers.add_parser("render-macro-operator-hierarchy-shadow")
+    hierarchy_parser.add_argument("--signal-context-csv", required=True)
+    hierarchy_parser.add_argument("--tactical-candidates-csv", required=True)
+    hierarchy_parser.add_argument("--macro-events-csv", required=True)
+    hierarchy_parser.add_argument("--macro-levels-csv", required=True)
+    hierarchy_parser.add_argument("--next-regime-events-csv", required=True)
+    hierarchy_parser.add_argument("--ohlcv-1h-csv", required=True)
+    hierarchy_parser.add_argument("--ohlcv-4h-csv")
+    hierarchy_parser.add_argument("--signal-id", required=True)
+    hierarchy_parser.add_argument("--output-html", required=True)
+    hierarchy_parser.add_argument("--output-json", required=True)
+    hierarchy_parser.add_argument("--output-md", required=True)
+    hierarchy_parser.add_argument("--replace-output", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23555,6 +23570,22 @@ def main() -> None:
             return 2
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "render-macro-operator-hierarchy-shadow":
+        try:
+            summary = render_macro_operator_hierarchy_shadow(
+                signal_context_csv=Path(args.signal_context_csv), tactical_candidates_csv=Path(args.tactical_candidates_csv),
+                macro_events_csv=Path(args.macro_events_csv), macro_levels_csv=Path(args.macro_levels_csv),
+                next_regime_events_csv=Path(args.next_regime_events_csv), ohlcv_1h_csv=Path(args.ohlcv_1h_csv),
+                ohlcv_4h_csv=Path(args.ohlcv_4h_csv) if args.ohlcv_4h_csv else None, signal_id=args.signal_id,
+                output_html=Path(args.output_html), output_json=Path(args.output_json), output_md=Path(args.output_md),
+                replace_output=bool(args.replace_output),
+            )
+        except (OSError, ValueError) as exc:
+            sys.stdout.write(json.dumps({"ok": False, "exit_code": 2, "error_code": str(exc)}, separators=(",", ":")) + "\n")
+            return 2
+        sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
         return int(summary.get("exit_code", 0))
 
     if args.command == "build-manual-trade-episodes":
