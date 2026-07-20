@@ -22,7 +22,9 @@ METHOD_VERSION = "macro_next_regime_replay.v1"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 EVENT_FIELDS = ("schema_version", "method_version", "record_id", "signal_id", "event_id", "event_timestamp_utc", "event_timestamp_jst", "current_tactical_side", "current_structural_thesis", "weakening_thesis", "next_regime_side", "status", "activation_families", "reason_codes", "invalidation_reason_codes", "first_reliable_target", "intervening_obstruction", "price_location", "volatility_state", "expansion_risk", "level_reliability_band", "baseline_present", "baseline_side", "baseline_status", "baseline_grade", "baseline_type", "baseline_reason_codes", "comparison_category", "forecast_evidence_json", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "first_material_move_timestamp", "data_quality_status", "safety_boundary")
 EPISODE_FIELDS = ("schema_version", "method_version", "episode_id", "policy", "signal_id", "event_id", "start_timestamp_utc", "side", "status", "evidence_key", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "first_material_move_timestamp", "data_quality_status")
-COMPATIBLE_PREFIXES = ("RELIABLE_LEVEL_REJECTION_", "LEVEL_BREAK_ACCEPTANCE_", "FALSE_BREAK_RECLAIM_", "ORDER_FLOW_PRESSURE_", "OPEN_TRAVEL_CORRIDOR_")
+CANDIDATE_FAMILIES = frozenset({f"{prefix}_{side}" for prefix in ("RELIABLE_LEVEL_REJECTION", "LEVEL_BREAK_ACCEPTANCE", "FALSE_BREAK_RECLAIM", "ORDER_FLOW_PRESSURE", "OPEN_TRAVEL_CORRIDOR") for side in ("UP", "DOWN")})
+AUXILIARY_FAMILIES = frozenset({"RELIABLE_LEVEL_APPROACH", "STRUCTURAL_COMPRESSION", "LIQUIDITY_FRAGILITY", "REPEATED_TEST_PRESSURE_UP", "REPEATED_TEST_PRESSURE_DOWN"})
+ACCEPTED_FAMILIES = CANDIDATE_FAMILIES | AUXILIARY_FAMILIES
 
 
 def _dt(value: Any) -> datetime:
@@ -71,7 +73,7 @@ def _families(raw: str) -> tuple[str, ...]:
 
 
 def _matching_family(activation: str, families: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(item for item in families if item.startswith(COMPATIBLE_PREFIXES) and item.endswith("_" + activation))
+    return tuple(item for item in families if item in CANDIDATE_FAMILIES and item.endswith("_" + activation))
 
 
 def _codes(value: Any) -> tuple[str, ...]:
@@ -100,6 +102,7 @@ def _forecast(signal: dict[str, str], event: dict[str, str], levels: set[str], b
     activation = _side(raw_activation) if raw_activation in {"UP", "DOWN", "NONE"} else "NONE"
     families = _families(event.get("event_family", ""))
     matching = _matching_family(activation, families) if activation != "NONE" else ()
+    opposite = tuple(item for item in families if item in CANDIDATE_FAMILIES and not item.endswith("_" + activation)) if activation != "NONE" else ()
     target = str(event.get("first_reliable_target", "")).strip()
     obstruction = str(event.get("intervening_obstruction", "")).strip().lower()
     current = _side(event.get("current_tactical_side") or signal.get("bias"))
@@ -111,11 +114,11 @@ def _forecast(signal: dict[str, str], event: dict[str, str], levels: set[str], b
     unavailable_corridor = obstruction in {"", "insufficient", "unavailable"}
     if raw_activation not in {"UP", "DOWN", "NONE"}:
         invalidation = ["malformed_directional_activation"]
-    elif activation != "NONE" and matching and target and target in levels and obstruction == "none":
+    elif activation != "NONE" and matching and not opposite and target and target in levels and obstruction == "none":
         side = activation
         reasons = list(matching)
         status = "activated"; invalidation = []
-    elif activation != "NONE" and matching and not explicit_obstruction and (not target or unavailable_corridor):
+    elif activation != "NONE" and matching and not opposite and not explicit_obstruction and (not target or unavailable_corridor):
         side = activation; reasons = list(matching); status = "armed"; invalidation = ["target_or_corridor_incomplete"]
     elif activation == "NONE" and weakening != "none":
         status = "watch"
@@ -123,7 +126,7 @@ def _forecast(signal: dict[str, str], event: dict[str, str], levels: set[str], b
     else:
         invalidation = []
         if activation == "NONE": invalidation.append("directional_activation_missing")
-        if activation != "NONE" and not matching: invalidation.append("directional_family_conflict")
+        if activation != "NONE" and (not matching or opposite): invalidation.append("directional_family_conflict")
         if target and target not in levels: invalidation.append("target_reference_invalid")
         if explicit_obstruction: invalidation.append("explicit_obstruction")
     baseline_side = _side(baseline.get("side"))
@@ -243,7 +246,7 @@ def replay_macro_next_regime(*, signals: Path, macro_events: Path, macro_levels:
         if obstruction not in {"", "none", "insufficient", "unavailable"} and obstruction not in level_map: raise ValueError("obstruction_reference_invalid")
         raw = str(event.get("directional_activation", "")).strip().upper()
         families = _families(event.get("event_family", ""))
-        if raw in {"UP", "DOWN"} and any(item.endswith("_UP") or item.endswith("_DOWN") for item in families) and not _matching_family(raw, families): raise ValueError("directional_family_conflict")
+        if any(item not in ACCEPTED_FAMILIES for item in families): raise ValueError("event_family_token_invalid")
     performance = {key: row for key, row in signal_map.items() if not _truthy(row.get("macro_context_only"))}
     if set(event_map) != set(performance): raise ValueError("signal_event_mismatch")
     records: list[dict[str, Any]] = []; previous: dict[str, str] | None = None

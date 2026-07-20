@@ -41,6 +41,13 @@ class MacroNextRegimeReplayTests(unittest.TestCase):
         self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", event_family="RELIABLE_LEVEL_REJECTION_DOWN"), {"level-1"}, {})["status"], "none")
         self.assertEqual(_forecast({}, _event("a", "2026-01-01T00:00:00+00:00", first_reliable_target="unknown"), {"level-1"}, {})["status"], "none")
 
+    def test_auxiliary_and_mixed_directional_families_fail_closed_without_replay_abort(self) -> None:
+        auxiliary = _forecast({}, _event("a", "2026-01-01T00:00:00+00:00", event_family="REPEATED_TEST_PRESSURE_UP"), {"level-1"}, {})
+        self.assertEqual((auxiliary["status"], auxiliary["next_regime_side"]), ("none", "NONE"))
+        mixed = _forecast({}, _event("a", "2026-01-01T00:00:00+00:00", event_family="RELIABLE_LEVEL_REJECTION_UP|RELIABLE_LEVEL_REJECTION_DOWN|RELIABLE_LEVEL_APPROACH"), {"level-1"}, {})
+        self.assertEqual((mixed["status"], mixed["next_regime_side"]), ("none", "NONE"))
+        self.assertIn("directional_family_conflict", mixed["invalidation_reason_codes"])
+
     def test_forecast_fields_are_separate_and_outcomes_do_not_change_episode(self) -> None:
         event = _event("a", "2026-01-01T00:00:00+00:00")
         forecast = _forecast({"bias": "short"}, event, {"level-1"}, {})
