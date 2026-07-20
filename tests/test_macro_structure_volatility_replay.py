@@ -110,6 +110,38 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         rows = [{"event": event, "signal": None, "outcome": "large_up", "timestamp": f"2026-01-01T0{hour}:00:00+00:00"} for hour in (0, 1)]
         self.assertEqual(len(_dedup_policy_episodes(rows, "current_notification")), 1)
 
+    def test_context_firing_preserves_boundary_continuity_but_reset_starts_performance_episode(self) -> None:
+        base = {"was_notified": "true", "current_tactical_side": "LONG", "event_family": "", "structural_state": "range", "volatility_state": "ordinary", "price_location": "lower_half"}
+        def row(hour: int, event: dict[str, object], context: bool = False) -> dict[str, object]:
+            return {"event": {**event, "_context_only": context}, "signal": None, "outcome": "unresolved", "timestamp": f"2026-01-01T{hour:02d}:00:00+00:00"}
+        stream = [row(0, base, True), row(1, base), row(2, {**base, "was_notified": "false"}), row(3, base)]
+        metrics = _policy_metrics([], "current_notification", stream)
+        self.assertEqual(metrics["episodes"], 1)
+        side_transition = _policy_metrics([], "current_notification", [row(0, base, True), row(1, {**base, "current_tactical_side": "SHORT"})])
+        self.assertEqual(side_transition["episodes"], 1)
+
+    def test_replay_excludes_macro_context_rows_and_records_performance_bounds(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            signals = root / "signals.csv"
+            context_at = start + timedelta(hours=8); performance_at = start + timedelta(hours=12)
+            _write(signals, [
+                {"signal_id": "context", "timestamp_utc": context_at.isoformat().replace("+00:00", "Z"), "current_price": "100", "bias": "long", "macro_context_only": "true"},
+                {"signal_id": "performance", "timestamp_utc": performance_at.isoformat().replace("+00:00", "Z"), "current_price": "100", "bias": "long", "macro_context_only": "false"},
+            ])
+            paths = {"15m": root / "15m.csv", "1h": root / "1h.csv", "4h": root / "4h.csv"}
+            _write(paths["15m"], _bars(start, 200, timedelta(minutes=15), "15m")); _write(paths["1h"], _bars(start, 50, timedelta(hours=1), "1h")); _write(paths["4h"], _bars(start, 15, timedelta(hours=4), "4h"))
+            out = [root / name for name in ("events.csv", "levels.csv", "misses.csv", "replay.json", "report.md")]
+            replay_macro_structure_volatility(signals=signals, ohlcv_15m=paths["15m"], ohlcv_1h=paths["1h"], ohlcv_4h=paths["4h"], output_events_csv=out[0], output_levels_csv=out[1], output_misses_csv=out[2], output_json=out[3], output_md=out[4], performance_start_utc=performance_at.isoformat(), performance_end_utc=(performance_at + timedelta(hours=1)).isoformat(), replace_output=True)
+            summary = json.loads(out[3].read_text())
+            self.assertEqual(summary["counts"]["signals"], 1)
+            self.assertEqual(summary["coverage"]["signals"], 1)
+            self.assertEqual(summary["coverage"]["total_signal_rows"], 2)
+            self.assertEqual(summary["coverage"]["context_signal_rows"], 1)
+            self.assertEqual(summary["coverage"]["performance_signal_rows"], 1)
+            self.assertEqual(summary["coverage"]["performance_start_utc"], performance_at.isoformat())
+            self.assertNotIn("context", out[0].read_text())
+
     def test_miss_diagnosis_uses_positive_predicates_and_fails_closed(self) -> None:
         row = {"data_quality_status": "ok", "structural_state": "range", "nearest_support_id": "s", "nearest_resistance_id": "r", "pressure_evidence_json": '{"rejection":"present","microstructure_status":"available"}', "event_family": "", "volatility_state": "ordinary"}
         self.assertEqual(_diagnose_miss(row, {"data_quality_status": "ok"}, False, False), "rejection_event_missing")
