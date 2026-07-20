@@ -26,7 +26,7 @@ SAFETY = "report-only / not FORMAL_GO / human-decided / no automatic order"
 EXPECTED_INTERVALS = {"15m": timedelta(minutes=15), "1h": timedelta(hours=1), "4h": timedelta(hours=4)}
 MICRO_FIELDS = ("order_flow_imbalance", "aggressive_buy_ratio", "aggressive_sell_ratio", "orderbook_depth_imbalance", "spread_bps", "cvd_slope", "oi_change_pct", "cvd_price_divergence", "orderbook_bias")
 ROOT_CAUSES = ("structure_not_established", "reliable_level_missing", "level_reliability_miscalibrated", "rejection_event_missing", "break_acceptance_missing", "false_break_reclaim_missing", "pressure_or_imbalance_unavailable", "pressure_or_imbalance_not_recognized", "travel_corridor_not_recognized", "volatility_regime_misclassified", "precursor_policy_too_strict", "correct_no_signal", "data_unresolved")
-EVENT_FIELDS = ("schema_version", "method_version", "event_id", "signal_id", "event_timestamp_utc", "event_timestamp_jst", "event_price", "was_notified", "current_tactical_side", "structural_state", "price_location", "nearest_support_id", "nearest_resistance_id", "next_upside_target_id", "next_downside_target_id", "event_family", "structural_direction", "expansion_risk", "directional_activation", "first_reliable_target", "intervening_obstruction", "volatility_state", "volatility_persistence", "volatility_bars_used", "level_reliability_band", "pressure_evidence_json", "forecast_json", "outcome_1h", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "mfe_atr", "mae_atr", "first_material_move_timestamp", "target_touch", "adverse_before_target", "whipsaw", "large_move_side", "jump_like", "data_quality_status", "reason_codes")
+EVENT_FIELDS = ("schema_version", "method_version", "event_id", "signal_id", "event_timestamp_utc", "event_timestamp_jst", "event_price", "was_notified", "current_tactical_side", "structural_state", "price_location", "nearest_support_id", "nearest_resistance_id", "next_upside_target_id", "next_downside_target_id", "event_family", "structural_direction", "expansion_risk", "directional_activation", "first_reliable_target", "intervening_obstruction", "volatility_state", "volatility_persistence", "volatility_bars_used", "level_reliability_band", "pressure_evidence_json", "forecast_json", "outcome_1h", "outcome_3h", "outcome_6h", "outcome_12h", "outcome_24h", "upward_excursion", "downward_excursion", "mfe_atr", "mae_atr", "first_material_move_timestamp", "target_touch", "adverse_before_target", "whipsaw", "level_behavior", "large_move_side", "jump_like", "data_quality_status", "reason_codes")
 LEVEL_FIELDS = ("schema_version", "method_version", "level_id", "side", "low", "high", "center", "source_timeframes", "first_seen_at", "last_confirmed_at", "touch_count", "clean_rejection_count", "break_count", "false_break_reclaim_count", "median_reaction_atr", "median_hold_hours", "recency_score", "cross_timeframe_confluence", "reliability_score", "reliability_band", "lifecycle", "role", "member_pivot_ids", "member_pivot_timestamps", "member_confirmation_timestamps", "reason_codes")
 MISS_FIELDS = ("opportunity_id", "direction", "start_timestamp_utc", "material_move_timestamp_utc", "move_size_atr", "structure_state", "price_location", "nearest_support_id", "nearest_resistance_id", "current_notification_fired", "turning_precursor_fired", "root_cause", "reason_codes", "data_quality_status")
 
@@ -75,6 +75,49 @@ def _parse_structured(value: Any) -> Any:
             raise ValueError("malformed_structured_signal")
         return parsed
     return [x.strip() for x in text.replace("|", ",").split(",") if x.strip()] if text else []
+
+
+def _tokens(value: Any) -> set[str]:
+    parsed = _parse_structured(value)
+    if isinstance(parsed, dict):
+        return {str(key).strip().lower() for key, item in parsed.items() if item}
+    return {str(item).strip().lower() for item in parsed if str(item).strip()}
+
+
+def _signal_tokens(row: dict[str, str]) -> set[str]:
+    fields = ("market_map_flags", "warning_flags", "risk_flags", "active_level_role", "level_flip_state", "failed_breakout_state", "trend_flip_state")
+    result: set[str] = set()
+    for field in fields:
+        result.update(_tokens(row.get(field)))
+    for field in ("primary_setup_reason", "notification_kind", "primary_setup_status"):
+        result.update(str(row.get(field) or "").lower().replace("/", " ").replace(",", " ").split())
+    return result
+
+
+def _micro_value(value: Any, field: str) -> tuple[str, str | None]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return "unavailable", None
+    numeric = _num(text)
+    if field in {"order_flow_imbalance", "orderbook_depth_imbalance", "spread_bps", "cvd_slope", "oi_change_pct"}:
+        if numeric is None:
+            return "unavailable", None
+        if numeric == 0:
+            return "absent", None
+        return "present", "UP" if numeric > 0 else "DOWN"
+    if field in {"aggressive_buy_ratio", "aggressive_sell_ratio"}:
+        if numeric is None or not 0 <= numeric <= 1:
+            return "unavailable", None
+        if numeric == .5:
+            return "absent", None
+        return "present", "UP" if (field == "aggressive_buy_ratio" and numeric > .5) else "DOWN" if (field == "aggressive_sell_ratio" and numeric > .5) else None
+    if field in {"cvd_price_divergence", "orderbook_bias"}:
+        if text in {"bullish", "bid_heavy", "bid", "up"}:
+            return "present", "UP"
+        if text in {"bearish", "ask_heavy", "ask", "down"}:
+            return "present", "DOWN"
+        return "absent", None
+    return "unavailable", None
 
 
 def _csv_rows(path: Path) -> list[dict[str, str]]:
@@ -221,7 +264,7 @@ def _reliability(level: dict[str, Any], state: dict[str, Any], at: datetime) -> 
     return {"schema_version": LEVEL_SCHEMA_VERSION, "method_version": METHOD_VERSION, "level_id": level["level_id"], "side": level["side"], "low": round(level["low"], 10), "high": round(level["high"], 10), "center": round(level["center"], 10), "source_timeframes": ",".join(sorted({m["source_timeframe"] for m in members})), "first_seen_at": members[0]["confirmation_timestamp"].isoformat(), "last_confirmed_at": members[-1]["confirmation_timestamp"].isoformat(), "touch_count": len(state["touches"]), "clean_rejection_count": len(state["rejections"]), "break_count": state["breaks"], "false_break_reclaim_count": state["reclaims"], "median_reaction_atr": round(state["reaction"], 8), "median_hold_hours": round((at - state["last_interaction"]).total_seconds() / 3600, 6) if state["last_interaction"] else "", "recency_score": round(state["recency"], 8), "cross_timeframe_confluence": 1.0 if len({m["source_timeframe"] for m in members}) >= 2 else .5, "reliability_score": round(state["score"], 8), "reliability_band": state["band"], "lifecycle": "accepted_beyond" if state["accepted"] else "rejected" if state["rejections"] else "touched" if state["touches"] else "active", "role": state["role"], "member_pivot_ids": ",".join(m["pivot_id"] for m in members), "member_pivot_timestamps": ",".join(m["pivot_timestamp"].isoformat() for m in members), "member_confirmation_timestamps": ",".join(m["confirmation_timestamp"].isoformat() for m in members), "reason_codes": ",".join(sorted(reason))}
 
 
-def _structure(price: float, levels: list[dict[str, Any]], candles4: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
+def _structure(price: float, levels: list[dict[str, Any]], candles4: list[dict[str, Any]], at: datetime, pivots4: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     reliable = [x for x in levels if x["reliability_band"] in {"medium", "high"}]
     below = sorted((x for x in reliable if x["center"] < price), key=lambda x: (price - x["center"], x["level_id"]))
     above = sorted((x for x in reliable if x["center"] > price), key=lambda x: (x["center"] - price, x["level_id"]))
@@ -231,12 +274,54 @@ def _structure(price: float, levels: list[dict[str, Any]], candles4: list[dict[s
     low, high = support["center"], resistance["center"]
     percentile = (price - low) / (high - low) if high > low else .5
     location = "outside" if percentile < 0 or percentile > 1 else "lower_half" if percentile < .45 else "equilibrium_area" if percentile <= .55 else "upper_half"
-    recent4 = [c for c in candles4 if c["timestamp"] + timedelta(hours=4) <= at]
-    highs = [c["high"] for c in recent4[-5:]]; lows = [c["low"] for c in recent4[-5:]]
-    state = "range"
-    if len(highs) >= 2 and len(lows) >= 2:
-        state = "trend_up" if highs[-1] > highs[0] and lows[-1] > lows[0] else "trend_down" if highs[-1] < highs[0] and lows[-1] < lows[0] else "range"
-    return {"state": state, "location": location, "support": support, "resistance": resistance, "target_up": above[1] if len(above) > 1 else None, "target_down": below[1] if len(below) > 1 else None, "obstruction": "none" if (above and below) else "insufficient", "range_low": low, "range_high": high, "percentile": round(percentile * 100, 6)}
+    swings = sorted((pivot for pivot in (pivots4 or []) if pivot["confirmation_timestamp"] <= at), key=lambda item: item["confirmation_timestamp"])
+    highs = [p["price"] for p in swings if p["side"] == "high"][-2:]; lows = [p["price"] for p in swings if p["side"] == "low"][-2:]
+    if len(highs) >= 2 and len(lows) >= 2 and highs[-1] > highs[-2] and lows[-1] > lows[-2]:
+        state = "trend_up"
+    elif len(highs) >= 2 and len(lows) >= 2 and highs[-1] < highs[-2] and lows[-1] < lows[-2]:
+        state = "trend_down"
+    elif len(highs) >= 1 and len(lows) >= 1:
+        state = "range"
+    else:
+        state = "transition"
+    return {"state": state, "location": location, "support": support, "resistance": resistance, "target_up": resistance, "target_down": support, "obstruction": "none", "range_low": low, "range_high": high, "percentile": round(percentile * 100, 6)}
+
+
+def _level_events(level: dict[str, Any], candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
+    """Resolve closed-candle level behaviour without using bars after *at*."""
+    bars = [bar for bar in candles if bar["timestamp"] + timedelta(hours=1) <= at]
+    touches: list[int] = []; rejection: str | None = None; break_side: str | None = None; accepted = False; reclaim = False
+    for index, bar in enumerate(bars):
+        if bar["high"] >= level["low"] and bar["low"] <= level["high"]:
+            if not touches or index - touches[-1] >= 3:
+                touches.append(index)
+        atr = _atr(bars, index) or max(level["center"] * .001, 1e-9)
+        side = "UP" if bar["close"] >= level["high"] + .10 * atr else "DOWN" if bar["close"] <= level["low"] - .10 * atr else None
+        if side and break_side is None:
+            break_side = side
+            following = bars[index + 1:index + 4]
+            if any((following_offset >= 0 and ((candidate["close"] < level["center"]) if side == "UP" else (candidate["close"] > level["center"]))) for following_offset, candidate in enumerate(following[:3])):
+                reclaim = True
+            if len(following) >= 2 and all(candidate["close"] > level["high"] if side == "UP" else candidate["close"] < level["low"] for candidate in following[:2]):
+                accepted = True
+        if touches:
+            touch_index = touches[-1]
+            if index > touch_index and index - touch_index <= 3:
+                if level["side"] == "low" and bar["close"] >= level["center"] + .50 * atr:
+                    rejection = "UP"
+                elif level["side"] == "high" and bar["close"] <= level["center"] - .50 * atr:
+                    rejection = "DOWN"
+    family = ""
+    activation: str | None = None
+    if reclaim and not accepted:
+        family = "FALSE_BREAK_RECLAIM_UP" if break_side == "UP" else "FALSE_BREAK_RECLAIM_DOWN"; activation = "DOWN" if break_side == "UP" else "UP"
+    elif accepted:
+        family = "LEVEL_BREAK_ACCEPTANCE_UP" if break_side == "UP" else "LEVEL_BREAK_ACCEPTANCE_DOWN"; activation = break_side
+    elif rejection:
+        family = "RELIABLE_LEVEL_REJECTION_UP" if rejection == "UP" else "RELIABLE_LEVEL_REJECTION_DOWN"; activation = rejection
+    elif touches:
+        family = "RELIABLE_LEVEL_APPROACH"
+    return {"touches": len(touches), "family": family, "activation": activation, "rejection": rejection, "break_side": break_side, "accepted": accepted, "reclaim": reclaim}
 
 
 def _volatility(candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
@@ -266,9 +351,14 @@ def _pressure(signal: dict[str, str], level: dict[str, Any] | None, candles1: li
         groups["close_concentration"] = "present" if sum(abs(b["close"] - level["center"]) <= .25 * (_atr(bars, i) or 1) for i, b in enumerate(bars[-5:])) >= 3 else "absent"
         changes = [b["close"] - bars[i - 1]["close"] for i, b in enumerate(bars) if i]
         groups["directional_close_imbalance"] = "present" if len(changes) >= 6 and max(sum(x > 0 for x in changes[-6:]), sum(x < 0 for x in changes[-6:])) >= 4 else "absent"
+    directional: dict[str, str] = {}
     for field in MICRO_FIELDS:
-        value = str(signal.get(field) or "").strip()
-        groups[field] = "unavailable" if not value else "present"
+        status, side = _micro_value(signal.get(field), field)
+        groups[field] = status
+        if side and status == "present":
+            directional[field] = side
+    groups["directional_microstructure"] = directional
+    groups["microstructure_status"] = "unavailable" if all(groups[field] == "unavailable" for field in MICRO_FIELDS) else "available"
     return groups
 
 
@@ -277,13 +367,14 @@ def _turning_fired(signal: dict[str, str]) -> bool:
     try:
         from src.feedback.turning_volatility_precursor_replay import classify_precursor_row
         classified = classify_precursor_row(signal)
-        return any(bool(item.get("fired")) for item in classified.values() if isinstance(item, dict))
+        combined = classified.get("POLICY_COMBINED_PRECURSOR", {})
+        return bool(isinstance(combined, dict) and combined.get("side"))
     except (KeyError, TypeError, ValueError):
         return False
 
 
 def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, Any]], levels: list[dict[str, Any]]) -> dict[str, Any]:
-    future = [c for c in candles15 if c["timestamp"] > at]
+    future = [c for c in candles15 if c["timestamp"] + timedelta(minutes=15) > at]
     result: dict[str, Any] = {}
     threshold = max(2 * atr, price * .005)
     for hours in (1, 3, 6, 12, 24):
@@ -296,12 +387,32 @@ def _outcomes(price: float, at: datetime, atr: float, candles15: list[dict[str, 
     ranges = [_tr(c, future[i - 1] if i else None) for i, c in enumerate(future[:4])]
     up_distance = max((c["high"] - price for c in future[:96]), default=0); down_distance = max((price - c["low"] for c in future[:96]), default=0)
     result["large_move_side"] = "UP" if up_distance >= threshold and down_distance < threshold else "DOWN" if down_distance >= threshold and up_distance < threshold else "NONE"
-    result["mfe_atr"] = round(max(up_distance, down_distance) / atr, 8) if atr else ""
-    result["mae_atr"] = ""
-    result["first_material_move_timestamp"] = next((c["timestamp"].isoformat() for c in future[:96] if max(c["high"] - price, price - c["low"]) >= threshold), "")
-    result["target_touch"] = "unresolved"
-    result["adverse_before_target"] = "unresolved"
-    result["whipsaw"] = result.get("outcome_12h") == "whipsaw_both"
+    side = "UP" if up_distance >= threshold and down_distance < threshold else "DOWN" if down_distance >= threshold and up_distance < threshold else "NONE"
+    directional_mfe = up_distance if side == "UP" else down_distance if side == "DOWN" else max(up_distance, down_distance)
+    directional_mae = down_distance if side == "UP" else up_distance if side == "DOWN" else min(up_distance, down_distance)
+    result["mfe_atr"] = round(directional_mfe / atr, 8) if atr else ""
+    result["mae_atr"] = round(directional_mae / atr, 8) if atr else ""
+    result["upward_excursion"] = round(up_distance, 8)
+    result["downward_excursion"] = round(down_distance, 8)
+    first = next((c for c in future[:96] if max(c["high"] - price, price - c["low"]) >= threshold), None)
+    result["first_material_move_timestamp"] = first["timestamp"].isoformat() if first else ""
+    target = None
+    for level in levels:
+        if side == "UP" and level.get("side") == "high" and level["center"] > price:
+            target = level; break
+        if side == "DOWN" and level.get("side") == "low" and level["center"] < price:
+            target = level; break
+    if target and side == "UP":
+        target_bar = next((c for c in future[:96] if c["high"] >= target["center"]), None)
+    elif target and side == "DOWN":
+        target_bar = next((c for c in future[:96] if c["low"] <= target["center"]), None)
+    else:
+        target_bar = None
+    result["target_touch"] = target_bar["timestamp"].isoformat() if target_bar else "unresolved" if target else "not_available"
+    result["adverse_before_target"] = bool(target_bar and ((max((price - c["low"] for c in future[:future.index(target_bar) + 1]), default=0) >= max(atr, price * .002)) if side == "UP" else (max((c["high"] - price for c in future[:future.index(target_bar) + 1]), default=0) >= max(atr, price * .002)))) if target_bar else "unresolved"
+    result["whipsaw"] = any(result.get(f"outcome_{hours}h") == "whipsaw_both" for hours in (1, 3, 6, 12, 24))
+    result["level_behavior"] = "target_touch" if target_bar else "unresolved" if target else "not_available"
+    result["large_move_side"] = side
     result["jump_like"] = bool(ranges and ranges[0] >= max(3 * atr, price * .01))
     return result
 
@@ -318,8 +429,68 @@ def _episodes(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def _realized_inventory(candles15: list[dict[str, Any]], signal_rows: list[dict[str, str]], events: list[dict[str, Any]], horizon_bars: int = 96) -> list[dict[str, Any]]:
+    """Discover opportunities from OHLCV, independently of signal rows."""
+    ordered = sorted(candles15, key=lambda candle: candle["timestamp"]); inventory: list[dict[str, Any]] = []; last_by_side: dict[str, datetime] = {}
+    event_by_signal = {str(event["signal_id"]): event for event in events}; signals = sorted(signal_rows, key=lambda row: _dt(row["timestamp_utc"]))
+    for index in range(14, len(ordered)):
+        anchor = ordered[index]; at = anchor["timestamp"]; atr = _atr(ordered, index - 1, 14)
+        if not atr or index + 1 >= len(ordered):
+            continue
+        future = ordered[index:index + horizon_bars]
+        if len(future) < horizon_bars or any((right["timestamp"] - left["timestamp"]).total_seconds() != 900 for left, right in zip(future, future[1:])):
+            continue
+        price = anchor["open"]; threshold = max(2 * atr, price * .005)
+        up_bar = next((bar for bar in future if bar["high"] - price >= threshold), None); down_bar = next((bar for bar in future if price - bar["low"] >= threshold), None)
+        if not up_bar and not down_bar:
+            continue
+        if up_bar and down_bar:
+            direction = "BOTH"; material = min(up_bar["timestamp"], down_bar["timestamp"]); move = max(up_bar["high"] - price, price - down_bar["low"]); whipsaw = True
+        elif up_bar:
+            direction = "UP"; material = up_bar["timestamp"]; move = up_bar["high"] - price; whipsaw = False
+        else:
+            direction = "DOWN"; material = down_bar["timestamp"]; move = price - down_bar["low"]; whipsaw = False
+        if direction in {"UP", "DOWN"} and direction in last_by_side and at - last_by_side[direction] < timedelta(hours=3):
+            continue
+        if direction in {"UP", "DOWN"}:
+            last_by_side[direction] = at
+        associated = next((row for row in reversed(signals) if (_dt(row["timestamp_utc"]) or at) <= at and at - (_dt(row["timestamp_utc"]) or at) <= timedelta(hours=3)), None)
+        event = event_by_signal.get(str(associated.get("signal_id"))) if associated else None
+        opportunity_id = hashlib.sha256(f"{METHOD_VERSION}|opportunity|{direction}|{at.isoformat()}".encode()).hexdigest()[:20]
+        inventory.append({"opportunity_id": opportunity_id, "direction": direction, "start_timestamp_utc": at.isoformat(), "material_move_timestamp_utc": material.isoformat(), "move_size_atr": round(move / atr, 8), "jump_like": _tr(anchor, ordered[index - 1]) >= max(3 * atr, price * .01), "whipsaw": whipsaw, "signal_id": str(associated.get("signal_id")) if associated else "", "event": event, "signal": associated, "data_quality_status": "ok"})
+    return inventory
+
+
+def _policy_fired(opportunity: dict[str, Any], policy: str) -> bool:
+    event = opportunity.get("event") or {}; family = set(str(event.get("event_family", "")).split("|"))
+    if policy == "current_notification":
+        return str(event.get("was_notified", "")).lower() in {"1", "true", "yes", "y"}
+    if policy == "turning_precursor_combined":
+        return bool(opportunity.get("signal") and _turning_fired(opportunity["signal"]))
+    if policy == "reliable_level_rejection":
+        return any("RELIABLE_LEVEL_REJECTION" in item for item in family)
+    if policy == "reliable_level_break_acceptance":
+        return any("LEVEL_BREAK_ACCEPTANCE" in item for item in family)
+    if policy == "false_break_reclaim":
+        return any("FALSE_BREAK_RECLAIM" in item for item in family)
+    if policy == "compression_only":
+        return event.get("volatility_state") == "compressed"
+    if policy == "reliable_level_pressure":
+        return any(event.get("pressure_evidence_json", "").find(token) >= 0 for token in ("\"present\"", "REPEATED_TEST_PRESSURE"))
+    if policy == "reliable_level_acceptance_corridor":
+        return any("OPEN_TRAVEL_CORRIDOR" in item for item in family)
+    return False
+
+
+def _policy_metrics(opportunities: list[dict[str, Any]], policy: str) -> dict[str, Any]:
+    fired = [item for item in opportunities if _policy_fired(item, policy)]; resolved = [item for item in opportunities if item.get("data_quality_status") == "ok"]
+    correct = [item for item in fired if item["direction"] in {"BOTH", str((item.get("event") or {}).get("directional_activation", ""))}]
+    leads = [(_dt(item["material_move_timestamp_utc"]) - _dt(item["start_timestamp_utc"])).total_seconds() / 60 for item in fired if _dt(item["material_move_timestamp_utc"]) and _dt(item["start_timestamp_utc"])]
+    return {"episodes": len(fired), "resolved_episodes": len(resolved), "directional_precision": round(len(correct) / len(fired), 8) if fired else None, "large_move_recall": round(len(fired) / len(opportunities), 8) if opportunities else None, "expansion_precision": round(len(correct) / len(fired), 8) if fired else None, "expansion_recall": round(len(fired) / len(opportunities), 8) if opportunities else None, "false_warning_rate": 0.0 if opportunities else None, "opposite_move_rate": round(sum(item["direction"] not in {"BOTH", str((item.get("event") or {}).get("directional_activation", ""))} for item in fired) / len(fired), 8) if fired else None, "whipsaw_rate": round(sum(bool(item.get("whipsaw")) for item in fired) / len(fired), 8) if fired else None, "unresolved_rate": round((len(opportunities) - len(resolved)) / len(opportunities), 8) if opportunities else None, "median_lead_minutes": median(leads) if leads else None, "median_favorable_excursion_atr": median([item["move_size_atr"] for item in fired]) if fired else None, "median_adverse_excursion_atr": None, "burden_per_jst_day": round(len(fired) / max(1, len({(_dt(item["start_timestamp_utc"]) + timedelta(hours=9)).date() for item in fired})), 8) if fired else 0}
+
+
 def _split(signals: list[dict[str, str]]) -> dict[str, Any]:
-    dates = sorted({_dt(row["timestamp_utc"]).date().isoformat() for row in signals if _dt(row["timestamp_utc"])})
+    dates = sorted({(_dt(row["timestamp_utc"]) + timedelta(hours=9)).date().isoformat() for row in signals if _dt(row["timestamp_utc"])})
     if len(dates) >= 5:
         a = max(1, int(len(dates) * .6)); v = max(a + 1, int(len(dates) * .8)); return {"status": "established", "calibration": dates[:a], "validation": dates[a:v], "holdout": dates[v:]}
     if 2 <= len(dates) <= 4:
@@ -330,11 +501,19 @@ def _split(signals: list[dict[str, str]]) -> dict[str, Any]:
 def _gate(events: list[dict[str, Any]], split: dict[str, Any], coverage: dict[str, Any]) -> dict[str, Any]:
     reasons = []
     if split["status"] != "established": reasons.append("validation_not_established")
-    validation_dates = set(split.get("validation", [])); v = [e for e in events if e["event_timestamp_utc"][:10] in validation_dates]
-    if sum(e.get("outcome_6h") in {"large_up", "whipsaw_both"} for e in v) < 10: reasons.append("validation_up_resolved_lt_10")
-    if sum(e.get("outcome_6h") in {"large_down", "whipsaw_both"} for e in v) < 10: reasons.append("validation_down_resolved_lt_10")
+    if len(split.get("validation", [])) < 3: reasons.append("validation_jst_dates_lt_3")
+    validation_dates = set(split.get("validation", [])); v = [e for e in events if (_dt(e["event_timestamp_utc"]) + timedelta(hours=9)).date().isoformat() in validation_dates]
+    up = sum(e.get("outcome_6h") == "large_up" for e in v); down = sum(e.get("outcome_6h") == "large_down" for e in v)
+    if up < 10: reasons.append("validation_up_resolved_lt_10")
+    if down < 10: reasons.append("validation_down_resolved_lt_10")
+    location_counts = Counter(e.get("price_location") for e in v if e.get("price_location") not in {None, "", "insufficient"})
+    if sum(value >= 10 for value in location_counts.values()) < 2: reasons.append("price_location_groups_lt_2")
     if not coverage.get("continuity_pass"): reasons.append("continuity_or_coverage_failed")
-    return {"status": "eligible_for_next_design_proposal" if not reasons else "continue_shadow_collection" if split["status"] == "established" else "insufficient_evidence", "reasons": reasons or ["all_declared_gate_conditions_pass"]}
+    if not events: reasons.append("no_comparable_opportunities")
+    if not any(e.get("level_reliability_band") in {"medium", "high"} for e in v): reasons.append("level_reliability_calibration_unavailable")
+    if not any("OPEN_TRAVEL_CORRIDOR" in e.get("event_family", "") or "LEVEL_BREAK_ACCEPTANCE" in e.get("event_family", "") for e in v): reasons.append("primary_objective_improvement_not_established")
+    if any(e.get("data_quality_status") != "ok" for e in v): reasons.append("validation_unresolved_data")
+    return {"status": "eligible_for_next_design_proposal" if not reasons else "continue_shadow_collection" if split["status"] == "established" else "insufficient_evidence", "reasons": sorted(set(reasons)) or ["all_declared_gate_conditions_pass"]}
 
 
 def _markdown(summary: dict[str, Any]) -> str:
@@ -382,45 +561,61 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
         known = [p for p in pivots if p["confirmation_timestamp"] <= at]; levels = build_levels(known)
         for level in levels:
             state = _level_state(level, candles1, at); level_rows[level["level_id"]] = _reliability(level, state, at); level["reliability_band"] = level_rows[level["level_id"]]["reliability_band"]; level["center"] = level_rows[level["level_id"]]["center"]
-        structure = _structure(price, levels, candles4, at); vol = _volatility(candles15, at); target = structure.get("target_up") or structure.get("target_down"); nearest = structure.get("support") or structure.get("resistance")
+        structure = _structure(price, levels, candles4, at, [p for p in known if p["source_timeframe"] == "4h"]); vol = _volatility(candles15, at)
+        reliable = [level for level in levels if level.get("reliability_band") in {"medium", "high"}]
+        nearest = min(reliable, key=lambda level: (abs(level["center"] - price), level["level_id"])) if reliable else None
         structural_direction = {"trend_up": "UP", "trend_down": "DOWN", "range": "BALANCED"}.get(structure["state"], "NONE")
         pressure = _pressure(signal, nearest, candles1, at); families = []
-        if nearest: families.append("RELIABLE_LEVEL_APPROACH")
-        if nearest and structure["location"] in {"lower_half", "outside"}: families.append("RELIABLE_LEVEL_REJECTION_UP")
-        if nearest and structure["location"] in {"upper_half", "outside"}: families.append("RELIABLE_LEVEL_REJECTION_DOWN")
+        lifecycle = _level_events(nearest, candles1, at) if nearest else {"family": "", "activation": None, "touches": 0, "accepted": False, "reclaim": False}
+        if lifecycle["family"]:
+            families.append(lifecycle["family"])
+        elif nearest and lifecycle["touches"]:
+            families.append("RELIABLE_LEVEL_APPROACH")
         if vol["state"] == "compressed": families.append("STRUCTURAL_COMPRESSION")
-        unavailable = all(pressure.get(field) == "unavailable" for field in MICRO_FIELDS)
-        if unavailable: pressure["microstructure_status"] = "unavailable"
-        else:
-            if pressure.get("order_flow_imbalance") == "present": families.append("ORDER_FLOW_PRESSURE_UP" if (_num(signal.get("order_flow_imbalance")) or 0) > 0 else "ORDER_FLOW_PRESSURE_DOWN")
-            if pressure.get("spread_bps") == "present": families.append("LIQUIDITY_FRAGILITY")
-        activation = "NONE"; direction = "NONE"
-        token_text = " ".join(str(signal.get(k, "")) for k in ("market_map_flags", "warning_flags", "risk_flags", "primary_setup_reason", "level_flip_state", "failed_breakout_state")).lower()
-        if "rejection" in token_text:
-            activation = "UP" if "support" in token_text or "long" in token_text else "DOWN"; direction = activation; families.append("RELIABLE_LEVEL_REJECTION_UP" if activation == "UP" else "RELIABLE_LEVEL_REJECTION_DOWN")
-        elif "accept" in token_text or "break" in token_text:
-            activation = "UP" if "up" in token_text or "long" in token_text else "DOWN"; direction = activation; families.append("LEVEL_BREAK_ACCEPTANCE_UP" if activation == "UP" else "LEVEL_BREAK_ACCEPTANCE_DOWN")
-        elif "reclaim" in token_text or "failed" in token_text:
-            activation = "UP" if "up" in token_text or "long" in token_text else "DOWN"; direction = activation; families.append("FALSE_BREAK_RECLAIM_UP" if activation == "UP" else "FALSE_BREAK_RECLAIM_DOWN")
-        if direction and target and vol["state"] != "insufficient" and abs(target["center"] - price) >= max(vol.get("atr", 0), price * .001):
-            families.append("OPEN_TRAVEL_CORRIDOR_UP" if direction == "UP" else "OPEN_TRAVEL_CORRIDOR_DOWN")
-        if direction == "UP" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_UP")
-        if direction == "DOWN" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_DOWN")
+        unavailable = pressure.get("microstructure_status") == "unavailable"
+        for field, side in pressure.get("directional_microstructure", {}).items():
+            if field in {"order_flow_imbalance", "aggressive_buy_ratio", "aggressive_sell_ratio", "orderbook_depth_imbalance", "cvd_price_divergence", "orderbook_bias"}:
+                families.append("ORDER_FLOW_PRESSURE_UP" if side == "UP" else "ORDER_FLOW_PRESSURE_DOWN")
+        if pressure.get("spread_bps") == "present": families.append("LIQUIDITY_FRAGILITY")
+        activation = lifecycle.get("activation")
+        target = structure.get("target_up") if activation == "UP" else structure.get("target_down") if activation == "DOWN" else None
+        obstruction = None
+        if activation and target:
+            lo, hi = sorted((price, target["center"]))
+            obstruction = next((level for level in reliable if level["level_id"] != target["level_id"] and lo < level["center"] < hi), None)
+            if abs(target["center"] - price) >= max(1.0 * (vol.get("atr") or 0), price * .005) and obstruction is None:
+                families.append("OPEN_TRAVEL_CORRIDOR_UP" if activation == "UP" else "OPEN_TRAVEL_CORRIDOR_DOWN")
+        if activation == "UP" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_UP")
+        if activation == "DOWN" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_DOWN")
+        pressure["rejection"] = "present" if lifecycle.get("rejection") else "absent"
+        pressure["break"] = "present" if lifecycle.get("break_side") else "absent"
+        pressure["closed_candle_acceptance"] = "present" if lifecycle.get("accepted") else "absent"
+        pressure["false_break_reclaim"] = "present" if lifecycle.get("reclaim") else "absent"
+        pressure["target_obstruction"] = "present" if obstruction else "absent" if target else "unavailable"
+        pressure["open_corridor"] = "present" if "OPEN_TRAVEL_CORRIDOR_UP" in families or "OPEN_TRAVEL_CORRIDOR_DOWN" in families else "absent"
         outcome = _outcomes(price, at, vol.get("atr", 0), candles15, levels)
         signal_id = str(signal.get("signal_id")); event_id = hashlib.sha256(f"{METHOD_VERSION}|{signal_id}|{at.isoformat()}".encode()).hexdigest()[:20]
-        event = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "event_id": event_id, "signal_id": signal_id, "event_timestamp_utc": at.isoformat(), "event_timestamp_jst": (at + timedelta(hours=9)).isoformat(), "event_price": round(price, 10), "was_notified": str(signal.get("was_notified", "")), "current_tactical_side": str(signal.get("bias") or signal.get("primary_setup_side") or "NONE").upper(), "structural_state": structure["state"], "price_location": structure["location"], "nearest_support_id": structure["support"]["level_id"] if structure.get("support") else "", "nearest_resistance_id": structure["resistance"]["level_id"] if structure.get("resistance") else "", "next_upside_target_id": structure["target_up"]["level_id"] if structure.get("target_up") else "", "next_downside_target_id": structure["target_down"]["level_id"] if structure.get("target_down") else "", "event_family": "|".join(sorted(set(families))), "structural_direction": structural_direction, "expansion_risk": vol["expansion_risk"], "directional_activation": activation, "first_reliable_target": target["level_id"] if target else "", "intervening_obstruction": structure["obstruction"], "volatility_state": vol["state"], "volatility_persistence": vol["persistence"], "volatility_bars_used": vol["bars_used"], "level_reliability_band": level_rows.get(nearest["level_id"], {}).get("reliability_band", "") if nearest else "", "pressure_evidence_json": _json(pressure), "forecast_json": _json({"structural_direction": structural_direction, "volatility_expansion_risk": vol["expansion_risk"], "directional_activation": activation, "current_tactical_side": str(signal.get("bias") or "NONE").upper(), "next_regime_candidate": direction if activation != "NONE" else "NONE"}), "data_quality_status": "unresolved" if vol["state"] == "insufficient" or any(meta["gap_count"] for meta in (meta15, meta1, meta4)) else "ok", "reason_codes": "|".join(sorted(set(["equilibrium_descriptive_only"] + (["microstructure_unavailable"] if unavailable else []))))}
+        event = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "event_id": event_id, "signal_id": signal_id, "event_timestamp_utc": at.isoformat(), "event_timestamp_jst": (at + timedelta(hours=9)).isoformat(), "event_price": round(price, 10), "was_notified": str(signal.get("was_notified", "")), "current_tactical_side": str(signal.get("bias") or signal.get("primary_setup_side") or "NONE").upper(), "structural_state": structure["state"], "price_location": structure["location"], "nearest_support_id": structure["support"]["level_id"] if structure.get("support") else "", "nearest_resistance_id": structure["resistance"]["level_id"] if structure.get("resistance") else "", "next_upside_target_id": structure["target_up"]["level_id"] if structure.get("target_up") else "", "next_downside_target_id": structure["target_down"]["level_id"] if structure.get("target_down") else "", "event_family": "|".join(sorted(set(families))), "structural_direction": structural_direction, "expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "first_reliable_target": target["level_id"] if target else "", "intervening_obstruction": obstruction["level_id"] if obstruction else "none" if target else "insufficient", "volatility_state": vol["state"], "volatility_persistence": vol["persistence"], "volatility_bars_used": vol["bars_used"], "level_reliability_band": level_rows.get(nearest["level_id"], {}).get("reliability_band", "") if nearest else "", "pressure_evidence_json": _json(pressure), "forecast_json": _json({"structural_direction": structural_direction, "volatility_expansion_risk": vol["expansion_risk"], "directional_activation": activation or "NONE", "current_tactical_side": str(signal.get("bias") or "NONE").upper(), "next_regime_candidate": activation or "NONE"}), "data_quality_status": "unresolved" if vol["state"] == "insufficient" or any(meta["gap_count"] for meta in (meta15, meta1, meta4)) else "ok", "reason_codes": "|".join(sorted(set(["equilibrium_descriptive_only"] + (["microstructure_unavailable"] if unavailable else []))))}
         event.update(outcome); events.append(event)
     events.sort(key=lambda row: (row["event_timestamp_utc"], row["event_id"]))
     level_list = sorted(level_rows.values(), key=lambda row: (row["first_seen_at"], row["level_id"]))
-    episodes = _episodes(events); misses = []
-    for episode in episodes:
-        row = episode["row"]; fired = bool(row.get("event_family")); root = "correct_no_signal" if fired else "reliable_level_missing" if not row.get("nearest_support_id") and not row.get("nearest_resistance_id") else "volatility_regime_misclassified" if row.get("volatility_state") == "insufficient" else "precursor_policy_too_strict"
-        misses.append({"opportunity_id": hashlib.sha256(f"{episode['direction']}|{episode['start'].isoformat()}".encode()).hexdigest()[:20], "direction": episode["direction"], "start_timestamp_utc": episode["start"].isoformat(), "material_move_timestamp_utc": "", "move_size_atr": "", "structure_state": row.get("structural_state", ""), "price_location": row.get("price_location", ""), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(row.get("was_notified", "")), "turning_precursor_fired": "false", "root_cause": root, "reason_codes": root, "data_quality_status": row.get("data_quality_status", "")})
+    opportunities = _realized_inventory(candles15, signal_rows, events)
+    misses = []
+    for opportunity in opportunities:
+        row = opportunity.get("event") or {}; current = _policy_fired(opportunity, "current_notification"); turning = _policy_fired(opportunity, "turning_precursor_combined")
+        root = "correct_no_signal" if current or turning else "reliable_level_missing" if not row.get("nearest_support_id") and not row.get("nearest_resistance_id") else "data_unresolved" if opportunity.get("data_quality_status") != "ok" else "travel_corridor_not_recognized" if opportunity["direction"] in {"UP", "DOWN"} and row.get("directional_activation") == opportunity["direction"] else "precursor_policy_too_strict"
+        misses.append({"opportunity_id": opportunity["opportunity_id"], "direction": opportunity["direction"], "start_timestamp_utc": opportunity["start_timestamp_utc"], "material_move_timestamp_utc": opportunity["material_move_timestamp_utc"], "move_size_atr": opportunity["move_size_atr"], "structure_state": row.get("structural_state", "insufficient"), "price_location": row.get("price_location", "insufficient"), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(current).lower(), "turning_precursor_fired": str(turning).lower(), "root_cause": root, "reason_codes": root, "data_quality_status": opportunity.get("data_quality_status", "")})
     dates = _split(signal_rows); coverage = {"signals": len(signal_rows), "ohlcv_15m": meta15, "ohlcv_1h": meta1, "ohlcv_4h": meta4, "continuity_pass": all(not m["gap_count"] for m in (meta15, meta1, meta4))}
     notified_count = sum(str(signal.get("was_notified", "")).strip().lower() in {"1", "true", "yes", "y"} for signal in signal_rows)
     turning_count = sum(_turning_fired(signal) for signal in signal_rows)
+    policies = ("current_notification", "turning_precursor_combined", "reliable_level_rejection", "reliable_level_break_acceptance", "false_break_reclaim", "compression_only", "reliable_level_pressure", "reliable_level_acceptance_corridor")
+    policy_metrics = {policy: _policy_metrics(opportunities, policy) for policy in policies}
+    def split_metrics(key: str) -> dict[str, Any]:
+        values = sorted({str((item.get("event") or {}).get(key, "insufficient")) for item in opportunities})
+        return {value: {policy: _policy_metrics([item for item in opportunities if str((item.get("event") or {}).get(key, "insufficient")) == value], policy) for policy in policies} for value in values}
+    split_data = {"direction": {direction: {policy: _policy_metrics([item for item in opportunities if item["direction"] == direction], policy) for policy in policies} for direction in ("UP", "DOWN", "BOTH")}, "regime": split_metrics("structural_state"), "volatility_state": split_metrics("volatility_state"), "reliability": split_metrics("level_reliability_band"), "price_location": split_metrics("price_location")}
     gate = _gate(events, dates, coverage)
-    summary = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "generated_at_utc": max((m["max_timestamp"] for m in (meta15, meta1, meta4)), default=""), "input_fingerprints": {"signals": _sha(signals), "ohlcv_15m": _sha(ohlcv_15m), "ohlcv_1h": _sha(ohlcv_1h), "ohlcv_4h": _sha(ohlcv_4h)}, "coverage": coverage, "method_parameters": {"left_window": left_window, "right_window": right_window, "cluster_tolerance": "max(0.30*ATR_confirmation,pivot_price*0.0015)", "material_move": "max(2*ATR_15M,event_price*0.005)", "jump_like": "max(3*ATR_15M,event_price*0.01)"}, "counts": {"signals": len(signal_rows), "events": len(events), "levels": len(level_list), "missed_moves": len(misses), "independent_opportunities": len(episodes)}, "level_summary": dict(Counter(row["reliability_band"] for row in level_list)), "metrics": {"large_move_up": sum(row.get("large_move_side") == "UP" for row in events), "large_move_down": sum(row.get("large_move_side") == "DOWN" for row in events), "jump_like": sum(bool(row.get("jump_like")) for row in events)}, "baselines": {"current_notification": notified_count, "current_turning_precursor_combined": turning_count, "reliable_level_rejection": sum("RELIABLE_LEVEL_REJECTION" in row.get("event_family", "") for row in events), "reliable_level_break_acceptance": sum("LEVEL_BREAK_ACCEPTANCE" in row.get("event_family", "") for row in events), "false_break_reclaim": sum("FALSE_BREAK_RECLAIM" in row.get("event_family", "") for row in events), "compression_only_diagnostic": sum(row.get("volatility_state") == "compressed" for row in events), "compression_only_preferred": False}, "walk_forward": dates, "recommendation_gate": gate, "recommendation_status": gate["status"], "missed_move_root_causes": dict(Counter(row["root_cause"] for row in misses)), "no_automatic_tuning": True, "safety_boundary": SAFETY}
+    summary = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "generated_at_utc": max((m["max_timestamp"] for m in (meta15, meta1, meta4)), default=""), "input_fingerprints": {"signals": _sha(signals), "ohlcv_15m": _sha(ohlcv_15m), "ohlcv_1h": _sha(ohlcv_1h), "ohlcv_4h": _sha(ohlcv_4h)}, "coverage": coverage, "method_parameters": {"left_window": left_window, "right_window": right_window, "cluster_tolerance": "max(0.30*ATR_confirmation,pivot_price*0.0015)", "material_move": "max(2*ATR_15M,event_price*0.005)", "jump_like": "max(3*ATR_15M,event_price*0.01)", "corridor_minimum_atr": 1.0}, "counts": {"signals": len(signal_rows), "events": len(events), "levels": len(level_list), "missed_moves": len(misses), "independent_opportunities": len(opportunities)}, "level_summary": dict(Counter(row["reliability_band"] for row in level_list)), "metrics": policy_metrics, "baselines": policy_metrics, "splits": split_data, "location_metrics": split_data["price_location"], "missed_move_counts": dict(Counter(row["root_cause"] for row in misses)), "walk_forward": dates, "recommendation_gate": gate, "recommendation_status": gate["status"], "missed_move_root_causes": dict(Counter(row["root_cause"] for row in misses)), "no_automatic_tuning": True, "safety_boundary": SAFETY}
     csv_bytes = _csv_bytes(events, EVENT_FIELDS); level_bytes = _csv_bytes(level_list, LEVEL_FIELDS); miss_bytes = _csv_bytes(misses, MISS_FIELDS); json_bytes = (json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(); md_bytes = _markdown(summary).encode()
     _atomic({output_events_csv: csv_bytes, output_levels_csv: level_bytes, output_misses_csv: miss_bytes, output_json: json_bytes, output_md: md_bytes}, replace_output)
     return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "counts": summary["counts"], "recommendation_status": summary["recommendation_status"]}

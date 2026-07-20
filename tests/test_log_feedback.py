@@ -7972,6 +7972,9 @@ class TurningVolatilityPrecursorCliTests(unittest.TestCase):
 
 
 class MacroStructureVolatilityCliTests(unittest.TestCase):
+    def _args(self, root: Path, fixture: Path) -> list[str]:
+        return [sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-macro-structure-volatility", "--signals", str(fixture / "signals.csv"), "--ohlcv-15m", str(fixture / "ohlcv_15m.csv"), "--ohlcv-1h", str(fixture / "ohlcv_1h.csv"), "--ohlcv-4h", str(fixture / "ohlcv_4h.csv"), "--output-events-csv", str(root / "events.csv"), "--output-levels-csv", str(root / "levels.csv"), "--output-misses-csv", str(root / "misses.csv"), "--output-json", str(root / "replay.json"), "--output-md", str(root / "replay.md"), "--stdout-json"]
+
     def test_explicit_fixture_route_is_compact_and_privacy_safe(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -7989,6 +7992,25 @@ class MacroStructureVolatilityCliTests(unittest.TestCase):
             result = subprocess.run([sys.executable, str(BASE_DIR / "tools/log_feedback.py"), "replay-macro-structure-volatility", "--signals", str(fixture / "signals.csv"), "--ohlcv-15m", str(fixture / "ohlcv_15m.csv"), "--ohlcv-1h", str(root / "missing.csv"), "--ohlcv-4h", str(fixture / "ohlcv_4h.csv"), "--output-events-csv", str(root / "e.csv"), "--output-levels-csv", str(root / "l.csv"), "--output-misses-csv", str(root / "m.csv"), "--output-json", str(root / "j.json"), "--output-md", str(root / "r.md"), "--stdout-json"], cwd=BASE_DIR, capture_output=True, text=True, check=False)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("input_file_missing", result.stdout + result.stderr)
+
+    def test_malformed_structured_signal_is_privacy_safe(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); fixture = BASE_DIR / "tests" / "fixtures" / "macro_structure_volatility"; bad = root / "signals.csv"
+            text = (fixture / "signals.csv").read_text(encoding="utf-8").replace("100,long,false,,", '100,long,false,"[broken",')
+            bad.write_text(text, encoding="utf-8")
+            args = self._args(root, fixture); args[args.index("--signals") + 1] = str(bad)
+            result = subprocess.run(args, cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("malformed_structured_signal", result.stdout)
+
+    def test_existing_outputs_require_replace_and_failure_keeps_all_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir); fixture = BASE_DIR / "tests" / "fixtures" / "macro_structure_volatility"; args = self._args(root, fixture)
+            for name in ("events.csv", "levels.csv", "misses.csv", "replay.json", "replay.md"):
+                (root / name).write_text("sentinel\n", encoding="utf-8")
+            result = subprocess.run(args, cwd=BASE_DIR, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(all((root / name).read_text(encoding="utf-8") == "sentinel\n" for name in ("events.csv", "levels.csv", "misses.csv", "replay.json", "replay.md")))
 
 
 if __name__ == "__main__":
