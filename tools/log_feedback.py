@@ -67,6 +67,7 @@ from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.feedback.turning_volatility_precursor_replay import replay_turning_volatility_precursors
 from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
+from src.feedback.macro_next_regime_replay import replay_macro_next_regime
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22102,6 +22103,18 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_parser.add_argument("--replace-output", action="store_true")
     macro_parser.add_argument("--stdout-json", action="store_true")
 
+    next_regime_parser = subparsers.add_parser("replay-macro-next-regime")
+    next_regime_parser.add_argument("--signals", required=True)
+    next_regime_parser.add_argument("--macro-events", required=True)
+    next_regime_parser.add_argument("--macro-levels", required=True)
+    next_regime_parser.add_argument("--macro-replay-json", required=True)
+    next_regime_parser.add_argument("--output-events-csv", required=True)
+    next_regime_parser.add_argument("--output-episodes-csv", required=True)
+    next_regime_parser.add_argument("--output-json", required=True)
+    next_regime_parser.add_argument("--output-md", required=True)
+    next_regime_parser.add_argument("--replace-output", action="store_true")
+    next_regime_parser.add_argument("--stdout-json", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23519,6 +23532,22 @@ def main() -> None:
                 output_levels_csv=Path(args.output_levels_csv), output_misses_csv=Path(args.output_misses_csv),
                 output_json=Path(args.output_json), output_md=Path(args.output_md), cutoff_utc=args.cutoff_utc,
                 left_window=int(args.left_window), right_window=int(args.right_window),
+                replace_output=bool(args.replace_output),
+            )
+        except (OSError, ValueError) as exc:
+            sys.stdout.write(json.dumps({"ok": False, "exit_code": 2, "error_code": str(exc)}, separators=(",", ":")) + "\n")
+            return 2
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "replay-macro-next-regime":
+        try:
+            summary = replay_macro_next_regime(
+                signals=Path(args.signals), macro_events=Path(args.macro_events),
+                macro_levels=Path(args.macro_levels), macro_replay_json=Path(args.macro_replay_json),
+                output_events_csv=Path(args.output_events_csv), output_episodes_csv=Path(args.output_episodes_csv),
+                output_json=Path(args.output_json), output_md=Path(args.output_md),
                 replace_output=bool(args.replace_output),
             )
         except (OSError, ValueError) as exc:

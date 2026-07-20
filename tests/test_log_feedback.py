@@ -8013,5 +8013,20 @@ class MacroStructureVolatilityCliTests(unittest.TestCase):
             self.assertTrue(all((root / name).read_text(encoding="utf-8") == "sentinel\n" for name in ("events.csv", "levels.csv", "misses.csv", "replay.json", "replay.md")))
 
 
+class MacroNextRegimeCliTests(unittest.TestCase):
+    def test_parser_dispatches_explicit_offline_paths_compactly(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            argv = ["log_feedback.py", "replay-macro-next-regime", "--signals", "signals.csv", "--macro-events", "events.csv", "--macro-levels", "levels.csv", "--macro-replay-json", "replay.json", "--output-events-csv", str(root / "events.csv"), "--output-episodes-csv", str(root / "episodes.csv"), "--output-json", str(root / "output.json"), "--output-md", str(root / "output.md"), "--replace-output", "--stdout-json"]
+            summary = {"ok": True, "exit_code": 0, "schema_version": "macro_next_regime_replay.v1", "method_version": "macro_next_regime_replay.v1", "counts": {"events": 1}, "recommendation": "continue_shadow_collection"}
+            with patch.object(sys, "argv", argv), patch("tools.log_feedback.replay_macro_next_regime", return_value=summary) as replay, patch("sys.stdout", new_callable=StringIO) as out:
+                self.assertEqual(main(), 0)
+                self.assertEqual(replay.call_count, 1)
+                self.assertIn('"ok":true', out.getvalue())
+                self.assertNotIn(str(root), out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

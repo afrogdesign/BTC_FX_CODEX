@@ -420,3 +420,19 @@ This section supersedes the older `Current next task` block above.
 - acceptance blockers must be separated from non-blocking improvement candidates; successful targeted validation must not be repeated without need
 - no runtime enablement, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, order, or automatic-tuning change is authorized
 - report-only / not `FORMAL_GO` / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-21 M3 authorization
+
+- M2 source commit `8aee427` and acceptance-doc commit `c2eed44` are accepted.
+- The user authorized continuous progression through the remaining macro phases, subject to each active spec and safety boundary.
+- current work ID: `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW`
+- active spec: `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`
+- mode: `CODEX_EXEC`
+- M3 is offline replay only and keeps the production Big Chance evaluator unchanged.
+- M4 and M5 require later separate active specs after preceding acceptance.
+- M6 remains a human-reviewed bounded runtime proposal; no automatic production adoption is authorized.
+- no notification, mail, scoring, gate, threshold, classifier, runtime, API, account, position, or order change is authorized in M3.
+- safety remains report-only / not FORMAL_GO / no automatic order / human decides manually.
