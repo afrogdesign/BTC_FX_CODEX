@@ -320,10 +320,11 @@ def _level_events(level: dict[str, Any], candles: list[dict[str, Any]], at: date
     completed = [item for item in interactions if item["kind"] != "break"]
     latest = completed[-1] if completed else None
     current = bool(latest and bars and latest["timestamp"] == bars[-1]["timestamp"])
-    family = "RELIABLE_LEVEL_APPROACH" if any(x >= 0 for x in touches) and latest is None else ""
+    current_approach = bool(bars and bars[-1]["high"] >= level["low"] and bars[-1]["low"] <= level["high"])
+    family = "RELIABLE_LEVEL_APPROACH" if current_approach and not current else ""
     if latest and current:
         family = {"clean_rejection": "RELIABLE_LEVEL_REJECTION", "accepted_break": "LEVEL_BREAK_ACCEPTANCE", "false_break_reclaim": "FALSE_BREAK_RECLAIM"}[latest["kind"]] + "_" + latest["side"]
-    return {"touches": sum(x >= 0 for x in touches), "touch_timestamps": [bars[x]["timestamp"] for x in touches if x >= 0], "family": family, "activation": latest["side"] if latest and current else None, "rejection": latest["side"] if latest and current and latest["kind"] == "clean_rejection" else None, "break_side": active["side"] if active else None, "accepted": bool(latest and latest["kind"] == "accepted_break"), "reclaim": bool(latest and latest["kind"] == "false_break_reclaim"), "role": role, "interactions": interactions}
+    return {"touches": sum(x >= 0 for x in touches), "touch_timestamps": [bars[x]["timestamp"] for x in touches if x >= 0], "family": family, "activation": latest["side"] if latest and current else None, "rejection": latest["side"] if latest and current and latest["kind"] == "clean_rejection" else None, "break_side": active["side"] if active else None, "accepted": bool(latest and latest["kind"] == "accepted_break"), "reclaim": bool(latest and latest["kind"] == "false_break_reclaim"), "current_kind": latest["kind"] if latest and current else "", "role": role, "interactions": interactions}
 
 
 def _volatility(candles: list[dict[str, Any]], at: datetime) -> dict[str, Any]:
@@ -673,10 +674,10 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
                 families.append("OPEN_TRAVEL_CORRIDOR_UP" if activation == "UP" else "OPEN_TRAVEL_CORRIDOR_DOWN")
         if activation == "UP" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_UP")
         if activation == "DOWN" and pressure.get("repeated_tests") == "present": families.append("REPEATED_TEST_PRESSURE_DOWN")
-        pressure["rejection"] = "present" if lifecycle.get("rejection") else "absent"
+        pressure["rejection"] = "present" if lifecycle.get("current_kind") == "clean_rejection" else "absent"
         pressure["break"] = "present" if lifecycle.get("break_side") else "absent"
-        pressure["closed_candle_acceptance"] = "present" if lifecycle.get("accepted") else "absent"
-        pressure["false_break_reclaim"] = "present" if lifecycle.get("reclaim") else "absent"
+        pressure["closed_candle_acceptance"] = "present" if lifecycle.get("current_kind") == "accepted_break" else "absent"
+        pressure["false_break_reclaim"] = "present" if lifecycle.get("current_kind") == "false_break_reclaim" else "absent"
         pressure["target_obstruction"] = "present" if obstruction else "absent" if target else "unavailable"
         pressure["open_corridor"] = "present" if "OPEN_TRAVEL_CORRIDOR_UP" in families or "OPEN_TRAVEL_CORRIDOR_DOWN" in families else "absent"
         outcome = _outcomes(price, at, vol.get("atr", 0), candles15, levels, activation, target, nearest, candles1)
@@ -701,16 +702,20 @@ def replay_macro_structure_volatility(*, signals: Path, ohlcv_15m: Path, ohlcv_1
             root = "reliable_level_missing"
         elif row.get("level_reliability_band") == "low":
             root = "level_reliability_miscalibrated"
-        elif opportunity["direction"] in {"UP", "DOWN"} and row.get("directional_activation") == opportunity["direction"] and "OPEN_TRAVEL_CORRIDOR" not in family:
+        elif row.get("directional_activation") in {"UP", "DOWN"} and "OPEN_TRAVEL_CORRIDOR" not in family and row.get("first_reliable_target"):
             root = "travel_corridor_not_recognized"
         elif pressure.get("microstructure_status") == "unavailable":
             root = "pressure_or_imbalance_unavailable"
         elif row.get("volatility_state") == "insufficient":
             root = "volatility_regime_misclassified"
-        elif "RELIABLE_LEVEL_REJECTION" not in family and "LEVEL_BREAK_ACCEPTANCE" not in family and "FALSE_BREAK_RECLAIM" not in family:
-            root = "rejection_event_missing" if opportunity["direction"] == "UP" else "break_acceptance_missing"
+        elif "RELIABLE_LEVEL_REJECTION" not in family and row.get("nearest_support_id"):
+            root = "rejection_event_missing"
+        elif "LEVEL_BREAK_ACCEPTANCE" not in family and row.get("nearest_resistance_id"):
+            root = "break_acceptance_missing"
+        elif "FALSE_BREAK_RECLAIM" not in family and row.get("directional_activation") in {"UP", "DOWN"}:
+            root = "false_break_reclaim_missing"
         else:
-            root = "precursor_policy_too_strict"
+            root = "data_unresolved"
         misses.append({"opportunity_id": opportunity["opportunity_id"], "direction": opportunity["direction"], "start_timestamp_utc": opportunity["start_timestamp_utc"], "material_move_timestamp_utc": opportunity["material_move_timestamp_utc"], "move_size_atr": opportunity["move_size_atr"], "structure_state": row.get("structural_state", "insufficient"), "price_location": row.get("price_location", "insufficient"), "nearest_support_id": row.get("nearest_support_id", ""), "nearest_resistance_id": row.get("nearest_resistance_id", ""), "current_notification_fired": str(current).lower(), "turning_precursor_fired": str(turning).lower(), "root_cause": root, "reason_codes": root, "data_quality_status": opportunity.get("data_quality_status", "")})
     policy_episodes = _policy_episodes(events, signal_rows, opportunities)
     evidence_dates = signal_rows + [{"timestamp_utc": item["start_timestamp_utc"]} for item in opportunities]

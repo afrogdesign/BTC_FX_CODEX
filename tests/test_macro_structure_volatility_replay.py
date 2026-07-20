@@ -4,11 +4,13 @@ import csv
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.feedback.macro_structure_volatility_replay import (
     _gate,
+    _atomic,
     _level_events,
     _micro_value,
     _outcomes,
@@ -112,6 +114,28 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         lifecycle = _level_events(level, bars, start + timedelta(hours=5))
         self.assertEqual(lifecycle["family"], "")
         self.assertEqual(sum(item["kind"] == "break" for item in lifecycle["interactions"]), 1)
+
+    def test_new_approach_is_current_evidence_after_historical_acceptance(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        level = {"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}
+        bars = [{"timestamp": start + timedelta(hours=i), "open": value, "high": value + .1, "low": value - .1, "close": value, "interval": "1h"} for i, value in enumerate((101, 101, 100, 100))]
+        lifecycle = _level_events(level, bars, start + timedelta(hours=5))
+        self.assertEqual(lifecycle["family"], "RELIABLE_LEVEL_APPROACH")
+        self.assertEqual(lifecycle["current_kind"], "")
+
+    def test_atomic_failure_preserves_all_existing_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); targets = [root / name for name in ("a", "b", "c", "d", "e")]
+            for target in targets: target.write_bytes(b"old")
+            original = Path.replace
+            def fail_third(source: Path, target: Path) -> Path:
+                if source.parent.name.startswith(".macro-replay-") and source.name.startswith("2-"):
+                    raise OSError("forced")
+                return original(source, target)
+            with patch("src.feedback.macro_structure_volatility_replay.Path.replace", new=fail_third):
+                with self.assertRaises(OSError):
+                    _atomic({target: b"new" for target in targets}, True)
+            self.assertEqual([target.read_bytes() for target in targets], [b"old"] * 5)
 
     def test_realized_move_side_is_not_overwritten_by_activation(self) -> None:
         start = datetime(2026, 1, 1, tzinfo=timezone.utc)
