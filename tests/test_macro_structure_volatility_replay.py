@@ -55,7 +55,14 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         accepted = _level_events({"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}, [candle(0, 101.0, 101.1, 100.9), candle(1, 101.0, 101.1, 100.9), candle(2, 101.0, 101.1, 100.9)], start + timedelta(hours=4))
         self.assertEqual(accepted["family"], "LEVEL_BREAK_ACCEPTANCE_UP")
         reclaimed = _level_events({"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}, [candle(0, 101.0, 101.1, 100.9), candle(1, 99.9, 100.0, 99.8)], start + timedelta(hours=3))
-        self.assertEqual(reclaimed["family"], "FALSE_BREAK_RECLAIM_UP")
+        self.assertEqual(reclaimed["family"], "FALSE_BREAK_RECLAIM_DOWN")
+        self.assertEqual(reclaimed["activation"], "DOWN")
+
+    def test_acceptance_uses_break_candle_plus_one_consecutive_close(self) -> None:
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        level = {"side": "high", "center": 100.0, "low": 99.8, "high": 100.2}
+        bars = [{"timestamp": start + timedelta(hours=i), "open": 101, "high": 101.1, "low": 100.9, "close": 101, "interval": "1h"} for i in range(2)]
+        self.assertEqual(_level_events(level, bars, start + timedelta(hours=3))["family"], "LEVEL_BREAK_ACCEPTANCE_UP")
 
     def test_microstructure_is_directional_only_when_valid(self) -> None:
         self.assertEqual(_micro_value("0", "order_flow_imbalance"), ("absent", None))
