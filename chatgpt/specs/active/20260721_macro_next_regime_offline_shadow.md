@@ -40,7 +40,7 @@ Required explicit local inputs:
 - M1/M2 `macro_level_reliability.csv`
 - M1/M2 `macro_structure_volatility_replay.json`
 
-Join by `signal_id`. Reject duplicates, malformed timestamps, incompatible schema/method versions, missing required columns, and event/signal mismatches.
+Join signal rows to macro events by `signal_id`. Resolve target and obstruction references to level records by `level_id`. Treat replay JSON as a schema/method/coverage metadata contract rather than a row join. Reject duplicates, malformed timestamps, incompatible schema/method versions, missing required columns, and event/signal mismatches.
 
 Only published performance events are eligible. Context-only rows must not re-enter M3 metrics or outputs.
 
@@ -228,3 +228,43 @@ M3 source completion requires:
 - no production or runtime behavior changes
 
 After ChatGPT acceptance, proceed directly to a separate M4 active spec for render-only operator hierarchy shadow. M3 acceptance does not itself change live UI or runtime.
+
+
+---
+
+## 15. ChatGPT acceptance — 2026-07-21
+
+M3 is accepted as an offline, report-only next-regime comparison layer.
+
+Accepted implementation commits:
+
+- initial implementation: `04d205a`
+- evaluation completion: `8639162`
+- episode identity completion: `1f4ea67`
+- family conflict boundary completion: `4f97a55`
+
+Accepted evidence:
+
+- focused M3 tests: 8 passing
+- fresh bounded replay: 124 performance events and 58 policy episodes
+- candidate and frozen Big Chance baseline remain independent
+- explicit obstruction and directional-family conflicts fail closed
+- candidate and baseline episode identities use complete pre-outcome evidence keys and three-hour separation from episode start
+- 3H, 6H, 12H, and 24H metrics and required performance-only splits are present
+- chronological validation compares candidate and baseline on the same dates
+- input schema, version, identifier, target, obstruction, and event-family boundaries are checked
+- four outputs publish deterministically and roll back as a complete set
+
+The bounded recommendation remains `continue_shadow_collection`. This does not block M4 render-only hierarchy work, but it does block production adoption of the M3 policy.
+
+M3 acceptance does not authorize changes to live Big Chance, notification, mail, scoring, thresholds, gates, runtime, APIs, accounts, positions, or orders.
+
+---
+
+## 16. Correction — validation-window review pending
+
+The historical acceptance record above is withdrawn pending FIX-04 review. M3 remains the active offline, report-only specification; M4 implementation is not authorized.
+
+FIX-04 corrects the chronological validation date basis to all eligible performance events (including dates with no policy episode), evaluates candidate and baseline on that same date set, and applies single-date concentration to candidate validation episodes only.
+
+The M3 proposal gate uses `3h` as its explicit primary horizon. The `6h`, `12h`, and `24h` metrics and splits remain required descriptive diagnostics only. Any future eligibility remains render-only M4 design eligibility and never authorizes production behavior.

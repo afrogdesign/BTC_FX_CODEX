@@ -11,6 +11,7 @@ from unittest.mock import patch
 from src.feedback.macro_next_regime_replay import (
     _episode_rows,
     _forecast,
+    _gate,
     baseline_evidence_key,
     candidate_evidence_key,
     baseline_adapter,
@@ -29,6 +30,34 @@ def _event(signal_id: str, at: str, **overrides: object) -> dict[str, object]:
 
 
 class MacroNextRegimeReplayTests(unittest.TestCase):
+    def test_candidate_owned_failed_thesis_is_non_directional_watch(self) -> None:
+        signal = {"failed_breakout_state": "failed_long_breakout"}
+        event = _event("a", "2026-01-01T00:00:00+00:00", directional_activation="NONE", event_family="")
+        absent = _forecast(signal, event, {"level-1"}, {})
+        present = _forecast(signal, event, {"level-1"}, {"present": True, "side": "short", "status": "active", "grade": "A"})
+        self.assertEqual((absent["status"], absent["next_regime_side"], absent["weakening_thesis"]), ("watch", "NONE", "explicit_failed_thesis"))
+        self.assertEqual((present["status"], present["next_regime_side"], present["weakening_thesis"]), ("watch", "NONE", "explicit_failed_thesis"))
+
+    def test_gate_uses_eligible_event_dates_and_candidate_only_concentration(self) -> None:
+        def episode(policy: str, day: int, ident: str) -> dict[str, object]:
+            return {"policy": policy, "start_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00", "side": "UP", "outcome_3h": "large_up", "outcome_6h": "large_up", "outcome_12h": "large_up", "outcome_24h": "large_up", "first_material_move_timestamp": "", "data_quality_status": "ok", "episode_id": ident}
+        eligible = [{"event_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00"} for day in range(1, 6)]
+        gate = _gate([episode("candidate", 5, "c"), episode("baseline", 4, "b1"), episode("baseline", 5, "b2")], eligible, True)
+        self.assertEqual(gate["eligible_event_jst_dates"], [f"2026-01-0{day}" for day in range(1, 6)])
+        self.assertEqual(gate["validation_dates"], ["2026-01-04", "2026-01-05"])
+        self.assertEqual(gate["validation_date_basis"], "eligible_performance_events")
+        self.assertEqual(gate["primary_gate_horizon"], "3h")
+        self.assertIn("single_jst_date_concentration", gate["reason_codes"])
+        self.assertEqual(set(gate["validation_candidate_metrics"]), {"3h", "6h", "12h", "24h"})
+        self.assertEqual(set(gate["validation_baseline_metrics"]), {"3h", "6h", "12h", "24h"})
+
+    def test_baseline_concentration_does_not_trigger_candidate_reason(self) -> None:
+        def episode(policy: str, day: int, ident: str) -> dict[str, object]:
+            return {"policy": policy, "start_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00", "side": "UP", "outcome_3h": "large_up", "outcome_6h": "large_up", "outcome_12h": "large_up", "outcome_24h": "large_up", "first_material_move_timestamp": "", "data_quality_status": "ok", "episode_id": ident}
+        eligible = [{"event_timestamp_utc": f"2026-01-0{day}T00:00:00+00:00"} for day in range(1, 6)]
+        gate = _gate([episode("candidate", 4, "c1"), episode("candidate", 5, "c2"), episode("baseline", 5, "b1"), episode("baseline", 5, "b2")], eligible, True)
+        self.assertNotIn("single_jst_date_concentration", gate["reason_codes"])
+
     def test_baseline_alone_does_not_create_candidate_watch_or_weakening(self) -> None:
         forecast = _forecast({}, _event("a", "2026-01-01T00:00:00+00:00", directional_activation="NONE", event_family=""), {"level-1"}, {"present": True, "side": "short", "status": "armed", "grade": "C"})
         self.assertEqual((forecast["status"], forecast["next_regime_side"], forecast["weakening_thesis"]), ("none", "NONE", "none"))

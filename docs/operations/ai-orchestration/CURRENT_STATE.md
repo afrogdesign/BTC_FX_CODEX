@@ -1048,3 +1048,31 @@ M2 is accepted at source commit `8aee427`.
 - M3 has not started; no active spec is open
 - no runtime, launchd, notification, mail, production analysis, scoring, gate, threshold, classifier, API, account, position, or order behavior changed
 - safety remains report-only / not `FORMAL_GO` / no automatic order / human decides manually
+
+
+---
+
+## 2026-07-21 M3 accepted; M4 render shadow active
+
+- M3 accepted implementation head: `4f97a55`
+- accepted M3 spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
+- accepted bounded replay: 124 events / 58 policy episodes
+- recommendation remains `continue_shadow_collection`
+- candidate and frozen Big Chance baseline are independent
+- obstruction, family conflict, schema, reference, and missing evidence boundaries fail closed
+- complete pre-outcome episode identity, multi-horizon metrics, required splits, chronological validation, and atomic outputs are accepted
+- production Big Chance, notification, mail, scoring, gates, runtime, APIs, accounts, positions, and orders remain unchanged
+- active phase: M4 local operator hierarchy render shadow
+- active spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
+- M4 is render-only and does not authorize live UI deployment
+
+---
+
+## 2026-07-21 M3 validation-window correction pending
+
+- the prior M3/M4 transition is withdrawn pending `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-04` review
+- active spec: `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`
+- M3 remains offline, report-only, and its recommendation remains `continue_shadow_collection`
+- M4 is preserved only as inactive draft `chatgpt/specs/archive/20260721_macro_operator_hierarchy_render_shadow_draft.md`; implementation has not started
+- FIX-04 covers eligible-event JST validation dates, candidate-only concentration, and explicit 3H primary gate reporting
+- no runtime, production, notification, mail, scoring, gate, threshold, classifier, API, account, position, or order behavior changed

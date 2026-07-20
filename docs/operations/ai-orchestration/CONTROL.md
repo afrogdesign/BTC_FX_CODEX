@@ -436,3 +436,30 @@ This section supersedes the older `Current next task` block above.
 - M6 remains a human-reviewed bounded runtime proposal; no automatic production adoption is authorized.
 - no notification, mail, scoring, gate, threshold, classifier, runtime, API, account, position, or order change is authorized in M3.
 - safety remains report-only / not FORMAL_GO / no automatic order / human decides manually.
+
+
+---
+
+## 2026-07-21 M3 acceptance and M4 control boundary
+
+- accepted M3 implementation head: `4f97a55`
+- accepted M3 specification is archived
+- active specification: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
+- current mode: `CODEX_EXEC`
+- current objective: deterministic local chart-first hierarchy comparison
+- M3 recommendation remains `continue_shadow_collection`; no policy promotion is authorized
+- M4 may create only local self-contained HTML/JSON/Markdown shadow artifacts
+- M4 must exclude future outcomes from view construction and retain unavailable evidence explicitly
+- production detail page, notification, mail, daily wrapper, scoring, thresholds, gates, classifiers, deploy, runtime, APIs, accounts, positions, and orders are outside scope
+- M5 cannot start until ChatGPT accepts M4 source and bounded artifact
+
+---
+
+## 2026-07-21 M3 FIX-04 control correction
+
+- prior M3 acceptance and M4 activation are withdrawn pending validation-window review
+- current work ID: `BTCFX-20260721-MACRO-NEXT-REGIME-OFFLINE-SHADOW-FIX-04`
+- active spec: `chatgpt/specs/active/20260721_macro_next_regime_offline_shadow.md`
+- M4 is an inactive preserved draft and implementation is not authorized
+- current recommendation remains `continue_shadow_collection`
+- FIX-04 is offline/report-only only; no production, runtime, notification, mail, scoring, gate, threshold, classifier, API, account, position, or order change is authorized
