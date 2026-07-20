@@ -11,6 +11,7 @@ from pathlib import Path
 from src.feedback.macro_structure_volatility_replay import (
     _gate,
     _atomic,
+    _dedup_policy_episodes,
     _level_events,
     _micro_value,
     _outcomes,
@@ -89,6 +90,16 @@ class MacroStructureVolatilityReplayTests(unittest.TestCase):
         self.assertEqual(metrics["episodes"], 1)
         self.assertEqual(metrics["resolved_episodes"], 1)
         self.assertEqual(metrics["false_warning_rate"], 1.0)
+
+    def test_policy_episode_dedup_keeps_transition_and_drops_repeated_snapshot(self) -> None:
+        base = {"was_notified": "true", "current_tactical_side": "LONG", "event_family": "", "structural_state": "range", "volatility_state": "ordinary", "price_location": "lower_half"}
+        def row(hour: int, event: dict[str, object] = base) -> dict[str, object]:
+            return {"event": dict(event), "signal": None, "outcome": "unresolved", "timestamp": f"2026-01-01T{hour:02d}:00:00+00:00", "mfe": None, "mae": None}
+        repeated = _dedup_policy_episodes([row(0), row(1)], "current_notification")
+        changed = _dedup_policy_episodes([row(0), row(1, {**base, "current_tactical_side": "SHORT"})], "current_notification")
+        self.assertEqual(len(repeated), 1)
+        self.assertEqual(len(changed), 2)
+        self.assertEqual(_policy_metrics([], "current_notification", [row(0), row(1)])["episodes"], 1)
 
     def test_compression_only_requires_expansion_and_has_no_directional_precision(self) -> None:
         event = {"volatility_state": "compressed", "event_family": ""}
