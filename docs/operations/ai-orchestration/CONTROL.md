@@ -262,6 +262,19 @@ The operator hero layout hotfix (`129cbba`) is runtime-applied in the primary re
 - P9 remains blocked; an eligible replay result authorizes only a separate human-approved proposal
 - safety: report-only / not FORMAL_GO / no automatic order / human decides manually
 
+## 2026-07-21 M4 acceptance / M5 activation
+
+- accepted M4 commit: `ea89e61`
+- active spec: `chatgpt/specs/active/20260721_macro_p9_champion_challenger_proposal_engine.md`
+- current mode: `BOUNDED_CODEX`
+- current work ID: `BTCFX-20260721-MACRO-P9-CHAMPION-CHALLENGER-PROPOSAL-ENGINE`
+- M3 recommendation: `continue_shadow_collection`
+- M5 objective: deterministic offline champion/challenger proposal ranking and issue diagnosis
+- M5 source implementation: not started
+- M4 is accepted only as local render-only evidence; live UI deployment is not authorized
+- no production, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed
+- safety: report-only / not `FORMAL_GO` / no automatic order / human decides manually
+
 ## 2026-07-12 corrected turning precursor replay
 
 - corrected replay completed once after discarding all pre-correction metrics

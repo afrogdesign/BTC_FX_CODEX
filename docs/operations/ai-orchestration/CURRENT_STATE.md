@@ -1120,3 +1120,15 @@ M3 FIX-05 is accepted as the final offline/report-only next-regime comparison co
 The recommendation remains `continue_shadow_collection`. No production Big Chance, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.
 
 M3 is archived at `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`. M4 is active again only for bounded FIX-01 work against preserved implementation base `5574a2e`. M4 is not accepted, live UI deployment is not authorized, and M5 has not started.
+
+## 2026-07-21 M4 accepted; M5 proposal engine active
+
+- M4 local render-only hierarchy shadow accepted at `ea89e61`.
+- Accepted M4 evidence includes grouped wording/trace, tactical status safety, NONE/disagreement handling, chart-first hierarchy, future-field audit, optional 4H metadata, and deterministic three-directory publication/rollback.
+- M3 recommendation remains `continue_shadow_collection`; no production policy promotion is authorized.
+- active phase: M5 bounded offline champion/challenger proposal engine
+- active spec: `chatgpt/specs/active/20260721_macro_p9_champion_challenger_proposal_engine.md`
+- current M5 work ID: `BTCFX-20260721-MACRO-P9-CHAMPION-CHALLENGER-PROPOSAL-ENGINE`
+- M5 source implementation has not started.
+- M4 remains local review evidence only; no live UI deployment.
+- no production UI, notification, mail, scoring, threshold, gate, classifier, runtime, API, account, position, or order behavior changed.

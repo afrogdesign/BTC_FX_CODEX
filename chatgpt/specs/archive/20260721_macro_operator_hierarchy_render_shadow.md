@@ -446,3 +446,18 @@ M4 remains report-only, not FORMAL_GO, human-decided, and incapable of automatic
 FIX-01 implementation note: the local renderer validates complete input schemas, preserves event-time-safe level references only, deduplicates included geometry by level ID, records 4H validation metadata, and publishes the three review outputs atomically across independently supplied parent directories. Acceptance remains pending review.
 
 FIX-02 implementation note: secondary tactical wording is grouped by normalized text with sorted contributing candidate IDs, including per-group source traces; tactical source statuses remain visible but are explicitly not execution permission. Acceptance remains pending review.
+
+---
+
+## 23. Final M4 acceptance record
+
+M4 is accepted as a bounded local render-only shadow at commit `ea89e61`.
+
+- grouped active-headline count: 1, containing both bounded candidate IDs
+- next-condition groups: 2 distinct groups
+- source trace coverage, tactical-status safety, `NONE`/disagreement handling, and chart-first hierarchy: accepted
+- future-field exclusion, optional 4H metadata, deterministic three-directory publication, rollback, and repeat determinism: accepted
+- scope: local self-contained HTML/JSON/Markdown review artifact only
+- no production UI, notification, mail, runtime, policy promotion, `FORMAL_GO`, or automatic-order authorization
+
+M4 acceptance does not authorize live deployment. M5 is the next bounded offline design/implementation phase and remains subject to its own active specification and ChatGPT acceptance.

@@ -43,3 +43,17 @@ Future bounded Codex work defaults to `GPT-5.4-mini Medium`.
 - no automatic order
 - no automatic production mutation
 - human decides manually
+
+## Current action — M5 bounded proposal engine
+
+- current_work_id: `BTCFX-20260721-MACRO-P9-CHAMPION-CHALLENGER-PROPOSAL-ENGINE`
+- mode: `BOUNDED_CODEX`
+- active_spec: `chatgpt/specs/active/20260721_macro_p9_champion_challenger_proposal_engine.md`
+- accepted_m4_head: `ea89e61`
+- m3_recommendation: `continue_shadow_collection`
+- next action: implement the new M5 offline proposal engine source and focused tests
+- source implementation: not started
+- m4 live UI deployment: not authorized
+- m5 does not authorize production mutation, notification, mail, runtime, scoring, gates, thresholds, classifiers, APIs, accounts, positions, or orders
+
+M4 was accepted only as a local deterministic render-only shadow. M5 remains report-only, not `FORMAL_GO`, human-decided, and no automatic order.
