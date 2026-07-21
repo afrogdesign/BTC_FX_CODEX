@@ -69,6 +69,7 @@ from src.feedback.turning_volatility_precursor_replay import replay_turning_vola
 from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
 from src.feedback.macro_structure_daily_operation import build_macro_structure_daily
 from src.feedback.macro_structure_history_operation import build_macro_structure_history
+from src.feedback.macro_structure_operator_artifact import render_macro_structure_operator
 from src.feedback.macro_next_regime_replay import replay_macro_next_regime
 from src.feedback.macro_operator_hierarchy_shadow import render_macro_operator_hierarchy_shadow
 from src.feedback.macro_p9_proposal_engine import run_macro_p9_proposal_engine
@@ -22125,6 +22126,14 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_history_parser.add_argument("--symbol", default="BTC_USDT")
     macro_history_parser.add_argument("--stdout-json", action="store_true")
 
+    macro_operator_parser = subparsers.add_parser("render-macro-structure-operator")
+    macro_operator_parser.add_argument("--snapshot-root", default="local/reports/macro_structure")
+    macro_operator_parser.add_argument("--history-root", default="local/reports/macro_structure/history")
+    macro_operator_parser.add_argument("--ohlcv-15m-csv", required=True)
+    macro_operator_parser.add_argument("--output-root", default="local/reports/macro_structure/operator")
+    macro_operator_parser.add_argument("--symbol", default="BTC_USDT")
+    macro_operator_parser.add_argument("--stdout-json", action="store_true")
+
     next_regime_parser = subparsers.add_parser("replay-macro-next-regime")
     next_regime_parser.add_argument("--signals", required=True)
     next_regime_parser.add_argument("--macro-events", required=True)
@@ -23606,6 +23615,20 @@ def main() -> None:
             )
         except (OSError, ValueError) as exc:
             summary = {"ok": False, "exit_code": 2, "error_code": str(exc)}
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "render-macro-structure-operator":
+        try:
+            summary = render_macro_structure_operator(
+                snapshot_root=Path(args.snapshot_root), history_root=Path(args.history_root),
+                ohlcv_15m_csv=Path(args.ohlcv_15m_csv), output_root=Path(args.output_root), symbol=args.symbol,
+            )
+        except (OSError, ValueError) as exc:
+            summary = {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False,
+                       "report_only": True, "automatic_order_allowed": False,
+                       "private_actual_trade_input": False}
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
         return int(summary.get("exit_code", 0))

@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import csv
+import json
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from src.feedback.macro_structure_operator_artifact import render_macro_structure_operator
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _zone(level_id: str, role: str, center: float, band: str = "medium") -> dict[str, object]:
+    return {
+        "level_id": level_id, "side": "low" if role == "support" else "high", "role": role,
+        "low": center - 1, "high": center + 1, "center": center, "source_timeframes": "1h,4h",
+        "first_seen_at": "2026-01-01T00:00:00+00:00", "last_confirmed_at": "2026-01-01T00:45:00+00:00",
+        "touch_count": 2, "clean_rejection_count": 1, "break_count": 0, "false_break_reclaim_count": 0,
+        "lifecycle": "accepted", "reliability_score": 62.5, "reliability_band": band,
+        "distance_from_price_pct": abs(center - 104) / 104 * 100, "distance_from_price_atr": abs(center - 104),
+        "reason_codes": ["prior_only"],
+    }
+
+
+def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
+    snapshot_root = root / "snapshot"
+    history_root = root / "history"
+    run = snapshot_root / "run_fixture"
+    history = history_root / "history_fixture"
+    run.mkdir(parents=True)
+    history.mkdir(parents=True)
+    snap = {
+        "schema_version": "macro_structure_daily_operation.v1", "method_version": "macro_structure_daily_operation.v1",
+        "run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "symbol": "BTC_USDT",
+        "as_of_utc": "2026-01-01T01:00:00+00:00", "as_of_jst": "2026-01-01T10:00:00+09:00",
+        "evaluated_at_utc": "2026-01-01T02:00:00+00:00", "evaluated_at_jst": "2026-01-01T11:00:00+09:00",
+        "current_price": 103.0, "structure_state": "transition", "price_location": "upper_half", "location_percentile": 60,
+        "support_zones": [_zone("level_support", "support", 100)], "resistance_zones": [_zone("level_resistance", "resistance", 110)],
+        "nearest_reliable_support": _zone("level_support", "support", 100), "nearest_reliable_resistance": _zone("level_resistance", "resistance", 110),
+        "next_upside_target": _zone("level_resistance", "resistance", 110), "next_downside_target": _zone("level_support", "support", 100),
+        "upside_obstruction": "insufficient", "downside_obstruction": "insufficient", "volatility_state": "stable",
+        "expansion_risk": "low", "directional_activation": "NONE", "stale_status": "current", "stale_timeframes": [],
+        "freshness": {"15m": {"status": "current"}}, "continuity_status": "continuous", "data_quality_status": "ok", "result_status": "ok",
+        "reason_codes": [], "reliability_band_counts": {"high": 0, "medium": 2, "low": 0, "insufficient": 0},
+        "safety_boundary": "report-only / not FORMAL_GO / no automatic order / human decides manually",
+    }
+    _write_json(run / "macro_structure_snapshot.json", snap)
+    _write_json(run / "run_manifest.json", {"schema_version": snap["schema_version"], "method_version": snap["method_version"], "run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "as_of_utc": snap["as_of_utc"], "evaluated_at_utc": snap["evaluated_at_utc"], "source": "public_ohlcv_only", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False})
+    (run / "macro_structure_snapshot.md").write_text("# fixture\n", encoding="utf-8")
+    level_fields = ["level_id", "side", "role", "low", "high", "center", "lifecycle", "reliability_band", "reliability_score"]
+    with (run / "macro_level_reliability.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=level_fields); writer.writeheader()
+        for item in (snap["support_zones"][0], snap["resistance_zones"][0]): writer.writerow({field: item[field] for field in level_fields})
+    _write_json(snapshot_root / "latest.json", {"run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "artifact_dir": "run_fixture", "symbol": "BTC_USDT"})
+
+    evaluation = {"run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "checkpoint_id": "checkpoint_fixture", "as_of_utc": snap["as_of_utc"], "evaluated_at_utc": snap["evaluated_at_utc"], "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok", "result_status": "ok", "reason_codes": []}
+    hist = {"schema_version": "macro_structure_history_operation.v2", "method_version": "macro_structure_history_operation.v2", "history_id": "history_fixture", "symbol": "BTC_USDT", "result_status": "insufficient_history", "source_run_count": 1, "evaluation_count": 1, "structural_checkpoint_count": 1, "first_as_of_utc": snap["as_of_utc"], "latest_as_of_utc": snap["as_of_utc"], "latest_evaluated_at_utc": snap["evaluated_at_utc"], "source_digest": "digest", "evaluation_history": [evaluation], "structural_checkpoints": [{"checkpoint_id": "checkpoint_fixture", "canonical_structural_run_id": "run_fixture", "latest_evaluation_run_id": "run_fixture", "latest_evaluation": evaluation}], "structure_changes": [], "level_history": [], "safety_boundary": snap["safety_boundary"]}
+    _write_json(history / "macro_structure_history.json", hist)
+    _write_json(history / "run_manifest.json", {"schema_version": hist["schema_version"], "method_version": hist["method_version"], "history_id": "history_fixture", "symbol": "BTC_USDT", "source_runs": ["run_fixture"], "source": "public_mops1_artifacts_only", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False})
+    (history / "macro_structure_history.md").write_text("# fixture\n", encoding="utf-8")
+    (history / "macro_snapshot_history.csv").write_text("fixture\n", encoding="utf-8")
+    (history / "macro_level_history.csv").write_text("fixture\n", encoding="utf-8")
+    (history / "macro_structure_changes.csv").write_text("fixture\n", encoding="utf-8")
+    _write_json(history_root / "latest.json", {"history_id": "history_fixture", "artifact_dir": "history_fixture", "symbol": "BTC_USDT"})
+
+    ohlcv = root / "ohlcv_15m.csv"
+    with ohlcv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["timestamp_utc", "open", "high", "low", "close", "interval", "symbol"]); writer.writeheader()
+        for index in range(5):
+            close = 100 + index
+            writer.writerow({"timestamp_utc": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=15 * index)).isoformat().replace("+00:00", "Z"), "open": close, "high": close + 1, "low": close - 1, "close": close, "interval": "15m", "symbol": "BTC_USDT"})
+    return snapshot_root, history_root, ohlcv
+
+
+class MacroStructureOperatorArtifactTests(unittest.TestCase):
+    def test_complete_chart_first_artifact_is_deterministic_and_report_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            first = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            second = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(first["ok"]); self.assertEqual(first["operator_artifact_id"], second["operator_artifact_id"])
+            artifact = output / first["artifact_dir"]
+            self.assertEqual(sorted(path.name for path in artifact.iterdir()), sorted(("macro_structure_operator.html", "macro_structure_operator.json", "macro_structure_operator.md", "run_manifest.json")))
+            html_text = (artifact / "macro_structure_operator.html").read_text(encoding="utf-8")
+            self.assertLess(html_text.index('id="status"'), html_text.index('id="chart"'))
+            self.assertIn("tactical Entry / SL / TP overlays are not included", html_text)
+            model = json.loads((artifact / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertEqual(model["schema_version"], "macro_structure_operator_artifact.v1")
+            self.assertEqual(model["selected_history_id"], "history_fixture")
+            self.assertEqual(model["zones"]["displayed_support_count"], 1)
+
+    def test_source_boundary_and_price_mismatch_fail_closed_without_latest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            valid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            latest_before = (output / "latest.json").read_bytes()
+            ohlcv.write_text(ohlcv.read_text(encoding="utf-8").replace(",103,104,102,103,", ",203,204,202,203,"), encoding="utf-8")
+            invalid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(valid["ok"]); self.assertEqual(invalid["error_code"], "snapshot_price_ohlcv_mismatch"); self.assertEqual((output / "latest.json").read_bytes(), latest_before)
+
+
+if __name__ == "__main__":
+    unittest.main()

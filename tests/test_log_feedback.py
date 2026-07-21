@@ -8065,6 +8065,26 @@ class MacroStructureHistoryCliTests(unittest.TestCase):
             self.assertIn('"report_only":true', out.getvalue())
 
 
+class MacroStructureOperatorCliTests(unittest.TestCase):
+    def test_parser_dispatches_chart_first_operator_route(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+
+        summary = {"ok": True, "exit_code": 0, "operator_artifact_id": "operator_test", "report_only": True}
+        argv = [
+            "log_feedback.py", "render-macro-structure-operator", "--snapshot-root", "snapshots",
+            "--history-root", "history", "--ohlcv-15m-csv", "15m.csv", "--output-root", "operator",
+            "--symbol", "ETH_USDT", "--stdout-json",
+        ]
+        with patch.object(sys, "argv", argv), patch("tools.log_feedback.render_macro_structure_operator", return_value=summary) as render, patch("sys.stdout", new_callable=StringIO) as out:
+            self.assertEqual(main(), 0)
+            self.assertEqual(render.call_args.kwargs["snapshot_root"], Path("snapshots"))
+            self.assertEqual(render.call_args.kwargs["history_root"], Path("history"))
+            self.assertEqual(render.call_args.kwargs["ohlcv_15m_csv"], Path("15m.csv"))
+            self.assertEqual(render.call_args.kwargs["symbol"], "ETH_USDT")
+            self.assertIn('"operator_artifact_id":"operator_test"', out.getvalue())
+
+
 class MacroNextRegimeCliTests(unittest.TestCase):
     def test_parser_dispatches_explicit_offline_paths_compactly(self) -> None:
         from io import StringIO

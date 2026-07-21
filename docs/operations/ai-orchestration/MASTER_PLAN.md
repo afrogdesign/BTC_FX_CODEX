@@ -51,7 +51,9 @@ complete private MEXC export batch missing
 → P9 remains blocked
 ```
 
-This is an accepted no-repeat boundary, not a source defect. Do not repeat importer/linker/readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
+This is an accepted no-repeat boundary, not a source defect.
+
+Do not repeat importer/linker/readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
 
 ## 4. Macro / M route
 
@@ -64,13 +66,13 @@ public OHLCV
 → stable higher-timeframe levels
 → lifecycle and prior-only reliability
 → current structural location
-→ confidence-labelled zones
+→ support/resistance confidence bands
 → next target and obstruction
 → chronological history
 → chart-first operator artifact
 ```
 
-Private actual-trade evidence is not required for this market-structure calculation.
+Private actual-trade evidence is not required for this calculation. It remains relevant to human outcome and production-adoption evaluation.
 
 ### 4.2 Accepted foundation
 
@@ -83,35 +85,44 @@ Private actual-trade evidence is not required for this market-structure calculat
 | M5 | bounded champion/challenger engine | accepted |
 | M6 | approved improvement adoption | unauthorized |
 
-Accepted M5 result remains `winner=none` and `continue_shadow_collection`. It does not block autonomous macro operation.
+Accepted M5 result:
 
-### 4.3 Primary completion lane: M-OPS
+- winner: `none`
+- recommendation: `continue_shadow_collection`
+- production mutation: none
+
+This no-winner result does not block autonomous macro operation.
+
+### 4.3 Primary M-OPS completion lane
 
 Canonical plan:
 
 - `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
 
-Sequence and status:
+Sequence and state:
 
 ```text
 M-OPS1 current snapshot and daily local report — accepted at 89bd338
-→ M-OPS2 chronological history and confidence continuity — current
-→ M-OPS3 chart-first operator artifact
+→ M-OPS2 chronological history and reliability continuity — accepted at dea0e33
+→ M-OPS3 chart-first operator artifact — current
 → M-OPS4 separate runtime/schedule enablement
 → M-OPS5 autonomous status and stale-data health
 ```
 
 Current active implementation:
 
-- `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
+- `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
+- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
 
-M-OPS2 must proceed without waiting for M5 refresh or private trade data. M-OPS1 must not be reopened without a concrete defect.
+M-OPS3 consumes accepted current snapshot/history and explicit public 15-minute OHLCV. It must remain local, deterministic, macro-only, and report-only.
 
-### 4.4 Secondary improvement lane: M5/M6
+### 4.4 Secondary M5/M6 lane
 
 Canonical plan:
 
 - `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
+
+Sequence:
 
 ```text
 accumulated accepted evidence
@@ -123,7 +134,7 @@ accumulated accepted evidence
 → separate runtime adoption
 ```
 
-`DEC-20260721-013` controls this improvement sequence. `DEC-20260721-014` prevents it from blocking unfinished M-OPS work.
+`DEC-20260721-013` controls this sequence only. `DEC-20260721-014` prevents it from blocking unfinished M-OPS work.
 
 ## 5. AI / A route
 
@@ -142,29 +153,43 @@ Current order:
 
 ```text
 P remains parked on private input
-→ implement M-OPS2 history source
-→ focused tests and bounded multi-date fixture
+→ implement M-OPS3 chart-first local artifact
+→ focused tests and deterministic fixture
 → ChatGPT MCP review
 → accept or one bounded material FIX
-→ continue to M-OPS3
+→ request explicit approval before M-OPS4 runtime/schedule work
 ```
 
 Do not:
 
-- route current M work to `WAIT_FOR_EVIDENCE`;
-- rerun M5 as part of M-OPS2;
-- require private trades for macro history;
-- rewrite accepted M1 or M-OPS1 semantics without a demonstrated defect;
+- route current M work to `WAIT_FOR_EVIDENCE` while M-OPS is unfinished;
+- rerun M5 as part of M-OPS3;
+- require private actual trades for support/resistance or chart rendering;
+- rewrite accepted M1/M-OPS1/M-OPS2 semantics without a demonstrated defect;
 - mix source edits with runtime/schedule application;
-- start M6 without an eligible challenger and explicit approval;
-- change delivery, gates, thresholds, scoring, classifiers, or execution behavior under M-OPS source tasks;
+- connect M-OPS3 to notification, mail, production UI, tactical execution, or orders;
+- start M6 without one eligible challenger and explicit approval;
 - create new orchestration frameworks.
 
 ## 7. Human involvement boundary
 
-No recurring human input is required after setup for public OHLCV collection, macro snapshots, reliability updates, local artifacts, chronological history, or health status.
+No recurring human input is required after setup for:
 
-Human approval is required for installed runtime/schedule enablement, live delivery integration, production policy changes, M6 adoption, automatic execution, and phase/version promotion.
+- public OHLCV collection;
+- macro snapshot calculation;
+- level lifecycle/reliability updates;
+- chronological history;
+- local chart-first artifact generation;
+- health and stale-data status.
+
+Human approval is required for:
+
+- installed runtime/schedule enablement;
+- live mail/notification integration;
+- production policy/gate/threshold/scoring/classifier changes;
+- M6 adoption;
+- automatic orders;
+- phase/version promotion.
 
 ## 8. Standard read route
 
@@ -175,44 +200,31 @@ New context:
 3. `MASTER_PLAN.md` for planning
 4. `CURRENT_STATE.md` and `NEXT_ACTION.md`
 5. target route only
-6. one active spec for implementation
+6. active spec only for implementation
 
 Do not broadly scan history or archived plans.
 
-## 9. Document roles
-
-| Document | Role |
-|---|---|
-| `MASTER_PLAN.md` | overall architecture and current priority |
-| `PRODUCT_IMPLEMENTATION_ROUTE.md` | P route and P9 gate |
-| `MACRO_IMPLEMENTATION_ROUTE.md` | canonical M route |
-| `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` | M operational completion contract |
-| `M5_M6_EXECUTION_PLAN_20260721.md` | secondary improvement/adoption route |
-| `CURRENT_STATE.md` | accepted state and controlling interpretation |
-| `NEXT_ACTION.md` | exactly one current task |
-| active spec | detailed implementation contract |
-| `CONTROL.md` | stable safety/git/runtime rules |
-| `AI_WORKFLOW.md` | ChatGPT/Codex execution and review |
-
-## 10. Completion definitions
+## 9. Completion definitions
 
 P route completion requires adequate actual-backed evidence and an accepted human-reviewed proposal where applicable.
 
 M route completion requires:
 
-- accepted public-data current snapshot operation;
-- accepted chronological history and latest status;
+- dedicated public-data current snapshot operation;
+- confidence-labelled support/resistance;
+- chronological history and latest status;
 - chart-first operator artifact;
 - fail-closed stale/insufficient behavior;
 - separately approved and verified report-only runtime cadence;
+- autonomous health/status;
 - current docs and operator behavior agreement.
 
-## 11. Safety and version boundary
+## 10. Safety and version boundary
 
 - no automatic order;
 - no private/account/order endpoints;
-- no unapproved runtime, delivery, gate, threshold, scoring, or classifier change;
+- no unapproved runtime, launchd, mail, notification, gate, threshold, scoring, or classifier change;
 - generated/private data remains local and uncommitted;
 - frozen runtime repo requires explicit `RUNTIME_TASK`.
 
-M-OPS source and local evidence remain Ver04.x. `Ver05` requires explicitly approved production adoption and matching validation; local M-OPS completion alone does not promote the version.
+M-OPS source and local evidence remain Ver04.x. `Ver05` requires explicitly approved production adoption, matching validation, runtime verification where applicable, and ChatGPT acceptance.

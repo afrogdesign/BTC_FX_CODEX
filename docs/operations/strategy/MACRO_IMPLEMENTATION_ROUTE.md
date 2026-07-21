@@ -7,7 +7,7 @@ status: canonical macro route
 
 M計画は、公開市場データから大局構造と信頼できるhigher-timeframe support/resistanceを自動的に更新し、manual 15-minute trading判断を補強するrouteである。
 
-本体Product計画を置き換えない。Private actual-trade evidenceがなくても、市場構造計算、信頼度更新、history、local operator artifactは進める。
+Private actual-trade evidenceがなくても、Mの市場構造計算・信頼度更新・chronological history・local operator artifactは進める。
 
 ## Controlling objective
 
@@ -16,13 +16,16 @@ public 15m / 1h / 4h OHLCV
 → stable reliable-level map
 → prior-only lifecycle and reliability
 → current structural location
-→ confidence-labelled support/resistance
+→ support/resistance confidence bands
 → next reliable target and obstruction
-→ chronological reliability continuity
+→ chronological history
 → chart-first operator artifact
+→ autonomous collection and health
 ```
 
-Nearest lineや単一pivotだけでは高信頼にしない。Weak, stale, discontinuous, or one-sided evidence must fail closed to `insufficient`.
+`high reliability`は過去のinteraction evidenceに基づく。nearest lineや単一pivotだけでは高信頼にしない。
+
+Weak, stale, discontinuous, or one-sided evidence must remain explicit and must not be promoted.
 
 ## Accepted foundation
 
@@ -31,11 +34,11 @@ Nearest lineや単一pivotだけでは高信頼にしない。Weak, stale, disco
 | M1 | reliable macro levels, lifecycle, event-time replay | accepted |
 | M2 | optional disabled-by-default P8 auxiliary shadow | accepted |
 | M3 | tactical bias and next-regime risk separation | accepted |
-| M4 | chart-first local render shadow | accepted |
+| M4 | chart-first local render shadow | accepted at `ea89e61` |
 | M5 | bounded champion/challenger proposal engine | accepted |
 | M6 | approved proposal adoption | not started / not authorized |
 
-M1–M5 created the analysis, evidence, UI-shadow, and proposal foundations. They did not complete normal autonomous operation.
+M1–M5 acceptance created analysis, evidence, local UI-shadow, and proposal foundations. It did not by itself complete normal autonomous operation.
 
 ## Two-lane route
 
@@ -45,19 +48,25 @@ Canonical plan:
 
 - `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
 
+Sequence and status:
+
 ```text
-M-OPS1 current snapshot and daily report — accepted at 89bd338
-→ M-OPS2 chronological history and reliability continuity — current
-→ M-OPS3 chart-first operator artifact
+M-OPS1 dedicated current snapshot and daily report source — accepted at 89bd338
+→ M-OPS2 chronological history and reliability continuity — accepted at dea0e33
+→ M-OPS3 chart-first operator artifact — current
 → M-OPS4 separate runtime/schedule enablement
 → M-OPS5 autonomous health and stale-data status
 ```
+
+This lane is the current priority.
 
 ### Secondary lane: improvement and adoption
 
 Canonical plan:
 
 - `M5_M6_EXECUTION_PLAN_20260721.md`
+
+Sequence:
 
 ```text
 accumulated accepted evidence
@@ -71,91 +80,107 @@ accumulated accepted evidence
 
 The secondary lane must not block unfinished M-OPS work.
 
-## Accepted M-OPS1
+## Accepted M-OPS source checkpoints
 
-Accepted source checkpoint: `89bd338`.
+### M-OPS1
 
-Command:
+- checkpoint: `89bd338`
+- command: `run-macro-structure-daily`
+- public-data current snapshot
+- deterministic common closed-candle cutoff and evaluation time
+- accepted M1 semantics reused
+- reliable zones, structure/location, targets, obstruction, volatility, activation, freshness, continuity
+- immutable complete artifacts and atomic latest summary
 
-- `run-macro-structure-daily`
+### M-OPS2
 
-Accepted behavior:
+- checkpoint: `dea0e33`
+- command: `run-macro-structure-history`
+- deterministic v2 chronological rollup
+- every evaluation plus unique structural checkpoints
+- stable level continuity, evidence changes, role/lifecycle/geometry changes, absence/reappearance/latest absence
+- canonical versus latest evaluation separation
+- identifiable level transition events
+- immutable complete artifacts, legacy v1 preservation, and atomic latest summary
 
-- public 15m/1h/4h only;
-- actual common closed-candle cutoff;
-- observable normalized evaluation time;
-- stable M1 level identity and prior-only reliability;
-- original side separated from current role;
-- canonical structure/location, nearest zones, targets, obstruction, volatility, activation, freshness, and continuity;
-- valid `insufficient` output;
-- immutable complete run artifacts and atomic compact latest summary;
-- deterministic identity and conflict-safe publication;
-- no runtime or delivery mutation.
+Do not reopen either accepted source without a concrete contradiction.
 
-Do not reopen M-OPS1 without a concrete source or contract defect.
-
-## Current source task — M-OPS2
+## Current source task
 
 Active spec:
 
-- `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
+- `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
 
 Work ID:
 
-- `BTCFX-20260721-MACRO-STRUCTURE-CHRONOLOGICAL-HISTORY-CONTINUITY`
+- `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
 
 Expected result:
 
-- `run-macro-structure-history` report-only command;
-- complete direct-child M-OPS1 source-run validation;
-- explicit symbol isolation;
-- chronological evaluation rows;
-- freshness-only reevaluations distinguished from unique structural checkpoints;
-- stable `level_id` continuity;
-- reliability, role, lifecycle, and evidence transitions;
-- absence and reappearance without invented permanent retirement;
-- structure/location/target/obstruction/stale/continuity changes;
-- deterministic immutable history artifacts;
-- atomic compact history latest summary;
-- bounded multi-date no-future fixture evidence.
+- new `render-macro-structure-operator` route;
+- exact latest M-OPS1 snapshot and M-OPS2 v2 history selection;
+- explicit local public 15-minute OHLCV input;
+- closed-candle/no-future validation;
+- self-contained chart-first HTML with inline SVG;
+- high/medium reliable macro zones and current structural status;
+- targets, obstruction, volatility, activation, freshness, continuity, and recent history;
+- complete immutable operator artifacts and atomic latest summary;
+- macro-only, report-only, no tactical or execution implication;
+- no live fetch, delivery, production UI, runtime, or policy change.
 
-Do not wait for M5 evidence refresh before implementing M-OPS2.
-
-## M5 and M6 boundary
+## M5 boundary
 
 Accepted M5 result:
 
-- checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
+- checkpoint locator: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
 - winner: `none`
 - recommendation: `continue_shadow_collection`
 - production mutation: none
 
-M5 is rerun only after its documented trigger. M6 requires one eligible challenger, adequate evidence, explicit human approval, and separate source/validation/adoption/runtime steps.
+This valid fail-closed result does not imply that macro operation should remain disabled. M5 is rerun only after its documented trigger and never as part of M-OPS3.
+
+## M6 boundary
+
+M6 requires one proposal-eligible challenger, adequate evidence, one bounded proposal, and explicit human approval. It is not required to operationalize already accepted M1–M4 behavior through M-OPS.
 
 ## Human involvement
 
-No recurring human input is required for public OHLCV collection, structure calculation, local snapshot/report generation, chronological reliability history, or health status.
+No recurring human input is required for:
 
-Explicit human approval is required for installed runtime/schedule changes, live delivery integration, production policy changes, M6 adoption, automatic execution, and version/phase promotion.
+- public OHLCV collection
+- structure and reliable-level calculation
+- snapshot and history generation
+- local chart-first artifact generation
+- health and stale-data status
+
+Explicit human approval is required for:
+
+- installed runtime/schedule changes
+- live mail or notification integration
+- production policy, gate, threshold, scoring, or classifier changes
+- M6 adoption
+- automatic order behavior
+- version/phase promotion
 
 ## Completion boundary
 
 M route is not complete until:
 
-- M-OPS1 current snapshot is accepted;
-- M-OPS2 history and latest status are accepted;
-- M-OPS3 chart-first operator output is accepted;
+- current snapshot source is accepted;
+- chronological history is accepted;
+- chart-first operator output is accepted;
 - a separately approved runtime cadence is verified;
-- stale and insufficient states fail closed;
-- health/status and current docs match actual behavior.
+- autonomous health/status is available;
+- stale and insufficient states remain explicit;
+- current docs and operator runbook match actual behavior.
 
 ## Canonical references
 
 - overall plan: `docs/operations/ai-orchestration/MASTER_PLAN.md`
 - autonomous completion: `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
-- M5/M6 route: `M5_M6_EXECUTION_PLAN_20260721.md`
-- accepted M-OPS1 spec: `chatgpt/specs/archive/20260721_macro_autonomous_structure_daily_operation.md`
-- active M-OPS2 spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
+- M5/M6 secondary route: `M5_M6_EXECUTION_PLAN_20260721.md`
+- research basis: `MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
+- accepted specs: `chatgpt/specs/archive/20260720_macro_*` and `chatgpt/specs/archive/20260721_macro_*`
 - current state/task: `docs/operations/ai-orchestration/CURRENT_STATE.md` and `NEXT_ACTION.md`
 
 ## Safety and version boundary
@@ -165,7 +190,7 @@ M route is not complete until:
 - no automatic order
 - no private/account/order endpoints
 - no automatic production mutation
-- no runtime, delivery, gate, threshold, scoring, or classifier change without separate approval
+- no runtime, mail, notification, gate, threshold, scoring, or classifier change without separate approval
 - human decides trades and production adoption
-
-M-OPS source and local evidence remain within Ver04.x. Local M-OPS completion alone does not automatically promote the version.
+- M-OPS source and local autonomous evidence remain within Ver04.x
+- `Ver05` requires explicitly approved production adoption and matching validation

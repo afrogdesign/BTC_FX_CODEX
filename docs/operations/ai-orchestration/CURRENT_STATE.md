@@ -11,8 +11,9 @@ last_updated: 2026-07-21
 - accepted P/M planning checkpoint: `ee68e94`
 - accepted M5 implementation checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
 - accepted M-OPS1 checkpoint: `89bd338`
+- accepted M-OPS2 checkpoint: `dea0e33`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
+- active spec: `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
 - safety: report-only / human-decided / no automatic order
 - push: none
 
@@ -48,7 +49,7 @@ Canonical decision: `DEC-20260721-012`.
 
 The primary M objective is autonomous higher-timeframe market-structure understanding from public data.
 
-The system completion route is:
+Completion route:
 
 ```text
 public 15m / 1h / 4h OHLCV
@@ -71,39 +72,14 @@ Canonical decision:
 
 - `DEC-20260721-014`
 
-## Macro implementation state
-
-Accepted foundation:
+## Macro accepted foundation
 
 - M1 accepted: event-time levels, lifecycle, prior-only reliability, location, volatility, activation, target/obstruction, outcomes
 - M2 accepted: opt-in public-data auxiliary macro shadow, disabled by default
 - M3 accepted: tactical and next-regime separation
-- M4 accepted: chart-first local render shadow
+- M4 accepted: chart-first local render shadow at `ea89e61`
 - M5 accepted: bounded champion/challenger proposal engine
 - M6 not started and not authorized
-
-Accepted autonomous operation source:
-
-- M-OPS1 accepted at `89bd338`
-- command: `run-macro-structure-daily`
-- public 15m/1h/4h only
-- deterministic actual common closed-candle cutoff
-- explicit normalized evaluation time
-- stable M1 level identity and prior-only evidence
-- original level side separated from current lifecycle role
-- canonical `structure_state`, structural nearest zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`
-- complete immutable run artifacts plus atomic compact `latest.json`
-- byte-conflict-safe deterministic publication
-- no private actual-trade dependency
-- no runtime, mail, notification, policy, or order mutation
-
-Reviewed retained evidence:
-
-- `local/reports/macro_structure/mops1_final_review/`
-- two complete immutable runs for the same market checkpoint at evaluation minutes `2026-01-02T12:00:00+00:00` and `2026-01-02T12:01:00+00:00`
-- distinct deterministic run IDs
-- latest points to the later evaluation
-- manifest remains public-only and report-only
 
 M5 remains secondary. Its accepted result remains:
 
@@ -111,19 +87,74 @@ M5 remains secondary. Its accepted result remains:
 - recommendation: `continue_shadow_collection`
 - production mutation: none
 
-## Corrected M route
+## Accepted M-OPS1
 
-Primary completion lane:
+Accepted at `89bd338`.
+
+Command:
+
+- `run-macro-structure-daily`
+
+Accepted behavior:
+
+- public 15m/1h/4h only;
+- deterministic actual common closed-candle cutoff;
+- explicit normalized evaluation time;
+- stable M1 level identity and prior-only evidence;
+- original level side separated from current lifecycle role;
+- canonical structure/location, nearest zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`;
+- complete immutable run artifacts plus atomic compact latest summary;
+- byte-conflict-safe deterministic publication;
+- no private actual-trade dependency;
+- no runtime, mail, notification, policy, or order mutation.
+
+Reviewed evidence:
+
+- `local/reports/macro_structure/mops1_final_review/`
+
+Do not reopen M-OPS1 without a concrete source or input-contract defect.
+
+## Accepted M-OPS2
+
+Accepted at `dea0e33`.
+
+Command:
+
+- `run-macro-structure-history`
+
+Accepted behavior:
+
+- reads only complete direct-child M-OPS1 immutable runs;
+- preserves every evaluation run;
+- separates freshness-only reevaluations from unique structural checkpoints;
+- uses earliest evaluation as canonical structural source and latest evaluation for current freshness/status;
+- exposes stable `level_id` continuity, reliability changes, role/lifecycle changes, geometry changes, evidence deltas, absence, reappearance, and `absent_from_latest`;
+- does not infer permanent retirement;
+- validates source identity, timestamps, public/report-only boundary, and unique non-empty level IDs;
+- publishes deterministic v2 immutable history artifacts and atomic latest summary;
+- preserves legacy v1 artifacts alongside v2;
+- keeps transition events identifiable by `level_id`;
+- no live fetch, private input, runtime, delivery, policy, or order mutation.
+
+Reviewed evidence:
+
+- `local/reports/macro_structure/mops2_review/history/`
+- accepted latest v2 artifact: `history_037b8f5e06b11d7cfa5d`
+- legacy v1 artifacts remain untouched
+
+Do not reopen M-OPS2 without a concrete source or artifact contradiction.
+
+## Current M route
 
 ```text
 M-OPS1 current snapshot and daily report source — accepted
-→ M-OPS2 chronological history and confidence continuity — current
-→ M-OPS3 chart-first operator artifact
+→ M-OPS2 chronological history and confidence continuity — accepted
+→ M-OPS3 chart-first operator artifact — current
 → M-OPS4 separately approved runtime/schedule enablement
 → M-OPS5 autonomous health and stale-data status
 ```
 
-Secondary improvement lane:
+Secondary improvement lane remains:
 
 ```text
 accumulated evidence
@@ -136,21 +167,22 @@ accumulated evidence
 
 ## Current selected action
 
-Implement M-OPS2 under:
+Implement M-OPS3 under:
 
-- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHRONOLOGICAL-HISTORY-CONTINUITY`
-- active spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
+- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
+- active spec: `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
 
-M-OPS1 already retains immutable runs and an atomic latest pointer, but no accepted history rollup currently exposes:
+Expected product result:
 
-- evaluation runs versus unique structural checkpoints;
-- stable `level_id` continuity across snapshots;
-- reliability upgrades/downgrades;
-- role and lifecycle transitions;
-- absence and reappearance;
-- chronological structure/location/target/obstruction changes.
-
-M-OPS2 must recompute an auditable deterministic rollup from complete M-OPS1 artifacts. It must not introduce mutable online learning or change accepted M1/M-OPS1 semantics.
+- one deterministic self-contained local HTML/SVG operator artifact;
+- latest accepted M-OPS1 snapshot and M-OPS2 v2 history as the only macro sources;
+- explicit local public 15-minute OHLCV for the chart;
+- current price and reliable macro zones shown first;
+- structure, location, targets, obstruction, volatility, activation, freshness, continuity, and recent history visible;
+- stale, discontinuous, and insufficient states shown prominently;
+- macro-only surface with no tactical Entry/SL/TP or execution implication;
+- immutable complete artifact set plus atomic latest summary;
+- no live fetch, delivery, production UI, runtime, policy, or order changes.
 
 ## Human involvement boundary
 

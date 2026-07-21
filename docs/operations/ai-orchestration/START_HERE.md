@@ -77,7 +77,8 @@ Current high-level state:
 - P1–P8 accepted; P9 blocked by absent actual-backed evidence
 - M1–M5 research/tooling accepted
 - M-OPS1 current snapshot source accepted at `89bd338`
-- M-OPS2 chronological history and confidence continuity is the current implementation task
+- M-OPS2 chronological history accepted at `dea0e33`
+- M-OPS3 chart-first operator artifact is the current implementation task
 - M6 not started and not authorized
 - A1/A2 accepted, A3 superseded, A4 not planned
 
@@ -109,9 +110,9 @@ Report:
 - the primary M objective is autonomous public-data macro structure operation;
 - private actual-trade data is not required to calculate support/resistance reliability;
 - M1–M5 are accepted foundations, not completion of autonomous operation;
-- M-OPS1 is accepted and must not be reopened without a concrete defect;
-- M-OPS2 is the current active source task;
-- M5 `winner=none` does not block history or operator artifact work;
+- M-OPS1 and M-OPS2 are accepted and must not be reopened without a concrete defect;
+- M-OPS3 is the current active source task;
+- M5 `winner=none` does not block operator artifact work;
 - current implementation follows `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` and the active M-OPS spec;
 - M5/M6 remains secondary and follows its separate plan only when improvement/adoption is being considered.
 
@@ -143,8 +144,8 @@ The controlling order is:
 ```text
 accepted M1–M4 capabilities
 → M-OPS1 current snapshot and local daily report — accepted
-→ M-OPS2 chronological reliability continuity — current
-→ M-OPS3 chart-first operator artifact
+→ M-OPS2 chronological reliability continuity — accepted
+→ M-OPS3 chart-first operator artifact — current
 → explicit human-approved M-OPS4 runtime/schedule enablement
 → autonomous M-OPS5 health and stale-data reporting
 → periodic M5 refresh only when triggered
@@ -201,7 +202,7 @@ Read a historical file only when a current task identifies the exact evidence or
 | `NEXT_ACTION.md` | exactly one current task |
 | `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` | completion route for automatic macro structure operation |
 | `M5_M6_EXECUTION_PLAN_20260721.md` | secondary challenger improvement and adoption route |
-| `CONTROL.md` | stable safety / git / runtime / validation rules |
+| `CONTROL.md` | stable safety / git / runtime rules |
 | `AI_WORKFLOW.md` | shared execution and review process |
 | `MILESTONES.md` | major accepted checkpoints |
 | `DECISIONS.md` | durable decisions and supersession records |
