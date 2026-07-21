@@ -1,48 +1,46 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260722-MACRO-STRUCTURE-AUTONOMOUS-HEALTH-STATUS-FIX-01`
+- current_work_id: `BTCFX-20260722-MACRO-STRUCTURE-AUTONOMOUS-HEALTH-STATUS-FIX-02`
 - mode: `BOUNDED_CODEX_FIX`
 - branch: `Ver04-v3`; confirm from local git before execution
-- implementation_base: `fa0f734`
+- implementation_base: `58c1e80`
 - runtime_implementation_commit: `690c014`
 - operator_runtime_fix_commit: `a9b3d46`
 - active_spec: `chatgpt/specs/active/20260722_macro_structure_autonomous_health_status.md`
-- status: M-OPS5 source implemented but not accepted; focused audit-contract FIX required
+- status: M-OPS5 not accepted; final audit-consistency FIX required
 - installed_target: `com.afrog.btc-macro-structure`
 - push: none
 
 ## Current action
 
-Fix three bounded M-OPS5 acceptance defects without changing M-OPS1–M-OPS4 or installed runtime behavior.
+Complete the final M-OPS5 consistency boundary without changing M-OPS1–M-OPS4 or installed runtime behavior.
 
-1. Generate the current operator HTML path from the validated operator artifact directory/ID. The reviewed output incorrectly contains `local/reports/macro_structure/operator/None/macro_structure_operator.html`.
-2. Accept a well-formed ordered runtime-step prefix when the service stopped after an early snapshot or history failure. Such a completed failed status must publish `failed`, not `inconsistent` or `unavailable`. Successful runtime still requires all three successful steps.
-3. Namespace source fingerprints by artifact type and filename so snapshot/history/operator manifests and all three latest pointers are individually retained in health identity and output.
+Required:
 
-Regenerate `local/reports/macro_structure/mops5_review/` so each required health case has one clearly designated final health output and no ambiguous intermediate review roots.
+1. validate identity fields and duplicated status fields inside snapshot/history/operator `latest.json`;
+2. require runtime status to agree with snapshot/history/operator source values for result, stale, continuity, and data quality;
+3. require exact public-source strings in each accepted artifact manifest;
+4. omit or reject stale IDs for stages that did not complete successfully;
+5. validate success return codes and timestamp ordering/future evidence;
+6. expand focused contradiction coverage;
+7. retain exactly six review cases, one health artifact and one canonical CLI result per case.
 
 ## Preserve
 
 - health-state precedence;
-- six-time schedule and 60-minute grace;
+- six JST schedule entries and 60-minute grace;
+- deterministic atomic v1 publication;
 - direct-child and complete-set validation;
-- accepted versions and safety boundaries;
-- deterministic atomic publication;
-- no runtime, launchctl, live fetch, mail, notification, policy, private endpoint, or order change.
+- valid `insufficient` as `healthy_insufficient`;
+- report-only/no-private/no-order boundary;
+- no launchctl, live fetch, runtime, delivery, policy, or execution mutation.
 
 ## Validation
 
-Use only:
-
-- `tests.test_macro_structure_health_status`;
-- matching M-OPS5 CLI test class;
-- one deterministic healthy/healthy-insufficient smoke;
-- early snapshot-failure and early history-failure fixture checks;
-- one identical repeat;
-- task-scoped `git diff --check`.
+Use only focused M-OPS5 tests, matching CLI tests, deterministic fixture smokes, one identical repeat, and task-scoped `git diff --check`.
 
 Do not run the full suite, launchctl, installed runtime, live fetch, M5/M6, mail/notification tests, or frozen-repo commands.
 
 ## Acceptance path
 
-After the FIX report, ChatGPT directly reviews source, focused tests, CLI, final six-state review artifacts, state/spec transition, and safety. If accepted, M-OPS5 source is complete. Automatic recurring health generation remains a separate explicitly approved runtime task.
+After the FIX report, ChatGPT directly reviews source, tests, CLI, six retained cases, state/spec, and safety. If accepted, M-OPS5 source and the autonomous M implementation plan are complete. Automatic recurring generation of M-OPS5 remains a separate explicit `RUNTIME_TASK`.

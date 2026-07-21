@@ -412,3 +412,19 @@ Direct review of commit `fa0f734` and the retained M-OPS5 artifacts found three 
 The retained review bundle also contains multiple intermediate health roots per case. FIX-01 must regenerate it so each required case has one clearly designated final published health root and no ambiguous stale review output.
 
 FIX-01 implementation scope: operator HTML paths, ordered early-failure runtime validation, namespaced source/latest-pointer fingerprints, operation-result statuses, latest evidence timestamps, and validated relative runtime log paths. No M-OPS1–M-OPS4 or installed runtime behavior is changed.
+
+## FIX-02 final audit consistency boundary
+
+Direct review of `58c1e80` confirmed the prior operator-path, early-failure, fingerprint namespace, evidence-time, and runtime-log fixes. M-OPS5 remains unaccepted because acceptance-critical consistency checks are still incomplete.
+
+Required final corrections:
+
+- validate the identity fields inside each `latest.json`, not only `artifact_dir`;
+- require runtime, snapshot, history, operator, and latest-pointer duplicated result/stale/continuity/data-quality values to agree;
+- require the exact public source boundary in each accepted artifact manifest;
+- never expose IDs from a stage that did not complete successfully;
+- validate successful step return codes and runtime timestamp ordering/future boundaries;
+- keep all six retained cases unambiguous, with one health artifact and one canonical CLI result per case;
+- add focused regressions for these checks.
+
+This is a final source-only FIX. It must not change M-OPS1–M-OPS4, launchd, schedule, live fetch, mail, notification, private inputs, policy, or order behavior.

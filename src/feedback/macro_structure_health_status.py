@@ -161,6 +161,12 @@ def _artifact(root: Path, latest_name: str, identity: str, files: tuple[str, ...
     manifest = _json(artifact / "run_manifest.json", f"{prefix}_manifest_invalid")
     _require(main.get("schema_version") == schema and main.get("method_version") == method, f"{prefix}_version_mismatch")
     _require(manifest.get("schema_version") == schema and manifest.get("method_version") == method, f"{prefix}_manifest_version_mismatch")
+    expected_sources = {
+        "snapshot": "public_ohlcv_only",
+        "history": "public_mops1_artifacts_only",
+        "operator": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv",
+    }
+    _require(manifest.get("source") == expected_sources[prefix], f"{prefix}_manifest_source_mismatch")
     _boundary(manifest, prefix)
     for payload in (main, manifest):
         if payload.get("symbol") is not None:
@@ -176,6 +182,11 @@ def _validate_runtime(path: Path, symbol: str | None = None) -> tuple[dict[str, 
     _require(status.get("service_schema_version") == RUNTIME_SCHEMA_VERSION and status.get("service_method_version") == RUNTIME_METHOD_VERSION, "runtime_version_mismatch")
     for field in ("started_at_utc", "finished_at_utc", "evaluation_utc"):
         _aware(status.get(field), "runtime_timestamp_invalid")
+    started_at = _aware(status["started_at_utc"], "runtime_timestamp_invalid")
+    finished_at = _aware(status["finished_at_utc"], "runtime_timestamp_invalid")
+    captured_evaluation = _aware(status["evaluation_utc"], "runtime_timestamp_invalid")
+    _require(started_at <= finished_at, "runtime_time_order")
+    _require(captured_evaluation <= finished_at, "runtime_evaluation_after_finish")
     for utc_field, jst_field in (("started_at_utc", "started_at_jst"), ("finished_at_utc", "finished_at_jst"), ("evaluation_utc", "evaluation_jst")):
         if status.get(jst_field) is not None:
             utc_value = _aware(status[utc_field], "runtime_timestamp_invalid")
@@ -193,6 +204,7 @@ def _validate_runtime(path: Path, symbol: str | None = None) -> tuple[dict[str, 
     _require(isinstance(steps, list), "runtime_steps_invalid")
     if status.get("status") == "success":
         _require(status.get("ok") is True, "runtime_success_ok_missing")
+        _require(status.get("error_code") in (None, ""), "runtime_success_error_present")
         _require(len(steps) == 3 and [item.get("name") for item in steps] == ["snapshot", "history", "operator"], "runtime_step_order")
         _require(all(item.get("status") == "success" for item in steps), "runtime_success_step_failed")
     elif status.get("status") == "failed":
@@ -207,6 +219,8 @@ def _validate_runtime(path: Path, symbol: str | None = None) -> tuple[dict[str, 
         _require(not steps, "runtime_already_running_steps")
     for item in steps:
         _require(isinstance(item, dict) and item.get("status") in {"success", "failed"} and isinstance(item.get("return_code"), int), "runtime_step_invalid")
+        if item.get("status") == "success":
+            _require(item.get("return_code") == 0, "runtime_success_return_code")
     fingerprints = status.get("public_input_fingerprints")
     if steps:
         _require(isinstance(fingerprints, dict) and set(fingerprints) == {"15m", "1h", "4h"} and all(isinstance(fingerprints.get(key), str) and fingerprints[key] for key in ("15m", "1h", "4h")), "runtime_public_inputs_invalid")
@@ -235,6 +249,26 @@ def _validate_snapshot_fields(snapshot: dict[str, Any], manifest: dict[str, Any]
     _require(isinstance(snapshot.get("freshness"), dict) and all(isinstance(snapshot["freshness"].get(key), dict) for key in ("15m", "1h", "4h")), "snapshot_freshness_missing", "unavailable")
     _require(isinstance(snapshot.get("reliability_band_counts"), dict), "snapshot_reliability_counts_missing", "unavailable")
     _require(isinstance(snapshot.get("stale_status"), str) and isinstance(snapshot.get("continuity_status"), str), "snapshot_operator_status_missing", "unavailable")
+    _require(_aware(snapshot["as_of_utc"], "snapshot_timestamp_invalid") <= _aware(snapshot["evaluated_at_utc"], "snapshot_timestamp_invalid"), "snapshot_cutoff_after_evaluation")
+
+
+def _optional_match(mapping: dict[str, Any], key: str, expected: Any, code: str) -> None:
+    if key in mapping and mapping[key] is not None:
+        _require(mapping[key] == expected, code)
+
+
+def _operator_source_status(operator: dict[str, Any]) -> dict[str, Any]:
+    value = operator.get("source_status", {})
+    return value if isinstance(value, dict) else {}
+
+
+def _operator_counts(operator: dict[str, Any]) -> tuple[int, int, dict[str, Any]]:
+    zones = operator.get("zones", {}) if isinstance(operator.get("zones", {}), dict) else {}
+    counts = zones.get("counts_by_role_and_band", {}) if isinstance(zones.get("counts_by_role_and_band", {}), dict) else {}
+    support = zones.get("displayed_support_count", operator.get("displayed_support_count"))
+    resistance = zones.get("displayed_resistance_count", operator.get("displayed_resistance_count"))
+    _require(isinstance(support, int) and isinstance(resistance, int), "operator_displayed_counts_missing")
+    return support, resistance, counts
 
 
 def _validate_coherence(status: dict[str, Any], snapshot_root: Path, history_root: Path, operator_root: Path, symbol: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str]]:
@@ -242,15 +276,58 @@ def _validate_coherence(status: dict[str, Any], snapshot_root: Path, history_roo
     snapshot_latest, snapshot, snapshot_manifest, snapshot_dir, snapshot_fp = _artifact(snapshot_root, "latest.json", status.get("snapshot_run_id", ""), ("macro_structure_snapshot.json", "macro_structure_snapshot.md", "macro_level_reliability.csv", "run_manifest.json"), SNAPSHOT_VERSION, SNAPSHOT_VERSION, symbol, "snapshot")
     history_latest, history, history_manifest, history_dir, history_fp = _artifact(history_root, "latest.json", status.get("history_id", ""), ("macro_structure_history.json", "macro_structure_history.md", "macro_snapshot_history.csv", "macro_level_history.csv", "macro_structure_changes.csv", "run_manifest.json"), HISTORY_VERSION, HISTORY_VERSION, symbol, "history")
     operator_latest, operator, operator_manifest, operator_dir, operator_fp = _artifact(operator_root, "latest.json", status.get("operator_artifact_id", ""), ("macro_structure_operator.html", "macro_structure_operator.json", "macro_structure_operator.md", "run_manifest.json"), OPERATOR_VERSION, OPERATOR_VERSION, symbol, "operator")
+    _require(snapshot_latest.get("artifact_dir") == status.get("snapshot_run_id"), "snapshot_latest_artifact_dir_mismatch")
+    _require(snapshot_latest.get("run_id") == status.get("snapshot_run_id"), "snapshot_latest_run_id_mismatch")
+    _require(snapshot_latest.get("snapshot_id") == status.get("snapshot_id"), "snapshot_latest_snapshot_id_mismatch")
+    _require(snapshot_latest.get("schema_version") == SNAPSHOT_VERSION and snapshot_latest.get("method_version") == SNAPSHOT_VERSION, "snapshot_latest_version_mismatch")
     _require(snapshot.get("run_id") == status.get("snapshot_run_id") and snapshot.get("snapshot_id") == status.get("snapshot_id"), "snapshot_runtime_identity_mismatch")
     _validate_snapshot_fields(snapshot, snapshot_manifest)
+    _require(snapshot_latest.get("symbol") == symbol, "snapshot_latest_symbol_mismatch")
+    _require(snapshot_latest.get("result_status") == snapshot.get("result_status"), "snapshot_latest_result_status_mismatch")
+    _optional_match(snapshot_latest, "stale_status", snapshot.get("stale_status"), "snapshot_latest_stale_status_mismatch")
+    _optional_match(snapshot_latest, "continuity_status", snapshot.get("continuity_status"), "snapshot_latest_continuity_status_mismatch")
+    _optional_match(snapshot_latest, "data_quality_status", snapshot.get("data_quality_status"), "snapshot_latest_data_quality_status_mismatch")
+    _require(status.get("snapshot_result_status") == snapshot.get("result_status"), "runtime_snapshot_result_status_mismatch")
+    _require(status.get("stale_status") == snapshot.get("stale_status"), "runtime_stale_status_mismatch")
+    _require(status.get("continuity_status") == snapshot.get("continuity_status"), "runtime_continuity_status_mismatch")
+    _require(status.get("data_quality_status") == snapshot.get("data_quality_status"), "runtime_data_quality_status_mismatch")
+    _require(_aware(snapshot.get("evaluated_at_utc"), "snapshot_timestamp_invalid") == _aware(status.get("evaluation_utc"), "runtime_snapshot_evaluation_mismatch"), "runtime_snapshot_evaluation_mismatch")
     _require(history.get("history_id") == status.get("history_id"), "history_runtime_identity_mismatch")
+    _require(history_latest.get("artifact_dir") == status.get("history_id"), "history_latest_artifact_dir_mismatch")
+    _require(history_latest.get("history_id") == status.get("history_id"), "history_latest_history_id_mismatch")
+    _require(history_latest.get("schema_version") == HISTORY_VERSION and history_latest.get("method_version") == HISTORY_VERSION, "history_latest_version_mismatch")
+    _optional_match(history_latest, "symbol", symbol, "history_latest_symbol_mismatch")
+    _require(history_latest.get("history_result_status") == history.get("result_status"), "history_latest_result_status_mismatch")
+    _optional_match(history_latest, "latest_evaluation_run_id", status.get("snapshot_run_id"), "history_latest_evaluation_run_mismatch")
+    _optional_match(history_latest, "latest_snapshot_result_status", snapshot.get("result_status"), "history_latest_snapshot_result_status_mismatch")
+    _optional_match(history_latest, "latest_stale_status", snapshot.get("stale_status"), "history_latest_stale_status_mismatch")
+    _optional_match(history_latest, "latest_continuity_status", snapshot.get("continuity_status"), "history_latest_continuity_status_mismatch")
+    _optional_match(history_latest, "latest_data_quality_status", snapshot.get("data_quality_status"), "history_latest_data_quality_status_mismatch")
+    _require(status.get("history_result_status") == history.get("result_status"), "runtime_history_result_status_mismatch")
     _require(operator.get("operator_artifact_id") == status.get("operator_artifact_id"), "operator_runtime_identity_mismatch")
+    _require(operator_latest.get("artifact_dir") == status.get("operator_artifact_id"), "operator_latest_artifact_dir_mismatch")
+    _require(operator_latest.get("operator_artifact_id") == status.get("operator_artifact_id"), "operator_latest_operator_artifact_id_mismatch")
+    _require(operator_latest.get("schema_version") == OPERATOR_VERSION and operator_latest.get("method_version") == OPERATOR_VERSION, "operator_latest_version_mismatch")
+    _optional_match(operator_latest, "symbol", symbol, "operator_latest_symbol_mismatch")
+    _require(operator_latest.get("selected_snapshot_run_id") == status.get("snapshot_run_id"), "operator_latest_selected_snapshot_run_mismatch")
+    _require(operator_latest.get("selected_snapshot_id") == status.get("snapshot_id"), "operator_latest_selected_snapshot_id_mismatch")
+    _require(operator_latest.get("selected_history_id") == status.get("history_id"), "operator_latest_selected_history_id_mismatch")
     _require(operator.get("selected_snapshot_run_id") == status.get("snapshot_run_id") and operator.get("selected_snapshot_id") == status.get("snapshot_id"), "operator_selected_snapshot_mismatch")
     _require(operator.get("selected_history_id") == status.get("history_id"), "operator_selected_history_mismatch")
-    _require(snapshot.get("result_status") == status.get("snapshot_result_status"), "snapshot_result_status_mismatch")
-    _require(history.get("result_status") == status.get("history_result_status"), "history_result_status_mismatch")
-    _require(snapshot_latest.get("artifact_dir") == snapshot_dir.name and history_latest.get("artifact_dir") == history_dir.name and operator_latest.get("artifact_dir") == operator_dir.name, "latest_pointer_mismatch")
+    operator_status = _operator_source_status(operator)
+    _require(operator_status.get("snapshot_result_status") == snapshot.get("result_status"), "operator_snapshot_result_status_mismatch")
+    _require(operator_status.get("history_result_status") == history.get("result_status"), "operator_history_result_status_mismatch")
+    _optional_match(operator_status, "stale_status", snapshot.get("stale_status"), "operator_stale_status_mismatch")
+    _optional_match(operator_status, "continuity_status", snapshot.get("continuity_status"), "operator_continuity_status_mismatch")
+    _optional_match(operator_status, "data_quality_status", snapshot.get("data_quality_status"), "operator_data_quality_status_mismatch")
+    _optional_match(operator_latest, "snapshot_result_status", snapshot.get("result_status"), "operator_latest_snapshot_result_status_mismatch")
+    _optional_match(operator_latest, "history_result_status", history.get("result_status"), "operator_latest_history_result_status_mismatch")
+    _optional_match(operator_latest, "stale_status", snapshot.get("stale_status"), "operator_latest_stale_status_mismatch")
+    _optional_match(operator_latest, "continuity_status", snapshot.get("continuity_status"), "operator_latest_continuity_status_mismatch")
+    _optional_match(operator_latest, "data_quality_status", snapshot.get("data_quality_status"), "operator_latest_data_quality_status_mismatch")
+    support_count, resistance_count, zone_counts = _operator_counts(operator)
+    _require(operator_latest.get("displayed_support_count") == support_count and operator_latest.get("displayed_resistance_count") == resistance_count, "operator_displayed_counts_mismatch")
+    _require(operator_latest.get("displayed_zone_counts") == zone_counts, "operator_displayed_zone_counts_mismatch")
     operator = dict(operator)
     operator["_validated_artifact_dir"] = operator_dir.name
     fingerprints = {**snapshot_fp, **history_fp, **operator_fp}
@@ -265,22 +342,67 @@ def _validate_partial_coherence(status: dict[str, Any], snapshot_root: Path, his
     if "snapshot" in completed:
         for field in ("snapshot_run_id", "snapshot_id", "snapshot_result_status", "stale_status", "continuity_status", "data_quality_status"):
             _require(status.get(field) not in (None, ""), f"runtime_{field}_missing")
-        _, snapshot, snapshot_manifest, _, fp = _artifact(snapshot_root, "latest.json", status.get("snapshot_run_id", ""), ("macro_structure_snapshot.json", "macro_structure_snapshot.md", "macro_level_reliability.csv", "run_manifest.json"), SNAPSHOT_VERSION, SNAPSHOT_VERSION, symbol, "snapshot")
+        snapshot_latest, snapshot, snapshot_manifest, _, fp = _artifact(snapshot_root, "latest.json", status.get("snapshot_run_id", ""), ("macro_structure_snapshot.json", "macro_structure_snapshot.md", "macro_level_reliability.csv", "run_manifest.json"), SNAPSHOT_VERSION, SNAPSHOT_VERSION, symbol, "snapshot")
+        _require(snapshot_latest.get("artifact_dir") == status.get("snapshot_run_id"), "snapshot_latest_artifact_dir_mismatch")
+        _require(snapshot_latest.get("run_id") == status.get("snapshot_run_id"), "snapshot_latest_run_id_mismatch")
+        _require(snapshot_latest.get("snapshot_id") == status.get("snapshot_id"), "snapshot_latest_snapshot_id_mismatch")
+        _require(snapshot_latest.get("schema_version") == SNAPSHOT_VERSION and snapshot_latest.get("method_version") == SNAPSHOT_VERSION, "snapshot_latest_version_mismatch")
         _validate_snapshot_fields(snapshot, snapshot_manifest)
+        _require(snapshot_latest.get("symbol") == symbol, "snapshot_latest_symbol_mismatch")
+        _require(snapshot_latest.get("result_status") == snapshot.get("result_status"), "snapshot_latest_result_status_mismatch")
+        _optional_match(snapshot_latest, "stale_status", snapshot.get("stale_status"), "snapshot_latest_stale_status_mismatch")
+        _optional_match(snapshot_latest, "continuity_status", snapshot.get("continuity_status"), "snapshot_latest_continuity_status_mismatch")
+        _optional_match(snapshot_latest, "data_quality_status", snapshot.get("data_quality_status"), "snapshot_latest_data_quality_status_mismatch")
         _require(snapshot.get("snapshot_id") == status.get("snapshot_id"), "snapshot_runtime_identity_mismatch")
         _require(snapshot.get("result_status") == status.get("snapshot_result_status"), "snapshot_result_status_mismatch")
+        _require(status.get("stale_status") == snapshot.get("stale_status"), "runtime_stale_status_mismatch")
+        _require(status.get("continuity_status") == snapshot.get("continuity_status"), "runtime_continuity_status_mismatch")
+        _require(status.get("data_quality_status") == snapshot.get("data_quality_status"), "runtime_data_quality_status_mismatch")
+        _require(_aware(snapshot.get("evaluated_at_utc"), "snapshot_timestamp_invalid") == _aware(status.get("evaluation_utc"), "runtime_snapshot_evaluation_mismatch"), "runtime_snapshot_evaluation_mismatch")
         fingerprints.update(fp)
     if "history" in completed:
         for field in ("history_id", "history_result_status"):
             _require(status.get(field) not in (None, ""), f"runtime_{field}_missing")
-        _, history, _, _, fp = _artifact(history_root, "latest.json", status.get("history_id", ""), ("macro_structure_history.json", "macro_structure_history.md", "macro_snapshot_history.csv", "macro_level_history.csv", "macro_structure_changes.csv", "run_manifest.json"), HISTORY_VERSION, HISTORY_VERSION, symbol, "history")
+        history_latest, history, _, _, fp = _artifact(history_root, "latest.json", status.get("history_id", ""), ("macro_structure_history.json", "macro_structure_history.md", "macro_snapshot_history.csv", "macro_level_history.csv", "macro_structure_changes.csv", "run_manifest.json"), HISTORY_VERSION, HISTORY_VERSION, symbol, "history")
+        _require(history_latest.get("artifact_dir") == status.get("history_id"), "history_latest_artifact_dir_mismatch")
+        _require(history_latest.get("history_id") == status.get("history_id"), "history_latest_history_id_mismatch")
+        _require(history_latest.get("schema_version") == HISTORY_VERSION and history_latest.get("method_version") == HISTORY_VERSION, "history_latest_version_mismatch")
+        _optional_match(history_latest, "symbol", symbol, "history_latest_symbol_mismatch")
+        _require(history_latest.get("history_result_status") == history.get("result_status"), "history_latest_result_status_mismatch")
+        _optional_match(history_latest, "latest_evaluation_run_id", status.get("snapshot_run_id"), "history_latest_evaluation_run_mismatch")
+        _optional_match(history_latest, "latest_snapshot_result_status", status.get("snapshot_result_status"), "history_latest_snapshot_result_status_mismatch")
+        _optional_match(history_latest, "latest_stale_status", status.get("stale_status"), "history_latest_stale_status_mismatch")
+        _optional_match(history_latest, "latest_continuity_status", status.get("continuity_status"), "history_latest_continuity_status_mismatch")
+        _optional_match(history_latest, "latest_data_quality_status", status.get("data_quality_status"), "history_latest_data_quality_status_mismatch")
+        _require(status.get("history_result_status") == history.get("result_status"), "runtime_history_result_status_mismatch")
         _require(history.get("result_status") == status.get("history_result_status"), "history_result_status_mismatch")
         fingerprints.update(fp)
     if "operator" in completed:
         _require(status.get("operator_artifact_id") not in (None, ""), "runtime_operator_artifact_id_missing")
-        _, operator, _, _, fp = _artifact(operator_root, "latest.json", status.get("operator_artifact_id", ""), ("macro_structure_operator.html", "macro_structure_operator.json", "macro_structure_operator.md", "run_manifest.json"), OPERATOR_VERSION, OPERATOR_VERSION, symbol, "operator")
+        operator_latest, operator, _, _, fp = _artifact(operator_root, "latest.json", status.get("operator_artifact_id", ""), ("macro_structure_operator.html", "macro_structure_operator.json", "macro_structure_operator.md", "run_manifest.json"), OPERATOR_VERSION, OPERATOR_VERSION, symbol, "operator")
+        _require(operator_latest.get("artifact_dir") == status.get("operator_artifact_id"), "operator_latest_artifact_dir_mismatch")
+        _require(operator_latest.get("operator_artifact_id") == status.get("operator_artifact_id"), "operator_latest_operator_artifact_id_mismatch")
+        _require(operator_latest.get("schema_version") == OPERATOR_VERSION and operator_latest.get("method_version") == OPERATOR_VERSION, "operator_latest_version_mismatch")
+        _optional_match(operator_latest, "symbol", symbol, "operator_latest_symbol_mismatch")
+        _require(operator_latest.get("selected_snapshot_run_id") == status.get("snapshot_run_id"), "operator_latest_selected_snapshot_run_mismatch")
+        _require(operator_latest.get("selected_snapshot_id") == status.get("snapshot_id"), "operator_latest_selected_snapshot_id_mismatch")
+        _require(operator_latest.get("selected_history_id") == status.get("history_id"), "operator_latest_selected_history_id_mismatch")
         _require(operator.get("operator_artifact_id") == status.get("operator_artifact_id"), "operator_runtime_identity_mismatch")
-        _require(operator.get("selected_snapshot_id") == status.get("snapshot_id") and operator.get("selected_history_id") == status.get("history_id"), "operator_selected_source_mismatch")
+        _require(operator.get("selected_snapshot_run_id") == status.get("snapshot_run_id") and operator.get("selected_snapshot_id") == status.get("snapshot_id") and operator.get("selected_history_id") == status.get("history_id"), "operator_selected_source_mismatch")
+        source_status = _operator_source_status(operator)
+        _require(source_status.get("snapshot_result_status") == status.get("snapshot_result_status"), "operator_snapshot_result_status_mismatch")
+        _require(source_status.get("history_result_status") == status.get("history_result_status"), "operator_history_result_status_mismatch")
+        _optional_match(source_status, "stale_status", status.get("stale_status"), "operator_stale_status_mismatch")
+        _optional_match(source_status, "continuity_status", status.get("continuity_status"), "operator_continuity_status_mismatch")
+        _optional_match(source_status, "data_quality_status", status.get("data_quality_status"), "operator_data_quality_status_mismatch")
+        _optional_match(operator_latest, "snapshot_result_status", status.get("snapshot_result_status"), "operator_latest_snapshot_result_status_mismatch")
+        _optional_match(operator_latest, "history_result_status", status.get("history_result_status"), "operator_latest_history_result_status_mismatch")
+        _optional_match(operator_latest, "stale_status", status.get("stale_status"), "operator_latest_stale_status_mismatch")
+        _optional_match(operator_latest, "continuity_status", status.get("continuity_status"), "operator_latest_continuity_status_mismatch")
+        _optional_match(operator_latest, "data_quality_status", status.get("data_quality_status"), "operator_latest_data_quality_status_mismatch")
+        support_count, resistance_count, zone_counts = _operator_counts(operator)
+        _require(operator_latest.get("displayed_support_count") == support_count and operator_latest.get("displayed_resistance_count") == resistance_count, "operator_displayed_counts_mismatch")
+        _require(operator_latest.get("displayed_zone_counts") == zone_counts, "operator_displayed_zone_counts_mismatch")
         operator = dict(operator)
         operator["_validated_artifact_dir"] = (operator_root / status["operator_artifact_id"]).name
         fingerprints.update(fp)
@@ -365,6 +487,8 @@ def check_macro_structure_health(*, runtime_status: Path = Path("logs/runtime/ma
             source_fingerprints["input:plist"] = _sha256(plist)
         status, runtime_fp = _validate_runtime(runtime_status)
         symbol = status["symbol"]
+        if status.get("status") == "already_running":
+            raise HealthError("runtime_completed_result_unavailable", "unavailable")
         source_fingerprints.update(runtime_fp)
         _validate_plist(plist)
         snapshot = history = operator = {}
@@ -377,28 +501,36 @@ def check_macro_structure_health(*, runtime_status: Path = Path("logs/runtime/ma
             source_fingerprints.update(artifact_fp)
         last_scheduled, next_scheduled = _scheduled(evaluation)
         finished = _aware(status.get("finished_at_utc"), "runtime_timestamp_invalid")
+        _require(evaluation >= finished, "health_evaluation_before_runtime_finish")
         age = max(0.0, round((evaluation - finished).total_seconds() / 60.0, 3))
         overdue = evaluation > last_scheduled + timedelta(minutes=GRACE_MINUTES) and finished < last_scheduled
         if overdue:
             state = "overdue"
         elif status.get("status") == "failed":
             state = "failed"
-        elif status.get("stale_status") != "current" or status.get("continuity_status") != "continuous" or status.get("data_quality_status") != "ok":
+        elif (snapshot.get("stale_status") if snapshot else None) != "current" or (snapshot.get("continuity_status") if snapshot else None) != "continuous" or (snapshot.get("data_quality_status") if snapshot else None) != "ok":
             state = "degraded"
-        elif status.get("snapshot_result_status") == "insufficient":
+        elif snapshot.get("result_status") == "insufficient":
             state = "healthy_insufficient"
         else:
             state = "healthy"
         severity = "ok" if state in {"healthy", "healthy_insufficient"} else ("warning" if state in {"degraded", "overdue"} else "error")
-        snapshot_result_status = snapshot.get("result_status") if snapshot else ("failed" if _operation_result_status(status, "snapshot") == "failed" else status.get("snapshot_result_status") or "not_run")
-        history_result_status = history.get("result_status") if history else ("failed" if _operation_result_status(status, "history") == "failed" else status.get("history_result_status") or "not_run")
+        snapshot_result_status = snapshot.get("result_status") if snapshot else ("failed" if _operation_result_status(status, "snapshot") == "failed" else "not_run")
+        history_result_status = history.get("result_status") if history else ("failed" if _operation_result_status(status, "history") == "failed" else "not_run")
         operator_result_status = _operation_result_status(status, "operator")
+        validated_snapshot_run_id = snapshot.get("run_id") if snapshot else None
+        validated_snapshot_id = snapshot.get("snapshot_id") if snapshot else None
+        validated_history_id = history.get("history_id") if history else None
+        validated_operator_id = operator.get("operator_artifact_id") if operator else None
         operator_dir = operator.get("_validated_artifact_dir") if operator else None
         operator_root_relative = _relative(operator_root)
         operator_html_path = f"{operator_root_relative}/{operator_dir}/macro_structure_operator.html" if operator_dir else None
         _require(operator_html_path is None or Path(operator_html_path).name == "macro_structure_operator.html", "operator_html_path_invalid")
         latest_evaluated_at_utc = snapshot.get("evaluated_at_utc") if snapshot else None
         latest_evaluated_at_jst = snapshot.get("evaluated_at_jst") if snapshot else None
+        snapshot_stale_status = snapshot.get("stale_status") if snapshot else None
+        snapshot_continuity_status = snapshot.get("continuity_status") if snapshot else None
+        snapshot_data_quality_status = snapshot.get("data_quality_status") if snapshot else None
         plist_value = _validate_plist(plist)
         payload: dict[str, Any] = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "health_state": state, "severity": severity,
@@ -407,18 +539,20 @@ def check_macro_structure_health(*, runtime_status: Path = Path("logs/runtime/ma
             "next_scheduled_utc": _iso_utc(next_scheduled), "next_scheduled_jst": _iso_jst(next_scheduled), "grace_minutes": GRACE_MINUTES,
             "runtime_started_at_utc": status.get("started_at_utc"), "runtime_started_at_jst": status.get("started_at_jst"), "runtime_finished_at_utc": status.get("finished_at_utc"), "runtime_finished_at_jst": status.get("finished_at_jst"), "runtime_evaluation_utc": status.get("evaluation_utc"), "runtime_evaluation_jst": status.get("evaluation_jst"),
             "runtime_status": status.get("status"), "runtime_status_path": _relative(runtime_status), "runtime_age_minutes": age, "overdue": overdue, "symbol": symbol, "first_failed_step": next((item.get("name") for item in status.get("steps", []) if item.get("status") == "failed"), None), "runtime_error_code": status.get("error_code"),
-            "snapshot_run_id": status.get("snapshot_run_id"), "snapshot_id": status.get("snapshot_id"), "history_id": status.get("history_id"), "operator_artifact_id": status.get("operator_artifact_id"),
+            "snapshot_run_id": validated_snapshot_run_id, "snapshot_id": validated_snapshot_id, "history_id": validated_history_id, "operator_artifact_id": validated_operator_id,
             "snapshot_result_status": snapshot_result_status, "history_result_status": history_result_status, "operator_result_status": operator_result_status,
-            "stale_status": status.get("stale_status"), "continuity_status": status.get("continuity_status"), "data_quality_status": status.get("data_quality_status"),
+            "stale_status": snapshot_stale_status, "continuity_status": snapshot_continuity_status, "data_quality_status": snapshot_data_quality_status,
             "stale_timeframes": (snapshot.get("stale_timeframes") if snapshot else []), "latest_as_of_utc": snapshot.get("as_of_utc") if snapshot else None, "latest_evaluated_at_utc": latest_evaluated_at_utc, "latest_evaluated_at_jst": latest_evaluated_at_jst,
             "displayed_support_count": operator.get("displayed_support_count", operator.get("zones", {}).get("displayed_support_count", 0)), "displayed_resistance_count": operator.get("displayed_resistance_count", operator.get("zones", {}).get("displayed_resistance_count", 0)),
             "displayed_zone_counts": operator.get("displayed_zone_counts", operator.get("zones", {}).get("counts_by_role_and_band", {})), "public_input_fingerprints": status.get("public_input_fingerprints", {}),
-            "snapshot_artifact_root": "local/reports/macro_structure", "history_artifact_root": "local/reports/macro_structure/history", "operator_artifact_root": "local/reports/macro_structure/operator",
+            "snapshot_artifact_root": _relative(snapshot_root), "history_artifact_root": _relative(history_root), "operator_artifact_root": _relative(operator_root),
             "runtime_status_path": _relative(runtime_status), "runtime_stdout_path": _relative(Path(plist_value["StandardOutPath"])), "runtime_stderr_path": _relative(Path(plist_value["StandardErrorPath"])), "operator_html_path": operator_html_path,
             "contract_checks": {"plist": True, "runtime": True, "snapshot": bool(snapshot), "history": bool(history), "operator": bool(operator), "safety": True},
             "reason_codes": sorted(set((snapshot.get("reason_codes") or []) if snapshot else [])), "source_fingerprints": source_fingerprints,
             "report_only": True, "private_actual_trade_input": False, "automatic_order_allowed": False, "safety_boundary": "report-only / no private or actual-trade input / no automatic order",
         }
+        if payload.get("operator_html_path") is None:
+            payload.pop("operator_html_path", None)
     except HealthError as exc:
         state = exc.category if exc.category in {"inconsistent", "unavailable"} else "unavailable"
         symbol = symbol or "BTC_USDT"
