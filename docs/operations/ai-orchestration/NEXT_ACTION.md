@@ -1,75 +1,136 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE-FIX-02`
-- mode: `RUNTIME_TASK`
+- current_work_id: `BTCFX-20260722-MACRO-STRUCTURE-AUTONOMOUS-HEALTH-STATUS`
+- mode: `BOUNDED_CODEX_IMPLEMENTATION`
 - branch: `Ver04-v3`; confirm from local git before execution
-- current_head_locator: `a9b3d46` (state commit pending)
+- accepted_base: `61e07a9`
 - runtime_implementation_commit: `690c014`
-- archived_spec: `chatgpt/specs/archive/20260721_macro_structure_runtime_service_enable.md`
-- status: M-OPS4 accepted; M-OPS5 is the next separate source task
-- target_label: `com.afrog.btc-macro-structure`
+- operator_runtime_fix_commit: `a9b3d46`
+- active_spec: `chatgpt/specs/active/20260722_macro_structure_autonomous_health_status.md`
+- status: ready for M-OPS5 source implementation
+- installed_target: `com.afrog.btc-macro-structure`
 - push: none
 
 ## Current action
 
-Define the separate M-OPS5 autonomous health/status source task. Do not repeat the accepted M-OPS4 runtime review or live run without a documented reopening trigger.
+Implement one read-only deterministic macro service health/status operation.
 
-## Established root cause
+Inputs:
 
-The launchd service, schedule, public fetch, M-OPS1, and M-OPS2 operated correctly.
+- `logs/runtime/macro_structure_service_last_result.json`
+- snapshot/history/operator `latest.json` and referenced manifests
+- repository plist `deploy/com.afrog.btc-macro-structure.plist`
+- explicit or current aware evaluation time
 
-The live M-OPS1 snapshot legitimately publishes optional unavailable references as empty dictionaries, including `next_upside_target`, `next_downside_target`, and `nearest_reliable_resistance` when structure is insufficient.
+The operation must not rerun the public-data pipeline or call `launchctl`.
 
-M-OPS3 currently rejects an empty dictionary as `zone_evidence_invalid` before recognizing it as an absent optional reference.
+## Accepted runtime state
 
-Required semantics:
+M-OPS4 is accepted.
 
-- optional nearest/target/obstruction reference values `None`, blank, `none`, `insufficient`, and `{}` are absent and not rendered;
-- a non-empty partial object remains malformed and fails closed;
-- every displayed high/medium support/resistance zone remains strictly validated;
-- no M-OPS1 reliability, lifecycle, role, or geometry semantics change.
+Installed contract:
 
-## Runtime status correction
+- label: `com.afrog.btc-macro-structure`
+- schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
+- primary repo Python/wrapper/working/log paths
+- no `RunAtLoad` or `KeepAlive`
 
-When a later pipeline step fails, preserve identifiers and statuses from earlier successful steps in `macro_structure_service_last_result.json`.
+Accepted live result:
 
-At minimum, an operator-step failure after successful snapshot/history must retain snapshot run ID, snapshot ID, history ID, snapshot result, history result, stale, continuity, and data-quality status.
+- snapshot: `run_bc49b15e01e3c2d49d64`
+- snapshot ID: `macro_snapshot_bc49b15e01e3c2d49d64`
+- history: `history_e0fa3fd0ebc25b781c5f`
+- operator: `operator_128b44f88c8a1e02b350`
+- snapshot result: `insufficient` (valid)
+- history result: `ok`
+- stale: `current`
+- continuity: `continuous`
+- data quality: `ok`
+- report-only / no private input / no automatic order
 
-## Validation and activation
+Do not repeat M-OPS4 activation or live acceptance without a documented reopening trigger.
 
-After the focused source fix:
+## Required health states
 
-1. run matching M-OPS3 and runtime-wrapper tests;
-2. run one deterministic fixture using M-OPS1-style empty optional references;
-3. commit the source fix locally;
-4. install the unchanged committed target plist;
-5. bootstrap only `com.afrog.btc-macro-structure` once;
-6. verify the existing six-time primary-repo contract;
-7. kickstart exactly once;
-8. verify one complete M-OPS1 → M-OPS2 → M-OPS3 success and matching artifacts;
-9. on success archive the M-OPS4 spec and mark M-OPS4 accepted / M-OPS5 next;
-10. on failure rollback only the target and do not repeat the live run.
+Distinguish:
 
-## FIX-02 accepted result
+- `healthy`
+- `healthy_insufficient`
+- `degraded`
+- `failed`
+- `overdue`
+- `inconsistent`
+- `unavailable`
 
-- source fix: `a9b3d46`;
-- runtime implementation: `690c014`;
-- target: `com.afrog.btc-macro-structure`, primary repo, schedule `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10` JST;
-- one bootstrap and one kickstart succeeded;
-- latest snapshot: `run_bc49b15e01e3c2d49d64` / `macro_snapshot_bc49b15e01e3c2d49d64`;
-- latest history: `history_e0fa3fd0ebc25b781c5f`;
-- latest operator: `operator_128b44f88c8a1e02b350`;
-- result: snapshot `insufficient`, history `ok`, stale `current`, continuity `continuous`, data quality `ok`;
-- safety: report-only, no private actual-trade input, no automatic order;
-- M-OPS5 is next; do not repeat M-OPS4 review or runtime run without a documented reopening trigger.
+`insufficient` is a valid result, not a service failure.
+
+## Required checks
+
+1. parse and validate the six-time repository plist contract;
+2. calculate last and next scheduled time in JST/UTC;
+3. apply a deterministic 60-minute schedule grace period;
+4. validate runtime timestamps, step order, public fingerprints, IDs, statuses, and safety;
+5. require runtime IDs to agree with all three latest pointers;
+6. require complete direct-child immutable artifact sets;
+7. require accepted snapshot/history/operator versions and manifest safety;
+8. expose stale, continuity, data quality, result status, and displayed zone counts;
+9. publish deterministic JSON, Markdown, manifest, and atomic latest health summary;
+10. preserve prior latest on conflict or publication failure.
+
+## Implementation boundary
+
+Default files:
+
+- new `src/feedback/macro_structure_health_status.py`
+- `tools/log_feedback.py`
+- new `tests/test_macro_structure_health_status.py`
+- `tests/test_log_feedback.py` only for matching M-OPS5 CLI coverage
+- active spec for one factual implementation note
+- one small matching fixture helper when useful
+
+Do not edit:
+
+- M1 or M-OPS1–M-OPS4 semantics;
+- runtime wrapper or plist;
+- installed LaunchAgent;
+- production UI, mail, notification, policy, account, position, or order code;
+- frozen runtime repo.
+
+## Validation
+
+Use only:
+
+- matching M-OPS5 unittest module;
+- matching CLI test class;
+- one deterministic healthy fixture smoke;
+- one deterministic overdue or failed fixture smoke;
+- one identical healthy repeat for idempotence;
+- task-scoped `git diff --check`.
+
+Do not run full suite, live public fetch, launchctl, installed runtime, M5/M6, mail/notification tests, or frozen-repo commands.
+
+## Acceptance path
+
+After Codex reports completion, ChatGPT reviews:
+
+- source and health-state precedence;
+- schedule calculation;
+- status/latest/artifact consistency;
+- direct-child and complete-set validation;
+- deterministic publication;
+- retained M-OPS5 review fixtures;
+- safety and scope.
+
+If accepted, the autonomous M source plan is complete through M-OPS5. Automatic recurring generation of the health artifact remains a separately approved runtime integration.
 
 ## Safety
 
 - report-only
 - no automatic order
-- no mail or notification integration
 - no private/account/position/order endpoint
-- no other LaunchAgent mutation
+- no mail or notification integration
+- no launchd or schedule mutation
+- no production policy mutation
 - no M5/M6
 - no version promotion
 - no push

@@ -70,6 +70,7 @@ from src.feedback.macro_structure_volatility_replay import replay_macro_structur
 from src.feedback.macro_structure_daily_operation import build_macro_structure_daily
 from src.feedback.macro_structure_history_operation import build_macro_structure_history
 from src.feedback.macro_structure_operator_artifact import render_macro_structure_operator
+from src.feedback.macro_structure_health_status import check_macro_structure_health
 from src.feedback.macro_next_regime_replay import replay_macro_next_regime
 from src.feedback.macro_operator_hierarchy_shadow import render_macro_operator_hierarchy_shadow
 from src.feedback.macro_p9_proposal_engine import run_macro_p9_proposal_engine
@@ -22134,6 +22135,16 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_operator_parser.add_argument("--symbol", default="BTC_USDT")
     macro_operator_parser.add_argument("--stdout-json", action="store_true")
 
+    macro_health_parser = subparsers.add_parser("check-macro-structure-health")
+    macro_health_parser.add_argument("--runtime-status", default="logs/runtime/macro_structure_service_last_result.json")
+    macro_health_parser.add_argument("--snapshot-root", default="local/reports/macro_structure")
+    macro_health_parser.add_argument("--history-root", default="local/reports/macro_structure/history")
+    macro_health_parser.add_argument("--operator-root", default="local/reports/macro_structure/operator")
+    macro_health_parser.add_argument("--plist", default="deploy/com.afrog.btc-macro-structure.plist")
+    macro_health_parser.add_argument("--output-root", default="local/reports/macro_structure/health")
+    macro_health_parser.add_argument("--evaluation-time-utc")
+    macro_health_parser.add_argument("--stdout-json", action="store_true")
+
     next_regime_parser = subparsers.add_parser("replay-macro-next-regime")
     next_regime_parser.add_argument("--signals", required=True)
     next_regime_parser.add_argument("--macro-events", required=True)
@@ -23632,6 +23643,20 @@ def main() -> None:
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
         return int(summary.get("exit_code", 0))
+
+    if args.command == "check-macro-structure-health":
+        try:
+            summary = check_macro_structure_health(
+                runtime_status=Path(args.runtime_status), snapshot_root=Path(args.snapshot_root),
+                history_root=Path(args.history_root), operator_root=Path(args.operator_root),
+                plist=Path(args.plist), output_root=Path(args.output_root),
+                evaluation_time_utc=args.evaluation_time_utc,
+            )
+        except (OSError, ValueError) as exc:
+            summary = {"ok": False, "exit_code": 3, "error_code": str(exc), "report_written": False}
+        if bool(getattr(args, "stdout_json", False)):
+            sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 3))
 
     if args.command == "replay-macro-next-regime":
         try:

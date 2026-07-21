@@ -8085,6 +8085,30 @@ class MacroStructureOperatorCliTests(unittest.TestCase):
             self.assertIn('"operator_artifact_id":"operator_test"', out.getvalue())
 
 
+class MacroStructureHealthCliTests(unittest.TestCase):
+    def test_parser_dispatches_health_paths_and_evaluation_time(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+
+        summary = {"ok": True, "exit_code": 0, "health_state": "healthy_insufficient", "health_artifact_id": "health_test"}
+        argv = [
+            "log_feedback.py", "check-macro-structure-health", "--runtime-status", "runtime.json",
+            "--snapshot-root", "snapshots", "--history-root", "history", "--operator-root", "operator",
+            "--plist", "service.plist", "--output-root", "health", "--evaluation-time-utc",
+            "2026-07-22T00:20:00+09:00", "--stdout-json",
+        ]
+        with patch.object(sys, "argv", argv), patch("tools.log_feedback.check_macro_structure_health", return_value=summary) as check, patch("sys.stdout", new_callable=StringIO) as out:
+            self.assertEqual(main(), 0)
+            self.assertEqual(check.call_args.kwargs["runtime_status"], Path("runtime.json"))
+            self.assertEqual(check.call_args.kwargs["snapshot_root"], Path("snapshots"))
+            self.assertEqual(check.call_args.kwargs["history_root"], Path("history"))
+            self.assertEqual(check.call_args.kwargs["operator_root"], Path("operator"))
+            self.assertEqual(check.call_args.kwargs["plist"], Path("service.plist"))
+            self.assertEqual(check.call_args.kwargs["output_root"], Path("health"))
+            self.assertEqual(check.call_args.kwargs["evaluation_time_utc"], "2026-07-22T00:20:00+09:00")
+            self.assertIn('"health_artifact_id":"health_test"', out.getvalue())
+
+
 class MacroNextRegimeCliTests(unittest.TestCase):
     def test_parser_dispatches_explicit_offline_paths_compactly(self) -> None:
         from io import StringIO

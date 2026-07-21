@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 
 ## Current posture
 
@@ -13,32 +13,30 @@ last_updated: 2026-07-21
 - accepted M-OPS1 checkpoint: `89bd338`
 - accepted M-OPS2 checkpoint: `dea0e33`
 - accepted M-OPS3 checkpoint: `09330b9`
+- accepted M-OPS4 source fix: `a9b3d46`
+- accepted M-OPS4 runtime implementation: `690c014`
+- accepted M-OPS4 state checkpoint: `61e07a9`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
-- current transition: M-OPS4 explicitly approved for bounded implementation and installed service activation
-- target label: `com.afrog.btc-macro-structure`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_autonomous_health_status.md`
+- current transition: M-OPS5 source implementation
+- installed target: `com.afrog.btc-macro-structure`
 - safety: report-only / human-decided / no automatic order
 - push: none
 
-MCP does not independently expose git branch, HEAD, commit objects, installed launchctl state, or the complete dirty tree. Branch/commit/runtime evidence must be confirmed from bounded local execution; acceptance-critical source, tests, specs, state paths, and generated artifacts are reviewed directly through MCP.
+MCP does not independently expose git branch, HEAD, commit objects, or live `launchctl` state. Branch/commit/loaded-state locators come from bounded local execution reports. Acceptance-critical source, tests, compact runtime status, specs, state paths, and generated artifacts are reviewed directly through MCP.
 
 ## Product / P state
 
 - P1–P8 accepted
 - P9 blocked pending adequate actual-backed evidence and human approval
 
-### P no-repeat boundary
-
-`BTCFX-20260721-P8-ACTUAL-EVIDENCE-READINESS-REVIEW` is complete and accepted.
-
 Confirmed blocker:
 
 - no complete private MEXC Trade History / Order History / Position History batch under `local/manual_trade_imports/YYYYMMDD/`
 - no generated actual-trade episode/link pair
 - eligible actual-backed evidence remains 0
-- this is an input-availability blocker, not an importer, linker, or P8 evaluator defect
 
-Do not repeat importer, episode-builder, signal-linker, CLI, or readiness review unless one documented reopening trigger is true:
+Do not repeat importer, episode-builder, signal-linker, CLI, or P8 readiness review unless one reopening trigger is true:
 
 1. a complete private export batch appears;
 2. relevant source/tests change;
@@ -49,7 +47,7 @@ Canonical decision: `DEC-20260721-012`.
 
 ## Macro / M purpose
 
-The primary M objective is autonomous higher-timeframe market-structure understanding from public data.
+The primary M objective is autonomous higher-timeframe market-structure understanding from public data for human 15-minute manual-trading judgment.
 
 ```text
 public 15m / 1h / 4h OHLCV
@@ -57,27 +55,23 @@ public 15m / 1h / 4h OHLCV
 → prior-only reliability and lifecycle
 → current structural location
 → confidence-labelled zones
-→ next target and obstruction
 → chronological evidence history
 → chart-first operator artifact
 → installed report-only cadence
 → autonomous health/status
 ```
 
-Private actual-trade evidence is not a prerequisite for market-structure operation. It remains relevant to human outcome evaluation and production adoption decisions.
+Private actual-trade evidence is not a prerequisite for macro structure calculation. It remains separate evidence for outcome evaluation and production adoption.
 
 Canonical plan:
 
 - `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+- decision `DEC-20260721-014`
 
-Canonical decision:
-
-- `DEC-20260721-014`
-
-## Macro accepted foundation
+## Accepted macro foundation
 
 - M1 accepted: event-time levels, lifecycle, prior-only reliability, location, volatility, activation, target/obstruction, outcomes
-- M2 accepted: opt-in public-data auxiliary macro shadow, disabled by default
+- M2 accepted: opt-in public-data auxiliary shadow
 - M3 accepted: tactical and next-regime separation
 - M4 accepted: chart-first local render shadow at `ea89e61`
 - M5 accepted: bounded champion/challenger proposal engine
@@ -97,17 +91,7 @@ Command:
 
 - `run-macro-structure-daily`
 
-Accepted behavior:
-
-- public 15m/1h/4h only;
-- deterministic actual common closed-candle cutoff;
-- explicit normalized evaluation time;
-- stable M1 level identity and prior-only evidence;
-- original level side separated from current lifecycle role;
-- structure/location, reliable zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`;
-- complete immutable run artifacts plus atomic compact latest summary;
-- byte-conflict-safe deterministic publication;
-- no private actual-trade, runtime, delivery, policy, or order mutation.
+Provides public-only cutoff-safe current snapshots, confidence-labelled zones, structure/location, targets/obstruction, volatility/activation, freshness/continuity, valid `insufficient`, immutable artifacts, and atomic latest status.
 
 Reviewed evidence:
 
@@ -121,143 +105,112 @@ Command:
 
 - `run-macro-structure-history`
 
-Accepted behavior:
-
-- complete direct-child M-OPS1 source validation;
-- every evaluation plus unique structural checkpoints;
-- earliest canonical structural source and latest freshness/status reevaluation separation;
-- stable level identity, reliability, role, lifecycle, geometry, evidence deltas, absence, reappearance, and latest absence;
-- deterministic v2 immutable history artifacts and atomic latest summary;
-- legacy v1 preservation;
-- identifiable level transition events;
-- no live fetch, private input, runtime, delivery, policy, or order mutation.
+Provides deterministic v2 evaluation/structural-checkpoint history, stable level continuity, reliability/role/lifecycle/geometry changes, absence/reappearance, legacy-v1 preservation, immutable artifacts, and atomic latest status.
 
 Reviewed evidence:
 
 - `local/reports/macro_structure/mops2_review/history/`
-- accepted v2 artifact: `history_037b8f5e06b11d7cfa5d`
 
 ## Accepted M-OPS3
 
-Accepted at `09330b9`.
+Accepted source checkpoint: `09330b9`.
+
+Runtime compatibility fix: `a9b3d46`.
 
 Command:
 
 - `render-macro-structure-operator`
 
-Accepted behavior:
+Provides deterministic self-contained v2 HTML/SVG, JSON, Markdown, manifest, 96 closed 15-minute candles, all high/medium zones, strict displayed-zone evidence, optional-reference absence handling, categorized history, truthful source traces, visible stale/continuity/data-quality/insufficient state, and macro-only safety.
 
-- exact direct-child latest M-OPS1 snapshot and M-OPS2 v2 history selection;
-- selected snapshot is the latest evaluation of the final structural checkpoint;
-- explicit public 15-minute OHLCV and no-future closed-candle filtering;
-- current-price agreement;
-- deterministic self-contained v2 HTML/SVG, JSON, Markdown, manifest, and atomic latest summary;
-- latest 96 eligible 15-minute candles;
-- all accepted high/medium support and resistance zones including non-nearest zones;
-- low/insufficient zones not promoted;
-- complete zone evidence without reliability/lifecycle recalculation;
-- categorized structure, reliability, role, lifecycle, geometry, absence, reappearance, and stale/discontinuous history;
-- display-level source traces;
-- visible stale, continuity, data-quality, insufficient, checkpoint, and safety state;
-- macro-only surface with no tactical Entry/SL/TP or execution implication;
-- no live fetch, production UI, mail, notification, runtime, policy, or order mutation.
-
-Reviewed evidence:
+Reviewed fixture evidence:
 
 - `local/reports/macro_structure/mops3_review/`
-- accepted latest v2 artifact: `operator_3f09d915f61d0183d51c`
-
-Archived accepted spec:
-
-- `chatgpt/specs/archive/20260721_macro_structure_chart_first_operator_artifact.md`
-
-Do not reopen M-OPS1–M-OPS3 without a concrete source or artifact contradiction.
 
 ## Accepted M-OPS4
 
-The user explicitly approved actual service implementation on 2026-07-21.
+Accepted at state checkpoint `61e07a9`.
 
-Work ID:
+Implementation:
 
-- `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE`
+- runtime wrapper commit: `690c014`
+- M-OPS3/runtime-status fix commit: `a9b3d46`
+- target label: `com.afrog.btc-macro-structure`
+- installed plist SHA-256: `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`
+- schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
+- primary repo Python/wrapper/working/log paths
+- no `RunAtLoad`
+- no `KeepAlive`
 
-Active spec:
+One bounded bootstrap and one launchd kickstart produced a complete successful public pipeline:
 
-- `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
+- runtime status: `logs/runtime/macro_structure_service_last_result.json`
+- snapshot: `run_bc49b15e01e3c2d49d64`
+- snapshot ID: `macro_snapshot_bc49b15e01e3c2d49d64`
+- history: `history_e0fa3fd0ebc25b781c5f`
+- operator: `operator_128b44f88c8a1e02b350`
+- snapshot result: `insufficient` (valid)
+- history result: `ok`
+- stale: `current`
+- continuity: `continuous`
+- data quality: `ok`
+- report-only: true
+- private actual-trade input: false
+- automatic order allowed: false
 
-Approved target:
+Direct artifact review confirmed:
 
-- new label only: `com.afrog.btc-macro-structure`
-- primary repo runtime
-- public OHLCV only
-- M-OPS1 → M-OPS2 → M-OPS3
-- JST schedule: 01:10, 05:10, 09:10, 13:10, 17:10, 21:10
-- one compact atomic runtime status
-- one bounded launchd-triggered live-public-data acceptance run
+- runtime IDs agree with all three latest pointers;
+- operator artifact is complete and `macro_structure_operator_artifact.v2`;
+- five high/medium support zones and zero resistance zones are published without fabricating absent references;
+- source fingerprints and safety manifests agree.
 
-The task inspected the frozen repo only as permitted and did not edit or run its source/tests. The installed service points to the primary repo.
+Archived runtime spec:
+
+- `chatgpt/specs/archive/20260721_macro_structure_runtime_service_enable.md`
+
+Do not repeat M-OPS4 activation or live acceptance without a concrete reopening trigger such as source/plist change, unloaded target evidence, schedule contradiction, failed scheduled cycle, or user-requested verification.
 
 ## Current M route
 
 ```text
-M-OPS1 current snapshot and daily report source — accepted
-→ M-OPS2 chronological history and confidence continuity — accepted
+M-OPS1 current snapshot — accepted
+→ M-OPS2 chronological history — accepted
 → M-OPS3 chart-first operator artifact — accepted
-→ M-OPS4 runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
-→ M-OPS5 autonomous health and stale-data status — next, not started
+→ M-OPS4 installed recurring service — accepted
+→ M-OPS5 autonomous health and stale-data status — current source task
 ```
 
 ## Current selected action
 
-Implement and activate the dedicated report-only macro LaunchAgent under the active spec.
+Implement M-OPS5 under:
 
-Acceptance requires:
+- work ID: `BTCFX-20260722-MACRO-STRUCTURE-AUTONOMOUS-HEALTH-STATUS`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_autonomous_health_status.md`
 
-- local implementation commit;
-- target-only installed plist and rollback evidence;
-- loaded primary-repo contract;
-- all six schedule entries;
-- exactly one bounded kickstart;
-- successful launchd-triggered snapshot/history/operator artifacts;
-- compact success status;
-- no unrelated runtime, mail, notification, policy, private endpoint, or order change.
+M-OPS5 must read existing runtime status, latest pointers, manifests, and the repository plist without rerunning the pipeline or changing runtime. It must distinguish healthy, healthy-insufficient, degraded, failed, overdue, inconsistent, and unavailable states and publish deterministic local JSON/Markdown health artifacts.
+
+Installed automatic health generation is not authorized by the M-OPS5 source task. Any later runtime integration requires a separate explicit `RUNTIME_TASK`.
 
 ## Human involvement boundary
 
-No recurring human input is required after setup for public OHLCV collection, structure calculation, reliability updates, local artifacts, history, or health status.
+No recurring human input is required for the installed public macro pipeline.
 
 Explicit human approval remains required for:
 
-- live mail or notification integration
-- production gates, thresholds, scoring, classifiers, or policy
-- M6 adoption
-- automatic order behavior
-- phase/version promotion
-
-M-OPS4 runtime approval is granted only for the target and boundaries recorded above.
+- any new runtime/schedule integration, including automatic M-OPS5 generation;
+- live mail or notification integration;
+- production gates, thresholds, scoring, classifiers, or policy;
+- M6 adoption;
+- automatic order behavior;
+- phase/version promotion.
 
 ## Version and safety policy
 
 - remain on `Ver04-v3`
-- M-OPS runtime activation does not automatically declare `Ver05`
+- runtime activation does not declare `Ver05`
 - generated evidence remains ignored and uncommitted under `local/`
 - no raw exchange export commit
 - no automatic order
 - no private/account/order endpoints
-- no mail or notification change
-- no production gate, threshold, scoring, or classifier change
-- no unrelated LaunchAgent change
-
-## M-OPS4 FIX-02 accepted result
-
-Source fix `a9b3d46` accepted absent optional M-OPS3 references and preserved upstream identities in failed runtime status. Runtime implementation remains `690c014`.
-
-Target `com.afrog.btc-macro-structure` loaded from the primary repo with six JST entries at `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, and `21:10`. One kickstart produced a successful public 15m/1h/4h run: snapshot `run_bc49b15e01e3c2d49d64` / `macro_snapshot_bc49b15e01e3c2d49d64`, history `history_e0fa3fd0ebc25b781c5f`, operator `operator_128b44f88c8a1e02b350`. Results were snapshot `insufficient`, history `ok`, stale `current`, continuity `continuous`, data quality `ok`; safety remained report-only/no-private/no-automatic-order. Installed plist SHA-256 was `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`.
-
-M-OPS4 is accepted. M-OPS5 is next and not implemented or authorized by this task.
-
-## M-OPS4 FIX-01 result
-
-The target-only registration diagnosis and one activation attempt completed under the active runtime spec. The repository plist was valid and the installed copy matched SHA-256 `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`; no target-specific disabled state, stale registration, ACL, flag, or quarantine attribute was found. Recopying with current-user ownership and mode `0644` allowed one bootstrap to succeed. The target contract and six JST schedule entries were verified.
-
-The single launchd-triggered run fetched public 15m/1h/4h inputs and completed M-OPS1 and M-OPS2, but M-OPS3 failed closed with `zone_evidence_invalid`. The target was rolled back only: label unloaded and new installed plist removed. M-OPS4 is not accepted, the active spec remains active, and no other LaunchAgent was changed. The retained compact status is `logs/runtime/macro_structure_service_last_result.json`.
+- no unapproved mail, notification, policy, or unrelated LaunchAgent change
