@@ -36,9 +36,9 @@ def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
     snap = {
         "schema_version": "macro_structure_daily_operation.v1", "method_version": "macro_structure_daily_operation.v1",
         "run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "symbol": "BTC_USDT",
-        "as_of_utc": "2026-01-01T01:00:00+00:00", "as_of_jst": "2026-01-01T10:00:00+09:00",
-        "evaluated_at_utc": "2026-01-01T02:00:00+00:00", "evaluated_at_jst": "2026-01-01T11:00:00+09:00",
-        "current_price": 103.0, "structure_state": "transition", "price_location": "upper_half", "location_percentile": 60,
+        "as_of_utc": "2026-01-02T01:00:00+00:00", "as_of_jst": "2026-01-02T10:00:00+09:00",
+        "evaluated_at_utc": "2026-01-02T02:00:00+00:00", "evaluated_at_jst": "2026-01-02T11:00:00+09:00",
+        "current_price": 199.0, "structure_state": "transition", "price_location": "upper_half", "location_percentile": 60,
         "support_zones": [_zone("level_support", "support", 100)], "resistance_zones": [_zone("level_resistance", "resistance", 110)],
         "nearest_reliable_support": _zone("level_support", "support", 100), "nearest_reliable_resistance": _zone("level_resistance", "resistance", 110),
         "next_upside_target": _zone("level_resistance", "resistance", 110), "next_downside_target": _zone("level_support", "support", 100),
@@ -70,7 +70,7 @@ def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
     ohlcv = root / "ohlcv_15m.csv"
     with ohlcv.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=["timestamp_utc", "open", "high", "low", "close", "interval", "symbol"]); writer.writeheader()
-        for index in range(5):
+        for index in range(100):
             close = 100 + index
             writer.writerow({"timestamp_utc": (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=15 * index)).isoformat().replace("+00:00", "Z"), "open": close, "high": close + 1, "low": close - 1, "close": close, "interval": "15m", "symbol": "BTC_USDT"})
     return snapshot_root, history_root, ohlcv
@@ -89,18 +89,51 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             self.assertLess(html_text.index('id="status"'), html_text.index('id="chart"'))
             self.assertIn("tactical Entry / SL / TP overlays are not included", html_text)
             model = json.loads((artifact / "macro_structure_operator.json").read_text(encoding="utf-8"))
-            self.assertEqual(model["schema_version"], "macro_structure_operator_artifact.v1")
+            self.assertEqual(model["schema_version"], "macro_structure_operator_artifact.v2")
             self.assertEqual(model["selected_history_id"], "history_fixture")
+            self.assertEqual(model["selected_structural_checkpoint_id"], "checkpoint_fixture")
             self.assertEqual(model["zones"]["displayed_support_count"], 1)
+            self.assertEqual(model["chart_model"]["candle_count"], 96)
+            self.assertIn("level_support", html_text)
+            self.assertIn("source_timeframes", html_text)
+            self.assertIn("data_quality=ok", html_text)
+            self.assertIn("macro_structure_operator_artifact.v2", (artifact / "run_manifest.json").read_text(encoding="utf-8"))
 
     def test_source_boundary_and_price_mismatch_fail_closed_without_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
             valid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
             latest_before = (output / "latest.json").read_bytes()
-            ohlcv.write_text(ohlcv.read_text(encoding="utf-8").replace(",103,104,102,103,", ",203,204,202,203,"), encoding="utf-8")
+            ohlcv.write_text(ohlcv.read_text(encoding="utf-8").replace(",199,200,198,199,", ",299,300,298,299,"), encoding="utf-8")
             invalid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
             self.assertTrue(valid["ok"]); self.assertEqual(invalid["error_code"], "snapshot_price_ohlcv_mismatch"); self.assertEqual((output / "latest.json").read_bytes(), latest_before)
+
+    def test_v1_directory_is_preserved_and_v2_conflict_is_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            legacy = output / "operator_legacy_v1"; legacy.mkdir(parents=True)
+            for name in ("macro_structure_operator.html", "macro_structure_operator.json", "macro_structure_operator.md", "run_manifest.json"):
+                (legacy / name).write_bytes(b"legacy")
+            first = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            latest_before = (output / "latest.json").read_bytes()
+            artifact = output / first["artifact_dir"]
+            (artifact / "macro_structure_operator.html").write_bytes(b"conflict")
+            conflict = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertEqual(conflict["error_code"], "existing_operator_conflict")
+            self.assertEqual((artifact / "macro_structure_operator.html").read_bytes(), b"conflict")
+            self.assertEqual((output / "latest.json").read_bytes(), latest_before)
+            self.assertEqual((legacy / "run_manifest.json").read_bytes(), b"legacy")
+
+    def test_jst_mismatch_and_malformed_displayed_evidence_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8")); data["as_of_jst"] = "2026-01-02T01:00:00+00:00"; _write_json(snap_path, data)
+            invalid_jst = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertEqual(invalid_jst["error_code"], "snapshot_jst_mismatch")
+            data["as_of_jst"] = "2026-01-02T10:00:00+09:00"; data["support_zones"][0]["center"] = "not-a-number"; _write_json(snap_path, data)
+            invalid_zone = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertEqual(invalid_zone["error_code"], "zone_evidence_invalid")
 
 
 if __name__ == "__main__":

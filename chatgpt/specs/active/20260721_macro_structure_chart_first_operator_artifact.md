@@ -407,3 +407,5 @@ After M-OPS3 acceptance, M-OPS4 runtime/schedule enablement remains a separate e
 ## Bounded implementation note
 
 The bounded implementation adds the local `render-macro-structure-operator` parser route and deterministic report-only artifact publisher without runtime or delivery integration.
+
+FIX-01 extends the accepted chart-first view model and publication identity to `macro_structure_operator_artifact.v2`, including complete high/medium zone evidence, checkpoint/status visibility, categorized M-OPS2 events, and display-level source traceability.
