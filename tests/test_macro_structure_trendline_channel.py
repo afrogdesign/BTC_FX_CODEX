@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from src.feedback.macro_structure_trendline_channel import METHOD_VERSION, build_trendline_model
+from src.feedback.macro_structure_trendline_channel import METHOD_VERSION, _line_for_kind, _state_priority, build_trendline_model
 
 
 def _candles(*, post_break: bool = False, anchor_breach: bool = False) -> list[dict[str, object]]:
@@ -32,6 +32,10 @@ def _model(**kwargs: object) -> dict[str, object]:
     return build_trendline_model(_candles(**kwargs), cutoff=datetime(2026, 1, 6, tzinfo=timezone.utc), current_price=100.0)
 
 
+def _rank_line(*, state: str = "active", touch_count: int = 2, confirmation: str = "2026-01-02T00:00:00+00:00", span: int = 10, distance: float = 1.0, line_id: str = "line", kind: str = "ascending_support") -> dict[str, object]:
+    return {"state": state, "touch_count": touch_count, "anchor_2_confirmation_timestamp": confirmation, "anchor_span_bars": span, "distance_from_price_atr": distance, "line_id": line_id, "kind": kind}
+
+
 def _line(model: dict[str, object], kind: str, first: str = "") -> dict[str, object]:
     lines = [item for item in model["lines"] if item["kind"] == kind]
     if first:
@@ -42,6 +46,39 @@ def _line(model: dict[str, object], kind: str, first: str = "") -> dict[str, obj
 
 
 class MacroStructureTrendlineChannelTests(unittest.TestCase):
+    def test_ranking_state_order_is_explicit(self) -> None:
+        lines = [_rank_line(state=state, line_id=state) for state in ("invalidated", "insufficient", "broken", "active", "tested")]
+        self.assertEqual([line["state"] for line in sorted(lines, key=_state_priority)], ["tested", "active", "broken", "insufficient", "invalidated"])
+
+    def test_ranking_prefers_touch_count_within_state(self) -> None:
+        lines = [_rank_line(touch_count=1, line_id="low"), _rank_line(touch_count=3, line_id="high")]
+        self.assertEqual(sorted(lines, key=_state_priority)[0]["line_id"], "high")
+
+    def test_ranking_prefers_newer_confirmation_with_other_ties(self) -> None:
+        lines = [_rank_line(confirmation="2026-01-01T00:00:00+00:00", line_id="old"), _rank_line(confirmation="2026-01-03T00:00:00+00:00", line_id="new")]
+        self.assertEqual(sorted(lines, key=_state_priority)[0]["line_id"], "new")
+
+    def test_ranking_prefers_larger_span_then_smaller_distance(self) -> None:
+        larger = _rank_line(span=20, distance=3.0, line_id="larger")
+        smaller = _rank_line(span=10, distance=0.5, line_id="smaller")
+        self.assertEqual(sorted([smaller, larger], key=_state_priority)[0]["line_id"], "larger")
+        nearer = _rank_line(span=20, distance=0.5, line_id="nearer")
+        farther = _rank_line(span=20, distance=2.0, line_id="farther")
+        self.assertEqual(sorted([farther, nearer], key=_state_priority)[0]["line_id"], "nearer")
+
+    def test_ranking_uses_line_id_as_final_tie_break(self) -> None:
+        lines = [_rank_line(line_id="z-line"), _rank_line(line_id="a-line")]
+        self.assertEqual([line["line_id"] for line in sorted(lines, key=_state_priority)], ["a-line", "z-line"])
+
+    def test_top_three_retention_keeps_live_candidates_ahead_of_weak_states(self) -> None:
+        lines = [_rank_line(state="invalidated", line_id="invalidated"), _rank_line(state="insufficient", line_id="insufficient"), _rank_line(state="broken", line_id="broken"), _rank_line(state="active", line_id="active"), _rank_line(state="tested", line_id="tested")]
+        retained = sorted(lines, key=_state_priority)[:3]
+        self.assertEqual([line["state"] for line in retained], ["tested", "active", "broken"])
+
+    def test_channel_base_selection_uses_highest_ranked_live_line(self) -> None:
+        lines = [_rank_line(state="active", touch_count=5, line_id="active"), _rank_line(state="tested", touch_count=1, line_id="tested"), _rank_line(state="broken", line_id="broken")]
+        self.assertEqual(_line_for_kind(lines, "ascending_support")["line_id"], "tested")
+
     def test_same_input_has_same_ids_geometry_and_channels(self) -> None:
         first = _model(); second = _model()
         self.assertEqual(first, second)

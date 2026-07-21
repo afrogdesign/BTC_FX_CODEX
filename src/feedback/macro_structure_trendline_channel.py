@@ -158,8 +158,11 @@ def _candidate(kind: str, first: dict[str, Any], second: dict[str, Any], first_i
     return line
 
 
-def _state_priority(line: dict[str, Any]) -> tuple[int, int, str, int, float, str]:
-    return ({"tested": 3, "active": 2, "broken": 1, "insufficient": 0, "invalidated": -1}.get(line["state"], -1), -line["touch_count"], line["anchor_2_confirmation_timestamp"], -line["anchor_span_bars"], abs(line["distance_from_price_atr"]), line["line_id"])
+def _state_priority(line: dict[str, Any]) -> tuple[int, int, int, int, float, str]:
+    """Ascending key for the fixed M-LINE1 candidate ranking contract."""
+    state_rank = {"tested": 0, "active": 1, "broken": 2, "insufficient": 3, "invalidated": 4}
+    confirmation_us = int(_utc(line["anchor_2_confirmation_timestamp"], "trendline_confirmation_invalid").timestamp() * 1_000_000)
+    return (state_rank.get(line["state"], 4), -int(line["touch_count"]), -confirmation_us, -int(line["anchor_span_bars"]), abs(_finite(line["distance_from_price_atr"], "trendline_distance_non_finite")), str(line["line_id"]))
 
 
 def _select_display(lines: list[dict[str, Any]], cutoff: datetime, candle_count: int) -> list[str]:
