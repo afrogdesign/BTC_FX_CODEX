@@ -4,16 +4,19 @@ last_updated: 2026-07-21
 
 ## Current posture
 
-- current cleanup branch: `Ver04-v3`
-- cleanup base: `3db0399` (`Migrate generated reports to local directory`)
+- current branch: `Ver04-v3` (reported by local git checkpoint)
+- cleanup base: `3db0399`
+- accepted cleanup checkpoint: `bff7669` (`docs: complete Ver04-v3 repository structure cleanup`)
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_ver04_v3_repo_structure_cleanup_checkpoint.md`
+- active spec: none
 - safety: report-only / human-decided / no automatic order
-- repository cleanup checkpoint: ready for ChatGPT MCP review
+- repository cleanup: accepted
+
+MCP does not independently expose git branch, HEAD, or commit objects. The branch and commit locators above come from the bounded local-git report; source paths, navigation files, archive placement, and removed-path boundaries were reviewed directly through MCP.
 
 ## Version policy
 
-- `Ver04-v3`: repository structure and documentation consolidation line
+- `Ver04-v3`: accepted repository-structure and documentation-consolidation line
 - `Ver05`: reserved for an evidence-backed, explicitly approved, implemented, validated, and accepted M6 change
 - M1–M5 acceptance alone does not qualify for `Ver05`
 
@@ -25,29 +28,52 @@ last_updated: 2026-07-21
 - M1–M5 accepted
 - M6 not started and not authorized
 
-Product implementation is paused in this thread. This thread is reserved for repository cleanup.
+Product implementation remains outside this repository-cleanup thread.
 
-## MCP cleanup completed
+## Accepted repository model
 
-- canonical plan and AI navigation consolidated
-- former top-level operations directory removed
-- generated reports migrated to `local/reports/`
-- old operations material moved under `_archive/`
-- `chatgpt/analysis/` retired and archived
-- Ver03-v2 deploy records and temporary report script moved to `docs/operations/history/`
-- the long Ver03-v4 manual-preview runbook archived and replaced with a short current runbook
-- old Ver03-v4 integrated strategy plan archived
-- `VALUE_DEFENSE_ENTRY_LAYER.md` moved to strategy
-- completed smoke, diagnostic, preview, checkpoint, cleanup-audit, and handoff records moved out of the orchestration root
-- duplicate handoff and compatibility entry routes retired
-- `Branch_Command/` removed
-- duplicate archived reports directory removed; `reports_snapshot/` retained
-- stale README files and the obsolete Ver02 spec template updated
-- redundant `.gitkeep` files and empty placeholder directories removed
-- durable directory model recorded in `DECISIONS.md`
+Active areas:
 
-## Checkpoint status
+- `src/`
+- `tools/`
+- `scripts/`
+- `tests/`
+- `docs/operations/ai-orchestration/`
+- `docs/operations/strategy/`
+- `chatgpt/specs/active/`
+- `local/` for generated uncommitted artifacts
 
-The local branch, cleanup-only staging, bounded validation, and one local cleanup commit are complete. Return this checkpoint to ChatGPT for MCP acceptance review.
+Historical areas:
 
-Do not start Product implementation or M6 work in this thread.
+- `_archive/legacy_operations_materials_20260721/`
+- `_archive/legacy_chatgpt_analysis_20260721/`
+- `docs/operations/ai-orchestration/history/`
+- `docs/operations/history/`
+- `docs/operations/strategy/archive/`
+- `chatgpt/specs/archive/`
+
+Removed active routes that must not be recreated:
+
+- former top-level Japanese operations directory
+- `Branch_Command/`
+- `chatgpt/analysis/`
+- `docs/operations/deploy/`
+- `docs/operations/ai-orchestration/handoffs/`
+- old Ver03-v2 report script at `scripts/run_btcfx_ver03_v2_reports.sh`
+
+## Acceptance evidence
+
+- root README and repository map match the current directory model
+- old report root is absent from active source, tools, and tests
+- required strategy and history destinations exist
+- duplicate decision heading is corrected to `DEC-20260721-010`
+- active/history directory model is recorded in `DEC-20260721-011`
+- reported focused tests: 19 pass
+- reported shell syntax and `git diff --check`: pass
+- reported generated `local/` and `logs/` files staged: none
+- unrelated dirty changes were preserved
+- push: none
+
+## Cleanup status
+
+The Ver04-v3 repository cleanup is complete and accepted. Further changes in this thread require a new explicit repository-cleanup finding; do not start Product or M6 work here.

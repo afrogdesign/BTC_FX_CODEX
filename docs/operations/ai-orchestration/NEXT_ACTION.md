@@ -1,43 +1,39 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-VER04-V3-REPO-CLEANUP-CHECKPOINT`
-- mode: `BOUNDED_CODEX`
-- source_branch: `Ver04-v3` (created from cleanup base `3db0399`)
-- target_branch: `Ver04-v3`
-- active_spec: `chatgpt/specs/active/20260721_ver04_v3_repo_structure_cleanup_checkpoint.md`
-- status: ready for ChatGPT MCP review
+- current_work_id: `none`
+- mode: `CHATGPT_MCP_REVIEW`
+- branch: `Ver04-v3`
+- active_spec: none
+- status: repository cleanup complete
 - push: none
 
-## Goal
+## Current action
 
-Review the completed MCP repository cleanup checkpoint on `Ver04-v3` through ChatGPT MCP acceptance, without starting Product or M6 work.
+No repository-cleanup task is active.
 
-## Required result
+The accepted cleanup checkpoint is:
 
-- actual branch and cleanup commit recorded from local git
-- unrelated dirty working tree preserved
-- duplicate decision heading corrected to `DEC-20260721-010`
-- active removed-path search and canonical path checks pass
-- bounded shell and focused unit-test validation recorded
-- generated `local/` and `logs/` artifacts remain unstaged
-- one local cleanup commit is ready for review
-- push remains none
+- base: `3db0399`
+- cleanup commit locator: `bff7669`
+- accepted branch: `Ver04-v3`
 
-## Scope
+## Reopen condition
 
-Repository structure, documentation, history placement, README accuracy, and cleanup checkpoint only.
+Create a new cleanup task only when a concrete repository issue is identified, such as:
 
-Do not change Product logic, trading behavior, gates, scoring, thresholds, classifiers, runtime, launchd, mail, notifications, private endpoints, or M6 authorization.
+- a dead or duplicated tracked directory
+- a stale current README or canonical route
+- a broken link caused by archive movement
+- a generated artifact tracked in error
+- a historical document incorrectly placed in an active path
+- an active source or test still depending on a retired path
 
-## Read
+Do not perform broad cleanup without a specific finding. Preserve historical evidence unless duplication or active-route confusion is demonstrated.
 
-1. `AGENTS.md`
-2. `docs/operations/ai-orchestration/START_HERE.md`
-3. active spec
-4. current git branch, HEAD, status, and cleanup diff
+## Thread boundary
 
-## Completion
+This thread remains repository-cleanup only. Do not start Product implementation, P9 tuning, M6, runtime, mail, notification, gate, threshold, scoring, classifier, or trading-behavior work here.
 
-The compact report is returned and written exactly once to the required outbox. ChatGPT performs the final MCP acceptance review.
+## Version gate
 
-This thread remains dedicated to repository cleanup.
+`Ver05` remains reserved for an accepted M6 implementation after its evidence gate and explicit human approval. Repository cleanup does not promote the project to `Ver05`.
