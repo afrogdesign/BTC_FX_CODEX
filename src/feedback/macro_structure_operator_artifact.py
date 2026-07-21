@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.feedback.macro_structure_trendline_channel import METHOD_VERSION as TRENDLINE_METHOD_VERSION, build_trendline_model
+
 SCHEMA_VERSION = "macro_structure_operator_artifact.v2"
 METHOD_VERSION = "macro_structure_operator_artifact.v2"
 M1_SCHEMA_VERSION = "macro_structure_daily_operation.v1"
@@ -276,9 +278,23 @@ def _source_label(value: Any) -> str:
     return "1H"
 
 
-def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, Any]], cutoff: str, *, timeframe: str = "15m") -> str:
+def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, Any]], cutoff: str, *, timeframe: str = "15m", trendline_model: dict[str, Any] | None = None) -> str:
     width, height, pad = 1100, 480, 46
     numbers = [price] + [n for candle in candles for n in (candle["low"], candle["high"])] + [n for item in overlays for n in (float(item["low"]), float(item["high"]))]
+    diagonal_lines = [] if not trendline_model else [line for line in trendline_model.get("lines", []) if line.get("line_id") in trendline_model.get("displayed_line_ids", [])]
+    diagonal_channels = [] if not trendline_model else [channel for channel in trendline_model.get("channels", []) if channel.get("channel_id") in trendline_model.get("displayed_channel_ids", [])]
+    line_by_id = {line.get("line_id"): line for line in (trendline_model or {}).get("lines", [])}
+    for line in diagonal_lines:
+        anchor_index = next((index for index, candle in enumerate(candles) if candle["timestamp_utc"] == line.get("anchor_1_timestamp")), None)
+        if anchor_index is not None:
+            numbers.extend(line["anchor_1_price"] + line["slope_per_4h_bar"] * (index - anchor_index) for index in range(anchor_index, len(candles)))
+    for channel in diagonal_channels:
+        base = line_by_id.get(channel.get("base_line_id"))
+        if base is not None:
+            anchor_index = next((index for index, candle in enumerate(candles) if candle["timestamp_utc"] == base.get("anchor_1_timestamp")), None)
+            if anchor_index is not None:
+                offset = channel["width_at_cutoff"] if base["kind"] == "ascending_support" else -channel["width_at_cutoff"]
+                numbers.extend(base["anchor_1_price"] + base["slope_per_4h_bar"] * (index - anchor_index) + delta for index in range(anchor_index, len(candles)) for delta in (0, offset))
     low, high = min(numbers), max(numbers)
     span = max(high - low, 1.0)
     low -= span * 0.08; high += span * 0.08
@@ -297,11 +313,47 @@ def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, A
         high_y = y(float(item["high"]))
         low_y = y(float(item["low"]))
         bands.append(f'<rect x="{pad}" y="{high_y:.2f}" width="{width-2*pad}" height="{max(low_y-high_y, 1):.2f}" fill="{color}" opacity=".16"/><text x="{pad+5}" y="{y(float(item["center"])):.2f}" font-size="10" fill="{color}">{label}</text>')
+    diagonal_svg: list[str] = []
+    for line in diagonal_lines:
+        anchor_index = next((index for index, candle in enumerate(candles) if candle["timestamp_utc"] == line.get("anchor_1_timestamp")), None)
+        if anchor_index is None:
+            continue
+        end_index = len(candles) - 1
+        start_value = float(line["anchor_1_price"])
+        end_value = start_value + float(line["slope_per_4h_bar"]) * (end_index - anchor_index)
+        color = "#15803d" if line["kind"] == "ascending_support" else "#c2410c"
+        dash = ' stroke-dasharray="8 5"' if line["state"] == "broken" else ""
+        diagonal_svg.append(f'<line x1="{x(anchor_index):.2f}" y1="{y(start_value):.2f}" x2="{x(end_index):.2f}" y2="{y(end_value):.2f}" stroke="{color}" stroke-width="2"{dash}/><text x="{x(anchor_index)+4:.2f}" y="{y(start_value)-5:.2f}" font-size="10" fill="{color}">{html.escape(line["kind"])} [{html.escape(line["state"])}] anchors={html.escape(line["anchor_1_pivot_id"])}→{html.escape(line["anchor_2_pivot_id"])} touches={line["touch_count"]}</text>')
+    for channel in diagonal_channels:
+        base = line_by_id.get(channel.get("base_line_id"))
+        if base is None:
+            continue
+        anchor_index = next((index for index, candle in enumerate(candles) if candle["timestamp_utc"] == base.get("anchor_1_timestamp")), None)
+        if anchor_index is None:
+            continue
+        end_index = len(candles) - 1
+        base_start = float(base["anchor_1_price"])
+        base_end = base_start + float(base["slope_per_4h_bar"]) * (end_index - anchor_index)
+        offset = float(channel["width_at_cutoff"]) if base["kind"] == "ascending_support" else -float(channel["width_at_cutoff"])
+        color = "#64748b"
+        diagonal_svg.append(f'<line x1="{x(anchor_index):.2f}" y1="{y(base_start + offset):.2f}" x2="{x(end_index):.2f}" y2="{y(base_end + offset):.2f}" stroke="{color}" stroke-width="1"/><text x="{x(anchor_index)+4:.2f}" y="{y(base_start + offset)-5:.2f}" font-size="10" fill="{color}">{html.escape(channel["kind"])} [{html.escape(channel["state"])}] position={channel["current_position_percent"]:.1f}%</text>')
     price_line = f'<line x1="{pad}" y1="{y(price):.2f}" x2="{width-pad}" y2="{y(price):.2f}" stroke="#111" stroke-dasharray="5 4"/><text x="{width-pad-145}" y="{y(price)-4:.2f}" font-size="10">current price={price:g}</text>'
     first_at = candles[0]["timestamp_utc"] if candles else "none"
     last_at = candles[-1]["timestamp_utc"] if candles else "none"
     context = f'<text x="{pad}" y="{height-20}" font-size="10">min={low:.4f} max={high:.4f} · candles={len(candles)} · first={html.escape(first_at)} · last={html.escape(last_at)} · cutoff={html.escape(cutoff)}</text>'
-    return f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(timeframe)} macro structure candlestick chart"><rect width="{width}" height="{height}" fill="#fff"/> <text x="{pad}" y="22" font-size="15">{html.escape(timeframe)} macro structure chart · cutoff {html.escape(cutoff)}</text><text x="5" y="{pad}" font-size="10">{high:.4f}</text><text x="5" y="{height-pad}" font-size="10">{low:.4f}</text>{"".join(bands)}{"".join(candle_svg)}{price_line}{context}</svg>'
+    return f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(timeframe)} macro structure candlestick chart"><rect width="{width}" height="{height}" fill="#fff"/> <text x="{pad}" y="22" font-size="15">{html.escape(timeframe)} macro structure chart · cutoff {html.escape(cutoff)}</text><text x="5" y="{pad}" font-size="10">{high:.4f}</text><text x="5" y="{height-pad}" font-size="10">{low:.4f}</text>{"".join(bands)}{"".join(diagonal_svg)}{"".join(candle_svg)}{price_line}{context}</svg>'
+
+
+def _diagonal_evidence_html(model: dict[str, Any]) -> str:
+    rows = []
+    for line in model.get("lines", []):
+        rows.append("<tr>" + "".join(f"<td>{html.escape(str(line.get(field, '')))}</td>" for field in ("line_id", "kind", "state", "anchor_1_pivot_id", "anchor_2_pivot_id", "confirmation_timestamp", "slope_per_4h_bar", "touch_count", "break_timestamp", "distance_from_price_atr")) + "</tr>")
+    for channel in model.get("channels", []):
+        rows.append("<tr>" + "".join(f"<td>{html.escape(str(channel.get(field, '')))}</td>" for field in ("channel_id", "kind", "state", "base_line_id", "opposite_anchor_pivot_id", "confirmation_timestamp", "", "", "", "current_position_percent")) + "</tr>")
+    headers = ("id", "kind", "state", "anchor 1/base", "anchor 2/opposite", "confirmation", "slope", "touch count", "break time", "distance ATR")
+    body = "".join(rows) or '<tr><td colspan="10">none</td></tr>'
+    status = "" if model.get("status") == "ok" else "<p>Diagonal structure: insufficient confirmed 4H evidence</p>"
+    return f'<section id="diagonal-evidence"><h2>Diagonal structure evidence</h2><p>status={html.escape(str(model.get("status", "")))} · method={html.escape(str(model.get("method_version", "")))}</p>{status}<table><thead><tr>{"".join(f"<th>{html.escape(field)}</th>" for field in headers)}</tr></thead><tbody>{body}</tbody></table></section>'
 
 
 EVENT_CATEGORIES = (
@@ -409,6 +461,7 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
         ohlcv_4h_fingerprint: str | None = None
         if ohlcv_4h_csv is not None:
             candles_4h, ohlcv_4h_fingerprint = _read_ohlcv(ohlcv_4h_csv, symbol, snapshot["_as_of"], _number(snapshot["current_price"], "snapshot_price_invalid"), interval="4h", limit=240, match_close=False)
+        trendline_model = build_trendline_model(candles_4h, cutoff=snapshot["_as_of"], current_price=_number(snapshot["current_price"], "snapshot_price_invalid")) if candles_4h else None
         support, resistance, shown = _zones(snapshot)
         references = _references(snapshot, shown)
         categories = _categorized_events(history)
@@ -423,7 +476,7 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
         if candles_4h:
             trace["candles_4h"] = {"source": "explicit local public 4h OHLCV CSV", "rule": "timestamp plus 4h endpoint <= snapshot as_of_utc; latest 240 eligible closed candles", "cutoff": snapshot["_as_of"].isoformat()}
         chart = {"timeframe": "15m", "candle_count": len(candles), "candles": candles, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles[-1]["timestamp_utc"], "overlays": references}
-        chart_4h = {"timeframe": "4H", "model": "mvis1_4h_candlestick_operator", "candle_count": len(candles_4h), "candles": candles_4h, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles_4h[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles_4h[-1]["timestamp_utc"], "overlays": references} if candles_4h else None
+        chart_4h = {"timeframe": "4H", "model": "mvis1_4h_candlestick_operator", "candle_count": len(candles_4h), "candles": candles_4h, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles_4h[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles_4h[-1]["timestamp_utc"], "overlays": references, "trendline_model": trendline_model} if candles_4h else None
         counts = {f"{role}_{band}": sum(1 for item in zones if item["role"] == role and item["reliability_band"] == band) for role, zones in (("support", support), ("resistance", resistance)) for band in ("high", "medium")}
         counts.update({"total_displayed_support": len(support), "total_displayed_resistance": len(resistance)})
         model = {
@@ -431,7 +484,7 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "operator_artifact_id": "", "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_history_id": history["history_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"],
             "snapshot_fingerprint": snapshot_fingerprints, "history_fingerprint": history_fingerprints, "ohlcv_15m_fingerprint": ohlcv_fingerprint, **({"ohlcv_4h_fingerprint": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {}),
             "as_of_utc": snapshot["_as_of"].isoformat(), "as_of_jst": snapshot.get("as_of_jst", ""), "evaluated_at_utc": snapshot["_evaluated"].isoformat(), "evaluated_at_jst": snapshot.get("evaluated_at_jst", ""),
-            "chart_model": chart, **({"chart_model_4h": chart_4h} if chart_4h else {}), "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
+            "chart_model": chart, **({"chart_model_4h": chart_4h, "trendline_model": trendline_model} if chart_4h else {}), "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
             "structure_panel": {field: snapshot.get(field, "") for field in ("structure_state", "price_location", "location_percentile", "current_price", "nearest_reliable_support", "nearest_reliable_resistance", "next_upside_target", "next_downside_target", "upside_obstruction", "downside_obstruction", "volatility_state", "expansion_risk", "directional_activation")},
             "freshness": {"stale_status": snapshot.get("stale_status", ""), "stale_timeframes": snapshot.get("stale_timeframes", []), "freshness": snapshot.get("freshness", {})},
             "source_status": {"snapshot_result_status": snapshot.get("result_status", ""), "history_result_status": history.get("result_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "data_quality_status": snapshot.get("data_quality_status", ""), "reason_codes": snapshot.get("reason_codes", [])},
@@ -440,23 +493,26 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "source_trace_map": trace,
             "safety_boundary": SAFETY,
         }
-        digest = hashlib.sha256((SCHEMA_VERSION + "|" + METHOD_VERSION + "|" + symbol + "|" + json.dumps({"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, "ohlcv_4h": ohlcv_4h_fingerprint}, sort_keys=True)).encode()).hexdigest()
+        digest_payload = {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, "ohlcv_4h": ohlcv_4h_fingerprint}
+        if trendline_model is not None:
+            digest_payload["trendline_method_version"] = TRENDLINE_METHOD_VERSION
+        digest = hashlib.sha256((SCHEMA_VERSION + "|" + METHOD_VERSION + "|" + symbol + "|" + json.dumps(digest_payload, sort_keys=True)).encode()).hexdigest()
         artifact_id = "operator_" + digest[:20]
         model["operator_artifact_id"] = artifact_id
         svg = _svg(candles, float(snapshot["current_price"]), references, model["as_of_utc"])
-        svg_4h = _svg(candles_4h, float(snapshot["current_price"]), references, model["as_of_utc"], timeframe="4H") if candles_4h else ""
+        svg_4h = _svg(candles_4h, float(snapshot["current_price"]), references, model["as_of_utc"], timeframe="4H", trendline_model=trendline_model) if candles_4h else ""
         banner = f'<section id="status"><h1>Macro Structure Chart-First Operator</h1><p class="safety">{html.escape(SAFETY)}</p><p>symbol={html.escape(symbol)} · checkpoint={html.escape(snapshot["_checkpoint_id"])} · cutoff UTC={html.escape(model["as_of_utc"])} · cutoff JST={html.escape(model["as_of_jst"])} · evaluation UTC={html.escape(model["evaluated_at_utc"])} · evaluation JST={html.escape(model["evaluated_at_jst"])}</p><p>price={html.escape(str(snapshot["current_price"]))} · structure={html.escape(str(snapshot["structure_state"]))} · location={html.escape(str(snapshot["price_location"]))} · stale={html.escape(str(snapshot["stale_status"]))} · continuity={html.escape(str(snapshot["continuity_status"]))} · data_quality={html.escape(str(snapshot["data_quality_status"]))} · snapshot={html.escape(str(snapshot.get("result_status", "")))} · history={html.escape(str(history.get("result_status", "")))}</p></section>'
         evidence_by_id = {item["level_id"]: item for item in support + resistance}
         evidence_by_id.update({item["level_id"]: item for item in references})
         zones_html = _zone_evidence_html([evidence_by_id[key] for key in sorted(evidence_by_id)])
         structure_html = "<ul>" + "".join(f"<li><b>{html.escape(key)}</b>: {html.escape(json.dumps(value, ensure_ascii=False, sort_keys=True) if isinstance(value, (dict,list)) else str(value))}</li>" for key, value in model["structure_panel"].items()) + "</ul>"
         event_html = "".join(f'<h3>{html.escape(category)}</h3><ul>{("".join(f"<li>{html.escape(_event_text(row))}</li>" for row in rows) or "<li>none</li>")}</ul>' for category, rows in categories.items())
-        primary = f'<section id="chart-4h"><h2>4H Macro Structure Chart</h2><p>current price={html.escape(str(snapshot["current_price"]))} · cutoff={html.escape(model["as_of_utc"])} · displayed candles={len(candles_4h)} · range={html.escape(candles_4h[0]["timestamp_utc"])} → {html.escape(candles_4h[-1]["endpoint_utc"])}</p>{svg_4h}</section>' if candles_4h else ''
+        primary = f'<section id="chart-4h"><h2>4H Macro Structure Chart</h2><p>current price={html.escape(str(snapshot["current_price"]))} · cutoff={html.escape(model["as_of_utc"])} · displayed candles={len(candles_4h)} · range={html.escape(candles_4h[0]["timestamp_utc"])} → {html.escape(candles_4h[-1]["endpoint_utc"])}</p>{svg_4h}</section>{_diagonal_evidence_html(trendline_model)}' if candles_4h else ''
         supplemental = f'<section id="chart"><h2>Supplemental 15m manual-confirmation view</h2>{svg}</section>'
         html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section{{margin:16px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520;font-weight:600}}svg{{width:100%;height:auto}}table{{border-collapse:collapse;display:block;overflow:auto;font-size:11px}}th,td{{border:1px solid #ccd3df;padding:3px;white-space:nowrap}}</style></head><body>{banner}{primary}<section id="zones"><h2>Reliable support/resistance evidence</h2>{zones_html}</section><section id="structure"><h2>Current structure and location</h2>{structure_html}<p class="safety">directional activation is evidence confidence, not execution permission.</p></section>{supplemental}<section id="status-detail"><h2>Volatility, activation, freshness, continuity</h2><pre>{html.escape(json.dumps({**model["freshness"], "volatility_state": snapshot.get("volatility_state"), "expansion_risk": snapshot.get("expansion_risk"), "directional_activation": snapshot.get("directional_activation")}, ensure_ascii=False, sort_keys=True, indent=2))}</pre></section><section id="changes"><h2>Recent chronological changes</h2>{event_html}</section><section id="evidence"><h2>Evidence details and limitations</h2><p>tactical Entry / SL / TP overlays are not included. No live fetch, private inputs, or execution permission.</p></section></body></html>'
         markdown = _render_markdown(model)
         files = {"macro_structure_operator.html": html_text.encode("utf-8"), "macro_structure_operator.json": _json_bytes(model), "macro_structure_operator.md": markdown.encode("utf-8")}
-        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "selected_history_id": history["history_id"], "input_fingerprints": {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, **({"ohlcv_4h": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {})}, "outputs": list(OUTPUT_NAMES), "source": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "selected_history_id": history["history_id"], "input_fingerprints": {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, **({"ohlcv_4h": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {})}, "model_identity": {"trendline_method_version": TRENDLINE_METHOD_VERSION} if trendline_model is not None else {}, "outputs": list(OUTPUT_NAMES), "source": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
         files["run_manifest.json"] = _json_bytes(manifest)
         latest_snapshot_result = snapshot.get("result_status", "")
         latest_history_result = history.get("result_status", "")

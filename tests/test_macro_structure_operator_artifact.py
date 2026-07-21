@@ -155,6 +155,7 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             model = json.loads((artifact / "macro_structure_operator.json").read_text(encoding="utf-8"))
             self.assertTrue(result["ok"])
             self.assertLess(html_text.index("4H Macro Structure Chart"), html_text.index("Supplemental 15m manual-confirmation view"))
+            self.assertIn("Diagonal structure", html_text)
             self.assertIn("1H+4H", html_text)
             self.assertEqual(model["chart_model_4h"]["candle_count"], 4)
             self.assertNotIn("2026-01-02T01:00:00Z", html_text)

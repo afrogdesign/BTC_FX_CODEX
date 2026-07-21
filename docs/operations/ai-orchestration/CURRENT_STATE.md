@@ -5,7 +5,8 @@ last_updated: 2026-07-22
 ## Current posture
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- branch / HEAD: `Ver04-v4` (development line; accepted base `Ver04-v3`)
+- branch: `Ver04-v4`
+- accepted M-VIS1 checkpoint: `c1ceda3` (`b0bb3ca` implementation + `c1ceda3` focused CLI assertion)
 - push: none
 - safety: report-only / human-decided / no automatic order
 - current product transition: accepted M-OPS analysis backend → practical user-facing macro visual product
@@ -26,27 +27,50 @@ last_updated: 2026-07-22
 - current accepted live evidence is report-only, public-data-only, and no-automatic-order
 - accepted M-OPS source, health semantics, runtime target, and schedule are not reopened without a concrete contradiction
 
-## Product gap
+## Visual product state
 
-The backend is operational, but the practical user-facing macro view remains incomplete.
+### M-VIS1 accepted
 
-Current limitations:
+M-VIS1 is accepted on `Ver04-v4`.
 
-- the current operator is 15m-first and can make higher-timeframe zones look like 15m support/resistance;
-- there is no dedicated 4H-first macro chart;
-- deterministic trendlines/channels are not implemented;
+Accepted behavior:
+
+- optional explicit public 4H OHLCV input;
+- no extra fetch;
+- 4H-first candlestick chart when the 4H input is supplied;
+- high / medium horizontal zones with visible `4H`, `1H+4H`, or `1H` source labels;
+- role, reliability band, and lifecycle visible on the chart/evidence;
+- future or unclosed 4H candles excluded by snapshot cutoff;
+- existing 15m view retained as supplemental manual-confirmation view;
+- invalid 4H input fails closed without replacing the previous `latest.json`;
+- existing no-4H caller behavior remains compatible;
+- report-only / no automatic order / human decides manually remain visible.
+
+Accepted review artifact:
+
+- `local/reports/macro_structure/mvis1_review/operator/operator_eea81e0efb24d41261be/macro_structure_operator.html`
+
+Accepted validation:
+
+- focused renderer unittest passed;
+- focused CLI parser/dispatch test passed with the repository virtual environment;
+- one bounded direct-renderer smoke passed;
+- task-scoped `git diff --check` passed.
+
+## Remaining product gap
+
+- deterministic 4H trendlines/channels are not implemented;
 - touch, break, retest, reclaim, and structural leg events are not presented as a coherent operator model;
 - condition/invalidation scenarios are not implemented;
 - a fixed complete latest HTML entry is not yet accepted;
-- HTML mail integration remains separate and unauthorized.
+- HTML mail integration remains separate and unauthorized;
+- accepted runtime service still uses its existing invocation until a separate runtime task is approved.
 
 ## Active plan
 
-The practical visual product will be completed one module at a time:
-
 ```text
-M-VIS1 4H-first macro chart
-→ M-LINE1 deterministic trendlines/channels
+M-VIS1 4H-first macro chart — accepted
+→ M-LINE1 deterministic trendlines/channels — specification fixed, implementation next
 → M-EVENT1 structural events
 → M-HYP1 bounded condition/invalidation scenarios
 → M-ENTRY1 fixed latest entry
@@ -55,10 +79,21 @@ M-VIS1 4H-first macro chart
 
 M-STATS1 remains optional shadow evidence and does not block product v1 completion when sample size is insufficient.
 
+## M-LINE1 contract state
+
+- active spec: `chatgpt/specs/active/20260722_macro_structure_trendline_channel.md`
+- specification status: fixed by ChatGPT
+- implementation status: pending ChatGPT acceptance
+- confirmed pivot source: existing event-time 4H `confirmed_pivots(..., left=2, right=2)`
+- line families: ascending support and descending resistance only
+- touch tolerance: `0.25 ATR`
+- wrong-side close breach: `0.35 ATR`
+- stable IDs, state definitions, ranking, channel construction, display limits, and insufficient behavior are fixed in the active spec
+
 ## Current selected action
 
-- next module: `M-VIS1`
-- status: M-VIS1 implementation pending ChatGPT acceptance
-- objective: generate a practical 4H-first macro chart from existing accepted M-OPS data and clearly label 1H / 4H horizontal zones
-- default validation: matching unittest, small deterministic fixture, one bounded smoke, task-scoped `git diff --check`
-- not included: M-LINE1, wave labeling, statistical probability, runtime, launchd, schedule, mail, notification, policy, gate, threshold, classifier, private data, or automatic order
+- next module: `M-LINE1`
+- status: ready for one bounded Codex implementation
+- objective: add deterministic 4H trendline/channel model and limited overlay to the accepted M-VIS1 artifact
+- normal validation budget: matching unittest, small deterministic fixture, one bounded smoke, task-scoped `git diff --check`
+- not included: wave labeling, probability, M-EVENT1 event history, M-HYP1 scenarios, runtime, launchd, schedule, mail, notification, policy, gate, threshold, classifier, private data, or automatic order
