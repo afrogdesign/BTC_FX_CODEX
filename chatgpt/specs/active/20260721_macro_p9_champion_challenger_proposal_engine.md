@@ -109,3 +109,7 @@ FIX-05 integrates candidate-specific rolling M1/M3 split evidence into actual ch
 ## Implementation correction — bounded FIX-06
 
 FIX-06 makes final challenger Pareto and issue diagnosis use same-date rolling champion evidence; terminal champion summaries are no longer challenger comparison fallbacks. Wholly missing split dimensions fail closed, champion direction counts use the existing threshold, and candidate diagnosis reads the actual M1 `root_cause` and `reason_codes` fields. Public lineage remains count/fingerprint only. Lightweight focused validation passed; the actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
+
+## Implementation correction — bounded FIX-07
+
+FIX-07 makes failed or malformed champion cache entries fail closed without exception leakage, records champion direction insufficiency explicitly, prevents runless challengers from inheriting terminal champion validation evidence, preserves rolling failure reasons, and requires the accepted M1 `opportunity_id`, `root_cause`, and `reason_codes` lineage fields. P8 insufficiency is reported only when the P8 gate itself fails. Lightweight focused validation passed; the actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.

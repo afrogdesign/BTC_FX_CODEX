@@ -15,11 +15,14 @@ from src.feedback.macro_p9_proposal_engine import (
     _m1_metrics,
     _performance_snapshot_dates,
     _rolling_snapshots,
+    _snapshot_record,
     _split_comparison,
     _write_snapshot_inputs,
     _expand_space,
     _p8_status,
+    _p8_gate_ok,
     _candidate_rolling_evidence,
+    _champion_snapshot_failure_reasons,
     _guarded_vector,
     _public_snapshot,
     _snapshot_eligible,
@@ -120,6 +123,39 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         self.assertEqual({}, m3)
         self.assertEqual({}, diagnostics)
 
+    def test_failed_champion_cache_is_a_deterministic_fail_closed_snapshot(self):
+        dates = [("2026-07-19", "2026-07-19T01:00:00Z")]
+        with patch("src.feedback.macro_p9_proposal_engine._performance_snapshot_dates", return_value=dates), patch("src.feedback.macro_p9_proposal_engine._write_snapshot_inputs", side_effect=lambda paths, cutoff, root: paths):
+            _, snapshots = _rolling_snapshots({"signals": Path("signals.csv")}, {"left_window": 3, "right_window": 2}, {}, {"left_window": 2, "right_window": 2}, Path("rolling"), champion_cache=[{"snapshot_jst_date": "2026-07-19", "cutoff_utc": "2026-07-19T01:00:00Z", "status": "failed", "reason_codes": ["replay_failure"]}])
+        self.assertEqual(1, len(snapshots))
+        self.assertFalse(snapshots[0]["comparison_eligible"])
+        self.assertIn("champion_snapshot_not_eligible", snapshots[0]["reason_codes"])
+        self.assertIn("replay_failure", snapshots[0]["reason_codes"])
+
+    def test_champion_direction_failure_has_specific_reason(self):
+        snapshot = {"snapshot_jst_date": "2026-07-19", "cutoff_utc": "2026-07-19T01:00:00Z", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": {key: 0.5 for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_guarded_metrics": {key: 0.5 for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_resolved_up_count": 9, "m3_resolved_down_count": 10, "validation_date_concentration": {"pass": True}, "m1_quality_status": "pass", "m3_quality_status": "pass", "status": "established", "_m1_split_summary": {}, "_m3_split_summary": {}}
+        reasons = _champion_snapshot_failure_reasons(snapshot, "2026-07-19", "2026-07-19T01:00:00Z")
+        self.assertIn("champion_direction_count_insufficient", reasons)
+        self.assertIn("champion_snapshot_not_eligible", reasons)
+
+    def test_candidate_lineage_requires_accepted_m1_misses_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            m1 = root / "m1"; m3 = root / "m3"
+            m1.mkdir(); m3.mkdir()
+            (m1 / "events.csv").write_text("event_id\ne1\n")
+            (m1 / "misses.csv").write_text("opportunity_id\nop1\n")
+            (m3 / "events.csv").write_text("record_id\nr1\n")
+            (m3 / "episodes.csv").write_text("episode_id,policy,start_timestamp_utc\ne1,candidate,2026-07-19T01:00:00Z\n")
+            (m3 / "replay.json").write_text("{}")
+            with patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_diagnostics", return_value={}):
+                with self.assertRaisesRegex(ValueError, "input_schema_invalid"):
+                    _snapshot_record("2026-07-19", "2026-07-19T01:00:00Z", {}, {"m1": m1, "m3": m3}, {}, {}, [], [], "established", False, False, 0)
+
+    def test_p8_reason_is_separate_from_comparison_failure(self):
+        self.assertFalse(_p8_gate_ok({"status": "missing", "ready": False, "unique_actual_episode_count": 0, "actual_high_medium_count": 0}))
+        self.assertTrue(_p8_gate_ok({"status": "provided", "ready": True, "unique_actual_episode_count": 50, "actual_high_medium_count": 1}))
+
     def test_champion_snapshot_quality_and_same_date_fail_closed(self):
         snapshot = {"snapshot_jst_date": "2026-07-19", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": {key: 0.1 for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_guarded_metrics": {key: 0.1 for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_resolved_up_count": 10, "m3_resolved_down_count": 9, "validation_date_concentration": {"pass": True}, "m1_quality_status": "fail", "m3_quality_status": "pass", "status": "established"}
         self.assertFalse(_snapshot_eligible(snapshot, "2026-07-19"))
@@ -189,9 +225,9 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
             return {"candidate_id": candidate_id(candidate), "parameters": candidate, "m1": temp_root / "m1", "m3": temp_root / "m3"}
 
         def fake_record(date, cutoff, paths, run, m1, m3, validation_dates, reasons, status, comparison, pareto, improved):
-            return {"snapshot_jst_date": date, "m3_eligible_jst_dates": [date], "m3_validation_jst_dates": [date], "m1_opportunity_id_fingerprint": "same", "m1_guarded_metrics": m1, "m3_guarded_metrics": m3}
+            return {"snapshot_jst_date": date, "cutoff_utc": cutoff, "m3_eligible_jst_dates": [date], "m3_validation_jst_dates": [date], "m1_opportunity_id_fingerprint": "same", "m1_guarded_metrics": m1, "m3_guarded_metrics": m3, "m1_quality_status": "pass", "m3_quality_status": "pass", "validation_date_concentration": {"pass": True}, "m3_resolved_up_count": 10, "m3_resolved_down_count": 10, "status": "established", "_m1_split_summary": {"splits": {"policy": {}}}, "_m3_split_summary": {"splits": {"policy": {}}}}
 
-        metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "resolved_up_count": 10, "resolved_down_count": 10}
+        metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "balanced_no_expansion_rate": 0.5, "resolved_up_count": 10, "resolved_down_count": 10}
         with patch("src.feedback.macro_p9_proposal_engine._performance_snapshot_dates", return_value=dates), patch("src.feedback.macro_p9_proposal_engine._write_snapshot_inputs", side_effect=lambda paths, cutoff, root: paths), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._read_json", return_value={"recommendation": {"validation_dates": ["2026-07-19"]}}), patch("src.feedback.macro_p9_proposal_engine._m1_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._m3_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._snapshot_record", side_effect=fake_record), patch("src.feedback.macro_p9_proposal_engine._id_fingerprint", return_value="same"), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._date_concentration", return_value={"pass": True}):
             champion_cache, _ = _rolling_snapshots({"signals": Path("signals.csv")}, parameters, fixed, parameters, Path("rolling-champion"))
             calls.clear()
