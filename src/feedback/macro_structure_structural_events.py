@@ -186,6 +186,16 @@ def _breach(obj: dict[str, Any], candle: dict[str, Any], index: int, candles: li
     return candle["close"] > high + BREACH_ATR * atr, "UP", "DOWN"
 
 
+def _original_side_return(obj: dict[str, Any], candle: dict[str, Any], index: int, candles: list[dict[str, Any]], current_price: float, break_direction: str) -> bool:
+    low, high = _object_geometry(obj, index, candles)
+    margin = RETURN_ATR * _atr_at(candles, index, current_price)
+    if break_direction == "DOWN":
+        return candle["close"] >= low + margin
+    if break_direction == "UP":
+        return candle["close"] <= high - margin
+    raise ValueError("structural_event_break_direction_invalid")
+
+
 def _contact(obj: dict[str, Any], candle: dict[str, Any], index: int, candles: list[dict[str, Any]], current_price: float) -> bool:
     low, high = _object_geometry(obj, index, candles)
     if obj["object_kind"] == "horizontal_zone":
@@ -202,9 +212,11 @@ def _event(obj: dict[str, Any], event_type: str, status: str, sequence: str, tim
     return values
 
 
-def _touch_events(obj: dict[str, Any], candles: list[dict[str, Any]], current_price: float) -> list[dict[str, Any]]:
+def _touch_events(obj: dict[str, Any], candles: list[dict[str, Any]], current_price: float, excluded_indices: set[int] | None = None) -> list[dict[str, Any]]:
     contacts = []
     for index, candle in enumerate(candles):
+        if excluded_indices and index in excluded_indices:
+            continue
         if not _available(obj, candle):
             continue
         breached, _, _ = _breach(obj, candle, index, candles, current_price)
@@ -254,6 +266,7 @@ def _sequence_events(obj: dict[str, Any], candles: list[dict[str, Any]], current
     result: list[dict[str, Any]] = []
     index = 0
     rearmed = True
+    rearm_direction: str | None = None
     while index < len(candles):
         candle = candles[index]
         if not _available(obj, candle):
@@ -261,10 +274,8 @@ def _sequence_events(obj: dict[str, Any], candles: list[dict[str, Any]], current
             continue
         breached, break_direction, _ = _breach(obj, candle, index, candles, current_price)
         if not rearmed or not breached:
-            if rearmed is False and not breached:
-                low_c, high_c = _object_geometry(obj, index, candles)
-                atr_c = _atr_at(candles, index, current_price)
-                rearmed = candle["close"] >= high_c - RETURN_ATR * atr_c if expected == "UP" else candle["close"] <= low_c + RETURN_ATR * atr_c
+            if rearmed is False and not breached and rearm_direction is not None:
+                rearmed = _original_side_return(obj, candle, index, candles, current_price, rearm_direction)
             index += 1
             continue
         low, high = _object_geometry(obj, index, candles)
@@ -280,17 +291,16 @@ def _sequence_events(obj: dict[str, Any], candles: list[dict[str, Any]], current
             if candidate_breach and candidate == index + 1:
                 acceptance_index = candidate
                 break
-            if not candidate_breach:
-                return_side = candidate_candle["close"] <= high_c - RETURN_ATR * _atr_at(candles, candidate, current_price) if expected == "UP" else candidate_candle["close"] >= low_c + RETURN_ATR * _atr_at(candles, candidate, current_price)
-                if return_side:
-                    reclaim_index = candidate
-                    break
+            if not candidate_breach and _original_side_return(obj, candidate_candle, candidate, candles, current_price, break_direction):
+                reclaim_index = candidate
+                break
         if reclaim_index is not None:
             reclaim_candle = candles[reclaim_index]
             low_r, high_r = _object_geometry(obj, reclaim_index, candles)
             break_event["sequence_status"] = "reclaimed"
             result.append(_event(obj, "false_break_reclaim", "confirmed", "reclaimed", reclaim_candle["endpoint"], expected, reclaim_candle["close"], low_r, high_r, 0.0, parent=break_event["event_id"]))
             rearmed = False
+            rearm_direction = break_direction
             index = reclaim_index + 1
             continue
         if acceptance_index is not None:
@@ -314,17 +324,20 @@ def _sequence_events(obj: dict[str, Any], candles: list[dict[str, Any]], current
                     candidate_breach, _, _ = _breach(obj, candidate_candle, candidate, candles, current_price)
                     low_c, high_c = _object_geometry(obj, candidate, candles)
                     atr_c = _atr_at(candles, candidate, current_price)
-                    failure = candidate_candle["close"] <= high_c - RETURN_ATR * atr_c if expected == "UP" else candidate_candle["close"] >= low_c + RETURN_ATR * atr_c
                     if candidate_breach:
                         result.append(_event(obj, "retest_hold", "confirmed", "accepted", candidate_candle["endpoint"], break_direction, candidate_candle["close"], low_c, high_c, 0.0, parent=retest["event_id"]))
                         break
-                    if failure:
+                    if _original_side_return(obj, candidate_candle, candidate, candles, current_price, break_direction):
                         result.append(_event(obj, "retest_failure", "confirmed", "accepted", candidate_candle["endpoint"], expected, candidate_candle["close"], low_c, high_c, 0.0, parent=retest["event_id"]))
                         break
             rearmed = False
+            rearm_direction = break_direction
             index = (retest_index + 1 if retest_index is not None else acceptance_index + 1)
             continue
-        index += 1
+        break_event["sequence_status"] = "unresolved"
+        rearmed = False
+        rearm_direction = break_direction
+        index += RECLAIM_BARS + 1
     return result
 
 
@@ -360,15 +373,29 @@ def _retain(events: list[dict[str, Any]], cutoff: datetime) -> list[dict[str, An
     pivot_events = [event for event in events if event["object_kind"] == "pivot_structure"]
     pivot_keep = {event["event_id"] for event in sorted(pivot_events, key=lambda item: (item["event_timestamp_utc"], item["event_id"]), reverse=True)[:MAX_PIVOT_EVENTS]}
     candidates = [event for event in events if event["object_kind"] != "pivot_structure" or event["event_id"] in pivot_keep]
-    retained = sorted(candidates, key=lambda item: (_utc(item["event_timestamp_utc"], "structural_event_timestamp_invalid"), item["event_id"]))[-MAX_EVENTS:]
     by_id = {event["event_id"]: event for event in events}
-    changed = True
-    while changed:
-        changed = False
-        for event in list(retained):
-            parent = event.get("parent_event_id")
-            if parent and parent in by_id and parent not in {item["event_id"] for item in retained}:
-                retained.append(by_id[parent]); changed = True
+    eligible = sorted(candidates, key=lambda item: (-_utc(item["event_timestamp_utc"], "structural_event_timestamp_invalid").timestamp(), item["event_id"]))
+    retained_by_id: dict[str, dict[str, Any]] = {}
+    for event in eligible:
+        chain: list[dict[str, Any]] = []
+        cursor: dict[str, Any] | None = event
+        chain_ids: set[str] = set()
+        while cursor is not None and cursor["event_id"] not in retained_by_id:
+            if cursor["event_id"] in chain_ids:
+                raise ValueError("structural_event_parent_cycle")
+            chain.append(cursor)
+            chain_ids.add(cursor["event_id"])
+            parent = cursor.get("parent_event_id")
+            if not parent:
+                cursor = None
+            elif parent not in by_id:
+                raise ValueError("structural_event_parent_missing")
+            else:
+                cursor = by_id[parent]
+        if len(retained_by_id) + len(chain) <= MAX_EVENTS:
+            for item in chain:
+                retained_by_id[item["event_id"]] = item
+    retained = list(retained_by_id.values())
     return sorted(retained, key=lambda item: (_utc(item["event_timestamp_utc"], "structural_event_timestamp_invalid"), item["event_id"]))
 
 
@@ -386,10 +413,12 @@ def build_structural_event_model(candles: list[dict[str, Any]], *, cutoff: datet
     events: list[dict[str, Any]] = []
     latest = closed[-1]
     for obj in objects:
-        touches = _touch_events(obj, closed, current_price)
+        sequence = _sequence_events(obj, closed, current_price)
+        retest_indices = {index for index, candle in enumerate(closed) if any(event["event_type"] == "retest" and event["event_timestamp_utc"] == candle["endpoint"].isoformat() for event in sequence)}
+        touches = _touch_events(obj, closed, current_price, excluded_indices=retest_indices)
         events.extend(touches)
         events.extend(_rejection_events(obj, touches, closed, current_price))
-        events.extend(_sequence_events(obj, closed, current_price))
+        events.extend(sequence)
         low, high = _object_geometry(obj, len(closed) - 1, closed)
         if not (latest["high"] >= low and latest["low"] <= high):
             expected, _ = _object_direction(obj)
