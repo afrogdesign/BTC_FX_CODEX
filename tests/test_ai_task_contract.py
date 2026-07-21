@@ -96,6 +96,33 @@ class TaskContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             validate_task(bad)
 
+    def test_ac08_acceptance_binds_reviewed_base_commit(self):
+        acceptance = self.acceptance()
+        self.assertEqual(validate_task(acceptance), canonical_sha(acceptance))
+        bad = copy.deepcopy(acceptance)
+        bad["repo"]["expected_base_commit"] = None
+        with self.assertRaises(ContractError):
+            validate_task(bad)
+        bad = copy.deepcopy(acceptance)
+        bad["repo"]["expected_base_commit"] = "not-a-commit"
+        with self.assertRaises(ContractError):
+            validate_task(bad)
+        implementation = self.implementation()
+        implementation["repo"]["expected_base_commit"] = None
+        self.assertEqual(validate_task(implementation), canonical_sha(implementation))
+        report = {
+            "schema_version": "1.0", "work_id": acceptance["work_id"], "task_revision": 1,
+            "task_sha256": canonical_sha(acceptance), "status": "partial", "branch": "Ver04-v2",
+            "base_commit": acceptance["repo"]["expected_base_commit"], "changed_files": [],
+            "requirements": {"VAL-01": {"status": "not_run", "evidence": "not run"}}, "tests": [],
+            "heavy_validation": {"authorized": True, "planned_work_units": 1, "full_runs": 0, "commands": [{"command": acceptance["validation"]["heavy"]["commands"][0], "status": "not_run", "evidence": "not run"}]},
+            "commit": None, "push": None, "notes": None
+        }
+        validate_report(acceptance, report)
+        report["base_commit"] = "1" * 40
+        with self.assertRaises(ContractError):
+            validate_report(acceptance, report)
+
     def test_foreground_and_sensitive_rejection(self):
         bad = self.implementation()
         bad["validation"]["unit_tests"] = ["pytest tests &"]

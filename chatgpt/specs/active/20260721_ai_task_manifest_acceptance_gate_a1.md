@@ -254,3 +254,16 @@ Archive only after ChatGPT accepts the implementation. Move this file to:
 `chatgpt/specs/archive/20260721_ai_task_manifest_acceptance_gate_a1.md`
 
 Then update `CURRENT_STATE.md` and replace `NEXT_ACTION.md` with one next item. A2, A3, CWT, replay redesign, M6, and production work are not activated automatically.
+
+
+## 8. Acceptance-lineage correction
+
+### AC-08 — Reviewed implementation commit binding
+
+An acceptance manifest must set `repo.expected_base_commit` to the exact 40-character lowercase hexadecimal commit that ChatGPT reviewed and approved for the acceptance run. `null` is invalid for `stage=acceptance`.
+
+The acceptance report `base_commit` must equal that manifest value. This binds heavy evidence to the reviewed implementation and prevents running acceptance against an unspecified or changed source state.
+
+The acceptance example, JSON Schema conditional rules, Python validator, and focused tests must enforce this requirement. No heavy run is authorized by this correction.
+
+A1 cannot be accepted or archived until AC-08 passes focused validation and direct MCP review.

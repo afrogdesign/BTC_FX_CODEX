@@ -183,6 +183,8 @@ def validate_task(task: dict[str, Any]) -> str:
     _string(repo["expected_branch"], "repo.expected_branch")
     if repo["expected_base_commit"] is not None and (not isinstance(repo["expected_base_commit"], str) or not HEX40.fullmatch(repo["expected_base_commit"])):
         raise ContractError("expected_base_commit must be null or lowercase SHA-1")
+    if stage == "acceptance" and (not isinstance(repo["expected_base_commit"], str) or not HEX40.fullmatch(repo["expected_base_commit"])):
+        raise ContractError("acceptance requires a concrete lowercase expected_base_commit")
     _clauses(task["contract_refs"])
 
     allowed = _object(task["allowed"], "allowed", {"read", "edit", "inspect"})

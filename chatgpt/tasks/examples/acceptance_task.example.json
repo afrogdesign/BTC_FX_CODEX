@@ -5,7 +5,7 @@
   "stage": "acceptance",
   "mode": "BOUNDED_CODEX",
   "goal": "Run one explicitly authorized bounded acceptance command.",
-  "repo": {"working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor", "expected_branch": "Ver04-v2", "expected_base_commit": null},
+  "repo": {"working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor", "expected_branch": "Ver04-v2", "expected_base_commit": "0000000000000000000000000000000000000000"},
   "contract_refs": [{"path": "chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md", "clauses": ["AC-01", "VAL-01"]}],
   "allowed": {"read": ["AGENTS.md"], "edit": [], "inspect": ["git_status", "task_diff"]},
   "autonomy": {},

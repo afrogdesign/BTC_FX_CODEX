@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "work_id", "revision", "stage", "mode", "goal", "repo", "contract_refs", "allowed", "autonomy", "requirements", "validation", "commit", "stop_codes", "report"],
+  "allOf": [{"if": {"properties": {"stage": {"const": "acceptance"}}}, "then": {"properties": {"repo": {"properties": {"expected_base_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}}}}}],
   "properties": {
     "schema_version": {"const": "1.0"}, "work_id": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1},
     "stage": {"enum": ["implementation", "acceptance", "review", "checkpoint", "runtime"]}, "mode": {"enum": ["BOUNDED_CODEX", "REVIEW_ONLY", "CHECKPOINT_PUSH", "RUNTIME_TASK"]}, "goal": {"type": "string", "minLength": 1},
