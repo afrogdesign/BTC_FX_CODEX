@@ -1,125 +1,83 @@
 # BTC Monitor
 
-更新日: 2026-03-23 18:35 JST
+`btc_monitor` は、notificationを受け取った人間が15分足を確認し、manual trading判断を行うための支援システムです。
 
-BTC監視システムの実行プロジェクトです。
+現段階の安全境界:
 
-## セットアップ
+- report-only
+- not `FORMAL_GO`
+- human-decided
+- no automatic order
+
+## Repository
+
+Primary working repo:
+
+`/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+
+Frozen old runtime repo:
+
+`/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+
+通常作業はprimary repoだけを対象にします。frozen repoは明示された`RUNTIME_TASK`以外で使用しません。
+
+## Setup
+
 ```bash
-cd .
 python3.12 -m venv .venv312
 .venv312/bin/python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-## 実行
+## Run
+
 ```bash
-cd .
 .venv312/bin/python main.py
 ```
 
-## 補足
-- 運用メモ・手順書は `運用資料/` にあります。
-- 市場構造の補助データとして Binance の公開APIも使います。
-- Funding 閾値（`FUNDING_*`）は `%` 単位で設定します（例: `0.05` は `0.05%`）。
+## AI / project navigation
 
-## AI の切り替え
+新しいAI contextは次から開始します。
 
-- 助言と要約は、それぞれ `API / CLI` を別々に切り替えられます。
-- `.env` の設定例:
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
 
-```bash
-AI_ADVICE_PROVIDER=api
-AI_SUMMARY_PROVIDER=cli
-AI_ADVICE_CLI_COMMAND=
-AI_SUMMARY_CLI_COMMAND=tools/codex_cli_wrapper.py
-```
+全体計画:
 
-- `AI_ADVICE_PROVIDER`
-  - `api` なら OpenAI API を使います
-  - `cli` なら `AI_ADVICE_CLI_COMMAND` を実行します
-- `AI_SUMMARY_PROVIDER`
-  - `api` なら OpenAI API を使います
-  - `cli` なら `AI_SUMMARY_CLI_COMMAND` を実行します
-- CLI モードでは、監視システムは JSON を標準入力へ渡し、標準出力を受け取ります。
-  - 助言CLIは JSON オブジェクトを返す必要があります
-  - 要約CLIは本文テキストを返す想定です
-- 同じラッパーを両方に使えます。
-  - `AI_ADVICE_CLI_COMMAND=tools/codex_cli_wrapper.py`
-  - `AI_SUMMARY_CLI_COMMAND=tools/codex_cli_wrapper.py`
-  - ラッパー側は、入力 JSON の `task` を見て `summary` と `ai_advice` を自動で切り替えます
+- `docs/operations/ai-orchestration/MASTER_PLAN.md`
 
-## 本番運用の考え方
+現在地と次作業:
 
-- Git は「コードの正本」に使います。
-  - 正本: いちばん信頼して管理する元データ
-- `logs/` や実行中に増える CSV / JSON は Git へ入れません。
-- 本番 MBP2020 への反映は、`git ls-files` を元にした `rsync` 配備へ寄せます。
-- 本番ログの確認は、必要なものだけを別同期します。
-- 実行履歴は `運用資料/progress.md` を軽く保ち、重い履歴は `運用資料/progress_weekly/` へ週ごとに退避します。
-- `tmp/` は `status/`、`snapshots/`、`errors/` に分け、日常確認では `status/` だけを見ます。
+- `docs/operations/ai-orchestration/CURRENT_STATE.md`
+- `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
-### コードを本番 Ver02.1 へ反映する
+実行ルール:
 
-```bash
-cd .
-zsh tools/deploy_ver021_prod.sh
-```
+- `docs/operations/ai-orchestration/AI_WORKFLOW.md`
+- `docs/operations/ai-orchestration/CONTROL.md`
 
-### 本番 Ver02.1 状態を軽く同期する
+## Main directories
 
-```bash
-cd .
-zsh tools/sync_ver021_prod_status.sh
-```
+| Path | Purpose |
+|---|---|
+| `src/` | application and evidence logic |
+| `tools/` | CLI and support tools |
+| `scripts/` | operator scripts |
+| `tests/` | tests |
+| `chatgpt/specs/active/` | one current implementation contract |
+| `chatgpt/specs/archive/` | accepted historical contracts |
+| `docs/operations/ai-orchestration/` | current plan, state, workflow, and controls |
+| `docs/operations/strategy/` | current product research and route references |
+| `local/reports/` | generated report output path (local, uncommitted) |
+| `_archive/` | historical material; never a default read |
 
-補足:
+Generated reports are written under `local/reports/` and are intentionally uncommitted. Historical operations material is preserved under `_archive/legacy_operations_materials_20260721/`.
 
-- これは archive や旧版本番を確認したいときだけ使う手動入口です。
-- 本番からは `heartbeat.txt`、`last_result.json`、`monitor.pid` だけを軽量取得します。
-- そのあと `tmp/status/prod_status_summary.json` と `tmp/status/prod_status_summary.md` を作り、重いログを毎回読み直さなくてよい形にします。
-- P8の日次report-only evidence cycleはcanonicalな`launchd` job（11:30 JST）として別途runtime applyできます。配置・bootstrapはruntime taskで実施し、repo実装だけでは常駐化しません。
+## Safety
 
-### 本番 Ver02.1 ログをフル取得する
-
-```bash
-cd .
-zsh tools/pull_ver021_prod_logs_auto.sh
-```
-
-補足:
-
-- これで「コード反映」と「実データ確認」を分けて扱えます。
-- 普段は使わず、通知発生後や詳細調査のときだけ使います。
-- `tmp/status/prod_status_summary.md` で足りるあいだは呼びません。
-- `tools/pull_ver021_prod_logs.sh` は下位入口で、個別オプションを直接使いたいときだけ呼びます。
-- 標準は鍵認証です。パスワード fallback が本当に必要なときだけ `zsh tools/pull_ver021_prod_logs_with_password.sh` を明示的に使います。
-
-### `tmp/` を整理する
-
-```bash
-cd .
-zsh tools/cleanup_tmp_status.sh
-```
-
-補足:
-
-- 日常確認用を `tmp/status/`、詳細 snapshot を `tmp/snapshots/`、失敗記録を `tmp/errors/` へ寄せます。
-- 古い `.tgz` や不要な `.DS_Store`、比較母集団外の古い snapshot を掃除します。
-- `--light` を付けると、`heartbeat.txt`、`last_result.json`、`monitor.pid` だけを取得します。
-- `.env`、仮想環境、`logs/` は本番側のまま残るため、実運用データを消しにくい構成です。
-- 件名は `SYSTEM_LABEL` に加えて実行モードも自動で付きます。
-  - 例: `[Ver02.1] [API] [BTC監視] ...`
-  - 例: `[Ver02.1] [CLI] [BTC監視] ...`
-
-### 週次 progress を圧縮する
-
-```bash
-cd .
-zsh tools/archive_progress_week.sh
-```
-
-補足:
-
-- `運用資料/progress.md` は入口だけを軽く保ちます。
-- 週次アーカイブは「システム本体の変化 / 検証結果 / 未解決」だけを残す方向で圧縮します。
+- no automatic order
+- no secrets or private/account/order endpoints
+- no raw exchange export commit
+- no unapproved runtime, launchd, mail, or notification change
+- no unapproved gate, threshold, scoring, or classifier change
+- human approval is required for production adoption

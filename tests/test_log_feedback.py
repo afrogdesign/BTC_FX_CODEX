@@ -242,7 +242,7 @@ class LogFeedbackTest(unittest.TestCase):
     def test_build_report_hub_lists_latest_previous_and_warnings(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
-            reports_dir = base_dir / "運用資料" / "reports"
+            reports_dir = base_dir / "local" / "reports"
             analysis_dir = reports_dir / "analysis"
             archive_daily = reports_dir / "archive" / "daily" / "2026-05"
             archive_weekly = reports_dir / "archive" / "weekly"
@@ -2106,7 +2106,7 @@ class LogFeedbackTest(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             logs_csv = base_dir / "logs" / "csv"
-            reports_analysis = base_dir / "運用資料" / "reports" / "analysis"
+            reports_analysis = base_dir / "local" / "reports" / "analysis"
             logs_csv.mkdir(parents=True, exist_ok=True)
             reports_analysis.mkdir(parents=True, exist_ok=True)
 
@@ -2161,7 +2161,7 @@ class LogFeedbackTest(unittest.TestCase):
             active_plan_candidate_outcomes_path = logs_csv / "active_plan_candidate_outcomes.csv"
             active_plan_candidate_outcomes_report_path = reports_analysis / "active_plan_candidate_outcomes_20260609.md"
             review_note_path = base_dir / "notes" / "review_note.md"
-            daily_report_path = base_dir / "運用資料" / "reports" / "feedback_daily_sync_20260609.md"
+            daily_report_path = base_dir / "local" / "reports" / "feedback_daily_sync_20260609.md"
 
             with (
                 patch("tools.log_feedback.update_outcomes", return_value=outcomes_path),
@@ -7520,7 +7520,7 @@ class LogFeedbackTest(unittest.TestCase):
 
             expected_path = (
                 base_dir
-                / "運用資料"
+                / "local"
                 / "reports"
                 / "analysis"
                 / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -7728,7 +7728,7 @@ class LogFeedbackTest(unittest.TestCase):
             )
             expected_path = (
                 base_dir
-                / "運用資料"
+                / "local"
                 / "reports"
                 / "analysis"
                 / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"

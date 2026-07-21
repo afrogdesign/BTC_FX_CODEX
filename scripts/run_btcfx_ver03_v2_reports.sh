@@ -31,12 +31,12 @@ done
 PYTHON_BIN="${PYTHON_BIN:-./.venv312/bin/python}"
 REPORT_DATE="$(date +%Y%m%d)"
 LABEL="BTCFX Ver03-v2"
-REPORT_DIR="運用資料/reports/analysis"
+REPORT_DIR="local/reports/analysis"
 OUTCOME_CSV="logs/csv/active_plan_candidate_intraperiod_outcomes.csv"
 PAPER_CANDIDATES_CSV="logs/csv/active_plan_paper_candidates.csv"
 OHLCV_CSV="logs/csv/active_plan_intraperiod_ohlcv.csv"
 OUTCOME_REPORT_PATH="${REPORT_DIR}/active_plan_candidate_intraperiod_outcomes_${REPORT_DATE}.md"
-REPORT_HUB_REL_PATH="運用資料/reports/report_hub_latest.md"
+REPORT_HUB_REL_PATH="local/reports/report_hub_latest.md"
 REPORT_HUB_ABS_PATH="${REPO_ROOT}/${REPORT_HUB_REL_PATH}"
 
 preflight_status="pass"
@@ -100,8 +100,8 @@ run_preflight() {
   fi
 
   ensure_writable_parent "logs/csv" || return 1
-  ensure_writable_parent "運用資料/reports/analysis" || return 1
-  ensure_writable_parent "運用資料/reports" || return 1
+  ensure_writable_parent "local/reports/analysis" || return 1
+  ensure_writable_parent "local/reports" || return 1
 
   if [[ -f "${PAPER_CANDIDATES_CSV}" ]]; then
     candidate_csv_state="present"
@@ -137,7 +137,7 @@ accepted OHLCV timestamp column names: timestamp_jst, timestamp_utc, timestamp, 
 required OHLCV price columns: high, low
 recommended OHLCV columns for human-maintained input: timestamp_jst, open, high, low, close
 output CSV path: logs/csv/active_plan_candidate_intraperiod_outcomes.csv
-output report pattern: 運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_<YYYYMMDD>.md
+output report pattern: local/reports/analysis/active_plan_candidate_intraperiod_outcomes_<YYYYMMDD>.md
 safety note: report-only, no live trading, no auto orders, no paper_positions integration
 EOF
 }

@@ -85,7 +85,7 @@ REVIEW_STATE_VERSION = 1
 AI_POST_REVIEW_VARIANT = "ai_post_review_v2"
 AI_POST_REVIEW_TASK = "ai_post_review"
 REPORT_STALE_DAYS = 7
-DAILY_PROXY_EVALUATOR_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
+DAILY_PROXY_EVALUATOR_OUTPUT_DIR = Path("local") / "reports" / "post_eval"
 _HARD_QUALITY_GUARD_REASONS = (
     "require_execution_for_high_wait",
     "require_execution_for_high_wait+suppress_long_high_wait",
@@ -123,8 +123,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "feedback_daily_sync_*.md",
         "date_pattern": r"feedback_daily_sync_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "daily"),
+            ("active", Path("local") / "reports"),
+            ("archive", Path("local") / "reports" / "archive" / "daily"),
         ],
         "purpose": "日次の全体成績、AI事後評価、Phase1 状況の入口。",
         "section": "current",
@@ -135,8 +135,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "feedback_weekly_*.md",
         "date_pattern": r"feedback_weekly_(\d{8})\.md$",
         "search_roots": [
-            ("archive", Path("運用資料") / "reports" / "archive" / "weekly"),
-            ("active", Path("運用資料") / "reports"),
+            ("archive", Path("local") / "reports" / "archive" / "weekly"),
+            ("active", Path("local") / "reports"),
         ],
         "purpose": "週次の長め集計。現行運用では常用せず、必要時だけ履歴参照する。",
         "section": "archived",
@@ -148,8 +148,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "market_map_effectiveness_*.md",
         "date_pattern": r"market_map_effectiveness_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "market_map flag 別の有効性確認。",
         "section": "current",
@@ -160,8 +160,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "market_map_readiness_*.md",
         "date_pattern": r"market_map_readiness_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "market_map 記録の値入り確認。market_map ロジック刷新時だけ再生成する補助診断。",
         "section": "dormant",
@@ -173,8 +173,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "operational_focus_*.md",
         "date_pattern": r"operational_focus_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "blocked 理由、AI backlog、Phase1 観測の詰まりどころを見る。",
         "section": "current",
@@ -185,8 +185,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "relaxation_candidates_*.md",
         "date_pattern": r"relaxation_candidates_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "gate 緩和候補の抽出。設計判断用。",
         "section": "ondemand",
@@ -197,8 +197,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "phase1b_promotion_candidates_*.md",
         "date_pattern": r"phase1b_promotion_candidates_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "Phase 1B-lite からの昇格候補確認。",
         "section": "ondemand",
@@ -209,8 +209,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "paper_opportunity_diagnostics_*.md",
         "date_pattern": r"paper_opportunity_diagnostics_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "紙候補の entry / wait / flag 別診断。",
         "section": "current",
@@ -221,8 +221,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "active_trade_plan_diagnostics_*.md",
         "date_pattern": r"active_trade_plan_diagnostics_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "Active Plan の action 別件数、成行/指値/逆方向短期の偏り、NO_ACTION 比率を確認する。",
         "section": "current",
@@ -233,8 +233,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "active_trade_plan_effectiveness_*.md",
         "date_pattern": r"active_trade_plan_effectiveness_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "Active Plan の action 別に MFE / MAE / TP1先行 / direction outcome を確認する。",
         "section": "current",
@@ -245,8 +245,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "active_plan_candidate_outcomes_*.md",
         "date_pattern": r"active_plan_candidate_outcomes_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "Active Plan 候補別に forward close ベースの暫定結果、TP/SL close 到達、候補タイプ別の偏りを確認する。",
         "section": "current",
@@ -257,8 +257,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "active_plan_candidate_intraperiod_outcomes_*.md",
         "date_pattern": r"active_plan_candidate_intraperiod_outcomes_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "Active Plan 候補別に entry到達、TP/SL先行、timeout、MFE/MAE を intraperiod で確認する。",
         "section": "current",
@@ -269,8 +269,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "paper_entry_sl_wait_redesign_*.md",
         "date_pattern": r"paper_entry_sl_wait_redesign_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "sl_hit 偏重、高 wait、低 execution の切り分け。",
         "section": "ondemand",
@@ -281,8 +281,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "quality_guard_effectiveness_*.md",
         "date_pattern": r"quality_guard_effectiveness_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "paper opportunity quality guard の初回反映評価と counterfactual 論点整理。",
         "section": "ondemand",
@@ -293,8 +293,8 @@ REPORT_FAMILY_SPECS = [
         "pattern": "soft_risk_collateral_damage_*.md",
         "date_pattern": r"soft_risk_collateral_damage_(\d{8})\.md$",
         "search_roots": [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ],
         "purpose": "B/C 単独 soft risk の hard blocker 化による巻き込み被害を評価する。",
         "section": "ondemand",
@@ -304,7 +304,7 @@ REPORT_FAMILY_SPECS = [
         "label": "標準比較 notified_rr_to_entry",
         "pattern": "notified_rr_to_entry.md",
         "date_pattern": None,
-        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "search_roots": [("active", Path("local") / "reports" / "analysis")],
         "purpose": "標準比較の evergreen レポート。",
         "section": "evergreen",
     },
@@ -313,7 +313,7 @@ REPORT_FAMILY_SPECS = [
         "label": "標準比較 ask-heavy",
         "pattern": "notified_rr_to_entry_orderbook_ask_heavy.md",
         "date_pattern": None,
-        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "search_roots": [("active", Path("local") / "reports" / "analysis")],
         "purpose": "標準比較の evergreen レポート。",
         "section": "evergreen",
     },
@@ -322,7 +322,7 @@ REPORT_FAMILY_SPECS = [
         "label": "標準比較 rr_to_confidence",
         "pattern": "rr_to_confidence.md",
         "date_pattern": None,
-        "search_roots": [("active", Path("運用資料") / "reports" / "analysis")],
+        "search_roots": [("active", Path("local") / "reports" / "analysis")],
         "purpose": "標準比較の evergreen レポート。",
         "section": "evergreen",
     },
@@ -1219,7 +1219,7 @@ def _latest_manual_delivery_input_json_seed_data(
 
 def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
     now_jst = datetime.now(tz=JST)
-    output_md = output_md or base_dir / "運用資料" / "reports" / "report_hub_latest.md"
+    output_md = output_md or base_dir / "local" / "reports" / "report_hub_latest.md"
     lines = [
         "# Report Hub",
         "",
@@ -1227,7 +1227,7 @@ def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
         "- purpose: ChatGPT が最初にここを開き、必要な raw report へ進むための案内板。",
         "",
         "## ChatGPT が最初に開く順",
-        "1. `運用資料/NEXT_TASK.md`",
+        "1. `docs/operations/ai-orchestration/NEXT_ACTION.md`",
         f"2. {_format_report_link(base_dir, output_md)}",
         "3. 最新 `feedback_daily_sync`",
         "4. 最新 `market_map_effectiveness`",
@@ -1251,8 +1251,8 @@ def build_report_hub(base_dir: Path, output_md: Path | None = None) -> str:
         [
             "## Legacy / 旧版説明",
             "",
-            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02.3のレポート' / 'README.md')}",
-            f"- legacy: {_format_report_link(base_dir, base_dir / '運用資料' / 'reports' / 'Ver02までのレポート' / 'README.md')}",
+            f"- legacy: {_format_report_link(base_dir, base_dir / 'local' / 'reports' / 'Ver02.3のレポート' / 'README.md')}",
+            f"- legacy: {_format_report_link(base_dir, base_dir / 'local' / 'reports' / 'Ver02までのレポート' / 'README.md')}",
             "- purpose: 現行判断の正本ではなく、旧版の背景説明用。",
             "",
             "## missing / stale 警告",
@@ -1420,9 +1420,9 @@ _MEXC_TRADE_SIGNAL_LINK_HEADER = [
 _MEXC_GROUND_TRUTH_REPORT_SAFETY_BOUNDARY = (
     "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually"
 )
-_MEXC_GROUND_TRUTH_REPORT_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
+_MEXC_GROUND_TRUTH_REPORT_OUTPUT_DIR = Path("local") / "reports" / "post_eval"
 _MEXC_GROUND_TRUTH_REPORT_HEADER = "# Manual Trade Ground Truth Report"
-_POST_EVAL_RECOMMENDATION_OUTPUT_DIR = Path("運用資料") / "reports" / "post_eval"
+_POST_EVAL_RECOMMENDATION_OUTPUT_DIR = Path("local") / "reports" / "post_eval"
 _POST_EVAL_RECOMMENDATION_SAFETY_BOUNDARY = (
     "report-only / not FORMAL_GO / no automatic order / no private/account/order endpoints / human decides manually"
 )
@@ -3625,7 +3625,7 @@ def refresh_standard_setup_comparison_reports(
     date_from: str = "",
     date_to: str = "",
 ) -> dict[str, Path]:
-    analysis_dir = analysis_dir or base_dir / "運用資料" / "reports" / "analysis"
+    analysis_dir = analysis_dir or base_dir / "local" / "reports" / "analysis"
     specs = [
         {
             "key": "notified_rr_to_entry",
@@ -9236,7 +9236,7 @@ def build_active_trade_plan_diagnostics_report(
     resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
     output_md = output_md or (
         base_dir
-        / "運用資料"
+        / "local"
         / "reports"
         / "analysis"
         / f"active_trade_plan_diagnostics_{resolved_report_date}.md"
@@ -10564,7 +10564,7 @@ def build_active_plan_candidate_outcomes_report(
 ) -> str:
     resolved_report_date = str(report_date or "").strip() or datetime.now(tz=JST).strftime("%Y%m%d")
     resolved_output_md = output_md or (
-        base_dir / "運用資料" / "reports" / "analysis" / f"active_plan_candidate_outcomes_{resolved_report_date}.md"
+        base_dir / "local" / "reports" / "analysis" / f"active_plan_candidate_outcomes_{resolved_report_date}.md"
     )
 
     if candidate_outcomes_path is not None and candidates_path is None and trades_path is None:
@@ -10791,7 +10791,7 @@ def build_active_plan_candidate_intraperiod_outcomes_report(
     resolved_report_date = datetime.now(tz=JST).strftime("%Y%m%d")
     resolved_output_md = output_md or (
         base_dir
-        / "運用資料"
+        / "local"
         / "reports"
         / "analysis"
         / f"active_plan_candidate_intraperiod_outcomes_{resolved_report_date}.md"
@@ -11398,7 +11398,7 @@ def _latest_active_plan_manual_preview_input_template() -> dict[str, Any]:
         "timeframe": "15m",
         "data_source": "exchange-auto-public",
         "data_freshness": "15m latest-window exchange-auto-public",
-        "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md",
+        "detail_report_path": "local/reports/analysis/active_plan_candidate_intraperiod_outcomes_YYYYMMDD.md",
         "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order",
         "active_plan_label": "ACTIVE_LIMIT_RETEST",
         "side": "long",
@@ -21730,7 +21730,7 @@ def daily_sync(
     today = datetime.now(tz=JST).strftime("%Y%m%d")
     active_plan_candidate_outcomes_report_path = (
         base_dir
-        / "運用資料"
+        / "local"
         / "reports"
         / "analysis"
         / f"active_plan_candidate_outcomes_{today}.md"
@@ -21748,7 +21748,7 @@ def daily_sync(
     )
     active_plan_candidate_intraperiod_outcomes_report_path = (
         base_dir
-        / "運用資料"
+        / "local"
         / "reports"
         / "analysis"
         / f"active_plan_candidate_intraperiod_outcomes_{today}.md"
@@ -21773,7 +21773,7 @@ def daily_sync(
     )
     if output_md is None:
         today = datetime.now(tz=JST).strftime("%Y%m%d")
-        output_md = base_dir / "運用資料" / "reports" / f"feedback_daily_sync_{today}.md"
+        output_md = base_dir / "local" / "reports" / f"feedback_daily_sync_{today}.md"
     build_feedback_report(
         base_dir=base_dir,
         period="weekly",
@@ -21810,14 +21810,14 @@ def daily_sync(
 def _default_report_path(base_dir: Path, period: str) -> Path:
     now = datetime.now(tz=JST)
     if period == "weekly":
-        return base_dir / "運用資料" / "reports" / f"feedback_weekly_{now.strftime('%Y%m%d')}.md"
-    return base_dir / "運用資料" / "reports" / f"feedback_monthly_{now.strftime('%Y-%m')}.md"
+        return base_dir / "local" / "reports" / f"feedback_weekly_{now.strftime('%Y%m%d')}.md"
+    return base_dir / "local" / "reports" / f"feedback_monthly_{now.strftime('%Y-%m')}.md"
 
 
 def _default_active_plan_intraperiod_report_path(base_dir: Path) -> Path:
     return (
         base_dir
-        / "運用資料"
+        / "local"
         / "reports"
         / "analysis"
         / f"active_plan_candidate_intraperiod_outcomes_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -22955,7 +22955,7 @@ def main() -> None:
         )
         resolved_output_md = output_md or (
             base_dir
-            / "運用資料"
+            / "local"
             / "reports"
             / "analysis"
             / f"active_trade_plan_diagnostics_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -22966,7 +22966,7 @@ def main() -> None:
     if args.command == "build-active-trade-plan-effectiveness-report":
         default_output_md = (
             base_dir
-            / "運用資料"
+            / "local"
             / "reports"
             / "analysis"
             / f"active_trade_plan_effectiveness_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -23123,7 +23123,7 @@ def main() -> None:
         )
         resolved_output_md = output_md or (
             base_dir
-            / "運用資料"
+            / "local"
             / "reports"
             / "analysis"
             / f"active_plan_candidate_outcomes_{report_date or datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -23148,7 +23148,7 @@ def main() -> None:
     if args.command == "build-paper-entry-sl-wait-redesign-report":
         default_output_md = (
             base_dir
-            / "運用資料"
+            / "local"
             / "reports"
             / "analysis"
             / f"paper_entry_sl_wait_redesign_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -23171,7 +23171,7 @@ def main() -> None:
         output_md = (
             Path(args.output_md)
             if args.output_md
-            else base_dir / "運用資料" / "reports" / "analysis" / f"quality_guard_effectiveness_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
+            else base_dir / "local" / "reports" / "analysis" / f"quality_guard_effectiveness_{datetime.now(tz=JST).strftime('%Y%m%d')}.md"
         )
         report = build_quality_guard_effectiveness_report(
             base_dir=base_dir,
@@ -23188,7 +23188,7 @@ def main() -> None:
     if args.command == "build-soft-risk-collateral-damage-report":
         default_output_md = (
             base_dir
-            / "運用資料"
+            / "local"
             / "reports"
             / "analysis"
             / f"soft_risk_collateral_damage_{str(args.date_to).replace('-', '') if str(args.date_to).strip() else datetime.now(tz=JST).strftime('%Y%m%d')}.md"
@@ -23216,7 +23216,7 @@ def main() -> None:
         if output_md:
             print(output_md)
         else:
-            print(base_dir / "運用資料" / "reports" / "report_hub_latest.md")
+            print(base_dir / "local" / "reports" / "report_hub_latest.md")
             print(report)
         return
 

@@ -56,7 +56,7 @@ def _post_eval_recommendation_payload() -> dict[str, Any]:
     return {
         "schema_version": "post_eval_recommendations.v1",
         "report_date": "20260702",
-        "report_path": "運用資料/reports/post_eval/post_eval_recommendations_20260702.md",
+        "report_path": "local/reports/post_eval/post_eval_recommendations_20260702.md",
         "output_csv_path": "logs/csv/post_eval_recommendation_candidates.csv",
         "candidate_count": 3,
         "top_recommendation_codes": [
@@ -184,7 +184,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             args.extend(
                 [
                     "--detail-report-path",
-                    "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260610.md",
+                    "local/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260610.md",
                 ]
             )
         if extra_args:
@@ -370,7 +370,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             human_action="manual_copy_review",
             source_readiness="ready",
             pending_caveat="pending_coverage_caveat: diagnostic=coverage_ok",
-            detail_report_path="運用資料/reports/analysis/example.md",
+            detail_report_path="local/reports/analysis/example.md",
         )
 
         self.assertEqual(list(row), ACTIONABILITY_SHADOW_DECISION_HEADER)
@@ -523,7 +523,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "--pending-caveat",
                     "pending_coverage_caveat: diagnostic=coverage_ok",
                     "--detail-report-path",
-                    "運用資料/reports/analysis/example.md",
+                    "local/reports/analysis/example.md",
                     "--output-csv",
                     str(output_csv),
                 ],
@@ -566,7 +566,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             payload["actionability_reasons"] = ["deterministic_checks_passed", "manual_context_review_required"]
             payload["human_action"] = "manual_copy_review"
             payload["intraperiod_evidence_summary"] = "local source resolver seed; source_readiness=ready; detail_report_exists=true"
-            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            payload["detail_report_path"] = "local/reports/analysis/from-json.md"
             input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             before_json = input_json_path.read_text(encoding="utf-8")
             output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
@@ -609,7 +609,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             payload["actionability_reasons"] = "manual_context_review_required"
             payload["human_action"] = "review_only"
             payload["intraperiod_evidence_summary"] = "detail_report_exists=true"
-            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            payload["detail_report_path"] = "local/reports/analysis/from-json.md"
             input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
 
@@ -636,7 +636,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             payload["symbol"] = ""
             payload["actionability_label"] = "REVIEW_REQUIRED"
             payload["human_action"] = "review_only"
-            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            payload["detail_report_path"] = "local/reports/analysis/from-json.md"
             input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             output_csv = base_dir / "logs" / "csv" / "active_plan_shadow_decisions.csv"
 
@@ -660,7 +660,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             payload = json.loads(input_json_path.read_text(encoding="utf-8"))
             payload["actionability_label"] = "REVIEW_REQUIRED"
             payload["human_action"] = "review_only"
-            payload["detail_report_path"] = "運用資料/reports/analysis/from-json.md"
+            payload["detail_report_path"] = "local/reports/analysis/from-json.md"
             input_json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
             output_csv = base_dir / "logs" / "csv" / "paper_positions.csv"
 
@@ -1857,7 +1857,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
         return code, stdout.getvalue(), stderr.getvalue()
 
     def _write_intraperiod_report(self, base_dir: Path, date: str, contents: str) -> Path:
-        path = base_dir / "運用資料" / "reports" / "analysis" / f"active_plan_candidate_intraperiod_outcomes_{date}.md"
+        path = base_dir / "local" / "reports" / "analysis" / f"active_plan_candidate_intraperiod_outcomes_{date}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents, encoding="utf-8")
         return path
@@ -1934,7 +1934,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             "symbol": "BTC_USDT",
             "timeframe": "15m",
             "data_source": "exchange-auto-public",
-            "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260610.md",
+            "detail_report_path": "local/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260610.md",
             "market_status_summary": "intraperiod evidence shows mixed TP1 / SL / pending outcomes",
             "active_plan_label": "ACTIVE_LIMIT_RETEST",
             "side": "long",
@@ -3002,7 +3002,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             intraperiod_outcomes_path = base_dir / "logs" / "csv" / "active_plan_candidate_intraperiod_outcomes.csv"
             intraperiod_outcomes_path.parent.mkdir(parents=True, exist_ok=True)
             intraperiod_outcomes_path.write_text("timestamp_jst,outcome,first_exit_reason\n", encoding="utf-8")
-            detail_report_path = base_dir / "運用資料" / "reports" / "analysis" / "manual-detail.md"
+            detail_report_path = base_dir / "local" / "reports" / "analysis" / "manual-detail.md"
             detail_report_path.parent.mkdir(parents=True, exist_ok=True)
             detail_report_path.write_text("manual detail", encoding="utf-8")
             before_intraperiod = intraperiod_outcomes_path.read_text(encoding="utf-8")
@@ -3102,7 +3102,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                         "timeframe": "15m",
                         "data_source": "exchange-auto-public",
                         "data_freshness": "15m latest-window exchange-auto-public",
-                        "detail_report_path": "運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
+                        "detail_report_path": "local/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
                         "market_status_summary": "report-only manual preview; not FORMAL_GO; no automatic order; JSON seed",
                         "active_plan_label": "NO_ACTION_REVIEW_REQUIRED",
                         "side": "review_required",
@@ -3171,7 +3171,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
             self.assertIn("data_source=exchange-auto-public", markdown)
             self.assertIn("data_freshness=15m latest-window exchange-auto-public", markdown)
             self.assertIn(
-                "detail_report_path=運用資料/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
+                "detail_report_path=local/reports/analysis/active_plan_candidate_intraperiod_outcomes_20260611.md",
                 markdown,
             )
             self.assertIn("active_plan_label=NO_ACTION_REVIEW_REQUIRED", markdown)
@@ -10801,7 +10801,7 @@ class ActivePlanNotificationFormattingTest(unittest.TestCase):
                     "--intraperiod-outcomes-path",
                     str(csv_path),
                     "--detail-report-path",
-                    str(base_dir / "運用資料" / "reports" / "analysis" / "manual-detail.md"),
+                    str(base_dir / "local" / "reports" / "analysis" / "manual-detail.md"),
                     "--include-manual-delivery-checklist",
                 ],
                 base_dir=base_dir,

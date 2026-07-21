@@ -48,7 +48,7 @@ class ActivePlanCandidateOutcomesReportTests(unittest.TestCase):
                 base_dir=base_dir,
                 report_date="20260608",
             )
-            output_path = base_dir / "運用資料" / "reports" / "analysis" / "active_plan_candidate_outcomes_20260608.md"
+            output_path = base_dir / "local" / "reports" / "analysis" / "active_plan_candidate_outcomes_20260608.md"
             self.assertTrue(output_path.exists())
         self.assertIn("active_plan_candidates.csv: missing", report)
         self.assertIn("trades.csv: missing", report)
@@ -196,7 +196,7 @@ class ActivePlanCandidateOutcomesReportTests(unittest.TestCase):
                 base_dir=base_dir,
                 report_date="20260608",
             )
-            output_path = base_dir / "運用資料" / "reports" / "analysis" / "active_plan_candidate_outcomes_20260608.md"
+            output_path = base_dir / "local" / "reports" / "analysis" / "active_plan_candidate_outcomes_20260608.md"
             self.assertTrue(output_path.exists())
 
 

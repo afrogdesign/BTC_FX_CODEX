@@ -31,7 +31,7 @@ class RunDailyReportsTest(unittest.TestCase):
         redesign = [step for step in steps if step.name == "paper-entry-sl-wait-redesign"][0]
         self.assertIsNotNone(redesign.argv)
         self.assertIn("build-paper-opportunity-diagnostics-report", redesign.argv)
-        self.assertIn("運用資料/reports/analysis/paper_entry_sl_wait_redesign_20260526.md", redesign.argv)
+        self.assertIn("local/reports/analysis/paper_entry_sl_wait_redesign_20260526.md", redesign.argv)
 
     def test_dry_run_prints_commands_without_writing_runtime_files(self) -> None:
         with TemporaryDirectory() as tmpdir:

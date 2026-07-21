@@ -57,8 +57,8 @@ class ActivePlanReportFamilyRegistryTests(unittest.TestCase):
         ]
 
         expected_roots = [
-            ("active", Path("運用資料") / "reports" / "analysis"),
-            ("archive", Path("運用資料") / "reports" / "archive" / "analysis"),
+            ("active", Path("local") / "reports" / "analysis"),
+            ("archive", Path("local") / "reports" / "archive" / "analysis"),
         ]
 
         for name in expected_names:

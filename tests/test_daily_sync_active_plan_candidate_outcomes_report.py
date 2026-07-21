@@ -65,7 +65,7 @@ class DailySyncActivePlanCandidateOutcomesReportTests(unittest.TestCase):
                 )
 
         report_path = result["active_plan_candidate_outcomes_report_path"]
-        self.assertEqual(report_path.parent, base_dir / "運用資料" / "reports" / "analysis")
+        self.assertEqual(report_path.parent, base_dir / "local" / "reports" / "analysis")
         self.assertTrue(report_path.name.startswith("active_plan_candidate_outcomes_"))
         self.assertTrue(report_path.name.endswith(".md"))
 

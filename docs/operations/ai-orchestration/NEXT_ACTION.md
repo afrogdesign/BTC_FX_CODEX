@@ -1,45 +1,49 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A3-ROUTING-FIX-01`
+- current_work_id: `BTCFX-20260721-GENERATED-REPORTS-DIRECTORY-MIGRATION`
 - mode: `BOUNDED_CODEX`
 - expected_branch: `Ver04-v2`
-- active_spec: `chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md`
-- status: ready for one compact-report routing correction
+- active_spec: `chatgpt/specs/active/20260721_generated_reports_directory_migration.md`
+- task_manifest: none
+- status: ready for implementation
 - push: none
 
 ## Goal
 
-Keep the useful A3 routing cleanup while restoring compact hand-written prompts and compact text reports as the normal route. Manifest and JSON validation remain optional strict tooling only when explicitly justified.
+Migrate the active generated-report contract to `local/reports/`, then remove the obsolete top-level operations directory.
 
-## Allowed content edits
+## Required result
 
-- `AGENTS.md`
-- `docs/operations/ai-orchestration/START_HERE.md`
-- `docs/operations/ai-orchestration/AI_WORKFLOW.md`
-- `docs/operations/ai-orchestration/CONTROL.md`
-- `docs/operations/ai-orchestration/INITIAL_PROMPT.md`
+- active source, tests, scripts, fixtures, and current docs use `local/reports`
+- report writers create missing directories
+- tracked historical report files move to `_archive/legacy_operations_materials_20260721/reports_snapshot/`
+- ignored/untracked generated reports remain local/uncommitted and may be moved to `local/reports`
+- retired progress tooling is archived or removed after caller check
+- no active fallback or dual-write to the former output area
+- one local commit
 
-The active spec and this `NEXT_ACTION.md` were prepared by ChatGPT. Stage them unchanged with the five routing documents.
+## Read
 
-## Required behavior
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. active spec
+4. active files containing the former output-area path
+5. matching tests
+6. current git status and tracked/untracked classification under the former report directory
 
-- normal tasks use the existing compact prompt template
-- Codex returns the compact text report
-- `response.txt` receives the same compact report exactly once
-- manifest, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tools, not the normal requirement
-- no report-format-only review loop
-- preserve role, dirty-tree, validation-budget, acceptance, and safety boundaries
+Do not broadly read historical files merely because they contain the old path.
 
 ## Validation
 
-- one task-scoped `git diff --check` across the seven scoped files
-- no JSON report generation or self-validation
-- no tests, heavy validation, replay, runtime, network, mail, or notification action
+Use the active spec's matching test set, one temporary-directory creation smoke, shell syntax check for changed scripts, active-reference search, and task-scoped `git diff --check`.
 
-## Commit
+No heavy replay, runtime task, mail, notification, launchd, or frozen-repo operation.
 
-- message: `docs(ai): keep compact reporting default`
-- stage only the five routing documents, the active spec, and this `NEXT_ACTION.md`
-- push: none
+## Safety
+
+- preserve unrelated dirty changes
+- do not commit generated reports
+- no reset、restore、checkout、clean、or stash manipulation
+- no trading logic、gate、threshold、classifier、scoring、runtime、mail、or notification change
 
 This file contains exactly one current task.

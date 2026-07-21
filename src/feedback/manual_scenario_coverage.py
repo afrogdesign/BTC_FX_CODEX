@@ -198,7 +198,7 @@ def build_manual_scenario_coverage(*, candidates: Path, scenarios: Path, scenari
     if output_json is None:
         output_json = Path("logs/json") / f"manual_scenario_coverage_{report_date}.json"
     if output_md is None:
-        output_md = Path("運用資料/reports/post_eval") / f"manual_scenario_coverage_{report_date}.md"
+        output_md = Path("local/reports/post_eval") / f"manual_scenario_coverage_{report_date}.md"
     if dry_run:
         payload["would_write_outputs"] = [output_json.name, output_md.name]
         return markdown, payload

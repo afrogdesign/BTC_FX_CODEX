@@ -253,7 +253,7 @@ class DailyProxyEvaluatorTests(unittest.TestCase):
                 report_date="20260602",
                 lookback_days=7,
             )
-            output_path = base_dir / "運用資料" / "reports" / "post_eval" / "daily_proxy_evaluator_20260602.md"
+            output_path = base_dir / "local" / "reports" / "post_eval" / "daily_proxy_evaluator_20260602.md"
             self.assertTrue(output_path.exists())
         self.assertIn("# Daily Proxy Evaluator", report)
         self.assertIn("`signal_outcomes`: status=missing", report)
@@ -295,7 +295,7 @@ class DailyProxyEvaluatorTests(unittest.TestCase):
                 lookback_days=7,
             )
             self.assertTrue(
-                (base_dir / "運用資料" / "reports" / "post_eval" / "daily_proxy_evaluator_20260602.md").exists()
+                (base_dir / "local" / "reports" / "post_eval" / "daily_proxy_evaluator_20260602.md").exists()
             )
 
         self.assertIn("`signal_outcomes`: status=header_only", report)
@@ -317,7 +317,7 @@ class DailyProxyEvaluatorTests(unittest.TestCase):
                 report_date=None,
                 lookback_days=7,
             )
-            output_path = base_dir / "運用資料" / "reports" / "post_eval" / "daily_proxy_evaluator_20260701.md"
+            output_path = base_dir / "local" / "reports" / "post_eval" / "daily_proxy_evaluator_20260701.md"
             self.assertTrue(output_path.exists())
         self.assertIn("report_date: `20260701`", report)
         self.assertIn("selected_window: `2026-06-25", report)

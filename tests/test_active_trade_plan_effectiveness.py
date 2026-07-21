@@ -158,7 +158,7 @@ class ActiveTradePlanEffectivenessTests(unittest.TestCase):
                     }
                 ],
             )
-            output_md = base_dir / "運用資料" / "reports" / "analysis" / "active_trade_plan_effectiveness_test.md"
+            output_md = base_dir / "local" / "reports" / "analysis" / "active_trade_plan_effectiveness_test.md"
 
             report = build_active_trade_plan_effectiveness_report(base_dir=base_dir, output_md=output_md)
 

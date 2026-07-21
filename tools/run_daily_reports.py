@@ -88,7 +88,7 @@ def _build_steps(args: argparse.Namespace) -> tuple[list[StepSpec], dict[str, st
     date_token, date_from, date_to = _resolve_dates(args.date, args.date_from, args.date_to)
     commands = _build_log_feedback_commands()
     python_bin = args.python_bin
-    reports_dir = BASE_DIR / "運用資料" / "reports"
+    reports_dir = BASE_DIR / "local" / "reports"
     analysis_dir = reports_dir / "analysis"
     ai_max = 0 if args.skip_ai else int(args.max_new_ai_reviews)
 

@@ -156,7 +156,7 @@ class ActiveTradePlanDiagnosticsReportTests(unittest.TestCase):
                 base_dir=base_dir,
                 report_date="20260608",
             )
-            output_path = base_dir / "運用資料" / "reports" / "analysis" / "active_trade_plan_diagnostics_20260608.md"
+            output_path = base_dir / "local" / "reports" / "analysis" / "active_trade_plan_diagnostics_20260608.md"
             self.assertTrue(output_path.exists())
             self.assertIn("# Active Trade Plan 診断", report)
             self.assertIn("## 3. 候補タイプ別件数", report)
@@ -203,7 +203,7 @@ class ActiveTradePlanDiagnosticsReportTests(unittest.TestCase):
             self._write_candidates_csv(base_dir, [])
 
             build_active_trade_plan_diagnostics_report(base_dir=base_dir, report_date="20260608")
-            output_path = base_dir / "運用資料" / "reports" / "analysis" / "active_trade_plan_diagnostics_20260608.md"
+            output_path = base_dir / "local" / "reports" / "analysis" / "active_trade_plan_diagnostics_20260608.md"
             self.assertTrue(output_path.exists())
 
 

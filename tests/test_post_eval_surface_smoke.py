@@ -29,7 +29,7 @@ def _compact_post_eval_payload() -> dict[str, object]:
     return {
         "schema_version": "post_eval_recommendations.v1",
         "report_date": "20260702",
-        "report_path": "運用資料/reports/post_eval/post_eval_recommendations_20260702.md",
+        "report_path": "local/reports/post_eval/post_eval_recommendations_20260702.md",
         "output_csv_path": "logs/csv/post_eval_recommendation_candidates.csv",
         "candidate_count": 3,
         "top_recommendation_codes": [
