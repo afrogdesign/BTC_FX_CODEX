@@ -331,7 +331,7 @@ def validate_report(task: dict[str, Any], report: dict[str, Any]) -> None:
     heavy = _object(report["heavy_validation"], "report.heavy_validation", {"authorized", "planned_work_units", "full_runs", "commands"})
     _required(heavy, {"authorized", "planned_work_units", "full_runs", "commands"}, "report.heavy_validation")
     manifest_heavy = task["validation"]["heavy"]
-    if heavy["authorized"] != manifest_heavy["authorized"] or isinstance(heavy["planned_work_units"], bool) or not isinstance(heavy["planned_work_units"], int) or heavy["planned_work_units"] < 0 or heavy["planned_work_units"] > manifest_heavy["planned_work_units"] or isinstance(heavy["full_runs"], bool) or not isinstance(heavy["full_runs"], int) or heavy["full_runs"] < 0 or heavy["full_runs"] > manifest_heavy["max_full_runs"]:
+    if heavy["authorized"] != manifest_heavy["authorized"] or isinstance(heavy["planned_work_units"], bool) or not isinstance(heavy["planned_work_units"], int) or heavy["planned_work_units"] != manifest_heavy["planned_work_units"] or isinstance(heavy["full_runs"], bool) or not isinstance(heavy["full_runs"], int) or heavy["full_runs"] < 0 or heavy["full_runs"] > manifest_heavy["max_full_runs"]:
         raise ContractError("heavy evidence exceeds manifest")
     heavy_items = heavy["commands"]
     if not isinstance(heavy_items, list):
@@ -340,6 +340,9 @@ def validate_report(task: dict[str, Any], report: dict[str, Any]) -> None:
     actual_heavy = [_evidence(item, f"heavy[{i}")["command"] for i, item in enumerate(heavy_items)]
     if len(actual_heavy) != len(set(actual_heavy)) or not set(actual_heavy) <= set(heavy_commands):
         raise ContractError("heavy evidence command mismatch")
+    executed_runs = sum(item["status"] in {"pass", "fail"} for item in heavy_items)
+    if heavy["full_runs"] != executed_runs:
+        raise ContractError("full_runs must equal executed heavy command evidence")
     if report["status"] == "done" and task["stage"] == "acceptance" and (heavy["full_runs"] != 1 or actual_heavy != heavy_commands or any(item["status"] != "pass" for item in heavy_items)):
         raise ContractError("done acceptance requires exact passing heavy command once")
 
@@ -350,23 +353,29 @@ def validate_report(task: dict[str, Any], report: dict[str, Any]) -> None:
         if not isinstance(commit["hash"], str) or not HEX40.fullmatch(commit["hash"]):
             raise ContractError("report commit hash invalid")
         _string(commit["message"], "report.commit.message")
+        if not task["commit"]["enabled"]:
+            raise ContractError("commit is disabled")
+        if commit["message"] != task["commit"]["message"]:
+            raise ContractError("report commit message mismatch")
+    elif not task["commit"]["enabled"]:
+        commit = None
     if report["status"] == "done":
         if any(value["status"] != "pass" for value in reqs.values()) or any(item["status"] != "pass" for item in tests):
             raise ContractError("done report requires passing evidence")
         if task["commit"]["enabled"] and (commit is None or commit["message"] != task["commit"]["message"]):
             raise ContractError("done report requires configured commit")
-        if not task["commit"]["enabled"] and commit is not None:
-            raise ContractError("commit is disabled")
     push = report["push"]
     if push is not None:
         push = _object(push, "report.push", {"remote", "branch", "commit"})
         _required(push, {"remote", "branch", "commit"}, "report.push")
+        _string(push["remote"], "report.push.remote")
+        _string(push["branch"], "report.push.branch")
         if task["stage"] != "checkpoint" or not task["commit"]["push"] or commit is None or push["branch"] != branch or push["commit"] != commit["hash"] or not HEX40.fullmatch(push["commit"]):
             raise ContractError("unauthorized or mismatched push")
     elif task["commit"]["push"] and report["status"] == "done":
         raise ContractError("configured push is missing")
     if report["notes"] is not None:
-        _string(report["notes"], "report.notes")
+        _string(report["notes"], "report.notes", nonempty=False)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -128,6 +128,9 @@ class TaskContractTests(unittest.TestCase):
         task = self.implementation()
         report = self.report()
         self.assertIsNone(report["notes"])
+        empty_notes = copy.deepcopy(report)
+        empty_notes["notes"] = ""
+        validate_report(task, empty_notes)
         for field, value in (("work_id", "wrong"), ("task_revision", 2), ("task_sha256", "f" * 64), ("branch", "wrong"), ("base_commit", "1" * 40)):
             bad = copy.deepcopy(report)
             bad[field] = value
@@ -142,6 +145,38 @@ class TaskContractTests(unittest.TestCase):
         bad["commit"]["message"] = "wrong"
         with self.assertRaises(ContractError):
             validate_report(task, bad)
+
+    def test_heavy_counts_commit_disabled_and_push_types(self):
+        task = self.implementation()
+        report = self.report()
+        bad = copy.deepcopy(report)
+        bad["heavy_validation"]["planned_work_units"] = 1
+        with self.assertRaises(ContractError):
+            validate_report(task, bad)
+        bad = copy.deepcopy(report)
+        bad["heavy_validation"]["full_runs"] = 1
+        with self.assertRaises(ContractError):
+            validate_report(task, bad)
+
+        acceptance = self.acceptance()
+        acceptance_report = {
+            "schema_version": "1.0", "work_id": acceptance["work_id"], "task_revision": 1,
+            "task_sha256": canonical_sha(acceptance), "status": "partial", "branch": "Ver04-v2",
+            "base_commit": "0" * 40, "changed_files": [], "requirements": {"VAL-01": {"status": "not_run", "evidence": "not run"}},
+            "tests": [], "heavy_validation": {"authorized": True, "planned_work_units": 1, "full_runs": 0, "commands": [{"command": acceptance["validation"]["heavy"]["commands"][0], "status": "not_run", "evidence": "not run"}]},
+            "commit": None, "push": None, "notes": ""
+        }
+        validate_report(acceptance, acceptance_report)
+        bad = copy.deepcopy(acceptance_report); bad["heavy_validation"]["full_runs"] = 1
+        with self.assertRaises(ContractError):
+            validate_report(acceptance, bad)
+        bad = copy.deepcopy(acceptance_report); bad["commit"] = {"hash": "0" * 40, "message": "not allowed"}
+        with self.assertRaises(ContractError):
+            validate_report(acceptance, bad)
+
+        enabled_partial = copy.deepcopy(report); enabled_partial["status"] = "partial"; enabled_partial["commit"]["message"] = "wrong"
+        with self.assertRaises(ContractError):
+            validate_report(task, enabled_partial)
 
     def test_push_alignment_and_partial_subset(self):
         task = self.implementation()
@@ -164,6 +199,12 @@ class TaskContractTests(unittest.TestCase):
         checkpoint_report["changed_files"] = []
         checkpoint_report["push"] = {"remote": "origin", "branch": "Ver04-v2", "commit": checkpoint_report["commit"]["hash"]}
         validate_report(checkpoint, checkpoint_report)
+        bad = copy.deepcopy(checkpoint_report); bad["push"]["remote"] = ""
+        with self.assertRaises(ContractError):
+            validate_report(checkpoint, bad)
+        bad = copy.deepcopy(checkpoint_report); bad["push"]["branch"] = ""
+        with self.assertRaises(ContractError):
+            validate_report(checkpoint, bad)
 
     def test_done_command_rules_and_cli_success_outputs(self):
         task_path = EXAMPLES / "implementation_task.example.json"
