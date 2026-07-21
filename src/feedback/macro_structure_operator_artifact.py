@@ -209,12 +209,10 @@ def _read_ohlcv(path: Path, symbol: str, cutoff: datetime, expected_close: float
 
 
 def _validated_zone(value: Any, code: str = "zone_evidence_invalid") -> dict[str, Any] | None:
-    if not isinstance(value, dict):
-        return None
+    if not isinstance(value, dict) or not value:
+        raise ValueError(code)
     if not _text(value.get("level_id")):
         raise ValueError(code)
-    if _text(value.get("reliability_band")) not in {"high", "medium"}:
-        return None
     if _text(value.get("role")) not in {"support", "resistance"} or not _text(value.get("side")):
         raise ValueError(code)
     for field in ("low", "center", "high", "reliability_score", "distance_from_price_pct", "distance_from_price_atr"):
@@ -228,12 +226,16 @@ def _validated_zone(value: Any, code: str = "zone_evidence_invalid") -> dict[str
         if value.get(field) in (None, ""):
             raise ValueError(code)
         _number(value.get(field), code)
+    if _text(value.get("reliability_band")) not in {"high", "medium"}:
+        return None
     return {field: value.get(field, "") for field in ZONE_FIELDS}
 
 
 def _zones(snapshot: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     def ordered(values: Any) -> list[dict[str, Any]]:
-        items = [item for item in (_validated_zone(value) for value in values or []) if item is not None]
+        if not isinstance(values, list):
+            raise ValueError("zone_evidence_invalid")
+        items = [item for item in (_validated_zone(value) for value in values) if item is not None]
         return sorted(items, key=lambda item: (-{"high": 2, "medium": 1}.get(_text(item["reliability_band"]), 0), _number(item["distance_from_price_pct"] or 0, "zone_distance_invalid"), _text(item["level_id"])))
     support = ordered(snapshot.get("support_zones"))
     resistance = ordered(snapshot.get("resistance_zones"))
@@ -242,11 +244,21 @@ def _zones(snapshot: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[st
     return support, resistance, support + resistance
 
 
+def _optional_reference(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "insufficient"}:
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    return _validated_zone(value)
+
+
 def _references(snapshot: dict[str, Any], shown: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_id = {item["level_id"]: {**item, "semantic_labels": []} for item in shown}
     for semantic, field in (("nearest_support", "nearest_reliable_support"), ("nearest_resistance", "nearest_reliable_resistance"), ("upside_target", "next_upside_target"), ("downside_target", "next_downside_target"), ("upside_obstruction", "upside_obstruction"), ("downside_obstruction", "downside_obstruction")):
         value = snapshot.get(field)
-        item = _validated_zone(value)
+        item = _optional_reference(value)
         if item is not None:
             by_id.setdefault(item["level_id"], {**item, "semantic_labels": []})
             by_id[item["level_id"]]["semantic_labels"].append(semantic)

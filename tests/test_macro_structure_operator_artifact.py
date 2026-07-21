@@ -134,6 +134,50 @@ def _make_rich_inputs(root: Path) -> tuple[Path, Path, Path]:
 
 
 class MacroStructureOperatorArtifactTests(unittest.TestCase):
+    def test_empty_optional_references_are_absent_but_displayed_zones_stay_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8"))
+            data.update({
+                "nearest_reliable_support": {}, "nearest_reliable_resistance": {},
+                "next_upside_target": {}, "next_downside_target": {},
+                "upside_obstruction": None, "downside_obstruction": "NONE",
+                "result_status": "insufficient", "reliability_band_counts": {"high": 1, "medium": 1, "low": 0, "insufficient": 0},
+            })
+            _write_json(snap_path, data)
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertEqual({item["level_id"] for item in model["chart_model"]["overlays"]}, {"level_support", "level_resistance"})
+            self.assertEqual(model["zones"]["displayed_support_count"], 1)
+            self.assertEqual(model["zones"]["displayed_resistance_count"], 1)
+            self.assertEqual(model["source_trace_map"]["references"], {})
+
+    def test_empty_displayed_zone_and_nonempty_partial_optional_reference_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8"))
+            data["support_zones"] = [{}]
+            _write_json(snap_path, data)
+            self.assertEqual(render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)["error_code"], "zone_evidence_invalid")
+            data["support_zones"] = [_zone("level_support", "support", 100)]
+            data["nearest_reliable_resistance"] = {"level_id": "partial"}
+            _write_json(snap_path, data)
+            self.assertEqual(render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)["error_code"], "zone_evidence_invalid")
+
+    def test_low_optional_reference_is_not_promoted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8")); data["next_upside_target"] = _zone("low_target", "resistance", 120, "low")
+            _write_json(snap_path, data)
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertNotIn("low_target", {item["level_id"] for item in model["chart_model"]["overlays"]})
+
     def test_complete_chart_first_artifact_is_deterministic_and_report_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"

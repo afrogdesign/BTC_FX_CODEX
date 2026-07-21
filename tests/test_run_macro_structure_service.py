@@ -80,6 +80,50 @@ class MacroStructureServiceTests(unittest.TestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
             self.assertEqual(json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())["status"], "failed")
 
+    def test_failed_history_retains_successful_snapshot_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            def fetch(path: Path, limit: int, interval: str, symbol: str) -> None:
+                path.write_text("valid", encoding="utf-8")
+            outputs = [
+                {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "insufficient", "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok"},
+                {"ok": False, "error_code": "history_failed"},
+            ]
+            def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                return subprocess.CompletedProcess(argv, 0 if outputs[0].get("ok") else 2, json.dumps(outputs.pop(0)) + "\n", "")
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
+                code, result = service.run_service(self.args(root))
+            self.assertNotEqual(code, 0)
+            self.assertEqual(result["snapshot_run_id"], "run_1")
+            self.assertEqual(result["snapshot_id"], "snap_1")
+            self.assertEqual(result["snapshot_result_status"], "insufficient")
+            self.assertEqual(result["stale_status"], "current")
+            self.assertEqual(result["continuity_status"], "continuous")
+            self.assertEqual(result["data_quality_status"], "ok")
+            self.assertNotIn("history_id", result)
+
+    def test_failed_operator_retains_snapshot_and_history_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            def fetch(path: Path, limit: int, interval: str, symbol: str) -> None:
+                path.write_text("valid", encoding="utf-8")
+            outputs = [
+                {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "insufficient", "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok"},
+                {"ok": True, "history_id": "history_1", "history_result_status": "insufficient_history"},
+                {"ok": False, "error_code": "zone_evidence_invalid"},
+            ]
+            def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                value = outputs.pop(0)
+                return subprocess.CompletedProcess(argv, 0 if value.get("ok") else 2, json.dumps(value) + "\n", "")
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
+                code, result = service.run_service(self.args(root))
+            self.assertNotEqual(code, 0)
+            self.assertEqual(result["snapshot_run_id"], "run_1")
+            self.assertEqual(result["history_id"], "history_1")
+            self.assertEqual(result["history_result_status"], "insufficient_history")
+            self.assertEqual(result["error_code"], "zone_evidence_invalid")
+            self.assertEqual(result["steps"][-1]["name"], "operator")
+
     def test_dry_run_has_no_fetch_or_status_side_effect(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

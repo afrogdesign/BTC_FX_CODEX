@@ -225,7 +225,30 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 if step["status"] != "success":
                     status["error_code"] = step.get("error_code", "operation_failed")
                     break
-                parsed_steps.append(parsed or {})
+                parsed_value = parsed or {}
+                parsed_steps.append(parsed_value)
+                if name == "snapshot":
+                    status.update({
+                        "snapshot_run_id": parsed_value.get("run_id"),
+                        "snapshot_id": parsed_value.get("snapshot_id"),
+                        "snapshot_result_status": parsed_value.get("result_status"),
+                        "stale_status": parsed_value.get("stale_status"),
+                        "continuity_status": parsed_value.get("continuity_status"),
+                        "data_quality_status": parsed_value.get("data_quality_status"),
+                        "snapshot_artifact_root": "local/reports/macro_structure",
+                    })
+                elif name == "history":
+                    status.update({
+                        "history_id": parsed_value.get("history_id"),
+                        "history_result_status": parsed_value.get("history_result_status") or parsed_value.get("result_status"),
+                        "history_artifact_root": "local/reports/macro_structure/history",
+                    })
+                elif name == "operator":
+                    status.update({
+                        "operator_artifact_id": parsed_value.get("operator_artifact_id") or parsed_value.get("artifact_id"),
+                        "operator_result_status": parsed_value.get("result_status"),
+                        "operator_artifact_root": "local/reports/macro_structure/operator",
+                    })
             if len(parsed_steps) == len(commands):
                 snapshot, history, operator = parsed_steps
                 status.update({
