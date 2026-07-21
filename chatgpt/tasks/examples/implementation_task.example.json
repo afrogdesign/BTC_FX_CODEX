@@ -1,0 +1,26 @@
+{
+  "schema_version": 1.0,
+  "work_id": "BTCFX-EXAMPLE-A1-IMPLEMENTATION",
+  "revision": 1,
+  "stage": "implementation",
+  "mode": "BOUNDED_CODEX",
+  "goal": "Implement one bounded standard-library task contract change.",
+  "repo": {
+    "expected_branch": "Ver04-v2",
+    "expected_base_commit": "0000000000000000000000000000000000000000",
+    "working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor",
+    "frozen_runtime_repo": null
+  },
+  "contract_refs": ["chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md"],
+  "allowed": {
+    "read": ["AGENTS.md", "docs/operations/ai-orchestration/START_HERE.md"],
+    "edit": ["chatgpt/tasks/README.md", "chatgpt/tasks/schemas/task_manifest.schema.json", "chatgpt/tasks/schemas/task_report.schema.json", "chatgpt/tasks/examples/implementation_task.example.json", "chatgpt/tasks/examples/acceptance_task.example.json", "chatgpt/tasks/examples/task_report.example.json", "tools/ai_task_contract.py", "tests/test_ai_task_contract.py"],
+    "diff_check": ["chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md", "chatgpt/tasks/README.md", "chatgpt/tasks/schemas/task_manifest.schema.json", "chatgpt/tasks/schemas/task_report.schema.json", "chatgpt/tasks/examples/implementation_task.example.json", "chatgpt/tasks/examples/acceptance_task.example.json", "chatgpt/tasks/examples/task_report.example.json", "tools/ai_task_contract.py", "tests/test_ai_task_contract.py"]
+  },
+  "autonomy": {"edit_helpers": true, "add_fixtures": true, "add_regressions": true, "remove_duplicate_calculations": false, "add_semantics_preserving_cache": false, "choose_bounded_order": true},
+  "requirements": [{"id": "IO-01", "description": "Strict JSON and canonical SHA."}, {"id": "IO-02", "description": "Manifest v1 validation."}, {"id": "IO-03", "description": "Report v1 validation."}, {"id": "IO-04", "description": "Four bounded CLI routes."}, {"id": "AC-01", "description": "Fail-closed stage separation."}, {"id": "AC-02", "description": "Exact foreground commands."}, {"id": "AC-03", "description": "Compact prompt renderer."}, {"id": "AC-04", "description": "Report alignment."}, {"id": "AC-05", "description": "Canonical outbox contract."}, {"id": "AC-06", "description": "Sensitive-data rejection."}, {"id": "AC-07", "description": "Examples and README."}],
+  "validation": {"unit_tests": ["./.venv312/bin/python -m unittest tests.test_ai_task_contract"], "heavy": {"authorized": false, "planned_work_units": 0, "max_full_runs": 0, "commands": []}},
+  "commit": {"enabled": true, "message": "feat(ai): add A1 task contract foundation"},
+  "stop_codes": ["BRANCH_MISMATCH", "SPEC_CHANGED", "SCOPE_OVERLAP", "UNSAFE_EXPANSION"],
+  "report": {"format": "json_v1", "outbox": "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt", "write_once": true}
+}

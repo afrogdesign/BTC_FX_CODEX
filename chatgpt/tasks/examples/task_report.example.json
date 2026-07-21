@@ -1,0 +1,16 @@
+{
+  "schema_version": 1.0,
+  "work_id": "BTCFX-EXAMPLE-A1-IMPLEMENTATION",
+  "task_revision": 1,
+  "task_sha256": "71e80aca5abaa731bdaae5244bcbd37c4cd7608cc4abf543714b285735ab0cda",
+  "status": "done",
+  "branch": "Ver04-v2",
+  "base_commit": "0000000000000000000000000000000000000000",
+  "changed_files": ["chatgpt/tasks/README.md", "chatgpt/tasks/schemas/task_manifest.schema.json", "chatgpt/tasks/schemas/task_report.schema.json", "chatgpt/tasks/examples/implementation_task.example.json", "chatgpt/tasks/examples/acceptance_task.example.json", "chatgpt/tasks/examples/task_report.example.json", "tools/ai_task_contract.py", "tests/test_ai_task_contract.py"],
+  "requirements": {"IO-01": {"status": "pass", "evidence": "focused unit test"}, "IO-02": {"status": "pass", "evidence": "focused unit test"}, "IO-03": {"status": "pass", "evidence": "focused unit test"}, "IO-04": {"status": "pass", "evidence": "focused unit test"}, "AC-01": {"status": "pass", "evidence": "focused unit test"}, "AC-02": {"status": "pass", "evidence": "focused unit test"}, "AC-03": {"status": "pass", "evidence": "focused unit test"}, "AC-04": {"status": "pass", "evidence": "focused unit test"}, "AC-05": {"status": "pass", "evidence": "focused unit test"}, "AC-06": {"status": "pass", "evidence": "focused unit test"}, "AC-07": {"status": "pass", "evidence": "focused unit test"}},
+  "tests": [{"command": "./.venv312/bin/python -m unittest tests.test_ai_task_contract", "status": "pass", "evidence": "focused suite"}, {"command": "git diff --check -- chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md chatgpt/tasks/README.md chatgpt/tasks/schemas/task_manifest.schema.json chatgpt/tasks/schemas/task_report.schema.json chatgpt/tasks/examples/implementation_task.example.json chatgpt/tasks/examples/acceptance_task.example.json chatgpt/tasks/examples/task_report.example.json tools/ai_task_contract.py tests/test_ai_task_contract.py", "status": "pass", "evidence": "diff clean"}],
+  "heavy_validation": {"authorized": false, "planned_work_units": 0, "full_runs": 0, "commands": []},
+  "commit": {"hash": "0000000000000000000000000000000000000000", "message": "feat(ai): add A1 task contract foundation"},
+  "push": null,
+  "notes": "example"
+}

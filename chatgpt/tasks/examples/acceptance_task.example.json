@@ -1,0 +1,17 @@
+{
+  "schema_version": 1.0,
+  "work_id": "BTCFX-EXAMPLE-A1-ACCEPTANCE",
+  "revision": 1,
+  "stage": "acceptance",
+  "mode": "BOUNDED_CODEX",
+  "goal": "Run one explicitly authorized bounded acceptance command.",
+  "repo": {"expected_branch": "Ver04-v2", "expected_base_commit": null, "working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor", "frozen_runtime_repo": null},
+  "contract_refs": ["chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md"],
+  "allowed": {"read": ["AGENTS.md"], "edit": [], "diff_check": ["chatgpt/specs/active/20260721_ai_task_manifest_acceptance_gate_a1.md"]},
+  "autonomy": {},
+  "requirements": [{"id": "VAL-01", "description": "Complete the bounded acceptance run."}],
+  "validation": {"unit_tests": ["./.venv312/bin/python -m unittest tests.test_ai_task_contract"], "heavy": {"authorized": true, "planned_work_units": 1, "max_full_runs": 1, "commands": ["./.venv312/bin/python -m unittest tests.test_ai_task_contract"]}},
+  "commit": {"enabled": false, "message": "acceptance does not commit"},
+  "stop_codes": ["ACCEPTANCE_FAILED"],
+  "report": {"format": "json_v1", "outbox": "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt", "write_once": true}
+}
