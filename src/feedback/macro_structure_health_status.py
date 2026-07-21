@@ -68,7 +68,7 @@ def _evaluation_time(value: str | None) -> datetime:
         now = datetime.now(timezone.utc)
     else:
         now = _aware(value, "evaluation_time_invalid")
-    return now.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    return now.astimezone(timezone.utc)
 
 
 def _sha256(path: Path) -> str:

@@ -19,6 +19,10 @@ class MacroStructureServiceTests(unittest.TestCase):
         parser = service._parser()
         return parser.parse_args(["--repo-root", str(root), *extra])
 
+    @staticmethod
+    def health_result(state: str = "healthy", exit_code: int = 0) -> dict[str, object]:
+        return {"ok": exit_code == 0, "exit_code": exit_code, "report_written": True, "health_state": state, "health_artifact_id": "health_1"}
+
     def test_three_step_order_shared_time_and_one_fetch_per_timeframe(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -32,6 +36,7 @@ class MacroStructureServiceTests(unittest.TestCase):
                 "run-macro-structure-daily": {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "ok", "stale_status": "current"},
                 "run-macro-structure-history": {"ok": True, "history_id": "history_1", "history_result_status": "ok"},
                 "render-macro-structure-operator": {"ok": True, "operator_artifact_id": "operator_1"},
+                "check-macro-structure-health": {"ok": True, "exit_code": 0, "report_written": True, "health_state": "healthy_insufficient", "health_artifact_id": "health_1"},
             }
             commands: list[list[str]] = []
 
@@ -47,7 +52,8 @@ class MacroStructureServiceTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual([item[0] for item in calls], ["15m", "1h", "4h"])
             self.assertTrue(all(item[1] == "ETH_USDT" for item in calls))
-            self.assertEqual([command[2] for command in commands], ["run-macro-structure-daily", "run-macro-structure-history", "render-macro-structure-operator"])
+            self.assertEqual([command[2] for command in commands[:3]], ["run-macro-structure-daily", "run-macro-structure-history", "render-macro-structure-operator"])
+            self.assertEqual(commands[3][2], "check-macro-structure-health")
             self.assertEqual(result["evaluation_utc"], "2026-01-02T16:10:00+00:00")
             self.assertTrue(result["ok"])
             self.assertEqual(result["snapshot_run_id"], "run_1")
@@ -70,12 +76,14 @@ class MacroStructureServiceTests(unittest.TestCase):
 
             def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
                 commands.append(argv)
+                if "check-macro-structure-health" in argv:
+                    return subprocess.CompletedProcess(argv, 3, '{"ok":false,"exit_code":3,"report_written":true,"health_state":"failed","health_artifact_id":"health_failed"}\n', "")
                 return subprocess.CompletedProcess(argv, 2, '{"ok":false,"error_code":"snapshot_failed"}\n', "")
 
             with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
                 code, result = service.run_service(self.args(root))
             self.assertNotEqual(code, 0)
-            self.assertEqual(len(commands), 1)
+            self.assertEqual(len(commands), 2)
             self.assertEqual(result["error_code"], "snapshot_failed")
             self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
             self.assertEqual(json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())["status"], "failed")
@@ -90,6 +98,8 @@ class MacroStructureServiceTests(unittest.TestCase):
                 {"ok": False, "error_code": "history_failed"},
             ]
             def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                if "check-macro-structure-health" in argv:
+                    return subprocess.CompletedProcess(argv, 3, '{"ok":false,"exit_code":3,"report_written":true,"health_state":"failed","health_artifact_id":"health_failed"}\n', "")
                 return subprocess.CompletedProcess(argv, 0 if outputs[0].get("ok") else 2, json.dumps(outputs.pop(0)) + "\n", "")
             with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
                 code, result = service.run_service(self.args(root))
@@ -113,6 +123,8 @@ class MacroStructureServiceTests(unittest.TestCase):
                 {"ok": False, "error_code": "zone_evidence_invalid"},
             ]
             def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                if "check-macro-structure-health" in argv:
+                    return subprocess.CompletedProcess(argv, 3, '{"ok":false,"exit_code":3,"report_written":true,"health_state":"failed","health_artifact_id":"health_failed"}\n', "")
                 value = outputs.pop(0)
                 return subprocess.CompletedProcess(argv, 0 if value.get("ok") else 2, json.dumps(value) + "\n", "")
             with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
@@ -151,6 +163,102 @@ class MacroStructureServiceTests(unittest.TestCase):
             finally:
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
                 handle.close()
+
+    def test_health_is_called_once_after_final_status_and_core_exit_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            events: list[str] = []
+
+            def fetch(path: Path, limit: int, interval: str, symbol: str) -> None:
+                path.write_text("valid", encoding="utf-8")
+
+            core = {
+                "run-macro-structure-daily": {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "ok", "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok"},
+                "run-macro-structure-history": {"ok": True, "history_id": "history_1", "history_result_status": "ok"},
+                "render-macro-structure-operator": {"ok": True, "operator_artifact_id": "operator_1"},
+            }
+
+            def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                if "check-macro-structure-health" in argv:
+                    events.append("health")
+                    return subprocess.CompletedProcess(argv, 2, json.dumps(self.health_result("degraded", 2)) + "\n", "")
+                events.append("core")
+                name = next(key for key in core if key in argv)
+                return subprocess.CompletedProcess(argv, 0, json.dumps(core[name]) + "\n", "")
+
+            original_atomic = service._atomic_json
+
+            def atomic(path: Path, payload: dict[str, object]) -> None:
+                events.append("status")
+                original_atomic(path, payload)
+
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run), patch.object(service, "_atomic_json", side_effect=atomic):
+                code, result = service.run_service(self.args(root))
+            self.assertEqual(code, 0)
+            self.assertEqual(events.count("health"), 1)
+            self.assertLess(events.index("status"), events.index("health"))
+            self.assertEqual(result["health_generation"]["status"], "published")
+            self.assertEqual(result["health_generation"]["health_state"], "degraded")
+            persisted = json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())
+            self.assertNotIn("health_generation", persisted)
+            self.assertEqual(persisted["status"], "success")
+
+    def test_health_generation_failure_does_not_change_core_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            def fetch(path: Path, limit: int, interval: str, symbol: str) -> None:
+                path.write_text("valid", encoding="utf-8")
+
+            def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                if "check-macro-structure-health" in argv:
+                    return subprocess.CompletedProcess(argv, 0, "not-json\n", "")
+                if "run-macro-structure-daily" in argv:
+                    value = {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "ok", "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok"}
+                elif "run-macro-structure-history" in argv:
+                    value = {"ok": True, "history_id": "history_1", "history_result_status": "ok"}
+                else:
+                    value = {"ok": True, "operator_artifact_id": "operator_1"}
+                return subprocess.CompletedProcess(argv, 0, json.dumps(value) + "\n", "")
+
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run):
+                code, result = service.run_service(self.args(root))
+            self.assertEqual(code, 0)
+            self.assertEqual(result["health_generation"]["status"], "failed")
+            self.assertEqual(result["health_generation"]["error_code"], "health_compact_json_missing")
+            persisted = json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())
+            self.assertEqual(persisted["status"], "success")
+            self.assertNotIn("health_generation", persisted)
+
+    def test_already_running_does_not_invoke_health(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            lock_path = root / "logs/runtime/macro_structure_service.lock"
+            lock_path.parent.mkdir(parents=True)
+            handle = lock_path.open("a+")
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                with patch.object(service, "_fetch_public_ohlcv") as fetch, patch.object(service.subprocess, "run") as run:
+                    code, result = service.run_service(self.args(root))
+                self.assertEqual(code, 0)
+                self.assertEqual(result["status"], "already_running")
+                fetch.assert_not_called()
+                run.assert_not_called()
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                handle.close()
+
+    def test_dry_run_lists_one_health_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(service, "_fetch_public_ohlcv") as fetch, patch.object(service.subprocess, "run") as run:
+                code, result = service.run_service(self.args(root, "--dry-run"))
+            self.assertEqual(code, 0)
+            self.assertEqual(result["status"], "dry_run")
+            self.assertEqual(result["health_command"][2], "check-macro-structure-health")
+            self.assertEqual(result["health_output_root"], "local/reports/macro_structure/health")
+            fetch.assert_not_called()
+            run.assert_not_called()
 
 
 class MacroStructureServicePlistTests(unittest.TestCase):

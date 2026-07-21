@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.feedback.macro_structure_health_status import check_macro_structure_health
+from src.feedback.macro_structure_health_status import _evaluation_time, check_macro_structure_health
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -356,6 +356,10 @@ class MacroStructureHealthStatusTests(unittest.TestCase):
         self.runtime.write_text(json.dumps(data))
         result = self.run_health()
         self.assertEqual(self.read_health(result)["error_code"], "runtime_success_return_code")
+
+    def test_explicit_evaluation_precision_is_preserved(self) -> None:
+        value = _evaluation_time("2026-01-02T16:10:23.456789+00:00")
+        self.assertEqual(value.isoformat(), "2026-01-02T16:10:23.456789+00:00")
 
     def test_latest_pointer_and_manifest_changes_change_health_id(self) -> None:
         first = self.run_health()

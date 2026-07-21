@@ -30,6 +30,7 @@ DEFAULT_INPUT_ROOT = "local/runtime/macro_structure_inputs"
 DEFAULT_SNAPSHOT_ROOT = "local/reports/macro_structure"
 DEFAULT_HISTORY_ROOT = "local/reports/macro_structure/history"
 DEFAULT_OPERATOR_ROOT = "local/reports/macro_structure/operator"
+DEFAULT_HEALTH_ROOT = "local/reports/macro_structure/health"
 DEFAULT_STATUS = "logs/runtime/macro_structure_service_last_result.json"
 DEFAULT_LOCK = "logs/runtime/macro_structure_service.lock"
 
@@ -46,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot-root", default=DEFAULT_SNAPSHOT_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--history-root", default=DEFAULT_HISTORY_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--operator-root", default=DEFAULT_OPERATOR_ROOT, help=argparse.SUPPRESS)
+    parser.add_argument("--health-root", default=DEFAULT_HEALTH_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--lock-path", default=DEFAULT_LOCK, help=argparse.SUPPRESS)
     return parser
 
@@ -151,6 +153,21 @@ def _build_commands(root: Path, python_bin: Path, symbol: str, limit: int, evalu
     ]
 
 
+def _build_health_command(root: Path, python_bin: Path, symbol: str, evaluation: datetime, status_path: Path, snapshot_root: Path, history_root: Path, operator_root: Path, plist: Path, health_root: Path) -> list[str]:
+    relative = lambda path: _relative(path, root)
+    return [
+        str(python_bin), "tools/log_feedback.py", "check-macro-structure-health",
+        "--runtime-status", relative(status_path),
+        "--snapshot-root", relative(snapshot_root),
+        "--history-root", relative(history_root),
+        "--operator-root", relative(operator_root),
+        "--plist", relative(plist),
+        "--output-root", relative(health_root),
+        "--evaluation-time-utc", _iso(evaluation),
+        "--stdout-json",
+    ]
+
+
 def _step_summary(name: str, returncode: int, parsed: dict[str, Any] | None, error_code: str = "") -> dict[str, Any]:
     result = {"name": name, "status": "success" if returncode == 0 and parsed and parsed.get("ok") is True else "failed", "return_code": int(returncode)}
     if error_code:
@@ -170,11 +187,37 @@ def _run_step(name: str, argv: list[str], root: Path) -> tuple[dict[str, Any], d
     return _step_summary(name, completed.returncode, parsed), parsed
 
 
+def _health_generation(argv: list[str], root: Path) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding="utf-8")
+    except OSError:
+        return {"attempted": True, "status": "failed", "return_code": 1, "error_code": "health_subprocess_failed"}
+    try:
+        parsed = _parse_compact_json(completed.stdout)
+    except ValueError:
+        return {"attempted": True, "status": "failed", "return_code": int(completed.returncode), "error_code": "health_compact_json_missing"}
+    state = parsed.get("health_state")
+    expected = {"healthy": 0, "healthy_insufficient": 0, "degraded": 2, "overdue": 2, "failed": 3, "inconsistent": 3, "unavailable": 3}
+    if parsed.get("report_written") is not True:
+        return {"attempted": True, "status": "failed", "return_code": int(completed.returncode), "error_code": "health_report_not_written"}
+    if state not in expected or not isinstance(parsed.get("health_artifact_id"), str) or not parsed["health_artifact_id"]:
+        return {"attempted": True, "status": "failed", "return_code": int(completed.returncode), "error_code": "health_result_invalid"}
+    if completed.returncode != expected[state] or parsed.get("exit_code") != expected[state]:
+        return {"attempted": True, "status": "failed", "return_code": int(completed.returncode), "error_code": "health_exit_code_mismatch"}
+    result = {"attempted": True, "status": "published", "return_code": int(completed.returncode), "health_state": state, "health_artifact_id": parsed["health_artifact_id"], "report_written": True}
+    if parsed.get("operator_html_path") is not None:
+        result["operator_html_path"] = parsed["operator_html_path"]
+    return result
+
+
 def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, commands: list[tuple[str, list[str]]]) -> dict[str, Any]:
     input_root = root / args.input_root
     snapshot_root = root / args.snapshot_root
     history_root = root / args.history_root
     operator_root = root / args.operator_root
+    status_path = root / args.status_path
+    health_root = root / args.health_root
+    health_command = _build_health_command(root, root / (args.python_bin or (root / ".venv312" / "bin" / "python")), args.symbol, evaluation, status_path, snapshot_root, history_root, operator_root, root / "deploy/com.afrog.btc-macro-structure.plist", health_root)
     return {
         "ok": True,
         "status": "dry_run",
@@ -183,6 +226,8 @@ def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, 
         "evaluation_utc": _iso(evaluation),
         "roots": {"inputs": _relative(input_root / "latest", root), "snapshot": _relative(snapshot_root, root), "history": _relative(history_root, root), "operator": _relative(operator_root, root)},
         "commands": [argv for _, argv in commands],
+        "health_command": health_command,
+        "health_output_root": _relative(health_root, root),
         "safety_boundary": SAFETY,
     }
 
@@ -194,10 +239,12 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     snapshot_root = root / args.snapshot_root
     history_root = root / args.history_root
     operator_root = root / args.operator_root
+    health_root = root / args.health_root
     status_path = root / args.status_path
     lock_path = root / args.lock_path
     evaluation = _normalized_evaluation_time()
     commands = _build_commands(root, python_bin, args.symbol, args.ohlcv_limit, evaluation, input_root, snapshot_root, history_root, operator_root)
+    health_command = _build_health_command(root, python_bin, args.symbol, evaluation, status_path, snapshot_root, history_root, operator_root, root / "deploy/com.afrog.btc-macro-structure.plist", health_root)
     if args.dry_run:
         result = _planned_output(root, args, evaluation, commands)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
@@ -265,9 +312,15 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         status["finished_at_utc"] = _iso(finished)
         status["finished_at_jst"] = _jst_iso(finished)
         _atomic_json(status_path, status)
+        health_generation = {"attempted": False, "status": "not_run"}
+        if status.get("status") != "already_running":
+            health_generation = _health_generation(_build_health_command(root, python_bin, args.symbol, finished, status_path, snapshot_root, history_root, operator_root, root / "deploy/com.afrog.btc-macro-structure.plist", health_root), root)
         compact = {key: value for key, value in status.items() if key not in {"public_input_fingerprints"}}
+        compact["health_generation"] = health_generation
         print(json.dumps(compact, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-        return (0 if status.get("ok") is True else 1), status
+        result = dict(status)
+        result["health_generation"] = health_generation
+        return (0 if status.get("ok") is True else 1), result
     finally:
         try:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
