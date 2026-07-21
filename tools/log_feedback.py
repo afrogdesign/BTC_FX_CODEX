@@ -22131,6 +22131,7 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_operator_parser.add_argument("--snapshot-root", default="local/reports/macro_structure")
     macro_operator_parser.add_argument("--history-root", default="local/reports/macro_structure/history")
     macro_operator_parser.add_argument("--ohlcv-15m-csv", required=True)
+    macro_operator_parser.add_argument("--ohlcv-4h-csv")
     macro_operator_parser.add_argument("--output-root", default="local/reports/macro_structure/operator")
     macro_operator_parser.add_argument("--symbol", default="BTC_USDT")
     macro_operator_parser.add_argument("--stdout-json", action="store_true")
@@ -23634,7 +23635,8 @@ def main() -> None:
         try:
             summary = render_macro_structure_operator(
                 snapshot_root=Path(args.snapshot_root), history_root=Path(args.history_root),
-                ohlcv_15m_csv=Path(args.ohlcv_15m_csv), output_root=Path(args.output_root), symbol=args.symbol,
+                ohlcv_15m_csv=Path(args.ohlcv_15m_csv), ohlcv_4h_csv=Path(args.ohlcv_4h_csv) if args.ohlcv_4h_csv else None,
+                output_root=Path(args.output_root), symbol=args.symbol,
             )
         except (OSError, ValueError) as exc:
             summary = {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False,

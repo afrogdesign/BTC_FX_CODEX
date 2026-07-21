@@ -232,3 +232,36 @@ M-OPS1–M-OPS4 satisfy the accepted source, local-artifact, and target-only run
 - frozen runtime repo requires explicit `RUNTIME_TASK`.
 
 M-OPS source and local evidence remain Ver04.x. `Ver05` requires explicitly approved production adoption, matching validation, runtime verification where applicable, and ChatGPT acceptance.
+
+
+---
+
+## 11. Product-facing macro visual priority override — 2026-07-22
+
+This section supersedes earlier `M-OPS5 next` and `no active source implementation` wording where they conflict.
+
+M-OPS1 through M-OPS5 are accepted and active on the existing report-only cadence. The next product priority is not another M-OPS health or audit phase. It is the user-facing macro visual completion lane defined in:
+
+- `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
+
+Current sequence:
+
+```text
+M-VIS1 4H-first macro chart
+→ M-LINE1 deterministic trendlines/channels
+→ M-EVENT1 structural events
+→ M-HYP1 condition/invalidation scenarios
+→ M-ENTRY1 fixed latest entry
+→ separately approved M-DELIVERY1 HTML mail integration
+```
+
+M-STATS1 remains optional shadow evidence and does not block product v1 completion when sample size is insufficient.
+
+Execution policy:
+
+- finish one useful module before starting the next;
+- reuse accepted M-OPS source and artifacts;
+- prioritize visible operator value over metadata or audit completeness;
+- use matching tests, a small deterministic fixture, one bounded smoke, and task-scoped diff check;
+- do not run long replay, broad parameter search, repeated runtime health cycles, or full-suite validation without explicit acceptance-critical approval;
+- do not change runtime, schedule, mail, notification, policy, gates, thresholds, classifiers, or automatic-order behavior in M-VIS1.

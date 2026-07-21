@@ -224,3 +224,27 @@ Read a historical file only when a current task identifies the exact evidence or
 - no raw exchange export commit
 - no unsupported gate, threshold, scoring, classifier change
 - no automatic phase promotion or production adoption
+
+
+---
+
+## 11. Product-facing macro visual route — 2026-07-22
+
+For work related to the practical 4H macro chart, trendlines/channels, structural events, scenario hypotheses, fixed latest entry, or final HTML mail integration, read:
+
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. `docs/operations/ai-orchestration/CURRENT_STATE.md`
+4. `docs/operations/ai-orchestration/NEXT_ACTION.md`
+5. `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
+
+Then read only the current module source, matching tests, CLI route, and current artifact.
+
+Controlling interpretation:
+
+- M-OPS1 through M-OPS5 remain accepted and are not reopened without a concrete contradiction;
+- the current product-facing next module is `M-VIS1`;
+- `M-VIS1` adds a practical 4H-first macro chart using existing accepted levels and does not change reliability semantics;
+- M-LINE1, M-EVENT1, M-HYP1, and M-ENTRY1 are subsequent separate modules;
+- mail/notification/runtime/schedule changes remain prohibited until a separately approved `M-DELIVERY1` task;
+- long replay, repeated health observation, broad evaluation, and full-suite validation are not default completion requirements.

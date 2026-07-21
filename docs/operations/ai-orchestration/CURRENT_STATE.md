@@ -4,12 +4,12 @@ last_updated: 2026-07-22
 
 ## Current posture
 
-- branch: `Ver04-v3` (latest reported locator)
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: none for M-OPS5 runtime integration; accepted spec archived
-- current transition: M-OPS1 through M-OPS5 automatic macro operation is active on the existing runtime cadence
+- branch / HEAD: `Ver04-v4` (development line; accepted base `Ver04-v3`)
 - push: none
 - safety: report-only / human-decided / no automatic order
+- current product transition: accepted M-OPS analysis backend → practical user-facing macro visual product
+- canonical visual plan: `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
 
 ## Product / P state
 
@@ -17,35 +17,48 @@ last_updated: 2026-07-22
 - P9 remains blocked because no complete private MEXC Trade History / Order History / Position History batch exists under `local/manual_trade_imports/YYYYMMDD/`
 - do not repeat P9 importer/linker/readiness work unless new private input, relevant code change, contradictory artifact, or explicit user request appears
 
-## Autonomous macro operation
+## Autonomous macro backend
 
-- M-OPS1 accepted: `89bd338`
-- M-OPS2 accepted: `dea0e33`
-- M-OPS3 accepted: `09330b9`
-- M-OPS3/runtime compatibility fix: `a9b3d46`
-- M-OPS4 runtime implementation: `690c014`
-- M-OPS4 accepted state checkpoint: `61e07a9`
-- M-OPS5 accepted source checkpoint: `dac7e8f`
-- M-OPS5 runtime integration implementation: `aec7587`
-- M-OPS5 snapshot-pointer compatibility fix: `0dbe9d0`
-
-Installed runtime:
-
-- label: `com.afrog.btc-macro-structure`
+- M-OPS1 through M-OPS5 are accepted and active on the existing six-time cadence
+- installed label: `com.afrog.btc-macro-structure`
 - schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
-- current pipeline: public 15m/1h/4h OHLCV → snapshot → history → operator artifact
-- health integration is accepted and active after the final launchd verification cycle
-- target remains report-only with no private input and no automatic order
+- current pipeline: public 15m / 1h / 4h OHLCV → snapshot → history → operator artifact → runtime status → health artifact
+- current accepted live evidence is report-only, public-data-only, and no-automatic-order
+- accepted M-OPS source, health semantics, runtime target, and schedule are not reopened without a concrete contradiction
 
-M-OPS5:
+## Product gap
 
-- command: `check-macro-structure-health`
-- source and focused validation are complete at `dac7e8f`, with integration implementation at `aec7587` and compatibility fix at `0dbe9d0`
-- final target-only launchd cycle completed core M-OPS1–3 and published a `healthy` M-OPS5 artifact
-- required integration is active: finalized runtime status → one read-only health command → deterministic health artifact
-- no new LaunchAgent, schedule, public fetch, mail, notification, policy, or order path
+The backend is operational, but the practical user-facing macro view remains incomplete.
+
+Current limitations:
+
+- the current operator is 15m-first and can make higher-timeframe zones look like 15m support/resistance;
+- there is no dedicated 4H-first macro chart;
+- deterministic trendlines/channels are not implemented;
+- touch, break, retest, reclaim, and structural leg events are not presented as a coherent operator model;
+- condition/invalidation scenarios are not implemented;
+- a fixed complete latest HTML entry is not yet accepted;
+- HTML mail integration remains separate and unauthorized.
+
+## Active plan
+
+The practical visual product will be completed one module at a time:
+
+```text
+M-VIS1 4H-first macro chart
+→ M-LINE1 deterministic trendlines/channels
+→ M-EVENT1 structural events
+→ M-HYP1 bounded condition/invalidation scenarios
+→ M-ENTRY1 fixed latest entry
+→ separately approved M-DELIVERY1 HTML mail integration
+```
+
+M-STATS1 remains optional shadow evidence and does not block product v1 completion when sample size is insufficient.
 
 ## Current selected action
 
-- no remaining M-OPS5 implementation task
-- respond only to a material runtime failure, incorrect operator output, safety violation, new P9 evidence, or explicit user request
+- next module: `M-VIS1`
+- status: M-VIS1 implementation pending ChatGPT acceptance
+- objective: generate a practical 4H-first macro chart from existing accepted M-OPS data and clearly label 1H / 4H horizontal zones
+- default validation: matching unittest, small deterministic fixture, one bounded smoke, task-scoped `git diff --check`
+- not included: M-LINE1, wave labeling, statistical probability, runtime, launchd, schedule, mail, notification, policy, gate, threshold, classifier, private data, or automatic order

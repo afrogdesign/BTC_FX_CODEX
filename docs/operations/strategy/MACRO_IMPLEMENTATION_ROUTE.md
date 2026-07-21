@@ -225,3 +225,35 @@ The first three conditions are accepted. Runtime cadence and autonomous health r
 - human decides trades and production adoption
 - M-OPS source and local autonomous evidence remain within Ver04.x
 - `Ver05` requires explicitly approved production adoption and matching validation
+
+
+---
+
+## Product-facing visual extension override — 2026-07-22
+
+This section supersedes earlier wording that describes M-OPS5 as the next unfinished macro task.
+
+M-OPS1 through M-OPS5 are accepted and active. The next macro priority is the practical user-facing visual lane:
+
+- canonical plan: `MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
+- current module: `M-VIS1`
+
+Sequence:
+
+```text
+M-VIS1 4H-first macro chart using accepted 1H/4H levels
+→ M-LINE1 deterministic 4H trendlines and channels
+→ M-EVENT1 touch/break/retest/reclaim events
+→ M-HYP1 bounded condition/invalidation scenarios
+→ M-ENTRY1 atomic fixed latest entry
+→ separately approved M-DELIVERY1 HTML mail integration
+```
+
+Implementation policy:
+
+- one module at a time;
+- complete practical operator value before optional statistical refinement;
+- no M-OPS reimplementation;
+- no reliability, score, gate, threshold, or classifier change unless separately approved;
+- no long replay, broad parameter search, repeated health cycles, runtime, schedule, mail, or notification change in M-VIS1;
+- matching tests, a small deterministic fixture, one bounded smoke, and task-scoped diff check are the normal validation budget.

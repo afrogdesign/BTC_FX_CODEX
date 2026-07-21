@@ -175,7 +175,7 @@ def _validate_history(root: Path, symbol: str, snapshot: dict[str, Any]) -> tupl
     return history, manifest, history_dir, fingerprints
 
 
-def _read_ohlcv(path: Path, symbol: str, cutoff: datetime, expected_close: float) -> tuple[list[dict[str, Any]], str]:
+def _read_ohlcv(path: Path, symbol: str, cutoff: datetime, expected_close: float, *, interval: str = "15m", limit: int = 96, match_close: bool = True) -> tuple[list[dict[str, Any]], str]:
     try:
         with path.open(newline="", encoding="utf-8-sig") as handle:
             reader = csv.DictReader(handle)
@@ -187,7 +187,7 @@ def _read_ohlcv(path: Path, symbol: str, cutoff: datetime, expected_close: float
     previous: datetime | None = None
     eligible: list[dict[str, Any]] = []
     for raw in rows:
-        if _text(raw.get("interval")) and _text(raw.get("interval")) != "15m":
+        if _text(raw.get("interval")) and _text(raw.get("interval")) != interval:
             raise ValueError("ohlcv_interval_invalid")
         if _text(raw.get("symbol")) and _text(raw.get("symbol")) != symbol:
             raise ValueError("ohlcv_symbol_mismatch")
@@ -198,14 +198,14 @@ def _read_ohlcv(path: Path, symbol: str, cutoff: datetime, expected_close: float
         values = {field: _number(raw.get(field), "ohlcv_numeric_invalid") for field in ("open", "high", "low", "close")}
         if values["high"] < max(values["open"], values["close"]) or values["low"] > min(values["open"], values["close"]) or values["low"] > values["high"]:
             raise ValueError("ohlcv_ohlc_invalid")
-        endpoint = at + timedelta(minutes=15)
+        endpoint = at + timedelta(minutes=15 if interval == "15m" else 4 * 60)
         if endpoint <= cutoff:
             eligible.append({"timestamp_utc": at.isoformat(), "endpoint_utc": endpoint.isoformat(), **values})
     if not eligible:
         raise ValueError("ohlcv_no_closed_candle")
-    if abs(eligible[-1]["close"] - expected_close) > max(1e-8, abs(expected_close) * 1e-8):
+    if match_close and abs(eligible[-1]["close"] - expected_close) > max(1e-8, abs(expected_close) * 1e-8):
         raise ValueError("snapshot_price_ohlcv_mismatch")
-    return eligible[-96:], _fingerprint(path)
+    return eligible[-limit:], _fingerprint(path)
 
 
 def _validated_zone(value: Any, code: str = "zone_evidence_invalid") -> dict[str, Any] | None:
@@ -267,7 +267,16 @@ def _references(snapshot: dict[str, Any], shown: list[dict[str, Any]]) -> list[d
     return [by_id[key] for key in sorted(by_id)]
 
 
-def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, Any]], cutoff: str) -> str:
+def _source_label(value: Any) -> str:
+    parts = {part.strip().lower() for part in _text(value).replace(" ", "").split(",") if part.strip()}
+    if "1h" in parts and "4h" in parts:
+        return "1H+4H"
+    if "4h" in parts:
+        return "4H"
+    return "1H"
+
+
+def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, Any]], cutoff: str, *, timeframe: str = "15m") -> str:
     width, height, pad = 1100, 480, 46
     numbers = [price] + [n for candle in candles for n in (candle["low"], candle["high"])] + [n for item in overlays for n in (float(item["low"]), float(item["high"]))]
     low, high = min(numbers), max(numbers)
@@ -283,7 +292,8 @@ def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, A
     bands: list[str] = []
     for item in overlays:
         color = "#2563eb" if item["role"] == "support" else "#dc2626"
-        label = html.escape(f'{item["level_id"]} [{item["role"]}, {item["reliability_band"]}, {item["lifecycle"]}] ({", ".join(item["semantic_labels"]) or "zone"})')
+        source = item.get("source_label") or _source_label(item.get("source_timeframes"))
+        label = html.escape(f'{source} {item["level_id"]} [{item["role"]}, {item["reliability_band"]}, {item["lifecycle"]}] ({", ".join(item["semantic_labels"]) or "zone"})')
         high_y = y(float(item["high"]))
         low_y = y(float(item["low"]))
         bands.append(f'<rect x="{pad}" y="{high_y:.2f}" width="{width-2*pad}" height="{max(low_y-high_y, 1):.2f}" fill="{color}" opacity=".16"/><text x="{pad+5}" y="{y(float(item["center"])):.2f}" font-size="10" fill="{color}">{label}</text>')
@@ -291,7 +301,7 @@ def _svg(candles: list[dict[str, Any]], price: float, overlays: list[dict[str, A
     first_at = candles[0]["timestamp_utc"] if candles else "none"
     last_at = candles[-1]["timestamp_utc"] if candles else "none"
     context = f'<text x="{pad}" y="{height-20}" font-size="10">min={low:.4f} max={high:.4f} · candles={len(candles)} · first={html.escape(first_at)} · last={html.escape(last_at)} · cutoff={html.escape(cutoff)}</text>'
-    return f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="15 minute macro structure candlestick chart"><rect width="{width}" height="{height}" fill="#fff"/> <text x="{pad}" y="22" font-size="15">15m macro structure chart · cutoff {html.escape(cutoff)}</text><text x="5" y="{pad}" font-size="10">{high:.4f}</text><text x="5" y="{height-pad}" font-size="10">{low:.4f}</text>{"".join(bands)}{"".join(candle_svg)}{price_line}{context}</svg>'
+    return f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(timeframe)} macro structure candlestick chart"><rect width="{width}" height="{height}" fill="#fff"/> <text x="{pad}" y="22" font-size="15">{html.escape(timeframe)} macro structure chart · cutoff {html.escape(cutoff)}</text><text x="5" y="{pad}" font-size="10">{high:.4f}</text><text x="5" y="{height-pad}" font-size="10">{low:.4f}</text>{"".join(bands)}{"".join(candle_svg)}{price_line}{context}</svg>'
 
 
 EVENT_CATEGORIES = (
@@ -390,11 +400,15 @@ def _publish(output_root: Path, artifact_id: str, files: dict[str, bytes], lates
         raise
 
 
-def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports/macro_structure"), history_root: Path = Path("local/reports/macro_structure/history"), ohlcv_15m_csv: Path, output_root: Path = Path("local/reports/macro_structure/operator"), symbol: str = "BTC_USDT") -> dict[str, Any]:
+def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports/macro_structure"), history_root: Path = Path("local/reports/macro_structure/history"), ohlcv_15m_csv: Path, ohlcv_4h_csv: Path | None = None, output_root: Path = Path("local/reports/macro_structure/operator"), symbol: str = "BTC_USDT") -> dict[str, Any]:
     try:
         snapshot, snapshot_manifest, snapshot_dir, snapshot_fingerprints = _validate_snapshot(snapshot_root, symbol)
         history, history_manifest, history_dir, history_fingerprints = _validate_history(history_root, symbol, snapshot)
         candles, ohlcv_fingerprint = _read_ohlcv(ohlcv_15m_csv, symbol, snapshot["_as_of"], _number(snapshot["current_price"], "snapshot_price_invalid"))
+        candles_4h: list[dict[str, Any]] = []
+        ohlcv_4h_fingerprint: str | None = None
+        if ohlcv_4h_csv is not None:
+            candles_4h, ohlcv_4h_fingerprint = _read_ohlcv(ohlcv_4h_csv, symbol, snapshot["_as_of"], _number(snapshot["current_price"], "snapshot_price_invalid"), interval="4h", limit=240, match_close=False)
         support, resistance, shown = _zones(snapshot)
         references = _references(snapshot, shown)
         categories = _categorized_events(history)
@@ -406,15 +420,18 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "events": {category: [{"source": "macro_structure_history.json.structure_changes" if row.get("source") == "macro_structure_changes.csv" else row.get("source", ""), "checkpoint_id": row.get("checkpoint_id", ""), "run_id": row.get("run_id", ""), "level_id": row.get("level_id", "")} for row in rows] for category, rows in categories.items()},
             "presentation_rules": {"geometry": "deduplicate by level_id and annotate accepted semantic labels", "zones": "display only high/medium accepted reliability bands", "events": "accepted M-OPS2 v2 rows, latest ten per category"},
         }
+        if candles_4h:
+            trace["candles_4h"] = {"source": "explicit local public 4h OHLCV CSV", "rule": "timestamp plus 4h endpoint <= snapshot as_of_utc; latest 240 eligible closed candles", "cutoff": snapshot["_as_of"].isoformat()}
         chart = {"timeframe": "15m", "candle_count": len(candles), "candles": candles, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles[-1]["timestamp_utc"], "overlays": references}
+        chart_4h = {"timeframe": "4H", "model": "mvis1_4h_candlestick_operator", "candle_count": len(candles_4h), "candles": candles_4h, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles_4h[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles_4h[-1]["timestamp_utc"], "overlays": references} if candles_4h else None
         counts = {f"{role}_{band}": sum(1 for item in zones if item["role"] == role and item["reliability_band"] == band) for role, zones in (("support", support), ("resistance", resistance)) for band in ("high", "medium")}
         counts.update({"total_displayed_support": len(support), "total_displayed_resistance": len(resistance)})
         model = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "symbol": symbol,
             "operator_artifact_id": "", "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_history_id": history["history_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"],
-            "snapshot_fingerprint": snapshot_fingerprints, "history_fingerprint": history_fingerprints, "ohlcv_15m_fingerprint": ohlcv_fingerprint,
+            "snapshot_fingerprint": snapshot_fingerprints, "history_fingerprint": history_fingerprints, "ohlcv_15m_fingerprint": ohlcv_fingerprint, **({"ohlcv_4h_fingerprint": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {}),
             "as_of_utc": snapshot["_as_of"].isoformat(), "as_of_jst": snapshot.get("as_of_jst", ""), "evaluated_at_utc": snapshot["_evaluated"].isoformat(), "evaluated_at_jst": snapshot.get("evaluated_at_jst", ""),
-            "chart_model": chart, "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
+            "chart_model": chart, **({"chart_model_4h": chart_4h} if chart_4h else {}), "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
             "structure_panel": {field: snapshot.get(field, "") for field in ("structure_state", "price_location", "location_percentile", "current_price", "nearest_reliable_support", "nearest_reliable_resistance", "next_upside_target", "next_downside_target", "upside_obstruction", "downside_obstruction", "volatility_state", "expansion_risk", "directional_activation")},
             "freshness": {"stale_status": snapshot.get("stale_status", ""), "stale_timeframes": snapshot.get("stale_timeframes", []), "freshness": snapshot.get("freshness", {})},
             "source_status": {"snapshot_result_status": snapshot.get("result_status", ""), "history_result_status": history.get("result_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "data_quality_status": snapshot.get("data_quality_status", ""), "reason_codes": snapshot.get("reason_codes", [])},
@@ -423,20 +440,23 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "source_trace_map": trace,
             "safety_boundary": SAFETY,
         }
-        digest = hashlib.sha256((SCHEMA_VERSION + "|" + METHOD_VERSION + "|" + symbol + "|" + json.dumps({"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv": ohlcv_fingerprint}, sort_keys=True)).encode()).hexdigest()
+        digest = hashlib.sha256((SCHEMA_VERSION + "|" + METHOD_VERSION + "|" + symbol + "|" + json.dumps({"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, "ohlcv_4h": ohlcv_4h_fingerprint}, sort_keys=True)).encode()).hexdigest()
         artifact_id = "operator_" + digest[:20]
         model["operator_artifact_id"] = artifact_id
         svg = _svg(candles, float(snapshot["current_price"]), references, model["as_of_utc"])
+        svg_4h = _svg(candles_4h, float(snapshot["current_price"]), references, model["as_of_utc"], timeframe="4H") if candles_4h else ""
         banner = f'<section id="status"><h1>Macro Structure Chart-First Operator</h1><p class="safety">{html.escape(SAFETY)}</p><p>symbol={html.escape(symbol)} · checkpoint={html.escape(snapshot["_checkpoint_id"])} · cutoff UTC={html.escape(model["as_of_utc"])} · cutoff JST={html.escape(model["as_of_jst"])} · evaluation UTC={html.escape(model["evaluated_at_utc"])} · evaluation JST={html.escape(model["evaluated_at_jst"])}</p><p>price={html.escape(str(snapshot["current_price"]))} · structure={html.escape(str(snapshot["structure_state"]))} · location={html.escape(str(snapshot["price_location"]))} · stale={html.escape(str(snapshot["stale_status"]))} · continuity={html.escape(str(snapshot["continuity_status"]))} · data_quality={html.escape(str(snapshot["data_quality_status"]))} · snapshot={html.escape(str(snapshot.get("result_status", "")))} · history={html.escape(str(history.get("result_status", "")))}</p></section>'
         evidence_by_id = {item["level_id"]: item for item in support + resistance}
         evidence_by_id.update({item["level_id"]: item for item in references})
         zones_html = _zone_evidence_html([evidence_by_id[key] for key in sorted(evidence_by_id)])
         structure_html = "<ul>" + "".join(f"<li><b>{html.escape(key)}</b>: {html.escape(json.dumps(value, ensure_ascii=False, sort_keys=True) if isinstance(value, (dict,list)) else str(value))}</li>" for key, value in model["structure_panel"].items()) + "</ul>"
         event_html = "".join(f'<h3>{html.escape(category)}</h3><ul>{("".join(f"<li>{html.escape(_event_text(row))}</li>" for row in rows) or "<li>none</li>")}</ul>' for category, rows in categories.items())
-        html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section{{margin:16px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520;font-weight:600}}svg{{width:100%;height:auto}}table{{border-collapse:collapse;display:block;overflow:auto;font-size:11px}}th,td{{border:1px solid #ccd3df;padding:3px;white-space:nowrap}}</style></head><body>{banner}<section id="chart"><h2>Primary 15m chart</h2>{svg}</section><section id="zones"><h2>Reliable support/resistance evidence</h2>{zones_html}</section><section id="structure"><h2>Current structure and location</h2>{structure_html}<p class="safety">directional activation is evidence confidence, not execution permission.</p></section><section id="status-detail"><h2>Volatility, activation, freshness, continuity</h2><pre>{html.escape(json.dumps({**model["freshness"], "volatility_state": snapshot.get("volatility_state"), "expansion_risk": snapshot.get("expansion_risk"), "directional_activation": snapshot.get("directional_activation")}, ensure_ascii=False, sort_keys=True, indent=2))}</pre></section><section id="changes"><h2>Recent chronological changes</h2>{event_html}</section><section id="evidence"><h2>Evidence details and limitations</h2><p>tactical Entry / SL / TP overlays are not included. No live fetch, private inputs, or execution permission.</p></section></body></html>'
+        primary = f'<section id="chart-4h"><h2>4H Macro Structure Chart</h2><p>current price={html.escape(str(snapshot["current_price"]))} · cutoff={html.escape(model["as_of_utc"])} · displayed candles={len(candles_4h)} · range={html.escape(candles_4h[0]["timestamp_utc"])} → {html.escape(candles_4h[-1]["endpoint_utc"])}</p>{svg_4h}</section>' if candles_4h else ''
+        supplemental = f'<section id="chart"><h2>Supplemental 15m manual-confirmation view</h2>{svg}</section>'
+        html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section{{margin:16px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520;font-weight:600}}svg{{width:100%;height:auto}}table{{border-collapse:collapse;display:block;overflow:auto;font-size:11px}}th,td{{border:1px solid #ccd3df;padding:3px;white-space:nowrap}}</style></head><body>{banner}{primary}<section id="zones"><h2>Reliable support/resistance evidence</h2>{zones_html}</section><section id="structure"><h2>Current structure and location</h2>{structure_html}<p class="safety">directional activation is evidence confidence, not execution permission.</p></section>{supplemental}<section id="status-detail"><h2>Volatility, activation, freshness, continuity</h2><pre>{html.escape(json.dumps({**model["freshness"], "volatility_state": snapshot.get("volatility_state"), "expansion_risk": snapshot.get("expansion_risk"), "directional_activation": snapshot.get("directional_activation")}, ensure_ascii=False, sort_keys=True, indent=2))}</pre></section><section id="changes"><h2>Recent chronological changes</h2>{event_html}</section><section id="evidence"><h2>Evidence details and limitations</h2><p>tactical Entry / SL / TP overlays are not included. No live fetch, private inputs, or execution permission.</p></section></body></html>'
         markdown = _render_markdown(model)
         files = {"macro_structure_operator.html": html_text.encode("utf-8"), "macro_structure_operator.json": _json_bytes(model), "macro_structure_operator.md": markdown.encode("utf-8")}
-        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "selected_history_id": history["history_id"], "input_fingerprints": {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint}, "outputs": list(OUTPUT_NAMES), "source": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "selected_history_id": history["history_id"], "input_fingerprints": {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, **({"ohlcv_4h": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {})}, "outputs": list(OUTPUT_NAMES), "source": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
         files["run_manifest.json"] = _json_bytes(manifest)
         latest_snapshot_result = snapshot.get("result_status", "")
         latest_history_result = history.get("result_status", "")

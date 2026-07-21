@@ -133,7 +133,56 @@ def _make_rich_inputs(root: Path) -> tuple[Path, Path, Path]:
     return snapshot_root, history_root, ohlcv
 
 
+def _make_4h_csv(root: Path, *, invalid: bool = False) -> Path:
+    path = root / "ohlcv_4h.csv"
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["timestamp_utc", "open", "high", "low", "close", "interval", "symbol"])
+        writer.writeheader()
+        for index in range(4):
+            start = datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(hours=4 * index)
+            writer.writerow({"timestamp_utc": start.isoformat().replace("+00:00", "Z"), "open": 100 + index, "high": 102 + index, "low": 99 + index, "close": 101 + index, "interval": "1h" if invalid else "4h", "symbol": "BTC_USDT"})
+        writer.writerow({"timestamp_utc": "2026-01-02T01:00:00Z", "open": 200, "high": 201, "low": 199, "close": 200, "interval": "4h", "symbol": "BTC_USDT"})
+    return path
+
+
 class MacroStructureOperatorArtifactTests(unittest.TestCase):
+    def test_valid_4h_input_is_primary_and_excludes_future_candles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); ohlcv_4h = _make_4h_csv(root); output = root / "operator"
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
+            artifact = output / result["artifact_dir"]
+            html_text = (artifact / "macro_structure_operator.html").read_text(encoding="utf-8")
+            model = json.loads((artifact / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertTrue(result["ok"])
+            self.assertLess(html_text.index("4H Macro Structure Chart"), html_text.index("Supplemental 15m manual-confirmation view"))
+            self.assertIn("1H+4H", html_text)
+            self.assertEqual(model["chart_model_4h"]["candle_count"], 4)
+            self.assertNotIn("2026-01-02T01:00:00Z", html_text)
+            self.assertIn("ohlcv_4h_fingerprint", model)
+            self.assertIn("report-only", html_text)
+            self.assertIn("no automatic order", html_text)
+
+    def test_invalid_4h_fails_closed_and_preserves_latest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); valid_4h = _make_4h_csv(root); output = root / "operator"
+            valid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=valid_4h, output_root=output)
+            latest_before = (output / "latest.json").read_bytes()
+            invalid_4h = _make_4h_csv(root, invalid=True)
+            invalid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=invalid_4h, output_root=output)
+            self.assertTrue(valid["ok"])
+            self.assertEqual(invalid["error_code"], "ohlcv_interval_invalid")
+            self.assertEqual((output / "latest.json").read_bytes(), latest_before)
+
+    def test_without_4h_preserves_15m_chart_model_and_supplemental_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            html_text = (output / result["artifact_dir"] / "macro_structure_operator.html").read_text(encoding="utf-8")
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertTrue(result["ok"])
+            self.assertEqual(model["chart_model"]["timeframe"], "15m")
+            self.assertNotIn("chart_model_4h", model)
+            self.assertIn("Supplemental 15m manual-confirmation view", html_text)
     def test_empty_optional_references_are_absent_but_displayed_zones_stay_strict(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
