@@ -3,15 +3,15 @@
 - current_work_id: `BTCFX-20260722-MACRO-STRUCTURE-HEALTH-RUNTIME-INTEGRATION`
 - mode: `RUNTIME_TASK`
 - branch: `Ver04-v3`; confirm from local git before execution
-- implementation_base: `dac7e8f`
+- implementation_base: `aec7587`
 - active_spec: `chatgpt/specs/active/20260722_macro_structure_health_runtime_integration.md`
 - installed_target: `com.afrog.btc-macro-structure`
-- status: human approved
+- status: partial — core live cycle succeeded; health published `inconsistent`
 - push: none
 
 ## Current action
 
-Connect completed M-OPS5 health generation to the existing M-OPS4 wrapper.
+Review the one bounded runtime result after the compatibility fix; M-OPS5 runtime integration is not accepted yet.
 
 Required:
 
@@ -22,6 +22,12 @@ Required:
 5. keep health generation separate from the canonical runtime `steps` list;
 6. do not rewrite the runtime status after health generation;
 7. preserve core exit semantics and safety boundaries;
-8. perform one focused implementation commit and one bounded launchd-triggered acceptance run.
+8. do not repeat the consumed kickstart without explicit new runtime authorization.
+
+Observed blocker:
+
+- health artifact `health_c710b453824f8669ca86` returned `snapshot_latest_symbol_mismatch` because the accepted M-OPS1 latest pointer omitted `symbol`; immutable snapshot evidence contained `BTC_USDT`
+- compatibility fix: `0dbe9d0`
+- core runtime IDs: `run_e9aa2c2554a7e471d97b`, `history_c235747e652ec548ab5e`, `operator_c415a6b130916ffb851f`
 
 Do not add a new LaunchAgent, schedule, fetch, mail, notification, private input, policy, or order path.

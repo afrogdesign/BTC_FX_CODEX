@@ -26,28 +26,31 @@ last_updated: 2026-07-22
 - M-OPS4 runtime implementation: `690c014`
 - M-OPS4 accepted state checkpoint: `61e07a9`
 - M-OPS5 accepted source checkpoint: `dac7e8f`
+- M-OPS5 runtime integration implementation: `aec7587`
+- M-OPS5 snapshot-pointer compatibility fix: `0dbe9d0`
 
 Installed runtime:
 
 - label: `com.afrog.btc-macro-structure`
 - schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
 - current pipeline: public 15m/1h/4h OHLCV → snapshot → history → operator artifact
+- health integration is implemented but runtime acceptance remains partial after one launchd cycle published `inconsistent` with `snapshot_latest_symbol_mismatch`
 - target remains report-only with no private input and no automatic order
 
 M-OPS5:
 
 - command: `check-macro-structure-health`
-- source and focused validation are complete at `dac7e8f`
-- current runtime integration is human approved
+- source and focused validation are complete at `dac7e8f`, with integration implementation at `aec7587` and compatibility fix at `0dbe9d0`
+- one target-only launchd cycle completed core M-OPS1–3 successfully; M-OPS5 published an inconsistent artifact because the M-OPS1 latest pointer omitted symbol
 - required integration: finalized runtime status → one read-only health command → deterministic health artifact
 - no new LaunchAgent, schedule, public fetch, mail, notification, policy, or order path
 
 ## Current selected action
 
-Implement and activate:
+Complete acceptance of:
 
 - work ID: `BTCFX-20260722-MACRO-STRUCTURE-HEALTH-RUNTIME-INTEGRATION`
 - mode: `RUNTIME_TASK`
 - active spec: `chatgpt/specs/active/20260722_macro_structure_health_runtime_integration.md`
 
-Acceptance requires one bounded launchd-triggered cycle proving both runtime status and health artifact publication without changing the six-time schedule or core success/failure semantics.
+Acceptance remains blocked by the observed `snapshot_latest_symbol_mismatch`; do not repeat the consumed kickstart without explicit new runtime authorization.

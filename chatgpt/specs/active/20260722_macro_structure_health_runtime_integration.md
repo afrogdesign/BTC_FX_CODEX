@@ -75,3 +75,17 @@ If runtime acceptance fails, do not repeat the unchanged kickstart. Preserve the
 - core success/failure semantics remain unchanged;
 - no plist, schedule, mail, notification, private-data, policy, or order change;
 - one local implementation commit and one factual state commit when runtime acceptance succeeds.
+
+## Bounded runtime attempt — partial
+
+- implementation commit: `aec7587`
+- target: `com.afrog.btc-macro-structure` remained loaded
+- repository and installed plist SHA-256 remained `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`
+- schedule remained `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10` JST
+- one target-only kickstart was performed; no second kickstart or manual wrapper run was performed
+- core runtime succeeded with snapshot `run_e9aa2c2554a7e471d97b` / `macro_snapshot_e9aa2c2554a7e471d97b`, history `history_c235747e652ec548ab5e`, and operator `operator_c415a6b130916ffb851f`
+- runtime status remained report-only, public-input-only, no-private-input, and no-automatic-order
+- health generation published `health_c710b453824f8669ca86` but returned `inconsistent` with `snapshot_latest_symbol_mismatch`
+- the observed blocker was that the accepted M-OPS1 snapshot `latest.json` omitted `symbol` while the immutable snapshot contained and validated `BTC_USDT`
+- source compatibility fix `0dbe9d0` accepts that existing pointer omission while retaining strict validation for a non-empty mismatching symbol; no additional live cycle was authorized or performed
+- M-OPS5 runtime integration remains unaccepted and this spec remains active
