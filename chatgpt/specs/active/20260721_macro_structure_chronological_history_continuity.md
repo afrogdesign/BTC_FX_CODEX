@@ -219,4 +219,6 @@ The bounded implementation adds `run-macro-structure-history` as a report-only d
 
 FIX-01 retains every evaluation-specific freshness/status record, carries level absence across consecutive checkpoints, and renders bounded transition events in Markdown while keeping canonical structural content separate from the latest reevaluation.
 
+FIX-02 versions the history contract as v2, preserves legacy v1 artifacts, and makes snapshot and level transition checkpoint identities and affected level IDs explicit.
+
 After acceptance, M-OPS3 connects the accepted snapshot and history summary to a chart-first local operator artifact. Runtime enablement remains a separate approval task.

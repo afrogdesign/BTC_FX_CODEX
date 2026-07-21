@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-METHOD_VERSION = "macro_structure_history_operation.v1"
-SCHEMA_VERSION = "macro_structure_history_operation.v1"
+METHOD_VERSION = "macro_structure_history_operation.v2"
+SCHEMA_VERSION = "macro_structure_history_operation.v2"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 OUTPUT_NAMES = (
     "macro_structure_history.json",
@@ -28,7 +28,7 @@ LEVEL_FIELDS = (
     "reliability_band", "distance_from_price_pct", "distance_from_price_atr", "reason_codes",
 )
 CSV_FIELDS = (
-    "symbol", "checkpoint_index", "checkpoint_id", "level_status", *LEVEL_FIELDS,
+    "schema_version", "method_version", "symbol", "checkpoint_index", "checkpoint_id", "level_status", *LEVEL_FIELDS,
     "reliability_score_delta", "reliability_band_transition", "role_transition",
     "lifecycle_transition", "touch_count_delta", "clean_rejection_count_delta",
     "break_count_delta", "false_break_reclaim_count_delta", "geometry_changed",
@@ -36,7 +36,7 @@ CSV_FIELDS = (
     "observation_present", "retirement_status",
 )
 SNAPSHOT_FIELDS = (
-    "symbol", "checkpoint_index", "checkpoint_id", "as_of_utc", "evaluated_at_utc",
+    "schema_version", "method_version", "symbol", "checkpoint_index", "checkpoint_id", "as_of_utc", "evaluated_at_utc",
     "structure_state", "price_location", "location_percentile", "current_price",
     "nearest_reliable_support_id", "nearest_reliable_resistance_id",
     "next_upside_target_id", "next_downside_target_id", "upside_obstruction",
@@ -53,7 +53,7 @@ SNAPSHOT_CHANGE_FIELDS = (
     "data_quality_status", "reliability_band_counts",
 )
 CHANGE_FIELDS = (
-    "symbol", "checkpoint_index", "checkpoint_id", "previous_checkpoint_id", "change_type",
+    "schema_version", "method_version", "symbol", "checkpoint_index", "checkpoint_id", "previous_checkpoint_id", "change_type", "level_id",
     "field", "previous_value", "current_value",
 )
 REQUIRED_INPUT_FILES = (
@@ -218,7 +218,7 @@ def _level_row(level: dict[str, Any], checkpoint: dict[str, Any], previous: dict
     return row
 
 
-def _snapshot_row(record: dict[str, Any], index: int, previous: dict[str, Any] | None) -> dict[str, Any]:
+def _snapshot_row(record: dict[str, Any], index: int, previous: dict[str, Any] | None, latest_evaluation: dict[str, Any]) -> dict[str, Any]:
     snapshot = record["snapshot"]
     def nested_id(name: str) -> str:
         value = snapshot.get(name) or {}
@@ -236,8 +236,8 @@ def _snapshot_row(record: dict[str, Any], index: int, previous: dict[str, Any] |
         "continuity_status": _text(snapshot.get("continuity_status")), "data_quality_status": _text(snapshot.get("data_quality_status")),
         "reliability_band_counts": snapshot.get("reliability_band_counts", {}),
         "previous_checkpoint_id": previous["checkpoint_id"] if previous else "", "transition_status": "continued" if previous else "no_previous_transition",
-        "canonical_structural_run_id": record["run_id"], "latest_evaluation_run_id": record["run_id"],
-        "latest_evaluated_at_utc": record["evaluated"].isoformat(),
+        "canonical_structural_run_id": record["run_id"], "latest_evaluation_run_id": latest_evaluation["run_id"],
+        "latest_evaluated_at_utc": latest_evaluation["evaluated"].isoformat(),
     }
     return row
 
@@ -260,11 +260,11 @@ def _change_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for field, transition in (("reliability_band", row["reliability_band_transition"]), ("role", row["role_transition"]), ("lifecycle", row["lifecycle_transition"])):
             if transition:
                 before, after = transition.split("->", 1)
-                changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": "level_transition", "field": field, "previous_value": before, "current_value": after})
+                changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": "level_transition", "level_id": row["level_id"], "field": field, "previous_value": before, "current_value": after})
         if row["level_status"] in {"absent_from_checkpoint", "absent_from_latest", "reappeared"}:
-            changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": row["level_status"], "field": "level_id", "previous_value": row["level_id"], "current_value": row["level_id"]})
+            changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": row["level_status"], "level_id": row["level_id"], "field": "level_id", "previous_value": row["level_id"], "current_value": row["level_id"]})
         if row["geometry_changed"]:
-            changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": "level_transition", "field": "geometry", "previous_value": "changed", "current_value": "changed"})
+            changes.append({"symbol": row["symbol"], "checkpoint_index": row["checkpoint_index"], "checkpoint_id": row["checkpoint_id"], "previous_checkpoint_id": row["previous_checkpoint_id"], "change_type": "level_transition", "level_id": row["level_id"], "field": "geometry", "previous_value": "changed", "current_value": "changed"})
     return changes
 
 
@@ -273,12 +273,12 @@ def _snapshot_change_rows(snapshot_rows: list[dict[str, Any]]) -> list[dict[str,
     for index, current in enumerate(snapshot_rows):
         previous = snapshot_rows[index - 1] if index else None
         if previous is None:
-            changes.append({"symbol": current["symbol"], "checkpoint_index": current["checkpoint_index"], "checkpoint_id": current["checkpoint_id"], "previous_checkpoint_id": "", "change_type": "no_previous_transition", "field": "snapshot", "previous_value": "", "current_value": ""})
+            changes.append({"symbol": current["symbol"], "checkpoint_index": current["checkpoint_index"], "checkpoint_id": current["checkpoint_id"], "previous_checkpoint_id": "", "change_type": "no_previous_transition", "level_id": "", "field": "snapshot", "previous_value": "", "current_value": ""})
             continue
         for field in SNAPSHOT_CHANGE_FIELDS:
             before, after = _stable_value(previous.get(field)), _stable_value(current.get(field))
             if before != after:
-                changes.append({"symbol": current["symbol"], "checkpoint_index": current["checkpoint_index"], "checkpoint_id": current["checkpoint_id"], "previous_checkpoint_id": current["previous_checkpoint_id"], "change_type": "snapshot_transition", "field": field, "previous_value": before, "current_value": after})
+                changes.append({"symbol": current["symbol"], "checkpoint_index": current["checkpoint_index"], "checkpoint_id": current["checkpoint_id"], "previous_checkpoint_id": current["previous_checkpoint_id"], "change_type": "snapshot_transition", "level_id": "", "field": field, "previous_value": before, "current_value": after})
     return changes
 
 
@@ -313,7 +313,7 @@ def _markdown(history: dict[str, Any]) -> str:
     reappearances = [row for row in changes if row.get("change_type") == "reappeared"]
     stale = [row for row in evaluations if row.get("stale_status") == "stale" or row.get("continuity_status") == "discontinuous" or row.get("data_quality_status") == "discontinuous"]
     lines = [
-        "# Macro Structure Chronological History", "", f"- symbol: `{history['symbol']}`", f"- evaluations: `{history['evaluation_count']}`", f"- structural checkpoints: `{history['structural_checkpoint_count']}`", f"- first cutoff: `{history.get('first_as_of_utc', '')}`", f"- latest cutoff: `{history.get('latest_as_of_utc', '')}`", "", "## Latest structural changes", "", f"- canonical structural run: `{latest.get('canonical_structural_run_id', '')}`", f"- latest evaluation run: `{latest.get('latest_evaluation_run_id', '')}`", f"- latest structure: `{latest.get('structure_state', '')}`", f"- latest location: `{latest.get('price_location', '')}`", *_event_lines(snapshot_changes, lambda row: f"- {row['field']}: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Reliability upgrades and downgrades", *_event_lines(reliability, lambda row: f"- checkpoint `{row['checkpoint_id']}`: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Role changes", *_event_lines(roles, lambda row: f"- level `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Lifecycle changes", *_event_lines(lifecycles, lambda row: f"- level `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Absence from checkpoint/latest", *_event_lines(absences, lambda row: f"- `{row['change_type']}`: level `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Reappearances", *_event_lines(reappearances, lambda row: f"- level `{row['current_value']}` reappeared at `{row['checkpoint_id']}`"), "", "## Stale or discontinuous evaluations", *_event_lines(stale, lambda row: f"- run `{row['run_id']}` at `{row['evaluated_at_utc']}`: stale=`{row['stale_status']}`, continuity=`{row['continuity_status']}`, data_quality=`{row['data_quality_status']}`, reasons=`{','.join(row.get('reason_codes', []))}`"), "", "## Evidence limitations", "", "A missing level is not permanent retirement; each absence has `retirement_status=not_established` unless an accepted source field establishes retirement.", "", "## Safety boundary", "", SAFETY, ""]
+        "# Macro Structure Chronological History", "", f"- schema: `{history['schema_version']}`", f"- method: `{history['method_version']}`", f"- symbol: `{history['symbol']}`", f"- evaluations: `{history['evaluation_count']}`", f"- structural checkpoints: `{history['structural_checkpoint_count']}`", f"- first cutoff: `{history.get('first_as_of_utc', '')}`", f"- latest cutoff: `{history.get('latest_as_of_utc', '')}`", "", "## Latest structural changes", "", f"- canonical structural run: `{latest.get('canonical_structural_run_id', '')}`", f"- latest evaluation run: `{latest.get('latest_evaluation_run_id', '')}`", f"- latest structure: `{latest.get('structure_state', '')}`", f"- latest location: `{latest.get('price_location', '')}`", *_event_lines(snapshot_changes, lambda row: f"- {row['field']}: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Reliability upgrades and downgrades", *_event_lines(reliability, lambda row: f"- level `{row['level_id']}` at checkpoint `{row['checkpoint_id']}`: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Role changes", *_event_lines(roles, lambda row: f"- level `{row['level_id']}`: `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Lifecycle changes", *_event_lines(lifecycles, lambda row: f"- level `{row['level_id']}`: `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Absence from checkpoint/latest", *_event_lines(absences, lambda row: f"- `{row['change_type']}`: level `{row['level_id']}` at `{row['checkpoint_id']}`"), "", "## Reappearances", *_event_lines(reappearances, lambda row: f"- level `{row['level_id']}` reappeared at `{row['checkpoint_id']}`"), "", "## Stale or discontinuous evaluations", *_event_lines(stale, lambda row: f"- run `{row['run_id']}` at `{row['evaluated_at_utc']}`: stale=`{row['stale_status']}`, continuity=`{row['continuity_status']}`, data_quality=`{row['data_quality_status']}`, reasons=`{','.join(row.get('reason_codes', []))}`"), "", "## Evidence limitations", "", "A missing level is not permanent retirement; each absence has `retirement_status=not_established` unless an accepted source field establishes retirement.", "", "## Safety boundary", "", SAFETY, ""]
     return "\n".join(lines)
 
 
@@ -354,7 +354,7 @@ def build_macro_structure_history(*, snapshot_root: Path = Path("local/reports/m
         }
         for index, record in enumerate(canonical):
             record["index"] = index
-        snapshot_rows = [_snapshot_row(record, index, canonical[index - 1] if index else None) for index, record in enumerate(canonical)]
+        snapshot_rows = [_snapshot_row(record, index, canonical[index - 1] if index else None, latest_evaluation_by_checkpoint[record["checkpoint_id"]]) for index, record in enumerate(canonical)]
         level_rows: list[dict[str, Any]] = []
         prior_levels: dict[str, dict[str, Any]] = {}
         last_observed_levels: dict[str, dict[str, Any]] = {}
@@ -366,16 +366,22 @@ def build_macro_structure_history(*, snapshot_root: Path = Path("local/reports/m
             for level_id in sorted(current_ids):
                 previous = last_observed_levels.get(level_id)
                 status = "reappeared" if previous is not None and level_id not in prior_levels else "first_observation" if previous is None else "continued"
-                level_rows.append(_level_row(current_levels[level_id], record, previous, status, prior_checkpoint_id, record["checkpoint_id"]))
+                previous_observation_checkpoint_id = "" if status == "first_observation" else previous.get("_last_observed_checkpoint_id", prior_checkpoint_id)
+                level_rows.append(_level_row(current_levels[level_id], record, previous, status, previous_observation_checkpoint_id, record["checkpoint_id"], last_observed_checkpoint_id=record["checkpoint_id"]))
             for level_id in sorted(set(last_observed_levels) - current_ids):
                 status = "absent_from_latest" if index == len(canonical) - 1 else "absent_from_checkpoint"
-                level_rows.append(_level_row(last_observed_levels[level_id], record, None, status, prior_checkpoint_id, record["checkpoint_id"], observation_present=False, last_observed_checkpoint_id=last_observed_levels[level_id]["_last_observed_checkpoint_id"]))
+                last_observed_checkpoint_id = last_observed_levels[level_id]["_last_observed_checkpoint_id"]
+                level_rows.append(_level_row(last_observed_levels[level_id], record, None, status, last_observed_checkpoint_id, record["checkpoint_id"], observation_present=False, last_observed_checkpoint_id=last_observed_checkpoint_id))
             for level in current_levels.values():
                 level["_last_observed_checkpoint_id"] = record["checkpoint_id"]
             last_observed_levels.update(current_levels)
             prior_levels = current_levels
             prior_checkpoint_id = record["checkpoint_id"]
         changes = _snapshot_change_rows(snapshot_rows) + _change_rows(level_rows)
+        for rows in (snapshot_rows, level_rows, changes):
+            for row in rows:
+                row["schema_version"] = SCHEMA_VERSION
+                row["method_version"] = METHOD_VERSION
         source_digest = hashlib.sha256("".join(f"{item['run_id']}:{item['source_hash']}" for item in evaluations).encode()).hexdigest()
         history_id = "history_" + hashlib.sha256(f"{SCHEMA_VERSION}|{METHOD_VERSION}|{symbol}|{source_digest}".encode()).hexdigest()[:20]
         evaluation_history = [_evaluation_fields(item, canonical_by_checkpoint[item["checkpoint_id"]]["run_id"]) for item in evaluations]

@@ -7,7 +7,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.feedback.macro_structure_history_operation import OUTPUT_NAMES, build_macro_structure_history
+from src.feedback.macro_structure_history_operation import METHOD_VERSION, OUTPUT_NAMES, SCHEMA_VERSION, build_macro_structure_history
 
 
 LEVEL_FIELDS = (
@@ -167,6 +167,65 @@ class MacroStructureHistoryOperationTests(unittest.TestCase):
             changes = list(csv.DictReader(handle))
         self.assertGreaterEqual(sum(row["change_type"] == "absent_from_checkpoint" for row in changes), 3)
         self.assertTrue(any(row["change_type"] == "reappeared" for row in changes))
+
+    def test_level_observation_checkpoint_identity_matches_comparison(self) -> None:
+        root = Path(self.temp.name) / "identity"
+        root.mkdir()
+        l1, l2 = _level("L1"), _level("L2")
+        _write_run(root, "run_1", "2026-01-01T00:00:00+00:00", "2026-01-01T01:00:00+00:00", [l1, l2], fingerprint="1")
+        _write_run(root, "run_2", "2026-01-02T00:00:00+00:00", "2026-01-02T01:00:00+00:00", [l1], fingerprint="2")
+        _write_run(root, "run_3", "2026-01-03T00:00:00+00:00", "2026-01-03T01:00:00+00:00", [l1], fingerprint="3")
+        _write_run(root, "run_4", "2026-01-04T00:00:00+00:00", "2026-01-04T01:00:00+00:00", [l1, l2], fingerprint="4")
+        result = build_macro_structure_history(snapshot_root=root, output_root=self.output)
+        with (self.output / result["artifact_dir"] / "macro_level_history.csv").open(newline="", encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if row["level_id"] == "L2"]
+        first, absent, reappeared = rows[0], rows[1], rows[-1]
+        self.assertEqual(first["previous_checkpoint_id"], "")
+        self.assertEqual(first["current_checkpoint_id"], first["last_observed_checkpoint_id"])
+        self.assertEqual(absent["previous_checkpoint_id"], first["current_checkpoint_id"])
+        self.assertEqual(absent["last_observed_checkpoint_id"], first["current_checkpoint_id"])
+        self.assertNotEqual(absent["current_checkpoint_id"], absent["last_observed_checkpoint_id"])
+        self.assertEqual(reappeared["level_status"], "reappeared")
+        self.assertEqual(reappeared["previous_checkpoint_id"], first["current_checkpoint_id"])
+        self.assertEqual(reappeared["current_checkpoint_id"], reappeared["last_observed_checkpoint_id"])
+
+    def test_v2_identity_migrates_alongside_legacy_and_csv_is_auditable(self) -> None:
+        legacy = self.output / "history_legacy_v1"
+        legacy.mkdir(parents=True)
+        legacy_bytes = {}
+        for name in OUTPUT_NAMES:
+            legacy_bytes[name] = b"legacy-v1\n"
+            (legacy / name).write_bytes(legacy_bytes[name])
+        (self.output / "latest.json").write_bytes(b'{"history_id":"history_legacy_v1","schema_version":"macro_structure_history_operation.v1"}\n')
+        result = build_macro_structure_history(snapshot_root=self.root, output_root=self.output)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["artifact_dir"] != legacy.name)
+        artifact = self.output / result["artifact_dir"]
+        self.assertEqual(json.loads((artifact / "macro_structure_history.json").read_text())["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(json.loads((artifact / "macro_structure_history.json").read_text())["method_version"], METHOD_VERSION)
+        self.assertEqual(json.loads((artifact / "run_manifest.json").read_text())["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(json.loads((self.output / "latest.json").read_text())["schema_version"], SCHEMA_VERSION)
+        self.assertIn(f"schema: `{SCHEMA_VERSION}`", (artifact / "macro_structure_history.md").read_text())
+        for name in ("macro_snapshot_history.csv", "macro_level_history.csv", "macro_structure_changes.csv"):
+            header = (artifact / name).read_text().splitlines()[0]
+            self.assertTrue(header.startswith("schema_version,method_version,"))
+        self.assertTrue(all((legacy / name).read_bytes() == legacy_bytes[name] for name in OUTPUT_NAMES))
+        before = {name: (artifact / name).read_bytes() for name in OUTPUT_NAMES}
+        repeated = build_macro_structure_history(snapshot_root=self.root, output_root=self.output)
+        self.assertEqual(repeated["history_id"], result["history_id"])
+        self.assertTrue(all((artifact / name).read_bytes() == before[name] for name in OUTPUT_NAMES))
+
+    def test_snapshot_csv_separates_canonical_and_latest_evaluation(self) -> None:
+        changed = _level("L1", side="low", role="resistance", band="high", lifecycle="broken", center="101")
+        reappeared = _level("L2", side="high", role="resistance", band="medium", center="111")
+        _write_run(self.root, "run_c_recheck", "2026-01-03T00:00:00+00:00", "2026-01-03T02:00:00+00:00", [changed, reappeared], fingerprint="fp-c", structure_state="reversal", price_location="upper_half", current_price=102)
+        result = build_macro_structure_history(snapshot_root=self.root, output_root=self.output)
+        with (self.output / result["artifact_dir"] / "macro_snapshot_history.csv").open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        row = next(item for item in rows if item["canonical_structural_run_id"] == "run_c")
+        self.assertEqual(row["evaluated_at_utc"], "2026-01-03T01:00:00+00:00")
+        self.assertEqual(row["latest_evaluation_run_id"], "run_c_recheck")
+        self.assertEqual(row["latest_evaluated_at_utc"], "2026-01-03T02:00:00+00:00")
 
     def test_final_absence_is_explicit_and_not_active(self) -> None:
         root = Path(self.temp.name) / "final-absence"
