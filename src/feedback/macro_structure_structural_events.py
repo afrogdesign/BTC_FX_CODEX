@@ -334,6 +334,12 @@ def _sequence_events(obj: dict[str, Any], candles: list[dict[str, Any]], current
             rearm_direction = break_direction
             index = (retest_index + 1 if retest_index is not None else acceptance_index + 1)
             continue
+        available_followups = len(candles) - index - 1
+        if available_followups < RECLAIM_BARS:
+            # The fixed resolution window has not been observed yet.  Keep
+            # this same break event pending and stop this object's scan; no
+            # future bar may be inferred from the cutoff.
+            return result
         break_event["sequence_status"] = "unresolved"
         rearmed = False
         rearm_direction = break_direction

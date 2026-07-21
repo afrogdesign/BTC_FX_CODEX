@@ -131,6 +131,16 @@ class MacroStructureStructuralEventTests(unittest.TestCase):
         rearmed = unresolved + [(100, 103, 99, 100), (100, 100, 96, 97), (97, 100, 96, 98.5), (98, 100, 96, 98.5), (98, 100, 96, 98.5), (98, 100, 96, 98.5)]
         self.assertEqual(len([event for event in model(rearmed)["events"] if event["event_type"] == "break"]), 2)
 
+    def test_incomplete_reclaim_window_stays_pending_with_stable_break_id(self) -> None:
+        prefix = [(100, 103, 97, 100)] * 3 + [(100, 100, 96, 97)]
+        followup = (97, 100, 96, 98.5)
+        snapshots = [model(prefix + [followup] * count)["events"] for count in range(4)]
+        breaks = [[event for event in events if event["event_type"] == "break"] for events in snapshots]
+        self.assertEqual([len(items) for items in breaks], [1, 1, 1, 1])
+        self.assertEqual(len({items[0]["event_id"] for items in breaks}), 1)
+        self.assertEqual([items[0]["sequence_status"] for items in breaks], ["pending", "pending", "pending", "unresolved"])
+        self.assertEqual(len([event for event in snapshots[2] if event["event_type"] == "break"]), 1)
+
     def test_parent_aware_retention_is_bounded(self) -> None:
         base = {"event_status": "confirmed", "sequence_status": "neutral", "event_type": "touch", "parent_event_id": "", "object_kind": "horizontal_zone"}
         events = []
