@@ -13,6 +13,7 @@ from src.feedback.macro_p9_proposal_engine import (
     _dominates,
     _date_concentration,
     _m1_metrics,
+    _m3_quality_ok,
     _performance_snapshot_dates,
     _rolling_snapshots,
     _snapshot_record,
@@ -23,6 +24,7 @@ from src.feedback.macro_p9_proposal_engine import (
     _p8_gate_ok,
     _candidate_rolling_evidence,
     _champion_snapshot_failure_reasons,
+    _champion_artifacts_match,
     _guarded_vector,
     _public_snapshot,
     _snapshot_eligible,
@@ -44,6 +46,35 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         _validate_champion_manifest(champion())
         space = {"schema_version": SPACE_SCHEMA, "method_version": METHOD_VERSION, "one_at_a_time": [{"parameter": "left_window", "values": [1, 3]}], "combinations": []}
         self.assertEqual([{"left_window": 1, "right_window": 2}, {"left_window": 3, "right_window": 2}], _expand_space(space, champion()))
+
+    def test_manifest_id_is_bound_to_deterministic_parameters(self):
+        value = champion()
+        value["champion_id"] = "wrong-id"
+        with self.assertRaisesRegex(ValueError, "champion_manifest_id_mismatch"):
+            _validate_champion_manifest(value)
+
+    def test_fresh_replay_json_is_part_of_champion_identity(self):
+        keys = ("m1_events", "m1_levels", "m1_misses", "m1_replay", "m3_events", "m3_episodes", "m3_replay")
+        supplied = {key: {"sha256": key, "ids": {}} for key in keys}
+        fresh = {key: {"sha256": key, "ids": {}} for key in keys}
+        declared = {key: key for key in keys}
+        self.assertTrue(_champion_artifacts_match(fresh, supplied, declared))
+        fresh["m1_replay"]["sha256"] = "drifted-replay-json"
+        self.assertFalse(_champion_artifacts_match(fresh, supplied, declared))
+
+    def test_m3_quality_uses_accepted_coverage_continuity_contract(self):
+        metrics = {"directional_precision": 0.5, "opposite_move_rate": 0.1, "balanced_no_expansion_rate": 0.5, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "resolved_up_count": 10, "resolved_down_count": 10}
+        summary = {"recommendation": {"validation_data_quality_pass": True, "validation_candidate_metrics": {"3h": metrics}}, "data_quality": {"coverage_continuity_pass": True}}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "m3.json"
+            path.write_text(json.dumps(summary))
+            self.assertTrue(_m3_quality_ok(path))
+            summary["data_quality"]["coverage_continuity_pass"] = False
+            path.write_text(json.dumps(summary))
+            self.assertFalse(_m3_quality_ok(path))
+            del summary["data_quality"]["coverage_continuity_pass"]
+            path.write_text(json.dumps(summary))
+            self.assertFalse(_m3_quality_ok(path))
 
     def test_unknown_parameter_and_bool_fail_closed(self):
         value = champion()
@@ -240,6 +271,7 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "balanced_no_expansion_rate": 0.5, "resolved_up_count": 10, "resolved_down_count": 10}
         m1_summary = {"schema_version": "macro_structure_volatility_replay.v1", "method_version": "macro_structure_volatility_replay.v1", "recommendation_gate": {"validation_policy_metrics": {"reliable_level_acceptance_corridor": metrics}}, "coverage": {"continuity_pass": True}}
         m3_summary = {"schema_version": "macro_next_regime_replay.v1", "method_version": "macro_next_regime_replay.v1", "recommendation": {"validation_candidate_metrics": {"3h": metrics, "6h": metrics, "12h": metrics, "24h": metrics}, "validation_dates": ["2026-07-19"], "validation_data_quality_pass": True}, "coverage": {"continuity_pass": True}}
+        m3_summary["recommendation"]["validation_candidate_metrics"]["6h"] = dict(metrics)
         split_keys_m1 = ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")
         split_keys_m3 = ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")
         m1_split_values = {key: metrics[key] for key in split_keys_m1}
@@ -269,6 +301,7 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
             output_paths = {name: root / name for name in ("results.csv", "issues.csv", "report.json", "report.md")}
             calls = []
             bounded_counts = []
+            candidate_mode = {"value": "no_pareto"}
 
             def fake_run(candidate, input_paths, fixed, temp_root):
                 calls.append((candidate, fixed.get("cutoff_utc")))
@@ -280,8 +313,9 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
                 candidate_m1 = json.loads(json.dumps(m1_summary if rolling_cutoff else terminal_m1_summary))
                 candidate_m3 = json.loads(json.dumps(m3_summary if rolling_cutoff else terminal_m3_summary))
                 if candidate != {"left_window": 2, "right_window": 2}:
-                    candidate_m1["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"].update({"directional_precision": 0.4, "large_move_recall": 0.4, "false_warning_rate": 0.08, "opposite_move_rate": 0.08, "whipsaw_rate": 0.08, "burden_per_jst_day": 0.8})
-                    candidate_m3["recommendation"]["validation_candidate_metrics"]["3h"].update({"directional_precision": 0.4, "opposite_move_rate": 0.08, "balanced_no_expansion_rate": 0.2, "whipsaw_rate": 0.08, "burden_per_jst_day": 0.8})
+                    values = {"directional_precision": 0.6, "large_move_recall": 0.6, "false_warning_rate": 0.05, "opposite_move_rate": 0.05, "whipsaw_rate": 0.05, "burden_per_jst_day": 0.5, "balanced_no_expansion_rate": 0.2} if candidate_mode["value"] == "winner" else {"directional_precision": 0.4, "large_move_recall": 0.4, "false_warning_rate": 0.08, "opposite_move_rate": 0.08, "whipsaw_rate": 0.08, "burden_per_jst_day": 0.8, "balanced_no_expansion_rate": 0.2}
+                    candidate_m1["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"].update({key: values[key] for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")})
+                    candidate_m3["recommendation"]["validation_candidate_metrics"]["3h"].update({key: values[key] for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")})
                 (m1_dir / "replay.json").write_text(json.dumps(candidate_m1))
                 (m3_dir / "replay.json").write_text(json.dumps(candidate_m3))
                 (m1_dir / "events.csv").write_text(paths["m1_events"].read_text())
@@ -299,30 +333,75 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
                 (m3_dir / "episodes.csv").write_text(f"episode_id,policy,start_timestamp_utc\nepisode,candidate,{snapshot_date}T01:00:00Z\n")
                 return {"candidate_id": candidate_id(candidate), "parameters": candidate, "m1": m1_dir, "m3": m3_dir}
 
-            def execute():
-                return run_macro_p9_proposal_engine(signals=paths["signals"], ohlcv_15m=paths["ohlcv_15m"], ohlcv_1h=paths["ohlcv_1h"], ohlcv_4h=paths["ohlcv_4h"], m1_events_csv=paths["m1_events"], m1_levels_csv=paths["m1_levels"], m1_misses_csv=paths["m1_misses"], m1_replay_json=m1_json, m3_events_csv=paths["m3_events"], m3_episodes_csv=paths["m3_episodes"], m3_replay_json=m3_json, champion_manifest=champion_path, proposal_space_manifest=space_path, output_results_csv=output_paths["results.csv"], output_issues_csv=output_paths["issues.csv"], output_json=output_paths["report.json"], output_md=output_paths["report.md"], replace_output=True)
+            p8_facts = root / "p8_facts.csv"; p8_report = root / "p8_report.json"
+            p8_facts.write_text("actual_episode_id,evidence_tier\n" + "".join(f"episode-{index},actual_high_medium\n" for index in range(50)))
+            p8_report.write_text(json.dumps({"actual_evidence": {"status": "provided"}, "p9_readiness": {"practical": {"ready": True}}}))
 
-            with patch("src.feedback.macro_p9_proposal_engine._fingerprints", return_value={}), patch("src.feedback.macro_p9_proposal_engine._artifact_signature", return_value={}), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._date_concentration", return_value={"pass": True}):
+            def execute(p8=False):
+                options = {"p8_trial_facts_csv": p8_facts, "p8_trial_report_json": p8_report} if p8 else {}
+                return run_macro_p9_proposal_engine(signals=paths["signals"], ohlcv_15m=paths["ohlcv_15m"], ohlcv_1h=paths["ohlcv_1h"], ohlcv_4h=paths["ohlcv_4h"], m1_events_csv=paths["m1_events"], m1_levels_csv=paths["m1_levels"], m1_misses_csv=paths["m1_misses"], m1_replay_json=m1_json, m3_events_csv=paths["m3_events"], m3_episodes_csv=paths["m3_episodes"], m3_replay_json=m3_json, champion_manifest=champion_path, proposal_space_manifest=space_path, output_results_csv=output_paths["results.csv"], output_issues_csv=output_paths["issues.csv"], output_json=output_paths["report.json"], output_md=output_paths["report.md"], replace_output=True, **options)
+
+            with patch("src.feedback.macro_p9_proposal_engine._fingerprints", return_value={}), patch("src.feedback.macro_p9_proposal_engine._artifact_signature", return_value={}), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._date_concentration", side_effect=lambda episodes, dates: {"pass": True} if episodes else {"status": "not_established", "validation_dates": sorted(set(dates)), "max_jst_date": None, "max_date_episode_count": 0, "validation_candidate_episode_count": 0, "ratio": None, "pass": False}):
                 first = execute()
                 first_bytes = {path: path.read_bytes() for path in output_paths.values()}
                 calls.clear()
                 second = execute()
                 self.assertEqual(first, second)
                 self.assertEqual(first_bytes, {path: path.read_bytes() for path in output_paths.values()})
+                initial_champion_calls = sum(1 for candidate, cutoff in calls if candidate == {"left_window": 2, "right_window": 2} and str(cutoff).startswith("2026-07-"))
+                self.assertEqual(2, initial_champion_calls)
+                initial_report = json.loads(output_paths["report.json"].read_text())
+                initial_issues = output_paths["issues.csv"].read_text()
+                initial_results = output_paths["results.csv"].read_text()
+                no_pareto = execute(p8=True)
+                no_pareto_report = json.loads(output_paths["report.json"].read_text())
+                self.assertEqual("continue_shadow_collection", no_pareto["recommendation"])
+                self.assertIn("no_pareto_dominant_challenger", no_pareto_report["reason_codes"])
+                self.assertNotIn("p8_actual_evidence_insufficient", no_pareto_report["reason_codes"])
+                with output_paths["issues.csv"].open() as handle:
+                    self.assertEqual(0, sum(1 for row in csv.DictReader(handle) if row["candidate_id"] == "REPORT_GLOBAL"))
+                candidate_mode["value"] = "winner"
+                winner_result = execute(p8=True)
+                winner_report = json.loads(output_paths["report.json"].read_text())
+                self.assertEqual("eligible_for_human_reviewed_proposal", winner_result["recommendation"])
+                self.assertNotEqual("none", winner_report["winner"])
+                winner_record = next(row for row in winner_report["candidate_validation_results"] if row["candidate_id"] == winner_report["winner"])
+                self.assertTrue(winner_record["proposal_eligible"])
+                self.assertNotIn("p8_actual_evidence_insufficient", winner_record["reason_codes"])
+                with output_paths["issues.csv"].open() as handle:
+                    self.assertEqual(0, sum(1 for row in csv.DictReader(handle) if row["candidate_id"] == "REPORT_GLOBAL"))
+                baseline_winner = winner_report["winner"]
+                m3_summary["recommendation"]["validation_candidate_metrics"]["6h"]["directional_precision"] = 0.99
+                diagnostic_changed = execute(p8=True)
+                diagnostic_report = json.loads(output_paths["report.json"].read_text())
+                self.assertEqual(baseline_winner, diagnostic_report["winner"])
+                self.assertEqual("eligible_for_human_reviewed_proposal", diagnostic_changed["recommendation"])
+                with patch("src.feedback.macro_p9_proposal_engine._performance_snapshot_dates", return_value=[]):
+                    isolated = execute()
+                isolated_report = json.loads(output_paths["report.json"].read_text())
+                isolated_record = next(row for row in isolated_report["candidate_validation_results"] if row["candidate_id"] != isolated_report["champion"]["candidate_id"])
+                self.assertEqual("{}", isolated_record["m1_validation_3h_json"])
+                self.assertEqual("{}", isolated_record["m3_validation_3h_json"])
+                self.assertEqual("{}", isolated_record["m3_diagnostic_horizons_json"])
+                self.assertEqual("{}", isolated_record["m1_split_comparison_json"])
+                self.assertEqual("{}", isolated_record["m3_split_comparison_json"])
+                self.assertEqual("not_established", json.loads(isolated_record["validation_date_concentration_json"])["status"])
+                self.assertFalse(isolated_record["comparison_eligible"])
+                self.assertFalse(isolated_record["pareto_dominant"])
+                self.assertIn("rolling_comparison_not_established", isolated_record["reason_codes"])
             self.assertEqual(2, first["candidate_count"])
             self.assertEqual(4, first["output_count"])
-            self.assertEqual(2, sum(1 for candidate, cutoff in calls if candidate == {"left_window": 2, "right_window": 2} and str(cutoff).startswith("2026-07-")))
-            report = json.loads(output_paths["report.json"].read_text())
+            report = initial_report
             self.assertEqual(1, report["counts"]["champion_count"])
             self.assertEqual(1, report["counts"]["challenger_count"])
-            with output_paths["issues.csv"].open() as handle:
+            with __import__("io").StringIO(initial_issues) as handle:
                 self.assertEqual(1, sum(1 for row in csv.DictReader(handle) if row["candidate_id"] == "REPORT_GLOBAL"))
             challenger_record = next(row for row in report["candidate_validation_results"] if row["candidate_id"] != report["champion"]["candidate_id"])
             self.assertTrue(challenger_record["comparison_eligible"])
             self.assertFalse(challenger_record["pareto_dominant"])
             self.assertTrue(_dominates(_guarded_vector(json.loads(challenger_record["m1_validation_3h_json"]), json.loads(challenger_record["m3_validation_3h_json"])), _guarded_vector(terminal_m1_summary["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"], terminal_m3_summary["recommendation"]["validation_candidate_metrics"]["3h"]))[0])
-            self.assertIn("rejection/break/acceptance/reclaim event missed", output_paths["issues.csv"].read_text())
-            public_rolling = output_paths["results.csv"].read_text() + output_paths["report.json"].read_text()
+            self.assertIn("rejection/break/acceptance/reclaim event missed", initial_issues)
+            public_rolling = initial_results + json.dumps(initial_report, sort_keys=True)
             self.assertNotIn("shared-opportunity", public_rolling)
             self.assertNotIn('"_issue_lineage"', public_rolling)
             self.assertTrue(all(counts["signals"] <= 2 and counts["ohlcv_15m"] <= 1 for counts in bounded_counts))

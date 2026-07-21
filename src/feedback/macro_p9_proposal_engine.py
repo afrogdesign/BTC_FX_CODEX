@@ -89,6 +89,8 @@ def _validate_champion_manifest(manifest: dict[str, Any]) -> None:
     if not isinstance(parameters, dict) or set(parameters) != {"left_window", "right_window", "cutoff_utc", "performance_start_utc", "performance_end_utc"}:
         raise ValueError("champion_manifest_parameters_invalid")
     _validate_parameters(parameters, fixed=True)
+    if manifest["champion_id"] != candidate_id({key: parameters[key] for key in LEVERS}):
+        raise ValueError("champion_manifest_id_mismatch")
     if not isinstance(manifest["input_fingerprints"], dict) or not isinstance(manifest["accepted_artifact_fingerprints"], dict):
         raise ValueError("champion_manifest_fingerprints_invalid")
 
@@ -213,38 +215,50 @@ def _m3_diagnostics(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _data_quality_ok(summary: dict[str, Any]) -> bool:
-    rec = summary.get("recommendation", {})
-    coverage = summary.get("coverage", {})
-    if coverage.get("continuity_pass") is False:
-        return False
-    if rec.get("validation_data_quality_pass") is False:
-        return False
-    return not any("unresolved" in str(x) for x in rec.get("reason_codes", []))
+    if isinstance(summary.get("recommendation_gate"), dict):
+        return _m1_summary_quality_ok(summary)
+    if isinstance(summary.get("recommendation"), dict):
+        return _m3_summary_quality_ok(summary)
+    return False
 
 
-def _m1_quality_ok(path: Path) -> bool:
-    summary = _read_json(path)
+def _failure_reason(summary: dict[str, Any]) -> bool:
+    recommendation = summary.get("recommendation", {})
+    gate = summary.get("recommendation_gate", {})
+    values = list(recommendation.get("reason_codes", [])) + list(gate.get("reasons", []))
+    return any(token in str(reason).lower() for reason in values for token in ("coverage", "continuity", "data_quality", "unresolved"))
+
+
+def _m1_summary_quality_ok(summary: dict[str, Any]) -> bool:
     coverage = summary.get("coverage")
     gate = summary.get("recommendation_gate")
     if not isinstance(coverage, dict) or coverage.get("continuity_pass") is not True or not isinstance(gate, dict):
         return False
     try:
-        _m1_metrics(summary)
+        metrics = _m1_metrics(summary)
     except ValueError:
         return False
-    reasons = gate.get("reasons", [])
-    return not any(token in str(reason).lower() for reason in reasons for token in ("continuity", "data_quality", "unresolved"))
+    return all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in metrics.values()) and not _failure_reason(summary)
+
+
+def _m3_summary_quality_ok(summary: dict[str, Any]) -> bool:
+    recommendation = summary.get("recommendation")
+    data_quality = summary.get("data_quality")
+    if not isinstance(recommendation, dict) or recommendation.get("validation_data_quality_pass") is not True or not isinstance(data_quality, dict) or data_quality.get("coverage_continuity_pass") is not True:
+        return False
+    try:
+        metrics = _m3_metrics(summary)
+    except ValueError:
+        return False
+    return all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in metrics.values()) and not _failure_reason(summary)
+
+
+def _m1_quality_ok(path: Path) -> bool:
+    return _m1_summary_quality_ok(_read_json(path))
 
 
 def _m3_quality_ok(path: Path) -> bool:
-    summary = _read_json(path)
-    recommendation = summary.get("recommendation")
-    coverage = summary.get("data_quality") or summary.get("coverage")
-    if not isinstance(recommendation, dict) or recommendation.get("validation_data_quality_pass") is not True:
-        return False
-    if isinstance(coverage, dict) and coverage.get("continuity_pass") is False:
-        return False
-    return not any("unresolved" in str(reason).lower() for reason in recommendation.get("reason_codes", []))
+    return _m3_summary_quality_ok(_read_json(path))
 
 
 def _row_count(path: Path) -> int:
@@ -327,6 +341,14 @@ def _id_fingerprint(path: Path, key: str) -> str:
     rows = _read_csv(path, {key})
     values = sorted(str(row[key]) for row in rows)
     return hashlib.sha256(_canonical(values).encode()).hexdigest()
+
+
+def _champion_artifacts_match(fresh: dict[str, Any], supplied: dict[str, Any], declared: dict[str, str]) -> bool:
+    fresh_fingerprints = {key: value["sha256"] for key, value in fresh.items()}
+    supplied_fingerprints = {key: value["sha256"] for key, value in supplied.items()}
+    fresh_ids = {key: value.get("ids", {}) for key, value in fresh.items()}
+    supplied_ids = {key: value.get("ids", {}) for key, value in supplied.items()}
+    return fresh_fingerprints == declared and fresh_fingerprints == supplied_fingerprints and fresh_ids == supplied_ids
 
 
 def _snapshot_record(date: str, cutoff: str, paths: dict[str, Path], run: dict[str, Any], m1: dict[str, Any], m3: dict[str, Any], validation_dates: list[str], reasons: list[str], status: str, comparison: bool, pareto: bool, improved: int) -> dict[str, Any]:
@@ -461,6 +483,8 @@ def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed
                     numeric = all(isinstance(value, (int, float)) and value is not None for value in _guarded_vector(m1, m3).values())
                     concentration = _date_concentration([row for row in _read_csv(run["m3"] / "episodes.csv", {"episode_id", "policy", "start_timestamp_utc"}) if row.get("policy") == "candidate"], validation_dates)
                     quality = _m1_quality_ok(run["m1"] / "replay.json") and _m3_quality_ok(run["m3"] / "replay.json")
+                    if not quality:
+                        reasons.append("validation_data_quality_or_continuity_failed")
                     if not _snapshot_eligible(champion_snapshot, date):
                         reasons.append("champion_snapshot_not_eligible")
                     m1_splits = _split_comparison(champion_snapshot.get("_m1_split_summary", {}), m1_summary, "reliable_level_acceptance_corridor", M1_SPLIT_DIMENSIONS, M1_GUARDED)
@@ -691,9 +715,7 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
         temp_root = Path(temp)
         champion_run = _run_candidate(champion_pair, input_paths, parameters, temp_root)
         fresh_artifacts = _artifact_signature({"m1_events": champion_run["m1"] / "events.csv", "m1_levels": champion_run["m1"] / "levels.csv", "m1_misses": champion_run["m1"] / "misses.csv", "m1_replay": champion_run["m1"] / "replay.json", "m3_events": champion_run["m3"] / "events.csv", "m3_episodes": champion_run["m3"] / "episodes.csv", "m3_replay": champion_run["m3"] / "replay.json"})
-        comparable = {key: value["sha256"] for key, value in fresh_artifacts.items() if key not in {"m1_replay", "m3_replay"}}
-        supplied = {key: value["sha256"] for key, value in supplied_signature.items() if key not in {"m1_replay", "m3_replay"}}
-        if comparable != {key: value for key, value in declared_artifacts.items() if key not in {"m1_replay", "m3_replay"}} or {key: value["ids"] for key, value in fresh_artifacts.items() if key not in {"m1_replay", "m3_replay"}} != {key: value["ids"] for key, value in supplied_signature.items() if key not in {"m1_replay", "m3_replay"}}:
+        if not _champion_artifacts_match(fresh_artifacts, supplied_signature, declared_artifacts):
             raise ValueError("champion_identity_mismatch")
         fresh_m1 = _read_json(champion_run["m1"] / "replay.json")
         fresh_m3 = _read_json(champion_run["m3"] / "replay.json")

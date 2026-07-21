@@ -113,3 +113,7 @@ FIX-06 makes final challenger Pareto and issue diagnosis use same-date rolling c
 ## Implementation correction — bounded FIX-07
 
 FIX-07 makes failed or malformed champion cache entries fail closed without exception leakage, records champion direction insufficiency explicitly, prevents runless challengers from inheriting terminal champion validation evidence, preserves rolling failure reasons, and requires the accepted M1 `opportunity_id`, `root_cause`, and `reason_codes` lineage fields. P8 insufficiency is reported only when the P8 gate itself fails. Lightweight focused validation passed; the actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
+
+## Implementation correction — bounded FIX-08
+
+FIX-08 aligns M3 quality with the accepted `data_quality.coverage_continuity_pass` contract; rolling quality, direction, and concentration failures retain explicit reasons; champion manifest IDs are bound to deterministic parameters; and fresh champion identity includes M1/M3 replay JSON. No-rolling final publication remains empty and fail-closed. P8-insufficient, P8-sufficient/no-Pareto, and P8-sufficient/winner paths passed lightweight orchestration tests, with diagnostic horizons remaining non-selecting. The actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
