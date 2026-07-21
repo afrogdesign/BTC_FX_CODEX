@@ -78,15 +78,18 @@ FAMILY_PRIORITY = {
     "pivot_structure_continuation": 4,
 }
 STATE_PRIORITY = {
-    "retest_hold": 5,
-    "retest_failure": 5,
+    "retest_hold": 7,
+    "retest_failure": 6,
     "false_break_reclaim": 5,
     "retest": 4,
     "closed_candle_acceptance": 4,
-    "break": 3,
-    "clean_rejection": 2,
-    "touch": 1,
-    "approach": 0,
+    "clean_rejection": 3,
+    "touch": 2,
+    "approach": 1,
+    "higher_high": 0,
+    "higher_low": 0,
+    "lower_high": 0,
+    "lower_low": 0,
 }
 EVENT_SEQUENCE_TYPES = {"break", "closed_candle_acceptance", "retest", "retest_hold", "retest_failure", "false_break_reclaim"}
 INTERACTION_TYPES = {"approach", "touch", "clean_rejection"}
@@ -112,8 +115,24 @@ def _payload(value: dict[str, Any]) -> str:
     return json.dumps({key: item for key, item in value.items() if key not in {"scenario_id", "event_id"}}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _latest_state_priority(event: dict[str, Any]) -> int:
+    event_type = event.get("event_type")
+    if event_type not in EVENT_TYPES:
+        raise ValueError("scenario_event_type_invalid")
+    if event_type == "break":
+        sequence_status = event.get("sequence_status")
+        if sequence_status == "pending":
+            return 8
+        if sequence_status in {"accepted", "reclaimed", "unresolved"}:
+            return 0
+        raise ValueError("scenario_event_sequence_status_invalid")
+    if event_type not in STATE_PRIORITY:
+        raise ValueError("scenario_event_type_invalid")
+    return STATE_PRIORITY[event_type]
+
+
 def _event_sort_key(event: dict[str, Any]) -> tuple[datetime, int, str]:
-    return (_utc(event["event_timestamp_utc"], "scenario_event_timestamp_invalid"), STATE_PRIORITY.get(event["event_type"], 99), str(event["event_id"]))
+    return (_utc(event["event_timestamp_utc"], "scenario_event_timestamp_invalid"), _latest_state_priority(event), str(event["event_id"]))
 
 
 def _scenario_id(scenario_type: str, direction: str, object_kind: str, object_id: str, timestamp: str, supporting_ids: list[str]) -> str:

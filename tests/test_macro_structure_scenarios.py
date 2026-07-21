@@ -187,6 +187,62 @@ class MacroStructureScenarioTests(unittest.TestCase):
         result = build([event("touch", "touch", 40, direction="UP"), event("break", "break", 40, sequence_status="pending")])
         self.assertEqual([scenario["scenario_type"] for scenario in result["scenarios"]], ["break_resolution_watch"])
 
+    def test_full_same_timestamp_precedence_is_explicit(self) -> None:
+        same_timestamp = [
+            event("approach", "approach", 20),
+            event("touch", "touch", 20),
+            event("clean", "clean_rejection", 20),
+            event("accept", "closed_candle_acceptance", 20),
+            event("retest", "retest", 20),
+            event("reclaim", "false_break_reclaim", 20),
+            event("failure", "retest_failure", 20),
+            event("hold", "retest_hold", 20),
+            event("pending", "break", 20, sequence_status="pending"),
+        ]
+        ordered = [item["event_id"] for item in sorted(same_timestamp, key=scenarios._event_sort_key)]
+        self.assertEqual(ordered, ["approach", "touch", "clean", "accept", "retest", "reclaim", "failure", "hold", "pending"])
+
+    def test_pending_break_wins_over_valid_resolution_sequences(self) -> None:
+        for resolution in ("retest_failure", "false_break_reclaim", "retest_hold"):
+            if resolution == "retest_failure":
+                chain = [event("root", "break", 4, sequence_status="accepted"), event("accept", "closed_candle_acceptance", 8, parent="root"), event("retest", "retest", 12, parent="accept"), event("resolution", resolution, 40, parent="retest")]
+            elif resolution == "retest_hold":
+                chain = [event("root", "break", 4, sequence_status="accepted"), event("accept", "closed_candle_acceptance", 8, parent="root"), event("retest", "retest", 12, parent="accept"), event("resolution", resolution, 40, parent="retest")]
+            else:
+                chain = [event("root", "break", 4, sequence_status="reclaimed"), event("resolution", resolution, 40, parent="root")]
+            result = build(chain + [event("pending", "break", 40, sequence_status="pending")])
+            self.assertEqual(result["scenarios"][0]["scenario_type"], "break_resolution_watch")
+
+    def test_resolution_precedes_retest_and_acceptance_and_selected_family_follows(self) -> None:
+        events = [
+            event("root", "break", 4, sequence_status="accepted"),
+            event("accept", "closed_candle_acceptance", 8, parent="root"),
+            event("retest", "retest", 12, parent="accept"),
+            event("hold", "retest_hold", 40, parent="retest"),
+            event("older-root", "break", 20, sequence_status="accepted"),
+            event("older-accept", "closed_candle_acceptance", 24, parent="older-root"),
+        ]
+        result = build(events)
+        self.assertEqual(result["scenarios"][0]["scenario_type"], "accepted_break_continuation")
+        self.assertEqual(scenarios._latest_state_priority(event("hold", "retest_hold", 40)), 7)
+        self.assertGreater(scenarios._latest_state_priority(event("hold", "retest_hold", 40)), scenarios._latest_state_priority(event("retest", "retest", 40)))
+        self.assertGreater(scenarios._latest_state_priority(event("hold", "retest_hold", 40)), scenarios._latest_state_priority(event("accept", "closed_candle_acceptance", 40)))
+
+    def test_nonpending_root_does_not_override_semantic_resolution(self) -> None:
+        events = [event("root", "break", 32, sequence_status="accepted"), event("accept", "closed_candle_acceptance", 36, parent="root"), event("retest", "retest", 40, parent="accept")]
+        result = build(events)
+        self.assertEqual(result["scenarios"][0]["scenario_type"], "accepted_break_continuation")
+        self.assertLess(scenarios._latest_state_priority(event("root", "break", 40, sequence_status="accepted")), scenarios._latest_state_priority(event("retest", "retest", 40)))
+
+    def test_same_precedence_uses_ascending_event_id_tiebreak(self) -> None:
+        first = event("hold-a", "retest_hold", 20)
+        second = event("hold-z", "retest_hold", 20)
+        self.assertEqual([item["event_id"] for item in sorted([second, first], key=scenarios._event_sort_key)], ["hold-a", "hold-z"])
+        invalid = event("bad", "touch", 20)
+        invalid["event_type"] = "unknown"
+        with self.assertRaises(ValueError):
+            scenarios._latest_state_priority(invalid)
+
 
 if __name__ == "__main__":
     unittest.main()
