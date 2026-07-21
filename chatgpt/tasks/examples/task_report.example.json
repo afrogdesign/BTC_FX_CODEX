@@ -1,8 +1,8 @@
 {
-  "schema_version": 1.0,
+  "schema_version": "1.0",
   "work_id": "BTCFX-EXAMPLE-A1-IMPLEMENTATION",
   "task_revision": 1,
-  "task_sha256": "71e80aca5abaa731bdaae5244bcbd37c4cd7608cc4abf543714b285735ab0cda",
+  "task_sha256": "fb8eee0c120bd20fe94378d97079ccba75babe56eeadd594619c0faf35f0a244",
   "status": "done",
   "branch": "Ver04-v2",
   "base_commit": "0000000000000000000000000000000000000000",
@@ -12,5 +12,5 @@
   "heavy_validation": {"authorized": false, "planned_work_units": 0, "full_runs": 0, "commands": []},
   "commit": {"hash": "0000000000000000000000000000000000000000", "message": "feat(ai): add A1 task contract foundation"},
   "push": null,
-  "notes": "example"
+  "notes": null
 }
