@@ -1,95 +1,75 @@
 # NEXT_ACTION
 
-- current_work_id: `M-HYP1`
+- current_work_id: `M-ENTRY1`
 - mode: `BOUNDED_CODEX`
 - branch: `Ver04-v4`
-- accepted_checkpoint: `a79e488`
-- active_spec: `chatgpt/specs/active/20260722_macro_structure_scenarios.md`
+- accepted_checkpoint: `e06fb99`
+- active_spec: `chatgpt/specs/active/20260722_macro_structure_fixed_latest_entry.md`
 - canonical_plan: `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
-- status: implementation complete; M-HYP1 review is next; pending ChatGPT acceptance
+- status: implementation complete; ChatGPT review next
 - push: none
 
 ## Current action
 
-Implement one deterministic current-scenario model on the accepted M-VIS1, M-LINE1, and M-EVENT1 operator.
+Review the M-ENTRY1 fixed latest HTML entry implementation.
 
 ```text
-accepted structural events
-+ current horizontal / trendline object IDs
-+ current structure and location
-→ deterministic candidate families
-→ condition
-→ next confirmation
-→ invalidation
-→ conflict suppression
-→ maximum three report-only scenarios
+complete immutable operator artifact
+→ validate all M-VIS1 / M-LINE1 / M-EVENT1 / M-HYP1 sections
+→ add deterministic fixed-entry banner
+→ atomic replacement of <output_root>/latest.html
+→ explicit unavailable page on failed 4H attempts
 ```
 
 ## Fixed contract
 
 The complete observable contract is in:
 
-- `chatgpt/specs/active/20260722_macro_structure_scenarios.md`
+- `chatgpt/specs/active/20260722_macro_structure_fixed_latest_entry.md`
 
-Key fixed decisions:
+Key decisions:
 
-- retained M-EVENT1 events only
-- no new fetch or raw replay
-- object-interaction triggers must be within the latest 12 closed 4H bars
-- pivot pairs must be within the latest 24 closed 4H bars
-- scenario families are limited to:
-  - break resolution watch
-  - accepted-break continuation
-  - failed-break reversal
-  - boundary reaction watch
-  - pivot-structure continuation
-- every scenario must expose:
-  - condition
-  - next confirmation
-  - invalidation
-- root break direction is resolved through the retained parent chain
-- latest object state suppresses older contradictory scenarios for the same object
-- global selection displays only the dominant direction
-- maximum three scenarios
-- same scenario type is displayed at most once
-- insufficient evidence produces no guessed scenario
-- probability, win rate, buy/sell, long/short, Entry / SL / TP, and execution wording are prohibited
+- default fixed path: `local/reports/macro_structure/operator/latest.html`
+- fixed entry is a regular self-contained UTF-8 HTML file
+- no JavaScript fetch, iframe, redirect, external asset, or symlink
+- success is published only from the complete HTML created by the same render
+- available banner exposes entry ID, source artifact ID, source digest, cutoff, evaluation, freshness, continuity, and safety
+- fixed entry availability does not imply current market freshness
+- invalid 4H attempts preserve immutable evidence and existing operator `latest.json`
+- invalid 4H attempts publish an explicit unavailable page when possible
+- previous success is labeled historical only
+- fixed-file replacement is atomic
+- operator artifact schema, digest, and artifact ID remain unchanged
+- no-4H callers do not create or update the fixed entry
 
 ## User-visible acceptance
 
-- the Scenario hypotheses panel appears after Structural events and before the supplemental 15m section
-- every displayed scenario is traceable to valid current object and event IDs
-- condition, next confirmation, and invalidation are readable
-- pending break is not described as an accepted breakout
-- retest direction comes from the root break event
-- failed-break evidence overrides older acceptance for the same object
-- opposite UP and DOWN continuation claims are not displayed together
-- scenarios are bounded to three
-- explicit insufficient text appears when current evidence is inadequate
-- M-VIS1 zones, M-LINE1 overlays, M-EVENT1 panel/markers, 15m view, and safety boundary remain
+- `open <output_root>/latest.html` opens one complete screen
+- 4H chart, horizontal zones, diagonal evidence, structural events, scenarios, and supplemental 15m view remain
+- scenario condition, next confirmation, and invalidation remain readable
+- failure is visibly unavailable rather than an old page presented as current success
+- previous valid artifact may be linked only as historical evidence
+- report-only, no automatic order, and human-decides-manually remain visible
 
-## Normal validation budget
+## Validation budget
 
 - matching unittest
-- one small deterministic scenario fixture
 - one bounded direct-renderer smoke using existing local inputs
+- one fixed-entry inspection
 - task-scoped `git diff --check`
-- one generated artifact inspection
 
-Do not run full suite, full replay, network fetches, parameter searches, repeated health cycles, runtime/launchd execution, or background processes.
+Do not run full suite, full replay, network fetches, repeated health cycles, runtime service, background processes, or parameter searches.
 
 ## Explicitly excluded
 
-- probability or historical outcome claims
-- M-STATS1
-- Elliott Wave or numbered wave interpretation
-- Entry / SL / TP or target optimization
-- M-ENTRY1 fixed latest entry
-- runtime, launchd, schedule, mail, notification, or delivery changes
-- existing gate, score, threshold, classifier, zone reliability, pivot semantics, M-LINE1 geometry, or M-EVENT1 threshold changes
+- runtime or schedule changes
+- mail or notification changes
+- local web server or hosting
+- automatic browser launch during normal render
+- analytical model changes
+- probability, Entry / SL / TP, or automatic order
 - private/account/order data
-- automatic order
 
 ## Transition
 
-After implementation, ChatGPT reviews only changed source, matching tests, one fresh artifact, scope, and safety. Accept M-HYP1 or request one material FIX. Only after acceptance may M-ENTRY1 become current.
+After implementation, ChatGPT reviews changed source, focused tests, fixed `latest.html`, immutable identity preservation, scope, and safety. Acceptance completes visual Product v1 except separately authorized M-DELIVERY1.

@@ -10,12 +10,13 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from src.feedback.macro_structure_trendline_channel import METHOD_VERSION as TRENDLINE_METHOD_VERSION, build_trendline_model
 from src.feedback.macro_structure_structural_events import METHOD_VERSION as STRUCTURAL_EVENT_METHOD_VERSION, build_structural_event_model
 from src.feedback.macro_structure_scenarios import METHOD_VERSION as SCENARIO_METHOD_VERSION, build_scenario_model
+from src.feedback.macro_structure_latest_entry import publish_available_entry, publish_unavailable_entry
 
 SCHEMA_VERSION = "macro_structure_operator_artifact.v2"
 METHOD_VERSION = "macro_structure_operator_artifact.v2"
@@ -462,7 +463,7 @@ def _zone_evidence_html(zones: list[dict[str, Any]]) -> str:
     return "<table><thead><tr>" + "".join(f"<th>{html.escape(field)}</th>" for field in headers) + "</tr></thead><tbody>" + ("".join(rows) or "<tr><td colspan=19>none</td></tr>") + "</tbody></table>"
 
 
-def _publish(output_root: Path, artifact_id: str, files: dict[str, bytes], latest: dict[str, Any]) -> None:
+def _publish(output_root: Path, artifact_id: str, files: dict[str, bytes], latest: dict[str, Any], before_latest: Callable[[Path], None] | None = None) -> None:
     output_root.mkdir(parents=True, exist_ok=True)
     target = output_root / artifact_id
     stage = Path(tempfile.mkdtemp(prefix=".macro-operator-", dir=output_root))
@@ -477,6 +478,8 @@ def _publish(output_root: Path, artifact_id: str, files: dict[str, bytes], lates
             shutil.rmtree(stage)
         else:
             stage.replace(target)
+        if before_latest is not None:
+            before_latest(target)
         latest_stage = output_root / ".latest.json.tmp"
         latest_stage.write_bytes(_compact_json_bytes(latest))
         latest_stage.replace(output_root / "latest.json")
@@ -486,6 +489,8 @@ def _publish(output_root: Path, artifact_id: str, files: dict[str, bytes], lates
 
 
 def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports/macro_structure"), history_root: Path = Path("local/reports/macro_structure/history"), ohlcv_15m_csv: Path, ohlcv_4h_csv: Path | None = None, output_root: Path = Path("local/reports/macro_structure/operator"), symbol: str = "BTC_USDT") -> dict[str, Any]:
+    has_4h_input = ohlcv_4h_csv is not None
+    latest_entry_info: dict[str, Any] = {}
     try:
         snapshot, snapshot_manifest, snapshot_dir, snapshot_fingerprints = _validate_snapshot(snapshot_root, symbol)
         history, history_manifest, history_dir, history_fingerprints = _validate_history(history_root, symbol, snapshot)
@@ -559,7 +564,15 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
         latest_snapshot_result = snapshot.get("result_status", "")
         latest_history_result = history.get("result_status", "")
         latest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "artifact_dir": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_history_id": history["history_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "as_of_utc": model["as_of_utc"], "as_of_jst": model["as_of_jst"], "evaluated_at_utc": model["evaluated_at_utc"], "evaluated_at_jst": model["evaluated_at_jst"], "structure_state": snapshot["structure_state"], "price_location": snapshot["price_location"], "snapshot_result_status": latest_snapshot_result, "history_result_status": latest_history_result, "latest_snapshot_result_status": latest_snapshot_result, "latest_history_result_status": latest_history_result, "data_quality_status": snapshot.get("data_quality_status", ""), "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "displayed_zone_counts": counts, "stale_status": snapshot.get("stale_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "source_digest": digest, "safety_boundary": SAFETY}
-        _publish(output_root, artifact_id, files, latest)
-        return {"ok": True, "exit_code": 0, **latest, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False}
+        def _publish_entry(source_dir: Path) -> None:
+            latest_entry_info.update(publish_available_entry(output_root=output_root, source_dir=source_dir, artifact_id=artifact_id, source_digest=digest, metadata={"as_of_utc": model["as_of_utc"], "as_of_jst": model["as_of_jst"], "evaluated_at_utc": model["evaluated_at_utc"], "evaluated_at_jst": model["evaluated_at_jst"], "stale_status": snapshot.get("stale_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "data_quality_status": snapshot.get("data_quality_status", ""), "safety_boundary": SAFETY}))
+        _publish(output_root, artifact_id, files, latest, before_latest=_publish_entry if has_4h_input else None)
+        return {"ok": True, "exit_code": 0, **latest, **latest_entry_info, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False}
     except (OSError, ValueError) as exc:
-        return {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        result = {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        if has_4h_input:
+            try:
+                result.update(publish_unavailable_entry(output_root=output_root, error_code=str(exc)))
+            except (OSError, ValueError):
+                pass
+        return result

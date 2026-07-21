@@ -6,128 +6,89 @@ last_updated: 2026-07-22
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - branch: `Ver04-v4`
-- accepted visual checkpoint: `a79e488`
+- accepted visual checkpoint: `e06fb99`
 - push: none
 - safety: report-only / human-decided / no automatic order
 - canonical visual plan: `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
 
-## Product / P state
+## Accepted backend
 
 - P1–P8 accepted
-- P9 remains blocked because no complete private MEXC Trade History / Order History / Position History batch exists under `local/manual_trade_imports/YYYYMMDD/`
-- do not repeat P9 importer/linker/readiness work unless new private input, relevant code change, contradictory artifact, or explicit user request appears
+- P9 blocked pending complete private MEXC history input
+- M-OPS1 through M-OPS5 accepted on the existing six-time cadence
+- accepted runtime, health semantics, source boundaries, and schedule are unchanged
 
-## Autonomous macro backend
+## Accepted visual modules
 
-- M-OPS1 through M-OPS5 are accepted and active on the existing six-time cadence
-- installed label: `com.afrog.btc-macro-structure`
-- schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
-- current pipeline: public 15m / 1h / 4h OHLCV → snapshot → history → operator artifact → runtime status → health artifact
-- accepted runtime, health semantics, source boundaries, and schedule are not reopened without a concrete contradiction
+### M-VIS1
 
-## Visual product state
+- checkpoint: `c1ceda3`
+- 4H-first chart, 1H/4H horizontal zones, supplemental 15m view
+- fail-closed 4H input and no-4H compatibility
 
-### M-VIS1 accepted
+### M-LINE1
 
-Accepted checkpoint: `c1ceda3`.
+- implementation: `2d47f26`
+- ranking fix: `77b9ca3`
+- deterministic confirmed-4H trendlines/channels, bounded display, explicit insufficient state
 
-- optional explicit public 4H OHLCV input
-- 4H-first candlestick view
-- visible 4H / 1H+4H horizontal zones
-- support/resistance, reliability, lifecycle, cutoff, freshness, and safety visible
-- future candles excluded
-- invalid input preserves previous latest
-- 15m view remains supplemental
-- no-4H caller compatibility retained
+### M-EVENT1
 
-### M-LINE1 accepted
+- implementation: `9295005`
+- sequence fixes: `0a6f3f8`, `a79e488`
+- deterministic event-time approach/touch/rejection/break/acceptance/reclaim/retest/hold/failure and HH/HL/LH/LL
+- correct original-side returns, pending windows, rearm, deduplication, and parent-aware 48-event retention
+- accepted artifact: `local/reports/macro_structure/mevent1_fix2_review/operator/operator_06dc8eccbd664a8b79d8/macro_structure_operator.html`
 
-Accepted implementation: `2d47f26`.
-Accepted ranking FIX: `77b9ca3`.
-Active specification:
+### M-HYP1
 
-- `chatgpt/specs/active/20260722_macro_structure_trendline_channel.md`
-
-Accepted behavior:
-
-- confirmed 4H pivots only, left=2/right=2
-- ascending support and descending resistance only
-- stable line/channel IDs and deterministic geometry
-- fixed touch and break tolerances
-- active, tested, broken, invalidated distinction
-- corrected candidate ranking and channel base selection
-- bounded display and explicit insufficient evidence
-- M-VIS1 horizontal zones, supplemental 15m view, and safety boundary retained
-
-### M-EVENT1 accepted
-
-Accepted implementation: `9295005`.
-Accepted sequence fixes: `0a6f3f8`, `a79e488`.
-Active specification:
-
-- `chatgpt/specs/active/20260722_macro_structure_structural_events.md`
-
-Accepted behavior:
-
-- one deterministic event model for displayed horizontal zones and trendlines
-- event-time-correct approach, touch, clean rejection, break, acceptance, reclaim, retest, hold, and failure
-- confirmed HH / HL / LH / LL at pivot confirmation time
-- stable event IDs and resolvable parent chains
-- original-side reclaim and retest-failure comparisons are correct
-- incomplete three-bar break windows remain pending
-- unresolved is used only after all three follow-up bars are observed
-- a retest bar is not duplicated as ordinary touch/rejection evidence
-- parent-aware retention remains at or below 48 events
-- list and chart markers use the same displayed event IDs
-- explicit insufficient behavior remains valid
-
-Accepted review artifact:
-
-- `local/reports/macro_structure/mevent1_fix2_review/operator/operator_06dc8eccbd664a8b79d8/macro_structure_operator.html`
-
-Accepted validation:
-
-- matching structural-event tests passed
-- matching operator tests passed on the implementation checkpoint
-- corrected bounded direct-renderer smokes passed
-- final artifact contains 39 retained structural events, within the 48-event cap
-- task-scoped diff checks passed
+- implementation: `882ab64`
+- input-validation fix: `7a51e98`
+- latest-state precedence fix: `e06fb99`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_scenarios.md`
+- five fixed scenario families
+- every scenario has condition, next confirmation, and invalidation
+- valid retained event/object references only; malformed vocabulary, parents, timestamps, and contradictions fail closed
+- pending break has highest same-timestamp precedence
+- maximum three scenarios and one displayed dominant direction
+- probability, win rate, buy/sell, long/short, Entry / SL / TP, and execution permission are prohibited
+- accepted artifact: `local/reports/macro_structure/mhyp1_review/operator/operator_2ec8b9f90c4524981667/macro_structure_operator.html`
 
 ## Remaining product gap
 
-- conditional scenarios with explicit confirmation and invalidation are implemented; pending ChatGPT acceptance
-- fixed complete latest HTML entry is not accepted
-- runtime still uses its accepted invocation; no runtime integration has been approved
+- fixed complete latest HTML entry is implemented and pending ChatGPT acceptance
+- runtime integration is unchanged
 - HTML mail integration remains separate and unauthorized
 
 ## Active plan
 
 ```text
-M-VIS1 4H-first macro chart — accepted
-→ M-LINE1 deterministic trendlines/channels — accepted
-→ M-EVENT1 structural events — accepted
-→ M-HYP1 bounded condition/invalidation scenarios — implementation pending ChatGPT acceptance; review is next
-→ M-ENTRY1 fixed latest entry
-→ separately approved M-DELIVERY1 HTML mail integration
+M-VIS1 — accepted
+→ M-LINE1 — accepted
+→ M-EVENT1 — accepted
+→ M-HYP1 — accepted
+→ M-ENTRY1 fixed latest entry — implementation pending ChatGPT acceptance
+→ separately approved M-DELIVERY1
 ```
 
-M-STATS1 remains optional shadow evidence and does not block visual product v1 completion.
+M-STATS1 remains optional and does not block visual Product v1 completion.
 
-## M-HYP1 contract state
+## M-ENTRY1 contract state
 
-- active spec: `chatgpt/specs/active/20260722_macro_structure_scenarios.md`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_fixed_latest_entry.md`
 - specification status: fixed by ChatGPT
-- implementation status: not started
-- inputs: accepted M-EVENT1 events, displayed horizontal zones, displayed M-LINE1 lines, current structure/location
-- scenario families: break resolution watch, accepted-break continuation, failed-break reversal, boundary reaction watch, pivot-structure continuation
-- every scenario must have condition, next confirmation, and invalidation
-- maximum three scenarios
-- opposite-direction candidates are suppressed from the same view
-- probability, win rate, buy/sell, long/short, Entry / SL / TP, and execution permission are prohibited
+- implementation status: pending ChatGPT acceptance
+- fixed path: `<output_root>/latest.html`
+- default path: `local/reports/macro_structure/operator/latest.html`
+- 4H success atomically publishes a complete self-contained available entry
+- 4H failure publishes an explicit unavailable entry when possible
+- previous success is historical only and is not presented as the current successful result
+- no-4H callers do not create or update the fixed entry
+- immutable artifact identity and digest remain unchanged
 
 ## Current selected action
 
-- next module: `M-HYP1`
-- status: specification fixed; ready for one bounded Codex implementation
-- normal validation budget: matching unittest, small deterministic fixture, one bounded smoke, task-scoped `git diff --check`
-- not included: probability, historical outcome statistics, fixed latest entry, runtime, launchd, schedule, mail, notification, gate, score, threshold, classifier, private data, or automatic order
+- next module: `M-ENTRY1`
+- mode: one bounded Codex implementation
+- normal validation: matching unittest, one bounded direct-renderer smoke, task-scoped diff check
+- excluded: runtime, schedule, mail, notification, web server, network fetch, private data, automatic order

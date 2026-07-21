@@ -7,7 +7,9 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
+from src.feedback import macro_structure_latest_entry
 from src.feedback.macro_structure_operator_artifact import render_macro_structure_operator
 
 
@@ -163,6 +165,27 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             self.assertIn("report-only", html_text)
             self.assertIn("no automatic order", html_text)
 
+    def test_4h_success_publishes_deterministic_self_contained_latest_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); ohlcv_4h = _make_4h_csv(root); output = root / "operator"
+            first = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
+            latest_path = output / "latest.html"
+            first_bytes = latest_path.read_bytes()
+            second = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
+            self.assertTrue(first["ok"])
+            self.assertTrue(latest_path.is_file())
+            self.assertFalse(latest_path.is_symlink())
+            self.assertEqual(first["latest_entry_status"], "available")
+            self.assertEqual(first["latest_entry_id"], second["latest_entry_id"])
+            self.assertEqual(first_bytes, latest_path.read_bytes())
+            entry = latest_path.read_text(encoding="utf-8")
+            for marker in ("entry_status", "available", first["operator_artifact_id"], first["source_digest"], "2026-01-02T01:00:00+00:00", "fixed entry availability does not imply current market freshness", "4H Macro Structure Chart", "Structural events", "Scenario hypotheses", "Supplemental 15m manual-confirmation view", "report-only", "no automatic order", "human decides manually"):
+                self.assertIn(marker, entry)
+            self.assertNotIn("fetch(", entry.lower())
+            self.assertNotIn("<iframe", entry.lower())
+            self.assertNotIn("meta http-equiv", entry.lower())
+            self.assertEqual(first["latest_entry_method_version"], macro_structure_latest_entry.METHOD_VERSION)
+
     def test_invalid_4h_fails_closed_and_preserves_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); valid_4h = _make_4h_csv(root); output = root / "operator"
@@ -173,6 +196,34 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             self.assertTrue(valid["ok"])
             self.assertEqual(invalid["error_code"], "ohlcv_interval_invalid")
             self.assertEqual((output / "latest.json").read_bytes(), latest_before)
+            unavailable = (output / "latest.html").read_text(encoding="utf-8")
+            self.assertIn("Macro Structure Latest Entry Unavailable", unavailable)
+            self.assertIn("entry_status=unavailable", unavailable)
+            self.assertIn("historical only; not the current successful result", unavailable)
+            self.assertIn(f'href="{valid["artifact_dir"]}/macro_structure_operator.html"', unavailable)
+
+    def test_first_invalid_4h_attempt_publishes_unavailable_without_previous_link(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); invalid_4h = _make_4h_csv(root, invalid=True); output = root / "operator"
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=invalid_4h, output_root=output)
+            self.assertFalse(result["ok"])
+            unavailable = (output / "latest.html").read_text(encoding="utf-8")
+            self.assertIn("entry_status=unavailable", unavailable)
+            self.assertNotIn("historical operator artifact", unavailable)
+            self.assertFalse((output / "latest.json").exists())
+
+    def test_fixed_entry_atomic_replace_failure_preserves_previous_file_and_latest_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); ohlcv_4h = _make_4h_csv(root); output = root / "operator"
+            valid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
+            latest_html_before = (output / "latest.html").read_bytes()
+            latest_json_before = (output / "latest.json").read_bytes()
+            with patch.object(macro_structure_latest_entry.os, "replace", side_effect=OSError("replace failed")):
+                failed = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
+            self.assertTrue(valid["ok"])
+            self.assertFalse(failed["ok"])
+            self.assertEqual((output / "latest.html").read_bytes(), latest_html_before)
+            self.assertEqual((output / "latest.json").read_bytes(), latest_json_before)
 
     def test_without_4h_preserves_15m_chart_model_and_supplemental_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -184,6 +235,8 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             self.assertEqual(model["chart_model"]["timeframe"], "15m")
             self.assertNotIn("chart_model_4h", model)
             self.assertIn("Supplemental 15m manual-confirmation view", html_text)
+            self.assertNotIn("latest_entry_status", result)
+            self.assertFalse((output / "latest.html").exists())
     def test_empty_optional_references_are_absent_but_displayed_zones_stay_strict(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
