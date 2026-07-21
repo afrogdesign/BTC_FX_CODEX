@@ -158,7 +158,12 @@ def _validate_history(root: Path, symbol: str, snapshot: dict[str, Any]) -> tupl
     if not evaluations:
         raise ValueError("history_missing_current_snapshot")
     checkpoint_id = evaluations[0].get("checkpoint_id")
-    checkpoints = [item for item in history.get("structural_checkpoints", []) if item.get("checkpoint_id") == checkpoint_id]
+    structural_checkpoints = history.get("structural_checkpoints")
+    if not isinstance(structural_checkpoints, list) or not structural_checkpoints:
+        raise ValueError("history_checkpoint_missing")
+    if not _text(structural_checkpoints[-1].get("checkpoint_id")) or checkpoint_id != structural_checkpoints[-1].get("checkpoint_id"):
+        raise ValueError("history_current_snapshot_not_latest_checkpoint")
+    checkpoints = [item for item in structural_checkpoints if item.get("checkpoint_id") == checkpoint_id]
     if not checkpoints:
         raise ValueError("history_checkpoint_missing")
     checkpoint = checkpoints[0]
@@ -385,8 +390,8 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "status": {field: {"source": "M-OPS1 macro_structure_snapshot.json", "field": field} for field in ("symbol", "as_of_utc", "as_of_jst", "evaluated_at_utc", "evaluated_at_jst", "current_price", "structure_state", "price_location", "result_status", "stale_status", "continuity_status", "data_quality_status", "safety_boundary")},
             "candles": {"source": "explicit local public 15m OHLCV CSV", "rule": "timestamp plus 15m endpoint <= snapshot as_of_utc; latest 96 eligible closed candles", "cutoff": snapshot["_as_of"].isoformat()},
             "zones": {item["level_id"]: {"source": "M-OPS1 macro_structure_snapshot.json", "field": "support_zones/resistance_zones", "level_id": item["level_id"]} for item in shown},
-            "references": {item["level_id"]: {"source": "M-OPS1 macro_structure_snapshot.json", "field": "nearest/target/obstruction", "level_id": item["level_id"]} for item in references},
-            "events": {category: [{"source": row.get("source", ""), "checkpoint_id": row.get("checkpoint_id", ""), "run_id": row.get("run_id", ""), "level_id": row.get("level_id", "")} for row in rows] for category, rows in categories.items()},
+            "references": {item["level_id"]: {"source": "M-OPS1 macro_structure_snapshot.json", "field": item["semantic_labels"], "level_id": item["level_id"]} for item in references if item["semantic_labels"]},
+            "events": {category: [{"source": "macro_structure_history.json.structure_changes" if row.get("source") == "macro_structure_changes.csv" else row.get("source", ""), "checkpoint_id": row.get("checkpoint_id", ""), "run_id": row.get("run_id", ""), "level_id": row.get("level_id", "")} for row in rows] for category, rows in categories.items()},
             "presentation_rules": {"geometry": "deduplicate by level_id and annotate accepted semantic labels", "zones": "display only high/medium accepted reliability bands", "events": "accepted M-OPS2 v2 rows, latest ten per category"},
         }
         chart = {"timeframe": "15m", "candle_count": len(candles), "candles": candles, "current_price": snapshot["current_price"], "cutoff_utc": snapshot["_as_of"].isoformat(), "first_displayed_timestamp_utc": candles[0]["timestamp_utc"], "last_displayed_timestamp_utc": candles[-1]["timestamp_utc"], "overlays": references}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -76,6 +77,62 @@ def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
     return snapshot_root, history_root, ohlcv
 
 
+def _make_rich_inputs(root: Path) -> tuple[Path, Path, Path]:
+    snapshot_root, history_root, ohlcv = _make_inputs(root)
+    final_dir = snapshot_root / "run_fixture"
+    snapshot_path = final_dir / "macro_structure_snapshot.json"
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    support_near = _zone("level_support_near", "support", 198, "high")
+    support_far = _zone("level_support_far", "support", 180, "medium")
+    resistance_near = _zone("level_resistance_near", "resistance", 200, "high")
+    resistance_far = _zone("level_resistance_far", "resistance", 220, "medium")
+    weak = _zone("level_weak", "support", 170, "low")
+    snapshot["support_zones"] = [support_near, support_far, weak]
+    snapshot["resistance_zones"] = [resistance_near, resistance_far]
+    snapshot["nearest_reliable_support"] = support_near
+    snapshot["nearest_reliable_resistance"] = resistance_near
+    snapshot["next_upside_target"] = resistance_far
+    snapshot["next_downside_target"] = "insufficient"
+    snapshot["upside_obstruction"] = resistance_near
+    snapshot["downside_obstruction"] = "insufficient"
+    _write_json(snapshot_path, snapshot)
+    base_manifest = json.loads((final_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    run_specs = [
+        ("run_early", "snapshot_early", "checkpoint_early", "2026-01-01T23:00:00+00:00", "2026-01-01T23:30:00+00:00"),
+        ("run_mid", "snapshot_mid", "checkpoint_mid", "2026-01-02T00:00:00+00:00", "2026-01-02T00:30:00+00:00"),
+        ("run_recheck", "snapshot_recheck", "checkpoint_final", "2026-01-02T01:00:00+00:00", "2026-01-02T01:30:00+00:00"),
+        ("run_fixture", "snapshot_fixture", "checkpoint_final", "2026-01-02T01:00:00+00:00", "2026-01-02T02:00:00+00:00"),
+    ]
+    for run_id, snapshot_id, checkpoint_id, as_of, evaluated in run_specs:
+        target = snapshot_root / run_id
+        if target != final_dir:
+            shutil.copytree(final_dir, target)
+        item = json.loads((target / "macro_structure_snapshot.json").read_text(encoding="utf-8"))
+        item.update({"run_id": run_id, "snapshot_id": snapshot_id, "as_of_utc": as_of, "as_of_jst": datetime.fromisoformat(as_of).astimezone(timezone(timedelta(hours=9))).isoformat(), "evaluated_at_utc": evaluated, "evaluated_at_jst": datetime.fromisoformat(evaluated).astimezone(timezone(timedelta(hours=9))).isoformat()})
+        _write_json(target / "macro_structure_snapshot.json", item)
+        manifest = dict(base_manifest); manifest.update({"run_id": run_id, "snapshot_id": snapshot_id, "as_of_utc": as_of, "evaluated_at_utc": evaluated})
+        _write_json(target / "run_manifest.json", manifest)
+    evaluations = []
+    for run_id, snapshot_id, checkpoint_id, as_of, evaluated in run_specs:
+        evaluations.append({"run_id": run_id, "snapshot_id": snapshot_id, "checkpoint_id": checkpoint_id, "as_of_utc": as_of, "evaluated_at_utc": evaluated, "stale_status": "stale" if run_id == "run_recheck" else "current", "continuity_status": "discontinuous" if run_id == "run_recheck" else "continuous", "data_quality_status": "discontinuous" if run_id == "run_recheck" else "ok", "result_status": "ok", "reason_codes": ["stale_ohlcv_15m"] if run_id == "run_recheck" else []})
+    changes = [
+        {"change_type": "snapshot_transition", "field": "structure_state", "checkpoint_id": "checkpoint_mid", "level_id": "", "previous_value": "transition", "current_value": "reversal"},
+        {"change_type": "level_transition", "field": "reliability_band", "checkpoint_id": "checkpoint_mid", "level_id": "level_support_near", "previous_value": "medium", "current_value": "high"},
+        {"change_type": "level_transition", "field": "role", "checkpoint_id": "checkpoint_mid", "level_id": "level_support_far", "previous_value": "resistance", "current_value": "support"},
+        {"change_type": "level_transition", "field": "lifecycle", "checkpoint_id": "checkpoint_mid", "level_id": "level_resistance_near", "previous_value": "forming", "current_value": "accepted"},
+        {"change_type": "level_transition", "field": "geometry", "checkpoint_id": "checkpoint_mid", "level_id": "level_resistance_far", "previous_value": "changed", "current_value": "changed"},
+        {"change_type": "absent_from_latest", "field": "level_id", "checkpoint_id": "checkpoint_final", "level_id": "level_absent", "previous_value": "level_absent", "current_value": "level_absent"},
+        {"change_type": "reappeared", "field": "level_id", "checkpoint_id": "checkpoint_final", "level_id": "level_reappeared", "previous_value": "level_reappeared", "current_value": "level_reappeared"},
+    ]
+    history_dir = history_root / "history_fixture"
+    history = json.loads((history_dir / "macro_structure_history.json").read_text(encoding="utf-8"))
+    history.update({"result_status": "ok", "source_run_count": 4, "evaluation_count": 4, "structural_checkpoint_count": 3, "first_as_of_utc": run_specs[0][3], "latest_as_of_utc": run_specs[-1][3], "latest_evaluated_at_utc": run_specs[-1][4], "evaluation_history": evaluations, "structural_checkpoints": [{"checkpoint_id": "checkpoint_early", "canonical_structural_run_id": "run_early", "latest_evaluation_run_id": "run_early"}, {"checkpoint_id": "checkpoint_mid", "canonical_structural_run_id": "run_mid", "latest_evaluation_run_id": "run_mid"}, {"checkpoint_id": "checkpoint_final", "canonical_structural_run_id": "run_recheck", "latest_evaluation_run_id": "run_fixture"}], "structure_changes": changes})
+    _write_json(history_dir / "macro_structure_history.json", history)
+    manifest = json.loads((history_dir / "run_manifest.json").read_text(encoding="utf-8")); manifest.update({"source_runs": [spec[0] for spec in run_specs], "source_run_count": 4, "evaluation_count": 4, "structural_checkpoint_count": 3}); _write_json(history_dir / "run_manifest.json", manifest)
+    _write_json(history_root / "latest.json", {"history_id": "history_fixture", "artifact_dir": "history_fixture", "symbol": "BTC_USDT"})
+    return snapshot_root, history_root, ohlcv
+
+
 class MacroStructureOperatorArtifactTests(unittest.TestCase):
     def test_complete_chart_first_artifact_is_deterministic_and_report_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -134,6 +191,40 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             data["as_of_jst"] = "2026-01-02T10:00:00+09:00"; data["support_zones"][0]["center"] = "not-a-number"; _write_json(snap_path, data)
             invalid_zone = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
             self.assertEqual(invalid_zone["error_code"], "zone_evidence_invalid")
+
+    def test_snapshot_must_be_latest_structural_checkpoint_and_final_eval(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            history_path = history / "history_fixture" / "macro_structure_history.json"
+            data = json.loads(history_path.read_text(encoding="utf-8"))
+            data["structural_checkpoints"] = [{"checkpoint_id": "checkpoint_fixture", "latest_evaluation_run_id": "run_fixture"}, {"checkpoint_id": "checkpoint_later", "latest_evaluation_run_id": "run_later"}]
+            _write_json(history_path, data)
+            invalid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertEqual(invalid["error_code"], "history_current_snapshot_not_latest_checkpoint")
+            data["structural_checkpoints"] = []
+            _write_json(history_path, data)
+            empty = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertEqual(empty["error_code"], "history_checkpoint_missing")
+
+    def test_rich_history_fixture_charts_all_reliable_zones_and_categories(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_rich_inputs(root); output = root / "operator"
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            self.assertEqual(model["selected_structural_checkpoint_id"], "checkpoint_final")
+            self.assertEqual(len(model["chart_model"]["overlays"]), 4)
+            self.assertNotIn("level_weak", {item["level_id"] for item in model["chart_model"]["overlays"]})
+            self.assertTrue(all(item["role"] in {"support", "resistance"} for item in model["chart_model"]["overlays"]))
+            categories = model["chronological_changes"]["categories"]
+            for category in ("reliability_changes", "role_changes", "lifecycle_changes", "geometry_changes", "absent_from_latest", "reappearances", "stale_or_discontinuous_evaluations"):
+                self.assertTrue(categories[category], category)
+            self.assertIn("level_support_far", model["source_trace_map"]["zones"])
+            self.assertNotIn("level_support_far", model["source_trace_map"]["references"])
+            html_text = (output / result["artifact_dir"] / "macro_structure_operator.html").read_text(encoding="utf-8")
+            self.assertIn("reliability_changes", html_text)
+            self.assertIn("absent_from_latest", html_text)
+            self.assertIn("stale_or_discontinuous_evaluations", html_text)
 
 
 if __name__ == "__main__":
