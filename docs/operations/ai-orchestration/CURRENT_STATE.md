@@ -6,10 +6,9 @@ last_updated: 2026-07-22
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - branch: `Ver04-v4`
-- accepted M-VIS1 checkpoint: `c1ceda3` (`b0bb3ca` implementation + `c1ceda3` focused CLI assertion)
+- accepted visual checkpoint: `77b9ca3`
 - push: none
 - safety: report-only / human-decided / no automatic order
-- current product transition: accepted M-OPS analysis backend → practical user-facing macro visual product
 - canonical visual plan: `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
 
 ## Product / P state
@@ -24,76 +23,85 @@ last_updated: 2026-07-22
 - installed label: `com.afrog.btc-macro-structure`
 - schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
 - current pipeline: public 15m / 1h / 4h OHLCV → snapshot → history → operator artifact → runtime status → health artifact
-- current accepted live evidence is report-only, public-data-only, and no-automatic-order
-- accepted M-OPS source, health semantics, runtime target, and schedule are not reopened without a concrete contradiction
+- accepted runtime, health semantics, source boundaries, and schedule are not reopened without a concrete contradiction
 
 ## Visual product state
 
 ### M-VIS1 accepted
 
-M-VIS1 is accepted on `Ver04-v4`.
+Accepted checkpoint: `c1ceda3`.
+
+- optional explicit public 4H OHLCV input
+- 4H-first candlestick view
+- visible 4H / 1H+4H horizontal zones
+- support/resistance, reliability, lifecycle, cutoff, freshness, and safety visible
+- future candles excluded
+- invalid input preserves previous latest
+- 15m view remains supplemental
+- no-4H caller compatibility retained
+
+### M-LINE1 accepted
+
+Accepted implementation: `2d47f26`.
+Accepted ranking FIX: `77b9ca3`.
+Active specification:
+
+- `chatgpt/specs/active/20260722_macro_structure_trendline_channel.md`
 
 Accepted behavior:
 
-- optional explicit public 4H OHLCV input;
-- no extra fetch;
-- 4H-first candlestick chart when the 4H input is supplied;
-- high / medium horizontal zones with visible `4H`, `1H+4H`, or `1H` source labels;
-- role, reliability band, and lifecycle visible on the chart/evidence;
-- future or unclosed 4H candles excluded by snapshot cutoff;
-- existing 15m view retained as supplemental manual-confirmation view;
-- invalid 4H input fails closed without replacing the previous `latest.json`;
-- existing no-4H caller behavior remains compatible;
-- report-only / no automatic order / human decides manually remain visible.
-
-Accepted review artifact:
-
-- `local/reports/macro_structure/mvis1_review/operator/operator_eea81e0efb24d41261be/macro_structure_operator.html`
+- confirmed 4H pivots only, left=2/right=2
+- ascending support and descending resistance only
+- stable line/channel IDs and deterministic geometry
+- fixed touch and break tolerances
+- active, tested, broken, invalidated distinction
+- ranking order: tested → active → broken → insufficient → invalidated
+- tested/active candidates cannot be displaced by invalidated/insufficient candidates
+- channel base uses the same corrected ranking
+- bounded display and explicit insufficient evidence
+- M-VIS1 horizontal zones, supplemental 15m view, and safety boundary retained
 
 Accepted validation:
 
-- focused renderer unittest passed;
-- focused CLI parser/dispatch test passed with the repository virtual environment;
-- one bounded direct-renderer smoke passed;
-- task-scoped `git diff --check` passed.
+- matching trendline/channel tests passed
+- matching operator tests passed
+- one bounded direct-renderer smoke passed
+- ranking regression tests passed
+- task-scoped diff checks passed
 
 ## Remaining product gap
 
-- deterministic 4H trendlines/channels are not implemented;
-- touch, break, retest, reclaim, and structural leg events are not presented as a coherent operator model;
-- condition/invalidation scenarios are not implemented;
-- a fixed complete latest HTML entry is not yet accepted;
-- HTML mail integration remains separate and unauthorized;
-- accepted runtime service still uses its existing invocation until a separate runtime task is approved.
+- current horizontal and diagonal interactions are not yet represented as one coherent structural-event model
+- conditional/invalidation scenarios are not implemented
+- fixed complete latest HTML entry is not accepted
+- runtime still uses its accepted invocation; no runtime integration has been approved
+- HTML mail integration remains separate and unauthorized
 
 ## Active plan
 
 ```text
 M-VIS1 4H-first macro chart — accepted
-→ M-LINE1 deterministic trendlines/channels — specification fixed, implementation next
-→ M-EVENT1 structural events
+→ M-LINE1 deterministic trendlines/channels — accepted
+→ M-EVENT1 structural events — specification fixed, implementation next
 → M-HYP1 bounded condition/invalidation scenarios
 → M-ENTRY1 fixed latest entry
 → separately approved M-DELIVERY1 HTML mail integration
 ```
 
-M-STATS1 remains optional shadow evidence and does not block product v1 completion when sample size is insufficient.
+M-STATS1 remains optional shadow evidence and does not block visual product v1 completion.
 
-## M-LINE1 contract state
+## M-EVENT1 contract state
 
-- active spec: `chatgpt/specs/active/20260722_macro_structure_trendline_channel.md`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_structural_events.md`
 - specification status: fixed by ChatGPT
-- implementation status: pending ChatGPT acceptance
-- confirmed pivot source: existing event-time 4H `confirmed_pivots(..., left=2, right=2)`
-- line families: ascending support and descending resistance only
-- touch tolerance: `0.25 ATR`
-- wrong-side close breach: `0.35 ATR`
-- stable IDs, state definitions, ranking, channel construction, display limits, and insufficient behavior are fixed in the active spec
+- implementation status: implemented; pending ChatGPT acceptance
+- inputs: existing validated 4H candles, displayed high/medium horizontal zones, M-LINE1 displayed lines, confirmed 4H pivots
+- events: approach, touch, clean rejection, break, closed-candle acceptance, false-break reclaim, retest, retest hold/failure, HH/HL/LH/LL
+- event-time, stable IDs, parent relations, deduplication, state-machine windows, retention, display priority, and fail-closed rules are fixed in the active spec
 
 ## Current selected action
 
-- next module: `M-LINE1`
-- status: ready for one bounded Codex implementation
-- objective: add deterministic 4H trendline/channel model and limited overlay to the accepted M-VIS1 artifact
+- next module: `M-EVENT1`
+- status: implementation pending ChatGPT acceptance; review is next
 - normal validation budget: matching unittest, small deterministic fixture, one bounded smoke, task-scoped `git diff --check`
-- not included: wave labeling, probability, M-EVENT1 event history, M-HYP1 scenarios, runtime, launchd, schedule, mail, notification, policy, gate, threshold, classifier, private data, or automatic order
+- not included: probability, scenario generation, runtime, launchd, schedule, mail, notification, gate, score, threshold, classifier, private data, or automatic order
