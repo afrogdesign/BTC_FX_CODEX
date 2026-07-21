@@ -1,0 +1,111 @@
+{
+  "schema_version": "1.0",
+  "work_id": "BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A2-MILESTONES-PILOT-IMPL-01",
+  "revision": 1,
+  "stage": "implementation",
+  "mode": "BOUNDED_CODEX",
+  "goal": "Align MILESTONES.md with the accepted A1 foundation and the current bounded A2 pilot route.",
+  "repo": {
+    "working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor",
+    "expected_branch": "Ver04-v2",
+    "expected_base_commit": null
+  },
+  "contract_refs": [
+    {
+      "path": "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "clauses": [
+        "IO-01",
+        "AC-01",
+        "AC-02",
+        "SC-01",
+        "VAL-01"
+      ]
+    }
+  ],
+  "allowed": {
+    "read": [
+      "AGENTS.md",
+      "docs/operations/ai-orchestration/START_HERE.md",
+      "docs/operations/ai-orchestration/CURRENT_STATE.md",
+      "docs/operations/ai-orchestration/NEXT_ACTION.md",
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "chatgpt/specs/archive/20260721_ai_task_manifest_acceptance_gate_a1.md",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json"
+    ],
+    "edit": [
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json"
+    ],
+    "inspect": [
+      "git_status",
+      "task_diff",
+      "target_definition"
+    ]
+  },
+  "autonomy": {
+    "helper_design": false,
+    "cache_design": false,
+    "fixture_design": false,
+    "execution_order": true,
+    "obvious_in_scope_bugfix": false,
+    "remove_redundant_validation": false
+  },
+  "requirements": [
+    {
+      "id": "IO-01",
+      "description": "Preserve the supplied active spec and implementation manifest byte-for-byte while committing them with the pilot."
+    },
+    {
+      "id": "AC-01",
+      "description": "Add one concise A1 acceptance milestone using the final accepted commit locator without recording FIX-by-FIX history."
+    },
+    {
+      "id": "AC-02",
+      "description": "Replace the stale Current transition with A1 accepted, A2 low-risk pilot active, and M6 still unauthorized."
+    },
+    {
+      "id": "SC-01",
+      "description": "Do not change product, trading, runtime, notification, mail, API, account, position, order, or M5 evidence."
+    },
+    {
+      "id": "VAL-01",
+      "description": "Keep all changes inside the three exact pilot paths and pass the canonical task-scoped diff check."
+    }
+  ],
+  "validation": {
+    "unit_tests": [],
+    "fixture_e2e": {
+      "required": false,
+      "location": null
+    },
+    "diff_check_files": [
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "docs/operations/ai-orchestration/MILESTONES.md"
+    ],
+    "heavy": {
+      "authorized": false,
+      "planned_work_units": 0,
+      "max_full_runs": 0,
+      "commands": []
+    }
+  },
+  "commit": {
+    "enabled": true,
+    "message": "docs(ai): record A1 acceptance milestone",
+    "push": false
+  },
+  "stop_codes": [
+    "BRANCH_MISMATCH",
+    "SPEC_OR_MANIFEST_CHANGED",
+    "SCOPE_OVERLAP",
+    "OUT_OF_SCOPE_CHANGE"
+  ],
+  "report": {
+    "format": "json_v1",
+    "outbox": "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt",
+    "write_once": true
+  }
+}

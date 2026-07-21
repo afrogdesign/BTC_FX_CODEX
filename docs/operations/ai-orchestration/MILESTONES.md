@@ -21,6 +21,13 @@
 
 M5 acceptance is implementation/evidence acceptance. It is not challenger adoption or production tuning approval.
 
+## 2026-07-21 — A1 AI task-manifest contract foundation accepted
+
+- accepted checkpoint: `13527dc69bfc3b2b17fc96ab2ab6f5a8d8ef495f`
+- strict task/report validation、canonical SHA、compact rendering、fail-closed report alignment、reviewed-commit binding、and write-once outbox accepted
+- focused static evidence was sufficient; no heavy run was required
+- A1 does not activate A3、CWT、automatic execution/acceptance、M6、runtime、notification、mail、or production behavior
+
 ## 2026-07-21 — M4 hierarchy render shadow accepted
 
 - accepted checkpoint: `ea89e61`
@@ -92,7 +99,7 @@ The route preserves strict formal gates and adds operator-action layers without 
 
 ## Current transition
 
-M5 is accepted with `continue_shadow_collection` and no eligible challenger. The next checkpoint is a separate AI-orchestration docs commit, followed by the bounded A1 task-manifest foundation spec. M6 is not active.
+M5 remains accepted with `continue_shadow_collection`. A1 is accepted and archived, and the current immediate route is one bounded A2 low-risk manifest pilot. M6 remains not started and not authorized.
 
 ## Detailed history
 
