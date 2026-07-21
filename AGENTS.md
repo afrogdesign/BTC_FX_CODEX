@@ -7,13 +7,13 @@ ChatGPT performs repo review, product/trading/safety judgment, scope selection, 
 
 ## Canonical task route
 
-For new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work, the default route is an A1-valid manifest under `chatgpt/tasks/active/`:
+For new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work, the default route is a compact ChatGPT prompt:
 
 ```text
-manifest → validate-task → render-prompt → bounded execution → json_v1 report → validate-report → ChatGPT review
+ChatGPT compact prompt → bounded Codex execution → compact text report → ChatGPT MCP review
 ```
 
-The manifest is immutable once execution starts. A manual hand-written prompt is an explicit fallback only when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk; the reason must be recorded. The fallback keeps the same scope, safety, validation, reporting, approval, and outbox rules.
+Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports. The user-visible report and `response.txt` use the existing compact report format. When strict tooling is selected, its immutability and validation rules apply.
 
 ## Context rule
 

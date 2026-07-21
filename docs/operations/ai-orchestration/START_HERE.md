@@ -62,13 +62,13 @@ ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch is
 
 Do not send Codex work while material product or safety judgment remains unresolved.
 
-The canonical route for new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work is:
+The normal route for new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work is:
 
 ```text
-active manifest → validate-task → render-prompt → bounded task → json_v1 report → validate-report → ChatGPT review
+ChatGPT compact prompt → bounded Codex execution → compact text report → ChatGPT MCP review
 ```
 
-The manifest becomes immutable once execution starts. A manual hand-written prompt is an explicit, reason-recorded fallback only when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk. It is not the default route.
+Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports; the user-visible report and `response.txt` use the existing compact report format.
 
 ## Source-of-truth order
 

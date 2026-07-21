@@ -43,22 +43,18 @@ Heavy real-data validation occurs only after ChatGPT review.
 Do not use Codex as a broad investigator or as an acceptance committee.
 Do not micromanage helper structure, caching, fixture shape, or edit order when the contract is already fixed.
 
-## 2A. Canonical task-manifest route
+## 2A. Normal compact-report route
 
-The default route for new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work is:
+The normal route for new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work is:
 
 ```text
-ChatGPT fixes scope and evidence
-→ active A1-valid manifest
-→ validate-task
-→ render-prompt
-→ Codex bounded execution
-→ json_v1 report
-→ validate-report
+ChatGPT compact prompt
+→ bounded Codex execution
+→ compact text report
 → ChatGPT MCP review and acceptance decision
 ```
 
-The manifest is immutable once execution starts. A manual hand-written prompt remains available only as an explicit fallback when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk; the reason is recorded in the prompt or task record. The fallback does not weaken scope, safety, validation, dirty-tree, reporting, approval, or outbox rules.
+Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` remain optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports. The user-visible report and `response.txt` use the existing compact report format. Optional strict tooling does not alter role ownership, implementation/review/acceptance separation, dirty-tree rules, validation budgets, heavy-run controls, or safety boundaries.
 
 ## 3. ChatGPT workflow
 

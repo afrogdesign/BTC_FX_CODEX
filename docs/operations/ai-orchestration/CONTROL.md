@@ -50,11 +50,11 @@ Human approval is required for production policy, gates, thresholds, notificatio
 
 Detailed process: `AI_WORKFLOW.md`.
 
-## Canonical task route
+## Normal compact-report route
 
-New `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work starts from an A1-valid manifest under `chatgpt/tasks/active/` and follows `validate-task`, `render-prompt`, bounded execution, `json_v1` reporting, `validate-report`, and ChatGPT review. The manifest is immutable once execution starts.
+New `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work normally follows `ChatGPT compact prompt → bounded Codex execution → compact text report → ChatGPT MCP review`.
 
-Manual hand-written prompts are an explicit, reason-recorded fallback only when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk. The fallback preserves all existing scope, safety, validation, approval, reporting, and outbox controls.
+Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports; user-visible reports and `response.txt` use the existing compact report format. Optional strict tooling preserves all scope, safety, validation, approval, reporting, and outbox controls.
 
 ## Git and dirty tree
 

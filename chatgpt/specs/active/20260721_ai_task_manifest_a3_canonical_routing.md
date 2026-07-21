@@ -200,3 +200,20 @@ After ChatGPT accepts A3:
 4. select optional A4 CWT integration or the separate replay-simplification route only through a new active spec
 
 A3 acceptance does not by itself authorize A4, replay/cache work, M6, or production changes.
+
+
+## 7. Operator simplification override — 2026-07-21
+
+This section supersedes the default-report parts of the objective, IO-02, AC-01, VAL-01, and the acceptance route where they conflict.
+
+- implementation commit locator `ad8f2078abd98cebbd2737c522c5f70a91c5c282` is not accepted as-is
+- the normal Codex route uses a compact hand-written prompt and compact text report
+- task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` remain optional strict tooling for tasks where ChatGPT explicitly determines that machine alignment adds material evidence
+- normal tasks do not create or self-validate a JSON report
+- the user-visible report and canonical `response.txt` content use the compact report format
+- report formatting alone is not a reason to retask when the implementation evidence is otherwise sufficient
+- manual prompt fallback reason for the corrective task: operator-directed simplification; the active A3 manifest would otherwise require the undesired JSON report route
+- corrective content edits are limited to the five A3 routing documents
+- no product, trading, replay, runtime, notification, mail, API, account, position, order, M6, or production behavior may change
+
+A3 is review-ready after the five routing documents consistently describe compact prompt/report as the normal path, strict manifest/JSON tooling as optional, one task-scoped diff check passes, one local corrective commit exists, and Codex returns the compact report exactly once to the canonical outbox.
