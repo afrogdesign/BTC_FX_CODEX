@@ -5,6 +5,7 @@ import hashlib
 import html
 import json
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,31 @@ REQUIRED_MARKERS = (
 UNAVAILABLE_TITLE = "Macro Structure Latest Entry Unavailable"
 FRESHNESS_NOTE = "fixed entry availability does not imply current market freshness; verify cutoff and status"
 HISTORICAL_NOTE = "historical only; not the current successful result"
+REQUIRED_SECTION_IDS = (
+    'id="status"',
+    'id="chart-4h"',
+    'id="diagonal-evidence"',
+    'id="structural-events"',
+    'id="scenario-hypotheses"',
+    'id="zones"',
+    'id="chart"',
+)
+PROHIBITED_SOURCE_PATTERNS = (
+    re.compile(r"<script\b", re.IGNORECASE),
+    re.compile(r"<iframe\b", re.IGNORECASE),
+    re.compile(r"<object\b", re.IGNORECASE),
+    re.compile(r"<embed\b", re.IGNORECASE),
+    re.compile(r"<meta\b[^>]*http-equiv\s*=\s*[\"']?refresh\b", re.IGNORECASE),
+    re.compile(r"fetch\(", re.IGNORECASE),
+    re.compile(r"window\.location", re.IGNORECASE),
+    re.compile(r"location\.href", re.IGNORECASE),
+    re.compile(r"javascript:", re.IGNORECASE),
+    re.compile(r"\b(?:src|href)\s*=\s*(?:[\"']\s*)?(?:https?://|//)", re.IGNORECASE),
+)
+
+
+class LatestEntryPublicationError(Exception):
+    """Stable signal for fixed-entry filesystem publication failures."""
 
 
 def _utc(value: Any, code: str) -> str:
@@ -52,23 +78,29 @@ def _entry_id_unavailable(error_code: str, artifact_id: str, source_digest: str)
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise LatestEntryPublicationError from exc
     if path.is_symlink():
         raise ValueError("latest_entry_path_unsafe")
-    fd, temporary_name = tempfile.mkstemp(prefix=".latest-entry-", dir=path.parent)
-    temporary = Path(temporary_name)
+    temporary: Path | None = None
     try:
+        fd, temporary_name = tempfile.mkstemp(prefix=".latest-entry-", dir=path.parent)
+        temporary = Path(temporary_name)
         with os.fdopen(fd, "wb") as handle:
             handle.write(content)
             handle.flush()
-            try:
-                os.fsync(handle.fileno())
-            except OSError:
-                pass
+            os.fsync(handle.fileno())
         os.replace(temporary, path)
-    except Exception:
-        temporary.unlink(missing_ok=True)
+    except LatestEntryPublicationError:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
         raise
+    except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise LatestEntryPublicationError from exc
 
 
 def _source_bytes(source_dir: Path, artifact_id: str, source_digest: str) -> bytes:
@@ -89,10 +121,9 @@ def _source_bytes(source_dir: Path, artifact_id: str, source_digest: str) -> byt
         raise ValueError("latest_entry_source_artifact_mismatch")
     if not isinstance(source_digest, str) or not source_digest or artifact_id != "operator_" + source_digest[:20]:
         raise ValueError("latest_entry_source_digest_mismatch")
-    if "<body>" not in text or any(marker not in text for marker in REQUIRED_MARKERS):
+    if "<body>" not in text or any(marker not in text for marker in REQUIRED_SECTION_IDS) or any(marker not in text for marker in REQUIRED_MARKERS):
         raise ValueError("latest_entry_source_incomplete")
-    lowered = text.lower()
-    if "fetch(" in lowered or "<iframe" in lowered or "meta http-equiv" in lowered or "window.location" in lowered:
+    if any(pattern.search(text) for pattern in PROHIBITED_SOURCE_PATTERNS):
         raise ValueError("latest_entry_source_not_self_contained")
     return content
 

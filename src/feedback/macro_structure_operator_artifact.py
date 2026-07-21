@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from src.feedback.macro_structure_trendline_channel import METHOD_VERSION as TRENDLINE_METHOD_VERSION, build_trendline_model
 from src.feedback.macro_structure_structural_events import METHOD_VERSION as STRUCTURAL_EVENT_METHOD_VERSION, build_structural_event_model
 from src.feedback.macro_structure_scenarios import METHOD_VERSION as SCENARIO_METHOD_VERSION, build_scenario_model
-from src.feedback.macro_structure_latest_entry import publish_available_entry, publish_unavailable_entry
+from src.feedback.macro_structure_latest_entry import LatestEntryPublicationError, publish_available_entry, publish_unavailable_entry
 
 SCHEMA_VERSION = "macro_structure_operator_artifact.v2"
 METHOD_VERSION = "macro_structure_operator_artifact.v2"
@@ -568,11 +568,15 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             latest_entry_info.update(publish_available_entry(output_root=output_root, source_dir=source_dir, artifact_id=artifact_id, source_digest=digest, metadata={"as_of_utc": model["as_of_utc"], "as_of_jst": model["as_of_jst"], "evaluated_at_utc": model["evaluated_at_utc"], "evaluated_at_jst": model["evaluated_at_jst"], "stale_status": snapshot.get("stale_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "data_quality_status": snapshot.get("data_quality_status", ""), "safety_boundary": SAFETY}))
         _publish(output_root, artifact_id, files, latest, before_latest=_publish_entry if has_4h_input else None)
         return {"ok": True, "exit_code": 0, **latest, **latest_entry_info, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False}
+    except LatestEntryPublicationError:
+        return {"ok": False, "exit_code": 2, "error_code": "latest_entry_publication_failed", "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
     except (OSError, ValueError) as exc:
         result = {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
         if has_4h_input:
             try:
                 result.update(publish_unavailable_entry(output_root=output_root, error_code=str(exc)))
+            except LatestEntryPublicationError:
+                result["error_code"] = "latest_entry_publication_failed"
             except (OSError, ValueError):
                 pass
         return result

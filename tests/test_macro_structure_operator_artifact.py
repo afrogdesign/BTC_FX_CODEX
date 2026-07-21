@@ -222,6 +222,24 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
                 failed = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=ohlcv_4h, output_root=output)
             self.assertTrue(valid["ok"])
             self.assertFalse(failed["ok"])
+            self.assertEqual(failed["error_code"], "latest_entry_publication_failed")
+            self.assertNotIn("latest_entry_status", failed)
+            self.assertEqual((output / "latest.html").read_bytes(), latest_html_before)
+            self.assertEqual((output / "latest.json").read_bytes(), latest_json_before)
+
+    def test_unavailable_entry_atomic_replace_failure_has_fixed_error_and_no_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); valid_4h = _make_4h_csv(root); output = root / "operator"
+            valid = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=valid_4h, output_root=output)
+            latest_html_before = (output / "latest.html").read_bytes()
+            latest_json_before = (output / "latest.json").read_bytes()
+            invalid_4h = _make_4h_csv(root, invalid=True)
+            with patch.object(macro_structure_latest_entry.os, "replace", side_effect=OSError("platform path must not leak")):
+                failed = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, ohlcv_4h_csv=invalid_4h, output_root=output)
+            self.assertTrue(valid["ok"])
+            self.assertFalse(failed["ok"])
+            self.assertEqual(failed["error_code"], "latest_entry_publication_failed")
+            self.assertNotIn("latest_entry_status", failed)
             self.assertEqual((output / "latest.html").read_bytes(), latest_html_before)
             self.assertEqual((output / "latest.json").read_bytes(), latest_json_before)
 
