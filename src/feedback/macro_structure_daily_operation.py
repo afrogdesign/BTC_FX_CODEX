@@ -14,6 +14,10 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
+
+from src.data.fetcher import FetchConfig, fetch_klines
+from tools.fetch_active_plan_market_data import convert_ohlcv_to_diagnostic_rows, write_diagnostic_csv
 
 from src.feedback.macro_structure_volatility_replay import (
     EXPECTED_INTERVALS,
@@ -34,6 +38,7 @@ METHOD_VERSION = "macro_structure_daily_operation.v1"
 SCHEMA_VERSION = "macro_structure_daily_operation.v1"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 TIMEFRAMES = ("15m", "1h", "4h")
+JST = ZoneInfo("Asia/Tokyo")
 OUTPUT_NAMES = (
     "macro_structure_snapshot.json",
     "macro_structure_snapshot.md",
@@ -67,6 +72,48 @@ def _json_bytes(value: Any) -> bytes:
 
 def _compact_json_bytes(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _input_symbols(path: Path) -> set[str]:
+    try:
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            reader = csv.DictReader(handle)
+            if "symbol" not in (reader.fieldnames or []):
+                return set()
+            return {str(row.get("symbol") or "").strip() for row in reader if str(row.get("symbol") or "").strip()}
+    except (OSError, UnicodeError, csv.Error) as exc:
+        raise ValueError("invalid_input") from exc
+
+
+def _validate_symbol_identity(paths: dict[str, Path], requested_symbol: str) -> None:
+    observed: set[str] = set()
+    for path in paths.values():
+        symbols = _input_symbols(path)
+        if any(symbol != requested_symbol for symbol in symbols):
+            raise ValueError("ohlcv_symbol_mismatch")
+        observed.update(symbols)
+    if len(observed) > 1:
+        raise ValueError("ohlcv_symbol_mismatch")
+
+
+def _fetch_public_ohlcv(path: Path, limit: int, interval: str, symbol: str) -> None:
+    frame = fetch_klines(
+        FetchConfig(
+            base_url="https://contract.mexc.com",
+            symbol=symbol,
+            timeout_sec=5,
+            retry_count=3,
+            request_interval_sec=0.3,
+        ),
+        interval=interval,
+        limit=limit,
+    )
+    if frame is None or frame.empty:
+        raise ValueError("public_ohlcv_empty")
+    rows = convert_ohlcv_to_diagnostic_rows(frame, source_label="exchange-auto-public", interval=interval, symbol=symbol)
+    if not rows or any(str(row.get("symbol") or "") != symbol for row in rows):
+        raise ValueError("ohlcv_symbol_mismatch")
+    write_diagnostic_csv(path, rows)
 
 
 def _csv_bytes(rows: list[dict[str, Any]]) -> bytes:
@@ -195,16 +242,17 @@ def build_macro_structure_daily(
     try:
         paths = {"15m": ohlcv_15m, "1h": ohlcv_1h, "4h": ohlcv_4h}
         if fetch_public_ohlcv:
-            from src.feedback.manual_operator_operating_cycle import _fetch_ohlcv
-
             temporary_root = Path(tempfile.mkdtemp(prefix="macro-structure-inputs-"))
             paths = {}
             for interval in TIMEFRAMES:
                 path = temporary_root / f"ohlcv_{interval}.csv"
-                _fetch_ohlcv(path, int(ohlcv_limit), interval)
+                _fetch_public_ohlcv(path, int(ohlcv_limit), interval, symbol)
                 paths[interval] = path
         if any(path is None for path in paths.values()):
             raise ValueError("public_ohlcv_paths_required")
+        explicit_paths = {interval: path for interval, path in paths.items() if path is not None}
+        if len(explicit_paths) == len(TIMEFRAMES):
+            _validate_symbol_identity(explicit_paths, symbol)
         candles: dict[str, list[dict[str, Any]]] = {}
         metadata: dict[str, dict[str, Any]] = {}
         fingerprints = {}
@@ -213,10 +261,10 @@ def build_macro_structure_daily(
             assert path is not None
             candles[interval], metadata[interval] = _load_ohlcv(path, interval)
             fingerprints[interval] = _sha256(path)
-        cutoff = _latest_common_closed_cutoff(candles)
+        cutoff = _latest_common_closed_cutoff(candles).astimezone(timezone.utc)
         requested = _dt(cutoff_utc) if cutoff_utc else None
         if requested is not None:
-            cutoff = min(cutoff, requested)
+            cutoff = min(cutoff, requested.astimezone(timezone.utc)).astimezone(timezone.utc)
         closed = {interval: [c for c in candles[interval] if c["timestamp"] + EXPECTED_INTERVALS[interval] <= cutoff] for interval in TIMEFRAMES}
         if any(not closed[interval] for interval in TIMEFRAMES):
             raise ValueError("common_closed_candle_cutoff_missing")
@@ -264,7 +312,7 @@ def build_macro_structure_daily(
         snapshot = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "m1_method_version": M1_METHOD_VERSION,
             "snapshot_id": "macro_snapshot_" + run_id[4:], "run_id": run_id, "as_of_utc": snapshot_cutoff,
-            "as_of_jst": (cutoff + timedelta(hours=9)).isoformat(), "snapshot_cutoff_utc": snapshot_cutoff,
+            "as_of_jst": cutoff.astimezone(JST).isoformat(), "snapshot_cutoff_utc": snapshot_cutoff,
             "symbol": symbol, "current_price": round(price, 10), "input_coverage": metadata,
             "input_fingerprints": fingerprints, "structure": structure["state"], "price_location": structure["location"],
             "location_percentile": structure.get("percentile", ""), "support_zones": support_zones,

@@ -8022,13 +8022,14 @@ class MacroStructureDailyCliTests(unittest.TestCase):
         argv = [
             "log_feedback.py", "run-macro-structure-daily", "--ohlcv-15m", "15m.csv",
             "--ohlcv-1h", "1h.csv", "--ohlcv-4h", "4h.csv", "--output-root", "reports",
-            "--stdout-json",
+            "--symbol", "ETH_USDT", "--stdout-json",
         ]
         with patch.object(sys, "argv", argv), patch("tools.log_feedback.build_macro_structure_daily", return_value=summary) as build, patch("sys.stdout", new_callable=StringIO) as out:
             self.assertEqual(main(), 0)
             self.assertEqual(build.call_count, 1)
             self.assertEqual(build.call_args.kwargs["ohlcv_15m"], Path("15m.csv"))
             self.assertEqual(build.call_args.kwargs["ohlcv_4h"], Path("4h.csv"))
+            self.assertEqual(build.call_args.kwargs["symbol"], "ETH_USDT")
             self.assertIn('"result_status":"insufficient"', out.getvalue())
             self.assertNotIn("15m.csv", out.getvalue())
 
