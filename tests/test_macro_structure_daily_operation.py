@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.feedback.macro_structure_daily_operation import build_macro_structure_daily
+from src.feedback.macro_structure_daily_operation import _zone_summary, build_macro_structure_daily
+from src.feedback.macro_structure_volatility_replay import _structure
 from tools.fetch_active_plan_market_data import write_diagnostic_csv as accepted_write_diagnostic_csv
 
 
@@ -78,9 +79,13 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
         self.assertEqual(snapshot["as_of_utc"], snapshot["snapshot_cutoff_utc"])
         self.assertEqual(snapshot["as_of_utc"], "2026-01-02T16:00:00+00:00")
         self.assertEqual(snapshot["as_of_jst"], "2026-01-03T01:00:00+09:00")
-        self.assertEqual(json.loads((self.output / "latest.json").read_text(encoding="utf-8"))["run_id"], result["run_id"])
+        latest = json.loads((self.output / "latest.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["structure_state"], latest["structure_state"])
+        self.assertNotIn("structure", snapshot)
+        self.assertEqual(latest["run_id"], result["run_id"])
         markdown = (run_dir / "macro_structure_snapshot.md").read_text(encoding="utf-8")
         self.assertTrue(markdown.startswith("# Macro Structure Daily Snapshot\n\n- snapshot time:"))
+        self.assertIn(f"current structure: `{snapshot['structure_state']}`", markdown)
         for label in ("evidence confidence, not execution permission", "report-only", "human decides manually"):
             self.assertIn(label, markdown)
 
@@ -114,7 +119,7 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
             _write(short_paths[interval], rows)
         insufficient = build_macro_structure_daily(
             ohlcv_15m=short_paths["15m"], ohlcv_1h=short_paths["1h"], ohlcv_4h=short_paths["4h"],
-            output_root=self.root / "insufficient-output", now_utc=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+            output_root=self.root / "insufficient-output", now_utc=datetime(2026, 1, 2, 1, tzinfo=timezone.utc),
         )
         self.assertTrue(insufficient["ok"])
         self.assertEqual(insufficient["result_status"], "insufficient")
@@ -129,6 +134,71 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["continuity_status"], "discontinuous")
         self.assertEqual(result["stale_status"], "stale")
+        self.assertEqual(result["data_quality_status"], "discontinuous")
+
+    def test_zone_evidence_fields_are_direct_m1_record_values(self) -> None:
+        level = {
+            "level_id": "level_1", "side": "low", "role": "support", "low": 99.0, "high": 99.5, "center": 99.25,
+            "source_timeframes": "1h,4h", "first_seen_at": "2026-01-01T00:00:00+00:00",
+            "last_confirmed_at": "2026-01-01T04:00:00+00:00", "touch_count": 3, "clean_rejection_count": 2,
+            "break_count": 1, "false_break_reclaim_count": 1, "lifecycle": "touched", "reliability_score": 62.5,
+            "reliability_band": "medium", "reason_codes": "prior_only,clean_rejection_history",
+        }
+        zone = _zone_summary(level, 100.0, 1.0)
+        required = {
+            "level_id", "side", "role", "low", "high", "center", "source_timeframes", "first_seen_at",
+            "last_confirmed_at", "touch_count", "clean_rejection_count", "break_count", "false_break_reclaim_count",
+            "lifecycle", "reliability_score", "reliability_band", "distance_from_price_pct", "distance_from_price_atr",
+            "reason_codes",
+        }
+        self.assertEqual(set(zone), required)
+        self.assertEqual(zone["touch_count"], level["touch_count"])
+        self.assertEqual(zone["reliability_score"], level["reliability_score"])
+        self.assertEqual(zone["reason_codes"], level["reason_codes"])
+
+    def test_nearest_structural_levels_beat_farther_high_reliability_display_levels(self) -> None:
+        levels = [
+            {"level_id": "far_support", "role": "support", "low": 89.5, "high": 90.5, "center": 90.0, "reliability_band": "high"},
+            {"level_id": "near_support", "role": "support", "low": 98.5, "high": 99.5, "center": 99.0, "reliability_band": "medium"},
+            {"level_id": "near_resistance", "role": "resistance", "low": 100.5, "high": 101.5, "center": 101.0, "reliability_band": "medium"},
+            {"level_id": "far_resistance", "role": "resistance", "low": 109.5, "high": 110.5, "center": 110.0, "reliability_band": "high"},
+        ]
+        structure = _structure(100.0, levels, [], datetime(2026, 1, 1, tzinfo=timezone.utc), [])
+        self.assertEqual(structure["support"]["level_id"], "near_support")
+        self.assertEqual(structure["resistance"]["level_id"], "near_resistance")
+
+    def test_interval_aware_freshness_thresholds_and_stale_timeframes(self) -> None:
+        current_paths = {interval: self.root / f"current_{interval}.csv" for interval in self.paths}
+        start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        _write(current_paths["15m"], _bars(start, 400, timedelta(minutes=15), "15m"))
+        _write(current_paths["1h"], _bars(start, 100, timedelta(hours=1), "1h"))
+        _write(current_paths["4h"], _bars(start, 25, timedelta(hours=4), "4h"))
+        current = build_macro_structure_daily(
+            ohlcv_15m=current_paths["15m"], ohlcv_1h=current_paths["1h"], ohlcv_4h=current_paths["4h"],
+            output_root=self.root / "fresh-output", now_utc=datetime(2026, 1, 5, 2, tzinfo=timezone.utc),
+        )
+        self.assertTrue(current["ok"])
+        self.assertEqual(current["stale_status"], "current")
+        self.assertEqual(current["freshness"]["15m"]["stale_threshold_minutes"], 45)
+        self.assertEqual(current["freshness"]["1h"]["stale_threshold_minutes"], 90)
+        self.assertEqual(current["freshness"]["4h"]["stale_threshold_minutes"], 270)
+
+        current_4h = self.root / "current_stale_check_4h.csv"
+        _write(current_4h, _bars(start, 26, timedelta(hours=4), "4h"))
+        stale_15m = build_macro_structure_daily(
+            ohlcv_15m=current_paths["15m"], ohlcv_1h=current_paths["1h"], ohlcv_4h=current_4h,
+            output_root=self.root / "stale-15m-output", now_utc=datetime(2026, 1, 5, 4, 46, tzinfo=timezone.utc),
+        )
+        self.assertTrue(stale_15m["ok"])
+        self.assertEqual(stale_15m["stale_status"], "stale")
+        self.assertIn("15m", stale_15m["stale_timeframes"])
+        self.assertNotIn("4h", stale_15m["stale_timeframes"])
+
+    def test_historical_cutoff_is_no_future_and_exposes_timeframe_staleness(self) -> None:
+        result = self.build(cutoff_utc="2026-01-02T12:00:00Z")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["stale_status"], "stale")
+        self.assertTrue(result["stale_timeframes"])
 
     def test_public_only_boundary_and_atomic_failure_preserve_latest(self) -> None:
         self.assertFalse(build_macro_structure_daily(output_root=self.output)["ok"])
