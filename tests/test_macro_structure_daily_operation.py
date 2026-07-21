@@ -156,6 +156,13 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
         self.assertEqual(zone["reliability_score"], level["reliability_score"])
         self.assertEqual(zone["reason_codes"], level["reason_codes"])
 
+        flipped_high = dict(level, side="high", role="support")
+        flipped_low = dict(level, side="low", role="resistance")
+        self.assertEqual(_zone_summary(flipped_high, 100.0, 1.0)["side"], "high")
+        self.assertEqual(_zone_summary(flipped_high, 100.0, 1.0)["role"], "support")
+        self.assertEqual(_zone_summary(flipped_low, 100.0, 1.0)["side"], "low")
+        self.assertEqual(_zone_summary(flipped_low, 100.0, 1.0)["role"], "resistance")
+
     def test_nearest_structural_levels_beat_farther_high_reliability_display_levels(self) -> None:
         levels = [
             {"level_id": "far_support", "role": "support", "low": 89.5, "high": 90.5, "center": 90.0, "reliability_band": "high"},
@@ -208,6 +215,28 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
             failed = self.build()
         self.assertFalse(failed["ok"])
         self.assertEqual((self.output / "latest.json").read_bytes(), before)
+
+    def test_conflicting_complete_run_fails_closed_without_mutation(self) -> None:
+        first = self.build()
+        run_dir = self.output / str(first["artifact_dir"])
+        latest_before = (self.output / "latest.json").read_bytes()
+        target = run_dir / "macro_structure_snapshot.md"
+        target_before = target.read_bytes()
+        target.write_bytes(b"conflicting pre-existing artifact\n")
+        failed = self.build()
+        self.assertFalse(failed["ok"])
+        self.assertEqual(failed["error_code"], "existing_output_conflict")
+        self.assertEqual(target.read_bytes(), b"conflicting pre-existing artifact\n")
+        self.assertEqual((self.output / "latest.json").read_bytes(), latest_before)
+        self.assertNotEqual(target.read_bytes(), target_before)
+
+    def test_incomplete_existing_run_fails_closed(self) -> None:
+        first = self.build()
+        run_dir = self.output / str(first["artifact_dir"])
+        (run_dir / "run_manifest.json").unlink()
+        failed = self.build()
+        self.assertFalse(failed["ok"])
+        self.assertEqual(failed["error_code"], "incomplete_existing_run")
 
     def test_public_fetch_uses_requested_symbol_and_labels_rows(self) -> None:
         calls = []

@@ -139,7 +139,7 @@ def _zone_summary(level: dict[str, Any], price: float, atr: float) -> dict[str, 
     distance = abs(level["center"] - price)
     return {
         "level_id": level["level_id"],
-        "side": "support" if level.get("role") == "support" else "resistance",
+        "side": level.get("side", ""),
         "role": level.get("role", ""),
         "low": level["low"],
         "high": level["high"],
@@ -223,6 +223,9 @@ def _publish(root: Path, run_id: str, files: dict[str, bytes], latest: dict[str,
         if not run_dir.exists():
             stage.replace(run_dir)
         else:
+            for name in OUTPUT_NAMES:
+                if (run_dir / name).read_bytes() != (stage / name).read_bytes():
+                    raise OSError("existing_output_conflict")
             shutil.rmtree(stage)
         latest_stage = root / ".latest.json.tmp"
         latest_stage.write_bytes(_compact_json_bytes(latest))
@@ -343,7 +346,7 @@ def build_macro_structure_daily(
         result_status = "insufficient" if structure["state"] == "insufficient" else "ok"
         data_quality = "discontinuous" if discontinuous else "stale" if stale else "ok"
         snapshot_cutoff = cutoff.isoformat()
-        run_id = "run_" + hashlib.sha256(f"{SCHEMA_VERSION}|{symbol}|{snapshot_cutoff}|{json.dumps(fingerprints, sort_keys=True)}".encode()).hexdigest()[:20]
+        run_id = "run_" + hashlib.sha256(f"{SCHEMA_VERSION}|{METHOD_VERSION}|{symbol}|{snapshot_cutoff}|{json.dumps(fingerprints, sort_keys=True)}".encode()).hexdigest()[:20]
         snapshot = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "m1_method_version": M1_METHOD_VERSION,
             "snapshot_id": "macro_snapshot_" + run_id[4:], "run_id": run_id, "as_of_utc": snapshot_cutoff,
