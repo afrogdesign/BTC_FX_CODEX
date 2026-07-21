@@ -8,10 +8,12 @@ last_updated: 2026-07-21
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - accepted macro phase: M5 bounded offline champion/challenger proposal engine
 - accepted source checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
-- M5 active spec: archived
+- AI-orchestration docs checkpoint: reported commit `5d13c3913dafb10c07add6a9abd25f5955fc900c`
+- active product spec: none
+- next route: bounded A1 task-manifest foundation spec
 - M6: not started and not authorized
 
-Branchはlocal作業開始時に `git status --short --branch` で再確認する。
+Branch and git objects are confirmed by local git at task start. AFROG MCP directly verifies file content and routing state but does not expose `.git` internals.
 
 ## Product objective
 
@@ -46,13 +48,8 @@ notification mailを受け取った人間が15分足を確認し、
 
 ## M5 acceptance
 
-ChatGPT directly reviewed the corrected source, focused tests, active-spec notes, and fresh bounded outputs after FIX-08.
+Acceptance-only execution completed one full bounded run across 6 chronological snapshot dates.
 
-Acceptance-only execution:
-
-- Work ID: `BTCFX-20260721-MACRO-P9-CHAMPION-CHALLENGER-PROPOSAL-ENGINE-ACCEPTANCE-01`
-- one full bounded run
-- 6 chronological snapshot dates
 - champion count: 1
 - challenger count: 4
 - comparison-eligible challengers: 0
@@ -71,17 +68,39 @@ Fresh output checkpoint:
 - JSON: `12947969e02f4476c02d760054d284932f8288628aa07914a158a799ca53425f`
 - Markdown: `fdbe8579f466ec17ed4a3a32979c9da9cd8801490eb7f21277f6ececc18803f5`
 
-The outcome is accepted because the engine fails closed when the champion baseline, direction counts, guarded metrics, concentration, or P8 evidence are insufficient. M5 acceptance does not approve a challenger, production tuning, or phase promotion.
+M5 acceptance is implementation/evidence acceptance. It does not approve a challenger, production tuning, M6, or phase promotion.
 
-## Current blocker and next route
+## AI-orchestration checkpoint
 
-There is no remaining M5 implementation blocker.
+The post-M5 docs state has been directly verified through MCP:
 
-Before any new product phase:
+- active specs contain only `.gitkeep`
+- accepted M5 spec is archived
+- canonical routing docs are aligned
+- stale M5 FIX boundaries were removed from current design docs
+- the task-manifest design and replay-simplification plan are separate
+- source, tests, local artifacts, and runtime files remain outside the docs checkpoint
 
-1. review and commit the existing ChatGPT-owned AI-orchestration documentation changes as a separate docs checkpoint
-2. create a bounded A1 active spec for the task-manifest and acceptance-gate foundation
-3. do not start replay-stage/cache redesign until the separate measurement route justifies it
+The checkpoint commit hash above is the Codex report value because MCP cannot inspect `.git` objects.
+
+## Current route
+
+Create one bounded A1 active spec using:
+
+```text
+docs/operations/ai-orchestration/AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md
+```
+
+A1 is limited to:
+
+- task manifest schema
+- task report schema
+- examples
+- validator and prompt renderer
+- focused tests
+- task README
+
+Do not start CWT integration, replay-stage/cache redesign, M6, runtime, notification, or production changes.
 
 ## Production state
 
@@ -99,4 +118,5 @@ M1-M5 remain offline/shadow evidence. They do not change:
 - exact current work: `NEXT_ACTION.md`
 - stable rules: `CONTROL.md`
 - accepted M5 spec: `chatgpt/specs/archive/20260721_macro_p9_champion_challenger_proposal_engine.md`
+- A1 parent contract: `AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md`
 - accepted large checkpoints: `MILESTONES.md`

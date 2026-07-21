@@ -1,58 +1,77 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-AI-ORCHESTRATION-DOCS-CHECKPOINT-01`
-- mode: `BOUNDED_CODEX`
+- current_work_id: `BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A1-SPEC-01`
+- mode: `SPEC_FIRST`
 - branch: confirm from repo state
-- status: ready for docs-only validation and commit
-- active_spec: none
+- status: ready for new ChatGPT thread
+- active_spec: none; create one bounded A1 spec
 - acceptance: not applicable
 - push: none
 
 ## Goal
 
-Commit the reviewed AI-orchestration routing, M5 acceptance records, task-manifest design, and preserved pre-optimization history as one docs-only checkpoint.
+Create one bounded active specification for Phase A1 of the AI task-manifest and acceptance-gate foundation.
 
-## Reviewed scope
-
-- `AGENTS.md`
-- M5 spec move from `chatgpt/specs/active/` to `chatgpt/specs/archive/`
-- canonical orchestration docs: `START_HERE.md`, `AI_WORKFLOW.md`, `CONTROL.md`, `INITIAL_PROMPT.md`
-- current records: `CURRENT_STATE.md`, `NEXT_ACTION.md`, `MILESTONES.md`, `DECISIONS.md`
-- compatibility pointers: `PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHATGPT_COMMANDER_PROMPT.md`, `RESUME.md`, `RESUME_SMOKE_TEST.md`
-- navigation docs: `README.md`, `REPO_MAP.md`, `handoffs/CURRENT_HANDOFF.md`
-- design docs: `AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md`, `MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md`
-- preserved history under `history/record-optimization-20260721/` and `history/ai-routing-optimization-20260721/`
-
-## Validation
-
-- confirm actual branch and starting HEAD
-- inspect current status and docs-only diff
-- verify no source, test, local artifact, runtime, or unrelated file is staged
-- verify active specs contain only `.gitkeep`
-- verify the archived M5 spec exists
-- run task-scoped `git diff --check` on reviewed docs
-- stage only reviewed docs and commit
-
-## Commit
+Parent contract:
 
 ```text
-docs: streamline AI routing and acceptance workflow
+docs/operations/ai-orchestration/AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md
 ```
 
-Push: none.
+## A1 scope
 
-## After checkpoint
+The active spec may authorize only:
 
-ChatGPT directly verifies the commit and then starts a new ChatGPT thread for bounded A1 active-spec creation.
+- `chatgpt/tasks/README.md`
+- `chatgpt/tasks/schemas/task_manifest.schema.json`
+- `chatgpt/tasks/schemas/task_report.schema.json`
+- `chatgpt/tasks/examples/implementation_task.example.json`
+- `chatgpt/tasks/examples/acceptance_task.example.json`
+- `chatgpt/tasks/examples/task_report.example.json`
+- `tools/ai_task_contract.py`
+- `tests/test_ai_task_contract.py`
+- the A1 active spec itself
 
-A1 must remain limited to task/report schemas, examples, validator, prompt renderer, focused tests, and task README. Do not start CWT integration, replay-stage/cache work, M6, runtime, or production changes.
+## Required A1 behavior
+
+- validate task and report JSON contracts fail-closed
+- compute deterministic canonical JSON SHA-256
+- render compact fresh and delta Codex prompts
+- prohibit heavy validation in implementation manifests
+- prohibit source edits in acceptance manifests
+- validate changed-file, test-command, heavy-run, commit, push, Work ID, revision, and SHA alignment in reports
+- use the canonical response outbox contract
+- require no new external dependency by default
+- provide focused unit tests and valid/invalid examples
+
+## A1 non-goals
+
+- no CWT integration
+- no worktree automation
+- no replay-stage or persistent-cache redesign
+- no conversion of all historical tasks
+- no automatic Codex execution
+- no automatic acceptance or next-task selection
+- no product, trading, scoring, threshold, gate, classifier, runtime, notification, mail, API, account, position, or order change
+- no M6 work
+
+## ChatGPT work in the new thread
+
+1. read the canonical startup docs and this current action
+2. inspect the parent contract only as needed
+3. create a concise A1 active spec with stable clause IDs
+4. define exact allowed files and focused validation
+5. directly review the spec for scope and safety
+6. produce one short bounded Codex implementation prompt
+
+Do not start Codex implementation before the A1 active spec exists and is internally consistent.
 
 ## Boundaries
 
-- do not edit source or tests
-- do not commit `local/` outputs
-- do not change product/trading behavior
+- preserve unrelated dirty files
+- do not alter accepted M5 records
+- do not edit source outside the A1 tool/test scope
 - do not reset, restore, checkout, clean, or manipulate stash state
-- preserve all unrelated dirty changes
+- push remains unauthorized
 
-This file contains one current task only. Replace it after the docs checkpoint is accepted.
+This file contains one current task only. Replace it after the A1 spec is created and the implementation task is fixed.
