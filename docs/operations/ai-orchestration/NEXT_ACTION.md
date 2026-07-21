@@ -1,45 +1,58 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-P8-ISSUE-LIFECYCLE-ALIGNMENT`
-- mode: `BOUNDED_CODEX`
-- branch: confirm from local git state; expected documentation line is `Ver04-v3`
-- active_spec: `chatgpt/specs/active/20260721_p8_issue_lifecycle_alignment.md`
-- status: approved for bounded implementation
+- current_work_id: `BTCFX-20260721-P8-ACTUAL-EXPORT-INPUT`
+- mode: `HUMAN_CHECK`
+- branch: `Ver04-v3` documentation line; confirm from local git before the next Codex task
+- active_spec: none
+- status: blocked pending local private input
 - push: none
 
 ## Current action
 
-Align the deterministic P8 issue-summary lifecycle with already accepted operator-surface behavior.
+Place one complete MEXC futures export batch under the ignored canonical directory:
 
-Required result:
+```text
+local/manual_trade_imports/YYYYMMDD/
+```
 
-- preserve `P8-ISSUE-001` as an evidence-driven open hypothesis
-- mark seeded UI issues 002–004 as resolved
-- add deterministic accepted-implementation resolution basis metadata
-- keep all evaluation counts, P9 readiness, classifier, gates, thresholds, notification, mail, and runtime behavior unchanged
-- add matching unit regressions
-- create one local commit
+The batch must contain `.xlsx` files matching all three categories:
 
-## Validation budget
+- Trade History
+- Order History
+- Position History
 
-- `tests.test_manual_operator_trial_evidence`
-- one task-scoped `git diff --check`
-- no full bundle or real-data replay
+Raw exchange exports must remain local and uncommitted.
 
-## Acceptance boundary
+## Why this is required
 
-After Codex completion, ChatGPT reviews the changed source, matching tests, scope, and commit report through `AFROG_Business_MCP`.
+The accepted importer, episode builder, signal linker, and P8 actual-evidence route already exist and have matching test coverage. Current inspection found no canonical raw input directory and no generated actual-trade, episode, or signal-link CSVs. Consequently eligible actual-backed evidence is 0.
 
-Only after acceptance will ChatGPT:
+Codex must not fabricate, download, infer, or synthesize private exchange history.
 
-- update `P8_P9_ISSUE_REGISTER.md`
-- archive the active spec
-- update accepted current state and select the next task
+## Next Codex task after input exists
+
+Run one bounded operations task in the primary repo:
+
+1. confirm the complete three-category batch without printing raw rows or private paths
+2. run `import-manual-actual-trades` with `--dry-run --conflict-policy reject --stdout-json`
+3. stop on any missing category, schema error, row rejection requiring judgment, or corrected-export conflict
+4. only after a clean dry-run, run the canonical importer and generate:
+   - `logs/csv/manual_actual_trades.csv`
+   - `logs/csv/manual_actual_orders.csv`
+   - `logs/csv/manual_actual_positions.csv`
+5. build `logs/csv/manual_trade_episodes.csv`
+6. build `logs/csv/manual_trade_signal_links.csv`
+7. report compact aggregate counts only; do not commit generated CSVs or raw exports
+8. return to ChatGPT before any P8 replay or production conclusion
 
 ## Safety
 
 - report-only
-- not `FORMAL_GO`
-- human-decided
+- no private/account/order endpoints
+- no API keys or secrets
+- no raw exchange export commit
+- no generated actual CSV commit
 - no automatic order
-- no classifier, gate, threshold, scoring, notification, mail, runtime, API, account, position, or order change
+- no classifier, score, gate, threshold, notification, mail, runtime, schedule, or phase-promotion change
+- no `paper_positions.csv` integration
+- frozen runtime repo remains out of scope

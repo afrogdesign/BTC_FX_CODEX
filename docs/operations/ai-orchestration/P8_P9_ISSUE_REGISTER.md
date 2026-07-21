@@ -338,3 +338,38 @@ Parent implementation commit `9c9a631` passed the fixed-formula audit and remove
 - preview summaries had null side-aware actions and did not prove the 14:05 no-chase display.
 
 The active review-fix spec requires exact confirmed-over-early precedence, mirrored strength buckets, canonical attachment-order evidence, and regenerated side-aware previews. This remains report/display-only and does not authorize scoring, gate, notification, mail, runtime, API, account, position, or order changes.
+
+
+---
+
+## 2026-07-21 UI issue lifecycle reconciliation
+
+The latest accepted lifecycle below supersedes the initial observation statuses in the original issue blocks for issues 002–004.
+
+### P8-ISSUE-002 — Main decision and Big Chance hierarchy is unclear
+
+- status: resolved
+- resolution basis: `accepted_operator_surface.main_vs_big_chance_hierarchy`
+- accepted behavior: side-aware operator action is primary; Big Chance remains auxiliary and does not override the normal Long/Short decision
+- evidence type: accepted source and matching deterministic UI regressions
+- market-performance occurrence, resolved-row, and actual-backed counts: 0; this is a UI-contract resolution, not trading-performance evidence
+
+### P8-ISSUE-003 — Raw classifier payload is exposed
+
+- status: resolved
+- resolution basis: `accepted_operator_surface.collapsed_classifier_payload`
+- accepted behavior: raw execution flags are absent from the primary operator workspace; internal values are confined to a collapsed diagnostic section
+- evidence type: accepted source and matching deterministic UI regressions
+- market-performance occurrence, resolved-row, and actual-backed counts: 0; this is a UI-contract resolution, not trading-performance evidence
+
+### P8-ISSUE-004 — STOP card side identity is unclear
+
+- status: resolved
+- resolution basis: `accepted_operator_surface.side_specific_stop_card_identity`
+- accepted behavior: Long/Short identity and side-specific STOP/action wording are explicit
+- evidence type: accepted source and matching deterministic UI regressions
+- market-performance occurrence, resolved-row, and actual-backed counts: 0; this is a UI-contract resolution, not trading-performance evidence
+
+Implementation checkpoint: `0eeb26b`
+
+Safety: report/display lifecycle alignment only. No classifier, score, gate, threshold, notification, mail, runtime, API, account, position, order, or automatic-tuning behavior changed.

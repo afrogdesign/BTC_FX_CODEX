@@ -83,3 +83,19 @@ Return the compact report required by `AGENTS.md` and write the same report exac
 `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`
 
 Do not read, check, retry, recreate, monitor, or watch that file after writing.
+
+## Acceptance — 2026-07-21
+
+- status: accepted
+- implementation commit: `0eeb26b`
+- reported branch: `Ver04-v3`
+- focused unittest: pass
+- task-scoped `git diff --check`: pass
+- direct MCP review confirmed:
+  - issue 001 remains evidence-driven `open hypothesis`
+  - issues 002–004 are emitted as `resolved`
+  - stable accepted-implementation resolution metadata is present
+  - row-derived and actual-backed counts remain zero for the seeded UI issues
+  - evaluation, global STOP, actual evidence, and P9 readiness calculation paths are unchanged
+- safety review: no classifier, gate, threshold, scoring, notification, mail, runtime, API, account, position, or order behavior change
+- acceptance action: archive this spec and return P8 focus to actual-backed evidence readiness
