@@ -101,3 +101,7 @@ FIX-03 now uses true cutoff-bounded snapshot replay, with the champion replay ca
 ## Implementation correction — bounded FIX-04
 
 FIX-04 closes the rolling review blockers: split degradation now follows the direction of every guarded metric and missing split metrics fail closed; challenger summaries use only eligible candidate-specific rolling snapshots with no terminal/champion fallback; rolling snapshots retain sanitized candidate issue lineage; and champion snapshots require quality, required metrics, date concentration, and same-date alignment before comparison. Focused module/CLI tests and a lightweight deterministic full-orchestration fixture passed. Full actual-bundle acceptance, a second full replay, and actual four-output byte-identity acceptance were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
+
+## Implementation correction — bounded FIX-05
+
+FIX-05 integrates candidate-specific rolling M1/M3 split evidence into actual challenger gating across every snapshot date. Split degradation and missing required metrics now fail closed, while candidate issue lineage remains private to diagnosis and public rolling evidence exposes only counts and deterministic fingerprints. The meaningful lightweight orchestration fixture passed through the real rolling, split, gating, issue publication, and four-output paths. The actual full bundle, second full replay, and actual-bundle four-output byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.

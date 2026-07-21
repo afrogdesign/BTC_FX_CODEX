@@ -335,7 +335,7 @@ def _snapshot_record(date: str, cutoff: str, paths: dict[str, Path], run: dict[s
     m1_quality = _m1_quality_ok(run["m1"] / "replay.json")
     m3_quality = _m3_quality_ok(run["m3"] / "replay.json")
     lineage = [{key: row.get(key, "") for key in ("opportunity_id", "root_cause", "reason", "event_family")} for row in _read_csv(m1_misses, {"opportunity_id"})]
-    return {"snapshot_jst_date": date, "cutoff_utc": cutoff, "input_row_counts": {key: _row_count(path) for key, path in paths.items()}, "input_fingerprints": _fingerprints(paths), "m1_event_count": len(_read_csv(m1_events, {"event_id"})), "m1_independent_opportunity_count": len(_read_csv(m1_misses, {"opportunity_id"})), "m1_opportunity_id_fingerprint": _id_fingerprint(m1_misses, "opportunity_id"), "m3_event_count": len(_read_csv(m3_events, {"record_id"})), "m3_candidate_episode_count": len(candidate_episodes), "m3_eligible_jst_dates": _jst_dates(m3_events), "m3_validation_jst_dates": validation_dates, "m1_guarded_metrics": m1, "m3_guarded_metrics": m3, "m3_diagnostic_horizons": _m3_diagnostics(m3_summary), "m3_resolved_up_count": m3.get("resolved_up_count"), "m3_resolved_down_count": m3.get("resolved_down_count"), "validation_date_concentration": concentration, "m1_quality_status": "pass" if m1_quality else "fail", "m3_quality_status": "pass" if m3_quality else "fail", "issue_lineage": lineage, "status": status, "comparison_eligible": comparison, "pareto_dominant_vs_champion": pareto, "improved_guarded_metric_count": improved, "reason_codes": sorted(set(reasons))}
+    return {"snapshot_jst_date": date, "cutoff_utc": cutoff, "input_row_counts": {key: _row_count(path) for key, path in paths.items()}, "input_fingerprints": _fingerprints(paths), "m1_event_count": len(_read_csv(m1_events, {"event_id"})), "m1_independent_opportunity_count": len(_read_csv(m1_misses, {"opportunity_id"})), "m1_opportunity_id_fingerprint": _id_fingerprint(m1_misses, "opportunity_id"), "m3_event_count": len(_read_csv(m3_events, {"record_id"})), "m3_candidate_episode_count": len(candidate_episodes), "m3_eligible_jst_dates": _jst_dates(m3_events), "m3_validation_jst_dates": validation_dates, "m1_guarded_metrics": m1, "m3_guarded_metrics": m3, "m3_diagnostic_horizons": _m3_diagnostics(m3_summary), "m3_resolved_up_count": m3.get("resolved_up_count"), "m3_resolved_down_count": m3.get("resolved_down_count"), "validation_date_concentration": concentration, "m1_quality_status": "pass" if m1_quality else "fail", "m3_quality_status": "pass" if m3_quality else "fail", "_issue_lineage": lineage, "status": status, "comparison_eligible": comparison, "pareto_dominant_vs_champion": pareto, "improved_guarded_metric_count": improved, "reason_codes": sorted(set(reasons))}
 
 
 def _snapshot_eligible(snapshot: dict[str, Any], date: str | None = None) -> bool:
@@ -352,6 +352,31 @@ def _snapshot_eligible(snapshot: dict[str, Any], date: str | None = None) -> boo
     return True
 
 
+def _public_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    lineage = snapshot.get("_issue_lineage", [])
+    public = {key: value for key, value in snapshot.items() if not key.startswith("_")}
+    public["issue_lineage_count"] = len(lineage)
+    public["issue_lineage_fingerprint"] = hashlib.sha256(_canonical(lineage).encode()).hexdigest()
+    return public
+
+
+def _split_gate(splits: dict[str, Any]) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    def visit(value: Any) -> None:
+        if not isinstance(value, dict):
+            return
+        if "status" in value:
+            if value.get("status") != "available" or value.get("missing_metrics"):
+                reasons.append("split_required_metric_missing")
+            if value.get("degradation"):
+                reasons.append("split_guarded_metric_degradation")
+            return
+        for child in value.values():
+            visit(child)
+    visit(splits)
+    return not reasons, sorted(set(reasons))
+
+
 def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed: dict[str, Any], champion_pair: dict[str, int], temp_root: Path, champion_cache: list[dict[str, Any]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     snapshots: list[dict[str, Any]] = []; champion_snapshots: list[dict[str, Any]] = []
     for index, (date, cutoff) in enumerate(_performance_snapshot_dates(paths["signals"])):
@@ -365,6 +390,8 @@ def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed
                 champion_validation_dates = list(champion_m3_summary.get("recommendation", {}).get("validation_dates", []))
                 champion_snapshot = _snapshot_record(date, cutoff, snapshot_paths, champion_run, champion_m1, champion_m3, champion_validation_dates, [], "established", False, False, 0)
                 champion_snapshot["comparison_eligible"] = _snapshot_eligible(champion_snapshot, date)
+                champion_snapshot["_m1_split_summary"] = champion_m1_summary
+                champion_snapshot["_m3_split_summary"] = champion_m3_summary
                 if not champion_snapshot["comparison_eligible"]:
                     champion_snapshot["reason_codes"] = sorted(set(champion_snapshot.get("reason_codes", []) + ["champion_snapshot_not_eligible"]))
                 champion_snapshots.append(champion_snapshot)
@@ -390,11 +417,20 @@ def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed
                     numeric = all(isinstance(value, (int, float)) and value is not None for value in _guarded_vector(m1, m3).values())
                     concentration = _date_concentration([row for row in _read_csv(run["m3"] / "episodes.csv", {"episode_id", "policy", "start_timestamp_utc"}) if row.get("policy") == "candidate"], validation_dates)
                     quality = _m1_quality_ok(run["m1"] / "replay.json") and _m3_quality_ok(run["m3"] / "replay.json")
-                    comparison = _snapshot_eligible(champion_snapshot, date) and not reasons and numeric and quality and m3.get("resolved_up_count", 0) >= 10 and m3.get("resolved_down_count", 0) >= 10 and concentration.get("pass", False)
+                    if not _snapshot_eligible(champion_snapshot, date):
+                        reasons.append("champion_snapshot_not_eligible")
+                    m1_splits = _split_comparison(champion_snapshot.get("_m1_split_summary", {}), m1_summary, "reliable_level_acceptance_corridor", ("direction", "regime", "price_location", "volatility_state", "reliability"), M1_GUARDED)
+                    m3_splits = _split_comparison(champion_snapshot.get("_m3_split_summary", {}), m3_summary, "candidate", ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band"), M3_GUARDED)
+                    split_ok, split_reasons = _split_gate({"m1": m1_splits, "m3": m3_splits})
+                    reasons.extend(split_reasons)
+                    comparison = _snapshot_eligible(champion_snapshot, date) and not reasons and split_ok and numeric and quality and m3.get("resolved_up_count", 0) >= 10 and m3.get("resolved_down_count", 0) >= 10 and concentration.get("pass", False)
                     pareto, improved = _dominates(_guarded_vector(m1, m3), _guarded_vector(champion_m1, champion_m3))
                     if not comparison: pareto = False
                     status = "established" if numeric else "not_established"
-                    snapshots.append(_snapshot_record(date, cutoff, snapshot_paths, run, m1, m3, validation_dates, reasons, status, comparison, pareto, improved))
+                    snapshot = _snapshot_record(date, cutoff, snapshot_paths, run, m1, m3, validation_dates, reasons, status, comparison, pareto, improved)
+                    snapshot["m1_split_comparison"] = m1_splits
+                    snapshot["m3_split_comparison"] = m3_splits
+                    snapshots.append(snapshot)
                 except ValueError as exc:
                     snapshots.append({"snapshot_jst_date": date, "cutoff_utc": cutoff, "status": "failed", "comparison_eligible": False, "pareto_dominant_vs_champion": False, "reason_codes": [str(exc)]})
         except (ValueError, OSError) as exc:
@@ -495,7 +531,8 @@ def _dominates(metrics: dict[str, Any], champion: dict[str, Any]) -> tuple[bool,
 def _candidate_record(cid: str, parameters: dict[str, int], m1: dict[str, Any], m3: dict[str, Any], states: dict[str, bool], reason_codes: list[str], improved: int = 0, diagnostics: dict[str, Any] | None = None, splits: dict[str, Any] | None = None, rolling: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     combined = (m1.get("burden_per_jst_day") or 0) + (m3.get("burden_per_jst_day") or 0)
     comparison = states["comparison_eligible"]
-    return {"candidate_id": cid, "parameters_json": _canonical(parameters), "structurally_valid": states["structurally_valid"], "comparison_eligible": comparison, "pareto_dominant": states["pareto_dominant"], "proposal_eligible": states["proposal_eligible"], "valid": comparison, "reason_codes": "|".join(sorted(set(reason_codes))), "m1_validation_3h_json": _canonical(m1), "m3_validation_3h_json": _canonical(m3), "m3_diagnostic_horizons_json": _canonical(diagnostics or {}), "m1_split_comparison_json": _canonical((splits or {}).get("m1", {})), "m3_split_comparison_json": _canonical((splits or {}).get("m3", {})), "rolling_snapshots_json": _canonical(rolling or []), "improved_guarded_metric_count": improved, "combined_burden": combined, "recommendation": "eligible_for_human_reviewed_proposal" if states["proposal_eligible"] else ("continue_shadow_collection" if states["structurally_valid"] else "reject")}
+    public_rolling = [_public_snapshot(snapshot) for snapshot in (rolling or [])]
+    return {"candidate_id": cid, "parameters_json": _canonical(parameters), "structurally_valid": states["structurally_valid"], "comparison_eligible": comparison, "pareto_dominant": states["pareto_dominant"], "proposal_eligible": states["proposal_eligible"], "valid": comparison, "reason_codes": "|".join(sorted(set(reason_codes))), "m1_validation_3h_json": _canonical(m1), "m3_validation_3h_json": _canonical(m3), "m3_diagnostic_horizons_json": _canonical(diagnostics or {}), "m1_split_comparison_json": _canonical((splits or {}).get("m1", {})), "m3_split_comparison_json": _canonical((splits or {}).get("m3", {})), "rolling_snapshots_json": _canonical(public_rolling), "improved_guarded_metric_count": improved, "combined_burden": combined, "recommendation": "eligible_for_human_reviewed_proposal" if states["proposal_eligible"] else ("continue_shadow_collection" if states["structurally_valid"] else "reject")}
 
 
 def _p8_status(trial_facts: Path | None, trial_report: Path | None) -> dict[str, Any]:
@@ -658,6 +695,9 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
             latest_eligible = bool(latest and _snapshot_eligible(latest, latest.get("snapshot_jst_date")) and latest.get("comparison_eligible"))
             earlier_degradation = any(_snapshot_eligible(snapshot, snapshot.get("snapshot_jst_date")) and not snapshot.get("comparison_eligible") for snapshot in rolling[:-1])
             comparison = structural and rolling_established and latest_eligible and not earlier_degradation
+            for rolling_reason in sorted({reason for snapshot in rolling for reason in snapshot.get("reason_codes", [])}):
+                if rolling_reason in {"split_required_metric_missing", "split_guarded_metric_degradation", "champion_snapshot_not_eligible"}:
+                    reasons.append(rolling_reason)
             if not rolling_established:
                 reasons.append("rolling_comparison_not_established")
             if any(value is None or not isinstance(value, (int, float)) for value in _guarded_vector(candidate_m1, candidate_m3).values()):
@@ -666,10 +706,21 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
                 comparison = False; reasons.append("validation_direction_count_insufficient")
             if not concentration.get("pass", False):
                 comparison = False; reasons.append("validation_date_concentration_over_0_50")
-            m1_splits = _split_comparison(fresh_m1, m1_summary, "reliable_level_acceptance_corridor", ("direction", "regime", "price_location", "volatility_state", "reliability"), M1_GUARDED) if run is not None else {}
-            m3_splits = _split_comparison(fresh_m3, m3_summary, "candidate", ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band"), M3_GUARDED) if run is not None else {}
-            if any(item.get("status") != "available" for split in (m1_splits, m3_splits) for dimension in split.values() for item in dimension.values()):
-                comparison = False; reasons.append("split_required_metric_missing")
+            if cid == champion_id:
+                m1_splits = {}
+                m3_splits = {}
+            elif latest:
+                m1_splits = latest.get("m1_split_comparison", {})
+                m3_splits = latest.get("m3_split_comparison", {})
+                split_ok, split_reasons = _split_gate({"m1": m1_splits, "m3": m3_splits})
+                if not split_ok:
+                    comparison = False
+                    reasons.extend(split_reasons)
+            else:
+                m1_splits = {}
+                m3_splits = {}
+                comparison = False
+                reasons.append("rolling_comparison_not_established")
             dominates, improved = (False, 0) if cid == champion_id else _dominates(_guarded_vector(candidate_m1, candidate_m3), _guarded_vector(champion_m1, champion_m3))
             pareto = bool(comparison and dominates)
             if cid != champion_id and not dominates:
@@ -683,7 +734,7 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
             rec["m1_split_comparison_json"] = _canonical(m1_splits)
             rec["m3_split_comparison_json"] = _canonical(m3_splits)
             records.append(rec)
-            lineage = latest.get("issue_lineage", []) if latest else []
+            lineage = latest.get("_issue_lineage", []) if latest else []
             issue_rows.extend(_issue_rows(cid, lineage or (_read_csv(run["m1"] / "misses.csv", {"opportunity_id"}) if run is not None else []), m1_splits, candidate_m1, champion_m1, candidate_m3, champion_m3, concentration, p8))
     dominators = [row for row in records if row["candidate_id"] != champion_id and row["pareto_dominant"]]
     dominators.sort(key=lambda row: (-row["improved_guarded_metric_count"], -(_safe_number(json.loads(row["m1_validation_3h_json"]).get("large_move_recall"), -1)), -(_safe_number(json.loads(row["m3_validation_3h_json"]).get("directional_precision"), -1)), _safe_number(json.loads(row["m1_validation_3h_json"]).get("false_warning_rate"), 999), _safe_number(json.loads(row["m3_validation_3h_json"]).get("opposite_move_rate"), 999), row["combined_burden"], row["candidate_id"]))

@@ -1,3 +1,4 @@
+import csv
 import json
 import tempfile
 import unittest
@@ -18,6 +19,10 @@ from src.feedback.macro_p9_proposal_engine import (
     _write_snapshot_inputs,
     _expand_space,
     _p8_status,
+    _public_snapshot,
+    _snapshot_eligible,
+    _split_gate,
+    _issue_rows,
     _validate_champion_manifest,
     candidate_id,
     run_macro_p9_proposal_engine,
@@ -90,6 +95,26 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         self.assertEqual("unavailable", result["direction"]["UP"]["status"])
         self.assertIn("large_move_recall", result["direction"]["UP"]["missing_metrics"])
 
+    def test_split_gate_blocks_degradation_and_missing_metrics(self):
+        self.assertEqual((False, ["split_guarded_metric_degradation"]), _split_gate({"m1": {"direction": {"UP": {"status": "available", "degradation": True, "missing_metrics": []}}}}))
+        self.assertEqual((False, ["split_required_metric_missing"]), _split_gate({"m1": {"direction": {"UP": {"status": "unavailable", "degradation": False, "missing_metrics": ["large_move_recall"]}}}}))
+
+    def test_champion_snapshot_quality_and_same_date_fail_closed(self):
+        snapshot = {"snapshot_jst_date": "2026-07-19", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": {key: 0.1 for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_guarded_metrics": {key: 0.1 for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")}, "validation_date_concentration": {"pass": True}, "m1_quality_status": "fail", "m3_quality_status": "pass", "status": "established"}
+        self.assertFalse(_snapshot_eligible(snapshot, "2026-07-19"))
+        snapshot["m1_quality_status"] = "pass"
+        self.assertFalse(_snapshot_eligible(snapshot, "2026-07-20"))
+
+    def test_public_rolling_snapshot_has_lineage_count_and_fingerprint_only(self):
+        public = _public_snapshot({"snapshot_jst_date": "2026-07-19", "_issue_lineage": [{"opportunity_id": "private-id", "root_cause": "reliable"}], "_m1_split_summary": {"private": "summary"}})
+        self.assertEqual(1, public["issue_lineage_count"])
+        self.assertNotIn("private-id", json.dumps(public))
+        self.assertNotIn("_m1_split_summary", public)
+
+    def test_issue_rows_keep_candidate_lineage_identity(self):
+        rows = _issue_rows("candidate-2", [{"opportunity_id": "candidate-2-opportunity", "root_cause": "reliable", "reason": "fixture"}], {}, {}, {}, {}, {}, {"pass": True}, {"actual_high_medium_count": 0})
+        self.assertTrue(all(row["candidate_id"] == "candidate-2" for row in rows))
+
     def test_concentration_boundary_and_failure(self):
         rows = [{"episode_id": "a", "start_timestamp_utc": "2026-07-19T01:00:00Z"}, {"episode_id": "b", "start_timestamp_utc": "2026-07-19T02:00:00Z"}, {"episode_id": "c", "start_timestamp_utc": "2026-07-20T02:00:00Z"}, {"episode_id": "d", "start_timestamp_utc": "2026-07-20T03:00:00Z"}]
         self.assertTrue(_date_concentration(rows, ["2026-07-19", "2026-07-20"])["pass"])
@@ -150,60 +175,66 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         self.assertEqual([{"left_window": 3, "right_window": 2}, {"left_window": 3, "right_window": 2}], calls)
 
     def test_lightweight_full_orchestration_fixture_is_cached_and_deterministic(self):
-        metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "resolved_up_count": 10, "resolved_down_count": 10}
+        metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "balanced_no_expansion_rate": 0.5, "resolved_up_count": 10, "resolved_down_count": 10}
         m1_summary = {"schema_version": "macro_structure_volatility_replay.v1", "method_version": "macro_structure_volatility_replay.v1", "recommendation_gate": {"validation_policy_metrics": {"reliable_level_acceptance_corridor": metrics}}, "coverage": {"continuity_pass": True}}
         m3_summary = {"schema_version": "macro_next_regime_replay.v1", "method_version": "macro_next_regime_replay.v1", "recommendation": {"validation_candidate_metrics": {"3h": metrics, "6h": metrics, "12h": metrics, "24h": metrics}, "validation_dates": ["2026-07-19"], "validation_data_quality_pass": True}, "coverage": {"continuity_pass": True}}
+        split_keys_m1 = ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")
+        split_keys_m3 = ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")
+        m1_split_values = {key: metrics[key] for key in split_keys_m1}
+        m3_split_values = {key: metrics[key] for key in split_keys_m3}
+        m1_summary["splits"] = {"reliable_level_acceptance_corridor": {dimension: {"UP": dict(m1_split_values)} for dimension in ("direction", "regime", "price_location", "volatility_state", "reliability")}}
+        m3_summary["splits"] = {"candidate": {dimension: {"UP": dict(m3_split_values)} for dimension in ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band")}}
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             paths = {name: root / f"{name}.csv" for name in ("signals", "ohlcv_15m", "ohlcv_1h", "ohlcv_4h", "m1_events", "m1_levels", "m1_misses", "m3_events", "m3_episodes")}
-            for path in paths.values():
-                path.write_text("fixture\n")
+            paths["signals"].write_text("signal_id,timestamp_utc,timestamp_jst,macro_context_only\ns1,2026-07-19T01:00:00Z,,false\ns2,2026-07-20T01:00:00Z,,false\nfuture,2026-07-21T01:00:00Z,,true\n")
+            for name in ("ohlcv_15m", "ohlcv_1h", "ohlcv_4h"):
+                paths[name].write_text("timestamp_utc\n2026-07-19T00:00:00Z\n2026-07-21T00:00:00Z\n")
+            paths["m1_events"].write_text("event_id,signal_id\nevent,signal\n")
+            paths["m1_levels"].write_text("level_id\nlevel\n")
+            paths["m1_misses"].write_text("opportunity_id,root_cause,reason\nchampion-opportunity,reliable,fixture\n")
+            paths["m3_events"].write_text("record_id,event_id,signal_id,event_timestamp_jst\nrecord,event,signal,2026-07-19 10:00:00+09:00\n")
+            paths["m3_episodes"].write_text("episode_id,policy,start_timestamp_utc\nepisode,candidate,2026-07-19T01:00:00Z\n")
             m1_json = root / "m1.json"; m3_json = root / "m3.json"; champion_path = root / "champion.json"; space_path = root / "space.json"
-            m1_json.write_text("{}"); m3_json.write_text("{}")
+            m1_json.write_text(json.dumps(m1_summary)); m3_json.write_text(json.dumps(m3_summary))
             champion_value = champion({"left_window": 2, "right_window": 2, "cutoff_utc": "x", "performance_start_utc": "y", "performance_end_utc": "z"})
             space_value = {"schema_version": SPACE_SCHEMA, "method_version": METHOD_VERSION, "one_at_a_time": [{"parameter": "left_window", "values": [3]}], "combinations": []}
-            champion_path.write_text("{}"); space_path.write_text("{}")
+            champion_path.write_text(json.dumps(champion_value)); space_path.write_text(json.dumps(space_value))
             output_paths = {name: root / name for name in ("results.csv", "issues.csv", "report.json", "report.md")}
             calls = []
+            bounded_counts = []
 
             def fake_run(candidate, input_paths, fixed, temp_root):
                 calls.append((candidate, fixed.get("cutoff_utc")))
                 m1_dir = temp_root / "m1"; m3_dir = temp_root / "m3"
                 m1_dir.mkdir(parents=True); m3_dir.mkdir(parents=True)
-                (m1_dir / "replay.json").write_text("{}")
-                (m3_dir / "replay.json").write_text("{}")
+                if str(fixed.get("cutoff_utc", "")).startswith("2026-07-"):
+                    bounded_counts.append({name: len(input_paths[name].read_text().splitlines()) - 1 for name in input_paths})
+                candidate_m1 = json.loads(json.dumps(m1_summary))
+                candidate_m3 = json.loads(json.dumps(m3_summary))
+                if candidate != {"left_window": 2, "right_window": 2}:
+                    candidate_m1["splits"]["reliable_level_acceptance_corridor"]["direction"]["UP"].update({"directional_precision": 0.4, "false_warning_rate": 0.2})
+                    candidate_m3["splits"]["candidate"]["side"]["UP"].update({"directional_precision": 0.4, "opposite_move_rate": 0.2})
+                (m1_dir / "replay.json").write_text(json.dumps(candidate_m1))
+                (m3_dir / "replay.json").write_text(json.dumps(candidate_m3))
+                (m1_dir / "events.csv").write_text(paths["m1_events"].read_text())
+                (m1_dir / "levels.csv").write_text(paths["m1_levels"].read_text())
+                (m1_dir / "misses.csv").write_text(paths["m1_misses"].read_text())
+                cutoff_text = str(fixed.get("cutoff_utc", "2026-07-19"))
+                snapshot_date = cutoff_text[:10] if cutoff_text.startswith("2026-07-") else "2026-07-19"
+                candidate_m3["recommendation"]["validation_dates"] = [snapshot_date]
+                if candidate != {"left_window": 2, "right_window": 2} and snapshot_date == "2026-07-19":
+                    candidate_m1["splits"]["reliable_level_acceptance_corridor"]["direction"]["UP"].pop("large_move_recall")
+                (m1_dir / "replay.json").write_text(json.dumps(candidate_m1))
+                (m3_dir / "replay.json").write_text(json.dumps(candidate_m3))
+                (m3_dir / "events.csv").write_text(f"record_id,event_id,signal_id,event_timestamp_jst\nrecord,event,signal,{snapshot_date} 10:00:00+09:00\n")
+                (m3_dir / "episodes.csv").write_text(f"episode_id,policy,start_timestamp_utc\nepisode,candidate,{snapshot_date}T01:00:00Z\n")
                 return {"candidate_id": candidate_id(candidate), "parameters": candidate, "m1": m1_dir, "m3": m3_dir}
-
-            def fake_read_json(path):
-                if path == champion_path:
-                    return champion_value
-                if path == space_path:
-                    return space_value
-                if path == m1_json or (path.name == "replay.json" and path.parent.name == "m1"):
-                    return m1_summary
-                return m3_summary
-
-            def fake_read_csv(path, required):
-                if "opportunity_id" in required:
-                    return [{"opportunity_id": "candidate-opportunity", "root_cause": "reliable", "reason": "fixture"}]
-                if "level_id" in required:
-                    return [{"level_id": "level"}]
-                if "record_id" in required:
-                    return [{"record_id": "record", "event_id": "event", "signal_id": "signal", "event_timestamp_jst": "2026-07-19 10:00:00+09:00"}]
-                if "episode_id" in required:
-                    return [{"episode_id": "episode", "policy": "candidate", "start_timestamp_utc": "2026-07-19T01:00:00Z"}]
-                return [{"event_id": "event", "signal_id": "signal"}]
-
-            def fake_rolling(input_paths, parameters, fixed, champion_pair, temp_root, champion_cache=None):
-                snapshot = {"snapshot_jst_date": "2026-07-19", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": metrics, "m3_guarded_metrics": metrics, "m3_diagnostic_horizons": {}, "validation_date_concentration": {"pass": True}, "m1_quality_status": "pass", "m3_quality_status": "pass", "status": "established", "comparison_eligible": True, "issue_lineage": [{"opportunity_id": f"{candidate_id(parameters)}-opportunity", "root_cause": "reliable", "reason": "fixture", "event_family": "level"}]}
-                if champion_cache is None:
-                    return [snapshot], []
-                return [], [snapshot]
 
             def execute():
                 return run_macro_p9_proposal_engine(signals=paths["signals"], ohlcv_15m=paths["ohlcv_15m"], ohlcv_1h=paths["ohlcv_1h"], ohlcv_4h=paths["ohlcv_4h"], m1_events_csv=paths["m1_events"], m1_levels_csv=paths["m1_levels"], m1_misses_csv=paths["m1_misses"], m1_replay_json=m1_json, m3_events_csv=paths["m3_events"], m3_episodes_csv=paths["m3_episodes"], m3_replay_json=m3_json, champion_manifest=champion_path, proposal_space_manifest=space_path, output_results_csv=output_paths["results.csv"], output_issues_csv=output_paths["issues.csv"], output_json=output_paths["report.json"], output_md=output_paths["report.md"], replace_output=True)
 
-            with patch("src.feedback.macro_p9_proposal_engine._fingerprints", return_value={}), patch("src.feedback.macro_p9_proposal_engine._artifact_signature", return_value={}), patch("src.feedback.macro_p9_proposal_engine._read_json", side_effect=fake_read_json), patch("src.feedback.macro_p9_proposal_engine._read_csv", side_effect=fake_read_csv), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._rolling_snapshots", side_effect=fake_rolling), patch("src.feedback.macro_p9_proposal_engine._jst_dates", return_value=["2026-07-19"]), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._data_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m1_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._m3_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._m3_diagnostics", return_value={}), patch("src.feedback.macro_p9_proposal_engine._date_concentration", return_value={"pass": True}), patch("src.feedback.macro_p9_proposal_engine._split_comparison", return_value={}):
+            with patch("src.feedback.macro_p9_proposal_engine._fingerprints", return_value={}), patch("src.feedback.macro_p9_proposal_engine._artifact_signature", return_value={}), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._date_concentration", return_value={"pass": True}):
                 first = execute()
                 first_bytes = {path: path.read_bytes() for path in output_paths.values()}
                 calls.clear()
@@ -212,7 +243,20 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
                 self.assertEqual(first_bytes, {path: path.read_bytes() for path in output_paths.values()})
             self.assertEqual(2, first["candidate_count"])
             self.assertEqual(4, first["output_count"])
-            self.assertEqual(1, sum(1 for candidate, cutoff in calls if candidate == {"left_window": 2, "right_window": 2}))
+            self.assertEqual(2, sum(1 for candidate, cutoff in calls if candidate == {"left_window": 2, "right_window": 2} and str(cutoff).startswith("2026-07-")))
+            report = json.loads(output_paths["report.json"].read_text())
+            self.assertEqual(1, report["counts"]["champion_count"])
+            self.assertEqual(1, report["counts"]["challenger_count"])
+            with output_paths["issues.csv"].open() as handle:
+                self.assertEqual(1, sum(1 for row in csv.DictReader(handle) if row["candidate_id"] == "REPORT_GLOBAL"))
+            challenger_record = next(row for row in report["candidate_validation_results"] if row["candidate_id"] != report["champion"]["candidate_id"])
+            self.assertFalse(challenger_record["comparison_eligible"])
+            self.assertIn("split_guarded_metric_degradation", challenger_record["reason_codes"])
+            self.assertIn("split_required_metric_missing", challenger_record["reason_codes"])
+            public_rolling = output_paths["results.csv"].read_text() + output_paths["report.json"].read_text()
+            self.assertNotIn("candidate-2-opportunity", public_rolling)
+            self.assertNotIn('"_issue_lineage"', public_rolling)
+            self.assertTrue(all(counts["signals"] <= 2 and counts["ohlcv_15m"] <= 1 for counts in bounded_counts))
 
     def test_p8_missing_caps_recommendation_inputs(self):
         with tempfile.TemporaryDirectory() as temp:
