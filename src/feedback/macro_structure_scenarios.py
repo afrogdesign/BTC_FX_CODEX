@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,6 +13,62 @@ BAR_INTERVAL = timedelta(hours=4)
 INTERACTION_WINDOW = timedelta(hours=48)
 PIVOT_WINDOW = timedelta(hours=96)
 MAX_SCENARIOS = 3
+
+EVENT_TYPES = {
+    "approach", "touch", "clean_rejection", "break",
+    "closed_candle_acceptance", "false_break_reclaim", "retest",
+    "retest_hold", "retest_failure", "higher_high", "higher_low",
+    "lower_high", "lower_low",
+}
+PIVOT_EVENT_TYPES = {"higher_high", "higher_low", "lower_high", "lower_low"}
+INTERACTION_EVENT_TYPES = {"approach", "touch", "clean_rejection"}
+OBJECT_KINDS = {"horizontal_zone", "trendline"}
+PIVOT_KINDS = {"pivot_structure"}
+EVENT_STATUS = {"approach": "ongoing", **{event_type: "confirmed" for event_type in EVENT_TYPES - {"approach"}}}
+SEQUENCE_STATUS = {
+    "approach": {"ongoing"},
+    "touch": {"neutral"},
+    "clean_rejection": {"neutral"},
+    "break": {"pending", "accepted", "reclaimed", "unresolved"},
+    "closed_candle_acceptance": {"accepted"},
+    "retest": {"accepted"},
+    "retest_hold": {"accepted"},
+    "false_break_reclaim": {"reclaimed"},
+    "retest_failure": {"accepted"},
+    "higher_high": {"neutral"},
+    "higher_low": {"neutral"},
+    "lower_high": {"neutral"},
+    "lower_low": {"neutral"},
+}
+PARENT_TYPE = {
+    "clean_rejection": "touch",
+    "closed_candle_acceptance": "break",
+    "false_break_reclaim": "break",
+    "retest": "closed_candle_acceptance",
+    "retest_hold": "retest",
+    "retest_failure": "retest",
+}
+SCENARIO_TYPES = {
+    "break_resolution_watch", "accepted_break_continuation",
+    "failed_break_reversal", "boundary_reaction_watch",
+    "pivot_structure_continuation",
+}
+SCENARIO_STATUSES = {"watch", "active"}
+CONDITION_CODES = {
+    "maintain_break_side_close", "maintain_accepted_side_close",
+    "maintain_reclaimed_side_close", "object_holds_expected_side",
+    "preserve_confirmed_pivot_sequence",
+}
+NEXT_CONFIRMATION_CODES = {
+    "closed_candle_acceptance", "retest_hold_or_same_direction_pivot",
+    "clean_rejection_or_same_direction_pivot", "next_same_direction_pivot",
+}
+INVALIDATION_CODES = {
+    "false_break_reclaim_or_original_side_return",
+    "retest_failure_reclaim_or_opposite_acceptance",
+    "new_acceptance_in_original_break_direction",
+    "wrong_side_break_or_acceptance", "opposite_confirmed_pivot_pair",
+}
 
 FAMILY_PRIORITY = {
     "break_resolution_watch": 0,
@@ -81,6 +138,26 @@ def _validate_events(event_model: dict[str, Any], cutoff: datetime) -> tuple[lis
         if not isinstance(event, dict) or not event.get("event_id") or not event.get("event_type"):
             raise ValueError("scenario_event_invalid")
         event_id = str(event["event_id"])
+        event_type = str(event["event_type"])
+        if event_type not in EVENT_TYPES:
+            raise ValueError("scenario_event_type_invalid")
+        if event.get("event_status") != EVENT_STATUS[event_type]:
+            raise ValueError("scenario_event_status_invalid")
+        if event.get("sequence_status") not in SEQUENCE_STATUS[event_type]:
+            raise ValueError("scenario_event_sequence_status_invalid")
+        object_kind = event.get("object_kind")
+        if event_type in PIVOT_EVENT_TYPES:
+            if object_kind not in PIVOT_KINDS:
+                raise ValueError("scenario_pivot_object_kind_invalid")
+            if not event.get("related_object_id"):
+                raise ValueError("scenario_pivot_related_missing")
+            expected_direction = "UP" if event_type in {"higher_high", "higher_low"} else "DOWN"
+            if event.get("direction") != expected_direction:
+                raise ValueError("scenario_pivot_direction_invalid")
+        elif object_kind not in OBJECT_KINDS:
+            raise ValueError("scenario_event_object_kind_invalid")
+        if not event.get("object_id"):
+            raise ValueError("scenario_event_object_missing")
         _direction(event.get("direction"))
         timestamp = _utc(event.get("event_timestamp_utc"), "scenario_event_timestamp_invalid")
         if timestamp > cutoff:
@@ -89,6 +166,24 @@ def _validate_events(event_model: dict[str, Any], cutoff: datetime) -> tuple[lis
             raise ValueError("scenario_event_id_collision")
         by_id[event_id] = event
     for event in events:
+        event_type = str(event["event_type"])
+        parent_id = event.get("parent_event_id")
+        required_parent = PARENT_TYPE.get(event_type)
+        if required_parent is None:
+            if parent_id not in (None, ""):
+                raise ValueError("scenario_parent_unexpected")
+            continue
+        if not isinstance(parent_id, str) or not parent_id:
+            raise ValueError("scenario_parent_missing")
+        if parent_id not in by_id:
+            raise ValueError("scenario_parent_missing")
+        parent = by_id[parent_id]
+        if parent.get("event_type") != required_parent:
+            raise ValueError("scenario_parent_type_invalid")
+        if parent.get("object_kind") != event.get("object_kind") or parent.get("object_id") != event.get("object_id"):
+            raise ValueError("scenario_parent_object_invalid")
+        if _utc(parent.get("event_timestamp_utc"), "scenario_event_timestamp_invalid") >= _utc(event.get("event_timestamp_utc"), "scenario_event_timestamp_invalid"):
+            raise ValueError("scenario_parent_timestamp_invalid")
         cursor = event
         seen: set[str] = set()
         while cursor.get("parent_event_id"):
@@ -100,6 +195,23 @@ def _validate_events(event_model: dict[str, Any], cutoff: datetime) -> tuple[lis
             if parent not in by_id:
                 raise ValueError("scenario_parent_missing")
             cursor = by_id[parent]
+
+    root_states: dict[str, set[str]] = {}
+    retest_states: dict[str, set[str]] = {}
+    for event in events:
+        event_type = str(event["event_type"])
+        if event_type in {"closed_candle_acceptance", "retest", "retest_hold", "retest_failure", "false_break_reclaim"}:
+            root = _root_break(event, by_id)
+            root_id = str(root["event_id"])
+            required = "reclaimed" if event_type == "false_break_reclaim" else "accepted"
+            if root.get("sequence_status") != required:
+                raise ValueError("scenario_root_sequence_status_invalid")
+            root_states.setdefault(root_id, set()).add(required)
+        if event_type in {"retest_hold", "retest_failure"}:
+            retest_id = str(event["parent_event_id"])
+            retest_states.setdefault(retest_id, set()).add(event_type)
+    if any(len(states) > 1 for states in root_states.values()) or any(len(states) > 1 for states in retest_states.values()):
+        raise ValueError("scenario_contradictory_resolution")
     return events, by_id
 
 
@@ -248,10 +360,44 @@ def _candidate_sort_key(candidate: dict[str, Any]) -> tuple[int, float, int, str
     return (FAMILY_PRIORITY[candidate["scenario_type"]], -_utc(candidate["trigger_timestamp_utc"], "scenario_timestamp_invalid").timestamp(), 0 if candidate["scenario_status"] == "active" else 1, candidate["primary_object_kind"], candidate["primary_object_id"], candidate["scenario_id"])
 
 
+def _validate_candidate(candidate: dict[str, Any], cutoff: datetime, objects: set[tuple[str, str]], by_id: dict[str, dict[str, Any]]) -> None:
+    if candidate.get("scenario_type") not in SCENARIO_TYPES:
+        raise ValueError("scenario_type_invalid")
+    if candidate.get("scenario_status") not in SCENARIO_STATUSES:
+        raise ValueError("scenario_status_invalid")
+    _direction(candidate.get("direction"))
+    if candidate.get("condition_code") not in CONDITION_CODES:
+        raise ValueError("scenario_condition_code_invalid")
+    if candidate.get("next_confirmation_code") not in NEXT_CONFIRMATION_CODES:
+        raise ValueError("scenario_next_confirmation_code_invalid")
+    if candidate.get("invalidation_code") not in INVALIDATION_CODES:
+        raise ValueError("scenario_invalidation_code_invalid")
+    timestamp = _utc(candidate.get("trigger_timestamp_utc"), "scenario_timestamp_invalid")
+    if timestamp > cutoff:
+        raise ValueError("scenario_future_timestamp")
+    supporting = candidate.get("supporting_event_ids")
+    if not isinstance(supporting, list) or any(str(event_id) not in by_id for event_id in supporting):
+        raise ValueError("scenario_supporting_event_missing")
+    primary_kind = candidate.get("primary_object_kind")
+    primary_id = str(candidate.get("primary_object_id", ""))
+    if primary_kind in OBJECT_KINDS:
+        if (str(primary_kind), primary_id) not in objects:
+            raise ValueError("scenario_primary_object_missing")
+    elif primary_kind == "pivot_structure":
+        pivot_ids = {
+            str(by_id[event_id].get("object_id")) for event_id in supporting
+            if by_id[event_id].get("object_kind") == "pivot_structure"
+        }
+        if primary_id not in pivot_ids:
+            raise ValueError("scenario_pivot_primary_missing")
+    else:
+        raise ValueError("scenario_primary_object_kind_invalid")
+
+
 def build_scenario_model(*, cutoff: datetime, current_price: float, structure_state: str, price_location: str, zones: list[dict[str, Any]], trendline_model: dict[str, Any], structural_event_model: dict[str, Any]) -> dict[str, Any]:
     cutoff = _utc(cutoff, "scenario_cutoff_invalid")
     try:
-        if not isinstance(current_price, (int, float)) or current_price != current_price:
+        if isinstance(current_price, bool) or not isinstance(current_price, (int, float)) or not math.isfinite(current_price):
             raise ValueError("scenario_current_price_invalid")
     except TypeError as exc:
         raise ValueError("scenario_current_price_invalid") from exc
@@ -268,6 +414,7 @@ def build_scenario_model(*, cutoff: datetime, current_price: float, structure_st
     candidates = _build_candidates(cutoff, objects, events, by_id)
     seen: dict[str, str] = {}
     for candidate in candidates:
+        _validate_candidate(candidate, cutoff, objects, by_id)
         payload = _payload(candidate)
         prior = seen.get(candidate["scenario_id"])
         if prior is not None and prior != payload:
@@ -276,5 +423,7 @@ def build_scenario_model(*, cutoff: datetime, current_price: float, structure_st
             raise ValueError("scenario_forbidden_word")
         seen[candidate["scenario_id"]] = payload
     selected, suppressed, dominant = _select(candidates)
+    for candidate in selected:
+        _validate_candidate(candidate, cutoff, objects, by_id)
     status = "ok" if selected else "insufficient"
     return {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "cutoff_utc": cutoff.isoformat(), "status": status, "dominant_direction": dominant, "scenarios": selected, "suppressed_candidate_count": suppressed, "reason_codes": [] if selected else ["insufficient_current_structural_evidence"]}
