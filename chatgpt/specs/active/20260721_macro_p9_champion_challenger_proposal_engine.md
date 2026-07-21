@@ -89,3 +89,7 @@ M4 has been accepted as local render-only evidence. M5 source implementation is 
 ## Implementation note — bounded FIX-01
 
 Historical 15-minute source bytes were not retained, so the bounded evaluation uses one fresh self-contained local bundle produced through the accepted public OHLCV fetch path. Only `left_window` and `right_window` are optimization levers; the evaluation windows remain fixed. The exact CLI route is `run-macro-p9-proposal-engine`. The implementation remains pending ChatGPT acceptance.
+
+## Implementation note — bounded FIX-02
+
+M1 validation comparison now uses only `recommendation_gate.validation_policy_metrics.reliable_level_acceptance_corridor`; no fallback policy or full-period metric is permitted. M1 and M3 guarded metrics remain explicitly namespaced. Candidate results expose separate structural, comparison, Pareto, and proposal eligibility states. Chronological rolling snapshots are event-time bounded, while 6H/12H/24H diagnostics are stored but non-selecting. The bounded result remains report-only with `continue_shadow_collection`; M5 acceptance remains pending ChatGPT review.

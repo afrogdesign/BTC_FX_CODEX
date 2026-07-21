@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -173,57 +174,175 @@ def _jst_dates(path: Path) -> list[str]:
     return sorted({str(row["event_timestamp_jst"])[:10] for row in rows})
 
 
-def _validation_metrics(summary: dict[str, Any], policy: str) -> dict[str, Any]:
-    rec = summary.get("recommendation", {})
-    if not isinstance(rec, dict) or not rec:
-        rec = summary.get("recommendation_gate", {})
-    source = rec.get("validation_candidate_metrics" if policy == "candidate" else "validation_baseline_metrics")
-    if not isinstance(source, dict):
-        source = rec.get("validation_policy_metrics", {})
-    if policy == "candidate" and isinstance(source, dict) and "3h" in source:
-        return source["3h"]
-    if policy == "baseline" and isinstance(source, dict) and "3h" in source:
-        return source["3h"]
-    metrics = summary.get("metrics", {})
-    candidates = [value for key, value in metrics.items() if key not in {"current_notification"} and isinstance(value, dict)]
-    return candidates[0] if candidates else {}
+M1_GUARDED = ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")
+M3_GUARDED = ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")
+
+
+def _required_dict(value: Any, reason: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError(reason)
+    return value
 
 
 def _m1_metrics(summary: dict[str, Any]) -> dict[str, Any]:
-    source = _validation_metrics(summary, "candidate")
-    return {key: source.get(key) for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}
+    gate = _required_dict(summary.get("recommendation_gate"), "m1_validation_policy_missing")
+    policies = _required_dict(gate.get("validation_policy_metrics"), "m1_validation_policy_missing")
+    source = _required_dict(policies.get("reliable_level_acceptance_corridor"), "m1_validation_policy_missing")
+    if any(key not in source for key in M1_GUARDED):
+        raise ValueError("m1_validation_metric_missing")
+    return {key: source[key] for key in M1_GUARDED}
 
 
-def _m3_metrics(summary: dict[str, Any]) -> dict[str, Any]:
-    source = summary.get("recommendation", {}).get("validation_candidate_metrics", {}).get("3h", {})
-    return {key: source.get(key) for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day", "resolved_up_count", "resolved_down_count")}
+def _m3_metrics(summary: dict[str, Any], horizon: str = "3h") -> dict[str, Any]:
+    recommendation = _required_dict(summary.get("recommendation"), "m3_validation_metrics_missing")
+    validation = _required_dict(recommendation.get("validation_candidate_metrics"), "m3_validation_metrics_missing")
+    source = _required_dict(validation.get(horizon), "m3_validation_metrics_missing")
+    keys = M3_GUARDED + ("resolved_up_count", "resolved_down_count")
+    if any(key not in source for key in keys):
+        raise ValueError("m3_validation_metric_missing")
+    return {key: source[key] for key in keys}
+
+
+def _m3_diagnostics(summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {horizon: _m3_metrics(summary, horizon) for horizon in ("6h", "12h", "24h")}
 
 
 def _data_quality_ok(summary: dict[str, Any]) -> bool:
     rec = summary.get("recommendation", {})
-    return bool(summary.get("coverage", {}).get("continuity_pass", True)) and bool(rec.get("validation_data_quality_pass", True)) and not any("unresolved" in str(x) for x in rec.get("reason_codes", []))
+    coverage = summary.get("coverage", {})
+    if coverage.get("continuity_pass") is False:
+        return False
+    if rec.get("validation_data_quality_pass") is False:
+        return False
+    return not any("unresolved" in str(x) for x in rec.get("reason_codes", []))
+
+
+def _utc(value: str) -> datetime:
+    text = str(value or "").strip().replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _date_concentration(episodes: list[dict[str, str]], validation_dates: list[str]) -> dict[str, Any]:
+    counts = Counter()
+    allowed = set(validation_dates)
+    for row in episodes:
+        stamp = row.get("start_timestamp_utc") or row.get("event_timestamp_utc") or ""
+        if not stamp:
+            continue
+        date = _utc(stamp).astimezone(timezone(timedelta(hours=9))).date().isoformat()
+        if date in allowed:
+            counts[date] += 1
+    total = sum(counts.values())
+    if not total:
+        return {"numerator": 0, "denominator": 0, "date": None, "ratio": None, "pass": False}
+    date, numerator = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0]
+    ratio = numerator / total
+    return {"numerator": numerator, "denominator": total, "date": date, "ratio": ratio, "pass": ratio <= 0.5}
+
+
+def _rolling_snapshots(events_path: Path, episodes_path: Path, validation_dates: list[str], metrics: dict[str, Any]) -> list[dict[str, Any]]:
+    events = _read_csv(events_path, {"event_id", "event_timestamp_utc", "event_timestamp_jst"})
+    episodes = _read_csv(episodes_path, {"episode_id", "start_timestamp_utc"})
+    snapshots: list[dict[str, Any]] = []
+    for date in sorted(set(validation_dates)):
+        visible = [row for row in events if str(row.get("event_timestamp_jst", ""))[:10] <= date]
+        if not visible:
+            snapshots.append({"snapshot_jst_date": date, "cutoff_utc": None, "status": "not_established", "comparison_eligible": False, "eligible_event_count": 0, "eligible_event_jst_dates": []})
+            continue
+        cutoff = max((_utc(row["event_timestamp_utc"]) for row in visible), default=None)
+        visible_episodes = [row for row in episodes if cutoff and _utc(row["start_timestamp_utc"]) <= cutoff]
+        snapshots.append({"snapshot_jst_date": date, "cutoff_utc": cutoff.isoformat().replace("+00:00", "Z") if cutoff else None, "status": "established" if metrics else "not_established", "comparison_eligible": bool(metrics), "eligible_event_count": len(visible), "eligible_event_jst_dates": sorted({str(row.get("event_timestamp_jst", ""))[:10] for row in visible}), "event_ids": sorted(row["event_id"] for row in visible), "episode_ids": sorted(row["episode_id"] for row in visible_episodes)})
+    return snapshots
+
+
+def _metric_value(value: Any) -> Any:
+    if isinstance(value, dict) and "3h" in value:
+        return value["3h"]
+    return value
+
+
+def _split_comparison(champion_summary: dict[str, Any], candidate_summary: dict[str, Any], policy: str, dimensions: tuple[str, ...]) -> dict[str, Any]:
+    def root(summary: dict[str, Any]) -> dict[str, Any]:
+        value = summary.get("splits", {})
+        if policy and isinstance(value, dict) and policy in value:
+            return value[policy]
+        return value
+    champion_root = root(champion_summary)
+    candidate_root = root(candidate_summary)
+    result: dict[str, Any] = {}
+    for dimension in dimensions:
+        left = champion_root.get(dimension, {}) if isinstance(champion_root, dict) else {}
+        right = candidate_root.get(dimension, {}) if isinstance(candidate_root, dict) else {}
+        if policy and isinstance(left, dict):
+            left = {key: (value.get(policy) if isinstance(value, dict) and policy in value else value) for key, value in left.items()}
+        if policy and isinstance(right, dict):
+            right = {key: (value.get(policy) if isinstance(value, dict) and policy in value else value) for key, value in right.items()}
+        values = sorted(set(left) | set(right)) if isinstance(left, dict) and isinstance(right, dict) else []
+        result[dimension] = {}
+        for value in values:
+            champion_value = _metric_value(left.get(value)) if isinstance(left, dict) else None
+            candidate_value = _metric_value(right.get(value)) if isinstance(right, dict) else None
+            degradation = False
+            if isinstance(champion_value, dict) and isinstance(candidate_value, dict):
+                for key in M1_GUARDED + M3_GUARDED:
+                    if key in champion_value and key in candidate_value and isinstance(champion_value[key], (int, float)) and isinstance(candidate_value[key], (int, float)) and candidate_value[key] < champion_value[key] and key in {"directional_precision", "large_move_recall"}:
+                        degradation = True
+            result[dimension][value] = {"champion": champion_value, "challenger": candidate_value, "degradation": degradation, "status": "available" if champion_value is not None and candidate_value is not None else "unavailable"}
+    return result
+
+
+def _issue_rows(candidate_id_value: str, m1_misses: list[dict[str, str]], m1_split: dict[str, Any], candidate_m1: dict[str, Any], champion_m1: dict[str, Any], candidate_m3: dict[str, Any], champion_m3: dict[str, Any], concentration: dict[str, Any], p8: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    def add(category: str, source: str, count: int, affected: str, champion: Any = None, challenger: Any = None, reason: str = "evidence_observed") -> None:
+        if count:
+            rows.append({"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_id": candidate_id_value, "issue_category": category, "status": "observed", "evidence_source": source, "evidence_count": count, "affected_metric_split": affected, "champion_value": champion, "candidate_value": challenger, "reason_codes": reason, "actual_backed_count": p8["actual_high_medium_count"], "proposal_eligibility_effect": "diagnostic_only"})
+    tokens = " ".join((row.get("root_cause", "") + " " + row.get("reason", "")).lower() for row in m1_misses)
+    add("reliable level missed", "m1_missed_move_diagnostics", tokens.count("reliable"), "m1.reliable_level_acceptance_corridor")
+    add("rejection/break/acceptance/reclaim event missed", "m1_missed_move_diagnostics", sum(tokens.count(token) for token in ("rejection", "break", "acceptance", "reclaim")), "m1.event_family")
+    reliability = sum(1 for value in m1_split.get("reliability", {}).values() if value.get("degradation"))
+    add("level reliability unstable", "m1_split_comparison", reliability, "m1.reliability")
+    if isinstance(candidate_m1.get("false_warning_rate"), (int, float)) and isinstance(champion_m1.get("false_warning_rate"), (int, float)) and candidate_m1["false_warning_rate"] > champion_m1["false_warning_rate"]:
+        add("excessive false warning", "m1_validation_metrics", 1, "m1.false_warning_rate", champion_m1["false_warning_rate"], candidate_m1["false_warning_rate"], "false_warning_degradation")
+    if isinstance(candidate_m3.get("opposite_move_rate"), (int, float)) and isinstance(champion_m3.get("opposite_move_rate"), (int, float)) and candidate_m3["opposite_move_rate"] > champion_m3["opposite_move_rate"]:
+        add("wrong next-regime side", "m3_validation_metrics", 1, "m3.opposite_move_rate", champion_m3["opposite_move_rate"], candidate_m3["opposite_move_rate"], "opposite_move_degradation")
+    if concentration.get("pass") is False:
+        add("one-sided or date-concentrated evidence", "m3_validation_candidate_episodes", 1, "validation_date_concentration", None, concentration.get("ratio"), "date_concentration_over_0_50")
+    return rows
+
+
+def _guarded_vector(m1: dict[str, Any], m3: dict[str, Any]) -> dict[str, float | None]:
+    return {**{f"m1.{key}": m1.get(key) for key in M1_GUARDED}, **{f"m3.{key}": m3.get(key) for key in M3_GUARDED}}
 
 
 def _dominates(metrics: dict[str, Any], champion: dict[str, Any]) -> tuple[bool, int]:
-    higher = {"directional_precision", "large_move_recall"}
-    lower = {"false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day", "balanced_no_expansion_rate"}
-    all_keys = set(higher | lower)
-    if any(metrics.get(key) is None or champion.get(key) is None for key in all_keys):
+    if any(key.startswith(("m1.", "m3.")) for key in metrics):
+        current, baseline = metrics, champion
+    else:
+        current = {f"m1.{key}": value for key, value in metrics.items() if key in M1_GUARDED}
+        baseline = {f"m1.{key}": value for key, value in champion.items() if key in M1_GUARDED}
+    higher = {"m1.directional_precision", "m1.large_move_recall", "m3.directional_precision"}
+    lower = {"m1.false_warning_rate", "m1.opposite_move_rate", "m1.whipsaw_rate", "m1.burden_per_jst_day", "m3.opposite_move_rate", "m3.balanced_no_expansion_rate", "m3.whipsaw_rate", "m3.burden_per_jst_day"}
+    all_keys = sorted(higher | lower)
+    if any(current.get(key) is None or baseline.get(key) is None or not isinstance(current.get(key), (int, float)) or not isinstance(baseline.get(key), (int, float)) for key in all_keys):
         return False, 0
     improved = 0
     for key in all_keys:
-        if key in higher and metrics[key] < champion[key]:
+        if key in higher and current[key] < baseline[key]:
             return False, 0
-        if key in lower and metrics[key] > champion[key]:
+        if key in lower and current[key] > baseline[key]:
             return False, 0
-        if metrics[key] != champion[key]:
+        if current[key] != baseline[key]:
             improved += 1
     return improved > 0, improved
 
 
-def _candidate_record(cid: str, parameters: dict[str, int], m1: dict[str, Any], m3: dict[str, Any], valid: bool, reason_codes: list[str], improved: int = 0) -> dict[str, Any]:
+def _candidate_record(cid: str, parameters: dict[str, int], m1: dict[str, Any], m3: dict[str, Any], states: dict[str, bool], reason_codes: list[str], improved: int = 0, diagnostics: dict[str, Any] | None = None, splits: dict[str, Any] | None = None, rolling: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     combined = (m1.get("burden_per_jst_day") or 0) + (m3.get("burden_per_jst_day") or 0)
-    return {"candidate_id": cid, "parameters_json": _canonical(parameters), "valid": valid, "reason_codes": "|".join(sorted(set(reason_codes))), "m1_validation_3h_json": _canonical(m1), "m3_validation_3h_json": _canonical(m3), "improved_guarded_metric_count": improved, "combined_burden": combined, "recommendation": "continue_shadow_collection" if valid else "reject"}
+    comparison = states["comparison_eligible"]
+    return {"candidate_id": cid, "parameters_json": _canonical(parameters), "structurally_valid": states["structurally_valid"], "comparison_eligible": comparison, "pareto_dominant": states["pareto_dominant"], "proposal_eligible": states["proposal_eligible"], "valid": comparison, "reason_codes": "|".join(sorted(set(reason_codes))), "m1_validation_3h_json": _canonical(m1), "m3_validation_3h_json": _canonical(m3), "m3_diagnostic_horizons_json": _canonical(diagnostics or {}), "m1_split_comparison_json": _canonical((splits or {}).get("m1", {})), "m3_split_comparison_json": _canonical((splits or {}).get("m3", {})), "rolling_snapshots_json": _canonical(rolling or []), "improved_guarded_metric_count": improved, "combined_burden": combined, "recommendation": "eligible_for_human_reviewed_proposal" if states["proposal_eligible"] else ("continue_shadow_collection" if states["structurally_valid"] else "reject")}
 
 
 def _p8_status(trial_facts: Path | None, trial_report: Path | None) -> dict[str, Any]:
@@ -296,7 +415,8 @@ def _run_candidate(parameters: dict[str, int], paths: dict[str, Path], fixed: di
 
 
 def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Path, ohlcv_4h: Path, m1_events_csv: Path, m1_levels_csv: Path, m1_misses_csv: Path, m1_replay_json: Path, m3_events_csv: Path, m3_episodes_csv: Path, m3_replay_json: Path, champion_manifest: Path, proposal_space_manifest: Path, output_results_csv: Path, output_issues_csv: Path, output_json: Path, output_md: Path, replace_output: bool = False, p8_trial_facts_csv: Path | None = None, p8_trial_report_json: Path | None = None) -> dict[str, Any]:
-    champion = _read_json(champion_manifest); _validate_champion_manifest(champion)
+    champion = _read_json(champion_manifest)
+    _validate_champion_manifest(champion)
     space = _read_json(proposal_space_manifest)
     input_paths = {"signals": signals, "ohlcv_15m": ohlcv_15m, "ohlcv_1h": ohlcv_1h, "ohlcv_4h": ohlcv_4h}
     if _fingerprints(input_paths) != champion["input_fingerprints"]:
@@ -306,75 +426,107 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
     supplied_signature = _artifact_signature(artifact_paths)
     if {key: value["sha256"] for key, value in supplied_signature.items()} != declared_artifacts:
         raise ValueError("accepted_artifact_fingerprint_mismatch")
-    m1summary = _read_json(m1_replay_json); m3summary = _read_json(m3_replay_json)
-    _require_version(m1summary, M1_SCHEMA, M1_SCHEMA); _require_version(m3summary, M3_SCHEMA, M3_SCHEMA)
-    _unique(_read_csv(m1_events_csv, {"event_id", "signal_id"}), "event_id"); _unique(_read_csv(m1_levels_csv, {"level_id"}), "level_id"); _unique(_read_csv(m1_misses_csv, {"opportunity_id"}), "opportunity_id")
-    m3_events = _read_csv(m3_events_csv, {"record_id", "event_id", "signal_id"}); m3_episodes = _read_csv(m3_episodes_csv, {"episode_id", "policy"})
-    _unique(m3_events, "record_id"); _unique(m3_events, "event_id"); _unique(m3_episodes, "episode_id")
+    _require_version(_read_json(m1_replay_json), M1_SCHEMA, M1_SCHEMA)
+    _require_version(_read_json(m3_replay_json), M3_SCHEMA, M3_SCHEMA)
+    m1_events = _read_csv(m1_events_csv, {"event_id", "signal_id"})
+    _unique(m1_events, "event_id")
+    _unique(_read_csv(m1_levels_csv, {"level_id"}), "level_id")
+    m1_misses = _read_csv(m1_misses_csv, {"opportunity_id"})
+    _unique(m1_misses, "opportunity_id")
+    m3_events = _read_csv(m3_events_csv, {"record_id", "event_id", "signal_id"})
+    m3_episodes = _read_csv(m3_episodes_csv, {"episode_id", "policy"})
+    _unique(m3_events, "record_id")
+    _unique(m3_events, "event_id")
+    _unique(m3_episodes, "episode_id")
     parameters = champion["parameters"]
     space_candidates = _expand_space(space, champion)
     champion_pair = {key: parameters[key] for key in LEVERS}
+    champion_id = candidate_id(champion_pair)
+    p8 = _p8_status(p8_trial_facts_csv, p8_trial_report_json)
     with tempfile.TemporaryDirectory(prefix="macro-p9-eval-") as temp:
         temp_root = Path(temp)
         champion_run = _run_candidate(champion_pair, input_paths, parameters, temp_root)
-        fresh_artifacts = _artifact_signature({"m1_events": champion_run["m1"]/"events.csv", "m1_levels": champion_run["m1"]/"levels.csv", "m1_misses": champion_run["m1"]/"misses.csv", "m1_replay": champion_run["m1"]/"replay.json", "m3_events": champion_run["m3"]/"events.csv", "m3_episodes": champion_run["m3"]/"episodes.csv", "m3_replay": champion_run["m3"]/"replay.json"})
-        fresh_hashes = {key: value["sha256"] for key, value in fresh_artifacts.items()}
-        comparable_hashes = {key: value for key, value in fresh_hashes.items() if key not in {"m1_replay", "m3_replay"}}
-        declared_comparable_hashes = {key: value for key, value in declared_artifacts.items() if key not in {"m1_replay", "m3_replay"}}
-        if comparable_hashes != declared_comparable_hashes:
-            raise ValueError("champion_fingerprint_mismatch")
-        supplied_ids = {key: value["ids"] for key, value in supplied_signature.items() if key not in {"m1_replay", "m3_replay"}}
-        fresh_ids = {key: value["ids"] for key, value in fresh_artifacts.items() if key not in {"m1_replay", "m3_replay"}}
-        if fresh_ids != supplied_ids:
+        fresh_artifacts = _artifact_signature({"m1_events": champion_run["m1"] / "events.csv", "m1_levels": champion_run["m1"] / "levels.csv", "m1_misses": champion_run["m1"] / "misses.csv", "m1_replay": champion_run["m1"] / "replay.json", "m3_events": champion_run["m3"] / "events.csv", "m3_episodes": champion_run["m3"] / "episodes.csv", "m3_replay": champion_run["m3"] / "replay.json"})
+        comparable = {key: value["sha256"] for key, value in fresh_artifacts.items() if key not in {"m1_replay", "m3_replay"}}
+        supplied = {key: value["sha256"] for key, value in supplied_signature.items() if key not in {"m1_replay", "m3_replay"}}
+        if comparable != {key: value for key, value in declared_artifacts.items() if key not in {"m1_replay", "m3_replay"}} or {key: value["ids"] for key, value in fresh_artifacts.items() if key not in {"m1_replay", "m3_replay"}} != {key: value["ids"] for key, value in supplied_signature.items() if key not in {"m1_replay", "m3_replay"}}:
             raise ValueError("champion_identity_mismatch")
-        fresh_m1 = _read_json(champion_run["m1"]/"replay.json"); fresh_m3 = _read_json(champion_run["m3"]/"replay.json")
-        if _jst_dates(champion_run["m3"]/"events.csv") != _jst_dates(m3_events_csv):
+        fresh_m1 = _read_json(champion_run["m1"] / "replay.json")
+        fresh_m3 = _read_json(champion_run["m3"] / "replay.json")
+        champion_dates = _jst_dates(champion_run["m3"] / "events.csv")
+        if champion_dates != _jst_dates(m3_events_csv):
             raise ValueError("champion_date_basis_mismatch")
-        records: list[dict[str, Any]] = []
         all_runs = [champion_run]
         for candidate in space_candidates:
             all_runs.append(_run_candidate(candidate, input_paths, parameters | candidate, temp_root))
             gc.collect()
-        champion_m1 = _m1_metrics(fresh_m1); champion_m3 = _m3_metrics(fresh_m3)
-        champion_dates = _jst_dates(champion_run["m3"]/"events.csv")
+        champion_m1 = _m1_metrics(fresh_m1)
+        champion_m3 = _m3_metrics(fresh_m3)
+        champion_diag = _m3_diagnostics(fresh_m3)
+        champion_concentration = _date_concentration(_read_csv(champion_run["m3"] / "episodes.csv", {"episode_id", "start_timestamp_utc"}), champion_dates)
+        records: list[dict[str, Any]] = []
+        issue_rows: list[dict[str, Any]] = []
         for run in all_runs:
             cid = run["candidate_id"]
-            candidate_m1 = _m1_metrics(_read_json(run["m1"]/"replay.json")); candidate_m3 = _m3_metrics(_read_json(run["m3"]/"replay.json"))
-            valid = True; reasons: list[str] = []
-            if _jst_dates(run["m3"]/"events.csv") != champion_dates:
-                valid = False; reasons.append("eligible_date_basis_mismatch")
-            if cid != candidate_id(champion_pair):
-                base_ids = _artifact_signature({"misses": champion_run["m1"]/"misses.csv"})["misses"]["ids"].get("opportunity_id", [])
-                run_ids = _artifact_signature({"misses": run["m1"]/"misses.csv"})["misses"]["ids"].get("opportunity_id", [])
-                if base_ids != run_ids:
-                    valid = False; reasons.append("independent_opportunity_set_mismatch")
-            if not _data_quality_ok(_read_json(run["m1"]/"replay.json")) or not _data_quality_ok(_read_json(run["m3"]/"replay.json")):
-                valid = False; reasons.append("validation_data_quality_or_continuity_failed")
-            if cid != candidate_id(champion_pair):
-                dominates, improved = _dominates({**candidate_m1, **{f"m3_{k}": v for k, v in candidate_m3.items()}}, {**champion_m1, **{f"m3_{k}": v for k, v in champion_m3.items()}}) if False else (False, 0)
-                all_current = {"directional_precision": candidate_m1.get("directional_precision"), "large_move_recall": candidate_m1.get("large_move_recall"), "false_warning_rate": candidate_m1.get("false_warning_rate"), "opposite_move_rate": candidate_m1.get("opposite_move_rate"), "whipsaw_rate": candidate_m1.get("whipsaw_rate"), "burden_per_jst_day": candidate_m1.get("burden_per_jst_day"), "balanced_no_expansion_rate": candidate_m3.get("balanced_no_expansion_rate")}
-                all_champion = {"directional_precision": champion_m1.get("directional_precision"), "large_move_recall": champion_m1.get("large_move_recall"), "false_warning_rate": champion_m1.get("false_warning_rate"), "opposite_move_rate": champion_m1.get("opposite_move_rate"), "whipsaw_rate": champion_m1.get("whipsaw_rate"), "burden_per_jst_day": champion_m1.get("burden_per_jst_day"), "balanced_no_expansion_rate": champion_m3.get("balanced_no_expansion_rate")}
-                dominates, improved = _dominates(all_current, all_champion)
-                if not dominates:
-                    reasons.append("not_pareto_dominant")
-            else:
-                improved = 0
+            m1_summary = _read_json(run["m1"] / "replay.json")
+            m3_summary = _read_json(run["m3"] / "replay.json")
+            candidate_m1 = _m1_metrics(m1_summary)
+            candidate_m3 = _m3_metrics(m3_summary)
+            diagnostics = _m3_diagnostics(m3_summary)
+            reasons: list[str] = []
+            structural = True
+            if _jst_dates(run["m3"] / "events.csv") != champion_dates:
+                structural = False; reasons.append("eligible_date_basis_mismatch")
+            if cid != champion_id:
+                base_opportunities = _artifact_signature({"misses": champion_run["m1"] / "misses.csv"})["misses"]["ids"].get("opportunity_id", [])
+                run_opportunities = _artifact_signature({"misses": run["m1"] / "misses.csv"})["misses"]["ids"].get("opportunity_id", [])
+                if base_opportunities != run_opportunities:
+                    structural = False; reasons.append("independent_opportunity_set_mismatch")
+            if not _data_quality_ok(m1_summary) or not _data_quality_ok(m3_summary):
+                structural = False; reasons.append("validation_data_quality_or_continuity_failed")
+            concentration = _date_concentration(_read_csv(run["m3"] / "episodes.csv", {"episode_id", "start_timestamp_utc"}), champion_dates)
+            rolling = _rolling_snapshots(run["m3"] / "events.csv", run["m3"] / "episodes.csv", champion_dates, candidate_m3)
+            rolling_established = any(snapshot["status"] == "established" for snapshot in rolling)
+            comparison = structural and rolling_established
+            if not rolling_established:
+                reasons.append("rolling_comparison_not_established")
+            if any(value is None or not isinstance(value, (int, float)) for value in _guarded_vector(candidate_m1, candidate_m3).values()):
+                comparison = False; reasons.append("guarded_metric_missing")
             if candidate_m3.get("resolved_up_count", 0) < 10 or candidate_m3.get("resolved_down_count", 0) < 10:
-                reasons.append("validation_direction_count_insufficient")
-            rec = _candidate_record(cid, run["parameters"], candidate_m1, candidate_m3, valid, reasons, improved)
-            rec["recommendation"] = "reject" if not valid else "continue_shadow_collection"
+                comparison = False; reasons.append("validation_direction_count_insufficient")
+            if not concentration["pass"]:
+                comparison = False; reasons.append("validation_date_concentration_over_0_50")
+            m1_splits = _split_comparison(fresh_m1, m1_summary, "reliable_level_acceptance_corridor", ("direction", "regime", "price_location", "volatility_state", "reliability"))
+            m3_splits = _split_comparison(fresh_m3, m3_summary, "candidate", ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band"))
+            dominates, improved = (False, 0) if cid == champion_id else _dominates(_guarded_vector(candidate_m1, candidate_m3), _guarded_vector(champion_m1, champion_m3))
+            pareto = bool(comparison and dominates)
+            if cid != champion_id and not dominates:
+                reasons.append("not_pareto_dominant")
+            proposal = bool(pareto and p8["ready"] and p8["status"] == "provided" and p8["unique_actual_episode_count"] >= 50 and p8["actual_high_medium_count"] > 0)
+            if not proposal:
+                reasons.append("p8_actual_evidence_insufficient")
+            states = {"structurally_valid": structural, "comparison_eligible": comparison, "pareto_dominant": pareto, "proposal_eligible": proposal}
+            rec = _candidate_record(cid, run["parameters"], candidate_m1, candidate_m3, states, reasons, improved, diagnostics, {"m1": m1_splits, "m3": m3_splits}, rolling)
+            rec["validation_date_concentration_json"] = _canonical(concentration)
+            rec["m1_split_comparison_json"] = _canonical(m1_splits)
+            rec["m3_split_comparison_json"] = _canonical(m3_splits)
             records.append(rec)
-    champion_id = candidate_id(champion_pair)
-    valid_dominators = [row for row in records if row["candidate_id"] != champion_id and row["valid"] and "not_pareto_dominant" not in row["reason_codes"] and "validation_direction_count_insufficient" not in row["reason_codes"]]
-    valid_dominators.sort(key=lambda row: (-row["improved_guarded_metric_count"], -json.loads(row["m1_validation_3h_json"]).get("large_move_recall", -1), -json.loads(row["m3_validation_3h_json"]).get("directional_precision", -1), json.loads(row["m1_validation_3h_json"]).get("false_warning_rate", 999), json.loads(row["m3_validation_3h_json"]).get("opposite_move_rate", 999), row["combined_burden"], row["candidate_id"]))
-    winner = valid_dominators[0]["candidate_id"] if valid_dominators else "none"
-    p8 = _p8_status(p8_trial_facts_csv, p8_trial_report_json)
-    proposal_eligible = bool(winner != "none" and p8["ready"] and p8["status"] == "provided" and p8["unique_actual_episode_count"] >= 50 and p8["actual_high_medium_count"] > 0)
+            issue_rows.extend(_issue_rows(cid, m1_misses, m1_splits, candidate_m1, champion_m1, candidate_m3, champion_m3, concentration, p8))
+    dominators = [row for row in records if row["candidate_id"] != champion_id and row["pareto_dominant"]]
+    dominators.sort(key=lambda row: (-row["improved_guarded_metric_count"], -(_safe_number(json.loads(row["m1_validation_3h_json"]).get("large_move_recall"), -1)), -(_safe_number(json.loads(row["m3_validation_3h_json"]).get("directional_precision"), -1)), _safe_number(json.loads(row["m1_validation_3h_json"]).get("false_warning_rate"), 999), _safe_number(json.loads(row["m3_validation_3h_json"]).get("opposite_move_rate"), 999), row["combined_burden"], row["candidate_id"]))
+    winner = dominators[0]["candidate_id"] if dominators else "none"
+    proposal_eligible = bool(winner != "none" and any(row["proposal_eligible"] and row["candidate_id"] == winner for row in records))
     recommendation = "eligible_for_human_reviewed_proposal" if proposal_eligible else "continue_shadow_collection"
-    reasons = [] if proposal_eligible else ["p8_actual_evidence_insufficient"]
-    results_fields = ("candidate_id", "parameters_json", "valid", "reason_codes", "m1_validation_3h_json", "m3_validation_3h_json", "improved_guarded_metric_count", "combined_burden", "recommendation")
-    issue_rows = [{"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_id": row["candidate_id"], "issue_category": "actual evidence missing or conflicting", "status": "observed" if not proposal_eligible else "cleared", "evidence_count": p8["unique_actual_episode_count"], "affected_metric_split": "proposal_eligibility", "reason_codes": "|".join(reasons), "actual_backed_count": p8["actual_high_medium_count"], "proposal_eligibility_effect": "capped_continue_shadow_collection" if not proposal_eligible else "none"} for row in records]
-    report = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "primary_gate_horizon": "3h", "champion": {"candidate_id": champion_id, "parameters": champion_pair}, "expanded_proposal_space": [row["parameters_json"] for row in records if row["candidate_id"] != champion_id], "candidate_validation_results": records, "pareto_ranking": [row["candidate_id"] for row in valid_dominators], "diagnostic_horizons": ["6h", "12h", "24h"], "winner": winner, "recommendation": recommendation, "reason_codes": reasons, "p8_actual_status": p8, "input_fingerprints": _fingerprints(input_paths), "accepted_artifact_fingerprints": declared_artifacts, "safety_boundary": SAFETY}
-    markdown = "# Macro P9 Proposal Engine\n\n## Result\n\n- primary horizon: 3h\n- winner: %s\n- recommendation: %s\n- reason codes: %s\n\n## Candidates\n\n- count: %d\n- diagnostic horizons: 6h, 12h, 24h; not used for ranking\n\n## Evidence\n\n- P8/actual status: %s\n- accepted artifacts and fresh raw bundle are fingerprinted\n- no production mutation; report-only / not FORMAL_GO / no automatic order / human decides manually\n" % (winner, recommendation, ", ".join(reasons) or "none", len(records), json.dumps(p8, sort_keys=True))
-    _atomic({output_results_csv: _csv_bytes(records, results_fields), output_issues_csv: _csv_bytes(issue_rows, ("schema_version", "method_version", "candidate_id", "issue_category", "status", "evidence_count", "affected_metric_split", "reason_codes", "actual_backed_count", "proposal_eligibility_effect")), output_json: (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(), output_md: markdown.encode()}, replace_output)
-    return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_count": len(records), "winner": winner, "recommendation": recommendation, "p8_actual_status": p8, "output_count": 4}
+    report_reasons = [] if proposal_eligible else ["p8_actual_evidence_insufficient"]
+    if not issue_rows and not proposal_eligible:
+        issue_rows.append({"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_id": "REPORT_GLOBAL", "issue_category": "actual evidence missing or conflicting", "status": "observed", "evidence_source": "p8_actual_status", "evidence_count": p8["unique_actual_episode_count"], "affected_metric_split": "proposal_eligibility", "champion_value": None, "candidate_value": None, "reason_codes": "p8_actual_evidence_insufficient", "actual_backed_count": p8["actual_high_medium_count"], "proposal_eligibility_effect": "capped_continue_shadow_collection"})
+    results_fields = ("candidate_id", "parameters_json", "structurally_valid", "comparison_eligible", "pareto_dominant", "proposal_eligible", "valid", "reason_codes", "m1_validation_3h_json", "m3_validation_3h_json", "m3_diagnostic_horizons_json", "m1_split_comparison_json", "m3_split_comparison_json", "rolling_snapshots_json", "validation_date_concentration_json", "improved_guarded_metric_count", "combined_burden", "recommendation")
+    report = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "primary_gate_horizon": "3h", "champion": {"candidate_id": champion_id, "parameters": champion_pair, "m1_metrics": champion_m1, "m3_metrics": champion_m3, "diagnostic_horizons": champion_diag, "validation_dates": champion_dates, "concentration": champion_concentration}, "expanded_proposal_space": [json.loads(row["parameters_json"]) for row in records if row["candidate_id"] != champion_id], "candidate_validation_results": records, "rolling_comparison": {row["candidate_id"]: json.loads(row["rolling_snapshots_json"]) for row in records}, "split_comparisons": {row["candidate_id"]: {"m1": json.loads(row["m1_split_comparison_json"]), "m3": json.loads(row["m3_split_comparison_json"])} for row in records}, "diagnostic_horizons": ["6h", "12h", "24h"], "pareto_ranking": [row["candidate_id"] for row in dominators], "winner": winner, "recommendation": recommendation, "reason_codes": report_reasons, "p8_actual_status": p8, "input_fingerprints": _fingerprints(input_paths), "accepted_artifact_fingerprints": declared_artifacts, "safety_boundary": SAFETY}
+    markdown = "# Macro P9 Proposal Engine\n\n## Result\n\n- primary horizon: 3h\n- winner: %s\n- recommendation: %s\n- reason codes: %s\n\n## Rolling comparison\n\n- candidate states: structurally_valid / comparison_eligible / pareto_dominant / proposal_eligible\n- diagnostic horizons: 6h, 12h, 24h; stored only and not used for ranking\n\n## Evidence\n\n- P8/actual status: %s\n- split comparisons and issue diagnosis are evidence-based\n- no production mutation; report-only / not FORMAL_GO / no automatic order / human decides manually\n" % (winner, recommendation, ", ".join(report_reasons) or "none", json.dumps(p8, sort_keys=True))
+    issue_fields = ("schema_version", "method_version", "candidate_id", "issue_category", "status", "evidence_source", "evidence_count", "affected_metric_split", "champion_value", "candidate_value", "reason_codes", "actual_backed_count", "proposal_eligibility_effect")
+    _atomic({output_results_csv: _csv_bytes(records, results_fields), output_issues_csv: _csv_bytes(issue_rows, issue_fields), output_json: (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(), output_md: markdown.encode()}, replace_output)
+    return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_count": len(records), "winner": winner, "recommendation": recommendation, "p8_actual_status": p8, "output_count": 4, "structurally_valid_count": sum(row["structurally_valid"] for row in records), "comparison_eligible_count": sum(row["comparison_eligible"] for row in records), "pareto_dominant_count": sum(row["pareto_dominant"] for row in records)}
+
+
+def _safe_number(value: Any, default: float) -> float:
+    return float(value) if isinstance(value, (int, float)) else default
