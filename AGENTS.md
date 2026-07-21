@@ -5,6 +5,16 @@
 Codex is the fixed-scope implementation worker for this repository.
 ChatGPT performs repo review, product/trading/safety judgment, scope selection, validation design, acceptance, and next-task selection.
 
+## Canonical task route
+
+For new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work, the default route is an A1-valid manifest under `chatgpt/tasks/active/`:
+
+```text
+manifest → validate-task → render-prompt → bounded execution → json_v1 report → validate-report → ChatGPT review
+```
+
+The manifest is immutable once execution starts. A manual hand-written prompt is an explicit fallback only when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk; the reason must be recorded. The fallback keeps the same scope, safety, validation, reporting, approval, and outbox rules.
+
 ## Context rule
 
 ### Fresh thread or lost context

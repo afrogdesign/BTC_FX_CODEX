@@ -1,77 +1,60 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A1-SPEC-01`
-- mode: `SPEC_FIRST`
-- branch: confirm from repo state
-- status: ready for new ChatGPT thread
-- active_spec: none; create one bounded A1 spec
-- acceptance: not applicable
+- current_work_id: `BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A3-ROUTING-IMPL-01`
+- mode: `BOUNDED_CODEX`
+- revision: `1`
+- expected_branch: `Ver04-v2`
+- expected_base_commit: `95840ef4de0aa7d88972f35df37b7dac9f078f65`
+- active_spec: `chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md`
+- manifest: `chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json`
+- task_sha256: `ba2129a0bcdbd410d1589bbe111acd634e67ddae5dc87401648034e6e29156ec`
+- status: ready for A3 implementation
 - push: none
 
 ## Goal
 
-Create one bounded active specification for Phase A1 of the AI task-manifest and acceptance-gate foundation.
+Activate the accepted task-manifest flow as the default ChatGPT-to-Codex route while retaining hand-written prompts as an explicit fallback.
 
-Parent contract:
+## Content edit files
 
-```text
-docs/operations/ai-orchestration/AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md
-```
+- `AGENTS.md`
+- `docs/operations/ai-orchestration/START_HERE.md`
+- `docs/operations/ai-orchestration/AI_WORKFLOW.md`
+- `docs/operations/ai-orchestration/CONTROL.md`
+- `docs/operations/ai-orchestration/INITIAL_PROMPT.md`
 
-## A1 scope
+Only these five files may receive content edits. The A2 archive transition, state files, milestone file, A3 active spec, and A3 manifest are ChatGPT supplied and must remain byte-for-byte unchanged while being staged in the same commit.
 
-The active spec may authorize only:
+## Required behavior
 
-- `chatgpt/tasks/README.md`
-- `chatgpt/tasks/schemas/task_manifest.schema.json`
-- `chatgpt/tasks/schemas/task_report.schema.json`
-- `chatgpt/tasks/examples/implementation_task.example.json`
-- `chatgpt/tasks/examples/acceptance_task.example.json`
-- `chatgpt/tasks/examples/task_report.example.json`
-- `tools/ai_task_contract.py`
-- `tests/test_ai_task_contract.py`
-- the A1 active spec itself
-
-## Required A1 behavior
-
-- validate task and report JSON contracts fail-closed
-- compute deterministic canonical JSON SHA-256
-- render compact fresh and delta Codex prompts
-- prohibit heavy validation in implementation manifests
-- prohibit source edits in acceptance manifests
-- validate changed-file, test-command, heavy-run, commit, push, Work ID, revision, and SHA alignment in reports
-- use the canonical response outbox contract
-- require no new external dependency by default
-- provide focused unit tests and valid/invalid examples
-
-## A1 non-goals
-
-- no CWT integration
-- no worktree automation
-- no replay-stage or persistent-cache redesign
-- no conversion of all historical tasks
-- no automatic Codex execution
-- no automatic acceptance or next-task selection
-- no product, trading, scoring, threshold, gate, classifier, runtime, notification, mail, API, account, position, or order change
-- no M6 work
-
-## ChatGPT work in the new thread
-
-1. read the canonical startup docs and this current action
-2. inspect the parent contract only as needed
-3. create a concise A1 active spec with stable clause IDs
-4. define exact allowed files and focused validation
-5. directly review the spec for scope and safety
-6. produce one short bounded Codex implementation prompt
-
-Do not start Codex implementation before the A1 active spec exists and is internally consistent.
+- validated manifests under `chatgpt/tasks/active/` are the normal route for new Codex tasks
+- `validate-task` precedes execution
+- `render-prompt` provides the compact launcher
+- the manifest is immutable after execution starts
+- pre-execution corrections increment revision; material scope changes use a new Work ID
+- manifest-driven reports use `json_v1` and pass `validate-report` before ChatGPT review
+- ChatGPT retains direct MCP review and acceptance authority
+- acceptance remains a separate reviewed-commit-bound stage when heavy evidence is needed
+- hand-written prompts remain an explicit reason-recorded fallback
 
 ## Boundaries
 
+- no automatic execution, acceptance, or next-task selection
+- no optional transport integration
+- no replay redesign or M6
+- no production or runtime posture change
+- no heavy validation
 - preserve unrelated dirty files
-- do not alter accepted M5 records
-- do not edit source outside the A1 tool/test scope
-- do not reset, restore, checkout, clean, or manipulate stash state
-- push remains unauthorized
+- no reset, restore, checkout, clean, or stash manipulation
 
-This file contains one current task only. Replace it after the A1 spec is created and the implementation task is fixed.
+## Commit and report
+
+- commit message: `docs(ai): activate manifest routing`
+- stage exactly the sixteen manifest paths
+- create `/tmp/btc_monitor_a3_implementation_report.json` after the commit
+- report every manifest requirement and every listed validation command in manifest order
+- self-validate the final report exactly once
+- write the identical validated JSON once to the canonical outbox
+- push: none
+
+This file contains exactly one current task.

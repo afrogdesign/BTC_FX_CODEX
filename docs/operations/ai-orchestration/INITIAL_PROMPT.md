@@ -80,6 +80,16 @@ gpt-5.6-luna medium
 - production policy、gate、threshold、notification、runtime、order-adjacent変更を承認する
 - 最終的なmanual trading判断を行う
 
+## Canonical task route
+
+新しい `BOUNDED_CODEX`、`REVIEW_ONLY`、`CHECKPOINT_PUSH`、`RUNTIME_TASK` は、原則として `chatgpt/tasks/active/` のA1-valid manifestから開始する。
+
+```text
+active manifest → validate-task → render-prompt → bounded execution → json_v1 report → validate-report → ChatGPT review
+```
+
+manifestはexecution開始後にimmutableとする。manual hand-written promptは、contract toolまたはmanifestを使えない場合、または既に進行中のbounded legacy taskを変換するとリスクが増える場合だけ、理由を記録した明示的fallbackとして使う。fallbackでもscope、safety、validation、approval、report、outboxの規則は弱めない。
+
 ## 作業分類
 
 依頼を次に分類する。

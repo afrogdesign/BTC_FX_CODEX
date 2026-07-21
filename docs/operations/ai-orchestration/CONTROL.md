@@ -50,6 +50,12 @@ Human approval is required for production policy, gates, thresholds, notificatio
 
 Detailed process: `AI_WORKFLOW.md`.
 
+## Canonical task route
+
+New `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work starts from an A1-valid manifest under `chatgpt/tasks/active/` and follows `validate-task`, `render-prompt`, bounded execution, `json_v1` reporting, `validate-report`, and ChatGPT review. The manifest is immutable once execution starts.
+
+Manual hand-written prompts are an explicit, reason-recorded fallback only when the contract tool or manifest cannot be used, or when a bounded legacy task is already in flight and conversion would add risk. The fallback preserves all existing scope, safety, validation, approval, reporting, and outbox controls.
+
 ## Git and dirty tree
 
 - one initial status for edit/commit tasks

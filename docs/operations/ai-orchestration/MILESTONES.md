@@ -9,15 +9,12 @@
 - one bounded actual local-bundle run completed
 - 1 champion、4 challengers、6 chronological snapshot dates
 - true cutoff-bounded M1/M3 replay and same-date champion baseline
-- guarded metric direction、quality、direction count、date concentration、candidate lineage、P8 evidence are fail-closed
-- primary gate horizon: `3h`; `6h`、`12h`、`24h` are diagnostic only
+- primary gate horizon: `3h`; longer horizons are diagnostic only
 - winner: `none`
 - recommendation: `continue_shadow_collection`
 - P8 actual evidence: missing
 - no comparison-eligible、Pareto-dominant、or proposal-eligible challenger
-- fresh four-output publication reviewed; no temporary absolute path or raw opportunity ID exposure
-- report-only / not `FORMAL_GO` / no production、runtime、notification、mail、gate、threshold、API、account、position、or order change
-- M6 remains unauthorized
+- report-only posture preserved; M6 remains unauthorized
 
 M5 acceptance is implementation/evidence acceptance. It is not challenger adoption or production tuning approval.
 
@@ -26,7 +23,17 @@ M5 acceptance is implementation/evidence acceptance. It is not challenger adopti
 - accepted checkpoint: `13527dc69bfc3b2b17fc96ab2ab6f5a8d8ef495f`
 - strict task/report validation、canonical SHA、compact rendering、fail-closed report alignment、reviewed-commit binding、and write-once outbox accepted
 - focused static evidence was sufficient; no heavy run was required
-- A1 does not activate A3、CWT、automatic execution/acceptance、M6、runtime、notification、mail、or production behavior
+- A1 does not activate canonical routing、transport integration、automatic execution/acceptance、M6、runtime、notification、mail、or production behavior
+
+## 2026-07-21 — A2 low-risk manifest pilot accepted
+
+- accepted implementation checkpoint: `95840ef4de0aa7d88972f35df37b7dac9f078f65`
+- implementation manifest SHA: `250a51807a470a17619d6ee85f3019af782577a41c40a436f5e14e3ef7022660`
+- first bounded docs-only pilot using the A1 manifest, rendered launcher, machine report, and report validator
+- exact three-file implementation scope
+- revision-3 read-only review report validated successfully
+- no heavy validation and no product or runtime posture change
+- A2 authorizes a separate A3 specification but does not activate A3 by itself
 
 ## 2026-07-21 — M4 hierarchy render shadow accepted
 
@@ -36,7 +43,6 @@ M5 acceptance is implementation/evidence acceptance. It is not challenger adopti
 - tactical status safety、NONE/disagreement、future-field exclusion accepted
 - deterministic three-directory publication and rollback accepted
 - live UI、notification、mail、runtime、policy promotionは未承認
-- M5 bounded proposal engineへ移行
 
 ## 2026-07-21 — M3 next-regime offline shadow accepted
 
@@ -44,14 +50,12 @@ M5 acceptance is implementation/evidence acceptance. It is not challenger adopti
 - event-time offline candidate/baseline comparison
 - exact family allowlist and fail-closed conflict handling
 - primary gate horizon: `3h`
-- longer horizons are diagnostic only
 - recommendation: `continue_shadow_collection`
 - production Big Chanceは変更なし
 
 ## 2026-07-21 — M2 macro auxiliary shadow accepted
 
 - accepted source checkpoint: `8aee427`
-- docs checkpoint: `c2eed44`
 - optional、disabled-by-default auxiliary shadow
 - bounded result: 124 events、94 levels、33 independent opportunities
 - recommendation: `continue_shadow_collection`
@@ -77,8 +81,6 @@ M5 acceptance is implementation/evidence acceptance. It is not challenger adopti
 
 ## 2026-07-10 — Manual trading practicality P1–P7 route completed
 
-Accepted route:
-
 ```text
 P1 importer contract
 → P2 importer hardening
@@ -99,7 +101,7 @@ The route preserves strict formal gates and adds operator-action layers without 
 
 ## Current transition
 
-M5 remains accepted with `continue_shadow_collection`. A1 is accepted and archived, and the current immediate route is one bounded A2 low-risk manifest pilot. M6 remains not started and not authorized.
+M5 remains accepted with `continue_shadow_collection`. A1 and A2 are accepted and archived. The current immediate route is the separately specified A3 canonical task-manifest routing activation. M6 remains not started and not authorized.
 
 ## Detailed history
 

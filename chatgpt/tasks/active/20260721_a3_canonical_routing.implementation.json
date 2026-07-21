@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0",
+  "work_id": "BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A3-ROUTING-IMPL-01",
+  "revision": 1,
+  "stage": "implementation",
+  "mode": "BOUNDED_CODEX",
+  "goal": "Activate the accepted task-manifest flow as the default Codex routing path while retaining the manual prompt route as an explicit fallback.",
+  "repo": {
+    "working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor",
+    "expected_branch": "Ver04-v2",
+    "expected_base_commit": "95840ef4de0aa7d88972f35df37b7dac9f078f65"
+  },
+  "contract_refs": [
+    {
+      "path": "chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md",
+      "clauses": ["IO-01", "IO-02", "AC-01", "AC-02", "AC-03", "AC-04", "SC-01", "VAL-01", "VAL-02"]
+    }
+  ],
+  "allowed": {
+    "read": [
+      "AGENTS.md",
+      "docs/operations/ai-orchestration/START_HERE.md",
+      "docs/operations/ai-orchestration/AI_WORKFLOW.md",
+      "docs/operations/ai-orchestration/CONTROL.md",
+      "docs/operations/ai-orchestration/INITIAL_PROMPT.md",
+      "docs/operations/ai-orchestration/CURRENT_STATE.md",
+      "docs/operations/ai-orchestration/NEXT_ACTION.md",
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "docs/operations/ai-orchestration/AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md",
+      "chatgpt/specs/archive/20260721_ai_task_manifest_acceptance_gate_a1.md",
+      "chatgpt/specs/archive/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.review.json",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md",
+      "chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json"
+    ],
+    "edit": [
+      "AGENTS.md",
+      "docs/operations/ai-orchestration/START_HERE.md",
+      "docs/operations/ai-orchestration/AI_WORKFLOW.md",
+      "docs/operations/ai-orchestration/CONTROL.md",
+      "docs/operations/ai-orchestration/INITIAL_PROMPT.md",
+      "docs/operations/ai-orchestration/CURRENT_STATE.md",
+      "docs/operations/ai-orchestration/NEXT_ACTION.md",
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md",
+      "chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/specs/archive/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.review.json",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.review.json"
+    ],
+    "inspect": ["git_status", "task_diff", "target_definition", "matching_tests"]
+  },
+  "autonomy": {
+    "helper_design": false,
+    "cache_design": false,
+    "fixture_design": false,
+    "execution_order": true,
+    "obvious_in_scope_bugfix": false,
+    "remove_redundant_validation": true
+  },
+  "requirements": [
+    {"id": "IO-01", "description": "All five routing documents make the validated manifest and rendered launcher the normal Codex task route."},
+    {"id": "IO-02", "description": "Manifest-driven tasks require an A1-valid json_v1 report validated before ChatGPT acceptance review."},
+    {"id": "AC-01", "description": "Manual hand-written prompts remain available only as an explicit reason-recorded fallback."},
+    {"id": "AC-02", "description": "Role ownership and fresh-versus-delta read discipline remain unchanged and consistent."},
+    {"id": "AC-03", "description": "Implementation, MCP review, and reviewed-commit-bound acceptance stages remain separated and fail closed."},
+    {"id": "AC-04", "description": "Compatibility guidance remains available without describing manual prompts as the default route."},
+    {"id": "SC-01", "description": "No automatic execution, acceptance, next-task selection, CWT, replay, M6, runtime, notification, mail, trading, or production behavior is introduced."},
+    {"id": "VAL-01", "description": "Run only manifest validation, one final report self-validation, and one canonical task-scoped diff check."},
+    {"id": "VAL-02", "description": "Preserve every ChatGPT supplied transition file byte-for-byte and keep the exact sixteen-path commit scope."}
+  ],
+  "validation": {
+    "unit_tests": [
+      "./.venv312/bin/python tools/ai_task_contract.py validate-task --task chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json",
+      "./.venv312/bin/python tools/ai_task_contract.py validate-report --task chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json --report /tmp/btc_monitor_a3_implementation_report.json"
+    ],
+    "fixture_e2e": {"required": false, "location": null},
+    "diff_check_files": [
+      "AGENTS.md",
+      "docs/operations/ai-orchestration/START_HERE.md",
+      "docs/operations/ai-orchestration/AI_WORKFLOW.md",
+      "docs/operations/ai-orchestration/CONTROL.md",
+      "docs/operations/ai-orchestration/INITIAL_PROMPT.md",
+      "docs/operations/ai-orchestration/CURRENT_STATE.md",
+      "docs/operations/ai-orchestration/NEXT_ACTION.md",
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a3_canonical_routing.md",
+      "chatgpt/tasks/active/20260721_a3_canonical_routing.implementation.json",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/specs/archive/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.review.json",
+      "chatgpt/tasks/archive/20260721_a2_milestones_alignment.review.json"
+    ],
+    "heavy": {"authorized": false, "planned_work_units": 0, "max_full_runs": 0, "commands": []}
+  },
+  "commit": {
+    "enabled": true,
+    "message": "docs(ai): activate manifest routing",
+    "push": false
+  },
+  "stop_codes": [
+    "BRANCH_MISMATCH",
+    "BASE_COMMIT_MISMATCH",
+    "MANIFEST_INVALID",
+    "SUPPLIED_FILE_CHANGED",
+    "SCOPE_OVERLAP",
+    "OUT_OF_SCOPE_CHANGE",
+    "REPORT_VALIDATION_FAILED"
+  ],
+  "report": {
+    "format": "json_v1",
+    "outbox": "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt",
+    "write_once": true
+  }
+}

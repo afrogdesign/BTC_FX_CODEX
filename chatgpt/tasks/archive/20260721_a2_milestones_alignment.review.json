@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "work_id": "BTCFX-20260721-AI-TASK-MANIFEST-ACCEPTANCE-GATE-A2-MILESTONES-PILOT-REVIEW-01",
+  "revision": 3,
+  "stage": "review",
+  "mode": "REVIEW_ONLY",
+  "goal": "Verify the A2 milestones pilot at the actual implementation commit and produce one self-validating machine report.",
+  "repo": {
+    "working_dir": "/Users/marupro/CODEX/100_MCP_Server/btc_monitor",
+    "expected_branch": "Ver04-v2",
+    "expected_base_commit": "95840ef4de0aa7d88972f35df37b7dac9f078f65"
+  },
+  "contract_refs": [
+    {
+      "path": "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "clauses": ["IO-01", "AC-01", "AC-02", "SC-01", "VAL-01"]
+    }
+  ],
+  "allowed": {
+    "read": [
+      "docs/operations/ai-orchestration/MILESTONES.md",
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.review.json"
+    ],
+    "edit": [],
+    "inspect": ["git_status", "task_diff", "target_definition"]
+  },
+  "autonomy": {
+    "helper_design": false,
+    "cache_design": false,
+    "fixture_design": false,
+    "execution_order": false,
+    "obvious_in_scope_bugfix": false,
+    "remove_redundant_validation": false
+  },
+  "requirements": [
+    {"id": "IO-01", "description": "Review the actual A2 implementation commit and supplied contract files without tracked edits."},
+    {"id": "AC-01", "description": "Confirm the accepted A1 milestone and its concise evidence summary."},
+    {"id": "AC-02", "description": "Confirm M5 remains accepted, A2 is current, and M6 remains unauthorized."},
+    {"id": "SC-01", "description": "Confirm this remains a documentation-only orchestration pilot."},
+    {"id": "VAL-01", "description": "Use one identical temporary and final report with changed_files empty, commit null, and every listed test passing in manifest order."}
+  ],
+  "validation": {
+    "unit_tests": [
+      "./.venv312/bin/python tools/ai_task_contract.py validate-task --task chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "./.venv312/bin/python tools/ai_task_contract.py validate-report --task chatgpt/tasks/active/20260721_a2_milestones_alignment.review.json --report /tmp/btc_monitor_a2_review_report.json"
+    ],
+    "fixture_e2e": {"required": false, "location": null},
+    "diff_check_files": [
+      "chatgpt/specs/active/20260721_ai_task_manifest_a2_milestones_alignment.md",
+      "chatgpt/tasks/active/20260721_a2_milestones_alignment.implementation.json",
+      "docs/operations/ai-orchestration/MILESTONES.md"
+    ],
+    "heavy": {"authorized": false, "planned_work_units": 0, "max_full_runs": 0, "commands": []}
+  },
+  "commit": {"enabled": false, "message": "review does not commit", "push": false},
+  "stop_codes": ["BRANCH_MISMATCH", "BASE_COMMIT_MISMATCH", "CONTRACT_FILE_MISMATCH", "REPORT_VALIDATION_FAILED"],
+  "report": {
+    "format": "json_v1",
+    "outbox": "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt",
+    "write_once": true
+  }
+}
