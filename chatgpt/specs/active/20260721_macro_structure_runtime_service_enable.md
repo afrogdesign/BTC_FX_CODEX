@@ -297,6 +297,17 @@ M-OPS4 is complete only when:
 9. rollback evidence is recorded;
 10. current docs identify M-OPS4 as accepted and M-OPS5 as next.
 
+## 14a. Bounded activation attempt
+
+- implementation commit: `690c014` (`feat: enable macro structure runtime service`)
+- repository plist lint: passed
+- installed target plist: copied from the repository plist, then removed during rollback
+- target backup: `none` (the target did not exist before this attempt)
+- bootstrap: failed with `launchctl bootstrap` I/O error
+- kickstart: not performed
+- rollback: target-only bootout attempted; new target plist removed; target remains unloaded
+- M-OPS4 acceptance: not achieved; this active spec remains unarchived
+
 ## 15. Safety boundary
 
 - report-only
