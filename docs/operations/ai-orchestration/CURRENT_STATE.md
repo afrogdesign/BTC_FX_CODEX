@@ -247,3 +247,9 @@ M-OPS4 runtime approval is granted only for the target and boundaries recorded a
 - no mail or notification change
 - no production gate, threshold, scoring, or classifier change
 - no unrelated LaunchAgent change
+
+## M-OPS4 FIX-01 result
+
+The target-only registration diagnosis and one activation attempt completed under the active runtime spec. The repository plist was valid and the installed copy matched SHA-256 `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`; no target-specific disabled state, stale registration, ACL, flag, or quarantine attribute was found. Recopying with current-user ownership and mode `0644` allowed one bootstrap to succeed. The target contract and six JST schedule entries were verified.
+
+The single launchd-triggered run fetched public 15m/1h/4h inputs and completed M-OPS1 and M-OPS2, but M-OPS3 failed closed with `zone_evidence_invalid`. The target was rolled back only: label unloaded and new installed plist removed. M-OPS4 is not accepted, the active spec remains active, and no other LaunchAgent was changed. The retained compact status is `logs/runtime/macro_structure_service_last_result.json`.

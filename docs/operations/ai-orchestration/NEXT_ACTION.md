@@ -1,108 +1,100 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE`
+- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE-FIX-01`
 - mode: `RUNTIME_TASK`
 - branch: `Ver04-v3`; confirm from local git before execution
-- accepted_base: `09330b9`
+- accepted_source_base: `09330b9`
+- implementation_commit: `690c014`
+- current_head_locator: `80bcd59`
 - active_spec: `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
-- status: explicitly approved for implementation and installed service activation
+- status: blocked after one target-only repair, bootstrap, kickstart, and live acceptance attempt
 - target_label: `com.afrog.btc-macro-structure`
 - push: none
 
 ## Current action
 
-Implement and activate M-OPS4 as one bounded report-only LaunchAgent.
+Diagnose and repair the target-only `launchctl bootstrap` I/O failure without reopening the accepted wrapper, plist schedule, or M-OPS1–M-OPS3 semantics.
 
-The user explicitly authorized installed runtime/schedule inspection and change on 2026-07-21.
+The initial activation attempt established:
 
-Connect accepted operations in this order:
+- focused source and CLI tests passed;
+- wrapper dry-run passed;
+- repository plist lint passed;
+- target did not previously exist;
+- bootstrap returned an I/O error;
+- kickstart was not performed;
+- rollback removed the installed target plist;
+- target remains unloaded;
+- no live runtime status or new macro artifacts were produced.
 
-```text
-public 15m / 1h / 4h OHLCV
-→ run-macro-structure-daily
-→ run-macro-structure-history
-→ render-macro-structure-operator
-```
+## Required diagnosis before mutation
 
-## Accepted source state
+Collect target-specific evidence for:
 
-- M-OPS1 accepted at `89bd338`
-- M-OPS2 accepted at `dea0e33`
-- M-OPS3 accepted at `09330b9`
+1. GUI-domain registration and disabled state;
+2. target plist ownership, mode, ACL, flags, and xattrs;
+3. `~/Library/LaunchAgents` ownership and access;
+4. primary Python, wrapper, working directory, and runtime log directory;
+5. installed/repository plist byte identity and lint;
+6. bounded launchd diagnostics mentioning the target label or plist.
 
-Do not reopen their analysis, reliability, history, chart, or publication semantics without a concrete command-breaking contradiction.
+## Repair boundary
 
-## Runtime target
+Perform at most one evidence-based target repair and one subsequent bootstrap attempt.
 
-New target only:
+Permitted target-only repairs:
 
-- label: `com.afrog.btc-macro-structure`
-- primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- wrapper: `tools/run_macro_structure_service.py`
-- repository plist: `deploy/com.afrog.btc-macro-structure.plist`
-- installed plist: `~/Library/LaunchAgents/com.afrog.btc-macro-structure.plist`
-- compact status: `logs/runtime/macro_structure_service_last_result.json`
+- stale target bootout/removal;
+- target plist ownership or mode correction;
+- target-plist quarantine removal;
+- required target log-directory creation;
+- recopy of the committed repository plist.
 
-Schedule in JST:
+Do not change the label, six-time schedule, source semantics, system timezone, another LaunchAgent, mail, notification, policy, private endpoints, or orders.
 
-- 01:10
-- 05:10
-- 09:10
-- 13:10
-- 17:10
-- 21:10
+## Success path
 
-No RunAtLoad or KeepAlive.
+If bootstrap succeeds:
 
-## Execution boundary
+1. verify loaded paths, schedule, logs, and no RunAtLoad/KeepAlive;
+2. kickstart the target exactly once;
+3. wait boundedly for one new runtime status;
+4. verify successful M-OPS1 → M-OPS2 → M-OPS3 artifacts and safety flags;
+5. archive the active spec;
+6. mark M-OPS4 accepted and M-OPS5 next;
+7. create one local state commit.
 
-This approved task may:
+## Failure path
 
-1. inspect installed matching LaunchAgents and the frozen repo read-only;
-2. implement the dedicated public-data runtime wrapper;
-3. add the target-only repository plist and focused tests;
-4. commit the implementation locally;
-5. back up only an existing target plist;
-6. boot out/bootstrap/kickstart only the target label;
-7. perform one bounded launchd-triggered live-public-data run;
-8. verify fresh M-OPS1, M-OPS2, and M-OPS3 artifacts;
-9. record rollback and runtime state.
+If no safe repair is established or repaired bootstrap/runtime acceptance fails:
 
-Do not edit or run source/tests in the frozen runtime repo. The new service must point to the primary repo.
+- boot out only the target;
+- remove the new installed plist because no prior target existed;
+- leave the target unloaded;
+- record exact diagnostic evidence and final state;
+- do not repeat bootstrap or kickstart;
+- keep M-OPS4 unaccepted.
 
-## Required safety
+## No-repeat and safety
 
-- report-only
-- no automatic order
-- no private/account/position/order endpoint
-- no mail or notification integration
-- no production gate, threshold, scoring, classifier, or policy change
-- no existing monitor, P8, review-form, feedback, or AI-post-review service change
-- no M5/M6
-- no version promotion
+- do not rerun implementation tests unless source changed;
+- do not repeat an unchanged bootstrap;
+- no other LaunchAgent mutation;
+- no normal monitor or P8 restart;
+- no frozen-repo edit or execution;
+- report-only;
+- no automatic order;
+- no mail or notification integration;
+- no private/account/position/order endpoint;
+- no M5, M6, or version promotion.
 
-## Acceptance path
+## FIX-01 result
 
-After Codex reports completion, ChatGPT reviews:
-
-- wrapper source;
-- focused tests;
-- plist contract;
-- installed target contract;
-- target-only backup/rollback evidence;
-- launchd result status;
-- latest snapshot/history/operator artifacts;
-- scope and safety.
-
-If accepted:
-
-```text
-M-OPS4 accepted
-→ define M-OPS5 autonomous health/stale-status source task
-```
-
-## No-repeat boundary
-
-Do not repeat M-OPS1–M-OPS3 implementation or acceptance review unless source changes or a contradictory artifact appears.
-
-Do not repeatedly bootstrap or kickstart an unchanged failed target. Collect the exact target-specific cause, perform at most one bounded rollback, and report partial/blocked.
+- target registration repair: bootstrap succeeded once after target-only recopy and normal ownership/mode correction;
+- target runtime: one launchd-triggered run only;
+- M-OPS1: success;
+- M-OPS2: success;
+- M-OPS3: failed closed with `zone_evidence_invalid`;
+- rollback: target-only unload and removal of the new installed plist; target remains unloaded;
+- concrete blocker: live M-OPS3 zone-evidence validation must be diagnosed in a separately authorized source-fix task;
+- no second bootstrap, kickstart, live run, or unrelated LaunchAgent operation is authorized by this checkpoint.

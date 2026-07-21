@@ -318,3 +318,35 @@ M-OPS4 is complete only when:
 - no production gate, threshold, scoring, classifier, or policy mutation
 - no M6
 - no version promotion
+
+## 15a. FIX-01 bounded diagnosis and runtime result
+
+- diagnosis: the committed plist was valid and byte-identical after installation; the target was not disabled or stale-registered, and the target plist had current-user ownership, mode `0644`, no ACL, no file flags, and no quarantine attribute. The initial I/O failure was therefore at the ordinary `launchctl` invocation boundary, not a repository plist contract defect.
+- repair: target-only label/path bootout attempts, recopy of the committed plist, target-normal `marupro:staff` ownership and `0644` mode; no label, schedule, wrapper, or accepted M-OPS source changes.
+- repository/installed plist SHA-256: `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`
+- bootstrap: succeeded once after the bounded repair.
+- loaded contract: verified for `com.afrog.btc-macro-structure`, primary-repo paths, six JST entries, and no `RunAtLoad`/`KeepAlive`.
+- kickstart: performed once; no retry.
+- launchd runtime result: M-OPS1 and M-OPS2 succeeded; M-OPS3 failed closed with `zone_evidence_invalid`.
+- runtime status: `logs/runtime/macro_structure_service_last_result.json`; public 15m/1h/4h fingerprints were recorded; report-only and no-private/no-automatic-order flags remained true.
+- rollback: target-only bootout completed and the new installed plist was removed; target is unloaded. No prior target backup existed.
+- M-OPS4 acceptance: not achieved; this active spec remains unarchived. The remaining concrete blocker is live M-OPS3 zone-evidence validation.
+
+## 14b. Target-only registration diagnosis and repair
+
+The first installed activation attempt ended at repository HEAD `80bcd59` after the committed target plist passed lint but `launchctl bootstrap` returned an I/O error. The target did not exist before the attempt, no backup was required, kickstart was not performed, rollback removed the installed plist, and the label remains unloaded.
+
+The next bounded runtime action is `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE-FIX-01`.
+
+Before another bootstrap, collect target-specific evidence for:
+
+- GUI-domain target registration and disabled state;
+- installed plist ownership, mode, ACL, flags, and extended attributes;
+- `~/Library/LaunchAgents` ownership and permissions;
+- primary Python, wrapper, working-directory, and log-directory existence and access;
+- exact installed plist content and SHA-256 versus the committed repository plist;
+- recent launchd diagnostics mentioning only the target label or target plist.
+
+Perform at most one evidence-based repair and one new bootstrap attempt. Acceptable target-only repairs include stale target bootout/removal, correcting target plist ownership/mode, removing a target-plist quarantine attribute, creating required target log directories, or recopying the committed plist. Do not change the service label, schedule, source contract, other LaunchAgents, system timezone, or accepted M-OPS semantics.
+
+If bootstrap succeeds, verify the loaded contract, kickstart exactly once, and perform the existing bounded runtime acceptance. If the evidence does not establish a safe repair or the repaired bootstrap still fails, rollback the target and report blocked without another bootstrap attempt.
