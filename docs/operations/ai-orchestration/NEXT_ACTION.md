@@ -1,59 +1,58 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-OPERATOR-HIERARCHY-RENDER-SHADOW-FIX-01`
+- current_work_id: `BTCFX-20260721-AI-ORCHESTRATION-DOCS-CHECKPOINT-01`
 - mode: `BOUNDED_CODEX`
-- task_type: `M4 LOCAL RENDER-SHADOW ACCEPTANCE FIX`
-- branch: `Ver04-v2`
-- active_spec: `chatgpt/specs/active/20260721_macro_operator_hierarchy_render_shadow.md`
-- accepted_m3_head_reported: `d576862`
-- accepted_m3_spec: `chatgpt/specs/archive/20260721_macro_next_regime_offline_shadow.md`
-- m3_recommendation: `continue_shadow_collection`
-- preserved_m4_base: `5574a2e`
-- runtime_change: none
+- branch: confirm from repo state
+- status: ready for docs-only validation and commit
+- active_spec: none
+- acceptance: not applicable
+- push: none
 
-## Exact next action
+## Goal
 
-Complete M4 FIX-01 against the preserved local renderer implementation.
+Commit the reviewed AI-orchestration routing, M5 acceptance records, task-manifest design, and preserved pre-optimization history as one docs-only checkpoint.
 
-Required posture:
+## Reviewed scope
 
-- add and prove the actual offline CLI route
-- deduplicate one level geometry referenced by multiple semantic roles
-- fail closed or explicitly exclude reference/level-role mismatches
-- render event-time-safe support, resistance, target, obstruction, and reliability in the macro strip
-- draw tactical entry-zone bands separately from macro geometry
-- trace every displayed fact to logical source and field
-- retain tactical headline and next-condition wording as secondary detail
-- render visible baseline/challenger hierarchy comparison
-- preserve future-field exclusion and event-time boundaries
-- publish three outputs atomically even when their parent directories differ
+- `AGENTS.md`
+- M5 spec move from `chatgpt/specs/active/` to `chatgpt/specs/archive/`
+- canonical orchestration docs: `START_HERE.md`, `AI_WORKFLOW.md`, `CONTROL.md`, `INITIAL_PROMPT.md`
+- current records: `CURRENT_STATE.md`, `NEXT_ACTION.md`, `MILESTONES.md`, `DECISIONS.md`
+- compatibility pointers: `PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHATGPT_COMMANDER_PROMPT.md`, `RESUME.md`, `RESUME_SMOKE_TEST.md`
+- navigation docs: `README.md`, `REPO_MAP.md`, `handoffs/CURRENT_HANDOFF.md`
+- design docs: `AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md`, `MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md`
+- preserved history under `history/record-optimization-20260721/` and `history/ai-routing-optimization-20260721/`
 
-## Completion posture
+## Validation
 
-After M4 FIX-01, ChatGPT reviews source, focused tests, actual CLI output, and fresh bounded artifacts. M5 remains blocked until M4 is accepted.
+- confirm actual branch and starting HEAD
+- inspect current status and docs-only diff
+- verify no source, test, local artifact, runtime, or unrelated file is staged
+- verify active specs contain only `.gitkeep`
+- verify the archived M5 spec exists
+- run task-scoped `git diff --check` on reviewed docs
+- stage only reviewed docs and commit
 
-M4 does not authorize live UI deployment, notification or mail changes, runtime reflection, policy promotion, or automatic production mutation.
+## Commit
 
-Future bounded Codex work defaults to `GPT-5.4-mini Medium`.
+```text
+docs: streamline AI routing and acceptance workflow
+```
 
-## Safety boundary
+Push: none.
 
-- report-only
-- not `FORMAL_GO`
-- no automatic order
-- no automatic production mutation
-- human decides manually
+## After checkpoint
 
-## Current action — M5 bounded proposal engine
+ChatGPT directly verifies the commit and then starts a new ChatGPT thread for bounded A1 active-spec creation.
 
-- current_work_id: `BTCFX-20260721-MACRO-P9-CHAMPION-CHALLENGER-PROPOSAL-ENGINE`
-- mode: `BOUNDED_CODEX`
-- active_spec: `chatgpt/specs/active/20260721_macro_p9_champion_challenger_proposal_engine.md`
-- accepted_m4_head: `ea89e61`
-- m3_recommendation: `continue_shadow_collection`
-- next action: implement the new M5 offline proposal engine source and focused tests
-- source implementation: not started
-- m4 live UI deployment: not authorized
-- m5 does not authorize production mutation, notification, mail, runtime, scoring, gates, thresholds, classifiers, APIs, accounts, positions, or orders
+A1 must remain limited to task/report schemas, examples, validator, prompt renderer, focused tests, and task README. Do not start CWT integration, replay-stage/cache work, M6, runtime, or production changes.
 
-M4 was accepted only as a local deterministic render-only shadow. M5 remains report-only, not `FORMAL_GO`, human-decided, and no automatic order.
+## Boundaries
+
+- do not edit source or tests
+- do not commit `local/` outputs
+- do not change product/trading behavior
+- do not reset, restore, checkout, clean, or manipulate stash state
+- preserve all unrelated dirty changes
+
+This file contains one current task only. Replace it after the docs checkpoint is accepted.

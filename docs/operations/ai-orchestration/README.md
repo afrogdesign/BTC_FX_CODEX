@@ -1,134 +1,95 @@
 # AI Orchestration
 
-新しい ChatGPT / Codex / future AI agent は最初に `START_HERE.md` を読みます。
+This directory separates project setup, AI routing, accepted state, stable controls, implementation contracts, and history.
 
-## Purpose
-
-- ChatGPT / Codex / future agents のresume costを下げる
-- MCP primary workflowでrepo confusionを防ぐ
-- manual trading practicality routeを段階実行する
-- planning、active spec、implementation、human approvalを混同しない
-
-## Two repo paths
-
-| Label | Path | Use |
-|---|---|---|
-| MCP primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | 通常のinspection / edit / test / git |
-| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 通常taskではread/edit/runしない |
-
-- frozen old runtime repoはcurrent editing targetではない。
-- GitHubはcheckpoint / history / sync用。
-- routine pushはdefaultでは要求しない。
-- runtime変更は明示taskだけで行う。
-
-## Current product objective
+## Canonical route
 
 ```text
-notification mail を受け取った人間が、
-15分足を確認し、
-攻めの姿勢で勝てる manual trading support system を作る。
+ChatGPT Project prompt: INITIAL_PROMPT.md
+→ AGENTS.md
+→ START_HERE.md
+→ request-specific CURRENT_STATE / NEXT_ACTION / active spec
+→ AI_WORKFLOW.md for execution or review
 ```
 
-Automatic trading is later-stage only.
+Same-thread work reads only the new report, changed files, matching tests, and relevant artifacts. Stable docs are not reread for every FIX.
 
-## Current practicality route
+## Canonical files
 
-```text
-A_FORMAL
-B_CHECK_15M
-C_WATCH_ZONE
-STOP_OR_EXIT
-```
-
-この4分類はoperator action layerであり、既存gateの置換ではない。
-
-- strict A candidate qualityを維持する
-- Bで人間が15分足確認できる候補を増やす
-- Cで未到達scenarioを監視する
-- STOPで新規停止・利確・撤退を支援する
-- candidate rowをscenarioへ圧縮する
-- actual trade ground truthで評価を補正する
-
-## Roles
-
-- ChatGPT: commander, planning, review, scope selection, active spec design, Codex prompt creation
-- Codex: fixed-scope implementation, validation, local commit, compact reporting
-- Human: production threshold / gate / notification / runtime / live behavior approval
-
-## Active anchors
-
-- `START_HERE.md`
-- `CURRENT_STATE.md`
-- `NEXT_ACTION.md`
-- `CONTROL.md`
-- `PRODUCT_IMPLEMENTATION_ROUTE.md`
-- `MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
-- `../strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
-- `MILESTONES.md`
-
-## Product source-of-truth files
-
-| File | Role |
+| File | Responsibility |
 |---|---|
-| `PRODUCT_IMPLEMENTATION_ROUTE.md` | active product route |
-| `MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md` | AI phase execution and anti-skip rules |
-| `../strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md` | detailed architecture review and improvement plan |
-| `../strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md` | daily/weekly/biweekly evaluation loop |
-| `../strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md` | manual decision success definition |
-| `PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md` | observation / cue / approval gate |
+| `INITIAL_PROMPT.md` | ChatGPT Project initial prompt source |
+| `AGENTS.md` | Codex worker rules and repo boundary |
+| `START_HERE.md` | role-aware startup router |
+| `AI_WORKFLOW.md` | analysis, implementation, review, and acceptance flow |
+| `CURRENT_STATE.md` | accepted state and current blocker |
+| `NEXT_ACTION.md` | exactly one current work item |
+| `CONTROL.md` | stable safety, git, runtime, and validation controls |
+| `MILESTONES.md` | accepted major checkpoints |
+| `DECISIONS.md` | durable product/design decisions |
+| active spec | current detailed implementation contract |
+| `TASK_LEDGER.md` | historical Work ID lookup only |
 
-## Current posture and next task
+## Current post-M5 route
 
-- runtime/product observation continues
-- Phase4 tuning remains blocked
-- planning route is approved
-- production tuning is not approved
-- current exact next task: `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC`
-- next task is active-spec creation only
-- importer implementation begins only after spec review
+M5 is accepted. The next orchestration improvement is the task-manifest foundation.
 
-## Phase sequence
+Design references:
+
+- `AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md`
+- `MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md`
+
+Sequence:
 
 ```text
-P1 importer active spec
-→ P2 importer implementation
-→ P3 trade-to-signal/scenario linking
-→ P4 coverage and scenario normalization
-→ P5 offline A/B/C/STOP classifier
-→ P6 historical replay
-→ P7 shadow surface
-→ P8 human manual trial
-→ P9 evidence-backed tuning review
+AI orchestration docs checkpoint
+→ A1 contract foundation
+→ A2 low-risk pilot
+→ A3 canonical activation
+→ optional A4 CWT integration
 ```
 
-Do not skip or merge phases without explicit redesign approval.
+Replay-stage/cache redesign is a later, separate route and is not part of A1.
 
-## Historical / non-default files
+## Compatibility files
 
-- `TASK_LEDGER.md` is historical/specific lookup only
-- `handoffs/CURRENT_HANDOFF.md` is handoff-only
-- `PRACTICAL_TRADING_SYSTEM_COMPLETION_ROADMAP.md` is an older evidence-phase roadmap and is not the current practicality execution route
-- older task notes are not current source of truth unless explicitly named
+These preserve old entry points but are not independent sources of truth:
 
-## Default operation
+- `PROMPTS.md`
+- `MINI_CODEX_RULES.md`
+- `PROMPT_PREFLIGHT_CHECKLIST.md`
+- `CHATGPT_COMMANDER_PROMPT.md`
+- `RESUME.md`
 
-- MCP primary
-- local edit / local validation / local commit
-- checkpoint push only
-- avoid `.venv312/`, logs, generated files, raw exchange exports, and full `TASK_LEDGER.md` by default
-- active spec is required before source implementation
+Do not read them together.
 
-## Hard safety rules
+## Update rules
 
-- no automatic order
-- no API keys or secrets
-- no private/account/order endpoints
-- no raw exchange export commit
-- no `paper_positions.csv` mixing
-- no gate relaxation without explicit human approval
-- no tuning from single examples
-- no unresolved/no_ohlcv win-loss claims
+### Normal implementation or FIX
 
-## Rule
+- do not update `CURRENT_STATE.md`, `CONTROL.md`, `MILESTONES.md`, or `TASK_LEDGER.md`
+- add only a short factual active-spec note when pending contract evidence changes
 
-長い履歴をpromptへ詰め込まず、repo-local source-of-truth docsを使う。
+### Acceptance or posture change
+
+1. archive the active spec
+2. update `CURRENT_STATE.md`
+3. replace `NEXT_ACTION.md` with one next item
+4. update `CONTROL.md` only if stable rules changed
+5. add a milestone only for a major accepted checkpoint
+
+### Project prompt change
+
+- update only `INITIAL_PROMPT.md` as the canonical source
+- keep execution detail in `AI_WORKFLOW.md`
+- keep stable repo rules in `CONTROL.md`
+- never add current Work IDs or task history to the project prompt
+
+## History
+
+Pre-optimization copies are preserved under:
+
+- `history/record-optimization-20260721/`
+- `history/ai-routing-optimization-20260721/`
+
+Historical files are not default reads.

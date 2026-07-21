@@ -1,97 +1,25 @@
 # PROMPT_PREFLIGHT_CHECKLIST
 
-## Purpose
+Compatibility checklist. The canonical process is `AI_WORKFLOW.md`.
 
-ChatGPT が Codex prompt を出す前に、形と境界が崩れていないかを確認する。
+Before sending Codex work, ChatGPT confirms:
 
-## Required prompt fields
+1. one coherent goal
+2. product/trading/safety judgment already resolved
+3. observable contract and allowed edit files known
+4. Codex has freedom over helper/cache/fixture mechanics
+5. minimum development validation is known
+6. full bundle or heavy replay is excluded unless this is an explicit acceptance run
+7. runtime/push/order boundary is explicit when relevant
 
-- Work ID
-- Goal
-- Allowed read
-- Allowed edit
-- Allowed inspection
-- Do
-- Validation
-- Stop
-- Commit
-- Report
+Heavy-run preflight:
 
-旧来の長い safety boilerplate は毎回フル記載しない。危険境界に関係するものだけを書く。
+- Is the implementation already review-ready?
+- Does real-data execution prove something MCP/static/fixture review cannot?
+- Is one full run sufficient?
+- Is a second full run truly acceptance-critical?
+- Are expected replay/evaluation work units stated?
 
-## BOUNDED_CODEX preflight
+For the same Codex thread, omit unchanged history and stable boilerplate. Add `Known state`, `Allowed read`, detailed contracts, and heavy-run authorization only when they changed or prevent ambiguity.
 
-- fixed-scope source / test / docs work なら `BOUNDED_CODEX` を第一候補にする
-- ChatGPT が product / safety / scope を先に固定する
-- Codex に broad exploration をさせない
-- review-only なら `REVIEW_ONLY`、極小修正なら `LIGHT_CODEX` を検討する
-
-## Size check
-
-- 1 から 3 edit files を優先する
-- 5 個を超える edit files は explicit authorization が必要
-- scope が不明なら送らない
-- Codex judgment が必要なら、送る前に ChatGPT 側で決める
-
-## Read/Edit/Inspection boundary check
-
-- Allowed read は task に必要な file だけにする
-- Allowed edit は明示された file だけにする
-- Allowed inspection は current diff/status、nearby helpers、matching tests など task に必要な最小限に絞る
-- source、runtime、generated file は Edit に明示されている場合だけ触る
-
-## Docs update check
-
-- docs を Allowed edit に足す前に、runtime / deployment / rollback / launchd / mail sending / safety boundary / handoff の作業かを確認する
-- next operator action が実際に変わるかを確認する
-- `CURRENT_STATE.md` が milestone 変更のために本当に必要かを確認する
-- すべて no なら docs files を入れない
-- UI / source / test fixes は原則 docs update なしにする
-
-## Validation minimization
-
-- generic validation bundles は入れない
-- `git diff --name-only` は既定では入れない
-- changed-file list confirmation が task に必要なときだけ `git diff --name-only` を入れる
-- repeated `git status` は commit 時か dirty-tree ambiguity があるときだけにする
-- docs-only task は通常 `git diff --check` だけでよい
-- source / test task は changed-file compile/test だけでよい
-
-## Push/Pull check
-
-- normal task は `Do not push` を明記する
-- push は `CHECKPOINT_PUSH` だけで許可する
-- pull は `RUNTIME_PULL_HANDOFF` だけで許可する
-- push/pull target が曖昧なら止める
-
-## Runtime repo check
-
-- old runtime execution repo は通常 task で触らない
-- `RUNTIME_PULL_HANDOFF` 以外では触らない
-
-## Safety check
-
-- product / trading / safety judgment が残っていないか確認する
-- runtime judgment が残っていないか確認する
-- unresolved judgment があるなら、送る前に ChatGPT が解決する
-- 実行用 prompt は `AUTO_SEND` で始める
-- `HUMAN_CHECK` は送信前停止の合図で、実行用 prompt を出す前に止める
-- full safety boilerplate は避ける
-- current task に関係する safety stop だけを書く
-
-## HUMAN_CHECK triggers
-
-- required field が missing
-- task scope が unclear
-- push / pull / runtime repo が unresolved
-- product judgment が unresolved
-- safety judgment が unresolved
-- runtime judgment が unresolved
-- task が oversized
-
-## Final output checklist
-
-- task が malformed でない
-- task が oversized でない
-- push / pull / runtime repo が明確
-- HUMAN_CHECK が必要なら先に止める
+Use `AUTO_SEND` only after these checks pass. Otherwise keep the decision in ChatGPT and do not issue an executable prompt.

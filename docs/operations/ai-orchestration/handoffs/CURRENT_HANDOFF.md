@@ -1,49 +1,40 @@
 # Current Handoff
 
-last_updated: 2026-07-02
-repo: afrogdesign/BTC_FX_CODEX
-branch: Ver04-v1
-canonical_working_dir: /Users/marupro/CODEX/100_MCP_Server/btc_monitor
+last_updated: 2026-07-21
+repo: `afrogdesign/BTC_FX_CODEX`
+primary_working_dir: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+recorded_branch: `Ver04-v2`; confirm from repo state
 active_handoff: none
 
-## Current operational posture
+## Current posture
 
-- Ver04-v1 runtime deployment complete / reflected active
-- post-deployment observation
-- notification sending behavior unchanged
-- no immediate implementation unless observation finds an issue or user explicitly requests implementation
+- M5 offline champion/challenger proposal engine accepted at `3c7f01d`
+- winner: `none`
+- recommendation: `continue_shadow_collection`
+- M6 not started and not authorized
+- current route: AI orchestration docs checkpoint, then bounded A1 task-manifest foundation
 
-## Product backlog next candidate
+## Resume route
 
-- BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER
+Do not use this file as an independent source of truth.
 
-## Safety boundary
+Read:
+
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. `docs/operations/ai-orchestration/CURRENT_STATE.md`
+4. `docs/operations/ai-orchestration/NEXT_ACTION.md`
+5. the active spec only when one exists
+6. `docs/operations/ai-orchestration/AI_WORKFLOW.md` when issuing or reviewing work
+
+## Safety
 
 - report-only
-- not FORMAL_GO
+- not `FORMAL_GO`
+- human-decided
 - no automatic order
-- no API keys/secrets
-- no private/account/order endpoints
-- no runtime restart unless explicitly approved
-- no notification sending behavior change unless explicitly approved
-- no raw exchange export commit
-- no paper_positions.csv integration unless explicitly approved
-- human decides manually
-
-## Source of truth
-
-- START_HERE.md
-- CURRENT_STATE.md
-- NEXT_ACTION.md
-- CONTROL.md
-- PRODUCT_IMPLEMENTATION_ROUTE.md
-- MILESTONES.md
-
-## Historical handoff archive
-
-- HISTORICAL_VER03_V4_HANDOFF_20260624.md
+- no unapproved production, runtime, notification, mail, gate, threshold, API, account, position, or order change
 
 ## Rule
 
-CURRENT_HANDOFF.md is read only for explicit handoff, migration, blocked, partial, or context-overload situations.
-It is not a default startup read.
+Use this file only for explicit handoff or lost-context recovery. Current state and next action remain canonical in their dedicated files.

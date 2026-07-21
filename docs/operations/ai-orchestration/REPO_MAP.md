@@ -1,74 +1,88 @@
 # Repository Map for AI
 
-## Repository
+## Primary boundaries
 
-- repo: `afrogdesign/BTC_FX_CODEX`
-- current branch: read from `git status --short --branch` and `CONTROL.md`
-- historical branch labels such as `Ver03-v2` are historical only and must not be treated as the current default
+| Purpose | Path |
+|---|---|
+| primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` |
+| frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` |
 
-## Repo paths
+The frozen repo is outside normal inspection and execution.
 
-| Label | Path | Rule |
-|---|---|---|
-| MCP primary repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | default read / edit / test / git |
-| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | do not edit or run by default; update later by GitHub pull after checkpoint push |
-
-## Active anchors
+## Canonical AI anchors
 
 | Path | Purpose |
 |---|---|
-| `AGENTS.md` | Fixed Codex / agent rules |
-| `docs/operations/ai-orchestration/START_HERE.md` | First read entrypoint |
-| `docs/operations/ai-orchestration/CURRENT_STATE.md` | Short current operating state |
-| `docs/operations/ai-orchestration/NEXT_ACTION.md` | Current work frame |
-| `docs/operations/ai-orchestration/CONTROL.md` | Current AI operating state |
-| `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md` | Active product route |
-| `docs/operations/ai-orchestration/MILESTONES.md` | Accepted history |
-| `docs/operations/ai-orchestration/PROMPTS.md` | Prompt templates |
-| `docs/operations/ai-orchestration/MINI_CODEX_RULES.md` | Mini Codex operating rules |
-| `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md` | Prompt preflight |
-| `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md` | Minimal checkpoint push procedure |
-| `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md` | Runtime repo pull handoff procedure |
+| `docs/operations/ai-orchestration/INITIAL_PROMPT.md` | ChatGPT Project initial prompt source |
+| `AGENTS.md` | Codex worker boundary |
+| `docs/operations/ai-orchestration/START_HERE.md` | role-aware repo entrypoint |
+| `docs/operations/ai-orchestration/AI_WORKFLOW.md` | shared execution/review process |
+| `docs/operations/ai-orchestration/CURRENT_STATE.md` | accepted current state |
+| `docs/operations/ai-orchestration/NEXT_ACTION.md` | one current task |
+| `docs/operations/ai-orchestration/CONTROL.md` | stable controls |
+| `chatgpt/specs/active/` | current detailed implementation contract |
+| `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md` | product route |
 
-## Historical / lookup-only docs
+## Post-M5 orchestration design
 
 | Path | Purpose |
 |---|---|
-| `docs/operations/ai-orchestration/TASK_LEDGER.md` | Historical archive / search-only by default |
-| `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` | Handoff-only |
-| `docs/operations/ai-orchestration/` root task notes | Historical notes; do not scan wholesale |
+| `docs/operations/ai-orchestration/AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md` | A1–A4 task-manifest design |
+| `docs/operations/ai-orchestration/MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md` | replay-cost and later R1–R5 backlog |
 
-## Directories to avoid by default
+A1 task-contract work is separate from replay-stage/cache work.
+
+## Source directories
+
+| Path | Purpose |
+|---|---|
+| `src/` | application and evidence logic |
+| `tools/` | CLI and support tools |
+| `tests/` | tests |
+| `scripts/` | operator scripts |
+| `chatgpt/specs/active/` | current implementation spec |
+| `chatgpt/specs/archive/` | accepted specs |
+| `chatgpt/tasks/` | task contracts after A1 implementation |
+| `docs/operations/strategy/` | product and research plans |
+
+## Default read routes
+
+Fresh ChatGPT:
+
+```text
+INITIAL_PROMPT.md
+→ AGENTS.md
+→ START_HERE.md
+→ request-specific state/spec/workflow only
+```
+
+Fresh Codex:
+
+```text
+AGENTS.md
+→ START_HERE.md
+→ task prompt or rendered manifest launcher
+→ named files and matching tests
+```
+
+Same-thread ChatGPT/Codex:
+
+```text
+new delta only
+```
+
+## Non-default reads
 
 - `.venv312/`
 - `logs/`
-- generated CSV / report / HTML outputs
-- large generated files under `local/`
+- generated files under `local/`
 - full `TASK_LEDGER.md`
-- historical task notes under `docs/operations/ai-orchestration/` root unless explicitly named
+- handoffs
+- history directories
+- old task notes in the orchestration root
 
-## Project source directories
+Read these only when the task explicitly depends on them.
 
-| Path | Purpose |
-|---|---|
-| `src/` | application and trading/report logic |
-| `tools/` | CLI and support tooling |
-| `tests/` | automated tests |
-| `scripts/` | operator entry scripts |
+## Compatibility entries
 
-## Operational docs directories
-
-| Path | Purpose |
-|---|---|
-| `docs/operations/ai-orchestration/` | AI operation anchors and prompts |
-| `docs/operations/strategy/` | reviewed roadmap and product direction |
-| `運用資料/` | human-facing operational notes and reports |
-| `chatgpt/` | ChatGPT-side supporting material |
-
-## Rule
-
-- AI should start with `AGENTS.md` and `docs/operations/ai-orchestration/START_HERE.md`
-- do not full-scan the repo unless explicitly asked
-- read only the files named in the current task plus required nearby context
-- normal MCP task should end with local commit or `PUSH: none`, not routine push
-- treat `docs/operations/ai-orchestration/` root as mixed active + historical docs; do not scan it wholesale
+`PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHATGPT_COMMANDER_PROMPT.md`, and `RESUME.md` point back to the canonical route. They are not separate sources of truth.

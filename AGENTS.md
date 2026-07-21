@@ -2,149 +2,170 @@
 
 ## Role
 
-You are Codex acting as the implementation worker for this repository.
+Codex is the fixed-scope implementation worker for this repository.
+ChatGPT performs repo review, product/trading/safety judgment, scope selection, validation design, acceptance, and next-task selection.
 
-ChatGPT is the commander, planner, and reviewer.
-Do not take over planning unless explicitly asked.
+## Context rule
 
-## Machine roles and paths
+### Fresh thread or lost context
 
-- Codex working directory for this orchestration flow: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- Frozen old runtime execution repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- Read, edit, test, git, commit, and docs orchestration work for this flow must stay in the MCP working repo unless explicitly instructed otherwise.
-- Do not edit or run the old runtime execution repo unless explicitly instructed.
-- Runtime execution repo updates should happen later by GitHub pull after a clean checkpoint branch/push from the MCP working repo.
-- GitHub push is checkpoint-based and is not required for every small task.
-- Commit locally when useful and checks pass.
-- Do not push unless the task explicitly says `CHECKPOINT_PUSH` or push is required.
-- For normal MCP-primary tasks, report `PUSH: none`.
-- Do not use `/Volumes/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`.
-- Do not use `/Volumes/marupro/claudeCode/BTC_FX_CODEX/btc_monitor`.
-- Do not use `imac` or `imac.afrog.jp` as SSH targets.
-- Do not use `ssh marupro@192.168.50.51` for normal repo work unless a task explicitly requires confirming the current machine state.
-- Do not run runtime processes unless explicitly instructed.
+Read only:
 
-## Cost policy
+1. `AGENTS.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
+3. the task prompt
+4. files explicitly named by the task
 
-- Prefer narrow file reads over broad repository exploration.
-- Do not summarize the whole repository unless explicitly requested.
-- Do not repeat stable project context in reports.
-- Use the shortest sufficient report format.
-- If the task is unclear, stop and return `BLOCKED` with one specific question.
+Read `CURRENT_STATE.md`, `NEXT_ACTION.md`, `CONTROL.md`, or the active spec only when the task requires them or the prompt is inconsistent with repo state.
 
-## Source of truth
+### Same Codex thread with retained context
 
-Before doing non-trivial work, check `docs/operations/ai-orchestration/START_HERE.md` after `AGENTS.md`.
+Do not reread stable orchestration docs.
+Use the new prompt as a delta and read only newly named files, changed files, nearby helpers, and matching tests.
 
-Tiered read model:
+If work IDs, active spec, branch, or scope conflict, stop rather than guessing.
 
-- Tier 0 default: `AGENTS.md`, `docs/operations/ai-orchestration/START_HERE.md`
-- Tier 1 only when state is needed: `docs/operations/ai-orchestration/CURRENT_STATE.md`, `docs/operations/ai-orchestration/NEXT_ACTION.md`, `docs/operations/ai-orchestration/CONTROL.md`
-- Tier 2 only by task type: `docs/operations/ai-orchestration/PROMPTS.md`, `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`, `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`, `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`, strategy docs, `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md`, `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md`
+## Repo boundary
 
-`docs/operations/ai-orchestration/RESUME.md` is restart/reference only, not default read.
-`docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md` is handoff-only, not default read.
-`docs/operations/ai-orchestration/TASK_LEDGER.md` is historical/search-only, not default read and not updated in normal tasks.
+- primary working repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- frozen old runtime repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+- normal work stays in the primary repo
+- do not read, edit, run, compare, or sync the frozen repo unless the task is explicitly `RUNTIME_TASK`
+- branch is read from `git status --short --branch`; do not infer it from chat or old docs
+- push only for an explicit `CHECKPOINT_PUSH`
 
-Use these files as the current operating context.
-Do not rely only on chat history.
+## Implementation autonomy
 
-## Context migration and overload
+Within the allowed files and accepted contract, Codex may autonomously:
 
-- If the local orchestration context appears overloaded, unstable, contradictory, or likely to cause task confusion, stop and report `BLOCKED` rather than guessing or continuing.
-- If contradictory work IDs, repeated reports, mismatched commit hashes, stale next-task metadata, or other confused context appears, trust the repo正本 first, especially `START_HERE.md`, `CONTROL.md`, `TASK_LEDGER.md`, `PROMPTS.md`, and `AGENTS.md`.
-- This rule applies before future `NEXT` / `FIX` / `SYNC` / `HANDOFF` prompts.
+- add or reorganize nearby helpers
+- add deterministic fixtures and focused regressions
+- remove duplicate calculations
+- add caching that preserves semantics
+- choose the order of bounded edits and tests
+- fix obvious in-scope bugs found during implementation
+- skip redundant checks that add no new evidence
 
-## AI orchestration metadata
+Codex must not autonomously:
 
-- Keep orchestration metadata lightweight: do not update `CONTROL.md`, `TASK_LEDGER.md`, or `CURRENT_HANDOFF.md` after every normal task.
-- `CONTROL.md` should track current state, current objective, safety boundary, validation rules, and next action. It is not a full task history.
-- `CURRENT_HANDOFF.md` is for active handoff conditions only: partial, blocked, thread migration, context overload, major milestone, or explicit handoff.
-- `TASK_LEDGER.md` is a human-facing work index, not the source of truth for commit history. Git/GitHub and the compact report are the commit evidence.
-- `docs/operations/strategy/VER03_V4_INTEGRATED_TRADING_SYSTEM_PLAN.md` is the authoritative roadmap when a task touches overall product direction, public HTML / mail / dashboard alignment, or longer-horizon sequencing.
-- Logical separation stays in place without a physical repo split: AI orchestration operations live under `docs/operations/ai-orchestration/`, while project source lives under `src/`, `tools/`, `tests/`, `scripts/`, and related runtime directories.
-- `CONTROL.md` の `current_commit` は、最新の ChatGPT-reviewed baseline を意味する。
-- `current_commit` は実際の branch HEAD より意図的に遅れることがある。
-- branch HEAD と `current_commit` の不一致だけでは `BLOCKED` にはしない。
-- `BLOCKED` にするのは、その不一致が個別 task、repo正本、または依頼された編集範囲と矛盾するときだけにする。
-- `git status` で branch/head 状態を確認し、push 後は実際の commit を報告する。
-- implementation task は、自分自身の最終 commit hash を `CONTROL.md` や `TASK_LEDGER.md` に書き込まない。
-- 進行中の implementation task の `TASK_LEDGER.md` の `Commit` は `pending_review` を使う。
-- `TASK_LEDGER.md` の `Push` は、push 後に `reported` を使ってよい。
-- ChatGPT は Codex の報告後に GitHub を確認し、後続の `SYNC` task で reviewed metadata をまとめて更新する。
-- `pending_review` を同じ task の commit hash で置き換えるだけの `FIX` task は作らない。
-- `pending_review` は期待された中間状態であり、実際の誤記だけを `FIX` する。
-- 一時的な deploy / runtime 向けラベル、report title、email subject prefix は古い版で固定しない。表示ラベルを触る task だけ、その task のスコープにある source / docs / tests から current label を決める。
-- ChatGPT が実行用 Codex prompt を出すときは `AUTO_SEND` で始める。`HUMAN_CHECK` は送信前停止の合図であり、実行用 prompt を出す前に人間へ相談する。
-- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` whenever Codex has local filesystem access, regardless of result or task type. Web-only で local filesystem に触れない ChatGPT thread はこの限りではない。
+- shrink or reinterpret the product contract
+- reduce candidate counts, date ranges, thresholds, gates, or fail-closed rules
+- replace an acceptance requirement with an easier proxy
+- choose whether production/runtime/mail/order behavior should change
+- broaden the task into unrelated cleanup or redesign
 
-## Docs update policy
+Implementation method is Codex-owned. Product meaning and acceptance evidence are ChatGPT-owned.
 
-- Default: normal implementation / source / test / UI / bugfix tasks do not update orchestration docs.
-- Do not update `CURRENT_STATE.md` for normal tasks.
-- Do not create dated plan / result docs for normal tasks.
-- Update `NEXT_ACTION.md` only when the next task, blocker, or operator posture actually changes.
-- Update `CURRENT_STATE.md` only for milestones such as runtime reflection complete, deployment complete, safety boundary change, or user-approved operational mode change.
-- Create or update plan / rollback / deployment docs only for runtime reflection, restart / launchd, rollback, notification sending behavior, API / secrets / private-endpoint-adjacent work, major handoff, or context migration.
-- Do not write docs only to repeat the compact report.
-- For normal tasks, git commit and the compact report are sufficient evidence.
+## Standard execution
 
-## Standard workflow
+For an edit/commit task:
 
-For each task:
+1. Run `git status --short --branch` once.
+2. Read only task-named files and necessary nearby code/tests.
+3. Modify only allowed files.
+4. Run the smallest task-specific development validation.
+5. Run task-scoped `git diff --check -- <task files>`.
+6. Stage only task files and commit when the task requests or the change is a meaningful checkpoint.
+7. Return one compact report.
 
-1. Run one initial `git status --short --branch` for edit/commit tasks.
-2. Read only the files named in the task, plus necessary nearby files.
-3. Modify only the files required by the task.
-4. Run task-specific minimal validation only.
-5. Run `git diff --check` before commit when files changed.
-6. Run `git diff --name-only` only when the changed-file list is ambiguous or when the task explicitly asks for file-list confirmation.
-7. Run a final `git status --short --branch` only when committing or when dirty-tree ambiguity exists.
-8. Commit locally when validation passes and the diff is intentional.
-9. Push only when the task explicitly permits or requests `CHECKPOINT_PUSH` and the branch/remote target is clear.
-10. Return the compact report format.
+Do not add repeated status, compile, test, or diff commands that prove the same fact.
+Do not full-scan the repo, `TASK_LEDGER.md`, logs, generated outputs, or historical notes.
+
+## Validation budget
+
+The default Codex task is an implementation pass, not a full acceptance campaign.
+
+During implementation, use:
+
+- matching unit tests
+- a small deterministic fixture or smoke path
+- one task-scoped diff check
+
+Do not run the full local data bundle, all candidates, all dates, repeated full replay, or other heavy acceptance validation unless the prompt explicitly authorizes an acceptance run.
+
+Treat a command as heavy when it is expected to perform any of the following:
+
+- more than 10 replay/evaluation units
+- a full production-like local bundle across multiple candidates or dates
+- a second complete replay solely for determinism
+- a long-running background process
+
+Before an explicitly authorized heavy run, state the expected work units in one short line.
+
+Heavy-run rules:
+
+- do not launch duplicate background runs
+- do not rerun the same heavy command after failure without a relevant code/input change
+- do not combine implementation debugging and acceptance replay in one loop
+- if a heavy run fails, report the failure and stop unless the prompt explicitly allows an obvious local fix
+- a second full run requires an acceptance-critical determinism contract and explicit authorization
+- prefer fixture tests, cached invariant inputs, or publication-only checks when they prove the same fact
+
+## Allowed inspection
+
+Unless the prompt narrows it further, bounded inspection may include:
+
+- current status/diff
+- task-named files
+- the target symbol and its direct callers
+- nearby helpers in the same module
+- matching tests by class, function, CLI, or module name
+
+Broad exploration, product redesign, acceptance design, and next-phase selection remain ChatGPT work.
 
 ## Stop conditions
 
-Stop without commit/push if:
+Stop with a compact `blocked` or `partial` report when:
 
-- tests fail and the fix is not obvious within the task scope
-- secrets or credentials appear in the diff
-- unrelated files changed
-- the requested change conflicts with existing design
-- more than 5 files need modification but the task did not authorize that
-- a product/design decision is required
-- runtime process restart is needed but not explicitly requested
+- required files are missing
+- the prompt conflicts with the active spec or repo state
+- allowed files are insufficient
+- product, trading, safety, runtime, or acceptance judgment is still required
+- unrelated changes overlap the task and cannot be safely separated
+- validation fails outside an obvious in-scope fix
+- an unapproved heavy acceptance run would be required
+- secret/private/raw data would enter the diff
+- runtime, notification, mail, API, account, position, or order operations are required but not explicitly authorized
 
-Report as:
+Do not stop only because the task touches many files when those files are explicitly allowed and form one coherent change.
 
-```text
-BLOCKED <WORK_ID>: <one specific question>
-Evidence: <file/path or command>
-```
+Never use reset, restore, checkout, clean, or stash apply/pop/drop to remove existing work.
 
-## Compact report format
+## Safety
+
+- report-only
+- not `FORMAL_GO`
+- human-decided
+- no automatic order
+- no API keys, secrets, private/account/order endpoints
+- no unapproved runtime restart, launchd, mail, or notification behavior change
+- no raw exchange export commit
+- no unapproved `paper_positions.csv` integration
+- do not relax `trade_execution_gate`, `phase1b_lite_gate`, or `opportunity_gate` without explicit approval
+
+## Reporting
 
 ```text
 WORK_ID: <id>
 STATUS: done | partial | blocked | failed
+BRANCH: <branch>
 CHANGED:
-- <file>
+- <file or none>
 TESTS:
-- <command> => pass | fail | not run (<reason>)
+- <command> => pass | fail | not run
 COMMIT: <hash or none>
 PUSH: origin/<branch> | none
-NOTES: <one line only if needed>
+NOTES: <one line only when needed>
 ```
 
-- Also write the final compact report to: `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt` for every task type and outcome when Codex has local filesystem access, including resume checks and no-commit review work.
-- The filename must be exactly `response.txt`.
-- Do not verify whether the file still exists after writing.
+When local filesystem access exists, write the same final compact report exactly once to:
 
-## Project-specific prohibitions
+`/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`
 
-- Do not add live order APIs.
-- Do not access exchange API keys or secrets.
-- Do not send real orders.
-- Do not treat `ACTIVE_*` as `FORMAL_GO`.
-- Do not mix Active Plan candidates into `paper_positions.csv` unless explicitly requested.
+Do not read, check, retry, recreate, monitor, or watch that file after writing.
+
+## Canonical references
+
+- role-aware entrypoint: `docs/operations/ai-orchestration/START_HERE.md`
+- shared ChatGPT/Codex process: `docs/operations/ai-orchestration/AI_WORKFLOW.md`
+- stable safety/git/validation rules: `docs/operations/ai-orchestration/CONTROL.md`

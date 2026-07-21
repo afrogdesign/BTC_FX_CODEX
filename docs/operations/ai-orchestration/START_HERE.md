@@ -1,248 +1,181 @@
 # START_HERE
 
-新しい ChatGPT / Codex / future AI agent は、まずこのファイルから読み始めます。
+This is the shortest role-aware entrypoint for `btc_monitor` AI work.
 
-## Repo doctrine
+The ChatGPT Project initial prompt is maintained in `INITIAL_PROMPT.md`. This file routes repo reads after that prompt is applied.
 
-| Label | Path | Rule |
-|---|---|---|
-| MCP/Codex primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | 通常の read / edit / test / git はここで行う |
-| Frozen old runtime execution repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | 通常 orchestration / product task では edit/run/inspect しない |
+## Choose the route first
 
-- runtime execution repo は current editing target ではない。
-- runtime execution repo への反映は、MCP working repoでclean checkpointを作ったあとに明示taskで行う。
-- ChatGPTはAFROG MCPをprimary repo inspection pathとして使う。
-- GitHubはcheckpoint / history / sync用であり、毎回のreviewのdefault read pathではない。
-- Codexは明示指示がない限りMCP working repoだけを編集する。
-- normal Codex taskはlocal edit + local validation + local commit + compact reportが基本。
-- pushは`CHECKPOINT_PUSH` taskだけで行う。
+### ChatGPT: fresh thread or changed repo premise
 
-## Current product objective
-
-現時点の最優先目的は自動売買ではない。
-
-```text
-notification mail を受け取った人間が、
-15分足を確認し、
-攻めの姿勢で勝てる manual trading support system を作る。
-```
-
-manual trading practicalityの現在の重点は次である。
-
-```text
-厳格なA候補の品質を維持する。
-B候補で人間が15分足確認できる機会を増やす。
-C候補で未到達の機会を監視する。
-STOPで新規停止・利確・撤退を支援する。
-候補行をscenarioへ圧縮する。
-actual trade ground truthで評価を補正する。
-```
-
-これはproduction tuningの自動承認ではない。
-
-## Branch source rule
-
-branchはchat historyや古い文書の固定値から推測しない。
-
-次を照合する。
-
-```text
-git status --short --branch
-docs/operations/ai-orchestration/CURRENT_STATE.md
-docs/operations/ai-orchestration/CONTROL.md
-```
-
-矛盾がtask判断へ影響する場合は停止する。
-
-## Tiered read order
-
-### Tier 0 / always
+Always read:
 
 1. `AGENTS.md`
-2. `docs/operations/ai-orchestration/START_HERE.md`
+2. `START_HERE.md`
 
-### Tier 1 / state needed
+Then read only what the request needs:
 
-1. `docs/operations/ai-orchestration/CURRENT_STATE.md`
-2. `docs/operations/ai-orchestration/NEXT_ACTION.md`
-3. `docs/operations/ai-orchestration/CONTROL.md`
+- current state or next-task decision: `CURRENT_STATE.md` and `NEXT_ACTION.md`
+- implementation, FIX, or acceptance: the one active spec under `chatgpt/specs/active/`
+- action selection, Codex prompt, or acceptance flow: `AI_WORKFLOW.md`
+- stable safety, git, dirty-tree, or validation rules: `CONTROL.md`
+- product direction: the relevant product/strategy route
 
-### Tier 2 / by task type only
+Do not load state, spec, workflow, and product docs for a simple explanation that does not depend on repo state.
 
-#### Product direction / manual trading practicality
+### ChatGPT: same thread and same task
 
-1. `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
-2. `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
-3. `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
-4. `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
-5. `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
-6. `docs/operations/strategy/VER04_V1_INTEGRATED_PRODUCT_PLAN.md`
+Do not reread stable docs. Inspect only the new report, changed source, matching tests, CLI route, fresh artifacts, and the relevant spec note.
 
-この順序は、次のtaskで必須。
+### Codex: fresh thread or lost context
 
-- 本採用候補が少ない問題
-- over-suppression
-- A/B/C/STOP
-- manual entry候補
-- scenario lifecycle
-- duplicate candidate / duplicate notification
-- actual trade ground truth
-- long/short機会調整
-- notification action wording
-- offline replay
-- evidence-backed tuning review
+Read:
 
-#### Phase4 observation / cue review
+1. `AGENTS.md`
+2. `START_HERE.md`
+3. the task prompt or rendered task-manifest launcher
+4. files explicitly named by the task
 
-- `docs/operations/ai-orchestration/PHASE4_SELF_IMPROVEMENT_CONTROL_PLAN_20260707.md`
+Read state docs and active spec only when named, required, or inconsistent with the task.
 
-#### Codex prompt work
+### Codex: retained context
 
-- `docs/operations/ai-orchestration/PROMPTS.md`
-- `docs/operations/ai-orchestration/MINI_CODEX_RULES.md`
-- `docs/operations/ai-orchestration/PROMPT_PREFLIGHT_CHECKLIST.md`
+Treat the new prompt as a delta. Do not reopen stable orchestration or product docs unless required by a changed contract or contradiction.
 
-#### Checkpoint
+## Repo boundary
 
-- `docs/operations/ai-orchestration/CHECKPOINT_RUNBOOK.md`
+| Purpose | Path | Rule |
+|---|---|---|
+| primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | normal read/edit/test/git |
+| frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | explicit `RUNTIME_TASK` only |
 
-#### Runtime pull handoff
+ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch is confirmed from repo state, not chat history.
 
-- `docs/operations/ai-orchestration/RUNTIME_PULL_HANDOFF.md`
+## Task routing
 
-#### Accepted history
+| Route | Use |
+|---|---|
+| ChatGPT answer/review | explanation, diagnosis, comparison, source/test/artifact review |
+| ChatGPT direct MCP work | deterministic Markdown/spec/state edits requiring no local test or git operation |
+| `BOUNDED_CODEX` | fixed implementation with known files, behavior, and validation |
+| spec-first | unresolved trading logic, gates, thresholds, schemas, multi-module design, safety, runtime, or competing choices |
 
-- `docs/operations/ai-orchestration/MILESTONES.md`
+Do not send Codex work while material product or safety judgment remains unresolved.
 
-#### Handoff only
-
-- `docs/operations/ai-orchestration/handoffs/CURRENT_HANDOFF.md`
-
-#### Historical lookup only
-
-- `docs/operations/ai-orchestration/TASK_LEDGER.md` by search / latest rows only
-
-`TASK_LEDGER.md` と `handoffs/CURRENT_HANDOFF.md` はdefault startup readではない。
-
-## Active spec rule
-
-- implementation前に`chatgpt/specs/active/`を確認する。
-- active specが空ならsource実装へ進まない。
-- 次phaseのactive spec作成だけを行う。
-- active specがある場合は、そのspecを実装正本とする。
-- active specがcurrent routeと矛盾する場合は、実装せずspec修正taskにする。
-- completed specはarchiveへ移す。
-
-## Current manual-trading phase rule
-
-manual trading practicality routeは次の順で進める。
+## Source-of-truth order
 
 ```text
-P1 actual trade importer spec
-→ P2 importer implementation
-→ P3 trade-to-signal/scenario linking
-→ P4 coverage and scenario normalization
-→ P5 offline A/B/C/STOP classifier
-→ P6 historical replay
-→ P7 shadow surface
-→ P8 human manual trial
-→ P9 evidence-backed tuning review
+repo files and generated artifacts
+→ active spec
+→ task manifest when activated for that task
+→ CURRENT_STATE.md and NEXT_ACTION.md
+→ CONTROL.md and product route
+→ accepted milestones and git history
+→ TASK_LEDGER / handoff / historical docs
+→ chat history
 ```
 
-複数phaseを1taskへまとめない。
+## Record roles
 
-## Default avoid list
+| File | Responsibility |
+|---|---|
+| `INITIAL_PROMPT.md` | ChatGPT Project initial prompt source |
+| `CURRENT_STATE.md` | accepted state and current blocker |
+| `NEXT_ACTION.md` | exactly one current work item |
+| `CONTROL.md` | stable safety, git, runtime, and validation rules |
+| `AI_WORKFLOW.md` | shared ChatGPT/Codex process |
+| `MILESTONES.md` | accepted major checkpoints |
+| `DECISIONS.md` | durable product/design decisions |
+| active spec | current detailed implementation contract |
+| `TASK_LEDGER.md` | historical lookup only |
 
-- `.venv312/`
-- `logs/` unless explicitly scoped
-- generated CSV / report / HTML
-- raw exchange exports under `local/manual_trade_imports/`
-- full `docs/operations/ai-orchestration/TASK_LEDGER.md`
-- historical task notes unless explicitly named
-- frozen old runtime execution repo
+## Task-specific reads
 
-## Quick rules
+Read only when relevant:
 
-- repo-local docsをchat historyより優先する。
-- current branchを自動推測しない。
-- 通常taskでruntime repoを読まない、走らせない、編集しない。
-- raw exchange exportsをcommitしない。
-- actual human tradesを`paper_positions.csv`へ混ぜない。
-- `ACTIVE_*`を`FORMAL_GO`として扱わない。
-- A/B/C/STOPを既存gateの置換として扱わない。
-- `trade_execution_gate`を緩和しない。
-- `phase1b_lite_gate`を勝手に変更しない。
-- `opportunity_gate`を勝手に緩和しない。
-- `trend_flip_confirmed_up`を根拠なく強評価へ戻さない。
-- no_ohlcv / unresolvedを勝敗へ混ぜない。
-- candidate row数を独立機会数として扱わない。
-- production behavior変更前にexplicit scopeとhuman approvalを確認する。
-- ChatGPTがscopeを決め、Codexには固定済みの小さいtaskを渡す。
+- product direction: `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- macro route: `docs/operations/strategy/MACRO_STRUCTURE_VOLATILITY_SELF_IMPROVEMENT_PLAN_20260720.md`
+- checkpoint push: `CHECKPOINT_RUNBOOK.md`
+- runtime handoff: `RUNTIME_PULL_HANDOFF.md`
+- accepted history: `MILESTONES.md`
+- old Work ID: search `TASK_LEDGER.md`; do not read it in full
 
+Do not scan the orchestration directory wholesale to discover context.
 
----
+## Validation routing
 
-## 2026-07-10 repo-audit correction
+### Implementation
 
-The manual trading practicality route must use the current repository implementation as evidence.
+Codex receives implementation freedom inside allowed files and runs only:
 
-The repository already contains an early MEXC actual-trade importer, trade-to-signal linker, and manual ground-truth report in `tools/log_feedback.py`, with matching targeted tests. Therefore:
+- matching unit tests
+- a small deterministic fixture/smoke when needed
+- task-scoped diff check
+
+Do not authorize a full local bundle or repeated replay during implementation.
+
+### Review
+
+ChatGPT reviews changed source, matching tests, CLI routing, fixture evidence, artifacts, and the active spec through MCP.
+
+### Acceptance
+
+Only after ChatGPT determines the implementation is review-ready may Codex receive an explicit heavy acceptance task. One full bounded run is the default maximum. A second full run requires an acceptance-critical determinism reason and explicit authorization.
+
+Canonical details: `AI_WORKFLOW.md` and `CONTROL.md`.
+
+## Current post-M5 improvement route
+
+M5 is accepted and its spec is archived. M6 is not active.
+
+The current route is:
 
 ```text
-P1 = importer hardening contract/spec
-P2 = existing importer hardening
-P3 = existing linker / ground-truth pipeline audit and hardening
-P4 = scenario identity, coverage, and human decision-event schema
+AI orchestration docs checkpoint
+→ A1 task-manifest contract foundation
+→ A2 low-risk pilot
+→ A3 canonical routing activation
+→ optional A4 CWT integration
 ```
 
-Do not describe P2 or P3 as greenfield work.
-
-Exchange exports establish actual order/fill/position/fee/PnL facts. They do not establish why a human entered, watched, skipped, exited, or took profit. Avoided-loss and missed-opportunity evaluation requires a separate human decision-event record and market counterfactual evidence.
-
-At the 2026-07-10 repo-audit starting point, the then-current active spec was:
+For A1 planning and implementation, read:
 
 ```text
-chatgpt/specs/active/20260710_manual_actual_trade_importer.md
+AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md
 ```
 
-At that audit starting point, the then-current next action was:
+For later replay-pipeline, cache, or publication-determinism work, read:
 
 ```text
-BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-HARDENING
+MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md
 ```
 
-The current phase and current task of record are maintained in `CURRENT_STATE.md` and `NEXT_ACTION.md`; the historical audit text above is not a fixed current value.
+Do not combine A1 with replay-stage/cache work, M6, runtime, or production changes.
 
+## Safety baseline
 
----
+- report-only
+- not `FORMAL_GO`
+- human-decided
+- no automatic order
+- no secrets or private/account/order endpoints
+- no unapproved runtime, launchd, mail, or notification change
+- no raw exchange export commit
+- no unapproved `paper_positions.csv` integration
+- no unsupported gate, scoring, threshold, or classifier relaxation
 
-## MCP transmission privacy rule
+## MCP request privacy
 
-This rule applies to ChatGPT when sending any request body to AFROG MCP or another MCP tool.
+Do not place address-formatted contacts or sensitive identifiers in MCP request bodies. Use redacted placeholders and inspect by safe filename, symbol, section, or abstract summary.
 
-- Do not include any email-address-formatted string in the MCP request body.
-- Replace all test or example email-like values with `[redacted-email]` before transmission.
-- Do not quote a source-code or test-file line when that line contains an email-address-formatted string.
-- When inspection is required, use a safe search term, filename, function name, summary, or line-number description that does not reproduce the email-like value.
-- If an MCP response contains such a value, do not repeat it in a later MCP request body.
-- This is a ChatGPT-side transmission rule and is separate from Codex implementation scope unless a user explicitly creates a Codex task for it.
+## Compatibility files
 
-This rule is mandatory across new threads because `START_HERE.md` is a Tier 0 startup document.
+`PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHATGPT_COMMANDER_PROMPT.md`, and `RESUME.md` are compatibility pointers only. Do not read them together.
 
+Canonical route:
 
-### MCP consent-prompt avoidance clarification
-
-ChatGPT should continue using MCP read and write operations proactively when they are the safest and most direct way to complete the task.
-
-The objective is not to disable MCP writes. The objective is to prevent avoidable consent prompts by sanitizing every MCP request body before transmission.
-
-Mandatory handling:
-
-- Build each write request from a clean summary instead of copying raw source or test lines.
-- Remove address-formatted contact strings and replace them with `[redacted-email]`.
-- Remove sensitive identifier-like values and replace them with `[redacted-id]`.
-- Do not quote a source or test line that contains either class of value.
-- Use safe filenames, function names, section names, line-number descriptions, and abstract summaries for inspection and edits.
-- Do not carry a sensitive value returned by one MCP call into a later MCP request.
-- Continue MCP writes after sanitization; do not stop or defer ChatGPT-completable work merely because a write is involved.
-- If a consent prompt still appears, cancel that specific request, rebuild a smaller clean request, and retry once without reproducing the flagged value.
+```text
+INITIAL_PROMPT.md
+→ START_HERE.md
+→ AI_WORKFLOW.md
+```

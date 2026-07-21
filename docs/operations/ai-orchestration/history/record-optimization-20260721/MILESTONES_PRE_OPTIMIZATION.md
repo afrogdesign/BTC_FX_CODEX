@@ -1,0 +1,186 @@
+# MILESTONES
+
+## Ver04-v1 branch opened for major product direction shift
+
+- branch `Ver04-v1` is the active product branch
+- `Ver03-v4` remains prior baseline / history
+- objective is unchanged in essence: notification mail -> 15m check -> aggressive-but-controlled manual trading support
+- self-improvement loop is daily proxy / weekly review / biweekly actual trade ground truth
+- automatic trading remains later-stage only
+- post-eval asset health audit is completed history
+- daily proxy evaluator is implemented and tested
+- default next implementation task is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+
+## Ver04-v2 branch-up checkpoint
+
+- Ver04-v1 self-review / run-fingerprint checkpoint was completed
+- source working branch moved from Ver04-v1 to Ver04-v2
+- next major design target is `VALUE-DEFENSE-ENTRY-LAYER`
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## Ver04-v2 value-defense entry layer design
+
+- design-only document created for entry-depth realism
+- scope separates market entry, shallow retest entry, and value defense entry
+- Ver04-v2 VALUE-DEFENSE-ENTRY-LAYER Phase1-3 are complete
+- Phase4 tuning remains observation-gated and requires explicit human approval
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## Ver04-v2 value-defense entry layer implementation
+
+- Phase1 attached report-only value defense payloads to `build_setup`
+- Phase2 surfaced value defense fields in public detail HTML
+- Phase3 extended deterministic judgment self-review with value-defense-aware dimensions
+- commits: `438be7fe7f48885d130141b9fd4d3ec765b036fa`, `e472eb6f42f7193a773d10b0d89d962134c3658a`, `0e035c1b58629834d0fea9a1269635f658e997f6`
+- Phase4 tuning remains observation-gated and requires explicit human approval
+- notification sending behavior remains unchanged
+- safety posture remains report-only / not FORMAL_GO / no automatic order / human decides manually
+
+## Daily Proxy Evaluator implemented
+
+- deterministic report-only Daily Proxy Evaluator was implemented in this thread
+- CLI entry is `build-daily-proxy-evaluator-report`
+- output path is `運用資料/reports/post_eval/daily_proxy_evaluator_YYYYMMDD.md`
+- safety boundary stays proxy-only / not `FORMAL_GO` / no automatic order / no private/account/order endpoints / human decides manually
+
+## Ver04-v1 implementation readiness package
+
+- implementation readiness package was created to hand off cleanly to the next implementation thread
+- it records the current source of truth, the MEXC export path, and the normalized output design
+- next implementation task pointer is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+
+## Dashboard parity and checkpoint push
+
+- dashboard parity smoke test result is `dashboard_parity_complete`
+- issues found are `none`
+- local dashboard parity now includes `Safety Flags`, `Surface Roles`, and `Ready Gate Copy`
+- single-source boundary is confirmed for public HTML / notification mail / local dashboard
+- checkpoint push was reported successful on branch `Ver03-v4`
+- upstream was reported as `origin/Ver03-v4`
+- runtime pull handoff remains separate and not executed
+
+## Ver03-v4 surface alignment
+
+- public HTML / notification mail / local dashboard の manual action surface が Ver03-v4 で aligned
+- accepted sequence includes `BTCFX-20260623-181-V4-PUBLIC-HTML-MANUAL-ACTION-CHECKLIST`, `183`, `184`, `186`
+- current doctrine は 3 surface を single source の別表示として扱う
+
+## Intraperiod review workflow
+
+- accepted intraperiod workflow includes `BTCFX-20260623-188`, `189`, `191`, `192`, `195`, `197`, `199`, `201`, `202`
+- local/report-only path includes `build-active-plan-intraperiod-outcomes`
+- one-shot review CLI `build-active-plan-intraperiod-review --stdout-json` と app contract exposure が accepted
+- same-bar TP1+TP2 without SL classified as `tp2_first` in accepted local/report-only tooling
+
+## Operator status diagnostics
+
+- runtime/operator status milestone includes `BTCFX-20260623-216`, `218`, `221`, `223`
+- accepted scope includes runtime startup observability, app contract exposure, dashboard display, and stdout JSON evidence
+- diagnostic remains local/report-only support
+
+## Safe config schema audit
+
+- safe config schema audit CLI and app surface integration are accepted
+- accepted scope includes app contract exposure, ready gate validation, dashboard display, and stdout JSON evidence
+- accepted safety rule: no `.env` value read, no secret exposure, no private endpoint use
+
+## Operator triage summary
+
+- operator triage summary is aligned across current manual-delivery app surface validation stdout JSON, public HTML, and notification mail
+- alias lookup includes `app_surface_validation`, `app_surface_validation_data`, `manual_delivery_app_surface_validation`, and `current_manual_delivery_app_surface_validation`
+
+## Integrated evidence overview
+
+- integrated evidence overview is aligned across dashboard, app surface validation stdout JSON, public HTML report, and notification mail
+- accepted evidence set includes `intraperiod_review_stdout_json`, `operator_status_diagnostic`, `safe_config_schema_audit`, `operator_triage_summary`, and `manual_action_checklist_surface`
+- accepted dashboard rendering shows evidence lists and renders empty missing/not-ready/execution-required lists as `none`
+- integrated_evidence_overview operator hints milestone is accepted using existing safe fields only
+
+## Major turning point diagnostic
+
+- major turning point opportunity milestone is accepted across public HTML, notification mail, and dashboard
+- major turning point diagnostic is accepted across intraperiod outcomes markdown, app surface validation stdout JSON, dashboard, public HTML, and notification mail
+- accepted classification uses `potential_missed_turn`, `potential_fakeout`, `bad_entry_timing`, and `inconclusive`
+- diagnostic remains post-hoc support only and does not authorize manual or automatic entry
+
+## Manual 15m self-improvement direction
+
+- final product objective is now explicit: notification mail を受け取った人間が15分足を確認し、攻めの姿勢で勝てる manual trading support system を作る
+- active route is `docs/operations/ai-orchestration/PRODUCT_IMPLEMENTATION_ROUTE.md`
+- Ver04-v1 integrated product plan is the active high-level plan
+- final self-improvement design is `docs/operations/strategy/VER04_V1_SELF_IMPROVEMENT_LOOP_FINAL_DESIGN_20260702.md`
+- companion definition is `docs/operations/strategy/VER04_V1_MANUAL_15M_WIN_DEFINITION_20260702.md`
+- Ver03-v4 is prior baseline / history
+- accepted self-improvement structure:
+  - Daily Proxy Loop: runs without actual exchange export
+  - Weekly Review Loop: summarizes attack/defense/regime trends
+  - Biweekly Ground Truth Loop: imports actual futures Excel exports and calibrates proxy vs actual human trade results
+- actual human trade exports are local/generated inputs and must not be committed by default
+- actual human trades must not be mixed into `paper_positions.csv` unless explicitly approved
+- AI post review is optional qualitative enrichment, not the main evaluation layer
+
+## Ver04-v1 intraperiod / MACD observation gate
+
+- report-only MACD / intraperiod early-warning support is implemented
+- live extra 15-minute mail sending is not enabled
+- before any live extra sending decision, several normal hourly notifications / generated HTML pages must be observed
+- observation must compare system judgment against actual chart movement after the notification
+- judgment-to-self-review linkage is now a required next design concern
+
+## Judgment self-review link implemented
+
+- deterministic report-only judgment self-review link is implemented
+- it evaluates predicted position accuracy and TP accuracy from intraperiod outcomes
+- it does not enable trading or notification sending behavior changes
+
+## Current implementation route
+
+- post-eval asset health audit is completed history
+- daily proxy evaluator is implemented and tested
+- implementation readiness package is created
+- next default implementation task is `BTCFX-20260702-MEXC-ACTUAL-TRADE-IMPORTER`
+- next task is local MEXC xlsx importer / normalized CSV output
+- no API integration
+- no raw MEXC export commit
+- no order execution
+- no trading logic change
+
+## Current safety boundary
+
+- report-only
+- not `FORMAL_GO`
+- no automatic order
+- no API keys
+- no private/account/order endpoints
+- no runtime restart during normal product work
+- no notification send behavior change without explicit approval
+- no raw exchange export commit
+- no `paper_positions.csv` integration unless explicitly approved
+- human decides manually
+
+
+## Manual trading practicality improvement route approved
+
+- approved planning date: `2026-07-10`
+- detailed plan: `docs/operations/strategy/MANUAL_TRADING_PRACTICALITY_IMPROVEMENT_PLAN_20260710.md`
+- AI execution route: `docs/operations/ai-orchestration/MANUAL_TRADING_PRACTICALITY_EXECUTION_ROUTE_20260710.md`
+- current decision is to preserve the strict formal candidate path and add future operator-action layers:
+  - `A_FORMAL`
+  - `B_CHECK_15M`
+  - `C_WATCH_ZONE`
+  - `STOP_OR_EXIT`
+- candidate rows must be normalized into scenario lifecycle before notification volume is expanded
+- actual trade ground truth and signal/scenario linking precede evidence-backed production tuning
+- this milestone does not authorize gate, threshold, notification, runtime, or automatic-order changes
+- current exact next task is `BTCFX-20260710-MTP-ACTUAL-TRADE-IMPORT-SPEC`
+- the next task is active-spec creation only; importer implementation follows only after review
+
+## P6 manual operator historical replay accepted
+
+- accepted checkpoint: `e870bd8`
+- reported targeted validation: `142 tests passed`
+- P6 replay test methods: `19`
+- offline deterministic replay with optional human/actual evidence support
+- no production behavior change
+- archived spec: `chatgpt/specs/archive/20260710_manual_operator_historical_replay.md`
+- P7 pending human decision

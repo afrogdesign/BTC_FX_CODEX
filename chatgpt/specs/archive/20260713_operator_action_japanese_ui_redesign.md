@@ -350,3 +350,33 @@ Implementation-test clarification:
 
 - exercise the generic branch with `C_WATCH_ZONE` or `A_FORMAL`
 - do not use `STOP_OR_EXIT` as the sole regression fixture because it has a dedicated headline branch and would not prove the generic fallback
+
+
+---
+
+## Final acceptance — 2026-07-13
+
+ChatGPT final MCP source review accepted the Japanese operator-action UI redesign through the Codex-reported final commit `03ec916`.
+
+Directly verified in the primary repo source:
+
+- known Short B headline: `ショート優先：15分足で戻りを確認`
+- known Long B headline: `ロング優先：15分足で押し目を確認`
+- unknown B headline: `方向判定待ち：15分足を確認`
+- unknown generic non-B headline: `方向判定待ち：<日本語action label>`
+- unknown generic headline no longer uses `優先`, Long or Short assumptions
+- STOP card preserves `新規見送り・保護確認`
+- visible side labels use Japanese and unknown side fails closed to `判定待ち`
+- late/no-chase wording is not duplicated
+- raw `SHORT B_CHECK_15M` is absent from the target source rendering path
+- matching regression assertions exist for B and generic unknown-side cases
+
+Codex reported:
+
+- `./.venv312/bin/python -m unittest tests.test_notification_detail_page`: pass
+- `git diff --check`: pass
+- push: none
+
+No runtime apply, notification behavior, mail behavior, classifier, score, gate, threshold, API, account, position or order behavior was changed by this source task.
+
+This implementation spec is accepted and ready to archive. Runtime apply remains a separate human-approved task.

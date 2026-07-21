@@ -117,3 +117,25 @@ FIX-07 makes failed or malformed champion cache entries fail closed without exce
 ## Implementation correction — bounded FIX-08
 
 FIX-08 aligns M3 quality with the accepted `data_quality.coverage_continuity_pass` contract; rolling quality, direction, and concentration failures retain explicit reasons; champion manifest IDs are bound to deterministic parameters; and fresh champion identity includes M1/M3 replay JSON. No-rolling final publication remains empty and fail-closed. P8-insufficient, P8-sufficient/no-Pareto, and P8-sufficient/winner paths passed lightweight orchestration tests, with diagnostic horizons remaining non-selecting. The actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
+
+
+## Acceptance — 2026-07-21
+
+M5 was accepted after direct ChatGPT review of FIX-08 source, focused tests, CLI behavior, and one bounded actual-bundle run at implementation checkpoint `3c7f01d`.
+
+Accepted evidence:
+
+- one full bounded execution; 31 planned candidate-run units
+- 6 chronological snapshot dates
+- champion count 1 and challenger count 4
+- all 4 challengers structurally valid but comparison-ineligible
+- no Pareto-dominant or proposal-eligible challenger
+- winner `none`
+- recommendation `continue_shadow_collection`
+- primary gate horizon `3h`; 6h/12h/24h diagnostic-only
+- P8 actual evidence missing and one report-global insufficiency row
+- exactly four fresh outputs
+- no temporary path or raw opportunity-ID publication
+- no source, runtime, production, notification, mail, gate, threshold, or order mutation during acceptance
+
+This acceptance approves the deterministic fail-closed offline proposal engine. It does not approve a challenger, production tuning, M6, or any runtime/adoption change.
