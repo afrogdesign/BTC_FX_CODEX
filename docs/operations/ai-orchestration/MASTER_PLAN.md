@@ -105,8 +105,8 @@ Sequence and state:
 M-OPS1 current snapshot and daily local report — accepted at 89bd338
 → M-OPS2 chronological history and reliability continuity — accepted at dea0e33
 → M-OPS3 chart-first operator artifact — accepted at 09330b9
-→ M-OPS4 separate runtime/schedule enablement — awaiting explicit human RUNTIME_TASK approval
-→ M-OPS5 autonomous status and stale-data health — not started
+→ M-OPS4 separate runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
+→ M-OPS5 autonomous status and stale-data health — next, not started
 ```
 
 There is no active source implementation spec.
@@ -120,7 +120,7 @@ Accepted local review evidence:
 - `local/reports/macro_structure/mops3_review/`
 - latest v2 artifact: `operator_3f09d915f61d0183d51c`
 
-M-OPS4 must not begin until the user explicitly authorizes inspection and change of the installed report-only runtime/schedule.
+M-OPS4 is accepted for `com.afrog.btc-macro-structure` only, with the six JST schedule entries and report-only boundaries recorded in the archived runtime spec. M-OPS5 remains a separate source task.
 
 ### 4.4 Secondary M5/M6 lane
 
@@ -160,11 +160,8 @@ Current order:
 ```text
 P remains parked on private input
 → M-OPS1–M-OPS3 remain accepted and unchanged
-→ wait for explicit M-OPS4 RUNTIME_TASK approval
-→ inspect actual installed target only after approval
-→ perform one bounded report-only runtime/schedule task
-→ verify target-specific execution and rollback
-→ then define M-OPS5 health/status source as a separate phase
+→ M-OPS4 accepted target-specific runtime and schedule
+→ define M-OPS5 health/status source as a separate phase
 ```
 
 Do not:
@@ -224,7 +221,7 @@ M route completion requires:
 - autonomous health/status;
 - current docs and operator behavior agreement.
 
-M-OPS1–M-OPS3 satisfy the accepted source and local-artifact portion. M-OPS4 and M-OPS5 remain.
+M-OPS1–M-OPS4 satisfy the accepted source, local-artifact, and target-only runtime portion. M-OPS5 remains next.
 
 ## 10. Safety and version boundary
 

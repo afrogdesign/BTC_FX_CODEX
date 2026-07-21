@@ -54,11 +54,11 @@ Sequence and status:
 M-OPS1 dedicated current snapshot and daily report source — accepted at 89bd338
 → M-OPS2 chronological history and reliability continuity — accepted at dea0e33
 → M-OPS3 chart-first operator artifact — accepted at 09330b9
-→ M-OPS4 separate runtime/schedule enablement — awaiting explicit human-approved RUNTIME_TASK
-→ M-OPS5 autonomous health and stale-data status — not started
+→ M-OPS4 separate runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
+→ M-OPS5 autonomous health and stale-data status — next, not started
 ```
 
-The current priority is the approval boundary, not another source rewrite.
+The current priority is the separate M-OPS5 health/status source task, not another M-OPS4 runtime run.
 
 ### Secondary lane: improvement and adoption
 
@@ -126,17 +126,17 @@ Reviewed evidence:
 
 Do not reopen accepted M-OPS1–M-OPS3 without a concrete contradiction.
 
-## Current transition: M-OPS4 approval
+## Current transition: M-OPS4 accepted
 
-There is no active implementation spec.
+The runtime spec is archived after acceptance. M-OPS5 remains a separate source task.
 
-M-OPS4 requires an explicit human-approved `RUNTIME_TASK` before:
+M-OPS4 was completed under an explicit human-approved `RUNTIME_TASK` for the target only:
 
 - reading, editing, or running the frozen runtime repo;
 - inspecting or changing installed launchd/plist/cron/schedule configuration;
 - installing a recurring macro pipeline.
 
-After explicit approval, one bounded task may:
+The bounded task:
 
 1. inspect the actual installed target and existing schedule;
 2. confirm the runtime repo/path rather than assuming it;
@@ -149,7 +149,7 @@ After explicit approval, one bounded task may:
 6. verify target-specific execution and generated local artifacts;
 7. leave mail, notification, production policy, private/account/order access, and automatic orders unchanged.
 
-M-OPS4 source acceptance does not automatically authorize M-OPS5 or production adoption.
+M-OPS4 acceptance does not automatically authorize M-OPS5 implementation or production adoption.
 
 ## M-OPS5 boundary
 

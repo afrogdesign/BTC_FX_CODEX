@@ -79,8 +79,8 @@ Current high-level state:
 - M-OPS1 accepted at `89bd338`
 - M-OPS2 accepted at `dea0e33`
 - M-OPS3 accepted at `09330b9`
-- M-OPS4 runtime/schedule enablement awaits explicit human-approved `RUNTIME_TASK`
-- M-OPS5 not started
+- M-OPS4 runtime/schedule enablement accepted at source fix `a9b3d46` with runtime implementation `690c014`
+- M-OPS5 is next and not started
 - M6 not started and not authorized
 - A1/A2 accepted, A3 superseded, A4 not planned
 
@@ -113,7 +113,7 @@ Report:
 - private actual-trade data is not required to calculate support/resistance reliability;
 - M1–M5 are accepted foundations;
 - M-OPS1–M-OPS3 are accepted and must not be reopened without a concrete contradiction;
-- M-OPS4 is not authorized until the user explicitly approves a bounded `RUNTIME_TASK`;
+- M-OPS4 is accepted only for the target `com.afrog.btc-macro-structure`, primary repo, six JST times, and report-only boundaries recorded in the archived runtime spec;
 - frozen runtime repo access, installed scheduling, launchd/plist/cron, mail, and notification changes remain prohibited until that approval;
 - M5 `winner=none` does not invalidate accepted M-OPS source/artifact work;
 - M5/M6 remains secondary and follows its separate plan only when improvement/adoption is being considered.
@@ -152,8 +152,8 @@ accepted M1–M4 capabilities
 → M-OPS1 current snapshot and local daily report — accepted
 → M-OPS2 chronological reliability continuity — accepted
 → M-OPS3 chart-first operator artifact — accepted
-→ explicit human-approved M-OPS4 runtime/schedule enablement — awaiting approval
-→ M-OPS5 autonomous health and stale-data reporting
+→ M-OPS4 runtime/schedule enablement — accepted
+→ M-OPS5 autonomous health and stale-data reporting — next, not implemented
 → periodic M5 refresh only when triggered
 → optional M6 proposal and adoption
 ```

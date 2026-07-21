@@ -173,7 +173,7 @@ Archived accepted spec:
 
 Do not reopen M-OPS1–M-OPS3 without a concrete source or artifact contradiction.
 
-## Authorized M-OPS4
+## Accepted M-OPS4
 
 The user explicitly approved actual service implementation on 2026-07-21.
 
@@ -195,7 +195,7 @@ Approved target:
 - one compact atomic runtime status
 - one bounded launchd-triggered live-public-data acceptance run
 
-The task may inspect the frozen repo read-only to confirm installed target boundaries. It must not edit or run frozen-repo source/tests and must not deploy the new service there.
+The task inspected the frozen repo only as permitted and did not edit or run its source/tests. The installed service points to the primary repo.
 
 ## Current M route
 
@@ -203,8 +203,8 @@ The task may inspect the frozen repo read-only to confirm installed target bound
 M-OPS1 current snapshot and daily report source — accepted
 → M-OPS2 chronological history and confidence continuity — accepted
 → M-OPS3 chart-first operator artifact — accepted
-→ M-OPS4 runtime/schedule enablement — explicitly approved and current
-→ M-OPS5 autonomous health and stale-data status — not started
+→ M-OPS4 runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
+→ M-OPS5 autonomous health and stale-data status — next, not started
 ```
 
 ## Current selected action
@@ -247,6 +247,14 @@ M-OPS4 runtime approval is granted only for the target and boundaries recorded a
 - no mail or notification change
 - no production gate, threshold, scoring, or classifier change
 - no unrelated LaunchAgent change
+
+## M-OPS4 FIX-02 accepted result
+
+Source fix `a9b3d46` accepted absent optional M-OPS3 references and preserved upstream identities in failed runtime status. Runtime implementation remains `690c014`.
+
+Target `com.afrog.btc-macro-structure` loaded from the primary repo with six JST entries at `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, and `21:10`. One kickstart produced a successful public 15m/1h/4h run: snapshot `run_bc49b15e01e3c2d49d64` / `macro_snapshot_bc49b15e01e3c2d49d64`, history `history_e0fa3fd0ebc25b781c5f`, operator `operator_128b44f88c8a1e02b350`. Results were snapshot `insufficient`, history `ok`, stale `current`, continuity `continuous`, data quality `ok`; safety remained report-only/no-private/no-automatic-order. Installed plist SHA-256 was `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`.
+
+M-OPS4 is accepted. M-OPS5 is next and not implemented or authorized by this task.
 
 ## M-OPS4 FIX-01 result
 

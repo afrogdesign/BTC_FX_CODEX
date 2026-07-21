@@ -35,8 +35,8 @@ M1 accepted structure/reliability engine
 → M-OPS1 current snapshot and daily artifact — accepted at 89bd338
 → M-OPS2 chronological history and confidence continuity — accepted at dea0e33
 → M-OPS3 chart-first operator artifact — accepted at 09330b9
-→ M-OPS4 separate runtime/schedule enablement — awaiting explicit human-approved RUNTIME_TASK
-→ M-OPS5 continuous health and stale-data monitoring — not started
+→ M-OPS4 separate runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
+→ M-OPS5 continuous health and stale-data monitoring — next, not started
 ```
 
 ### Secondary lane — bounded improvement and adoption
@@ -185,11 +185,11 @@ Archived spec:
 
 `chatgpt/specs/archive/20260721_macro_structure_chart_first_operator_artifact.md`
 
-### M-OPS4 — awaiting explicit approval
+### M-OPS4 — accepted
 
-M-OPS4 is a separate bounded `RUNTIME_TASK` and is not authorized by source acceptance.
+M-OPS4 was completed as a separate bounded `RUNTIME_TASK` for `com.afrog.btc-macro-structure` only. The implementation is `690c014` and the optional-reference source fix is `a9b3d46`.
 
-The user must explicitly authorize installed runtime/schedule inspection and change before any work begins.
+The installed target uses the primary repo and the six JST entries `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, and `21:10`. The run was report-only with no private input and no automatic order.
 
 After approval, the task may only:
 
@@ -200,11 +200,8 @@ After approval, the task may only:
 - verify target-specific command execution and local artifacts;
 - keep mail, notification, private/account/order access, policy, and automatic orders unchanged.
 
-Until approval:
+The active runtime spec is archived after acceptance. M-OPS5 remains a separate, not-started source task.
 
-- no frozen runtime repo read/edit/run;
-- no launchd, plist, cron, schedule, deploy, mail, or notification change;
-- no active M-OPS4 spec or Codex runtime task.
 
 ### M-OPS5 — continuous health
 
@@ -241,7 +238,7 @@ Criteria 1–4 are accepted. Criteria 5–6 remain.
 
 ## 9. Immediate next transition
 
-Await explicit human approval for M-OPS4 as a bounded `RUNTIME_TASK`.
+M-OPS4 is accepted for the target-only report-only service. Await a separate M-OPS5 source task; no production delivery or execution is implied.
 
 Do not rerun M5 or reopen M-OPS1–M-OPS3 while waiting unless a concrete contradiction appears.
 

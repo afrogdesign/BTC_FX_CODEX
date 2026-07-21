@@ -1,100 +1,75 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE-FIX-01`
+- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE-FIX-02`
 - mode: `RUNTIME_TASK`
 - branch: `Ver04-v3`; confirm from local git before execution
-- accepted_source_base: `09330b9`
-- implementation_commit: `690c014`
-- current_head_locator: `80bcd59`
-- active_spec: `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
-- status: blocked after one target-only repair, bootstrap, kickstart, and live acceptance attempt
+- current_head_locator: `a9b3d46` (state commit pending)
+- runtime_implementation_commit: `690c014`
+- archived_spec: `chatgpt/specs/archive/20260721_macro_structure_runtime_service_enable.md`
+- status: M-OPS4 accepted; M-OPS5 is the next separate source task
 - target_label: `com.afrog.btc-macro-structure`
 - push: none
 
 ## Current action
 
-Diagnose and repair the target-only `launchctl bootstrap` I/O failure without reopening the accepted wrapper, plist schedule, or M-OPS1–M-OPS3 semantics.
+Define the separate M-OPS5 autonomous health/status source task. Do not repeat the accepted M-OPS4 runtime review or live run without a documented reopening trigger.
 
-The initial activation attempt established:
+## Established root cause
 
-- focused source and CLI tests passed;
-- wrapper dry-run passed;
-- repository plist lint passed;
-- target did not previously exist;
-- bootstrap returned an I/O error;
-- kickstart was not performed;
-- rollback removed the installed target plist;
-- target remains unloaded;
-- no live runtime status or new macro artifacts were produced.
+The launchd service, schedule, public fetch, M-OPS1, and M-OPS2 operated correctly.
 
-## Required diagnosis before mutation
+The live M-OPS1 snapshot legitimately publishes optional unavailable references as empty dictionaries, including `next_upside_target`, `next_downside_target`, and `nearest_reliable_resistance` when structure is insufficient.
 
-Collect target-specific evidence for:
+M-OPS3 currently rejects an empty dictionary as `zone_evidence_invalid` before recognizing it as an absent optional reference.
 
-1. GUI-domain registration and disabled state;
-2. target plist ownership, mode, ACL, flags, and xattrs;
-3. `~/Library/LaunchAgents` ownership and access;
-4. primary Python, wrapper, working directory, and runtime log directory;
-5. installed/repository plist byte identity and lint;
-6. bounded launchd diagnostics mentioning the target label or plist.
+Required semantics:
 
-## Repair boundary
+- optional nearest/target/obstruction reference values `None`, blank, `none`, `insufficient`, and `{}` are absent and not rendered;
+- a non-empty partial object remains malformed and fails closed;
+- every displayed high/medium support/resistance zone remains strictly validated;
+- no M-OPS1 reliability, lifecycle, role, or geometry semantics change.
 
-Perform at most one evidence-based target repair and one subsequent bootstrap attempt.
+## Runtime status correction
 
-Permitted target-only repairs:
+When a later pipeline step fails, preserve identifiers and statuses from earlier successful steps in `macro_structure_service_last_result.json`.
 
-- stale target bootout/removal;
-- target plist ownership or mode correction;
-- target-plist quarantine removal;
-- required target log-directory creation;
-- recopy of the committed repository plist.
+At minimum, an operator-step failure after successful snapshot/history must retain snapshot run ID, snapshot ID, history ID, snapshot result, history result, stale, continuity, and data-quality status.
 
-Do not change the label, six-time schedule, source semantics, system timezone, another LaunchAgent, mail, notification, policy, private endpoints, or orders.
+## Validation and activation
 
-## Success path
+After the focused source fix:
 
-If bootstrap succeeds:
+1. run matching M-OPS3 and runtime-wrapper tests;
+2. run one deterministic fixture using M-OPS1-style empty optional references;
+3. commit the source fix locally;
+4. install the unchanged committed target plist;
+5. bootstrap only `com.afrog.btc-macro-structure` once;
+6. verify the existing six-time primary-repo contract;
+7. kickstart exactly once;
+8. verify one complete M-OPS1 → M-OPS2 → M-OPS3 success and matching artifacts;
+9. on success archive the M-OPS4 spec and mark M-OPS4 accepted / M-OPS5 next;
+10. on failure rollback only the target and do not repeat the live run.
 
-1. verify loaded paths, schedule, logs, and no RunAtLoad/KeepAlive;
-2. kickstart the target exactly once;
-3. wait boundedly for one new runtime status;
-4. verify successful M-OPS1 → M-OPS2 → M-OPS3 artifacts and safety flags;
-5. archive the active spec;
-6. mark M-OPS4 accepted and M-OPS5 next;
-7. create one local state commit.
+## FIX-02 accepted result
 
-## Failure path
+- source fix: `a9b3d46`;
+- runtime implementation: `690c014`;
+- target: `com.afrog.btc-macro-structure`, primary repo, schedule `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10` JST;
+- one bootstrap and one kickstart succeeded;
+- latest snapshot: `run_bc49b15e01e3c2d49d64` / `macro_snapshot_bc49b15e01e3c2d49d64`;
+- latest history: `history_e0fa3fd0ebc25b781c5f`;
+- latest operator: `operator_128b44f88c8a1e02b350`;
+- result: snapshot `insufficient`, history `ok`, stale `current`, continuity `continuous`, data quality `ok`;
+- safety: report-only, no private actual-trade input, no automatic order;
+- M-OPS5 is next; do not repeat M-OPS4 review or runtime run without a documented reopening trigger.
 
-If no safe repair is established or repaired bootstrap/runtime acceptance fails:
+## Safety
 
-- boot out only the target;
-- remove the new installed plist because no prior target existed;
-- leave the target unloaded;
-- record exact diagnostic evidence and final state;
-- do not repeat bootstrap or kickstart;
-- keep M-OPS4 unaccepted.
-
-## No-repeat and safety
-
-- do not rerun implementation tests unless source changed;
-- do not repeat an unchanged bootstrap;
-- no other LaunchAgent mutation;
-- no normal monitor or P8 restart;
-- no frozen-repo edit or execution;
-- report-only;
-- no automatic order;
-- no mail or notification integration;
-- no private/account/position/order endpoint;
-- no M5, M6, or version promotion.
-
-## FIX-01 result
-
-- target registration repair: bootstrap succeeded once after target-only recopy and normal ownership/mode correction;
-- target runtime: one launchd-triggered run only;
-- M-OPS1: success;
-- M-OPS2: success;
-- M-OPS3: failed closed with `zone_evidence_invalid`;
-- rollback: target-only unload and removal of the new installed plist; target remains unloaded;
-- concrete blocker: live M-OPS3 zone-evidence validation must be diagnosed in a separately authorized source-fix task;
-- no second bootstrap, kickstart, live run, or unrelated LaunchAgent operation is authorized by this checkpoint.
+- report-only
+- no automatic order
+- no mail or notification integration
+- no private/account/position/order endpoint
+- no other LaunchAgent mutation
+- no M5/M6
+- no version promotion
+- no push
