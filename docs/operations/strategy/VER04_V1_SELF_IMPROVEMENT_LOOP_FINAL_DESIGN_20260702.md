@@ -294,7 +294,7 @@ Safety:
 ./.venv312/bin/python tools/log_feedback.py build-manual-trade-ground-truth-report \
   --manual-trades logs/csv/manual_actual_trades.csv \
   --links logs/csv/manual_trade_signal_links.csv \
-  --output-md 運用資料/reports/post_eval/manual_trade_ground_truth_20260715.md \
+  --output-md local/reports/post_eval/manual_trade_ground_truth_20260715.md \
   --stdout-json
 ```
 
@@ -415,7 +415,7 @@ AI post review recovery should happen after deterministic loop is reliable.
 File concept:
 
 ```text
-運用資料/reports/post_eval/post_eval_daily_proxy_YYYYMMDD.md
+local/reports/post_eval/post_eval_daily_proxy_YYYYMMDD.md
 ```
 
 Sections:
@@ -434,7 +434,7 @@ Sections:
 File concept:
 
 ```text
-運用資料/reports/post_eval/post_eval_weekly_review_YYYYMMDD.md
+local/reports/post_eval/post_eval_weekly_review_YYYYMMDD.md
 ```
 
 Sections:
@@ -451,7 +451,7 @@ Sections:
 File concept:
 
 ```text
-運用資料/reports/post_eval/manual_trade_ground_truth_YYYYMMDD.md
+local/reports/post_eval/manual_trade_ground_truth_YYYYMMDD.md
 ```
 
 Sections:

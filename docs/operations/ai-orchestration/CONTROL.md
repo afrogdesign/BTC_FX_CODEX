@@ -162,3 +162,32 @@ When local filesystem access exists, write the same report exactly once to:
 `/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt`
 
 Do not read, verify, retry, recreate, monitor, or watch after writing.
+
+
+## Development completion and cost guardrail
+
+This section supersedes `Canonical task route` where they conflict.
+
+Priority order:
+
+1. complete the product system and increase observable user value
+2. preserve safety, scope, and acceptance integrity
+3. minimize Codex credits, elapsed time, and repeated validation
+4. improve orchestration neatness or machine-readable formatting
+
+Stable rules:
+
+- the normal route is a compact prompt, one bounded Codex implementation pass, a compact text report, and direct ChatGPT MCP review
+- task manifests and JSON reports are optional strict tools, not the default
+- strict tooling requires a stated material reason such as heavy acceptance, reviewed-commit binding, checkpoint push, runtime work, or a genuinely multi-stage contract
+- deterministic Markdown, spec, state, and review work is performed directly by ChatGPT through MCP when local execution is unnecessary
+- one coherent implementation, its matching tests, required fixture, short docs, validation, and commit are bundled into one Codex task
+- do not create a Codex review task when ChatGPT can inspect the same evidence through MCP
+- do not create or self-validate a report only to satisfy an optional report schema
+- report formatting, field order, equivalent wording, or other non-material report differences cause zero retasks
+- one minimal FIX is allowed only for broken implementation, failed relevant validation, unsafe or out-of-scope changes, or missing acceptance-critical behavior
+- if a second orchestration-only correction would be needed, stop that route and simplify the process before spending more credits
+- if orchestration work is expected to equal or exceed the underlying product change, use the simpler route
+- a pilot that increases operational cost does not justify promoting that mechanism to the default route
+
+Acceptance decisions prioritize direct source, test, CLI, artifact, and safety evidence. Reports remain locators rather than proof.

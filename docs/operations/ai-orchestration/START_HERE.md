@@ -1,189 +1,157 @@
 # START_HERE
 
-This is the shortest role-aware entrypoint for `btc_monitor` AI work.
+This is the shortest role-aware entrypoint for `btc_monitor` work.
 
-The ChatGPT Project initial prompt is maintained in `INITIAL_PROMPT.md`. This file routes repo reads after that prompt is applied.
+## 1. Choose the route
 
-## Choose the route first
-
-### ChatGPT: fresh thread or changed repo premise
+### New ChatGPT thread or unknown context
 
 Always read:
 
 1. `AGENTS.md`
-2. `START_HERE.md`
+2. `docs/operations/ai-orchestration/START_HERE.md`
 
-Then read only what the request needs:
+Then read only what the request needs.
 
-- current state or next-task decision: `CURRENT_STATE.md` and `NEXT_ACTION.md`
-- implementation, FIX, or acceptance: the one active spec under `chatgpt/specs/active/`
-- action selection, Codex prompt, or acceptance flow: `AI_WORKFLOW.md`
-- stable safety, git, dirty-tree, or validation rules: `CONTROL.md`
-- product direction: the relevant product/strategy route
+| Need | Read |
+|---|---|
+| overall plan or next-area judgment | `MASTER_PLAN.md` |
+| accepted current state | `CURRENT_STATE.md` |
+| exactly one current task | `NEXT_ACTION.md` |
+| Product planning | `PRODUCT_IMPLEMENTATION_ROUTE.md` |
+| Macro planning | `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md` |
+| implementation / FIX / acceptance | one file under `chatgpt/specs/active/` |
+| ChatGPT/Codex execution | `AI_WORKFLOW.md` |
+| stable safety、git、runtime、validation | `CONTROL.md` |
+| accepted checkpoints | `MILESTONES.md` |
 
-Do not load state, spec, workflow, and product docs for a simple explanation that does not depend on repo state.
+Do not read all of these by default.
 
-### ChatGPT: same thread and same task
+### Same thread and same task
 
-Do not reread stable docs. Inspect only the new report, changed source, matching tests, CLI route, fresh artifacts, and the relevant spec note.
+Read only the delta:
 
-### Codex: fresh thread or lost context
+- new Codex report
+- changed source
+- matching tests
+- CLI parser / dispatch when relevant
+- fresh artifact
+- active-spec note
+- task-related diff
+
+Do not reread stable planning or workflow docs.
+
+### Fresh Codex context
 
 Read:
 
 1. `AGENTS.md`
 2. `START_HERE.md`
-3. the task prompt or rendered task-manifest launcher
+3. the task prompt
 4. files explicitly named by the task
 
-Read state docs and active spec only when named, required, or inconsistent with the task.
+Read state, master plan, or active spec only when named, required, or inconsistent with the task.
 
-### Codex: retained context
+## 2. Plan hierarchy
 
-Treat the new prompt as a delta. Do not reopen stable orchestration or product docs unless required by a changed contract or contradiction.
+```text
+MASTER_PLAN.md
+├─ PRODUCT_IMPLEMENTATION_ROUTE.md
+├─ docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md
+└─ AI_OPERATIONS_STATUS.md
+```
 
-## Repo boundary
+Meaning:
+
+- Product / P route is the main system-development axis
+- Macro / M route is a supporting evidence and operator-decision axis
+- AI / A route is a completed operations experiment, not an active product backlog
+
+Current high-level state:
+
+- P1〜P7 accepted
+- P8 evidence pipeline accepted and collecting evidence
+- P9 blocked pending adequate evidence and human approval
+- M1〜M5 accepted
+- M6 not started and not authorized
+- A1/A2 accepted, A3 superseded, A4 not planned
+
+## 3. Current execution route
+
+Normal route:
+
+```text
+ChatGPT fixes one useful scope
+→ one bounded Codex implementation
+→ matching tests / small fixture
+→ compact text report
+→ ChatGPT MCP review
+→ accept, one material FIX, or human judgment
+```
+
+Use direct MCP work for deterministic Markdown、spec、state、and review tasks that do not require local tests or git operations.
+
+Task manifests and JSON reports are optional strict tooling only. See `AI_OPERATIONS_STATUS.md`.
+
+## 4. Repo boundary
 
 | Purpose | Path | Rule |
 |---|---|---|
 | primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | normal read/edit/test/git |
 | frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | explicit `RUNTIME_TASK` only |
 
-ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch is confirmed from repo state, not chat history.
+ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch and HEAD are confirmed from local repo state when git evidence is required.
 
-## Task routing
-
-| Route | Use |
-|---|---|
-| ChatGPT answer/review | explanation, diagnosis, comparison, source/test/artifact review |
-| ChatGPT direct MCP work | deterministic Markdown/spec/state edits requiring no local test or git operation |
-| `BOUNDED_CODEX` | fixed implementation with known files, behavior, and validation |
-| spec-first | unresolved trading logic, gates, thresholds, schemas, multi-module design, safety, runtime, or competing choices |
-
-Do not send Codex work while material product or safety judgment remains unresolved.
-
-The normal route for new `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work is:
+## 5. Current source-of-truth order
 
 ```text
-ChatGPT compact prompt → bounded Codex execution → compact text report → ChatGPT MCP review
-```
-
-Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports; the user-visible report and `response.txt` use the existing compact report format.
-
-## Source-of-truth order
-
-```text
-repo files and generated artifacts
+repo source、tests、generated artifacts
 → active spec
-→ task manifest when activated for that task
-→ CURRENT_STATE.md and NEXT_ACTION.md
-→ CONTROL.md and product route
-→ accepted milestones and git history
-→ TASK_LEDGER / handoff / historical docs
-→ chat history
+→ MASTER_PLAN and target route
+→ CURRENT_STATE and NEXT_ACTION
+→ CONTROL and AI_WORKFLOW
+→ MILESTONES and DECISIONS
+→ archived plans and specs
+→ TASK_LEDGER and chat history
 ```
 
-## Record roles
+Historical documents never override current source or canonical routes.
+
+## 6. Non-default reads
+
+Do not broadly scan:
+
+- `TASK_LEDGER.md`
+- `history/`
+- `docs/operations/strategy/archive/`
+- old task notes in the orchestration root
+- generated outputs and logs
+- frozen runtime repo
+
+Read a historical file only when a current task identifies the exact evidence or decision being investigated.
+
+## 7. Record roles
 
 | File | Responsibility |
 |---|---|
-| `INITIAL_PROMPT.md` | ChatGPT Project initial prompt source |
-| `CURRENT_STATE.md` | accepted state and current blocker |
-| `NEXT_ACTION.md` | exactly one current work item |
-| `CONTROL.md` | stable safety, git, runtime, and validation rules |
-| `AI_WORKFLOW.md` | shared ChatGPT/Codex process |
-| `MILESTONES.md` | accepted major checkpoints |
-| `DECISIONS.md` | durable product/design decisions |
+| `MASTER_PLAN.md` | overall plan and plan hierarchy |
+| `CURRENT_STATE.md` | accepted state and blocker |
+| `NEXT_ACTION.md` | exactly one current task |
+| `CONTROL.md` | stable safety / git / runtime / validation rules |
+| `AI_WORKFLOW.md` | shared execution and review process |
+| `MILESTONES.md` | major accepted checkpoints |
+| `DECISIONS.md` | durable decisions and supersession records |
 | active spec | current detailed implementation contract |
-| `TASK_LEDGER.md` | historical lookup only |
+| `TASK_LEDGER.md` | historical Work ID lookup only |
 
-## Task-specific reads
-
-Read only when relevant:
-
-- product direction: `PRODUCT_IMPLEMENTATION_ROUTE.md`
-- macro route: `docs/operations/strategy/MACRO_STRUCTURE_VOLATILITY_SELF_IMPROVEMENT_PLAN_20260720.md`
-- checkpoint push: `CHECKPOINT_RUNBOOK.md`
-- runtime handoff: `RUNTIME_PULL_HANDOFF.md`
-- accepted history: `MILESTONES.md`
-- old Work ID: search `TASK_LEDGER.md`; do not read it in full
-
-Do not scan the orchestration directory wholesale to discover context.
-
-## Validation routing
-
-### Implementation
-
-Codex receives implementation freedom inside allowed files and runs only:
-
-- matching unit tests
-- a small deterministic fixture/smoke when needed
-- task-scoped diff check
-
-Do not authorize a full local bundle or repeated replay during implementation.
-
-### Review
-
-ChatGPT reviews changed source, matching tests, CLI routing, fixture evidence, artifacts, and the active spec through MCP.
-
-### Acceptance
-
-Only after ChatGPT determines the implementation is review-ready may Codex receive an explicit heavy acceptance task. One full bounded run is the default maximum. A second full run requires an acceptance-critical determinism reason and explicit authorization.
-
-Canonical details: `AI_WORKFLOW.md` and `CONTROL.md`.
-
-## Current post-M5 improvement route
-
-M5 is accepted and its spec is archived. M6 is not active.
-
-The current route is:
-
-```text
-AI orchestration docs checkpoint
-→ A1 task-manifest contract foundation
-→ A2 low-risk pilot
-→ A3 canonical manifest routing (active)
-→ optional A4 CWT integration
-```
-
-For A1 planning and implementation, read:
-
-```text
-AI_TASK_MANIFEST_AND_ACCEPTANCE_GATE_SPEC_20260721.md
-```
-
-For later replay-pipeline, cache, or publication-determinism work, read:
-
-```text
-MACRO_REPLAY_AND_AI_ACCEPTANCE_SIMPLIFICATION_PLAN_20260721.md
-```
-
-Do not combine A1 with replay-stage/cache work, M6, runtime, or production changes.
-
-## Safety baseline
+## 8. Safety baseline
 
 - report-only
 - not `FORMAL_GO`
 - human-decided
 - no automatic order
 - no secrets or private/account/order endpoints
-- no unapproved runtime, launchd, mail, or notification change
+- no unapproved runtime、launchd、mail、notification change
 - no raw exchange export commit
-- no unapproved `paper_positions.csv` integration
-- no unsupported gate, scoring, threshold, or classifier relaxation
-
-## MCP request privacy
-
-Do not place address-formatted contacts or sensitive identifiers in MCP request bodies. Use redacted placeholders and inspect by safe filename, symbol, section, or abstract summary.
-
-## Compatibility files
-
-`PROMPTS.md`, `MINI_CODEX_RULES.md`, `PROMPT_PREFLIGHT_CHECKLIST.md`, `CHATGPT_COMMANDER_PROMPT.md`, and `RESUME.md` are compatibility pointers only. Do not read them together.
-
-Canonical route:
-
-```text
-INITIAL_PROMPT.md
-→ START_HERE.md
-→ AI_WORKFLOW.md
-```
+- no unsupported gate、threshold、scoring、classifier change
+- no automatic Phase promotion or production adoption

@@ -1,11 +1,9 @@
-更新日: 2026-04-10 05:55 JST
+# Early Ver02 Report Archive
 
-# Ver02までのレポート
+status: historical / non-canonical
 
-このフォルダは、`Ver02` 初期までの比較レポートや古いログレビューを置く場所です。
+This directory preserves early Ver02 comparison reports and log reviews.
 
-## 位置づけ
+It is not an active evaluation baseline. Do not use these files for current task selection, current performance claims, or current operating instructions.
 
-- 完全に履歴参照用
-- 現在の `Ver02.4-v1` の改善判断には直接使わない
-- 長期比較や経緯確認が必要なときだけ見る
+Current navigation starts from `AGENTS.md` and `docs/operations/ai-orchestration/START_HERE.md`.

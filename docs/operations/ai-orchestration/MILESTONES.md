@@ -33,7 +33,7 @@ M5 acceptance is implementation/evidence acceptance. It is not challenger adopti
 - exact three-file implementation scope
 - revision-3 read-only review report validated successfully
 - no heavy validation and no product or runtime posture change
-- A2 authorizes a separate A3 specification but does not activate A3 by itself
+- pilot evidence showed that strict routing should remain optional rather than become the normal path
 
 ## 2026-07-21 — M4 hierarchy render shadow accepted
 
@@ -101,7 +101,11 @@ The route preserves strict formal gates and adds operator-action layers without 
 
 ## Current transition
 
-M5 remains accepted with `continue_shadow_collection`. A1 and A2 are accepted and archived. The current immediate route is the separately specified A3 canonical task-manifest routing activation. M6 remains not started and not authorized.
+- `MASTER_PLAN.md` is the canonical overall planning entrypoint
+- Product/P is the main axis; P8 evidence collection continues and P9 remains evidence-gated
+- Macro/M is a supporting axis; M1〜M5 are accepted and M6 remains unauthorized
+- AI/A is a completed operations experiment; A1 tooling is optional, A3 is superseded, and A4 is not planned
+- the next task is one smallest useful Product task selected from current P8/M5 evidence
 
 ## Detailed history
 

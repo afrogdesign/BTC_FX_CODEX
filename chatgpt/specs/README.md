@@ -1,20 +1,17 @@
-# specs
+# Implementation Specs
 
-このディレクトリには、Codex に渡す仕様書を保存します。
+This directory contains detailed implementation contracts for bounded Codex work.
 
-## ディレクトリ構成
+## Structure
 
-- `active/`
-  - Codex が次に読む現役の確定仕様書
-- `archive/`
-  - 実施済み、または履歴参照用の仕様書
+- `active/`: zero or one current implementation contract
+- `archive/`: accepted, completed, canceled, or superseded contracts
 
-## 運用ルール
+## Rules
 
-- 未確定の考察は `analysis/` に置き、ここには置かない。
-- ChatGPT が設計を確定した仕様だけを `active/` に置く。
-- Codex は `active/` の仕様書を実務実行の正本として扱う。
-- `active/` が空のときは、ChatGPT は `NEXT_TASK.md` と `chatgpt/analysis/` を更新し、確定後にだけ `active/` へ上げる。
-- Codex は、実施完了後に検証、`commit / push`、仕様書の `archive/` への移動までを一連で行う。
-- 実施が終わった仕様は `archive/` へ移し、`active/` には未着手の現役仕様だけを残す。
-- 実装判断が必要になった場合は、実装せず確認事項として返す。
+- Planning and current-task selection happen under `docs/operations/ai-orchestration/`.
+- Only a sufficiently fixed implementation contract is placed in `active/`.
+- Codex reads the named active spec and the files explicitly required by the task.
+- ChatGPT performs acceptance review and moves the spec to `archive/` after acceptance.
+- An empty `active/` directory means there is no authorized implementation task.
+- Archived specs are historical evidence and never override current source, tests, or canonical planning documents.

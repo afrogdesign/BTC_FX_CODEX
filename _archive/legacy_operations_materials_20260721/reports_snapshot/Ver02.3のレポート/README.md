@@ -1,11 +1,9 @@
-更新日: 2026-04-10 05:55 JST
+# Ver02.3 Report Archive
 
-# Ver02.3 のレポート
+status: historical / non-canonical
 
-このフォルダは、`Ver02.3` 時代の通知や評価の見方を説明した資料です。
+This directory preserves explanatory material from the Ver02.3 period.
 
-## 位置づけ
+It is not an operating guide for the current system. Do not reuse its version labels, thresholds, notification assumptions, or next-step instructions without a specific historical review.
 
-- 現在の `Ver02.4-v1` を直接運用するための正本ではない
-- 旧版の通知思想や説明資料を振り返るときに使う
-- 現在の判断は上位の `../README.md` と `../../README.md` を優先する
+Current navigation starts from `AGENTS.md` and `docs/operations/ai-orchestration/START_HERE.md`.

@@ -10,13 +10,12 @@ data/historical/
 .vscode/
 .viewer_server.log
 
-# Ver03-v4 local generated/manual-delivery artifacts
+# Local generated/manual-delivery artifacts
 local/manual_delivery_app_surface/
 local/manual_delivery_handoff/
 local/reports/
 
-# Ver03-v4 local branch helper commands
-Branch_Command/
+# Generic generated and build outputs
 node_modules/
 dist/
 build/

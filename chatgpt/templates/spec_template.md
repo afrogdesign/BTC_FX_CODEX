@@ -1,88 +1,76 @@
----
-title: 仕様書タイトル
-date: YYYY-MM-DD
-tags:
-  - btc-monitor
-  - spec
-  - codex
----
+# <Specification Title>
 
-> [!abstract]
-> この文書は、Codex に実装を依頼するための確定仕様書です。目的、変更範囲、実装内容、検証方法、完了条件を明確にします。
+- created_at: YYYY-MM-DD
+- work_id: `<WORK_ID>`
+- status: active implementation contract
+- mode: `BOUNDED_CODEX | REVIEW_ONLY | CHECKPOINT_PUSH | RUNTIME_TASK`
+- primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- expected branch: `<verify from local git>`
+- push: `none` unless explicitly approved
 
-保存先:
+## Goal
 
-```txt
-chatgpt/specs/active/YYYYMMDD_topic.md
-```
+Describe one observable result.
 
-## 📋 目次
+## Known state
 
-- [[#🎯 目的]]
-- [[#🌿 対象ブランチ]]
-- [[#🧩 変更範囲]]
-- [[#🛠 実装内容]]
-- [[#🧪 検証方法]]
-- [[#✅ 完了条件]]
-- [[#⚠️ 注意事項]]
+List only facts that are current and material to this task. Do not repeat stable repo rules already covered by `AGENTS.md`, `START_HERE.md`, or `CONTROL.md`.
 
----
+## Observable contract
 
-## 🎯 目的
+State what must be true after implementation from the user, CLI, file, or report perspective.
 
-ここに、この仕様で達成したい目的を書く。
+## Allowed scope
 
----
+### Read
 
-## 🌿 対象ブランチ
+- `<path>`
 
-```txt
-ver02.6-v1
-```
+### Edit
 
----
+- `<path>`
 
-## 🧩 変更範囲
+### Inspect only
 
-### 触ってよいファイル
+- `<path>`
 
-```txt
-例:
-src/analysis/example.py
-src/trade/example.py
-```
+## Required work
 
-### 触らないファイル
+1. `<bounded change>`
+2. `<matching regression coverage>`
+3. `<small deterministic smoke when needed>`
 
-```txt
-例:
-.env
-logs/
-secrets/
-```
+## Autonomy
 
----
+Codex may choose small helpers, fixtures, and internal structure inside the accepted contract. Product, trading, safety, acceptance, and phase decisions remain with ChatGPT and the human operator.
 
-## 🛠 実装内容
+## Validation budget
 
-Codex が判断しなくてよい粒度で、実装内容を具体的に書く。
+- matching tests
+- one small deterministic fixture or smoke when needed
+- task-scoped `git diff --check`
+- no heavy replay or repeated full run unless explicitly authorized
 
----
+## Stop conditions
 
-## 🧪 検証方法
+- material ambiguity outside the contract
+- runtime or frozen-repo access required but not authorized
+- safety boundary would change
+- unrelated dirty changes overlap the task files
 
-実行すべきテスト、確認すべきログ、生成すべきレポートを書く。
+## Safety
 
----
+- no automatic order
+- no secrets or private/account/order endpoints
+- no unapproved runtime, launchd, mail, or notification change
+- no unapproved gate, threshold, scoring, or classifier change
+- preserve unrelated changes
+- no reset, restore, checkout, clean, or stash manipulation
 
-## ✅ 完了条件
+## Commit and report
 
-何が確認できたら完了かを書く。
-
----
-
-## ⚠️ 注意事項
-
-- 実弾発注は禁止。
-- 秘密鍵、APIキー、`.env` の中身は表示・変更しない。
-- 判断が必要な場合は実装せず、確認事項として報告する。
+- stage only task files
+- create one local commit when requested
+- push: none unless explicitly approved
+- return the compact report defined by `AI_WORKFLOW.md`
+- write the same report exactly once to the required outbox when local filesystem access is available

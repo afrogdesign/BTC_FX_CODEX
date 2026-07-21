@@ -4,77 +4,50 @@ last_updated: 2026-07-21
 
 ## Current posture
 
-- recorded branch: `Ver04-v2`
-- branch and HEAD must be confirmed by local git before Codex work
+- current cleanup branch: `Ver04-v3`
+- cleanup base: `3db0399` (`Migrate generated reports to local directory`)
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_generated_reports_directory_migration.md`
-- active task manifest: none
-- safety: report-only / not `FORMAL_GO` / human-decided / no automatic order
+- active spec: `chatgpt/specs/active/20260721_ver04_v3_repo_structure_cleanup_checkpoint.md`
+- safety: report-only / human-decided / no automatic order
+- repository cleanup checkpoint: ready for ChatGPT MCP review
 
-## Plan state
+## Version policy
 
-### Product / P route
+- `Ver04-v3`: repository structure and documentation consolidation line
+- `Ver05`: reserved for an evidence-backed, explicitly approved, implemented, validated, and accepted M6 change
+- M1–M5 acceptance alone does not qualify for `Ver05`
 
-- P1〜P7: accepted
-- P8 deterministic evidence pipeline: accepted and collecting evidence
-- P9: blocked pending adequate evidence and explicit human approval
-- main product gap: insufficient actual-backed ground truth and validation sample
+## Product state
 
-### Macro / M route
+- P1–P7 accepted
+- P8 evidence pipeline accepted and collecting evidence
+- P9 blocked pending adequate evidence and human approval
+- M1–M5 accepted
+- M6 not started and not authorized
 
-- M1〜M5: accepted
-- M5 winner: `none`
-- M5 recommendation: `continue_shadow_collection`
-- M6: not started and not authorized
+Product implementation is paused in this thread. This thread is reserved for repository cleanup.
 
-### AI operations / A route
+## MCP cleanup completed
 
-- A1: accepted as optional strict tooling
-- A2: accepted pilot
-- A3: superseded and archived
-- A4: not planned
-- normal route: compact prompt、bounded implementation、compact report、ChatGPT MCP review
+- canonical plan and AI navigation consolidated
+- former top-level operations directory removed
+- generated reports migrated to `local/reports/`
+- old operations material moved under `_archive/`
+- `chatgpt/analysis/` retired and archived
+- Ver03-v2 deploy records and temporary report script moved to `docs/operations/history/`
+- the long Ver03-v4 manual-preview runbook archived and replaced with a short current runbook
+- old Ver03-v4 integrated strategy plan archived
+- `VALUE_DEFENSE_ENTRY_LAYER.md` moved to strategy
+- completed smoke, diagnostic, preview, checkpoint, cleanup-audit, and handoff records moved out of the orchestration root
+- duplicate handoff and compatibility entry routes retired
+- `Branch_Command/` removed
+- duplicate archived reports directory removed; `reports_snapshot/` retained
+- stale README files and the obsolete Ver02 spec template updated
+- redundant `.gitkeep` files and empty placeholder directories removed
+- durable directory model recorded in `DECISIONS.md`
 
-## Documentation cleanup accepted in working tree
+## Checkpoint status
 
-The canonical plan structure is:
+The local branch, cleanup-only staging, bounded validation, and one local cleanup commit are complete. Return this checkpoint to ChatGPT for MCP acceptance review.
 
-```text
-MASTER_PLAN.md
-├─ PRODUCT_IMPLEMENTATION_ROUTE.md
-├─ docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md
-└─ AI_OPERATIONS_STATUS.md
-```
-
-Old planning, AI-routing, runtime-transition, and operations-management documents were moved under `_archive/` or orchestration history.
-
-## Active migration
-
-Generated reports are now written under `local/reports/`; the former top-level operations directory is retired.
-
-The active implementation contract migrates generated reports to:
-
-```text
-local/reports/
-```
-
-Required behavior:
-
-- active code/tests/scripts use `local/reports`
-- tracked old report snapshots move to `_archive/legacy_operations_materials_20260721/reports_snapshot/`
-- ignored/untracked generated reports remain local and uncommitted
-- the former top-level operations directory is removed after acceptance
-- no trading, runtime, notification, mail, gate, or classifier behavior changes
-
-## Current blocker
-
-The directory migration requires local source edits, matching tests, filesystem classification using git tracking state, and one local commit. MCP alone cannot safely complete it.
-
-## Navigation
-
-- active spec: `chatgpt/specs/active/20260721_generated_reports_directory_migration.md`
-- immediate task: `NEXT_ACTION.md`
-- overall plan: `MASTER_PLAN.md`
-- product route: `PRODUCT_IMPLEMENTATION_ROUTE.md`
-- execution: `AI_WORKFLOW.md`
-- stable controls: `CONTROL.md`
+Do not start Product implementation or M6 work in this thread.

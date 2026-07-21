@@ -1,34 +1,27 @@
-# Generated Reports Compatibility Area
+# Historical Reports Snapshot
 
-This directory is a generated-output location retained for compatibility with existing source, tests, and scripts.
+archived_at: 2026-07-21
+status: historical / non-canonical
 
-It is not a canonical AI entrypoint and is not the source of truth for current plan, state, task, safety, or acceptance.
+This directory preserves report files that were tracked under the former top-level operations area.
 
-## Live-compatible paths
+They are historical evidence only. They are not active output locations and must not be used for current report discovery, task selection, or operator workflow.
 
-- `analysis/`
-- `archive/analysis/`
-- `post_eval/`
-- `feedback_daily_sync_*.md`
-- `report_hub_latest.md`
+## Current replacement
 
-Some files may be ignored by git and regenerated locally.
+Generated reports now use:
 
-## How to use reports
+```text
+local/reports/
+```
 
-Read a report only when a current task, active spec, issue, or acceptance review identifies the exact report family or date required.
-
-Do not broadly scan this directory to determine current work.
-
-Canonical navigation:
+Current navigation:
 
 - `docs/operations/ai-orchestration/START_HERE.md`
 - `docs/operations/ai-orchestration/MASTER_PLAN.md`
 - `docs/operations/ai-orchestration/CURRENT_STATE.md`
 - `docs/operations/ai-orchestration/NEXT_ACTION.md`
 
-Old Ver02 explanatory report collections were moved to:
+## Use rule
 
-`_archive/legacy_operations_materials_20260721/reports/`
-
-A future migration away from `運用資料/reports/` requires source edits, matching tests, and a bounded Codex task. Do not rename this path through documentation cleanup alone.
+Read a file here only when a named historical investigation requires that exact report or date. Do not copy old paths or version assumptions back into active code or documentation.

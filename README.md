@@ -81,3 +81,9 @@ Generated reports are written under `local/reports/` and are intentionally uncom
 - no unapproved runtime, launchd, mail, or notification change
 - no unapproved gate, threshold, scoring, or classifier change
 - human approval is required for production adoption
+
+## Development line
+
+- current repository-cleanup target: `Ver04-v3`
+- `Ver05` is reserved for an evidence-backed, explicitly approved, implemented, validated, and accepted M6 change
+- M1–M5 acceptance alone does not promote the project to `Ver05`

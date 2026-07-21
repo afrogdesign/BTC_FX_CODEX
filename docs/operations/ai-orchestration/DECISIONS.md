@@ -196,3 +196,120 @@ Long prompts repeatedly carried stable safety rules, state, implementation requi
 - implementation manifests cannot authorize heavy validation.
 - acceptance manifests cannot repair source and default to one exact heavy run.
 - the manual prompt route remains available until A3 is accepted.
+
+
+## DEC-20260721-008: One master plan and three clearly separated routes
+
+Date: 2026-07-21
+Status: accepted documentation direction
+Related work: plan and AI navigation consolidation
+
+### Decision
+
+Use `MASTER_PLAN.md` as the single overall planning entrypoint.
+
+Separate the repository's planning routes as follows:
+
+```text
+Product / P route = main system-development axis
+Macro / M route = supporting market-structure and operator-decision axis
+AI / A route = completed operations experiment
+```
+
+Canonical supporting routes are:
+
+- `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
+- `AI_OPERATIONS_STATUS.md`
+
+`DEC-20260721-007` is superseded where it proposed making manifest/JSON routing the normal path. A1 tooling remains optional strict tooling. A3 remains archived and A4 is not planned.
+
+### Reason
+
+Four months of work left multiple generations of product plans, phase routes, task notes, smoke reports, compatibility pointers, and AI-orchestration designs in the same navigation layer. New AI contexts could follow an older P1 start instruction or the superseded A3 route instead of the accepted P8/M5 state.
+
+The repo needs one current architecture map, while retaining accepted specs, research basis, and useful implementation evidence.
+
+### Consequences
+
+- new planning contexts read `MASTER_PLAN.md`
+- Product planning follows the current P8/P9 state rather than restarting P1
+- M6 remains evidence-gated and unauthorized
+- A1/A2 remain accepted history; A3/A4 are not active backlog
+- superseded plan documents move to explicit archive directories
+- history, archive, handoffs, and `TASK_LEDGER.md` are non-default reads
+- compact prompt and compact report remain the normal route
+- no new orchestration framework task is created without a task-specific material-evidence reason
+
+## DEC-20260721-009: Generated reports use `local/reports/`
+
+### Decision
+
+The active generated-report root is `local/reports/`.
+
+The former top-level `運用資料/` directory is retired and must not be recreated as an active settings, planning, progress, or report root.
+
+### Rationale
+
+- `local/` is already the repo boundary for generated, private, report-only, and uncommitted assets.
+- The old directory mixed active output contracts with obsolete settings, plans, work logs, progress records, and historical reports.
+- A single English path avoids locale-dependent shell and integration handling and makes generated-output ownership explicit.
+
+### Migration result
+
+- active source、tools、scripts、tests use `local/reports/`
+- tracked historical reports are under `_archive/legacy_operations_materials_20260721/reports_snapshot/`
+- old operations-management materials are under `_archive/legacy_operations_materials_20260721/`
+- no fallback、symlink、or dual-write to the former path is permitted
+- reported implementation commit locator: `3db0399`
+
+### Supersedes
+
+Any earlier instruction treating `運用資料/ChatGPTプロジェクト設定.md`、`運用資料/NEXT_TASK.md`、`運用資料/開発ロードマップ.md`、or `運用資料/reports/` as an active source of truth.
+
+## DEC-20260721-010: Ver04-v3 cleanup line and Ver05 gate
+
+Decision:
+
+- create `Ver04-v3` as the repository-structure and documentation-consolidation line
+- commit the current cleanup work on `Ver04-v3`
+- do not treat repository cleanup itself as Product or Macro feature promotion
+- reserve `Ver05` for the point at which an M6 proposal passes its evidence gate, receives explicit human approval, is implemented and validated, and is accepted by ChatGPT
+
+Reason:
+
+The repository has undergone a material structural cleanup that deserves a clean branch boundary, while M1–M5 acceptance alone does not represent completed runtime adoption of the Macro plan. Version promotion must reflect accepted behavior, not only planning or offline tooling.
+
+## DEC-20260721-011: Active repository paths are separated from history
+
+Date: 2026-07-21
+Status: accepted directory model
+Related work: Ver04-v3 repository cleanup
+
+### Decision
+
+Keep current work in a small set of purpose-specific areas:
+
+- application and validation: `src/`, `tools/`, `scripts/`, `tests/`
+- AI control: `docs/operations/ai-orchestration/`
+- Product/Macro design: `docs/operations/strategy/`
+- current operator runbook: `docs/operations/manual-preview/`
+- implementation contracts and optional strict tooling: `chatgpt/specs/`, `chatgpt/tasks/`, `chatgpt/templates/`
+- generated local artifacts: `local/`
+
+Store completed or superseded material only under `_archive/`, `docs/operations/history/`, orchestration `history/`, strategy `archive/`, or `chatgpt/specs/archive/`.
+
+Retire duplicate routes including the former top-level operations directory, `Branch_Command/`, `chatgpt/analysis/`, the old deploy directory, the handoff mirror, and standalone compatibility prompt files.
+
+### Reason
+
+Several generations of plans, task records, runbooks, reports, compatibility pointers, and generated outputs were mixed into current navigation. This caused stale version labels and obsolete next-task instructions to appear active.
+
+### Consequences
+
+- new AI contexts use only `AGENTS.md` and `START_HERE.md` initially
+- README files describe directory role rather than historical operating state
+- history is preserved but is never a default read path
+- current state is not duplicated into handoff or compatibility files
+- removed directories are not recreated
+- Product, trading, runtime, notification, and safety behavior are unchanged by this cleanup

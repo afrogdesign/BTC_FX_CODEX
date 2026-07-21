@@ -1,27 +1,9 @@
-# analysis reports
+# Historical Analysis Reports
 
-更新日: 2026-05-26 JST
+status: archived snapshot
 
-このフォルダは、現役の分析レポート棚です。
-各レポート族の最新 1 本だけを置き、ChatGPT は `report_hub_latest.md` から必要な raw report を開きます。
+This directory preserves analysis reports that were once treated as a current report shelf.
 
-## 置くもの
+It is no longer an active report-discovery location. Current generated reports use `local/reports/`.
 
-- `market_map_effectiveness_YYYYMMDD.md`
-- `market_map_readiness_YYYYMMDD.md`
-- `operational_focus_YYYYMMDD.md`
-- `relaxation_candidates_YYYYMMDD.md`
-- `phase1b_promotion_candidates_YYYYMMDD.md`
-- `paper_opportunity_diagnostics_YYYYMMDD.md`
-- `paper_entry_sl_wait_redesign_YYYYMMDD.md`
-- `notified_rr_to_entry.md`
-- `notified_rr_to_entry_orderbook_ask_heavy.md`
-- `rr_to_confidence.md`
-
-## ルール
-
-- dated report は各族の最新 1 本だけをここに残す。
-- 古い dated report は `../archive/analysis/` へ移す。
-- evergreen 比較レポートはここに残してよい。
-- `market_map_readiness` は常用棚ではなく dormant 診断。market_map ロジック刷新時だけ更新し、普段は stale 警告対象にしない。
-- ここは ChatGPT の分析メモ置き場ではない。設計メモは `../../chatgpt/analysis/` を使う。
+Read an item here only when a named historical review requires the exact report family and date. Do not use this directory to select current work, infer current versions, or restore former retention rules.

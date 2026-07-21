@@ -375,3 +375,56 @@ Do not retask for:
 - no raw exchange export commit
 - no unapproved `paper_positions.csv` integration
 - no unsupported gate, scoring, threshold, classifier, or phase promotion
+
+
+## 10. Product-first execution economy
+
+This section supersedes `2A. Canonical task-manifest route` where they conflict.
+
+### Default route
+
+```text
+ChatGPT fixes the smallest useful product scope
+→ one compact Codex implementation task
+→ matching tests and one task-scoped diff check
+→ one compact text report
+→ ChatGPT directly reviews acceptance-critical evidence through MCP
+→ accept, one material FIX, or human decision
+```
+
+Machine manifests, rendered launchers, JSON reports, and report self-validation are optional. Use them only when they add evidence that direct scope, test, diff, and commit review cannot provide at lower cost.
+
+### Pre-Codex cost gate
+
+Before creating a Codex task, ChatGPT answers:
+
+1. Can ChatGPT complete this deterministically through MCP?
+2. Is all product and safety judgment already resolved?
+3. Can implementation, matching tests, required fixture, short docs, validation, and commit fit one coherent task?
+4. Does every requested validation add distinct acceptance evidence?
+
+If the first answer is yes, do not use Codex. If the second or third answer is no, fix the scope first. If the fourth answer is no, remove the redundant validation.
+
+### Credit and retask limits
+
+- use one Codex task per coherent implementation scope
+- do not split source, matching tests, required fixture, short task docs, and commit into separate tasks
+- do not issue a review-only Codex task for evidence available through MCP
+- do not retask for report formatting, JSON shape, field order, wording, or optional-schema alignment
+- do not create a report-validation loop or a task whose main output is another validated report
+- allow at most one minimal FIX after implementation, and only for an acceptance-critical defect
+- when a second process-only correction appears necessary, abandon that process and revert to the compact route
+- when orchestration effort reaches the size of the underlying product change, stop and simplify before continuing
+
+### Review priority
+
+Review in this order:
+
+1. product behavior and user value
+2. safety and scope
+3. changed source and matching tests
+4. required CLI or artifact evidence
+5. commit lineage when acceptance-critical
+6. report presentation
+
+Only items 1 through 5 may normally block acceptance. Item 6 is never, by itself, a reason to spend another Codex task.

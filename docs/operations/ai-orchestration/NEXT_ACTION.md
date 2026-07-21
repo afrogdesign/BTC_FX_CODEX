@@ -1,49 +1,43 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-GENERATED-REPORTS-DIRECTORY-MIGRATION`
+- current_work_id: `BTCFX-20260721-VER04-V3-REPO-CLEANUP-CHECKPOINT`
 - mode: `BOUNDED_CODEX`
-- expected_branch: `Ver04-v2`
-- active_spec: `chatgpt/specs/active/20260721_generated_reports_directory_migration.md`
-- task_manifest: none
-- status: ready for implementation
+- source_branch: `Ver04-v3` (created from cleanup base `3db0399`)
+- target_branch: `Ver04-v3`
+- active_spec: `chatgpt/specs/active/20260721_ver04_v3_repo_structure_cleanup_checkpoint.md`
+- status: ready for ChatGPT MCP review
 - push: none
 
 ## Goal
 
-Migrate the active generated-report contract to `local/reports/`, then remove the obsolete top-level operations directory.
+Review the completed MCP repository cleanup checkpoint on `Ver04-v3` through ChatGPT MCP acceptance, without starting Product or M6 work.
 
 ## Required result
 
-- active source, tests, scripts, fixtures, and current docs use `local/reports`
-- report writers create missing directories
-- tracked historical report files move to `_archive/legacy_operations_materials_20260721/reports_snapshot/`
-- ignored/untracked generated reports remain local/uncommitted and may be moved to `local/reports`
-- retired progress tooling is archived or removed after caller check
-- no active fallback or dual-write to the former output area
-- one local commit
+- actual branch and cleanup commit recorded from local git
+- unrelated dirty working tree preserved
+- duplicate decision heading corrected to `DEC-20260721-010`
+- active removed-path search and canonical path checks pass
+- bounded shell and focused unit-test validation recorded
+- generated `local/` and `logs/` artifacts remain unstaged
+- one local cleanup commit is ready for review
+- push remains none
+
+## Scope
+
+Repository structure, documentation, history placement, README accuracy, and cleanup checkpoint only.
+
+Do not change Product logic, trading behavior, gates, scoring, thresholds, classifiers, runtime, launchd, mail, notifications, private endpoints, or M6 authorization.
 
 ## Read
 
 1. `AGENTS.md`
 2. `docs/operations/ai-orchestration/START_HERE.md`
 3. active spec
-4. active files containing the former output-area path
-5. matching tests
-6. current git status and tracked/untracked classification under the former report directory
+4. current git branch, HEAD, status, and cleanup diff
 
-Do not broadly read historical files merely because they contain the old path.
+## Completion
 
-## Validation
+The compact report is returned and written exactly once to the required outbox. ChatGPT performs the final MCP acceptance review.
 
-Use the active spec's matching test set, one temporary-directory creation smoke, shell syntax check for changed scripts, active-reference search, and task-scoped `git diff --check`.
-
-No heavy replay, runtime task, mail, notification, launchd, or frozen-repo operation.
-
-## Safety
-
-- preserve unrelated dirty changes
-- do not commit generated reports
-- no reset、restore、checkout、clean、or stash manipulation
-- no trading logic、gate、threshold、classifier、scoring、runtime、mail、or notification change
-
-This file contains exactly one current task.
+This thread remains dedicated to repository cleanup.
