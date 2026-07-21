@@ -38,7 +38,7 @@ Weak, stale, discontinuous, or one-sided evidence must remain explicit and must 
 | M5 | bounded champion/challenger proposal engine | accepted |
 | M6 | approved proposal adoption | not started / not authorized |
 
-M1–M5 acceptance created analysis, evidence, local UI-shadow, and proposal foundations. It did not by itself complete normal autonomous operation.
+M1–M5 created analysis, evidence, local UI-shadow, and proposal foundations. They did not by themselves authorize installed recurring operation.
 
 ## Two-lane route
 
@@ -53,12 +53,12 @@ Sequence and status:
 ```text
 M-OPS1 dedicated current snapshot and daily report source — accepted at 89bd338
 → M-OPS2 chronological history and reliability continuity — accepted at dea0e33
-→ M-OPS3 chart-first operator artifact — current
-→ M-OPS4 separate runtime/schedule enablement
-→ M-OPS5 autonomous health and stale-data status
+→ M-OPS3 chart-first operator artifact — accepted at 09330b9
+→ M-OPS4 separate runtime/schedule enablement — awaiting explicit human-approved RUNTIME_TASK
+→ M-OPS5 autonomous health and stale-data status — not started
 ```
 
-This lane is the current priority.
+The current priority is the approval boundary, not another source rewrite.
 
 ### Secondary lane: improvement and adoption
 
@@ -78,9 +78,9 @@ accumulated accepted evidence
 → separate adoption/runtime task
 ```
 
-The secondary lane must not block unfinished M-OPS work.
+The secondary lane must not replace M-OPS4 authorization or M-OPS5 completion.
 
-## Accepted M-OPS source checkpoints
+## Accepted M-OPS checkpoints
 
 ### M-OPS1
 
@@ -103,30 +103,59 @@ The secondary lane must not block unfinished M-OPS work.
 - identifiable level transition events
 - immutable complete artifacts, legacy v1 preservation, and atomic latest summary
 
-Do not reopen either accepted source without a concrete contradiction.
+### M-OPS3
 
-## Current source task
+- checkpoint: `09330b9`
+- command: `render-macro-structure-operator`
+- exact latest M-OPS1 and M-OPS2 v2 source selection
+- final structural checkpoint and latest reevaluation enforcement
+- explicit public 15-minute OHLCV and no-future closed-candle validation
+- final close/current-price agreement
+- deterministic self-contained v2 chart-first artifact
+- all high/medium zones including non-nearest support/resistance
+- low/insufficient zone non-promotion
+- complete zone evidence and categorized recent history
+- truthful display-level traces
+- immutable complete artifacts and atomic latest summary
+- macro-only, report-only, no tactical or execution implication
 
-Active spec:
+Reviewed evidence:
 
-- `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
+- `local/reports/macro_structure/mops3_review/`
+- accepted latest artifact: `operator_3f09d915f61d0183d51c`
 
-Work ID:
+Do not reopen accepted M-OPS1–M-OPS3 without a concrete contradiction.
 
-- `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
+## Current transition: M-OPS4 approval
 
-Expected result:
+There is no active implementation spec.
 
-- new `render-macro-structure-operator` route;
-- exact latest M-OPS1 snapshot and M-OPS2 v2 history selection;
-- explicit local public 15-minute OHLCV input;
-- closed-candle/no-future validation;
-- self-contained chart-first HTML with inline SVG;
-- high/medium reliable macro zones and current structural status;
-- targets, obstruction, volatility, activation, freshness, continuity, and recent history;
-- complete immutable operator artifacts and atomic latest summary;
-- macro-only, report-only, no tactical or execution implication;
-- no live fetch, delivery, production UI, runtime, or policy change.
+M-OPS4 requires an explicit human-approved `RUNTIME_TASK` before:
+
+- reading, editing, or running the frozen runtime repo;
+- inspecting or changing installed launchd/plist/cron/schedule configuration;
+- installing a recurring macro pipeline.
+
+After explicit approval, one bounded task may:
+
+1. inspect the actual installed target and existing schedule;
+2. confirm the runtime repo/path rather than assuming it;
+3. connect accepted commands in order:
+   - `run-macro-structure-daily`
+   - `run-macro-structure-history`
+   - `render-macro-structure-operator`;
+4. enable one report-only cadence;
+5. preserve rollback and unrelated configuration;
+6. verify target-specific execution and generated local artifacts;
+7. leave mail, notification, production policy, private/account/order access, and automatic orders unchanged.
+
+M-OPS4 source acceptance does not automatically authorize M-OPS5 or production adoption.
+
+## M-OPS5 boundary
+
+M-OPS5 begins only after M-OPS4 acceptance as a separate source task.
+
+It must expose success/failed/stale/insufficient status, input coverage, cutoff, artifact location, zone counts, continuity errors, and schema/method versions without triggering delivery or execution.
 
 ## M5 boundary
 
@@ -137,11 +166,11 @@ Accepted M5 result:
 - recommendation: `continue_shadow_collection`
 - production mutation: none
 
-This valid fail-closed result does not imply that macro operation should remain disabled. M5 is rerun only after its documented trigger and never as part of M-OPS3.
+This fail-closed result does not invalidate accepted M-OPS work. M5 is rerun only after its documented trigger.
 
 ## M6 boundary
 
-M6 requires one proposal-eligible challenger, adequate evidence, one bounded proposal, and explicit human approval. It is not required to operationalize already accepted M1–M4 behavior through M-OPS.
+M6 requires one proposal-eligible challenger, adequate evidence, one bounded proposal, and explicit human approval. It is not required to operationalize already accepted M-OPS behavior.
 
 ## Human involvement
 
@@ -151,7 +180,7 @@ No recurring human input is required for:
 - structure and reliable-level calculation
 - snapshot and history generation
 - local chart-first artifact generation
-- health and stale-data status
+- health and stale-data status after setup
 
 Explicit human approval is required for:
 
@@ -173,6 +202,8 @@ M route is not complete until:
 - autonomous health/status is available;
 - stale and insufficient states remain explicit;
 - current docs and operator runbook match actual behavior.
+
+The first three conditions are accepted. Runtime cadence and autonomous health remain.
 
 ## Canonical references
 

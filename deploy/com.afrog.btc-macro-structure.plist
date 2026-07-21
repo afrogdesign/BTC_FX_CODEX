@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.afrog.btc-macro-structure</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/.venv312/bin/python</string>
+		<string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/tools/run_macro_structure_service.py</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict><key>Hour</key><integer>1</integer><key>Minute</key><integer>10</integer></dict>
+		<dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>10</integer></dict>
+		<dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>10</integer></dict>
+		<dict><key>Hour</key><integer>13</integer><key>Minute</key><integer>10</integer></dict>
+		<dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>10</integer></dict>
+		<dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>10</integer></dict>
+	</array>
+	<key>StandardOutPath</key>
+	<string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/runtime/macro_structure_service.launchd.out</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/marupro/CODEX/100_MCP_Server/btc_monitor/logs/runtime/macro_structure_service.launchd.err</string>
+</dict>
+</plist>

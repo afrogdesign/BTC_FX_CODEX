@@ -1,134 +1,108 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
-- mode: `BOUNDED_CODEX_IMPLEMENTATION`
+- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE`
+- mode: `RUNTIME_TASK`
 - branch: `Ver04-v3`; confirm from local git before execution
-- accepted_base: `dea0e33`
-- active_spec: `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
-- status: ready for source implementation
+- accepted_base: `09330b9`
+- active_spec: `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
+- status: explicitly approved for implementation and installed service activation
+- target_label: `com.afrog.btc-macro-structure`
 - push: none
 
 ## Current action
 
-Implement M-OPS3: one deterministic self-contained chart-first local operator artifact.
+Implement and activate M-OPS4 as one bounded report-only LaunchAgent.
 
-M-OPS1 and M-OPS2 are accepted. Do not reopen their analysis, reliability, identity, freshness, chronology, or publication semantics unless a concrete source/input-contract contradiction is demonstrated.
+The user explicitly authorized installed runtime/schedule inspection and change on 2026-07-21.
 
-## Required product behavior
-
-The new route must:
-
-1. resolve one complete latest M-OPS1 direct-child immutable snapshot;
-2. resolve one complete latest M-OPS2 v2 direct-child immutable history artifact;
-3. verify that history contains the selected current snapshot run;
-4. read one explicit local public 15-minute OHLCV CSV;
-5. exclude candles after the snapshot cutoff;
-6. verify the latest eligible 15-minute close against snapshot current price;
-7. render a self-contained chart-first HTML with inline SVG;
-8. show high/medium macro support and resistance zones with level identity, role, reliability, and lifecycle;
-9. show current structure/location, targets, obstruction, volatility, activation, freshness, and continuity;
-10. show bounded recent history changes with stable level IDs;
-11. keep stale, discontinuous, and insufficient states prominent;
-12. publish one complete deterministic immutable artifact set and atomic latest summary;
-13. remain macro-only, report-only, and independent from delivery, runtime, policy, and execution behavior.
-
-## Command and outputs
-
-Command:
+Connect accepted operations in this order:
 
 ```text
-render-macro-structure-operator
+public 15m / 1h / 4h OHLCV
+→ run-macro-structure-daily
+→ run-macro-structure-history
+→ render-macro-structure-operator
 ```
 
-Default output root:
+## Accepted source state
 
-```text
-local/reports/macro_structure/operator/
-```
+- M-OPS1 accepted at `89bd338`
+- M-OPS2 accepted at `dea0e33`
+- M-OPS3 accepted at `09330b9`
 
-Minimum generated files:
+Do not reopen their analysis, reliability, history, chart, or publication semantics without a concrete command-breaking contradiction.
 
-```text
-<operator-id>/macro_structure_operator.html
-<operator-id>/macro_structure_operator.json
-<operator-id>/macro_structure_operator.md
-<operator-id>/run_manifest.json
-latest.json
-```
+## Runtime target
 
-Generated outputs remain uncommitted.
+New target only:
 
-## Implementation boundary
+- label: `com.afrog.btc-macro-structure`
+- primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- wrapper: `tools/run_macro_structure_service.py`
+- repository plist: `deploy/com.afrog.btc-macro-structure.plist`
+- installed plist: `~/Library/LaunchAgents/com.afrog.btc-macro-structure.plist`
+- compact status: `logs/runtime/macro_structure_service_last_result.json`
 
-Follow the active spec.
+Schedule in JST:
 
-Default implementation area:
+- 01:10
+- 05:10
+- 09:10
+- 13:10
+- 17:10
+- 21:10
 
-- new `src/feedback/macro_structure_operator_artifact.py`
-- minimal parser/dispatch wiring in `tools/log_feedback.py`
-- new focused M-OPS3 test module
-- matching M-OPS3 CLI tests in `tests/test_log_feedback.py`
-- the active spec for one short factual implementation note
-- one small deterministic fixture helper when clearly needed
+No RunAtLoad or KeepAlive.
 
-The accepted M4 renderer may be read and pure SVG/layout patterns reused. Do not depend on M3 inputs, tactical candidate inputs, or signal IDs.
+## Execution boundary
 
-Do not edit accepted M1, M-OPS1, or M-OPS2 source unless an input-contract defect is demonstrated and reported first.
+This approved task may:
 
-Do not edit production analysis, production UI, notification, mail, delivery, runtime, gate, threshold, scoring, classifier, account, position, or order files.
+1. inspect installed matching LaunchAgents and the frozen repo read-only;
+2. implement the dedicated public-data runtime wrapper;
+3. add the target-only repository plist and focused tests;
+4. commit the implementation locally;
+5. back up only an existing target plist;
+6. boot out/bootstrap/kickstart only the target label;
+7. perform one bounded launchd-triggered live-public-data run;
+8. verify fresh M-OPS1, M-OPS2, and M-OPS3 artifacts;
+9. record rollback and runtime state.
 
-## Validation
+Do not edit or run source/tests in the frozen runtime repo. The new service must point to the primary repo.
 
-Use only:
+## Required safety
 
-- matching M-OPS3 unittest module
-- matching M-OPS3 CLI parser/dispatch tests
-- one bounded deterministic fixture smoke
-- one identical repeat for idempotence
-- task-scoped `git diff --check`
-
-Do not run full suite, live fetch, M5, broad replay, installed runtime/schedule, browser automation, screenshot comparison, or frozen runtime repo.
+- report-only
+- no automatic order
+- no private/account/position/order endpoint
+- no mail or notification integration
+- no production gate, threshold, scoring, classifier, or policy change
+- no existing monitor, P8, review-form, feedback, or AI-post-review service change
+- no M5/M6
+- no version promotion
 
 ## Acceptance path
 
 After Codex reports completion, ChatGPT reviews:
 
-- changed source
-- focused tests
-- actual CLI parser/dispatch
-- exact snapshot/history selection
-- M-OPS2 v2 and current-snapshot inclusion
-- 15-minute closed-candle/no-future behavior
-- chart-first HTML order
-- reliable zone geometry and evidence labels
-- stale/discontinuous/insufficient visibility
-- chronological change panel
-- deterministic complete artifact publication
-- privacy, scope, and safety
+- wrapper source;
+- focused tests;
+- plist contract;
+- installed target contract;
+- target-only backup/rollback evidence;
+- launchd result status;
+- latest snapshot/history/operator artifacts;
+- scope and safety.
 
 If accepted:
 
 ```text
-M-OPS3 accepted
-→ request explicit human approval before M-OPS4 runtime/schedule enablement
+M-OPS4 accepted
+→ define M-OPS5 autonomous health/stale-status source task
 ```
 
-M-OPS4 is a separate `RUNTIME_TASK`. Source acceptance does not authorize installed execution.
+## No-repeat boundary
 
-## P and M5 boundaries
+Do not repeat M-OPS1–M-OPS3 implementation or acceptance review unless source changes or a contradictory artifact appears.
 
-- P readiness remains parked on the absent complete MEXC export batch; do not repeat the accepted review.
-- M5 remains accepted and secondary; do not rerun it during M-OPS3.
-- M6 remains unauthorized.
-
-## Safety
-
-- report-only
-- no automatic order
-- no private/account/order endpoints
-- no live fetch
-- no tactical execution implication
-- no mail or notification change
-- no runtime, launchd, plist, cron, or schedule change
-- no production gate, threshold, scoring, classifier, or policy change
-- no frozen runtime repo access
+Do not repeatedly bootstrap or kickstart an unchanged failed target. Collect the exact target-specific cause, perform at most one bounded rollback, and report partial/blocked.

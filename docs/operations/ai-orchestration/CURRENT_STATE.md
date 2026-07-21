@@ -12,17 +12,19 @@ last_updated: 2026-07-21
 - accepted M5 implementation checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
 - accepted M-OPS1 checkpoint: `89bd338`
 - accepted M-OPS2 checkpoint: `dea0e33`
+- accepted M-OPS3 checkpoint: `09330b9`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
+- active spec: `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
+- current transition: M-OPS4 explicitly approved for bounded implementation and installed service activation
+- target label: `com.afrog.btc-macro-structure`
 - safety: report-only / human-decided / no automatic order
 - push: none
 
-MCP does not independently expose git branch, HEAD, commit objects, or the complete dirty tree. Branch and commit locators come from bounded local-git reports; acceptance-critical source, tests, CLI routes, specs, state paths, and artifacts are reviewed directly through MCP.
+MCP does not independently expose git branch, HEAD, commit objects, installed launchctl state, or the complete dirty tree. Branch/commit/runtime evidence must be confirmed from bounded local execution; acceptance-critical source, tests, specs, state paths, and generated artifacts are reviewed directly through MCP.
 
 ## Product / P state
 
-- P1–P7 accepted
-- P8 evidence pipeline accepted and collecting evidence
+- P1–P8 accepted
 - P9 blocked pending adequate actual-backed evidence and human approval
 
 ### P no-repeat boundary
@@ -49,8 +51,6 @@ Canonical decision: `DEC-20260721-012`.
 
 The primary M objective is autonomous higher-timeframe market-structure understanding from public data.
 
-Completion route:
-
 ```text
 public 15m / 1h / 4h OHLCV
 → stable support/resistance identity
@@ -60,6 +60,8 @@ public 15m / 1h / 4h OHLCV
 → next target and obstruction
 → chronological evidence history
 → chart-first operator artifact
+→ installed report-only cadence
+→ autonomous health/status
 ```
 
 Private actual-trade evidence is not a prerequisite for market-structure operation. It remains relevant to human outcome evaluation and production adoption decisions.
@@ -81,7 +83,7 @@ Canonical decision:
 - M5 accepted: bounded champion/challenger proposal engine
 - M6 not started and not authorized
 
-M5 remains secondary. Its accepted result remains:
+Accepted M5 result remains:
 
 - winner: `none`
 - recommendation: `continue_shadow_collection`
@@ -102,17 +104,14 @@ Accepted behavior:
 - explicit normalized evaluation time;
 - stable M1 level identity and prior-only evidence;
 - original level side separated from current lifecycle role;
-- canonical structure/location, nearest zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`;
+- structure/location, reliable zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`;
 - complete immutable run artifacts plus atomic compact latest summary;
 - byte-conflict-safe deterministic publication;
-- no private actual-trade dependency;
-- no runtime, mail, notification, policy, or order mutation.
+- no private actual-trade, runtime, delivery, policy, or order mutation.
 
 Reviewed evidence:
 
 - `local/reports/macro_structure/mops1_final_review/`
-
-Do not reopen M-OPS1 without a concrete source or input-contract defect.
 
 ## Accepted M-OPS2
 
@@ -124,65 +123,104 @@ Command:
 
 Accepted behavior:
 
-- reads only complete direct-child M-OPS1 immutable runs;
-- preserves every evaluation run;
-- separates freshness-only reevaluations from unique structural checkpoints;
-- uses earliest evaluation as canonical structural source and latest evaluation for current freshness/status;
-- exposes stable `level_id` continuity, reliability changes, role/lifecycle changes, geometry changes, evidence deltas, absence, reappearance, and `absent_from_latest`;
-- does not infer permanent retirement;
-- validates source identity, timestamps, public/report-only boundary, and unique non-empty level IDs;
-- publishes deterministic v2 immutable history artifacts and atomic latest summary;
-- preserves legacy v1 artifacts alongside v2;
-- keeps transition events identifiable by `level_id`;
+- complete direct-child M-OPS1 source validation;
+- every evaluation plus unique structural checkpoints;
+- earliest canonical structural source and latest freshness/status reevaluation separation;
+- stable level identity, reliability, role, lifecycle, geometry, evidence deltas, absence, reappearance, and latest absence;
+- deterministic v2 immutable history artifacts and atomic latest summary;
+- legacy v1 preservation;
+- identifiable level transition events;
 - no live fetch, private input, runtime, delivery, policy, or order mutation.
 
 Reviewed evidence:
 
 - `local/reports/macro_structure/mops2_review/history/`
-- accepted latest v2 artifact: `history_037b8f5e06b11d7cfa5d`
-- legacy v1 artifacts remain untouched
+- accepted v2 artifact: `history_037b8f5e06b11d7cfa5d`
 
-Do not reopen M-OPS2 without a concrete source or artifact contradiction.
+## Accepted M-OPS3
+
+Accepted at `09330b9`.
+
+Command:
+
+- `render-macro-structure-operator`
+
+Accepted behavior:
+
+- exact direct-child latest M-OPS1 snapshot and M-OPS2 v2 history selection;
+- selected snapshot is the latest evaluation of the final structural checkpoint;
+- explicit public 15-minute OHLCV and no-future closed-candle filtering;
+- current-price agreement;
+- deterministic self-contained v2 HTML/SVG, JSON, Markdown, manifest, and atomic latest summary;
+- latest 96 eligible 15-minute candles;
+- all accepted high/medium support and resistance zones including non-nearest zones;
+- low/insufficient zones not promoted;
+- complete zone evidence without reliability/lifecycle recalculation;
+- categorized structure, reliability, role, lifecycle, geometry, absence, reappearance, and stale/discontinuous history;
+- display-level source traces;
+- visible stale, continuity, data-quality, insufficient, checkpoint, and safety state;
+- macro-only surface with no tactical Entry/SL/TP or execution implication;
+- no live fetch, production UI, mail, notification, runtime, policy, or order mutation.
+
+Reviewed evidence:
+
+- `local/reports/macro_structure/mops3_review/`
+- accepted latest v2 artifact: `operator_3f09d915f61d0183d51c`
+
+Archived accepted spec:
+
+- `chatgpt/specs/archive/20260721_macro_structure_chart_first_operator_artifact.md`
+
+Do not reopen M-OPS1–M-OPS3 without a concrete source or artifact contradiction.
+
+## Authorized M-OPS4
+
+The user explicitly approved actual service implementation on 2026-07-21.
+
+Work ID:
+
+- `BTCFX-20260721-MACRO-STRUCTURE-RUNTIME-SERVICE-ENABLE`
+
+Active spec:
+
+- `chatgpt/specs/active/20260721_macro_structure_runtime_service_enable.md`
+
+Approved target:
+
+- new label only: `com.afrog.btc-macro-structure`
+- primary repo runtime
+- public OHLCV only
+- M-OPS1 → M-OPS2 → M-OPS3
+- JST schedule: 01:10, 05:10, 09:10, 13:10, 17:10, 21:10
+- one compact atomic runtime status
+- one bounded launchd-triggered live-public-data acceptance run
+
+The task may inspect the frozen repo read-only to confirm installed target boundaries. It must not edit or run frozen-repo source/tests and must not deploy the new service there.
 
 ## Current M route
 
 ```text
 M-OPS1 current snapshot and daily report source — accepted
 → M-OPS2 chronological history and confidence continuity — accepted
-→ M-OPS3 chart-first operator artifact — current
-→ M-OPS4 separately approved runtime/schedule enablement
-→ M-OPS5 autonomous health and stale-data status
-```
-
-Secondary improvement lane remains:
-
-```text
-accumulated evidence
-→ periodic bounded M5 refresh
-→ optional one-candidate M6 proposal
-→ explicit human approval
-→ source-only shadow and validation
-→ separate runtime adoption
+→ M-OPS3 chart-first operator artifact — accepted
+→ M-OPS4 runtime/schedule enablement — explicitly approved and current
+→ M-OPS5 autonomous health and stale-data status — not started
 ```
 
 ## Current selected action
 
-Implement M-OPS3 under:
+Implement and activate the dedicated report-only macro LaunchAgent under the active spec.
 
-- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
-- active spec: `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
+Acceptance requires:
 
-Expected product result:
-
-- one deterministic self-contained local HTML/SVG operator artifact;
-- latest accepted M-OPS1 snapshot and M-OPS2 v2 history as the only macro sources;
-- explicit local public 15-minute OHLCV for the chart;
-- current price and reliable macro zones shown first;
-- structure, location, targets, obstruction, volatility, activation, freshness, continuity, and recent history visible;
-- stale, discontinuous, and insufficient states shown prominently;
-- macro-only surface with no tactical Entry/SL/TP or execution implication;
-- immutable complete artifact set plus atomic latest summary;
-- no live fetch, delivery, production UI, runtime, policy, or order changes.
+- local implementation commit;
+- target-only installed plist and rollback evidence;
+- loaded primary-repo contract;
+- all six schedule entries;
+- exactly one bounded kickstart;
+- successful launchd-triggered snapshot/history/operator artifacts;
+- compact success status;
+- no unrelated runtime, mail, notification, policy, private endpoint, or order change.
 
 ## Human involvement boundary
 
@@ -190,20 +228,22 @@ No recurring human input is required after setup for public OHLCV collection, st
 
 Explicit human approval remains required for:
 
-- installed runtime/schedule enablement
 - live mail or notification integration
 - production gates, thresholds, scoring, classifiers, or policy
 - M6 adoption
 - automatic order behavior
 - phase/version promotion
 
+M-OPS4 runtime approval is granted only for the target and boundaries recorded above.
+
 ## Version and safety policy
 
-- remain on `Ver04-v3` for M-OPS source, local artifacts, and planning
-- M-OPS completion does not automatically declare `Ver05`
+- remain on `Ver04-v3`
+- M-OPS runtime activation does not automatically declare `Ver05`
 - generated evidence remains ignored and uncommitted under `local/`
 - no raw exchange export commit
 - no automatic order
 - no private/account/order endpoints
-- no unapproved notification, mail, runtime, launchd, gate, threshold, scoring, or classifier change
-- no frozen runtime repo access without an explicit `RUNTIME_TASK`
+- no mail or notification change
+- no production gate, threshold, scoring, or classifier change
+- no unrelated LaunchAgent change

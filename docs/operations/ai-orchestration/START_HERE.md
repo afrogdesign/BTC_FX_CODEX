@@ -17,12 +17,12 @@ Then read only what the request needs.
 |---|---|
 | overall plan or next-area judgment | `MASTER_PLAN.md` |
 | accepted current state | `CURRENT_STATE.md` |
-| exactly one current task | `NEXT_ACTION.md` |
+| exactly one current task or approval boundary | `NEXT_ACTION.md` |
 | Product planning | `PRODUCT_IMPLEMENTATION_ROUTE.md` |
 | Macro route | `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md` |
 | autonomous macro completion | `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` |
 | M5/M6 improvement and adoption | `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md` |
-| implementation / FIX / acceptance | one file under `chatgpt/specs/active/` |
+| implementation / FIX / acceptance | one file under `chatgpt/specs/active/` when present |
 | ChatGPT/Codex execution | `AI_WORKFLOW.md` |
 | stable safety, git, runtime, validation | `CONTROL.md` |
 | accepted checkpoints | `MILESTONES.md` |
@@ -38,7 +38,7 @@ Read only the delta:
 - matching tests
 - CLI parser/dispatch when relevant
 - fresh artifact
-- active-spec note
+- active-spec note when present
 - task-related diff
 
 Do not reread stable planning or workflow docs.
@@ -76,20 +76,22 @@ Current high-level state:
 
 - P1–P8 accepted; P9 blocked by absent actual-backed evidence
 - M1–M5 research/tooling accepted
-- M-OPS1 current snapshot source accepted at `89bd338`
-- M-OPS2 chronological history accepted at `dea0e33`
-- M-OPS3 chart-first operator artifact is the current implementation task
+- M-OPS1 accepted at `89bd338`
+- M-OPS2 accepted at `dea0e33`
+- M-OPS3 accepted at `09330b9`
+- M-OPS4 runtime/schedule enablement awaits explicit human-approved `RUNTIME_TASK`
+- M-OPS5 not started
 - M6 not started and not authorized
 - A1/A2 accepted, A3 superseded, A4 not planned
 
 ## 3. Mandatory current-state handoff
 
-Before proposing or starting a new task, read `CURRENT_STATE.md` and `NEXT_ACTION.md` when they contain an accepted blocker, no-repeat boundary, or active spec.
+Before proposing or starting a new task, read `CURRENT_STATE.md` and `NEXT_ACTION.md` when they contain an accepted blocker, no-repeat boundary, or approval boundary.
 
 The first status report must state:
 
 1. the latest accepted checkpoint locator;
-2. the current blocker or active implementation;
+2. the current blocker, active implementation, or approval boundary;
 3. the exact event that permits the next transition;
 4. which accepted review must not be repeated.
 
@@ -109,20 +111,18 @@ Report:
 
 - the primary M objective is autonomous public-data macro structure operation;
 - private actual-trade data is not required to calculate support/resistance reliability;
-- M1–M5 are accepted foundations, not completion of autonomous operation;
-- M-OPS1 and M-OPS2 are accepted and must not be reopened without a concrete defect;
-- M-OPS3 is the current active source task;
-- M5 `winner=none` does not block operator artifact work;
-- current implementation follows `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` and the active M-OPS spec;
+- M1–M5 are accepted foundations;
+- M-OPS1–M-OPS3 are accepted and must not be reopened without a concrete contradiction;
+- M-OPS4 is not authorized until the user explicitly approves a bounded `RUNTIME_TASK`;
+- frozen runtime repo access, installed scheduling, launchd/plist/cron, mail, and notification changes remain prohibited until that approval;
+- M5 `winner=none` does not invalidate accepted M-OPS source/artifact work;
 - M5/M6 remains secondary and follows its separate plan only when improvement/adoption is being considered.
-
-Do not route general M work to `WAIT_FOR_EVIDENCE` or M5 refresh while an unfinished M-OPS phase exists.
 
 Canonical decision: `DEC-20260721-014`.
 
 ## 4. Current execution route
 
-Normal route:
+Normal source route:
 
 ```text
 ChatGPT fixes one useful scope
@@ -133,28 +133,32 @@ ChatGPT fixes one useful scope
 → accept, one material FIX, or human judgment
 ```
 
+Runtime route:
+
+```text
+accepted source and local artifacts
+→ explicit human RUNTIME_TASK approval
+→ inspect actual installed target
+→ one bounded runtime/schedule task
+→ target-specific verification and rollback evidence
+```
+
 Use direct MCP work for deterministic Markdown, spec, state, and review tasks that do not require local tests or git operations.
 
-Task manifests and JSON reports are optional strict tooling only. See `AI_OPERATIONS_STATUS.md`.
-
 ## 5. Macro completion order
-
-The controlling order is:
 
 ```text
 accepted M1–M4 capabilities
 → M-OPS1 current snapshot and local daily report — accepted
 → M-OPS2 chronological reliability continuity — accepted
-→ M-OPS3 chart-first operator artifact — current
-→ explicit human-approved M-OPS4 runtime/schedule enablement
-→ autonomous M-OPS5 health and stale-data reporting
+→ M-OPS3 chart-first operator artifact — accepted
+→ explicit human-approved M-OPS4 runtime/schedule enablement — awaiting approval
+→ M-OPS5 autonomous health and stale-data reporting
 → periodic M5 refresh only when triggered
 → optional M6 proposal and adoption
 ```
 
-Do not substitute M5 replay for unfinished M-OPS work.
-
-Human approval is not required for every public-data calculation. It is required for installed runtime/schedule changes, live delivery changes, production policy changes, and candidate adoption.
+Human approval is not required for public-data calculations or local artifacts. It is required for installed runtime/schedule changes, live delivery changes, production policy changes, and candidate adoption.
 
 ## 6. Repo boundary
 
@@ -169,7 +173,7 @@ ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch an
 
 ```text
 repo source, tests, generated artifacts
-→ active spec
+→ active spec when present
 → MASTER_PLAN and target route
 → CURRENT_STATE and NEXT_ACTION
 → CONTROL and AI_WORKFLOW
@@ -199,14 +203,14 @@ Read a historical file only when a current task identifies the exact evidence or
 |---|---|
 | `MASTER_PLAN.md` | overall plan and current priority |
 | `CURRENT_STATE.md` | accepted state, blocker, controlling interpretation |
-| `NEXT_ACTION.md` | exactly one current task |
+| `NEXT_ACTION.md` | exactly one current task or approval boundary |
 | `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` | completion route for automatic macro structure operation |
 | `M5_M6_EXECUTION_PLAN_20260721.md` | secondary challenger improvement and adoption route |
 | `CONTROL.md` | stable safety / git / runtime rules |
 | `AI_WORKFLOW.md` | shared execution and review process |
 | `MILESTONES.md` | major accepted checkpoints |
 | `DECISIONS.md` | durable decisions and supersession records |
-| active spec | current detailed implementation contract |
+| active spec | current detailed implementation contract when authorized |
 | `TASK_LEDGER.md` | historical Work ID lookup only |
 
 ## 10. Safety baseline
@@ -219,4 +223,4 @@ Read a historical file only when a current task identifies the exact evidence or
 - no unapproved runtime, launchd, mail, notification change
 - no raw exchange export commit
 - no unsupported gate, threshold, scoring, classifier change
-- no automatic Phase promotion or production adoption
+- no automatic phase promotion or production adoption

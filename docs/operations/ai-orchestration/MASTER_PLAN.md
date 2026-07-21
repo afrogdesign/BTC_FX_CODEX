@@ -104,17 +104,23 @@ Sequence and state:
 ```text
 M-OPS1 current snapshot and daily local report — accepted at 89bd338
 → M-OPS2 chronological history and reliability continuity — accepted at dea0e33
-→ M-OPS3 chart-first operator artifact — current
-→ M-OPS4 separate runtime/schedule enablement
-→ M-OPS5 autonomous status and stale-data health
+→ M-OPS3 chart-first operator artifact — accepted at 09330b9
+→ M-OPS4 separate runtime/schedule enablement — awaiting explicit human RUNTIME_TASK approval
+→ M-OPS5 autonomous status and stale-data health — not started
 ```
 
-Current active implementation:
+There is no active source implementation spec.
 
-- `chatgpt/specs/active/20260721_macro_structure_chart_first_operator_artifact.md`
-- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHART-FIRST-OPERATOR-ARTIFACT`
+M-OPS3 accepted command:
 
-M-OPS3 consumes accepted current snapshot/history and explicit public 15-minute OHLCV. It must remain local, deterministic, macro-only, and report-only.
+- `render-macro-structure-operator`
+
+Accepted local review evidence:
+
+- `local/reports/macro_structure/mops3_review/`
+- latest v2 artifact: `operator_3f09d915f61d0183d51c`
+
+M-OPS4 must not begin until the user explicitly authorizes inspection and change of the installed report-only runtime/schedule.
 
 ### 4.4 Secondary M5/M6 lane
 
@@ -153,21 +159,20 @@ Current order:
 
 ```text
 P remains parked on private input
-→ implement M-OPS3 chart-first local artifact
-→ focused tests and deterministic fixture
-→ ChatGPT MCP review
-→ accept or one bounded material FIX
-→ request explicit approval before M-OPS4 runtime/schedule work
+→ M-OPS1–M-OPS3 remain accepted and unchanged
+→ wait for explicit M-OPS4 RUNTIME_TASK approval
+→ inspect actual installed target only after approval
+→ perform one bounded report-only runtime/schedule task
+→ verify target-specific execution and rollback
+→ then define M-OPS5 health/status source as a separate phase
 ```
 
 Do not:
 
-- route current M work to `WAIT_FOR_EVIDENCE` while M-OPS is unfinished;
-- rerun M5 as part of M-OPS3;
-- require private actual trades for support/resistance or chart rendering;
-- rewrite accepted M1/M-OPS1/M-OPS2 semantics without a demonstrated defect;
-- mix source edits with runtime/schedule application;
-- connect M-OPS3 to notification, mail, production UI, tactical execution, or orders;
+- route current M work to M5 refresh while runtime approval is pending;
+- reopen accepted M1/M-OPS1/M-OPS2/M-OPS3 semantics without a demonstrated contradiction;
+- read, edit, or run the frozen runtime repo without explicit `RUNTIME_TASK` approval;
+- mix runtime/schedule work with mail, notification, production policy, or order behavior;
 - start M6 without one eligible challenger and explicit approval;
 - create new orchestration frameworks.
 
@@ -200,7 +205,7 @@ New context:
 3. `MASTER_PLAN.md` for planning
 4. `CURRENT_STATE.md` and `NEXT_ACTION.md`
 5. target route only
-6. active spec only for implementation
+6. active spec only when one is authorized and present
 
 Do not broadly scan history or archived plans.
 
@@ -218,6 +223,8 @@ M route completion requires:
 - separately approved and verified report-only runtime cadence;
 - autonomous health/status;
 - current docs and operator behavior agreement.
+
+M-OPS1–M-OPS3 satisfy the accepted source and local-artifact portion. M-OPS4 and M-OPS5 remain.
 
 ## 10. Safety and version boundary
 
