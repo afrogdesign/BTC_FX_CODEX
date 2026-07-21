@@ -6,8 +6,8 @@ last_updated: 2026-07-22
 
 - branch: `Ver04-v3` (latest reported locator)
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260722_macro_structure_health_runtime_integration.md`
-- current transition: connect completed M-OPS5 health generation to the existing M-OPS4 runtime wrapper
+- active spec: none for M-OPS5 runtime integration; accepted spec archived
+- current transition: M-OPS1 through M-OPS5 automatic macro operation is active on the existing runtime cadence
 - push: none
 - safety: report-only / human-decided / no automatic order
 
@@ -34,23 +34,18 @@ Installed runtime:
 - label: `com.afrog.btc-macro-structure`
 - schedule JST: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
 - current pipeline: public 15m/1h/4h OHLCV → snapshot → history → operator artifact
-- health integration is implemented but runtime acceptance remains partial after one launchd cycle published `inconsistent` with `snapshot_latest_symbol_mismatch`
+- health integration is accepted and active after the final launchd verification cycle
 - target remains report-only with no private input and no automatic order
 
 M-OPS5:
 
 - command: `check-macro-structure-health`
 - source and focused validation are complete at `dac7e8f`, with integration implementation at `aec7587` and compatibility fix at `0dbe9d0`
-- one target-only launchd cycle completed core M-OPS1–3 successfully; M-OPS5 published an inconsistent artifact because the M-OPS1 latest pointer omitted symbol
-- required integration: finalized runtime status → one read-only health command → deterministic health artifact
+- final target-only launchd cycle completed core M-OPS1–3 and published a `healthy` M-OPS5 artifact
+- required integration is active: finalized runtime status → one read-only health command → deterministic health artifact
 - no new LaunchAgent, schedule, public fetch, mail, notification, policy, or order path
 
 ## Current selected action
 
-Complete acceptance of:
-
-- work ID: `BTCFX-20260722-MACRO-STRUCTURE-HEALTH-RUNTIME-INTEGRATION`
-- mode: `RUNTIME_TASK`
-- active spec: `chatgpt/specs/active/20260722_macro_structure_health_runtime_integration.md`
-
-Acceptance remains blocked by the observed `snapshot_latest_symbol_mismatch`; do not repeat the consumed kickstart without explicit new runtime authorization.
+- no remaining M-OPS5 implementation task
+- respond only to a material runtime failure, incorrect operator output, safety violation, new P9 evidence, or explicit user request

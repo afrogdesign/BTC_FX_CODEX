@@ -89,3 +89,21 @@ If runtime acceptance fails, do not repeat the unchanged kickstart. Preserve the
 - the observed blocker was that the accepted M-OPS1 snapshot `latest.json` omitted `symbol` while the immutable snapshot contained and validated `BTC_USDT`
 - source compatibility fix `0dbe9d0` accepts that existing pointer omission while retaining strict validation for a non-empty mismatching symbol; no additional live cycle was authorized or performed
 - M-OPS5 runtime integration remains unaccepted and this spec remains active
+
+## Final runtime verification — accepted
+
+- verified HEAD: `269e683`
+- implementation: `aec7587`; M-OPS1 pointer compatibility fix: `0dbe9d0`
+- repository and installed plist SHA-256: `5e99a8538cbcc267cbbff89394b5c4d2aa06ff2ffb2bf315379d8557eea167cb`
+- loaded target: `com.afrog.btc-macro-structure`
+- unchanged JST schedule: `01:10`, `05:10`, `09:10`, `13:10`, `17:10`, `21:10`
+- one additional existing-target kickstart completed; no new service, bootstrap, plist change, or schedule change
+- runtime status: `logs/runtime/macro_structure_service_last_result.json`
+- snapshot: `run_b7dcf049ceff48ba3d92` / `macro_snapshot_b7dcf049ceff48ba3d92`
+- history: `history_13d735093dd7639335b5`
+- operator: `operator_2c78bfde0e97ad939912`
+- health: `health_c0213584d9f4f7b20e2e`, state `healthy`, latest `local/reports/macro_structure/health/latest.json`
+- immutable health artifact: `local/reports/macro_structure/health/health_c0213584d9f4f7b20e2e/`
+- health source fingerprint matched the finalized runtime status; operator HTML path was validated and present
+- M-OPS1 through M-OPS5 now run automatically on the existing six-time cadence
+- report-only, no private actual-trade input, no automatic order; notification delivery remains separate and disabled
