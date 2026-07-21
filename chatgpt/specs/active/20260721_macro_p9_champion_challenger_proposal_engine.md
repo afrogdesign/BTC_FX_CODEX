@@ -97,3 +97,7 @@ M1 validation comparison now uses only `recommendation_gate.validation_policy_me
 ## Implementation correction — bounded FIX-03 continuation
 
 FIX-03 now uses true cutoff-bounded snapshot replay, with the champion replay cached once per date and reused across challengers. Lightweight module/CLI validation is complete; heavy actual-bundle acceptance, the second full replay, and byte-identity verification are deferred to a separate task. M5 acceptance remains pending ChatGPT review.
+
+## Implementation correction — bounded FIX-04
+
+FIX-04 closes the rolling review blockers: split degradation now follows the direction of every guarded metric and missing split metrics fail closed; challenger summaries use only eligible candidate-specific rolling snapshots with no terminal/champion fallback; rolling snapshots retain sanitized candidate issue lineage; and champion snapshots require quality, required metrics, date concentration, and same-date alignment before comparison. Focused module/CLI tests and a lightweight deterministic full-orchestration fixture passed. Full actual-bundle acceptance, a second full replay, and actual four-output byte-identity acceptance were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
