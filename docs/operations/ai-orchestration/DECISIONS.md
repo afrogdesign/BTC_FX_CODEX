@@ -359,3 +359,62 @@ Canonical plan:
 Reason:
 
 This preserves fail-closed evidence integrity, prevents an unsupported M6 promotion, and avoids rewriting an already accepted M5 engine.
+
+
+## DEC-20260721-014: Autonomous macro operation is the primary M completion lane
+
+Date: 2026-07-21
+Status: accepted planning decision
+
+### Decision
+
+The controlling purpose of the M route is autonomous public-data higher-timeframe structure operation, not waiting for an M5 winner.
+
+The primary M completion lane is:
+
+```text
+M-OPS1 current macro snapshot and daily local report
+→ M-OPS2 chronological reliability continuity
+→ M-OPS3 chart-first operator artifact
+→ M-OPS4 separately approved runtime/schedule enablement
+→ M-OPS5 autonomous health and stale-data status
+```
+
+M5/M6 is a secondary improvement and adoption lane:
+
+```text
+accumulated accepted evidence
+→ periodic bounded M5 refresh
+→ optional one-candidate M6 proposal
+→ explicit human approval and separate adoption tasks
+```
+
+Private actual-trade evidence is not a prerequisite for public-market support/resistance identity, lifecycle, reliability, current structural location, target/obstruction, local artifact generation, or chronological collection.
+
+M5 `winner=none` / `continue_shadow_collection` does not block M-OPS1–M-OPS3 and does not justify leaving the accepted macro capability disabled.
+
+`DEC-20260721-013` remains valid for the M5-to-M6 sequence, but is superseded where it made M5 refresh the overall current M action.
+
+Canonical plan:
+
+- `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+
+Current active implementation contract:
+
+- `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+
+### Reason
+
+M1–M4 already provide deterministic level construction, prior-only reliability, public-data auxiliary execution, next-regime separation, and chart-first rendering. The missing product value is operational connection: a maintained current snapshot, chronological reliability history, operator artifact, and separately approved report-only runtime cadence.
+
+Routing the project to M5 evidence waiting before this connection is complete confuses improvement selection with normal product operation and incorrectly makes private trade evidence appear necessary for market-structure understanding.
+
+### Consequences
+
+- new AI contexts must report the autonomous M objective and follow the M-OPS plan;
+- `NEXT_ACTION.md` selects M-OPS work while an unfinished M-OPS phase exists;
+- no M5 refresh is run during M-OPS1 source implementation;
+- M-OPS source work may use accepted public data and requires no recurring human input;
+- installed runtime/schedule, live delivery, production policy, and M6 adoption remain separately human-approved;
+- support/resistance confidence must fail closed to `insufficient` when evidence is weak, stale, discontinuous, or not prior-only;
+- autonomous calculation never becomes automatic order permission.

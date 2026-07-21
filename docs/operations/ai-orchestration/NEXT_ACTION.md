@@ -1,72 +1,110 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-M5-EVIDENCE-REFRESH-TRIGGER`
-- mode: `WAIT_FOR_EVIDENCE`
-- branch: `Ver04-v3` documentation line; confirm from local git before the next Codex task
-- active_spec: none
-- status: waiting for a gate-relevant input change
+- current_work_id: `BTCFX-20260721-MACRO-AUTONOMOUS-STRUCTURE-DAILY-OPERATION`
+- mode: `BOUNDED_CODEX_IMPLEMENTATION`
+- branch: `Ver04-v3`; confirm from local git before execution
+- active_spec: `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+- status: ready for source implementation
 - push: none
 
 ## Current action
 
-Do not rerun or rewrite the accepted M5 proposal engine now.
+Implement M-OPS1: one dedicated report-only current macro structure operation route.
 
-Wait until at least one M5 refresh trigger becomes true:
+This is the current primary M task. Do not wait for an M5 refresh trigger.
 
-1. at least seven new eligible JST dates exist after the accepted 2026-07-21 M5 cutoff;
-2. the P-route actual episode/link pair becomes available and changes P8 actual evidence status;
-3. an accepted M1 or M3 source change materially changes the comparison basis;
-4. the user explicitly requests an earlier bounded refresh.
+## Required product behavior
 
-The seven-date rule is a replay-cost scheduling rule, not a proposal-eligibility threshold.
+The new route must:
 
-## Next task when triggered
+1. use accepted public 15m, 1h, and 4h market-data paths;
+2. require no private actual-trade data;
+3. choose one deterministic latest common closed-candle cutoff;
+4. reuse accepted M1 structure, level identity, lifecycle, and prior-only reliability semantics;
+5. produce a current structure snapshot;
+6. publish confidence-labelled support/resistance zones;
+7. report current price location, next reliable targets, and obstruction;
+8. expose stale, discontinuous, and `insufficient` states explicitly;
+9. write a complete date/time-scoped local artifact set under `local/reports/macro_structure/`;
+10. atomically update a compact `latest.json` summary;
+11. remain report-only and independent from M5, mail, notification, and runtime.
 
-Create one active M5 refresh spec and run one bounded operations task:
+## Implementation boundary
 
-- use the accepted champion manifest unchanged
-- use the accepted four-challenger proposal space unchanged
-- use fresh explicit M1/M3 inputs
-- include P8 evidence only when the accepted actual episode/link route has produced it
-- execute `run-macro-p9-proposal-engine` exactly once
-- produce exactly four fresh local outputs
-- do not commit generated artifacts or private inputs
-- return to ChatGPT before any M6 task
+Follow the active spec exactly.
 
-## Decision after refresh
+Default allowed implementation area:
 
-- no eligible challenger: record `continue_shadow_collection` and park again
-- material engine defect: create one bounded M5 FIX spec
-- exactly one proposal-eligible challenger: create one M6 proposal package and request explicit human approval
-- multiple eligible challengers: do not combine them; select one through ChatGPT/human judgment
+- `src/feedback/macro_structure_volatility_replay.py`
+- new `src/feedback/macro_structure_daily_operation.py`
+- `tools/log_feedback.py`
+- optional new `tools/run_macro_structure_daily.py`
+- focused matching tests
+- short factual notes in the active spec
 
-## P-route handoff
+Do not edit production analysis, notification, mail, deploy, runtime, gate, threshold, scoring, classifier, account, position, or order files.
 
-P1–P8 and the actual-evidence readiness review are accepted. P9 remains blocked by the absent complete private MEXC Trade History / Order History / Position History batch.
+## Validation
 
-Do not repeat the accepted P importer/linker/readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
+Use only:
 
-## M6 boundary
+- matching daily-operation unittest module
+- matching M1 regression subset
+- matching CLI parser/dispatch tests
+- one small deterministic fixture smoke
+- task-scoped `git diff --check`
 
-M6 is not authorized by this `NEXT_ACTION`.
+Do not run the M5 full bundle, full test suite, installed schedule, or frozen runtime repo.
 
-M6 requires:
+## Expected outputs
 
-- one proposal-eligible M5 challenger
-- one bounded proposal
-- explicit human approval
-- source-only shadow before any runtime apply
-- separate validation and adoption decisions
+Minimum generated local files:
 
-Canonical plan:
+```text
+local/reports/macro_structure/<run-id>/macro_structure_snapshot.json
+local/reports/macro_structure/<run-id>/macro_structure_snapshot.md
+local/reports/macro_structure/<run-id>/macro_level_reliability.csv
+local/reports/macro_structure/<run-id>/run_manifest.json
+local/reports/macro_structure/latest.json
+```
 
-- `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
+Generated outputs remain uncommitted.
+
+## Acceptance path
+
+After Codex reports completion, ChatGPT reviews:
+
+- changed source
+- focused tests
+- actual CLI parser/dispatch
+- deterministic fixture artifact metadata
+- event-time cutoff and no-future boundary
+- confidence labels and valid `insufficient` behavior
+- atomic publication and privacy boundary
+- scope and safety
+
+If accepted:
+
+```text
+M-OPS1 accepted
+→ decide whether M-OPS2 history continuity is already complete or needs one bounded follow-up
+→ M-OPS3 chart-first artifact
+→ explicit human-approved M-OPS4 runtime/schedule task
+```
+
+## P and M5 boundaries
+
+- P readiness remains parked on the private MEXC export batch; do not repeat the accepted review.
+- M5 remains accepted and secondary; do not rerun it during M-OPS1.
+- M6 remains unauthorized.
 
 ## Safety
 
 - report-only
 - no automatic order
-- no automatic production mutation
-- no raw exchange export or generated actual CSV commit
-- no gate, threshold, scoring, classifier, notification, mail, runtime, schedule, API, account, position, or order change
-- no frozen runtime repo access without an explicit `RUNTIME_TASK`
+- no private/account/order endpoints
+- no actual-trade requirement
+- no mail or notification change
+- no runtime, launchd, plist, or schedule change
+- no production gate, threshold, scoring, classifier, or policy change
+- no frozen runtime repo access

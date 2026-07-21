@@ -1,283 +1,206 @@
-# M5 / M6 Execution Plan
+# M5 / M6 Improvement and Adoption Plan
 
 created_at: 2026-07-21
-status: canonical implementation plan; M5 refresh planned; M6 conditional and unauthorized
+last_updated: 2026-07-21
+status: canonical secondary lane; M5 accepted; M6 conditional and unauthorized
 primary_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-safety: report-only / not `FORMAL_GO` / no automatic order / human decides manually
+safety: report-only / not `FORMAL_GO` / no automatic order / human decides adoption
 
-## 1. Decision
+## 1. Scope correction
 
-M5 is not an unimplemented phase. The deterministic offline champion/challenger proposal engine is accepted at checkpoint locator `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`.
+This document controls periodic improvement proposals and production adoption only.
 
-The next M-route work is therefore:
+It does not control the primary autonomous macro-operation route.
+
+Primary M completion follows:
+
+- `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+
+Controlling relationship:
 
 ```text
-accumulate gate-relevant evidence
-→ run one bounded M5 evidence refresh
-→ select zero or one proposal-eligible challenger
-→ create one human-reviewed M6 proposal
-→ implement source-only shadow
-→ validate
-→ obtain explicit human adoption approval
-→ apply runtime separately
+M-OPS current snapshot / history / operator artifact proceeds first
+→ accumulated accepted evidence may later trigger M5 refresh
+→ M6 handles one bounded improvement adoption only
 ```
 
-Do not rewrite M5 merely because its accepted result had no winner. `winner=none` and `continue_shadow_collection` are valid fail-closed outcomes.
+Do not route unfinished M-OPS work to `WAIT_FOR_EVIDENCE` or stop normal macro operation because M5 selected no winner.
 
-M6 remains unauthorized until the documented entry gate is satisfied and the user explicitly approves one candidate.
+## 2. Accepted M5 baseline
 
-## 2. Accepted baseline
+M5 is implemented and accepted at checkpoint locator:
 
-Accepted M5 result:
+`3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
 
-- champion count: `1`
-- challenger count: `4`
-- chronological snapshot dates: `6`
-- structurally valid challengers: `4`
-- comparison-eligible challengers: `0`
-- Pareto-dominant challengers: `0`
-- proposal-eligible challengers: `0`
+Accepted result:
+
+- champion count: 1
+- challenger count: 4
+- chronological snapshot dates: 6
+- structurally valid challengers: 4
+- comparison-eligible challengers: 0
+- proposal-eligible challengers: 0
 - winner: `none`
 - recommendation: `continue_shadow_collection`
-- primary gate horizon: `3h`
-- diagnostic-only horizons: `6h`, `12h`, `24h`
-- P8 eligible actual-backed count: `0`
+- primary horizon: 3H
+- diagnostic horizons: 6H / 12H / 24H
 - production mutation: none
 
-The accepted engine, CLI route, output schema, champion identity, proposal-space manifest contract, rolling comparison semantics, and fail-closed gates are frozen unless a material defect is demonstrated.
+A no-winner result is valid fail-closed evidence. It is not an engine defect and does not block M-OPS.
 
-## 3. M5 continuation plan
+## 3. M5 refresh trigger
 
-### M5-E0 — Preserve the accepted engine
+Do not run the heavy proposal bundle daily.
 
-No source task is opened by default.
+One bounded refresh becomes eligible when at least one is true:
 
-Reopen M5 source only when one of these is demonstrated:
+1. at least seven new eligible JST dates exist after the accepted cutoff;
+2. accepted M-OPS history materially expands the validation basis;
+3. P8 actual episode/link evidence becomes available;
+4. an accepted M1/M3 source change changes the comparison basis;
+5. the user explicitly requests an earlier bounded refresh.
 
-- deterministic output or identity defect
-- accepted CLI route failure
-- future-data leakage
-- comparison denominator mismatch
-- gate result inconsistent with the accepted contract
-- output privacy or atomicity defect
+The seven-date rule is a replay-cost trigger, not an eligibility threshold.
 
-A weak or empty challenger result is not itself an engine defect.
+## 4. M5 refresh execution
 
-### M5-E1 — Accumulate evidence without daily heavy replay
+Create one active refresh spec before execution.
 
-Use existing accepted public-market-data and generated local evidence paths. Do not run the 31-unit M5 bundle every day.
+Default scope:
 
-A bounded M5 refresh becomes eligible when at least one operational trigger is true:
+- accepted champion unchanged;
+- accepted four-challenger proposal space unchanged;
+- fresh explicit M1/M3/M-OPS-compatible inputs;
+- P8 evidence only when accepted and available;
+- exactly one proposal-engine execution;
+- exactly four fresh outputs;
+- no generated artifact or raw input commit;
+- no second complete replay without explicit ChatGPT approval and a changed failure cause.
 
-1. at least seven new eligible JST dates exist after the accepted 2026-07-21 cutoff;
-2. the P-route actual episode/link pair becomes available and changes `p8_actual_status`;
-3. an accepted M1 or M3 source change materially changes the comparison basis;
-4. the user explicitly requests an earlier bounded refresh.
-
-The seven-date rule is a replay-cost scheduling rule, not a proposal-eligibility threshold. Candidate eligibility continues to use the engine's accepted gates.
-
-Do not modify launchd, runtime schedules, notification, mail, or production behavior merely to satisfy this collection step.
-
-### M5-E2 — One bounded evidence refresh
-
-Create one active spec before execution.
-
-Default refresh scope:
-
-- primary repo only
-- accepted champion manifest unchanged
-- accepted proposal-space unchanged: champion plus four declared challengers
-- fresh explicit M1 and M3 inputs
-- optional P8 trial report and trial facts only when the accepted actual episode/link route has produced them
-- exactly one `run-macro-p9-proposal-engine` execution
-- exactly four fresh outputs in a new local artifact directory
-- no output or raw input commit
-- no second full replay unless ChatGPT explicitly approves it after identifying a changed failure cause
-
-Required outputs:
+Required outputs remain:
 
 - `macro_p9_challenger_results.csv`
 - `macro_p9_issue_diagnosis.csv`
 - `macro_p9_proposal_engine.json`
 - `macro_p9_proposal_engine.md`
 
-If no source changes are needed, this is an operations/artifact task and should not create a source commit. If a material engine defect is found, stop and create a separate bounded FIX spec.
+If a material engine defect appears, stop and create one bounded FIX spec. Do not repair source during a heavy evidence run.
 
-### M5-E3 — ChatGPT acceptance review
-
-Review only the evidence needed for the decision:
-
-- input fingerprints and chronological cutoff dates
-- champion exactly once
-- challenger count and deterministic IDs
-- same-opportunity and same-date comparison basis
-- 3H primary gate and diagnostic-only longer horizons
-- Long/Short representation
-- validation concentration and data-quality gates
-- guarded metric non-degradation
-- P8 actual status and any explicit contradiction
-- winner, recommendation, and reason codes
-- no private path, raw opportunity identity, runtime, or production mutation
-
-Decision outcomes:
+## 5. M5 decision
 
 | Result | Action |
 |---|---|
-| no eligible challenger | record `continue_shadow_collection`; park M5 until the next trigger |
-| material M5 defect | one bounded FIX task; do not start M6 |
-| exactly one eligible challenger | create an M6 proposal package; M6 still requires human approval |
-| multiple eligible challengers | do not combine them; ChatGPT selects one or asks for human choice |
+| no eligible challenger | record `continue_shadow_collection`; continue M-OPS normally |
+| material M5 defect | one bounded FIX; M6 remains blocked |
+| exactly one eligible challenger | create one M6 proposal package |
+| multiple eligible challengers | do not combine; ChatGPT/human selects one |
 
-## 4. M6 implementation plan
+M5 never applies a candidate automatically.
 
-### M6-P1 — One-candidate proposal package
+## 6. M6 entry gate
 
-Create one active proposal spec containing:
+M6 may begin only when all are true:
 
-- exact M5 candidate ID and deterministic parameters
-- accepted champion identity
-- affected observable behavior
-- why the change helps the manual 15-minute operator
-- validation and calibration metrics
-- Long/Short, regime, structure/location, false-warning, missed-move, whipsaw, and burden splits
-- P8 actual evidence status and any conflict
-- unchanged safety boundaries
-- rollback condition
-- allowed files
-- validation budget
+1. one proposal-eligible candidate exists;
+2. comparison and validation windows are adequate;
+3. Long/Short, regime, false-warning, missed-move, opposite-move, whipsaw, and burden checks show no hidden material damage;
+4. actual-backed evidence conflict is absent or explicitly disclosed;
+5. scope is one bounded UI or policy change;
+6. the user explicitly approves that proposal.
 
-The proposal must be limited to one bounded UI or policy change. It must not combine UI, threshold, gate, scoring, notification, mail, and runtime changes.
+M6 is not required to operationalize already accepted M1–M4 behavior through M-OPS.
 
-The user must explicitly approve the proposal before M6 source implementation begins.
+## 7. M6 task sequence
 
-### M6-S1 — Source-only shadow implementation
+### M6-P1 — Proposal package
 
-Implement the approved candidate in one bounded Codex task.
+Record:
 
-Default boundaries:
+- exact candidate ID and parameters;
+- champion identity;
+- observable operator change;
+- evidence strengths and weaknesses;
+- directional/regime splits;
+- actual evidence status;
+- unchanged safety boundaries;
+- rollback condition;
+- allowed files and validation budget.
 
-- disabled by default or reachable only through an explicit shadow route
-- no production config adoption
-- no live notification or mail change
-- no launchd or runtime change
-- no automatic order
-- no private/account/order endpoint
-- no broad gate, threshold, classifier, or scoring redesign
-- no frozen runtime repo access
+Request explicit user approval before source implementation.
 
-Implementation form depends on the approved proposal:
+### M6-S1 — Source-only shadow
 
-- UI proposal: render-only comparison with explicit champion/challenger labels
-- policy proposal: offline/shadow candidate output alongside the accepted champion
+Implement one disabled-by-default or explicit shadow route.
 
-Required implementation evidence:
+No production config, live notification, mail, schedule, runtime, order, or broad scoring/gate redesign.
 
-- matching unit tests
-- one small deterministic fixture or smoke
-- task-scoped `git diff --check`
-- one local commit
-- compact report
+Required evidence:
+
+- matching tests;
+- one small deterministic fixture;
+- scoped `git diff --check`;
+- one local commit;
+- compact report.
 
 ### M6-V1 — Bounded validation
 
-After source review, run one bounded validation task.
+Use the same eligible opportunities and date denominators, event-time construction, 3H primary selection horizon, directional/regime splits, and guarded damage checks.
 
-Validation must use:
-
-- the same eligible opportunities and date denominators
-- event-time construction only
-- 3H primary selection horizon
-- Long/Short and relevant regime/location splits
-- false-warning, missed-move, opposite-move, whipsaw, and burden checks
-- actual-backed contradiction check when actual evidence exists
-- one fresh operator-facing shadow artifact when the proposal changes UI
-
-Do not run a duplicate full replay or a second validation bundle without explicit ChatGPT approval.
+No duplicate full replay without explicit approval.
 
 ### M6-A1 — Human adoption decision
 
-ChatGPT presents:
+Allowed decisions:
 
-- the candidate and champion difference
-- expected operator-visible change
-- evidence strengths and weaknesses
-- unresolved risks
-- rollback condition
-- source-only validation result
+- reject;
+- continue shadow collection;
+- approve one runtime apply.
 
-Human choices:
-
-- reject
-- continue shadow collection
-- approve runtime apply
-
-No automatic adoption is permitted.
+No automatic adoption.
 
 ### M6-R1 — Separate runtime apply
 
-Runtime apply is a separate explicit `RUNTIME_TASK` after source acceptance and human approval.
+A separate explicit `RUNTIME_TASK` is required.
 
-Rules:
+Do not mix source changes and runtime apply. Target one approved component, preserve rollback, verify installed arguments/target, and run one bounded post-apply check.
 
-- do not mix source edits and runtime apply
-- target one approved runtime component only
-- inspect the frozen runtime repo only when the task explicitly names it
-- preserve backup and rollback capability
-- verify the installed target and arguments
-- perform one bounded post-apply verification
-- do not infer production success from source tests alone
+## 8. Relationship to autonomous operation
 
-Notification, mail, schedule, gate, threshold, or scoring changes require their own explicit approval even when the source proposal is accepted.
+M-OPS uses accepted M1/M4 semantics to provide current public-data macro value.
 
-### M6-C1 — Acceptance and version boundary
+M5/M6 may improve those semantics later, but cannot delay:
 
-M6 is complete only when:
+- current snapshot generation;
+- reliable-level history;
+- chart-first local artifacts;
+- stale/insufficient health reporting;
+- separately approved report-only scheduling.
 
-1. one proposal passed the M6 entry gate;
-2. human approval was explicit;
-3. source-only implementation and matching tests were accepted;
-4. bounded validation passed without hidden material damage;
-5. any runtime apply was separately approved and verified;
-6. operator-facing docs and current state match the adopted behavior;
-7. ChatGPT records acceptance.
+If M-OPS exposes a real accepted-logic defect, handle it as a bounded defect task. Do not disguise a policy redesign as operations work.
 
-Only then may `Ver05` be proposed. M5 acceptance alone and an M6 shadow implementation alone do not qualify.
+## 9. Human involvement boundary
 
-## 5. Task packaging
+No recurring human involvement is needed for M-OPS market-data calculation.
 
-| Task | Default owner | Commit | Heavy run |
-|---|---|---:|---:|
-| evidence trigger check | ChatGPT/MCP | no | no |
-| bounded M5 refresh | Codex operations | normally no | one approved bundle |
-| M5 review and candidate decision | ChatGPT/MCP | state docs only | no duplicate run |
-| M6 proposal spec | ChatGPT/MCP | docs checkpoint when bundled | no |
-| M6 source-only shadow | Codex | one local commit | small fixture only |
-| M6 bounded validation | Codex | artifact normally uncommitted | one approved bundle |
-| M6 runtime apply | Codex under explicit `RUNTIME_TASK` | source commit already accepted | target-only verification |
-| final acceptance/state update | ChatGPT/MCP | bundled docs checkpoint | no |
+Human approval is required for:
 
-## 6. Stop conditions
+- M6 proposal adoption;
+- installed runtime/schedule changes;
+- live delivery changes;
+- production gate, threshold, scoring, classifier, or policy changes;
+- automatic execution/order behavior;
+- version promotion.
 
-Stop and return to ChatGPT when:
+## 10. Version boundary
 
-- M5 still returns no eligible challenger
-- actual evidence conflicts materially with the challenger
-- comparison denominator or event-time integrity is uncertain
-- a candidate damages either direction or a relevant regime materially
-- proposal scope expands beyond one observable change
-- runtime, notification, mail, gate, threshold, scoring, account, position, or order scope appears without approval
-- the frozen runtime repo would be touched without an explicit `RUNTIME_TASK`
+M5 acceptance, M5 refresh, and M6 source-only shadow do not by themselves qualify for `Ver05`.
 
-## 7. Relationship to the P route
+`Ver05` may be proposed only after one explicitly approved adoption is implemented, validated, applied where relevant, verified, and accepted by ChatGPT.
 
-The P route remains parked on the human-supplied private actual-trade export batch. M-route evidence work may continue using public market evidence, but M6 proposal eligibility still fails closed when the accepted engine requires P8 practical readiness and actual-backed evidence.
+## 11. Canonical references
 
-Do not substitute macro proxy evidence for missing actual trading evidence.
-
-## 8. Canonical references
-
-- current macro route: `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
-- M5 accepted spec: `chatgpt/specs/archive/20260721_macro_p9_champion_challenger_proposal_engine.md`
-- research basis: `docs/operations/strategy/MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
-- current accepted state: `docs/operations/ai-orchestration/CURRENT_STATE.md`
-- exactly one current task: `docs/operations/ai-orchestration/NEXT_ACTION.md`
+- primary autonomous route: `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+- current macro route: `MACRO_IMPLEMENTATION_ROUTE.md`
+- accepted M5 spec: `chatgpt/specs/archive/20260721_macro_p9_champion_challenger_proposal_engine.md`
+- current state/task: `docs/operations/ai-orchestration/CURRENT_STATE.md` and `NEXT_ACTION.md`
+- durable decisions: `DEC-20260721-013` and `DEC-20260721-014`

@@ -5,257 +5,255 @@ status: canonical overall plan
 
 ## 1. Product objective
 
-`btc_monitor` の最上位目的は、notification mailを受け取った人間が15分足を確認し、manual trading判断を行うための支援システムを完成させることである。
+`btc_monitor`の最上位目的は、notification mailを受け取った人間が15分足を確認し、manual trading判断を行うための支援システムを完成させることである。
 
-現段階では次を維持する。
+Maintain:
 
 - report-only
 - not `FORMAL_GO`
-- human-decided
+- human-decided trades and production adoption
 - no automatic order
 
-自動売買、production tuning、runtime変更は本計画の通常経路ではない。
-
-## 2. 全体構造
-
-このrepoには、同格の3計画があるわけではない。
+## 2. Plan structure
 
 ```text
-本体Product計画
-├─ P1〜P9: 本体機能と自己改善loopを完成させる実行Phase
-├─ M1〜M6: マクロ構造・次regime・operator判断を補強する追加計画
-└─ A1〜A4: ChatGPT/Codex運用を軽量化するために行った補助実験
+Product / P route
+├─ P1–P9: manual-trading evidence and improvement loop
+Macro / M route
+├─ M1–M5: accepted research/evaluation foundations
+├─ M-OPS1–M-OPS5: autonomous macro operation completion lane
+└─ M5/M6: periodic improvement and adoption lane
+AI / A route
+└─ completed operations experiments
 ```
 
-優先順位は常に次の順である。
+Priority:
 
-1. 本体Productを完成させ、利用者に観測可能な価値を増やす
-2. safety、scope、acceptance integrityを守る
-3. Codex credit、作業時間、重複validationを節約する
-4. orchestrationや記録形式を整える
+1. increase observable operator value;
+2. preserve safety and contract integrity;
+3. avoid repeated review and heavy validation;
+4. keep orchestration compact.
 
-運用整備が本体変更と同等以上の負担になった場合は、運用改善を停止してcompact routeへ戻る。
+## 3. Product / P route
 
-## 3. 現在の計画状態
-
-### 3.1 Product / P route
-
-本体計画の現在地は次のとおり。
-
-| Phase | 内容 | 状態 |
+| Phase | Result | Status |
 |---|---|---|
-| P1 | actual trade importer contract | accepted |
-| P2 | actual trade importer implementation | accepted |
-| P3 | trade-to-signal/scenario linking | accepted |
-| P4 | scenario identity、coverage、decision events | accepted |
-| P5 | offline A/B/C/STOP classifier | accepted |
-| P6 | historical replay | accepted |
-| P7 | shadow surface | accepted |
-| P8 | deterministic evidence pipeline and operating cycle | accepted and collecting evidence |
-| P9 | evidence-backed tuning proposal and human review | blocked pending adequate evidence |
+| P1–P7 | importer, linking, scenarios, classifier, replay, shadow | accepted |
+| P8 | deterministic evidence pipeline and operating cycle | accepted / collecting |
+| P9 | evidence-backed tuning proposal | blocked |
 
-現在の主要な不足は、コードの未実装よりも、actual-backed ground truthが不足していることである。
+Current blocker:
 
 ```text
-actual trade export
-→ importer / episode builder
-→ signal / scenario linking
-→ proxyとactual PnLの照合
-→十分なsample
-→ P9 proposal
+complete private MEXC export batch missing
+→ no actual episode/link pair
+→ actual-backed evidence = 0
+→ P9 remains blocked
 ```
 
-P9 readinessはproduction変更権限ではない。最初にproposalを作り、人間承認後にだけbounded implementationへ進む。
+This is an accepted no-repeat boundary, not a source defect.
 
-P actual-evidence readiness review is accepted and is a no-repeat boundary. The route is parked until a complete private MEXC Trade History / Order History / Position History batch appears under the ignored canonical input directory, relevant source changes, a contradictory artifact appears, or the user explicitly requests re-verification.
+Do not repeat importer/linker/readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
 
-正本:
+Canonical references:
 
 - `PRODUCT_IMPLEMENTATION_ROUTE.md`
 - `CURRENT_STATE.md`
-- `DEC-20260721-012` in `DECISIONS.md`
-- `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
+- `DEC-20260721-012`
 
-### 3.2 Macro / M route
+## 4. Macro / M route
 
-M計画は本体の15分足判断を、上位足構造、信頼できるsupport/resistance、volatility、next-regime情報で補強する計画である。
+### 4.1 Controlling purpose
 
-| Phase | 内容 | 状態 |
+M計画の主目的は、公開市場データから大局構造と信頼度付きsupport/resistanceを人間の継続入力なしで更新し、15分足manual判断へ提供することである。
+
+```text
+public OHLCV
+→ stable higher-timeframe levels
+→ lifecycle and prior-only reliability
+→ current structural location
+→ support/resistance confidence bands
+→ next target and obstruction
+→ chart-first operator artifact
+→ autonomous chronological evidence
+```
+
+Private actual-trade evidence is not required for this market-structure calculation. It remains relevant to human outcome and production-adoption evaluation.
+
+### 4.2 Accepted foundation
+
+| Phase | Result | Status |
 |---|---|---|
-| M1 | macro structure evidence layer | accepted |
-| M2 | P8 auxiliary shadow | accepted |
-| M3 | next-regime offline shadow | accepted |
-| M4 | operator hierarchy render shadow | accepted |
-| M5 | champion/challenger proposal engine | accepted |
-| M6 | human-reviewed runtime proposal | not started and not authorized |
+| M1 | event-time macro structure and reliable levels | accepted |
+| M2 | opt-in public-data auxiliary shadow | accepted |
+| M3 | tactical / next-regime separation | accepted |
+| M4 | chart-first local render shadow | accepted |
+| M5 | bounded champion/challenger engine | accepted |
+| M6 | approved improvement adoption | unauthorized |
 
-M5の結果:
+Accepted M5 result:
 
 - winner: `none`
 - recommendation: `continue_shadow_collection`
-- actual-backed evidence: missing
+- production mutation: none
 
-M5 is already implemented. The next M work is a bounded evidence refresh after a gate-relevant input change, not an engine rewrite.
+This no-winner result does not block autonomous macro operation.
 
-M6 remains conditional. It starts only after M5 identifies one proposal-eligible challenger and the user explicitly approves one bounded proposal. Source-only shadow, validation, human adoption, and runtime apply are separate tasks.
+### 4.3 Primary completion lane: M-OPS
 
-正本:
+Canonical plan:
 
-- `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
+- `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+
+Sequence:
+
+```text
+M-OPS1 current snapshot and daily local report source
+→ M-OPS2 chronological history and reliability continuity
+→ M-OPS3 chart-first operator artifact
+→ M-OPS4 separate runtime/schedule enablement
+→ M-OPS5 autonomous status and stale-data health
+```
+
+Current active implementation:
+
+- `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+
+M-OPS1 must proceed without waiting for M5 refresh or private trade data.
+
+### 4.4 Secondary improvement lane: M5/M6
+
+Canonical plan:
+
 - `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
-- `docs/operations/strategy/MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
-- `DEC-20260721-013` in `DECISIONS.md`
-- accepted M specs under `chatgpt/specs/archive/`
 
-### 3.3 AI operations / A route
+Sequence:
 
-A計画はproduct機能ではなく、長いCodex prompt、重複validation、report確認コストを減らすための運用実験だった。
+```text
+accumulated accepted evidence
+→ periodic bounded M5 refresh
+→ zero or one eligible challenger
+→ one explicitly approved M6 proposal
+→ source-only shadow
+→ validation
+→ separate runtime adoption
+```
 
-| Phase | 内容 | 状態 |
+`DEC-20260721-013` controls this M5-to-M6 sequence only.
+
+`DEC-20260721-014` controls the overall M priority and prevents M5 waiting from blocking unfinished M-OPS work.
+
+## 5. AI / A route
+
+| Phase | Result | Status |
 |---|---|---|
 | A1 | manifest schema / validator / renderer | accepted |
 | A2 | low-risk pilot | accepted |
-| A3 | manifest/JSON routeを標準化 | superseded and archived |
+| A3 | canonical manifest routing | superseded |
 | A4 | optional CWT integration | not planned |
 
-結論:
+Compact prompts and compact reports remain normal. Strict manifest tooling is optional for heavy or machine-aligned tasks.
 
-- 問題認識は正しかった
-- A1 toolingは技術的に有効
-- 通常taskへ標準適用すると運用コストが高すぎる
-- compact prompt / compact reportが通常経路
-- manifest / JSON toolingはheavy、runtime、checkpoint、厳密なmulti-stage taskでのみoptional
+## 6. Current execution policy
 
-A計画は進行中のproduct backlogではない。再開しない限り、新しいA phaseを作らない。
-
-正本:
-
-- `AI_OPERATIONS_STATUS.md`
-- `AI_WORKFLOW.md`
-- `CONTROL.md`
-
-## 4. 現在の実行方針
-
-P route is parked on human private input. Do not repeat the accepted readiness review.
-
-While the P blocker remains, proceed on the M route only through the accepted evidence-gated sequence:
+Current order:
 
 ```text
-wait for a gate-relevant M5 input change
-→ create one active M5 refresh spec
-→ one bounded M5 engine execution
+P remains parked on private input
+→ execute M-OPS1 source implementation
+→ focused tests and deterministic fixture
 → ChatGPT MCP review
-→ no candidate: park and continue collection
-→ one eligible candidate: create one M6 proposal package
-→ explicit human approval
-→ source-only disabled-by-default shadow
-→ matching validation
-→ explicit human adoption decision
-→ separate runtime apply when approved
+→ accept or one bounded FIX
+→ continue M-OPS completion lane
 ```
 
-The default M5 refresh trigger is at least seven new eligible JST dates after the accepted 2026-07-21 cutoff, new P8 actual evidence, an accepted M1/M3 comparison-basis change, or explicit user instruction. This is a replay-cost trigger, not an eligibility threshold.
+Do not:
 
-次を行わない。
+- route current M work to `WAIT_FOR_EVIDENCE` while M-OPS is unfinished;
+- rerun M5 as part of M-OPS1;
+- require private actual trades for support/resistance calculation;
+- rewrite accepted M1/M5 semantics without a demonstrated defect;
+- mix source edits with runtime/schedule application;
+- start M6 without one eligible challenger and explicit approval;
+- change mail, notification, gates, thresholds, scoring, classifiers, or orders under M-OPS source tasks;
+- create new orchestration frameworks.
 
-- 新しいorchestration frameworkの作成
-- A3/A4の再開
-- M5 engineの根拠のない再実装
-- proposal-eligible candidateなしでのM6開始
-- evidence不足のままP9 tuning
-- source変更とruntime applyの同一task化
-- product変更を細かな複数Codex taskへ分割
-- report形式だけを理由とするretask
+## 7. Human involvement boundary
 
-## 5. AIの標準読取導線
+No recurring human input is required after setup for:
 
-新しいChatGPT threadまたはcontext不明時:
+- public OHLCV collection;
+- macro snapshot calculation;
+- level lifecycle/reliability updates;
+- local report and chart artifact generation;
+- chronological history;
+- health and stale-data status.
+
+Human approval is required for:
+
+- installed runtime/schedule enablement;
+- live mail/notification integration;
+- production policy/gate/threshold/scoring/classifier changes;
+- M6 adoption;
+- automatic orders;
+- phase/version promotion.
+
+## 8. Standard read route
+
+New context:
 
 1. `AGENTS.md`
-2. `docs/operations/ai-orchestration/START_HERE.md`
-3. planningまたはnext-task判断なら `MASTER_PLAN.md`
-4. 現在地が必要なら `CURRENT_STATE.md` と `NEXT_ACTION.md`
-5. 対象routeだけ読む
+2. `START_HERE.md`
+3. `MASTER_PLAN.md` for planning
+4. `CURRENT_STATE.md` and `NEXT_ACTION.md`
+5. target route only:
    - Product: `PRODUCT_IMPLEMENTATION_ROUTE.md`
    - Macro: `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
-   - M5/M6 execution: `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
-   - AI execution: `AI_WORKFLOW.md` と必要時だけ `CONTROL.md`
-6. implementation時だけ `chatgpt/specs/active/` の1本を読む
+   - autonomous Macro: `docs/operations/strategy/MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md`
+   - M5/M6: `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
+6. active spec only for implementation
 
-同じthread、同じtaskではstable docsを再読しない。
+Do not broadly scan history or archived plans.
 
-## 6. 文書の役割
+## 9. Document roles
 
-| 文書 | 役割 |
+| Document | Role |
 |---|---|
-| `MASTER_PLAN.md` | 全体設計、3軸の関係、現在の優先順位 |
-| `PRODUCT_IMPLEMENTATION_ROUTE.md` | 本体Productの現在地と次Phase条件 |
-| `MACRO_IMPLEMENTATION_ROUTE.md` | M1〜M6の現在地とM6境界 |
-| `M5_M6_EXECUTION_PLAN_20260721.md` | M5 evidence refreshからM6 runtimeまでの分離実行計画 |
-| `AI_OPERATIONS_STATUS.md` | A計画の結論とoptional toolingの扱い |
-| `CURRENT_STATE.md` | 受理済み現在地、blocker、no-repeat boundary |
-| `NEXT_ACTION.md` | 現在の作業またはevidence triggerを1件だけ記載 |
-| `AI_WORKFLOW.md` | ChatGPT/Codexの実行手順 |
-| `CONTROL.md` | stable safety、git、runtime、validation rules |
-| `MILESTONES.md` | major accepted checkpoints |
-| `DECISIONS.md` | durable decisions and supersession records |
+| `MASTER_PLAN.md` | overall architecture and current priority |
+| `PRODUCT_IMPLEMENTATION_ROUTE.md` | P route and P9 gate |
+| `MACRO_IMPLEMENTATION_ROUTE.md` | canonical M route |
+| `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` | M operational completion contract |
+| `M5_M6_EXECUTION_PLAN_20260721.md` | secondary improvement/adoption route |
+| `CURRENT_STATE.md` | accepted state and controlling interpretation |
+| `NEXT_ACTION.md` | exactly one current task |
+| active spec | detailed implementation contract |
+| `CONTROL.md` | stable safety/git/runtime rules |
+| `AI_WORKFLOW.md` | ChatGPT/Codex execution and review |
+| `MILESTONES.md` | accepted checkpoints |
+| `DECISIONS.md` | durable decisions and supersession |
 
-## 7. Archive policy
+## 10. Completion definitions
 
-次は現行導線から外し、archiveへ保存する。
+P route completion requires adequate actual-backed evidence and an accepted human-reviewed proposal where applicable.
 
-- completedまたはsuperseded plan
-- 古いPhase route
-- 過去のorchestration experiment
-- 一時的なcheckpoint、smoke、review記録
+M route completion requires more than accepted offline tooling. It requires:
 
-次は削除せず残す。
+- dedicated public-data current snapshot operation;
+- confidence-labelled support/resistance;
+- chronological history and latest status;
+- chart-first operator artifact;
+- fail-closed stale/insufficient behavior;
+- separately approved and verified report-only runtime cadence;
+- current docs and operator behavior agreement.
 
-- accepted active/archive specs
-- product/evaluation contract
-- research basis
-- runtime runbook
-- implementation evidence
-- git historyとtask reports
+## 11. Safety and version boundary
 
-Historical fileは調査対象が明確な場合だけ読む。新しいAIはhistoryや`TASK_LEDGER.md`を広く探索しない。
+- no automatic order;
+- no private/account/order endpoints;
+- no unapproved runtime, launchd, mail, notification, gate, threshold, scoring, or classifier change;
+- generated/private data remains local and uncommitted;
+- frozen runtime repo requires explicit `RUNTIME_TASK`.
 
-## 8. Safety and approval boundary
+M-OPS source and local evidence remain Ver04.x.
 
-人間承認なしで変更しない。
-
-- production policy
-- gate、threshold、classifier、scoring
-- notification trigger、mail behavior
-- runtime、launchd
-- API、account、position、order関連
-- M6開始
-- Phase昇格
-- production adoption
-
-最終的なmanual trading判断は人間が行う。
-
-## 9. Version and branch policy
-
-### Ver04-v3
-
-`Ver04-v3` is the current repository and Product/Macro planning line.
-
-Its scope includes accepted repository cleanup, bounded report-only Product corrections, and evidence-gated Macro work without production promotion.
-
-### Ver05 promotion gate
-
-Do not create or declare `Ver05` merely because M1–M5 are accepted or because an M6 shadow source change exists.
-
-`Ver05` promotion requires all of the following:
-
-1. an M6 proposal satisfies the M6 entry gate
-2. the selected M6 change is implemented in a bounded scope
-3. matching tests and required evidence pass
-4. no material Product/P8 contradiction remains hidden
-5. human approval is explicit
-6. any runtime apply is separately approved and verified when runtime adoption is part of the proposal
-7. ChatGPT acceptance is recorded
-8. source, tests, current plans, and operator-facing documentation agree on the adopted behavior
-
-Until those conditions are met, the development line remains Ver04.x.
+`Ver05` requires an explicitly approved production adoption, matching validation, runtime verification where applicable, and ChatGPT acceptance. M1–M5 or local M-OPS completion alone does not automatically promote the version.
