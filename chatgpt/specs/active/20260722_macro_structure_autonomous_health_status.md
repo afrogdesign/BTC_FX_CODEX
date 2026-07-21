@@ -400,3 +400,15 @@ Installed automatic generation of the M-OPS5 health artifact is not authorized b
 ## Implementation note
 
 M-OPS5 is implemented as the read-only `check-macro-structure-health` route with deterministic v1 health artifacts, schedule/status/latest-pointer validation, atomic publication, and focused fixture coverage. It does not invoke M-OPS1–M-OPS4, launchctl, live fetch, or runtime mutation.
+
+## FIX-01 acceptance findings
+
+Direct review of commit `fa0f734` and the retained M-OPS5 artifacts found three material contract defects:
+
+1. `operator_html_path` is emitted as `local/reports/macro_structure/operator/None/macro_structure_operator.html` because the operator main JSON does not contain `artifact_dir`; the path must use the validated operator artifact directory or runtime/operator ID.
+2. runtime step validation requires all three step rows even for a legitimate early snapshot or history failure. The accepted runtime wrapper stops after the first failed step, so a well-formed ordered prefix must publish health state `failed`, not `inconsistent` or `unavailable`.
+3. artifact source-fingerprint keys are merged by filename, causing the snapshot/history/operator `run_manifest.json` fingerprints to overwrite each other. Fingerprints and health identity must retain namespaced entries for every validated artifact file and the three latest pointers.
+
+The retained review bundle also contains multiple intermediate health roots per case. FIX-01 must regenerate it so each required case has one clearly designated final published health root and no ambiguous stale review output.
+
+FIX-01 implementation scope: operator HTML paths, ordered early-failure runtime validation, namespaced source/latest-pointer fingerprints, operation-result statuses, latest evidence timestamps, and validated relative runtime log paths. No M-OPS1–M-OPS4 or installed runtime behavior is changed.
