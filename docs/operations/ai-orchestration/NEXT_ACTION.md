@@ -1,58 +1,72 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-P8-ACTUAL-EXPORT-INPUT`
-- mode: `HUMAN_CHECK`
+- current_work_id: `BTCFX-20260721-M5-EVIDENCE-REFRESH-TRIGGER`
+- mode: `WAIT_FOR_EVIDENCE`
 - branch: `Ver04-v3` documentation line; confirm from local git before the next Codex task
 - active_spec: none
-- status: blocked pending local private input
+- status: waiting for a gate-relevant input change
 - push: none
 
 ## Current action
 
-Place one complete MEXC futures export batch under the ignored canonical directory:
+Do not rerun or rewrite the accepted M5 proposal engine now.
 
-```text
-local/manual_trade_imports/YYYYMMDD/
-```
+Wait until at least one M5 refresh trigger becomes true:
 
-The batch must contain `.xlsx` files matching all three categories:
+1. at least seven new eligible JST dates exist after the accepted 2026-07-21 M5 cutoff;
+2. the P-route actual episode/link pair becomes available and changes P8 actual evidence status;
+3. an accepted M1 or M3 source change materially changes the comparison basis;
+4. the user explicitly requests an earlier bounded refresh.
 
-- Trade History
-- Order History
-- Position History
+The seven-date rule is a replay-cost scheduling rule, not a proposal-eligibility threshold.
 
-Raw exchange exports must remain local and uncommitted.
+## Next task when triggered
 
-## Why this is required
+Create one active M5 refresh spec and run one bounded operations task:
 
-The accepted importer, episode builder, signal linker, and P8 actual-evidence route already exist and have matching test coverage. Current inspection found no canonical raw input directory and no generated actual-trade, episode, or signal-link CSVs. Consequently eligible actual-backed evidence is 0.
+- use the accepted champion manifest unchanged
+- use the accepted four-challenger proposal space unchanged
+- use fresh explicit M1/M3 inputs
+- include P8 evidence only when the accepted actual episode/link route has produced it
+- execute `run-macro-p9-proposal-engine` exactly once
+- produce exactly four fresh local outputs
+- do not commit generated artifacts or private inputs
+- return to ChatGPT before any M6 task
 
-Codex must not fabricate, download, infer, or synthesize private exchange history.
+## Decision after refresh
 
-## Next Codex task after input exists
+- no eligible challenger: record `continue_shadow_collection` and park again
+- material engine defect: create one bounded M5 FIX spec
+- exactly one proposal-eligible challenger: create one M6 proposal package and request explicit human approval
+- multiple eligible challengers: do not combine them; select one through ChatGPT/human judgment
 
-Run one bounded operations task in the primary repo:
+## P-route handoff
 
-1. confirm the complete three-category batch without printing raw rows or private paths
-2. run `import-manual-actual-trades` with `--dry-run --conflict-policy reject --stdout-json`
-3. stop on any missing category, schema error, row rejection requiring judgment, or corrected-export conflict
-4. only after a clean dry-run, run the canonical importer and generate:
-   - `logs/csv/manual_actual_trades.csv`
-   - `logs/csv/manual_actual_orders.csv`
-   - `logs/csv/manual_actual_positions.csv`
-5. build `logs/csv/manual_trade_episodes.csv`
-6. build `logs/csv/manual_trade_signal_links.csv`
-7. report compact aggregate counts only; do not commit generated CSVs or raw exports
-8. return to ChatGPT before any P8 replay or production conclusion
+P1–P8 and the actual-evidence readiness review are accepted. P9 remains blocked by the absent complete private MEXC Trade History / Order History / Position History batch.
+
+Do not repeat the accepted P importer/linker/readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
+
+## M6 boundary
+
+M6 is not authorized by this `NEXT_ACTION`.
+
+M6 requires:
+
+- one proposal-eligible M5 challenger
+- one bounded proposal
+- explicit human approval
+- source-only shadow before any runtime apply
+- separate validation and adoption decisions
+
+Canonical plan:
+
+- `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
 
 ## Safety
 
 - report-only
-- no private/account/order endpoints
-- no API keys or secrets
-- no raw exchange export commit
-- no generated actual CSV commit
 - no automatic order
-- no classifier, score, gate, threshold, notification, mail, runtime, schedule, or phase-promotion change
-- no `paper_positions.csv` integration
-- frozen runtime repo remains out of scope
+- no automatic production mutation
+- no raw exchange export or generated actual CSV commit
+- no gate, threshold, scoring, classifier, notification, mail, runtime, schedule, API, account, position, or order change
+- no frozen runtime repo access without an explicit `RUNTIME_TASK`

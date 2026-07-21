@@ -20,6 +20,7 @@ Then read only what the request needs.
 | exactly one current task | `NEXT_ACTION.md` |
 | Product planning | `PRODUCT_IMPLEMENTATION_ROUTE.md` |
 | Macro planning | `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md` |
+| M5/M6 execution planning | `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md` |
 | implementation / FIX / acceptance | one file under `chatgpt/specs/active/` |
 | ChatGPT/Codex execution | `AI_WORKFLOW.md` |
 | stable safety、git、runtime、validation | `CONTROL.md` |
@@ -71,12 +72,37 @@ Current high-level state:
 
 - P1〜P7 accepted
 - P8 evidence pipeline accepted and collecting evidence
-- P9 blocked pending adequate evidence and human approval
+- P9 blocked pending a human-supplied private actual-trade export batch and adequate evidence
 - M1〜M5 accepted
+- M5 accepted result is `winner=none` / `continue_shadow_collection`
 - M6 not started and not authorized
 - A1/A2 accepted, A3 superseded, A4 not planned
 
-## 3. Current execution route
+## 3. Mandatory current-state handoff
+
+Before proposing or starting a new task, a new ChatGPT context must read `CURRENT_STATE.md` and `NEXT_ACTION.md` when they contain an accepted blocker or no-repeat boundary.
+
+The first status report must state:
+
+1. the latest accepted checkpoint locator;
+2. the current blocker;
+3. the exact event that permits work to resume;
+4. which accepted review must not be repeated.
+
+For the current P route:
+
+- report that P1–P8 and the actual-evidence readiness route are accepted;
+- report that P9 is blocked by the absent complete MEXC Trade History / Order History / Position History batch;
+- do not repeat importer, episode-builder, linker, or P8 readiness review unless a reopening trigger in `CURRENT_STATE.md` or `DEC-20260721-012` is true.
+
+For the current M route:
+
+- report that M5 is already implemented and accepted;
+- do not describe M5 as unimplemented;
+- follow `M5_M6_EXECUTION_PLAN_20260721.md`;
+- do not start M6 without one proposal-eligible challenger and explicit human approval.
+
+## 4. Current execution route
 
 Normal route:
 
@@ -93,7 +119,7 @@ Use direct MCP work for deterministic Markdown、spec、state、and review tasks
 
 Task manifests and JSON reports are optional strict tooling only. See `AI_OPERATIONS_STATUS.md`.
 
-## 4. Repo boundary
+## 5. Repo boundary
 
 | Purpose | Path | Rule |
 |---|---|---|
@@ -102,7 +128,7 @@ Task manifests and JSON reports are optional strict tooling only. See `AI_OPERAT
 
 ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch and HEAD are confirmed from local repo state when git evidence is required.
 
-## 5. Current source-of-truth order
+## 6. Current source-of-truth order
 
 ```text
 repo source、tests、generated artifacts
@@ -117,7 +143,7 @@ repo source、tests、generated artifacts
 
 Historical documents never override current source or canonical routes.
 
-## 6. Non-default reads
+## 7. Non-default reads
 
 Do not broadly scan:
 
@@ -130,13 +156,13 @@ Do not broadly scan:
 
 Read a historical file only when a current task identifies the exact evidence or decision being investigated.
 
-## 7. Record roles
+## 8. Record roles
 
 | File | Responsibility |
 |---|---|
 | `MASTER_PLAN.md` | overall plan and plan hierarchy |
-| `CURRENT_STATE.md` | accepted state and blocker |
-| `NEXT_ACTION.md` | exactly one current task |
+| `CURRENT_STATE.md` | accepted state, blocker, and no-repeat review boundary |
+| `NEXT_ACTION.md` | exactly one current task or evidence trigger |
 | `CONTROL.md` | stable safety / git / runtime / validation rules |
 | `AI_WORKFLOW.md` | shared execution and review process |
 | `MILESTONES.md` | major accepted checkpoints |
@@ -144,7 +170,7 @@ Read a historical file only when a current task identifies the exact evidence or
 | active spec | current detailed implementation contract |
 | `TASK_LEDGER.md` | historical Work ID lookup only |
 
-## 8. Safety baseline
+## 9. Safety baseline
 
 - report-only
 - not `FORMAL_GO`

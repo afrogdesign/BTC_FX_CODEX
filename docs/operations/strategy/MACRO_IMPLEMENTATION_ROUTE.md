@@ -60,6 +60,23 @@ midpointやcompressionは補助変数であり、単独triggerや方向signalと
 
 M5 acceptanceはengineとevidence contractの受理であり、challenger採用ではない。
 
+M5 is already implemented. A no-winner result does not authorize rewriting the engine or starting M6.
+
+## M5 continuation boundary
+
+The next M5 work is an evidence refresh, not a new engine implementation.
+
+Do not run the heavy proposal bundle daily. A bounded refresh becomes eligible when at least one gate-relevant input changes:
+
+- at least seven new eligible JST dates after the accepted 2026-07-21 cutoff;
+- P8 actual episode/link evidence becomes available;
+- an accepted M1 or M3 source change materially changes the comparison basis;
+- the user explicitly requests an earlier bounded refresh.
+
+The seven-date rule controls replay cost only. It does not replace the accepted proposal gates.
+
+A refresh uses the accepted champion, the same four declared challengers, one bounded engine execution, and four fresh local outputs. No generated artifact or raw input is committed.
+
 ## M6 entry gate
 
 M6は次をすべて満たした場合だけ検討する。
@@ -74,20 +91,44 @@ M6は次をすべて満たした場合だけ検討する。
 M6では次を一括で行わない。
 
 - source変更とruntime apply
--複数proposalの同時採用
+- 複数proposalの同時採用
 - gate / threshold / scoringの広範変更
 - mail / notification / launchd変更
 - automatic production adoption
 
+## M6 execution boundary
+
+M6 is divided into separate acceptance points:
+
+```text
+one-candidate proposal package
+→ explicit human approval
+→ source-only disabled-by-default shadow
+→ matching tests and one bounded validation
+→ ChatGPT review
+→ explicit human adoption decision
+→ separate target-specific runtime apply
+→ post-apply verification
+```
+
+A source-only M6 shadow is not runtime adoption and does not qualify for `Ver05`.
+
+Runtime, notification, mail, gate, threshold, scoring, or schedule changes require explicit separate approval.
+
+Detailed canonical plan:
+
+- `M5_M6_EXECUTION_PLAN_20260721.md`
+
 ## Current action
 
-M route単独のnext implementationはない。
+The P route is parked pending a complete private actual-trade export batch.
 
-現在はP8 evidence collectionとProduct routeを優先する。新しいmacro evidenceがM5の結論を変える場合にだけ、M6 proposal判断を再開する。
+The selected M action is to wait for the M5 evidence-refresh trigger recorded in `NEXT_ACTION.md`. Do not start a heavy M5 run before the trigger, and do not start M6 before a proposal-eligible candidate and explicit human approval exist.
 
 ## Canonical references
 
 - overall plan: `docs/operations/ai-orchestration/MASTER_PLAN.md`
+- M5/M6 execution plan: `M5_M6_EXECUTION_PLAN_20260721.md`
 - research basis: `MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
 - accepted M implementation contracts: `chatgpt/specs/archive/20260720_macro_*` and `chatgpt/specs/archive/20260721_macro_*`
 - accepted checkpoint summary: `docs/operations/ai-orchestration/MILESTONES.md`

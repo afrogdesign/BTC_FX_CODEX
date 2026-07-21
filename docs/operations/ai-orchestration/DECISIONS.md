@@ -313,3 +313,49 @@ Several generations of plans, task records, runbooks, reports, compatibility poi
 - current state is not duplicated into handoff or compatibility files
 - removed directories are not recreated
 - Product, trading, runtime, notification, and safety behavior are unchanged by this cleanup
+
+
+## DEC-20260721-012: P actual-evidence readiness is a no-repeat review boundary
+
+Date: 2026-07-21
+Status: accepted
+
+Decision:
+
+- P1–P8 implementation and the actual-evidence readiness route are accepted.
+- P9 remains blocked because the canonical private MEXC Trade History / Order History / Position History batch has not been supplied.
+- The absence of `manual_actual_*`, episode, and signal-link CSVs is an input-availability blocker, not an evaluator defect.
+- A new AI must report this accepted blocker from `CURRENT_STATE.md` and `NEXT_ACTION.md` instead of repeating the importer, episode-builder, linker, and P8 readiness review.
+
+The review may be reopened only when:
+
+1. a complete private export batch appears under the ignored canonical input path;
+2. relevant importer/linker/evaluator source or tests change;
+3. a new artifact contradicts the recorded state; or
+4. the user explicitly requests re-verification.
+
+Reason:
+
+The accepted code and contracts have already been reviewed. Repeating the same review consumes time and Codex credit without changing the blocking fact.
+
+
+## DEC-20260721-013: M5 evidence refresh precedes any M6 implementation
+
+Date: 2026-07-21
+Status: accepted planning decision
+
+Decision:
+
+- M5 source implementation is complete and accepted; it is not reopened merely because the accepted run selected no winner.
+- The next M work is an evidence refresh after a gate-relevant input change, using the accepted engine and proposal space.
+- M6 may begin only after M5 identifies one proposal-eligible challenger and the user explicitly approves one bounded proposal.
+- M6 source-only shadow, bounded validation, human adoption, and runtime apply are separate tasks.
+- Runtime, notification, mail, gate, threshold, scoring, and production adoption are never bundled into the M6 source task.
+
+Canonical plan:
+
+- `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
+
+Reason:
+
+This preserves fail-closed evidence integrity, prevents an unsupported M6 promotion, and avoids rewriting an already accepted M5 engine.

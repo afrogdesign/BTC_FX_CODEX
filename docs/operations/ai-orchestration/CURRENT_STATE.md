@@ -7,6 +7,8 @@ last_updated: 2026-07-21
 - current branch: `Ver04-v3` (reported by bounded local git execution)
 - accepted repository-cleanup checkpoint: `bff7669`
 - accepted Product checkpoint: `0eeb26b` (`P8 issue lifecycle alignment`)
+- accepted state checkpoint: `b9ca3f6` (`record P8 actual evidence blocker`)
+- accepted M5 implementation checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - active spec: none
 - safety: report-only / human-decided / no automatic order
@@ -18,47 +20,24 @@ MCP does not independently expose git branch, HEAD, commit objects, or the compl
 
 - `Ver04-v3`: current accepted repository and Product working line
 - `Ver05`: reserved for an evidence-backed, explicitly approved, implemented, validated, and accepted M6 change
-- M1–M5 acceptance and P8 UI/report corrections do not qualify for `Ver05`
+- M1–M5 acceptance, M5 evidence refresh, and an M6 source-only shadow do not by themselves qualify for `Ver05`
 
-## Product state
+## Product / P state
 
 - P1–P7 accepted
 - P8 evidence pipeline accepted and collecting evidence
 - P9 blocked pending adequate evidence and human approval
-- M1–M5 accepted
-- M6 not started and not authorized
 
-Current evidence posture:
+Current P evidence posture:
 
 - actual-backed evidence remains missing / 0 eligible episodes in the latest reviewed P8 artifacts
 - `P8-ISSUE-001` remains an evidence-driven `open hypothesis`
 - `P8-ISSUE-002`, `P8-ISSUE-003`, and `P8-ISSUE-004` are resolved UI-contract issues
-- the issue-summary generator represents those three UI lifecycle states deterministically without inventing market occurrences, resolved rows, or actual evidence
 - P9 readiness remains false
 
-## Accepted P8 lifecycle alignment
+## P actual-evidence readiness — accepted no-repeat boundary
 
-Direct MCP review confirmed:
-
-- all existing issue keys are preserved
-- issue 001 status and proxy evidence semantics are unchanged
-- issues 002–004 are emitted as `resolved`
-- each resolved UI issue has stable machine-readable accepted-implementation resolution metadata
-- evaluation counts, class distribution, comparison metrics, global STOP metrics, actual evidence, and P9 readiness calculation paths remain unchanged
-- focused unittest and task-scoped `git diff --check` were reported passing
-- no classifier, score, gate, threshold, notification, mail, runtime, API, account, position, order, or automatic-tuning behavior changed
-
-Archived acceptance spec:
-
-- `chatgpt/specs/archive/20260721_p8_issue_lifecycle_alignment.md`
-
-Issue register reconciliation:
-
-- `docs/operations/ai-orchestration/P8_P9_ISSUE_REGISTER.md`
-
-## Actual-evidence readiness review
-
-`BTCFX-20260721-P8-ACTUAL-EVIDENCE-READINESS-REVIEW` is complete as a review-only task.
+`BTCFX-20260721-P8-ACTUAL-EVIDENCE-READINESS-REVIEW` is complete and accepted as a review-only result.
 
 Directly confirmed availability:
 
@@ -70,27 +49,85 @@ Directly confirmed availability:
 - `logs/csv/manual_trade_signal_links.csv` is absent
 - `local/manual_trade_imports/` is protected by `.gitignore`
 
-Therefore the latest eligible actual evidence is 0 because no exchange export batch has entered the accepted local importer → episode builder → signal linker route. This is an input-availability blocker, not a P8 evaluator defect.
+Conclusion:
 
-Accepted raw workbook contract:
+- eligible actual evidence is 0 because no complete private exchange export batch has entered the accepted importer → episode builder → signal linker route
+- this is an input-availability blocker, not an importer, linker, or P8 evaluator defect
+- no P source implementation is currently required
 
-- Trade History `.xlsx`: `UID`, `時間(UTC+09:00)`, `先物取引ペア`, `方向`, `注文の種類`, `約定価格`, `取引手数料`, `手数料支払い暗号資産`, `役割`, `決済損益`, plus at least one accepted quantity column
-- Order History `.xlsx`: `UID`, `時間(UTC+09:00)`, `先物取引ペア`, `方向`, `レバレッジ`, `注文の種類`, `約定数量`, `平均約定価格`, `決済損益`, `手数料`, `ステータス`
-- Position History `.xlsx`: `UID`, `取引ペア`, `オープン時間(UTC+09:00)`, `決済時刻`, `方向`, `実現損益`, `ステータス`
+A new AI must report this accepted state and must not repeat the importer, episode-builder, signal-linker, CLI, or P8 readiness review.
 
-Accepted generated route:
+Reopen the P readiness review only when at least one trigger is true:
 
-1. `import-manual-actual-trades`
-2. `build-manual-trade-episodes`
-3. `link-manual-trades-to-signals`
-4. P8 operating-cycle use of the episode/link pair
+1. a complete MEXC Trade History / Order History / Position History `.xlsx` batch appears under `local/manual_trade_imports/YYYYMMDD/`;
+2. relevant importer, episode-builder, linker, operating-cycle, or P8 evaluator source/tests change;
+3. a new generated artifact contradicts the recorded state;
+4. the user explicitly requests re-verification.
 
-No source implementation is currently required. The next action requires a human-supplied local export batch.
+Canonical decision: `DEC-20260721-012` in `DECISIONS.md`.
+
+## Macro / M state
+
+- M1 accepted
+- M2 accepted
+- M3 accepted
+- M4 accepted
+- M5 accepted
+- M6 not started and not authorized
+
+Accepted M5 result:
+
+- champion count: 1
+- challenger count: 4
+- chronological snapshot dates: 6
+- winner: `none`
+- recommendation: `continue_shadow_collection`
+- P8 actual-backed evidence: missing / 0
+- production mutation: none
+
+M5 is already implemented. Do not reopen or rewrite the M5 engine merely because no challenger won.
+
+The current M execution plan is:
+
+```text
+wait for a gate-relevant evidence change
+→ one bounded M5 evidence refresh
+→ zero or one proposal-eligible challenger
+→ one human-approved M6 proposal
+→ source-only shadow
+→ bounded validation
+→ explicit human adoption decision
+→ separate runtime apply when approved
+```
+
+Canonical plan:
+
+- `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
+
+Canonical decision:
+
+- `DEC-20260721-013` in `DECISIONS.md`
+
+M6 may not start until M5 identifies one proposal-eligible challenger and the user explicitly approves one bounded proposal.
+
+## Current selected action
+
+The P route is parked on human private input. While that blocker remains, the selected M-route action is the M5 evidence-refresh trigger defined in `NEXT_ACTION.md`.
+
+Do not run the heavy M5 bundle daily. A refresh is eligible after a gate-relevant change, normally at least seven new eligible JST dates after the accepted 2026-07-21 cutoff, new P8 actual evidence, an accepted M1/M3 comparison-basis change, or explicit user instruction.
 
 ## Repository model
 
-Repository cleanup remains accepted. Active implementation areas remain `src/`, `tools/`, `scripts/`, `tests/`, `docs/operations/`, and `chatgpt/specs/active/`. Generated evidence and raw private inputs remain under ignored/uncommitted `local/` or `logs/` paths unless a separate artifact contract explicitly says otherwise.
+Repository cleanup remains accepted. Active implementation areas remain `src/`, `tools/`, `scripts/`, `tests/`, `docs/operations/`, and `chatgpt/specs/active/`.
 
-## Active blocker
+Generated evidence and raw private inputs remain ignored and uncommitted under `local/` or `logs/` unless a separate artifact contract explicitly says otherwise.
 
-The main P8/P9 blocker is the absence of a complete privacy-safe local actual-trade export batch and, after import, sufficient high/medium-confidence linked episodes and an established validation window. No production tuning or phase promotion is authorized.
+## Safety boundary
+
+- report-only
+- not `FORMAL_GO`
+- human decides all trades and all adoption
+- no automatic order
+- no raw exchange export or generated actual CSV commit
+- no automatic gate, threshold, scoring, classifier, notification, mail, runtime, or Phase promotion
+- no frozen runtime repo access without an explicit `RUNTIME_TASK`

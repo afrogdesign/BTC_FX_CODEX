@@ -67,9 +67,13 @@ actual trade export
 
 P9 readinessはproduction変更権限ではない。最初にproposalを作り、人間承認後にだけbounded implementationへ進む。
 
+P actual-evidence readiness review is accepted and is a no-repeat boundary. The route is parked until a complete private MEXC Trade History / Order History / Position History batch appears under the ignored canonical input directory, relevant source changes, a contradictory artifact appears, or the user explicitly requests re-verification.
+
 正本:
 
 - `PRODUCT_IMPLEMENTATION_ROUTE.md`
+- `CURRENT_STATE.md`
+- `DEC-20260721-012` in `DECISIONS.md`
 - `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
 
 ### 3.2 Macro / M route
@@ -91,12 +95,16 @@ M5の結果:
 - recommendation: `continue_shadow_collection`
 - actual-backed evidence: missing
 
-したがってM6は現在のnext taskではない。採用可能な候補と人間承認が揃った場合だけ再検討する。
+M5 is already implemented. The next M work is a bounded evidence refresh after a gate-relevant input change, not an engine rewrite.
+
+M6 remains conditional. It starts only after M5 identifies one proposal-eligible challenger and the user explicitly approves one bounded proposal. Source-only shadow, validation, human adoption, and runtime apply are separate tasks.
 
 正本:
 
 - `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
+- `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
 - `docs/operations/strategy/MACRO_STRUCTURE_RESEARCH_BASIS_20260720.md`
+- `DEC-20260721-013` in `DECISIONS.md`
 - accepted M specs under `chatgpt/specs/archive/`
 
 ### 3.3 AI operations / A route
@@ -128,24 +136,34 @@ A計画は進行中のproduct backlogではない。再開しない限り、新�
 
 ## 4. 現在の実行方針
 
-現在は次の順で進める。
+P route is parked on human private input. Do not repeat the accepted readiness review.
+
+While the P blocker remains, proceed on the M route only through the accepted evidence-gated sequence:
 
 ```text
-P8 / M5の既存evidenceを確認
-→ actual-backed evidence gapを特定
-→ 利用者価値を増やす最小のProduct taskを1件選ぶ
-→ 必要ならactive specを1本作る
-→ 1回のbounded implementation
-→ matching validation
+wait for a gate-relevant M5 input change
+→ create one active M5 refresh spec
+→ one bounded M5 engine execution
 → ChatGPT MCP review
+→ no candidate: park and continue collection
+→ one eligible candidate: create one M6 proposal package
+→ explicit human approval
+→ source-only disabled-by-default shadow
+→ matching validation
+→ explicit human adoption decision
+→ separate runtime apply when approved
 ```
+
+The default M5 refresh trigger is at least seven new eligible JST dates after the accepted 2026-07-21 cutoff, new P8 actual evidence, an accepted M1/M3 comparison-basis change, or explicit user instruction. This is a replay-cost trigger, not an eligibility threshold.
 
 次を行わない。
 
 - 新しいorchestration frameworkの作成
 - A3/A4の再開
-- 根拠のないM6開始
+- M5 engineの根拠のない再実装
+- proposal-eligible candidateなしでのM6開始
 - evidence不足のままP9 tuning
+- source変更とruntime applyの同一task化
 - product変更を細かな複数Codex taskへ分割
 - report形式だけを理由とするretask
 
@@ -156,10 +174,11 @@ P8 / M5の既存evidenceを確認
 1. `AGENTS.md`
 2. `docs/operations/ai-orchestration/START_HERE.md`
 3. planningまたはnext-task判断なら `MASTER_PLAN.md`
-4.現在地が必要なら `CURRENT_STATE.md` と `NEXT_ACTION.md`
+4. 現在地が必要なら `CURRENT_STATE.md` と `NEXT_ACTION.md`
 5. 対象routeだけ読む
    - Product: `PRODUCT_IMPLEMENTATION_ROUTE.md`
    - Macro: `docs/operations/strategy/MACRO_IMPLEMENTATION_ROUTE.md`
+   - M5/M6 execution: `docs/operations/strategy/M5_M6_EXECUTION_PLAN_20260721.md`
    - AI execution: `AI_WORKFLOW.md` と必要時だけ `CONTROL.md`
 6. implementation時だけ `chatgpt/specs/active/` の1本を読む
 
@@ -172,9 +191,10 @@ P8 / M5の既存evidenceを確認
 | `MASTER_PLAN.md` | 全体設計、3軸の関係、現在の優先順位 |
 | `PRODUCT_IMPLEMENTATION_ROUTE.md` | 本体Productの現在地と次Phase条件 |
 | `MACRO_IMPLEMENTATION_ROUTE.md` | M1〜M6の現在地とM6境界 |
+| `M5_M6_EXECUTION_PLAN_20260721.md` | M5 evidence refreshからM6 runtimeまでの分離実行計画 |
 | `AI_OPERATIONS_STATUS.md` | A計画の結論とoptional toolingの扱い |
-| `CURRENT_STATE.md` | 受理済み現在地とblocker |
-| `NEXT_ACTION.md` | 現在の作業を1件だけ記載 |
+| `CURRENT_STATE.md` | 受理済み現在地、blocker、no-repeat boundary |
+| `NEXT_ACTION.md` | 現在の作業またはevidence triggerを1件だけ記載 |
 | `AI_WORKFLOW.md` | ChatGPT/Codexの実行手順 |
 | `CONTROL.md` | stable safety、git、runtime、validation rules |
 | `MILESTONES.md` | major accepted checkpoints |
@@ -186,8 +206,8 @@ P8 / M5の既存evidenceを確認
 
 - completedまたはsuperseded plan
 - 古いPhase route
--過去のorchestration experiment
--一時的なcheckpoint、smoke、review記録
+- 過去のorchestration experiment
+- 一時的なcheckpoint、smoke、review記録
 
 次は削除せず残す。
 
@@ -219,21 +239,13 @@ Historical fileは調査対象が明確な場合だけ読む。新しいAIはhis
 
 ### Ver04-v3
 
-`Ver04-v3` is the repository-structure and documentation-consolidation line.
+`Ver04-v3` is the current repository and Product/Macro planning line.
 
-Its scope is:
-
-- canonical navigation cleanup
-- removal or archival of obsolete directories and documents
-- README and repository-map correction
-- generated/local/history boundary clarification
-- no trading-logic or runtime behavior promotion merely because the repository was reorganized
-
-The current cleanup changes should be committed on `Ver04-v3`, leaving `Ver04-v2` as the preceding accepted line.
+Its scope includes accepted repository cleanup, bounded report-only Product corrections, and evidence-gated Macro work without production promotion.
 
 ### Ver05 promotion gate
 
-Do not create or declare `Ver05` merely because M1–M5 are accepted.
+Do not create or declare `Ver05` merely because M1–M5 are accepted or because an M6 shadow source change exists.
 
 `Ver05` promotion requires all of the following:
 
@@ -242,7 +254,8 @@ Do not create or declare `Ver05` merely because M1–M5 are accepted.
 3. matching tests and required evidence pass
 4. no material Product/P8 contradiction remains hidden
 5. human approval is explicit
-6. ChatGPT acceptance is recorded
-7. source, tests, current plans, and operator-facing documentation agree on the adopted behavior
+6. any runtime apply is separately approved and verified when runtime adoption is part of the proposal
+7. ChatGPT acceptance is recorded
+8. source, tests, current plans, and operator-facing documentation agree on the adopted behavior
 
 Until those conditions are met, the development line remains Ver04.x.
