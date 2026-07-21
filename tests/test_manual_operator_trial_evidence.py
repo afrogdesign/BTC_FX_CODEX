@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.feedback.manual_operator_classifier import OUTPUT_HEADERS
-from src.feedback.manual_operator_trial_evidence import TRIAL_FACT_HEADERS, _counterfactual_classification, _issue_flags, _status, build_manual_operator_trial_evidence
+from src.feedback.manual_operator_trial_evidence import ISSUE_RESOLUTION_METADATA, TRIAL_FACT_HEADERS, _counterfactual_classification, _issue_flags, _status, build_manual_operator_trial_evidence
 from src.feedback.manual_decision_events import DECISION_HEADERS
 from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
 from src.feedback.manual_trade_signal_linker import LINK_HEADERS
@@ -110,6 +110,30 @@ class TrialEvidenceTests(unittest.TestCase):
             row = next(reader)
         self.assertEqual(row["outcome_status"], "resolved_positive")
         self.assertEqual(row["comparison_status"], "aligned")
+
+    def test_issue_lifecycle_alignment_preserves_evidence_and_readiness(self) -> None:
+        result = self.build(self.fixtures())
+        self.assertEqual(result["counts"], {"trial_fact_rows": 1, "resolved_rows": 1, "unresolved_rows": 0, "no_ohlcv_rows": 0, "ambiguous_rows": 0, "scenario_count": 1, "review_queue_size": 0})
+        self.assertEqual(result["actual_evidence"], {"status": "missing", "eligible_rows": 0, "unique_episode_count": 0, "high_confidence_rows": 0, "medium_confidence_rows": 0})
+        self.assertEqual(result["global_stop_opportunity"], {"global_stop_present": False, "stop_rows": 0, "opposite_side_exists": 0, "counterfactual_B": 0, "counterfactual_C": 0, "not_eligible": 0, "issue_001_qualified_rows": 0})
+        self.assertFalse(result["p9_readiness"]["initial"]["ready"])
+        self.assertFalse(result["p9_readiness"]["practical"]["ready"])
+        issue_summary = result["issue_summary"]
+        issue_001 = issue_summary["P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY"]
+        self.assertEqual(issue_001["status"], "open hypothesis")
+        self.assertEqual(issue_001["evidence_confidence"], "proxy")
+        self.assertEqual(issue_001["occurrence_count"], 0)
+        self.assertEqual(issue_001["resolved_evidence_count"], 0)
+        self.assertEqual(issue_001["actual_backed_count"], 0)
+        for key, basis in ISSUE_RESOLUTION_METADATA.items():
+            issue = issue_summary[key]
+            self.assertEqual(issue["status"], "resolved")
+            self.assertEqual(issue["occurrence_count"], 0)
+            self.assertEqual(issue["resolved_evidence_count"], 0)
+            self.assertEqual(issue["actual_backed_count"], 0)
+            self.assertEqual(issue["resolution_confidence"], "accepted_implementation")
+            self.assertEqual(issue["resolution_basis"], basis["resolution_basis"])
+            self.assertTrue(issue["resolution_basis"])
 
     def test_resolved_negative_keeps_outcome_separate_from_comparison(self) -> None:
         self.build(self.fixtures(outcome="sl_first"))

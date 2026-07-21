@@ -27,6 +27,20 @@ SCHEMA_VERSION = "manual_operator_trial_evidence.v1"
 METHOD_VERSION = "manual_operator_trial_evidence.v1"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 POLICIES = ("CURRENT_STRICT", "A_ONLY", "A_PLUS_B", "A_PLUS_B_PLUS_C_OBSERVE", "STOP_OVERLAY")
+ISSUE_RESOLUTION_METADATA = {
+    "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": {
+        "resolution_confidence": "accepted_implementation",
+        "resolution_basis": "accepted_operator_surface.main_vs_big_chance_hierarchy",
+    },
+    "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED": {
+        "resolution_confidence": "accepted_implementation",
+        "resolution_basis": "accepted_operator_surface.collapsed_classifier_payload",
+    },
+    "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY": {
+        "resolution_confidence": "accepted_implementation",
+        "resolution_basis": "accepted_operator_surface.side_specific_stop_card_identity",
+    },
+}
 
 TRIAL_FACT_HEADERS = [
     "schema_version", "trial_fact_id", "scenario_id", "scenario_event_id", "signal_id", "candidate_id",
@@ -191,10 +205,10 @@ def _counterfactual_classification(class_row: dict[str, str], event_row: dict[st
     return "not_eligible"
 
 
-def _issue_summary(rows: list[dict[str, str]], key: str, *, status: str, severity: str, confidence: str, tuning: str) -> dict[str, Any]:
+def _issue_summary(rows: list[dict[str, str]], key: str, *, status: str, severity: str, confidence: str, tuning: str, resolution_metadata: dict[str, str] | None = None) -> dict[str, Any]:
     affected = [row for row in rows if key in set(filter(None, row.get("issue_flags", "").split(";")))]
     timestamps = sorted(row.get("event_timestamp_utc", "") for row in affected if row.get("event_timestamp_utc"))
-    return {
+    summary = {
         "first_evidence_timestamp": timestamps[0] if timestamps else "",
         "last_evidence_timestamp": timestamps[-1] if timestamps else "",
         "occurrence_count": len(affected),
@@ -208,6 +222,9 @@ def _issue_summary(rows: list[dict[str, str]], key: str, *, status: str, severit
         "tuning_eligibility": tuning,
         "status": status,
     }
+    if resolution_metadata:
+        summary.update(resolution_metadata)
+    return summary
 
 
 def _atomic(outputs: list[tuple[Path, str]]) -> None:
@@ -399,9 +416,9 @@ def build_manual_operator_trial_evidence(
         actual_rows = [row for row in rows if row.get("evidence_tier") == "actual_high_medium"]
         issue_summary = {
             "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY": _issue_summary(rows, "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", status="open hypothesis", severity="medium", confidence="proxy", tuning="not_eligible"),
-            "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": _issue_summary(rows, "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY", status="confirmed usability issue", severity="medium", confidence="human_observation", tuning="not_eligible"),
-            "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED": _issue_summary(rows, "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED", status="confirmed usability issue", severity="medium", confidence="human_observation", tuning="not_eligible"),
-            "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY": _issue_summary(rows, "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY", status="confirmed usability issue", severity="medium", confidence="human_observation", tuning="not_eligible"),
+            "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": _issue_summary(rows, "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY", status="resolved", severity="medium", confidence="accepted_implementation", tuning="not_eligible", resolution_metadata=ISSUE_RESOLUTION_METADATA["P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY"]),
+            "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED": _issue_summary(rows, "P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED", status="resolved", severity="medium", confidence="accepted_implementation", tuning="not_eligible", resolution_metadata=ISSUE_RESOLUTION_METADATA["P8-ISSUE-003_RAW_CLASSIFIER_PAYLOAD_EXPOSED"]),
+            "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY": _issue_summary(rows, "P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY", status="resolved", severity="medium", confidence="accepted_implementation", tuning="not_eligible", resolution_metadata=ISSUE_RESOLUTION_METADATA["P8-ISSUE-004_STOP_CARD_SIDE_IDENTITY"]),
         }
         input_paths = {"scenarios": scenarios, "scenario_events": scenario_events, "classifications": classifications, "decision_events": decision_events, "trade_episodes": trade_episodes, "episode_links": episode_links}
         fingerprints = {name: _sha256(path) for name, path in input_paths.items() if path is not None}
