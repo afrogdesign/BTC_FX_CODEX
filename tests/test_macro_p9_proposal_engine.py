@@ -12,7 +12,9 @@ from src.feedback.macro_p9_proposal_engine import (
     _dominates,
     _date_concentration,
     _m1_metrics,
+    _performance_snapshot_dates,
     _rolling_snapshots,
+    _write_snapshot_inputs,
     _expand_space,
     _p8_status,
     _validate_champion_manifest,
@@ -81,10 +83,49 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
     def test_rolling_snapshots_do_not_include_future_rows(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            (root / "events.csv").write_text("event_id,event_timestamp_utc,event_timestamp_jst\na,2026-07-19T01:00:00Z,2026-07-19 10:00:00+09:00\nb,2026-07-21T01:00:00Z,2026-07-21 10:00:00+09:00\n")
-            (root / "episodes.csv").write_text("episode_id,start_timestamp_utc\ne1,2026-07-19T01:00:00Z\ne2,2026-07-21T01:00:00Z\n")
-            snapshots = _rolling_snapshots(root / "events.csv", root / "episodes.csv", ["2026-07-19", "2026-07-21"], {"directional_precision": 0.1})
-            self.assertEqual(["e1"], snapshots[0]["episode_ids"])
+            (root / "signals.csv").write_text("signal_id,timestamp_utc,timestamp_jst,macro_context_only\na,2026-07-19T01:00:00Z,2026-07-19 10:00:00+09:00,false\nb,2026-07-21T01:00:00Z,2026-07-21 10:00:00+09:00,false\nc,2026-07-22T01:00:00Z,2026-07-22 10:00:00+09:00,false\n")
+            self.assertEqual([("2026-07-19", "2026-07-19T01:00:00Z"), ("2026-07-21", "2026-07-21T01:00:00Z"), ("2026-07-22", "2026-07-22T01:00:00Z")], _performance_snapshot_dates(root / "signals.csv"))
+
+    def test_snapshot_inputs_are_cutoff_bounded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths = {}
+            for name, rows in {
+                "signals": "timestamp_utc,macro_context_only\n2026-07-19T01:00:00Z,false\n2026-07-19T02:00:00Z,false\n",
+                "ohlcv_15m": "timestamp_utc\n2026-07-19T00:30:00Z\n2026-07-19T01:00:00Z\n",
+                "ohlcv_1h": "timestamp_utc\n2026-07-19T00:00:00Z\n2026-07-19T01:00:00Z\n",
+                "ohlcv_4h": "timestamp_utc\n2026-07-18T22:00:00Z\n2026-07-19T01:00:00Z\n",
+            }.items():
+                path = root / f"{name}.csv"
+                path.write_text(rows)
+                paths[name] = path
+            bounded = _write_snapshot_inputs(paths, "2026-07-19T01:00:00Z", root / "bounded")
+            self.assertEqual(1, len(bounded["signals"].read_text().splitlines()) - 1)
+            self.assertEqual(1, len(bounded["ohlcv_15m"].read_text().splitlines()) - 1)
+            self.assertEqual(1, len(bounded["ohlcv_1h"].read_text().splitlines()) - 1)
+            self.assertEqual(0, len(bounded["ohlcv_4h"].read_text().splitlines()) - 1)
+
+    def test_rolling_orchestration_reuses_champion_cache_and_handles_runless_candidate(self):
+        parameters = {"left_window": 2, "right_window": 2}
+        fixed = {"performance_start_utc": "2026-07-18T00:00:00Z", "performance_end_utc": "2026-07-21T00:00:00Z"}
+        dates = [("2026-07-19", "2026-07-19T01:00:00Z"), ("2026-07-20", "2026-07-20T01:00:00Z")]
+        calls = []
+
+        def fake_run(candidate, paths, values, temp_root):
+            calls.append(candidate)
+            return {"candidate_id": candidate_id(candidate), "parameters": candidate, "m1": temp_root / "m1", "m3": temp_root / "m3"}
+
+        def fake_record(date, cutoff, paths, run, m1, m3, validation_dates, reasons, status, comparison, pareto, improved):
+            return {"snapshot_jst_date": date, "m3_eligible_jst_dates": [date], "m3_validation_jst_dates": [date], "m1_opportunity_id_fingerprint": "same", "m1_guarded_metrics": m1, "m3_guarded_metrics": m3}
+
+        metrics = {"directional_precision": 0.5, "large_move_recall": 0.5, "false_warning_rate": 0.1, "opposite_move_rate": 0.1, "whipsaw_rate": 0.1, "burden_per_jst_day": 1.0, "resolved_up_count": 10, "resolved_down_count": 10}
+        with patch("src.feedback.macro_p9_proposal_engine._performance_snapshot_dates", return_value=dates), patch("src.feedback.macro_p9_proposal_engine._write_snapshot_inputs", side_effect=lambda paths, cutoff, root: paths), patch("src.feedback.macro_p9_proposal_engine._run_candidate", side_effect=fake_run), patch("src.feedback.macro_p9_proposal_engine._read_json", return_value={"recommendation": {"validation_dates": ["2026-07-19"]}}), patch("src.feedback.macro_p9_proposal_engine._m1_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._m3_metrics", return_value=metrics), patch("src.feedback.macro_p9_proposal_engine._snapshot_record", side_effect=fake_record), patch("src.feedback.macro_p9_proposal_engine._id_fingerprint", return_value="same"), patch("src.feedback.macro_p9_proposal_engine._m1_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._m3_quality_ok", return_value=True), patch("src.feedback.macro_p9_proposal_engine._date_concentration", return_value={"pass": True}):
+            champion_cache, _ = _rolling_snapshots({"signals": Path("signals.csv")}, parameters, fixed, parameters, Path("rolling-champion"))
+            calls.clear()
+            _, challenger_snapshots = _rolling_snapshots({"signals": Path("signals.csv")}, {"left_window": 3, "right_window": 2}, fixed, parameters, Path("rolling-challenger"), champion_cache=champion_cache)
+        self.assertEqual(2, len(champion_cache))
+        self.assertEqual(2, len(challenger_snapshots))
+        self.assertEqual([{"left_window": 3, "right_window": 2}, {"left_window": 3, "right_window": 2}], calls)
 
     def test_p8_missing_caps_recommendation_inputs(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -93,3 +93,7 @@ Historical 15-minute source bytes were not retained, so the bounded evaluation u
 ## Implementation note — bounded FIX-02
 
 M1 validation comparison now uses only `recommendation_gate.validation_policy_metrics.reliable_level_acceptance_corridor`; no fallback policy or full-period metric is permitted. M1 and M3 guarded metrics remain explicitly namespaced. Candidate results expose separate structural, comparison, Pareto, and proposal eligibility states. Chronological rolling snapshots are event-time bounded, while 6H/12H/24H diagnostics are stored but non-selecting. The bounded result remains report-only with `continue_shadow_collection`; M5 acceptance remains pending ChatGPT review.
+
+## Implementation correction — bounded FIX-03 continuation
+
+FIX-03 now uses true cutoff-bounded snapshot replay, with the champion replay cached once per date and reused across challengers. Lightweight module/CLI validation is complete; heavy actual-bundle acceptance, the second full replay, and byte-identity verification are deferred to a separate task. M5 acceptance remains pending ChatGPT review.
