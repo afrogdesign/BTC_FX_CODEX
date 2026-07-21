@@ -28,7 +28,7 @@ def _level(level_id: str, side: str = "low", role: str = "support", band: str = 
     }
 
 
-def _write_run(root: Path, run_id: str, as_of: str, evaluated: str, levels: list[dict[str, str]], *, symbol: str = "BTC_USDT", fingerprint: str | None = None, structure_state: str = "range", price_location: str = "middle", current_price: int = 100) -> Path:
+def _write_run(root: Path, run_id: str, as_of: str, evaluated: str, levels: list[dict[str, str]], *, symbol: str = "BTC_USDT", fingerprint: str | None = None, structure_state: str = "range", price_location: str = "middle", current_price: int = 100, stale_status: str = "current", stale_timeframes: list[str] | None = None, continuity_status: str = "continuous", data_quality_status: str = "ok", result_status: str = "ok", reason_codes: list[str] | None = None) -> Path:
     run = root / run_id
     run.mkdir(parents=True)
     snapshot_id = "macro_snapshot_" + run_id[4:]
@@ -40,8 +40,8 @@ def _write_run(root: Path, run_id: str, as_of: str, evaluated: str, levels: list
         "nearest_reliable_support": {"level_id": levels[0]["level_id"]} if levels else {},
         "nearest_reliable_resistance": {}, "next_upside_target": {}, "next_downside_target": {},
         "upside_obstruction": {}, "downside_obstruction": {}, "volatility_state": "normal", "expansion_risk": "low",
-        "directional_activation": "NONE", "stale_status": "current", "continuity_status": "continuous",
-        "data_quality_status": "ok", "result_status": "ok", "reliability_band_counts": {"high": 0, "medium": 1, "low": 0, "insufficient": 0},
+        "directional_activation": "NONE", "stale_status": stale_status, "stale_timeframes": stale_timeframes or [], "freshness": {"15m": {"status": stale_status}}, "continuity_status": continuity_status,
+        "data_quality_status": data_quality_status, "result_status": result_status, "reason_codes": reason_codes or [], "reliability_band_counts": {"high": 0, "medium": 1, "low": 0, "insufficient": 0},
         "input_fingerprints": {"15m": fingerprint or run_id},
     }
     manifest = {
@@ -108,6 +108,107 @@ class MacroStructureHistoryOperationTests(unittest.TestCase):
         failed = build_macro_structure_history(snapshot_root=self.root, output_root=self.output, symbol="BTC_USDT")
         self.assertFalse(failed["ok"])
         self.assertEqual(failed["error_code"], "source_symbol_mismatch")
+
+    def test_latest_reevaluation_status_is_retained_without_structural_duplication(self) -> None:
+        changed = _level("L1", side="low", role="resistance", band="high", lifecycle="broken", center="101")
+        reappeared = _level("L2", side="high", role="resistance", band="medium", center="111")
+        _write_run(self.root, "run_c_recheck", "2026-01-03T00:00:00+00:00", "2026-01-03T02:00:00+00:00", [changed, reappeared], fingerprint="fp-c", structure_state="reversal", price_location="upper_half", current_price=102, stale_status="stale", stale_timeframes=["15m"], continuity_status="discontinuous", data_quality_status="discontinuous", result_status="insufficient", reason_codes=["stale_ohlcv_15m"])
+        result = build_macro_structure_history(snapshot_root=self.root, output_root=self.output)
+        self.assertTrue(result["ok"])
+        history = json.loads((self.output / result["artifact_dir"] / "macro_structure_history.json").read_text())
+        evaluations = history["evaluation_history"]
+        latest_eval = evaluations[-1]
+        self.assertEqual(latest_eval["run_id"], "run_c_recheck")
+        self.assertEqual(latest_eval["stale_status"], "stale")
+        self.assertEqual(latest_eval["continuity_status"], "discontinuous")
+        self.assertEqual(latest_eval["data_quality_status"], "discontinuous")
+        self.assertEqual(latest_eval["result_status"], "insufficient")
+        self.assertEqual(latest_eval["freshness"]["15m"]["status"], "stale")
+        self.assertEqual(sum(item["canonical"] for item in evaluations), 3)
+        latest = json.loads((self.output / "latest.json").read_text())
+        self.assertEqual(latest["history_result_status"], "ok")
+        self.assertEqual(latest["latest_snapshot_result_status"], "insufficient")
+        self.assertEqual(latest["latest_evaluation_run_id"], "run_c_recheck")
+        self.assertEqual(latest["latest_stale_status"], "stale")
+        self.assertEqual(latest["latest_continuity_status"], "discontinuous")
+        self.assertEqual(latest["latest_structure_state"], "reversal")
+
+    def test_markdown_renders_bounded_history_events(self) -> None:
+        changed = _level("L1", side="low", role="resistance", band="high", lifecycle="broken", center="101")
+        reappeared = _level("L2", side="high", role="resistance", band="medium", center="111")
+        _write_run(self.root, "run_c_recheck", "2026-01-03T00:00:00+00:00", "2026-01-03T02:00:00+00:00", [changed, reappeared], fingerprint="fp-c", structure_state="reversal", price_location="upper_half", current_price=102, stale_status="stale", stale_timeframes=["15m"], reason_codes=["stale_ohlcv_15m"])
+        result = build_macro_structure_history(snapshot_root=self.root, output_root=self.output)
+        markdown = (self.output / result["artifact_dir"] / "macro_structure_history.md").read_text()
+        for section in ("Latest structural changes", "Reliability upgrades and downgrades", "Role changes", "Lifecycle changes", "Absence from checkpoint/latest", "Reappearances", "Stale or discontinuous evaluations", "Evidence limitations", "Safety boundary"):
+            self.assertIn(section, markdown)
+        self.assertIn("absent_from_checkpoint", markdown)
+        self.assertIn("reappeared", markdown)
+        self.assertIn("stale_ohlcv_15m", markdown)
+        self.assertIn("retirement_status=not_established", markdown)
+
+    def test_multiple_absences_reappearance_and_final_absence(self) -> None:
+        root = Path(self.temp.name) / "absence"
+        root.mkdir()
+        l1, l2, l3 = _level("L1"), _level("L2"), _level("L3")
+        _write_run(root, "run_1", "2026-01-01T00:00:00+00:00", "2026-01-01T01:00:00+00:00", [l1, l2], fingerprint="1")
+        _write_run(root, "run_2", "2026-01-02T00:00:00+00:00", "2026-01-02T01:00:00+00:00", [l1, l3], fingerprint="2")
+        _write_run(root, "run_3", "2026-01-03T00:00:00+00:00", "2026-01-03T01:00:00+00:00", [l1, l3], fingerprint="3")
+        _write_run(root, "run_4", "2026-01-04T00:00:00+00:00", "2026-01-04T01:00:00+00:00", [l1], fingerprint="4")
+        _write_run(root, "run_5", "2026-01-05T00:00:00+00:00", "2026-01-05T01:00:00+00:00", [l1, l2], fingerprint="5")
+        result = build_macro_structure_history(snapshot_root=root, output_root=self.output)
+        with (self.output / result["artifact_dir"] / "macro_level_history.csv").open(newline="", encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if row["level_id"] == "L2"]
+        self.assertEqual([row["level_status"] for row in rows], ["first_observation", "absent_from_checkpoint", "absent_from_checkpoint", "absent_from_checkpoint", "reappeared"])
+        self.assertTrue(all(row["retirement_status"] == "not_established" for row in rows))
+        self.assertTrue(all(row["observation_present"] == "False" for row in rows[1:4]))
+        self.assertTrue(all(row["reliability_score_delta"] == "" for row in rows[1:4]))
+        self.assertTrue(all(row["last_observed_checkpoint_id"] == rows[0]["checkpoint_id"] for row in rows[1:4]))
+        with (self.output / result["artifact_dir"] / "macro_structure_changes.csv").open(newline="", encoding="utf-8") as handle:
+            changes = list(csv.DictReader(handle))
+        self.assertGreaterEqual(sum(row["change_type"] == "absent_from_checkpoint" for row in changes), 3)
+        self.assertTrue(any(row["change_type"] == "reappeared" for row in changes))
+
+    def test_final_absence_is_explicit_and_not_active(self) -> None:
+        root = Path(self.temp.name) / "final-absence"
+        root.mkdir()
+        l1, l2 = _level("L1"), _level("L2")
+        _write_run(root, "run_1", "2026-01-01T00:00:00+00:00", "2026-01-01T01:00:00+00:00", [l1, l2], fingerprint="1")
+        _write_run(root, "run_2", "2026-01-02T00:00:00+00:00", "2026-01-02T01:00:00+00:00", [l1], fingerprint="2")
+        _write_run(root, "run_3", "2026-01-03T00:00:00+00:00", "2026-01-03T01:00:00+00:00", [l1], fingerprint="3")
+        result = build_macro_structure_history(snapshot_root=root, output_root=self.output)
+        with (self.output / result["artifact_dir"] / "macro_level_history.csv").open(newline="", encoding="utf-8") as handle:
+            rows = [row for row in csv.DictReader(handle) if row["level_id"] == "L2"]
+        self.assertEqual(rows[-1]["level_status"], "absent_from_latest")
+        self.assertEqual(rows[-1]["observation_present"], "False")
+
+    def test_source_validation_failures_preserve_previous_latest(self) -> None:
+        cases = (("blank", "source_level_id_missing"), ("duplicate", "source_level_id_duplicate"), ("manifest_missing", "source_manifest_timestamp_missing"), ("manifest_naive", "invalid_source_manifest_as_of_utc"), ("manifest_mismatch", "source_timestamp_mismatch"))
+        for kind, expected in cases:
+            with self.subTest(kind=kind):
+                root = Path(self.temp.name) / kind
+                root.mkdir()
+                levels = [_level("L1")]
+                run = _write_run(root, "run_valid", "2026-01-01T00:00:00+00:00", "2026-01-01T01:00:00+00:00", levels, fingerprint=kind)
+                first = build_macro_structure_history(snapshot_root=root, output_root=self.output / kind)
+                latest = (self.output / kind / "latest.json").read_bytes()
+                if kind == "blank":
+                    _write_run(root, "run_bad", "2026-01-02T00:00:00+00:00", "2026-01-02T01:00:00+00:00", [_level("")], fingerprint="bad")
+                elif kind == "duplicate":
+                    _write_run(root, "run_bad", "2026-01-02T00:00:00+00:00", "2026-01-02T01:00:00+00:00", [_level("L1"), _level("L1")], fingerprint="bad")
+                else:
+                    manifest_path = run / "run_manifest.json"
+                    manifest = json.loads(manifest_path.read_text())
+                    if kind == "manifest_missing":
+                        manifest.pop("as_of_utc")
+                    elif kind == "manifest_naive":
+                        manifest["as_of_utc"] = "2026-01-01T00:00:00"
+                    else:
+                        manifest["evaluated_at_utc"] = "2026-01-01T02:00:00+00:00"
+                    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                failed = build_macro_structure_history(snapshot_root=root, output_root=self.output / kind)
+                self.assertFalse(failed["ok"])
+                self.assertEqual(failed["error_code"], expected)
+                self.assertEqual(latest, (self.output / kind / "latest.json").read_bytes())
 
     def test_one_checkpoint_is_insufficient_history_and_repeat_is_idempotent(self) -> None:
         root = Path(self.temp.name) / "one"

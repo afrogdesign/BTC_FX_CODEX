@@ -32,7 +32,8 @@ CSV_FIELDS = (
     "reliability_score_delta", "reliability_band_transition", "role_transition",
     "lifecycle_transition", "touch_count_delta", "clean_rejection_count_delta",
     "break_count_delta", "false_break_reclaim_count_delta", "geometry_changed",
-    "previous_checkpoint_id", "current_checkpoint_id",
+    "previous_checkpoint_id", "current_checkpoint_id", "last_observed_checkpoint_id",
+    "observation_present", "retirement_status",
 )
 SNAPSHOT_FIELDS = (
     "symbol", "checkpoint_index", "checkpoint_id", "as_of_utc", "evaluated_at_utc",
@@ -41,7 +42,8 @@ SNAPSHOT_FIELDS = (
     "next_upside_target_id", "next_downside_target_id", "upside_obstruction",
     "downside_obstruction", "volatility_state", "expansion_risk", "directional_activation",
     "stale_status", "continuity_status", "data_quality_status", "reliability_band_counts",
-    "previous_checkpoint_id", "transition_status",
+    "previous_checkpoint_id", "transition_status", "canonical_structural_run_id",
+    "latest_evaluation_run_id", "latest_evaluated_at_utc",
 )
 SNAPSHOT_CHANGE_FIELDS = (
     "structure_state", "price_location", "location_percentile", "current_price",
@@ -133,11 +135,13 @@ def _read_source(run_dir: Path, symbol: str) -> dict[str, Any]:
         raise ValueError("source_version_missing")
     if _text(manifest.get("schema_version")) != _text(snapshot.get("schema_version")) or _text(manifest.get("method_version")) != _text(snapshot.get("method_version")):
         raise ValueError("source_version_mismatch")
+    if not _text(manifest.get("as_of_utc")) or not _text(manifest.get("evaluated_at_utc")):
+        raise ValueError("source_manifest_timestamp_missing")
     as_of = _utc(snapshot.get("as_of_utc"), "as_of_utc")
     evaluated = _utc(snapshot.get("evaluated_at_utc"), "evaluated_at_utc")
-    if _text(manifest.get("as_of_utc")) and _utc(manifest.get("as_of_utc"), "manifest_as_of_utc") != as_of:
+    if _utc(manifest.get("as_of_utc"), "manifest_as_of_utc") != as_of:
         raise ValueError("source_timestamp_mismatch")
-    if _text(manifest.get("evaluated_at_utc")) and _utc(manifest.get("evaluated_at_utc"), "manifest_evaluated_at_utc") != evaluated:
+    if _utc(manifest.get("evaluated_at_utc"), "manifest_evaluated_at_utc") != evaluated:
         raise ValueError("source_timestamp_mismatch")
     if _text(manifest.get("source")) != "public_ohlcv_only" or manifest.get("report_only") is not True:
         raise ValueError("source_boundary_invalid")
@@ -145,6 +149,11 @@ def _read_source(run_dir: Path, symbol: str) -> dict[str, Any]:
         raise ValueError("source_boundary_invalid")
     if not set(LEVEL_FIELDS).issubset(fieldnames):
         raise ValueError("source_level_schema_invalid")
+    level_ids = [_zone_id(row.get("level_id")) for row in rows]
+    if any(not level_id for level_id in level_ids):
+        raise ValueError("source_level_id_missing")
+    if len(level_ids) != len(set(level_ids)):
+        raise ValueError("source_level_id_duplicate")
     fingerprints = snapshot.get("input_fingerprints")
     if not isinstance(fingerprints, dict) or not fingerprints:
         raise ValueError("source_fingerprint_missing")
@@ -187,22 +196,24 @@ def _zone_id(value: Any) -> str:
     return _text(value)
 
 
-def _level_row(level: dict[str, Any], checkpoint: dict[str, Any], previous: dict[str, Any] | None, status: str, previous_checkpoint_id: str, current_checkpoint_id: str) -> dict[str, Any]:
+def _level_row(level: dict[str, Any], checkpoint: dict[str, Any], previous: dict[str, Any] | None, status: str, previous_checkpoint_id: str, current_checkpoint_id: str, *, observation_present: bool = True, last_observed_checkpoint_id: str = "") -> dict[str, Any]:
     row = {field: _text(level.get(field)) for field in LEVEL_FIELDS}
     prior = previous or {}
     row.update({
         "symbol": checkpoint["snapshot"]["symbol"], "checkpoint_index": checkpoint["index"],
         "checkpoint_id": checkpoint["checkpoint_id"], "level_status": status,
-        "reliability_score_delta": _delta(level.get("reliability_score"), prior.get("reliability_score")),
-        "reliability_band_transition": f"{_text(prior.get('reliability_band'))}->{_text(level.get('reliability_band'))}" if previous and prior.get("reliability_band") != level.get("reliability_band") else "",
-        "role_transition": f"{_text(prior.get('role'))}->{_text(level.get('role'))}" if previous and prior.get("role") != level.get("role") else "",
-        "lifecycle_transition": f"{_text(prior.get('lifecycle'))}->{_text(level.get('lifecycle'))}" if previous and prior.get("lifecycle") != level.get("lifecycle") else "",
-        "touch_count_delta": _delta(level.get("touch_count"), prior.get("touch_count")),
-        "clean_rejection_count_delta": _delta(level.get("clean_rejection_count"), prior.get("clean_rejection_count")),
-        "break_count_delta": _delta(level.get("break_count"), prior.get("break_count")),
-        "false_break_reclaim_count_delta": _delta(level.get("false_break_reclaim_count"), prior.get("false_break_reclaim_count")),
-        "geometry_changed": bool(previous and any(_stable_value(level.get(field)) != _stable_value(prior.get(field)) for field in ("low", "high", "center", "source_timeframes"))),
+        "reliability_score_delta": _delta(level.get("reliability_score"), prior.get("reliability_score")) if observation_present else "",
+        "reliability_band_transition": f"{_text(prior.get('reliability_band'))}->{_text(level.get('reliability_band'))}" if observation_present and previous and prior.get("reliability_band") != level.get("reliability_band") else "",
+        "role_transition": f"{_text(prior.get('role'))}->{_text(level.get('role'))}" if observation_present and previous and prior.get("role") != level.get("role") else "",
+        "lifecycle_transition": f"{_text(prior.get('lifecycle'))}->{_text(level.get('lifecycle'))}" if observation_present and previous and prior.get("lifecycle") != level.get("lifecycle") else "",
+        "touch_count_delta": _delta(level.get("touch_count"), prior.get("touch_count")) if observation_present else "",
+        "clean_rejection_count_delta": _delta(level.get("clean_rejection_count"), prior.get("clean_rejection_count")) if observation_present else "",
+        "break_count_delta": _delta(level.get("break_count"), prior.get("break_count")) if observation_present else "",
+        "false_break_reclaim_count_delta": _delta(level.get("false_break_reclaim_count"), prior.get("false_break_reclaim_count")) if observation_present else "",
+        "geometry_changed": bool(observation_present and previous and any(_stable_value(level.get(field)) != _stable_value(prior.get(field)) for field in ("low", "high", "center", "source_timeframes"))),
         "previous_checkpoint_id": previous_checkpoint_id, "current_checkpoint_id": current_checkpoint_id,
+        "last_observed_checkpoint_id": last_observed_checkpoint_id or current_checkpoint_id,
+        "observation_present": observation_present, "retirement_status": "not_established",
     })
     return row
 
@@ -225,6 +236,8 @@ def _snapshot_row(record: dict[str, Any], index: int, previous: dict[str, Any] |
         "continuity_status": _text(snapshot.get("continuity_status")), "data_quality_status": _text(snapshot.get("data_quality_status")),
         "reliability_band_counts": snapshot.get("reliability_band_counts", {}),
         "previous_checkpoint_id": previous["checkpoint_id"] if previous else "", "transition_status": "continued" if previous else "no_previous_transition",
+        "canonical_structural_run_id": record["run_id"], "latest_evaluation_run_id": record["run_id"],
+        "latest_evaluated_at_utc": record["evaluated"].isoformat(),
     }
     return row
 
@@ -269,10 +282,38 @@ def _snapshot_change_rows(snapshot_rows: list[dict[str, Any]]) -> list[dict[str,
     return changes
 
 
+def _evaluation_fields(record: dict[str, Any], canonical_run_id: str) -> dict[str, Any]:
+    snapshot = record["snapshot"]
+    return {
+        "run_id": record["run_id"], "snapshot_id": record["snapshot_id"], "checkpoint_id": record["checkpoint_id"],
+        "as_of_utc": record["as_of"].isoformat(), "evaluated_at_utc": record["evaluated"].isoformat(),
+        "canonical_structural_run_id": canonical_run_id, "is_canonical_structural_source": record["run_id"] == canonical_run_id, "canonical": record["run_id"] == canonical_run_id,
+        "stale_status": snapshot.get("stale_status", ""), "stale_timeframes": snapshot.get("stale_timeframes", []),
+        "freshness": snapshot.get("freshness", {}), "continuity_status": snapshot.get("continuity_status", ""),
+        "data_quality_status": snapshot.get("data_quality_status", ""), "result_status": snapshot.get("result_status", ""),
+        "reason_codes": snapshot.get("reason_codes", []),
+    }
+
+
+def _event_lines(events: list[dict[str, Any]], formatter: Any) -> list[str]:
+    bounded = events[-10:]
+    return [formatter(event) for event in bounded] if bounded else ["- none"]
+
+
 def _markdown(history: dict[str, Any]) -> str:
     latest = history["structural_checkpoints"][-1] if history["structural_checkpoints"] else {}
+    changes = history.get("structure_changes", [])
+    levels = history.get("level_history", [])
+    evaluations = history.get("evaluation_history", [])
+    snapshot_changes = [row for row in changes if row.get("change_type") == "snapshot_transition"]
+    reliability = [row for row in changes if row.get("field") == "reliability_band"]
+    roles = [row for row in changes if row.get("field") == "role"]
+    lifecycles = [row for row in changes if row.get("field") == "lifecycle"]
+    absences = [row for row in changes if row.get("change_type") in {"absent_from_checkpoint", "absent_from_latest"}]
+    reappearances = [row for row in changes if row.get("change_type") == "reappeared"]
+    stale = [row for row in evaluations if row.get("stale_status") == "stale" or row.get("continuity_status") == "discontinuous" or row.get("data_quality_status") == "discontinuous"]
     lines = [
-        "# Macro Structure Chronological History", "", f"- symbol: `{history['symbol']}`", f"- evaluations: `{history['evaluation_count']}`", f"- structural checkpoints: `{history['structural_checkpoint_count']}`", f"- first cutoff: `{history.get('first_as_of_utc', '')}`", f"- latest cutoff: `{history.get('latest_as_of_utc', '')}`", "", "## Latest structural changes", "", f"- latest structure: `{latest.get('structure_state', '')}`", f"- latest location: `{latest.get('price_location', '')}`", "- snapshot transitions: see `macro_structure_changes.csv`", "", "## Reliability, role, lifecycle, absence, and reappearance", "", "See `macro_level_history.csv` and `macro_structure_changes.csv` for deterministic prior-observation deltas, upgrades, downgrades, role/lifecycle changes, absences, and reappearances.", "", "## Stale or discontinuous evidence", "", "Each source snapshot retains its accepted stale, continuity, and data-quality status; no later checkpoint rewrites an earlier observation.", "", "## Evidence limitations", "", "A missing level is not permanent retirement; retirement is `not_established` unless an accepted source field establishes it.", "", "## Safety boundary", "", SAFETY, ""]
+        "# Macro Structure Chronological History", "", f"- symbol: `{history['symbol']}`", f"- evaluations: `{history['evaluation_count']}`", f"- structural checkpoints: `{history['structural_checkpoint_count']}`", f"- first cutoff: `{history.get('first_as_of_utc', '')}`", f"- latest cutoff: `{history.get('latest_as_of_utc', '')}`", "", "## Latest structural changes", "", f"- canonical structural run: `{latest.get('canonical_structural_run_id', '')}`", f"- latest evaluation run: `{latest.get('latest_evaluation_run_id', '')}`", f"- latest structure: `{latest.get('structure_state', '')}`", f"- latest location: `{latest.get('price_location', '')}`", *_event_lines(snapshot_changes, lambda row: f"- {row['field']}: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Reliability upgrades and downgrades", *_event_lines(reliability, lambda row: f"- checkpoint `{row['checkpoint_id']}`: `{row['previous_value']}` -> `{row['current_value']}`"), "", "## Role changes", *_event_lines(roles, lambda row: f"- level `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Lifecycle changes", *_event_lines(lifecycles, lambda row: f"- level `{row['previous_value']}` -> `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Absence from checkpoint/latest", *_event_lines(absences, lambda row: f"- `{row['change_type']}`: level `{row['current_value']}` at `{row['checkpoint_id']}`"), "", "## Reappearances", *_event_lines(reappearances, lambda row: f"- level `{row['current_value']}` reappeared at `{row['checkpoint_id']}`"), "", "## Stale or discontinuous evaluations", *_event_lines(stale, lambda row: f"- run `{row['run_id']}` at `{row['evaluated_at_utc']}`: stale=`{row['stale_status']}`, continuity=`{row['continuity_status']}`, data_quality=`{row['data_quality_status']}`, reasons=`{','.join(row.get('reason_codes', []))}`"), "", "## Evidence limitations", "", "A missing level is not permanent retirement; each absence has `retirement_status=not_established` unless an accepted source field establishes retirement.", "", "## Safety boundary", "", SAFETY, ""]
     return "\n".join(lines)
 
 
@@ -303,6 +344,14 @@ def build_macro_structure_history(*, snapshot_root: Path = Path("local/reports/m
     try:
         records = _discover(snapshot_root, symbol)
         canonical, evaluations = _checkpoint_records(records)
+        evaluations_by_checkpoint: dict[str, list[dict[str, Any]]] = {}
+        for record in evaluations:
+            evaluations_by_checkpoint.setdefault(record["checkpoint_id"], []).append(record)
+        canonical_by_checkpoint = {record["checkpoint_id"]: record for record in canonical}
+        latest_evaluation_by_checkpoint = {
+            checkpoint_id: max(group, key=lambda item: (item["evaluated"], item["run_id"]))
+            for checkpoint_id, group in evaluations_by_checkpoint.items()
+        }
         for index, record in enumerate(canonical):
             record["index"] = index
         snapshot_rows = [_snapshot_row(record, index, canonical[index - 1] if index else None) for index, record in enumerate(canonical)]
@@ -318,23 +367,37 @@ def build_macro_structure_history(*, snapshot_root: Path = Path("local/reports/m
                 previous = last_observed_levels.get(level_id)
                 status = "reappeared" if previous is not None and level_id not in prior_levels else "first_observation" if previous is None else "continued"
                 level_rows.append(_level_row(current_levels[level_id], record, previous, status, prior_checkpoint_id, record["checkpoint_id"]))
-            for level_id in sorted(previous_ids - current_ids):
+            for level_id in sorted(set(last_observed_levels) - current_ids):
                 status = "absent_from_latest" if index == len(canonical) - 1 else "absent_from_checkpoint"
-                level_rows.append(_level_row(last_observed_levels[level_id], record, last_observed_levels[level_id], status, prior_checkpoint_id, record["checkpoint_id"]))
+                level_rows.append(_level_row(last_observed_levels[level_id], record, None, status, prior_checkpoint_id, record["checkpoint_id"], observation_present=False, last_observed_checkpoint_id=last_observed_levels[level_id]["_last_observed_checkpoint_id"]))
+            for level in current_levels.values():
+                level["_last_observed_checkpoint_id"] = record["checkpoint_id"]
             last_observed_levels.update(current_levels)
             prior_levels = current_levels
             prior_checkpoint_id = record["checkpoint_id"]
         changes = _snapshot_change_rows(snapshot_rows) + _change_rows(level_rows)
         source_digest = hashlib.sha256("".join(f"{item['run_id']}:{item['source_hash']}" for item in evaluations).encode()).hexdigest()
         history_id = "history_" + hashlib.sha256(f"{SCHEMA_VERSION}|{METHOD_VERSION}|{symbol}|{source_digest}".encode()).hexdigest()[:20]
+        evaluation_history = [_evaluation_fields(item, canonical_by_checkpoint[item["checkpoint_id"]]["run_id"]) for item in evaluations]
+        structural_checkpoints = []
+        for row in snapshot_rows:
+            canonical_record = canonical_by_checkpoint[row["checkpoint_id"]]
+            latest_evaluation = latest_evaluation_by_checkpoint[row["checkpoint_id"]]
+            structural_checkpoints.append({
+                **row, "canonical_structural_run_id": canonical_record["run_id"],
+                "latest_evaluation_run_id": latest_evaluation["run_id"],
+                "latest_evaluated_at_utc": latest_evaluation["evaluated"].isoformat(),
+                "latest_evaluation": _evaluation_fields(latest_evaluation, canonical_record["run_id"]),
+                "levels": [level for level in level_rows if level["checkpoint_id"] == row["checkpoint_id"]],
+            })
         history = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "symbol": symbol,
             "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical),
             "result_status": "insufficient_history" if len(canonical) == 1 else "ok",
             "first_as_of_utc": canonical[0]["as_of"].isoformat(), "latest_as_of_utc": canonical[-1]["as_of"].isoformat(),
-            "latest_evaluated_at_utc": evaluations[-1]["evaluated"].isoformat(), "source_digest": source_digest,
-            "evaluation_history": [{"run_id": item["run_id"], "snapshot_id": item["snapshot_id"], "checkpoint_id": item["checkpoint_id"], "as_of_utc": item["as_of"].isoformat(), "evaluated_at_utc": item["evaluated"].isoformat(), "canonical": item in canonical} for item in evaluations],
-            "structural_checkpoints": [{**row, "levels": [level for level in level_rows if level["checkpoint_id"] == row["checkpoint_id"]]} for row in snapshot_rows],
+            "latest_evaluated_at_utc": latest_evaluation_by_checkpoint[canonical[-1]["checkpoint_id"]]["evaluated"].isoformat(), "source_digest": source_digest,
+            "evaluation_history": evaluation_history, "structural_checkpoints": structural_checkpoints,
+            "level_history": level_rows, "structure_changes": changes,
             "safety_boundary": SAFETY,
         }
         files = {
@@ -342,11 +405,13 @@ def build_macro_structure_history(*, snapshot_root: Path = Path("local/reports/m
             "macro_snapshot_history.csv": _csv_bytes(snapshot_rows, SNAPSHOT_FIELDS), "macro_level_history.csv": _csv_bytes(level_rows, CSV_FIELDS),
             "macro_structure_changes.csv": _csv_bytes(changes, CHANGE_FIELDS),
         }
-        latest_record = canonical[-1]["snapshot"]
-        latest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "artifact_dir": history_id, "symbol": symbol, "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical), "first_as_of_utc": history["first_as_of_utc"], "latest_as_of_utc": history["latest_as_of_utc"], "latest_evaluated_at_utc": history["latest_evaluated_at_utc"], "latest_structure_state": latest_record.get("structure_state", ""), "latest_price_location": latest_record.get("price_location", ""), "latest_stale_status": latest_record.get("stale_status", ""), "latest_continuity_status": latest_record.get("continuity_status", ""), "latest_result_status": history["result_status"], "latest_reliability_band_counts": latest_record.get("reliability_band_counts", {}), "source_digest": source_digest, "safety_boundary": SAFETY}
+        canonical_latest_record = canonical[-1]["snapshot"]
+        latest_evaluation = latest_evaluation_by_checkpoint[canonical[-1]["checkpoint_id"]]
+        latest_snapshot = latest_evaluation["snapshot"]
+        latest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "artifact_dir": history_id, "symbol": symbol, "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical), "first_as_of_utc": history["first_as_of_utc"], "latest_as_of_utc": history["latest_as_of_utc"], "history_result_status": history["result_status"], "latest_snapshot_result_status": latest_snapshot.get("result_status", ""), "canonical_structural_run_id": canonical[-1]["run_id"], "latest_evaluation_run_id": latest_evaluation["run_id"], "latest_evaluated_at_utc": latest_evaluation["evaluated"].isoformat(), "latest_structure_state": canonical_latest_record.get("structure_state", ""), "latest_price_location": canonical_latest_record.get("price_location", ""), "latest_stale_status": latest_snapshot.get("stale_status", ""), "latest_stale_timeframes": latest_snapshot.get("stale_timeframes", []), "latest_freshness": latest_snapshot.get("freshness", {}), "latest_continuity_status": latest_snapshot.get("continuity_status", ""), "latest_data_quality_status": latest_snapshot.get("data_quality_status", ""), "latest_snapshot_reason_codes": latest_snapshot.get("reason_codes", []), "latest_reliability_band_counts": canonical_latest_record.get("reliability_band_counts", {}), "source_digest": source_digest, "safety_boundary": SAFETY}
         manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "symbol": symbol, "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical), "source_digest": source_digest, "source_runs": [item["run_id"] for item in evaluations], "outputs": list(OUTPUT_NAMES), "source": "public_mops1_artifacts_only", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
         files["run_manifest.json"] = _json_bytes(manifest)
         _publish(output_root, history_id, files, latest)
-        return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "artifact_dir": history_id, "symbol": symbol, "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical), "latest_as_of_utc": history["latest_as_of_utc"], "latest_structure_state": latest_record.get("structure_state", ""), "latest_result_status": history["result_status"], "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "history_id": history_id, "artifact_dir": history_id, "symbol": symbol, "source_run_count": len(evaluations), "evaluation_count": len(evaluations), "structural_checkpoint_count": len(canonical), "history_result_status": history["result_status"], "latest_snapshot_result_status": latest_snapshot.get("result_status", ""), "canonical_structural_run_id": canonical[-1]["run_id"], "latest_evaluation_run_id": latest_evaluation["run_id"], "latest_evaluated_at_utc": latest_evaluation["evaluated"].isoformat(), "latest_as_of_utc": history["latest_as_of_utc"], "latest_structure_state": canonical_latest_record.get("structure_state", ""), "latest_stale_status": latest_snapshot.get("stale_status", ""), "latest_continuity_status": latest_snapshot.get("continuity_status", ""), "latest_data_quality_status": latest_snapshot.get("data_quality_status", ""), "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
     except (OSError, ValueError) as exc:
         return {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}

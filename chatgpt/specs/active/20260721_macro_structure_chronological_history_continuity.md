@@ -217,4 +217,6 @@ M-OPS2 is complete when the command consumes only complete M-OPS1 artifacts, dis
 
 The bounded implementation adds `run-macro-structure-history` as a report-only direct-child M-OPS1 artifact rollup with deterministic continuity and atomic publication.
 
+FIX-01 retains every evaluation-specific freshness/status record, carries level absence across consecutive checkpoints, and renders bounded transition events in Markdown while keeping canonical structural content separate from the latest reevaluation.
+
 After acceptance, M-OPS3 connects the accepted snapshot and history summary to a chart-first local operator artifact. Runtime enablement remains a separate approval task.
