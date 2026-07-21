@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from src.feedback.macro_structure_trendline_channel import METHOD_VERSION as TRENDLINE_METHOD_VERSION, build_trendline_model
 from src.feedback.macro_structure_structural_events import METHOD_VERSION as STRUCTURAL_EVENT_METHOD_VERSION, build_structural_event_model
+from src.feedback.macro_structure_scenarios import METHOD_VERSION as SCENARIO_METHOD_VERSION, build_scenario_model
 
 SCHEMA_VERSION = "macro_structure_operator_artifact.v2"
 METHOD_VERSION = "macro_structure_operator_artifact.v2"
@@ -379,6 +380,15 @@ def _structural_event_html(model: dict[str, Any]) -> str:
     return f'<section id="structural-events"><h2>Structural events</h2><p>status={html.escape(str(model.get("status", "")))} · method={html.escape(str(model.get("method_version", "")))} · evidence is retained only at or before cutoff.</p><p class="safety">structural event is evidence, not execution permission. Report-only; no automatic order; human decides manually.</p><table><thead><tr>{"".join(f"<th>{html.escape(field)}</th>" for field in headers)}</tr></thead><tbody>{body}</tbody></table></section>'
 
 
+def _scenario_html(model: dict[str, Any]) -> str:
+    rows = []
+    for scenario in model.get("scenarios", []):
+        rows.append(f'<article><h3>{html.escape(str(scenario.get("scenario_type", "")))} · {html.escape(str(scenario.get("scenario_status", "")))} · {html.escape(str(scenario.get("direction", "")))}</h3><p>primary={html.escape(str(scenario.get("primary_object_kind", "")))}:{html.escape(str(scenario.get("primary_object_id", "")))} · trigger={html.escape(str(scenario.get("trigger_timestamp_utc", "")))}</p><p>condition: {html.escape(str(scenario.get("condition_text", "")))}</p><p>next confirmation: {html.escape(str(scenario.get("next_confirmation_text", "")))}</p><p>invalidation: {html.escape(str(scenario.get("invalidation_text", "")))}</p><p>supporting event IDs: {html.escape(", ".join(scenario.get("supporting_event_ids", [])))}</p></article>')
+    if not rows:
+        rows.append('<p>Scenario hypotheses: insufficient current structural evidence</p>')
+    return f'<section id="scenario-hypotheses"><h2>Scenario hypotheses</h2><p>status={html.escape(str(model.get("status", "")))} · dominant direction={html.escape(str(model.get("dominant_direction", "")))} · suppressed opposite-direction candidates={html.escape(str(model.get("suppressed_candidate_count", 0)))}</p>{"".join(rows)}<p class="safety">scenario is conditional evidence, not execution permission</p><p class="safety">report-only / no automatic order / human decides manually</p></section>'
+
+
 EVENT_CATEGORIES = (
     "structure_location_changes", "reliability_changes", "role_changes", "lifecycle_changes",
     "geometry_changes", "absent_from_latest", "reappearances", "stale_or_discontinuous_evaluations",
@@ -487,6 +497,7 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
         trendline_model = build_trendline_model(candles_4h, cutoff=snapshot["_as_of"], current_price=_number(snapshot["current_price"], "snapshot_price_invalid")) if candles_4h else None
         support, resistance, shown = _zones(snapshot)
         structural_event_model = build_structural_event_model(candles_4h, cutoff=snapshot["_as_of"], current_price=_number(snapshot["current_price"], "snapshot_price_invalid"), zones=shown, trendline_model=trendline_model) if candles_4h else None
+        scenario_model = build_scenario_model(cutoff=snapshot["_as_of"], current_price=_number(snapshot["current_price"], "snapshot_price_invalid"), structure_state=str(snapshot.get("structure_state", "")), price_location=str(snapshot.get("price_location", "")), zones=shown, trendline_model=trendline_model, structural_event_model=structural_event_model) if candles_4h else None
         references = _references(snapshot, shown)
         categories = _categorized_events(history)
         trace: dict[str, Any] = {
@@ -508,7 +519,7 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             "operator_artifact_id": "", "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_history_id": history["history_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"],
             "snapshot_fingerprint": snapshot_fingerprints, "history_fingerprint": history_fingerprints, "ohlcv_15m_fingerprint": ohlcv_fingerprint, **({"ohlcv_4h_fingerprint": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {}),
             "as_of_utc": snapshot["_as_of"].isoformat(), "as_of_jst": snapshot.get("as_of_jst", ""), "evaluated_at_utc": snapshot["_evaluated"].isoformat(), "evaluated_at_jst": snapshot.get("evaluated_at_jst", ""),
-            "chart_model": chart, **({"chart_model_4h": chart_4h, "trendline_model": trendline_model, "structural_event_model": structural_event_model} if chart_4h else {}), "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
+            "chart_model": chart, **({"chart_model_4h": chart_4h, "trendline_model": trendline_model, "structural_event_model": structural_event_model, "scenario_model": scenario_model} if chart_4h else {}), "zones": {"support_zones": support, "resistance_zones": resistance, "displayed_support_count": len(support), "displayed_resistance_count": len(resistance), "counts_by_role_and_band": counts},
             "structure_panel": {field: snapshot.get(field, "") for field in ("structure_state", "price_location", "location_percentile", "current_price", "nearest_reliable_support", "nearest_reliable_resistance", "next_upside_target", "next_downside_target", "upside_obstruction", "downside_obstruction", "volatility_state", "expansion_risk", "directional_activation")},
             "freshness": {"stale_status": snapshot.get("stale_status", ""), "stale_timeframes": snapshot.get("stale_timeframes", []), "freshness": snapshot.get("freshness", {})},
             "source_status": {"snapshot_result_status": snapshot.get("result_status", ""), "history_result_status": history.get("result_status", ""), "continuity_status": snapshot.get("continuity_status", ""), "data_quality_status": snapshot.get("data_quality_status", ""), "reason_codes": snapshot.get("reason_codes", [])},
@@ -522,6 +533,8 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
             digest_payload["trendline_method_version"] = TRENDLINE_METHOD_VERSION
         if structural_event_model is not None:
             digest_payload["structural_event_method_version"] = STRUCTURAL_EVENT_METHOD_VERSION
+        if scenario_model is not None:
+            digest_payload["scenario_method_version"] = SCENARIO_METHOD_VERSION
         digest = hashlib.sha256((SCHEMA_VERSION + "|" + METHOD_VERSION + "|" + symbol + "|" + json.dumps(digest_payload, sort_keys=True)).encode()).hexdigest()
         artifact_id = "operator_" + digest[:20]
         model["operator_artifact_id"] = artifact_id
@@ -535,11 +548,12 @@ def render_macro_structure_operator(*, snapshot_root: Path = Path("local/reports
         event_html = "".join(f'<h3>{html.escape(category)}</h3><ul>{("".join(f"<li>{html.escape(_event_text(row))}</li>" for row in rows) or "<li>none</li>")}</ul>' for category, rows in categories.items())
         primary = f'<section id="chart-4h"><h2>4H Macro Structure Chart</h2><p>current price={html.escape(str(snapshot["current_price"]))} · cutoff={html.escape(model["as_of_utc"])} · displayed candles={len(candles_4h)} · range={html.escape(candles_4h[0]["timestamp_utc"])} → {html.escape(candles_4h[-1]["endpoint_utc"])}</p>{svg_4h}</section>{_diagonal_evidence_html(trendline_model)}' if candles_4h else ''
         structural_events_html = _structural_event_html(structural_event_model) if structural_event_model is not None else ''
+        scenario_html = _scenario_html(scenario_model) if scenario_model is not None else ''
         supplemental = f'<section id="chart"><h2>Supplemental 15m manual-confirmation view</h2>{svg}</section>'
-        html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section{{margin:16px 0;padding:12px;border:1px solid #d8deea}}.safety{{color:#7a1520;font-weight:600}}svg{{width:100%;height:auto}}table{{border-collapse:collapse;display:block;overflow:auto;font-size:11px}}th,td{{border:1px solid #ccd3df;padding:3px;white-space:nowrap}}</style></head><body>{banner}{primary}{structural_events_html}<section id="zones"><h2>Reliable support/resistance evidence</h2>{zones_html}</section><section id="structure"><h2>Current structure and location</h2>{structure_html}<p class="safety">directional activation is evidence confidence, not execution permission.</p></section>{supplemental}<section id="status-detail"><h2>Volatility, activation, freshness, continuity</h2><pre>{html.escape(json.dumps({**model["freshness"], "volatility_state": snapshot.get("volatility_state"), "expansion_risk": snapshot.get("expansion_risk"), "directional_activation": snapshot.get("directional_activation")}, ensure_ascii=False, sort_keys=True, indent=2))}</pre></section><section id="changes"><h2>Recent chronological changes</h2>{event_html}</section><section id="evidence"><h2>Evidence details and limitations</h2><p>tactical Entry / SL / TP overlays are not included. No live fetch, private inputs, or execution permission.</p></section></body></html>'
+        html_text = f'<!doctype html><html><head><meta charset="utf-8"><style>body{{font:14px sans-serif;margin:20px;color:#172033}}section{{margin:16px 0;padding:12px;border:1px solid #d8deea}}article{{margin:8px 0;padding:8px;background:#f5f7fb}}.safety{{color:#7a1520;font-weight:600}}svg{{width:100%;height:auto}}table{{border-collapse:collapse;display:block;overflow:auto;font-size:11px}}th,td{{border:1px solid #ccd3df;padding:3px;white-space:nowrap}}</style></head><body>{banner}{primary}{structural_events_html}{scenario_html}<section id="zones"><h2>Reliable support/resistance evidence</h2>{zones_html}</section><section id="structure"><h2>Current structure and location</h2>{structure_html}<p class="safety">directional activation is evidence confidence, not execution permission.</p></section>{supplemental}<section id="status-detail"><h2>Volatility, activation, freshness, continuity</h2><pre>{html.escape(json.dumps({**model["freshness"], "volatility_state": snapshot.get("volatility_state"), "expansion_risk": snapshot.get("expansion_risk"), "directional_activation": snapshot.get("directional_activation")}, ensure_ascii=False, sort_keys=True, indent=2))}</pre></section><section id="changes"><h2>Recent chronological changes</h2>{event_html}</section><section id="evidence"><h2>Evidence details and limitations</h2><p>tactical Entry / SL / TP overlays are not included. No live fetch, private inputs, or execution permission.</p></section></body></html>'
         markdown = _render_markdown(model)
         files = {"macro_structure_operator.html": html_text.encode("utf-8"), "macro_structure_operator.json": _json_bytes(model), "macro_structure_operator.md": markdown.encode("utf-8")}
-        model_identity = {"trendline_method_version": TRENDLINE_METHOD_VERSION, "structural_event_method_version": STRUCTURAL_EVENT_METHOD_VERSION} if trendline_model is not None else {}
+        model_identity = {"trendline_method_version": TRENDLINE_METHOD_VERSION, "structural_event_method_version": STRUCTURAL_EVENT_METHOD_VERSION, "scenario_method_version": SCENARIO_METHOD_VERSION} if trendline_model is not None else {}
         manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "operator_artifact_id": artifact_id, "symbol": symbol, "selected_snapshot_run_id": snapshot["run_id"], "selected_snapshot_id": snapshot["snapshot_id"], "selected_structural_checkpoint_id": snapshot["_checkpoint_id"], "selected_history_id": history["history_id"], "input_fingerprints": {"snapshot": snapshot_fingerprints, "history": history_fingerprints, "ohlcv_15m": ohlcv_fingerprint, **({"ohlcv_4h": ohlcv_4h_fingerprint} if ohlcv_4h_fingerprint else {})}, "model_identity": model_identity, "outputs": list(OUTPUT_NAMES), "source": "accepted_mops1_snapshot_mops2_v2_history_and_explicit_public_ohlcv", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
         files["run_manifest.json"] = _json_bytes(manifest)
         latest_snapshot_result = snapshot.get("result_status", "")
