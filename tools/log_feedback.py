@@ -22115,6 +22115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_daily_parser.add_argument("--ohlcv-limit", type=int, default=500)
     macro_daily_parser.add_argument("--fetch-public-ohlcv", action="store_true")
     macro_daily_parser.add_argument("--cutoff-utc")
+    macro_daily_parser.add_argument("--evaluation-time-utc")
     macro_daily_parser.add_argument("--stdout-json", action="store_true")
 
     next_regime_parser = subparsers.add_parser("replay-macro-next-regime")
@@ -23584,7 +23585,7 @@ def main() -> None:
                 ohlcv_4h=Path(args.ohlcv_4h) if args.ohlcv_4h else None,
                 output_root=Path(args.output_root), symbol=args.symbol,
                 ohlcv_limit=int(args.ohlcv_limit), fetch_public_ohlcv=bool(args.fetch_public_ohlcv),
-                cutoff_utc=args.cutoff_utc,
+                cutoff_utc=args.cutoff_utc, evaluation_time_utc=args.evaluation_time_utc,
             )
         except (OSError, ValueError) as exc:
             summary = {"ok": False, "exit_code": 2, "error_code": str(exc)}

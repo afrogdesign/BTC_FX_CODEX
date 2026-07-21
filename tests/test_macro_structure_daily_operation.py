@@ -79,6 +79,8 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
         self.assertEqual(snapshot["as_of_utc"], snapshot["snapshot_cutoff_utc"])
         self.assertEqual(snapshot["as_of_utc"], "2026-01-02T16:00:00+00:00")
         self.assertEqual(snapshot["as_of_jst"], "2026-01-03T01:00:00+09:00")
+        self.assertEqual(snapshot["evaluated_at_utc"], "2026-01-03T12:01:00+00:00")
+        self.assertEqual(snapshot["evaluated_at_jst"], "2026-01-03T21:01:00+09:00")
         latest = json.loads((self.output / "latest.json").read_text(encoding="utf-8"))
         self.assertEqual(snapshot["structure_state"], latest["structure_state"])
         self.assertNotIn("structure", snapshot)
@@ -206,6 +208,37 @@ class MacroStructureDailyOperationTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["stale_status"], "stale")
         self.assertTrue(result["stale_timeframes"])
+
+    def test_evaluation_time_normalization_and_run_identity(self) -> None:
+        first = self.build(evaluation_time_utc="2026-01-03T12:00:01.123456+00:00")
+        second = self.build(evaluation_time_utc="2026-01-03T21:00:59+09:00")
+        self.assertTrue(first["ok"])
+        self.assertEqual(first["run_id"], second["run_id"])
+        first_dir = self.output / str(first["artifact_dir"])
+        second_dir = self.output / str(second["artifact_dir"])
+        for name in ("macro_structure_snapshot.json", "macro_structure_snapshot.md", "macro_level_reliability.csv", "run_manifest.json"):
+            self.assertEqual((first_dir / name).read_bytes(), (second_dir / name).read_bytes())
+
+        later = self.build(evaluation_time_utc="2026-01-03T12:01:00Z")
+        self.assertTrue(later["ok"])
+        self.assertNotEqual(first["run_id"], later["run_id"])
+        self.assertEqual(json.loads((self.output / "latest.json").read_text(encoding="utf-8"))["run_id"], later["run_id"])
+        for result in (first, later):
+            run_dir = self.output / str(result["artifact_dir"])
+            self.assertTrue(all((run_dir / name).is_file() for name in ("macro_structure_snapshot.json", "macro_structure_snapshot.md", "macro_level_reliability.csv", "run_manifest.json")))
+
+    def test_common_cutoff_uses_actual_closed_endpoints_not_open_candle_endpoint(self) -> None:
+        rows = []
+        with self.paths["15m"].open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        rows.extend(_bars(datetime(2026, 1, 2, 16, tzinfo=timezone.utc), 1, timedelta(minutes=15), "15m"))
+        _write(self.paths["15m"], rows)
+        result = self.build(evaluation_time_utc="2026-01-02T16:10:00Z")
+        self.assertTrue(result["ok"])
+        run_dir = self.output / str(result["artifact_dir"])
+        snapshot = json.loads((run_dir / "macro_structure_snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot["snapshot_cutoff_utc"], "2026-01-02T16:00:00+00:00")
+        self.assertIn(snapshot["snapshot_cutoff_utc"], {"2026-01-02T16:00:00+00:00", "2026-01-03T12:00:00+00:00"})
 
     def test_public_only_boundary_and_atomic_failure_preserve_latest(self) -> None:
         self.assertFalse(build_macro_structure_daily(output_root=self.output)["ok"])

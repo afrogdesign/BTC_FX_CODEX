@@ -8018,11 +8018,11 @@ class MacroStructureDailyCliTests(unittest.TestCase):
         from io import StringIO
         from tools.log_feedback import main
 
-        summary = {"ok": True, "exit_code": 0, "result_status": "insufficient", "structure_state": "insufficient", "run_id": "run_test"}
+        summary = {"ok": True, "exit_code": 0, "result_status": "insufficient", "structure_state": "insufficient", "evaluated_at_utc": "2026-01-03T12:00:00+00:00", "evaluated_at_jst": "2026-01-03T21:00:00+09:00", "run_id": "run_test"}
         argv = [
             "log_feedback.py", "run-macro-structure-daily", "--ohlcv-15m", "15m.csv",
             "--ohlcv-1h", "1h.csv", "--ohlcv-4h", "4h.csv", "--output-root", "reports",
-            "--symbol", "ETH_USDT", "--stdout-json",
+            "--symbol", "ETH_USDT", "--evaluation-time-utc", "2026-01-03T12:00:59+00:00", "--stdout-json",
         ]
         with patch.object(sys, "argv", argv), patch("tools.log_feedback.build_macro_structure_daily", return_value=summary) as build, patch("sys.stdout", new_callable=StringIO) as out:
             self.assertEqual(main(), 0)
@@ -8030,9 +8030,20 @@ class MacroStructureDailyCliTests(unittest.TestCase):
             self.assertEqual(build.call_args.kwargs["ohlcv_15m"], Path("15m.csv"))
             self.assertEqual(build.call_args.kwargs["ohlcv_4h"], Path("4h.csv"))
             self.assertEqual(build.call_args.kwargs["symbol"], "ETH_USDT")
+            self.assertEqual(build.call_args.kwargs["evaluation_time_utc"], "2026-01-03T12:00:59+00:00")
             self.assertIn('"structure_state":"insufficient"', out.getvalue())
+            self.assertIn('"evaluated_at_utc":"2026-01-03T12:00:00+00:00"', out.getvalue())
             self.assertIn('"result_status":"insufficient"', out.getvalue())
             self.assertNotIn("15m.csv", out.getvalue())
+
+    def test_malformed_evaluation_time_fails_closed(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+
+        argv = ["log_feedback.py", "run-macro-structure-daily", "--evaluation-time-utc", "not-a-time"]
+        with patch.object(sys, "argv", argv), patch("sys.stdout", new_callable=StringIO) as out:
+            self.assertEqual(main(), 2)
+            self.assertIn('"error_code":"evaluation_time_invalid"', out.getvalue())
 
 
 class MacroNextRegimeCliTests(unittest.TestCase):

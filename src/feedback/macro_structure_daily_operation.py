@@ -135,6 +135,33 @@ def _latest_common_closed_cutoff(candles: dict[str, list[dict[str, Any]]]) -> da
     return min(latest)
 
 
+def _normalize_evaluation_time(value: str | datetime | None, legacy_now: datetime | None) -> datetime:
+    if value is None:
+        parsed = legacy_now or datetime.now(timezone.utc)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+    elif isinstance(value, datetime):
+        if value.tzinfo is None:
+            raise ValueError("evaluation_time_invalid")
+        parsed = value
+    else:
+        parsed = _dt(value)
+        if parsed is None:
+            raise ValueError("evaluation_time_invalid")
+    return parsed.astimezone(timezone.utc).replace(second=0, microsecond=0)
+
+
+def _latest_eligible_endpoint(candles: list[dict[str, Any]], interval: str, boundary: datetime) -> datetime:
+    endpoints = [
+        candle["timestamp"] + EXPECTED_INTERVALS[interval]
+        for candle in candles
+        if candle["timestamp"] + EXPECTED_INTERVALS[interval] <= boundary
+    ]
+    if not endpoints:
+        raise ValueError("common_closed_candle_cutoff_missing")
+    return max(endpoints)
+
+
 def _zone_summary(level: dict[str, Any], price: float, atr: float) -> dict[str, Any]:
     distance = abs(level["center"] - price)
     return {
@@ -246,14 +273,12 @@ def build_macro_structure_daily(
     fetch_public_ohlcv: bool = False,
     cutoff_utc: str | None = None,
     now_utc: datetime | None = None,
+    evaluation_time_utc: str | datetime | None = None,
 ) -> dict[str, Any]:
     """Build and atomically publish one deterministic current snapshot."""
     temporary_root: Path | None = None
     try:
-        now = (now_utc or datetime.now(timezone.utc))
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
-        now = now.astimezone(timezone.utc)
+        evaluation_time = _normalize_evaluation_time(evaluation_time_utc, now_utc)
         paths = {"15m": ohlcv_15m, "1h": ohlcv_1h, "4h": ohlcv_4h}
         if fetch_public_ohlcv:
             temporary_root = Path(tempfile.mkdtemp(prefix="macro-structure-inputs-"))
@@ -275,10 +300,15 @@ def build_macro_structure_daily(
             assert path is not None
             candles[interval], metadata[interval] = _load_ohlcv(path, interval)
             fingerprints[interval] = _sha256(path)
-        cutoff = min(_latest_common_closed_cutoff(candles), now).astimezone(timezone.utc)
         requested = _dt(cutoff_utc) if cutoff_utc else None
+        boundary = evaluation_time
         if requested is not None:
-            cutoff = min(cutoff, requested.astimezone(timezone.utc)).astimezone(timezone.utc)
+            boundary = min(boundary, requested.astimezone(timezone.utc))
+        eligible_endpoints = {
+            interval: _latest_eligible_endpoint(candles[interval], interval, boundary)
+            for interval in TIMEFRAMES
+        }
+        cutoff = min(eligible_endpoints.values()).astimezone(timezone.utc)
         closed = {interval: [c for c in candles[interval] if c["timestamp"] + EXPECTED_INTERVALS[interval] <= cutoff] for interval in TIMEFRAMES}
         if any(not closed[interval] for interval in TIMEFRAMES):
             raise ValueError("common_closed_candle_cutoff_missing")
@@ -304,19 +334,13 @@ def build_macro_structure_daily(
         nearest = min(reliable, key=lambda level: (abs(level["center"] - price), level["level_id"])) if reliable else None
         lifecycle = _level_events(nearest, closed["1h"], cutoff) if nearest else {}
         activation = lifecycle.get("activation") or "NONE"
-        freshness_cap = min(now, requested.astimezone(timezone.utc)) if requested is not None else now
         freshness: dict[str, dict[str, Any]] = {}
         stale_timeframes: list[str] = []
         for interval in TIMEFRAMES:
-            endpoints = [
-                candle["timestamp"] + EXPECTED_INTERVALS[interval]
-                for candle in candles[interval]
-                if candle["timestamp"] + EXPECTED_INTERVALS[interval] <= freshness_cap
-            ]
-            endpoint = max(endpoints) if endpoints else None
-            age_minutes = round(max(0.0, (now - endpoint).total_seconds() / 60), 6) if endpoint else None
+            endpoint = eligible_endpoints[interval]
+            age_minutes = round(max(0.0, (evaluation_time - endpoint).total_seconds() / 60), 6)
             threshold_minutes = int(EXPECTED_INTERVALS[interval].total_seconds() / 60 + 30)
-            timeframe_stale = endpoint is None or age_minutes > threshold_minutes
+            timeframe_stale = age_minutes > threshold_minutes
             if timeframe_stale:
                 stale_timeframes.append(interval)
             freshness[interval] = {
@@ -346,11 +370,13 @@ def build_macro_structure_daily(
         result_status = "insufficient" if structure["state"] == "insufficient" else "ok"
         data_quality = "discontinuous" if discontinuous else "stale" if stale else "ok"
         snapshot_cutoff = cutoff.isoformat()
-        run_id = "run_" + hashlib.sha256(f"{SCHEMA_VERSION}|{METHOD_VERSION}|{symbol}|{snapshot_cutoff}|{json.dumps(fingerprints, sort_keys=True)}".encode()).hexdigest()[:20]
+        evaluated_at_utc = evaluation_time.isoformat()
+        run_id = "run_" + hashlib.sha256(f"{SCHEMA_VERSION}|{METHOD_VERSION}|{symbol}|{snapshot_cutoff}|{evaluated_at_utc}|{json.dumps(fingerprints, sort_keys=True)}".encode()).hexdigest()[:20]
         snapshot = {
             "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "m1_method_version": M1_METHOD_VERSION,
             "snapshot_id": "macro_snapshot_" + run_id[4:], "run_id": run_id, "as_of_utc": snapshot_cutoff,
             "as_of_jst": cutoff.astimezone(JST).isoformat(), "snapshot_cutoff_utc": snapshot_cutoff,
+            "evaluated_at_utc": evaluated_at_utc, "evaluated_at_jst": evaluation_time.astimezone(JST).isoformat(),
             "symbol": symbol, "current_price": round(price, 10), "input_coverage": metadata,
             "input_fingerprints": fingerprints, "structure_state": structure["state"], "price_location": structure["location"],
             "location_percentile": structure.get("percentile", ""), "support_zones": support_zones,
@@ -367,11 +393,11 @@ def build_macro_structure_daily(
             "reason_codes": sorted(set(reason_codes)), "reliability_band_counts": {band: sum(row.get("reliability_band") == band for row in reliability_rows) for band in ("high", "medium", "low", "insufficient")},
             "safety_boundary": SAFETY,
         }
-        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "outputs": list(OUTPUT_NAMES), "input_fingerprints": fingerprints, "source": "public_ohlcv_only", "private_actual_trade_input": False, "report_only": True, "automatic_order_allowed": False, "safety_boundary": SAFETY}
+        manifest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "as_of_utc": snapshot_cutoff, "evaluated_at_utc": evaluated_at_utc, "evaluated_at_jst": snapshot["evaluated_at_jst"], "outputs": list(OUTPUT_NAMES), "input_fingerprints": fingerprints, "source": "public_ohlcv_only", "private_actual_trade_input": False, "report_only": True, "automatic_order_allowed": False, "safety_boundary": SAFETY}
         files = {"macro_structure_snapshot.json": _json_bytes(snapshot), "macro_structure_snapshot.md": _markdown(snapshot).encode("utf-8"), "macro_level_reliability.csv": _csv_bytes(reliability_rows), "run_manifest.json": _json_bytes(manifest)}
-        latest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "artifact_dir": run_id, "as_of_utc": snapshot_cutoff, "result_status": result_status, "structure_state": snapshot["structure_state"], "price_location": snapshot["price_location"], "reliability_band_counts": snapshot["reliability_band_counts"], "stale_status": snapshot["stale_status"], "stale_timeframes": snapshot["stale_timeframes"], "freshness": snapshot["freshness"], "continuity_status": snapshot["continuity_status"], "safety_boundary": SAFETY}
+        latest = {"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "artifact_dir": run_id, "as_of_utc": snapshot_cutoff, "evaluated_at_utc": evaluated_at_utc, "evaluated_at_jst": snapshot["evaluated_at_jst"], "result_status": result_status, "structure_state": snapshot["structure_state"], "price_location": snapshot["price_location"], "reliability_band_counts": snapshot["reliability_band_counts"], "stale_status": snapshot["stale_status"], "stale_timeframes": snapshot["stale_timeframes"], "freshness": snapshot["freshness"], "continuity_status": snapshot["continuity_status"], "safety_boundary": SAFETY}
         _publish(output_root, run_id, files, latest)
-        return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "artifact_dir": run_id, "result_status": result_status, "structure_state": snapshot["structure_state"], "price_location": snapshot["price_location"], "reliability_band_counts": snapshot["reliability_band_counts"], "stale_status": snapshot["stale_status"], "stale_timeframes": snapshot["stale_timeframes"], "freshness": snapshot["freshness"], "data_quality_status": snapshot["data_quality_status"], "continuity_status": snapshot["continuity_status"], "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
+        return {"ok": True, "exit_code": 0, "schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "run_id": run_id, "snapshot_id": snapshot["snapshot_id"], "artifact_dir": run_id, "as_of_utc": snapshot_cutoff, "evaluated_at_utc": evaluated_at_utc, "evaluated_at_jst": snapshot["evaluated_at_jst"], "result_status": result_status, "structure_state": snapshot["structure_state"], "price_location": snapshot["price_location"], "reliability_band_counts": snapshot["reliability_band_counts"], "stale_status": snapshot["stale_status"], "stale_timeframes": snapshot["stale_timeframes"], "freshness": snapshot["freshness"], "data_quality_status": snapshot["data_quality_status"], "continuity_status": snapshot["continuity_status"], "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
     except (OSError, ValueError) as exc:
         return {"ok": False, "exit_code": 2, "error_code": str(exc), "report_written": False, "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False, "safety_boundary": SAFETY}
     finally:
