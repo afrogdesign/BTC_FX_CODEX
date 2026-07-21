@@ -1,74 +1,91 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260721-MACRO-AUTONOMOUS-STRUCTURE-DAILY-OPERATION`
+- current_work_id: `BTCFX-20260721-MACRO-STRUCTURE-CHRONOLOGICAL-HISTORY-CONTINUITY`
 - mode: `BOUNDED_CODEX_IMPLEMENTATION`
 - branch: `Ver04-v3`; confirm from local git before execution
-- active_spec: `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+- accepted_base: `89bd338`
+- active_spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
 - status: ready for source implementation
 - push: none
 
 ## Current action
 
-Implement M-OPS1: one dedicated report-only current macro structure operation route.
+Implement M-OPS2: one deterministic report-only chronological history operation over complete immutable M-OPS1 artifacts.
 
-This is the current primary M task. Do not wait for an M5 refresh trigger.
+M-OPS1 is accepted. Do not reopen its structure, reliability, cutoff, symbol, freshness, identity, or publication semantics unless a concrete input-contract defect is demonstrated.
 
 ## Required product behavior
 
 The new route must:
 
-1. use accepted public 15m, 1h, and 4h market-data paths;
-2. require no private actual-trade data;
-3. choose one deterministic latest common closed-candle cutoff;
-4. reuse accepted M1 structure, level identity, lifecycle, and prior-only reliability semantics;
-5. produce a current structure snapshot;
-6. publish confidence-labelled support/resistance zones;
-7. report current price location, next reliable targets, and obstruction;
-8. expose stale, discontinuous, and `insufficient` states explicitly;
-9. write a complete date/time-scoped local artifact set under `local/reports/macro_structure/`;
-10. atomically update a compact `latest.json` summary;
-11. remain report-only and independent from M5, mail, notification, and runtime.
+1. read only direct-child complete M-OPS1 `run_*` artifact directories from an explicit snapshot root;
+2. isolate one explicit symbol;
+3. validate source run identity, manifest, timestamps, public-only/report-only boundary, and level schema;
+4. preserve every evaluation run chronologically;
+5. distinguish freshness-only reevaluations from unique structural checkpoints;
+6. prove stable `level_id` continuity across checkpoints;
+7. expose reliability score/band, role, lifecycle, and evidence-count changes;
+8. expose absence and reappearance without inventing permanent retirement;
+9. expose structure, location, target, obstruction, volatility, activation, stale, continuity, and data-quality changes;
+10. write a complete immutable history artifact set;
+11. atomically update a compact history `latest.json`;
+12. remain independent from live fetch, private trade inputs, M5, delivery, runtime, and execution behavior.
+
+## Command and outputs
+
+Command:
+
+```text
+run-macro-structure-history
+```
+
+Default output root:
+
+```text
+local/reports/macro_structure/history/
+```
+
+Minimum generated files:
+
+```text
+<history-run>/macro_structure_history.json
+<history-run>/macro_structure_history.md
+<history-run>/macro_snapshot_history.csv
+<history-run>/macro_level_history.csv
+<history-run>/macro_structure_changes.csv
+<history-run>/run_manifest.json
+latest.json
+```
+
+Generated outputs remain uncommitted.
 
 ## Implementation boundary
 
-Follow the active spec exactly.
+Follow the active spec.
 
 Default allowed implementation area:
 
-- `src/feedback/macro_structure_volatility_replay.py`
-- new `src/feedback/macro_structure_daily_operation.py`
+- new `src/feedback/macro_structure_history_operation.py`
 - `tools/log_feedback.py`
-- optional new `tools/run_macro_structure_daily.py`
-- focused matching tests
-- short factual notes in the active spec
+- new `tests/test_macro_structure_history_operation.py`
+- matching M-OPS2 CLI tests in `tests/test_log_feedback.py`
+- the active and archived M-OPS specs and current state documents already changed by ChatGPT
+- one small deterministic fixture helper when clearly needed
 
-Do not edit production analysis, notification, mail, deploy, runtime, gate, threshold, scoring, classifier, account, position, or order files.
+Do not edit accepted M1 or M-OPS1 source unless an input-contract defect is demonstrated and reported first.
+
+Do not edit production analysis, delivery, runtime, gate, threshold, scoring, classifier, account, position, or order files.
 
 ## Validation
 
 Use only:
 
-- matching daily-operation unittest module
-- matching M1 regression subset
-- matching CLI parser/dispatch tests
-- one small deterministic fixture smoke
+- matching history-operation unittest module
+- matching M-OPS2 CLI parser/dispatch tests
+- one bounded deterministic multi-date fixture smoke
 - task-scoped `git diff --check`
 
-Do not run the M5 full bundle, full test suite, installed schedule, or frozen runtime repo.
-
-## Expected outputs
-
-Minimum generated local files:
-
-```text
-local/reports/macro_structure/<run-id>/macro_structure_snapshot.json
-local/reports/macro_structure/<run-id>/macro_structure_snapshot.md
-local/reports/macro_structure/<run-id>/macro_level_reliability.csv
-local/reports/macro_structure/<run-id>/run_manifest.json
-local/reports/macro_structure/latest.json
-```
-
-Generated outputs remain uncommitted.
+Do not run full suite, live public fetch, M5, broad replay, installed runtime/schedule, or frozen runtime repo.
 
 ## Acceptance path
 
@@ -77,25 +94,24 @@ After Codex reports completion, ChatGPT reviews:
 - changed source
 - focused tests
 - actual CLI parser/dispatch
-- deterministic fixture artifact metadata
-- event-time cutoff and no-future boundary
-- confidence labels and valid `insufficient` behavior
-- atomic publication and privacy boundary
-- scope and safety
+- complete multi-date history artifacts
+- evaluation versus structural-checkpoint deduplication
+- level identity, transitions, absence, and reappearance
+- no-future chronological behavior
+- atomicity, determinism, privacy, scope, and safety
 
 If accepted:
 
 ```text
-M-OPS1 accepted
-→ decide whether M-OPS2 history continuity is already complete or needs one bounded follow-up
-→ M-OPS3 chart-first artifact
+M-OPS2 accepted
+→ M-OPS3 chart-first operator artifact
 → explicit human-approved M-OPS4 runtime/schedule task
 ```
 
 ## P and M5 boundaries
 
-- P readiness remains parked on the private MEXC export batch; do not repeat the accepted review.
-- M5 remains accepted and secondary; do not rerun it during M-OPS1.
+- P readiness remains parked on the absent complete MEXC export batch; do not repeat the accepted review.
+- M5 remains accepted and secondary; do not rerun it during M-OPS2.
 - M6 remains unauthorized.
 
 ## Safety
@@ -103,8 +119,8 @@ M-OPS1 accepted
 - report-only
 - no automatic order
 - no private/account/order endpoints
-- no actual-trade requirement
+- no live fetch required
 - no mail or notification change
-- no runtime, launchd, plist, or schedule change
+- no runtime, launchd, plist, cron, or schedule change
 - no production gate, threshold, scoring, classifier, or policy change
 - no frozen runtime repo access

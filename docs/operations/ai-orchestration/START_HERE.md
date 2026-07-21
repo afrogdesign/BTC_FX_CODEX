@@ -76,7 +76,8 @@ Current high-level state:
 
 - P1–P8 accepted; P9 blocked by absent actual-backed evidence
 - M1–M5 research/tooling accepted
-- M-OPS1 is the current implementation task
+- M-OPS1 current snapshot source accepted at `89bd338`
+- M-OPS2 chronological history and confidence continuity is the current implementation task
 - M6 not started and not authorized
 - A1/A2 accepted, A3 superseded, A4 not planned
 
@@ -108,7 +109,9 @@ Report:
 - the primary M objective is autonomous public-data macro structure operation;
 - private actual-trade data is not required to calculate support/resistance reliability;
 - M1–M5 are accepted foundations, not completion of autonomous operation;
-- M5 `winner=none` does not block current snapshot, history, or operator artifact work;
+- M-OPS1 is accepted and must not be reopened without a concrete defect;
+- M-OPS2 is the current active source task;
+- M5 `winner=none` does not block history or operator artifact work;
 - current implementation follows `MACRO_AUTONOMOUS_OPERATION_PLAN_20260721.md` and the active M-OPS spec;
 - M5/M6 remains secondary and follows its separate plan only when improvement/adoption is being considered.
 
@@ -139,8 +142,8 @@ The controlling order is:
 
 ```text
 accepted M1–M4 capabilities
-→ M-OPS1 current snapshot and local daily report
-→ M-OPS2 chronological reliability continuity
+→ M-OPS1 current snapshot and local daily report — accepted
+→ M-OPS2 chronological reliability continuity — current
 → M-OPS3 chart-first operator artifact
 → explicit human-approved M-OPS4 runtime/schedule enablement
 → autonomous M-OPS5 health and stale-data reporting

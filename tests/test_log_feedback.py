@@ -8046,6 +8046,25 @@ class MacroStructureDailyCliTests(unittest.TestCase):
             self.assertIn('"error_code":"evaluation_time_invalid"', out.getvalue())
 
 
+class MacroStructureHistoryCliTests(unittest.TestCase):
+    def test_parser_dispatches_report_only_history_route(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+
+        summary = {"ok": True, "exit_code": 0, "history_id": "history_test", "evaluation_count": 1, "structural_checkpoint_count": 1, "latest_result_status": "insufficient_history", "report_only": True}
+        argv = [
+            "log_feedback.py", "run-macro-structure-history", "--snapshot-root", "snapshots",
+            "--output-root", "history", "--symbol", "ETH_USDT", "--stdout-json",
+        ]
+        with patch.object(sys, "argv", argv), patch("tools.log_feedback.build_macro_structure_history", return_value=summary) as build, patch("sys.stdout", new_callable=StringIO) as out:
+            self.assertEqual(main(), 0)
+            self.assertEqual(build.call_args.kwargs["snapshot_root"], Path("snapshots"))
+            self.assertEqual(build.call_args.kwargs["output_root"], Path("history"))
+            self.assertEqual(build.call_args.kwargs["symbol"], "ETH_USDT")
+            self.assertIn('"history_id":"history_test"', out.getvalue())
+            self.assertIn('"report_only":true', out.getvalue())
+
+
 class MacroNextRegimeCliTests(unittest.TestCase):
     def test_parser_dispatches_explicit_offline_paths_compactly(self) -> None:
         from io import StringIO

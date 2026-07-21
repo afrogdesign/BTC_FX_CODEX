@@ -10,8 +10,9 @@ last_updated: 2026-07-21
 - accepted P state checkpoint: `b9ca3f6`
 - accepted P/M planning checkpoint: `ee68e94`
 - accepted M5 implementation checkpoint: `3c7f01d90c3f5cc126cedd9aed294cf67a602c42`
+- accepted M-OPS1 checkpoint: `89bd338`
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- active spec: `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+- active spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
 - safety: report-only / human-decided / no automatic order
 - push: none
 
@@ -43,24 +44,24 @@ Do not repeat importer, episode-builder, signal-linker, CLI, or readiness review
 
 Canonical decision: `DEC-20260721-012`.
 
-## Macro / M purpose — controlling interpretation
+## Macro / M purpose
 
 The primary M objective is autonomous higher-timeframe market-structure understanding from public data.
 
-The system must ultimately maintain, without recurring human input:
+The system completion route is:
 
 ```text
 public 15m / 1h / 4h OHLCV
 → stable support/resistance identity
 → prior-only reliability and lifecycle
 → current structural location
-→ high/medium/low/insufficient zones
-→ next reliable target and obstruction
-→ chart-first operator artifact
+→ confidence-labelled zones
+→ next target and obstruction
 → chronological evidence history
+→ chart-first operator artifact
 ```
 
-Private actual-trade evidence is not a prerequisite for this market-structure operation. It remains relevant to human outcome evaluation and production adoption decisions.
+Private actual-trade evidence is not a prerequisite for market-structure operation. It remains relevant to human outcome evaluation and production adoption decisions.
 
 Canonical plan:
 
@@ -72,7 +73,7 @@ Canonical decision:
 
 ## Macro implementation state
 
-Accepted research/tooling foundation:
+Accepted foundation:
 
 - M1 accepted: event-time levels, lifecycle, prior-only reliability, location, volatility, activation, target/obstruction, outcomes
 - M2 accepted: opt-in public-data auxiliary macro shadow, disabled by default
@@ -81,23 +82,42 @@ Accepted research/tooling foundation:
 - M5 accepted: bounded champion/challenger proposal engine
 - M6 not started and not authorized
 
-Accepted M5 result remains:
+Accepted autonomous operation source:
+
+- M-OPS1 accepted at `89bd338`
+- command: `run-macro-structure-daily`
+- public 15m/1h/4h only
+- deterministic actual common closed-candle cutoff
+- explicit normalized evaluation time
+- stable M1 level identity and prior-only evidence
+- original level side separated from current lifecycle role
+- canonical `structure_state`, structural nearest zones, targets, obstruction, volatility, activation, freshness, continuity, and valid `insufficient`
+- complete immutable run artifacts plus atomic compact `latest.json`
+- byte-conflict-safe deterministic publication
+- no private actual-trade dependency
+- no runtime, mail, notification, policy, or order mutation
+
+Reviewed retained evidence:
+
+- `local/reports/macro_structure/mops1_final_review/`
+- two complete immutable runs for the same market checkpoint at evaluation minutes `2026-01-02T12:00:00+00:00` and `2026-01-02T12:01:00+00:00`
+- distinct deterministic run IDs
+- latest points to the later evaluation
+- manifest remains public-only and report-only
+
+M5 remains secondary. Its accepted result remains:
 
 - winner: `none`
 - recommendation: `continue_shadow_collection`
 - production mutation: none
 
-M5 is not the current primary task. Its no-winner result does not block autonomous macro collection, current support/resistance reporting, history accumulation, or chart-first local artifacts.
-
 ## Corrected M route
-
-The M route now has two lanes.
 
 Primary completion lane:
 
 ```text
-M-OPS1 dedicated current snapshot and daily report source
-→ M-OPS2 chronological history and confidence continuity
+M-OPS1 current snapshot and daily report source — accepted
+→ M-OPS2 chronological history and confidence continuity — current
 → M-OPS3 chart-first operator artifact
 → M-OPS4 separately approved runtime/schedule enablement
 → M-OPS5 autonomous health and stale-data status
@@ -114,27 +134,23 @@ accumulated evidence
 → separate runtime adoption
 ```
 
-`DEC-20260721-013` still controls the M5-to-M6 sequence, but it no longer controls the overall M next action.
-
 ## Current selected action
 
-Implement M-OPS1 under:
+Implement M-OPS2 under:
 
-- work ID: `BTCFX-20260721-MACRO-AUTONOMOUS-STRUCTURE-DAILY-OPERATION`
-- active spec: `chatgpt/specs/active/20260721_macro_autonomous_structure_daily_operation.md`
+- work ID: `BTCFX-20260721-MACRO-STRUCTURE-CHRONOLOGICAL-HISTORY-CONTINUITY`
+- active spec: `chatgpt/specs/active/20260721_macro_structure_chronological_history_continuity.md`
 
-Expected product result:
+M-OPS1 already retains immutable runs and an atomic latest pointer, but no accepted history rollup currently exposes:
 
-- dedicated report-only current macro snapshot command
-- public-data only
-- no actual-trade dependency
-- confidence-labelled support/resistance zones
-- current structural location, target, and obstruction
-- date/time-scoped generated artifacts under `local/reports/macro_structure/`
-- atomic compact latest summary
-- no runtime or schedule application in the source task
+- evaluation runs versus unique structural checkpoints;
+- stable `level_id` continuity across snapshots;
+- reliability upgrades/downgrades;
+- role and lifecycle transitions;
+- absence and reappearance;
+- chronological structure/location/target/obstruction changes.
 
-Do not wait for seven M5 dates or an M5 challenger before executing M-OPS1.
+M-OPS2 must recompute an auditable deterministic rollup from complete M-OPS1 artifacts. It must not introduce mutable online learning or change accepted M1/M-OPS1 semantics.
 
 ## Human involvement boundary
 
@@ -149,14 +165,10 @@ Explicit human approval remains required for:
 - automatic order behavior
 - phase/version promotion
 
-## Version policy
+## Version and safety policy
 
 - remain on `Ver04-v3` for M-OPS source, local artifacts, and planning
-- M-OPS completion by itself does not automatically declare `Ver05`
-- `Ver05` remains evidence-backed, explicitly approved, implemented, validated, and accepted production adoption territory
-
-## Repository and safety boundary
-
+- M-OPS completion does not automatically declare `Ver05`
 - generated evidence remains ignored and uncommitted under `local/`
 - no raw exchange export commit
 - no automatic order
