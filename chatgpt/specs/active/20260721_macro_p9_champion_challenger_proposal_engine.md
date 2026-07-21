@@ -85,3 +85,7 @@ Cover proposal manifest schema/version fail-closed, unknown/non-allowlisted para
 M5 completion requires focused tests, one bounded local replay, and four complete deterministic outputs, with no production/runtime/notification/mail behavior changes. ChatGPT acceptance is required before archive or M6. M6 remains human-reviewed and is not authorized by M5 completion.
 
 M4 has been accepted as local render-only evidence. M5 source implementation is the next task and has not started.
+
+## Implementation note — bounded FIX-01
+
+Historical 15-minute source bytes were not retained, so the bounded evaluation uses one fresh self-contained local bundle produced through the accepted public OHLCV fetch path. Only `left_window` and `right_window` are optimization levers; the evaluation windows remain fixed. The exact CLI route is `run-macro-p9-proposal-engine`. The implementation remains pending ChatGPT acceptance.

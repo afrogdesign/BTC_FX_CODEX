@@ -8044,5 +8044,22 @@ class MacroOperatorHierarchyShadowCliTests(unittest.TestCase):
                 self.assertNotIn(str(root), out.getvalue())
 
 
+class MacroP9ProposalEngineCliTests(unittest.TestCase):
+    def test_parser_dispatches_all_explicit_paths_compactly(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            argv = ["log_feedback.py", "run-macro-p9-proposal-engine", "--signals", "signals.csv", "--ohlcv-15m", "15m.csv", "--ohlcv-1h", "1h.csv", "--ohlcv-4h", "4h.csv", "--m1-events-csv", "m1-events.csv", "--m1-levels-csv", "m1-levels.csv", "--m1-misses-csv", "m1-misses.csv", "--m1-replay-json", "m1.json", "--m3-events-csv", "m3-events.csv", "--m3-episodes-csv", "m3-episodes.csv", "--m3-replay-json", "m3.json", "--champion-manifest", "champion.json", "--proposal-space-manifest", "space.json", "--output-results-csv", str(root / "results.csv"), "--output-issues-csv", str(root / "issues.csv"), "--output-json", str(root / "report.json"), "--output-md", str(root / "report.md"), "--replace-output"]
+            summary = {"ok": True, "exit_code": 0, "winner": "none", "recommendation": "continue_shadow_collection"}
+            with patch.object(sys, "argv", argv), patch("tools.log_feedback.run_macro_p9_proposal_engine", return_value=summary) as run, patch("sys.stdout", new_callable=StringIO) as out:
+                self.assertEqual(main(), 0)
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(run.call_args.kwargs["ohlcv_15m"], Path("15m.csv"))
+                self.assertEqual(run.call_args.kwargs["ohlcv_4h"], Path("4h.csv"))
+                self.assertIn('"winner":"none"', out.getvalue())
+                self.assertNotIn(str(root), out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

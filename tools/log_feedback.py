@@ -69,6 +69,7 @@ from src.feedback.turning_volatility_precursor_replay import replay_turning_vola
 from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
 from src.feedback.macro_next_regime_replay import replay_macro_next_regime
 from src.feedback.macro_operator_hierarchy_shadow import render_macro_operator_hierarchy_shadow
+from src.feedback.macro_p9_proposal_engine import run_macro_p9_proposal_engine
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22130,6 +22131,13 @@ def _build_parser() -> argparse.ArgumentParser:
     hierarchy_parser.add_argument("--output-md", required=True)
     hierarchy_parser.add_argument("--replace-output", action="store_true")
 
+    p9_parser = subparsers.add_parser("run-macro-p9-proposal-engine")
+    for option in ("signals", "ohlcv-15m", "ohlcv-1h", "ohlcv-4h", "m1-events-csv", "m1-levels-csv", "m1-misses-csv", "m1-replay-json", "m3-events-csv", "m3-episodes-csv", "m3-replay-json", "champion-manifest", "proposal-space-manifest", "output-results-csv", "output-issues-csv", "output-json", "output-md"):
+        p9_parser.add_argument("--" + option, required=True)
+    p9_parser.add_argument("--p8-trial-facts-csv")
+    p9_parser.add_argument("--p8-trial-report-json")
+    p9_parser.add_argument("--replace-output", action="store_true")
+
     active_plan_intraperiod_review_parser = subparsers.add_parser("build-active-plan-intraperiod-review")
     active_plan_intraperiod_review_parser.add_argument("--candidates-csv", default="logs/csv/active_plan_candidates.csv")
     active_plan_intraperiod_review_parser.add_argument("--ohlcv-csv", required=True)
@@ -23581,6 +23589,22 @@ def main() -> None:
                 ohlcv_4h_csv=Path(args.ohlcv_4h_csv) if args.ohlcv_4h_csv else None, signal_id=args.signal_id,
                 output_html=Path(args.output_html), output_json=Path(args.output_json), output_md=Path(args.output_md),
                 replace_output=bool(args.replace_output),
+            )
+        except (OSError, ValueError) as exc:
+            sys.stdout.write(json.dumps({"ok": False, "exit_code": 2, "error_code": str(exc)}, separators=(",", ":")) + "\n")
+            return 2
+        sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "run-macro-p9-proposal-engine":
+        try:
+            summary = run_macro_p9_proposal_engine(
+                signals=Path(args.signals), ohlcv_15m=Path(args.ohlcv_15m), ohlcv_1h=Path(args.ohlcv_1h), ohlcv_4h=Path(args.ohlcv_4h),
+                m1_events_csv=Path(args.m1_events_csv), m1_levels_csv=Path(args.m1_levels_csv), m1_misses_csv=Path(args.m1_misses_csv), m1_replay_json=Path(args.m1_replay_json),
+                m3_events_csv=Path(args.m3_events_csv), m3_episodes_csv=Path(args.m3_episodes_csv), m3_replay_json=Path(args.m3_replay_json),
+                champion_manifest=Path(args.champion_manifest), proposal_space_manifest=Path(args.proposal_space_manifest),
+                output_results_csv=Path(args.output_results_csv), output_issues_csv=Path(args.output_issues_csv), output_json=Path(args.output_json), output_md=Path(args.output_md),
+                replace_output=bool(args.replace_output), p8_trial_facts_csv=Path(args.p8_trial_facts_csv) if args.p8_trial_facts_csv else None, p8_trial_report_json=Path(args.p8_trial_report_json) if args.p8_trial_report_json else None,
             )
         except (OSError, ValueError) as exc:
             sys.stdout.write(json.dumps({"ok": False, "exit_code": 2, "error_code": str(exc)}, separators=(",", ":")) + "\n")
