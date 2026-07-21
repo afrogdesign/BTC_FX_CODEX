@@ -19,6 +19,8 @@ from src.feedback.macro_p9_proposal_engine import (
     _write_snapshot_inputs,
     _expand_space,
     _p8_status,
+    _candidate_rolling_evidence,
+    _guarded_vector,
     _public_snapshot,
     _snapshot_eligible,
     _split_gate,
@@ -99,11 +101,34 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         self.assertEqual((False, ["split_guarded_metric_degradation"]), _split_gate({"m1": {"direction": {"UP": {"status": "available", "degradation": True, "missing_metrics": []}}}}))
         self.assertEqual((False, ["split_required_metric_missing"]), _split_gate({"m1": {"direction": {"UP": {"status": "unavailable", "degradation": False, "missing_metrics": ["large_move_recall"]}}}}))
 
+    def test_missing_entire_split_dimension_fails_closed(self):
+        champion_summary = {"splits": {"policy": {"direction": {"UP": {"directional_precision": 0.5}}}}}
+        result = _split_comparison(champion_summary, champion_summary, "policy", ("direction", "regime"), ("directional_precision",))
+        allowed, reasons = _split_gate({"m1": result})
+        self.assertFalse(allowed)
+        self.assertEqual(["split_required_metric_missing"], reasons)
+
+    def test_empty_split_dimension_fails_closed(self):
+        summary = {"splits": {"policy": {"direction": {}}}}
+        result = _split_comparison(summary, summary, "policy", ("direction",), ("directional_precision",))
+        self.assertEqual("unavailable", result["direction"]["__missing_dimension__"]["status"])
+
+    def test_no_eligible_rolling_snapshot_does_not_inherit_terminal_evidence(self):
+        latest, m1, m3, diagnostics = _candidate_rolling_evidence([{"snapshot_jst_date": "2026-07-19", "status": "failed", "m1_guarded_metrics": {"directional_precision": 0.99}, "m3_guarded_metrics": {"directional_precision": 0.99}, "m3_diagnostic_horizons": {"6h": {"directional_precision": 0.99}}}])
+        self.assertEqual("failed", latest["status"])
+        self.assertEqual({}, m1)
+        self.assertEqual({}, m3)
+        self.assertEqual({}, diagnostics)
+
     def test_champion_snapshot_quality_and_same_date_fail_closed(self):
-        snapshot = {"snapshot_jst_date": "2026-07-19", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": {key: 0.1 for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_guarded_metrics": {key: 0.1 for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")}, "validation_date_concentration": {"pass": True}, "m1_quality_status": "fail", "m3_quality_status": "pass", "status": "established"}
+        snapshot = {"snapshot_jst_date": "2026-07-19", "m3_eligible_jst_dates": ["2026-07-19"], "m3_validation_jst_dates": ["2026-07-19"], "m1_guarded_metrics": {key: 0.1 for key in ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_guarded_metrics": {key: 0.1 for key in ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")}, "m3_resolved_up_count": 10, "m3_resolved_down_count": 9, "validation_date_concentration": {"pass": True}, "m1_quality_status": "fail", "m3_quality_status": "pass", "status": "established"}
         self.assertFalse(_snapshot_eligible(snapshot, "2026-07-19"))
         snapshot["m1_quality_status"] = "pass"
+        snapshot["m3_resolved_down_count"] = 10
         self.assertFalse(_snapshot_eligible(snapshot, "2026-07-20"))
+        snapshot["snapshot_jst_date"] = "2026-07-20"
+        snapshot["m3_eligible_jst_dates"] = ["2026-07-20"]
+        self.assertTrue(_snapshot_eligible(snapshot, "2026-07-20"))
 
     def test_public_rolling_snapshot_has_lineage_count_and_fingerprint_only(self):
         public = _public_snapshot({"snapshot_jst_date": "2026-07-19", "_issue_lineage": [{"opportunity_id": "private-id", "root_cause": "reliable"}], "_m1_split_summary": {"private": "summary"}})
@@ -112,8 +137,9 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         self.assertNotIn("_m1_split_summary", public)
 
     def test_issue_rows_keep_candidate_lineage_identity(self):
-        rows = _issue_rows("candidate-2", [{"opportunity_id": "candidate-2-opportunity", "root_cause": "reliable", "reason": "fixture"}], {}, {}, {}, {}, {}, {"pass": True}, {"actual_high_medium_count": 0})
+        rows = _issue_rows("candidate-2", [{"opportunity_id": "candidate-2-opportunity", "root_cause": "rejection", "reason_codes": "candidate_unique"}], {}, {}, {}, {}, {}, {"pass": True}, {"actual_high_medium_count": 0})
         self.assertTrue(all(row["candidate_id"] == "candidate-2" for row in rows))
+        self.assertTrue(any(row["issue_category"].startswith("rejection/") for row in rows))
 
     def test_concentration_boundary_and_failure(self):
         rows = [{"episode_id": "a", "start_timestamp_utc": "2026-07-19T01:00:00Z"}, {"episode_id": "b", "start_timestamp_utc": "2026-07-19T02:00:00Z"}, {"episode_id": "c", "start_timestamp_utc": "2026-07-20T02:00:00Z"}, {"episode_id": "d", "start_timestamp_utc": "2026-07-20T03:00:00Z"}]
@@ -184,6 +210,10 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
         m3_split_values = {key: metrics[key] for key in split_keys_m3}
         m1_summary["splits"] = {"reliable_level_acceptance_corridor": {dimension: {"UP": dict(m1_split_values)} for dimension in ("direction", "regime", "price_location", "volatility_state", "reliability")}}
         m3_summary["splits"] = {"candidate": {dimension: {"UP": dict(m3_split_values)} for dimension in ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band")}}
+        terminal_m1_summary = json.loads(json.dumps(m1_summary))
+        terminal_m3_summary = json.loads(json.dumps(m3_summary))
+        terminal_m1_summary["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"].update({"directional_precision": 0.3, "large_move_recall": 0.3, "false_warning_rate": 0.2, "opposite_move_rate": 0.2, "whipsaw_rate": 0.2, "burden_per_jst_day": 2.0})
+        terminal_m3_summary["recommendation"]["validation_candidate_metrics"]["3h"].update({"directional_precision": 0.3, "opposite_move_rate": 0.2, "balanced_no_expansion_rate": 0.3, "whipsaw_rate": 0.2, "burden_per_jst_day": 2.0})
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             paths = {name: root / f"{name}.csv" for name in ("signals", "ohlcv_15m", "ohlcv_1h", "ohlcv_4h", "m1_events", "m1_levels", "m1_misses", "m3_events", "m3_episodes")}
@@ -192,11 +222,11 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
                 paths[name].write_text("timestamp_utc\n2026-07-19T00:00:00Z\n2026-07-21T00:00:00Z\n")
             paths["m1_events"].write_text("event_id,signal_id\nevent,signal\n")
             paths["m1_levels"].write_text("level_id\nlevel\n")
-            paths["m1_misses"].write_text("opportunity_id,root_cause,reason\nchampion-opportunity,reliable,fixture\n")
+            paths["m1_misses"].write_text("opportunity_id,root_cause,reason_codes\nshared-opportunity,reliable,champion_only\n")
             paths["m3_events"].write_text("record_id,event_id,signal_id,event_timestamp_jst\nrecord,event,signal,2026-07-19 10:00:00+09:00\n")
             paths["m3_episodes"].write_text("episode_id,policy,start_timestamp_utc\nepisode,candidate,2026-07-19T01:00:00Z\n")
             m1_json = root / "m1.json"; m3_json = root / "m3.json"; champion_path = root / "champion.json"; space_path = root / "space.json"
-            m1_json.write_text(json.dumps(m1_summary)); m3_json.write_text(json.dumps(m3_summary))
+            m1_json.write_text(json.dumps(terminal_m1_summary)); m3_json.write_text(json.dumps(terminal_m3_summary))
             champion_value = champion({"left_window": 2, "right_window": 2, "cutoff_utc": "x", "performance_start_utc": "y", "performance_end_utc": "z"})
             space_value = {"schema_version": SPACE_SCHEMA, "method_version": METHOD_VERSION, "one_at_a_time": [{"parameter": "left_window", "values": [3]}], "combinations": []}
             champion_path.write_text(json.dumps(champion_value)); space_path.write_text(json.dumps(space_value))
@@ -210,21 +240,23 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
                 m1_dir.mkdir(parents=True); m3_dir.mkdir(parents=True)
                 if str(fixed.get("cutoff_utc", "")).startswith("2026-07-"):
                     bounded_counts.append({name: len(input_paths[name].read_text().splitlines()) - 1 for name in input_paths})
-                candidate_m1 = json.loads(json.dumps(m1_summary))
-                candidate_m3 = json.loads(json.dumps(m3_summary))
+                rolling_cutoff = str(fixed.get("cutoff_utc", "")).startswith("2026-07-")
+                candidate_m1 = json.loads(json.dumps(m1_summary if rolling_cutoff else terminal_m1_summary))
+                candidate_m3 = json.loads(json.dumps(m3_summary if rolling_cutoff else terminal_m3_summary))
                 if candidate != {"left_window": 2, "right_window": 2}:
-                    candidate_m1["splits"]["reliable_level_acceptance_corridor"]["direction"]["UP"].update({"directional_precision": 0.4, "false_warning_rate": 0.2})
-                    candidate_m3["splits"]["candidate"]["side"]["UP"].update({"directional_precision": 0.4, "opposite_move_rate": 0.2})
+                    candidate_m1["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"].update({"directional_precision": 0.4, "large_move_recall": 0.4, "false_warning_rate": 0.08, "opposite_move_rate": 0.08, "whipsaw_rate": 0.08, "burden_per_jst_day": 0.8})
+                    candidate_m3["recommendation"]["validation_candidate_metrics"]["3h"].update({"directional_precision": 0.4, "opposite_move_rate": 0.08, "balanced_no_expansion_rate": 0.2, "whipsaw_rate": 0.08, "burden_per_jst_day": 0.8})
                 (m1_dir / "replay.json").write_text(json.dumps(candidate_m1))
                 (m3_dir / "replay.json").write_text(json.dumps(candidate_m3))
                 (m1_dir / "events.csv").write_text(paths["m1_events"].read_text())
                 (m1_dir / "levels.csv").write_text(paths["m1_levels"].read_text())
-                (m1_dir / "misses.csv").write_text(paths["m1_misses"].read_text())
+                if candidate == {"left_window": 2, "right_window": 2}:
+                    (m1_dir / "misses.csv").write_text("opportunity_id,root_cause,reason_codes\nshared-opportunity,reliable,champion_only\n")
+                else:
+                    (m1_dir / "misses.csv").write_text("opportunity_id,root_cause,reason_codes\nshared-opportunity,rejection,challenger_unique\n")
                 cutoff_text = str(fixed.get("cutoff_utc", "2026-07-19"))
                 snapshot_date = cutoff_text[:10] if cutoff_text.startswith("2026-07-") else "2026-07-19"
                 candidate_m3["recommendation"]["validation_dates"] = [snapshot_date]
-                if candidate != {"left_window": 2, "right_window": 2} and snapshot_date == "2026-07-19":
-                    candidate_m1["splits"]["reliable_level_acceptance_corridor"]["direction"]["UP"].pop("large_move_recall")
                 (m1_dir / "replay.json").write_text(json.dumps(candidate_m1))
                 (m3_dir / "replay.json").write_text(json.dumps(candidate_m3))
                 (m3_dir / "events.csv").write_text(f"record_id,event_id,signal_id,event_timestamp_jst\nrecord,event,signal,{snapshot_date} 10:00:00+09:00\n")
@@ -250,11 +282,12 @@ class MacroP9ProposalEngineTests(unittest.TestCase):
             with output_paths["issues.csv"].open() as handle:
                 self.assertEqual(1, sum(1 for row in csv.DictReader(handle) if row["candidate_id"] == "REPORT_GLOBAL"))
             challenger_record = next(row for row in report["candidate_validation_results"] if row["candidate_id"] != report["champion"]["candidate_id"])
-            self.assertFalse(challenger_record["comparison_eligible"])
-            self.assertIn("split_guarded_metric_degradation", challenger_record["reason_codes"])
-            self.assertIn("split_required_metric_missing", challenger_record["reason_codes"])
+            self.assertTrue(challenger_record["comparison_eligible"])
+            self.assertFalse(challenger_record["pareto_dominant"])
+            self.assertTrue(_dominates(_guarded_vector(json.loads(challenger_record["m1_validation_3h_json"]), json.loads(challenger_record["m3_validation_3h_json"])), _guarded_vector(terminal_m1_summary["recommendation_gate"]["validation_policy_metrics"]["reliable_level_acceptance_corridor"], terminal_m3_summary["recommendation"]["validation_candidate_metrics"]["3h"]))[0])
+            self.assertIn("rejection/break/acceptance/reclaim event missed", output_paths["issues.csv"].read_text())
             public_rolling = output_paths["results.csv"].read_text() + output_paths["report.json"].read_text()
-            self.assertNotIn("candidate-2-opportunity", public_rolling)
+            self.assertNotIn("shared-opportunity", public_rolling)
             self.assertNotIn('"_issue_lineage"', public_rolling)
             self.assertTrue(all(counts["signals"] <= 2 and counts["ohlcv_15m"] <= 1 for counts in bounded_counts))
 

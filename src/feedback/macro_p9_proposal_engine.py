@@ -175,6 +175,8 @@ def _jst_dates(path: Path) -> list[str]:
 
 M1_GUARDED = ("directional_precision", "large_move_recall", "false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day")
 M3_GUARDED = ("directional_precision", "opposite_move_rate", "balanced_no_expansion_rate", "whipsaw_rate", "burden_per_jst_day")
+M1_SPLIT_DIMENSIONS = ("direction", "regime", "price_location", "volatility_state", "reliability")
+M3_SPLIT_DIMENSIONS = ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band")
 METRIC_DIRECTIONS = {
     **{key: "higher" for key in ("directional_precision", "large_move_recall")},
     **{key: "lower" for key in ("false_warning_rate", "opposite_move_rate", "whipsaw_rate", "burden_per_jst_day", "balanced_no_expansion_rate")},
@@ -334,7 +336,7 @@ def _snapshot_record(date: str, cutoff: str, paths: dict[str, Path], run: dict[s
     m3_summary = _read_json(run["m3"] / "replay.json")
     m1_quality = _m1_quality_ok(run["m1"] / "replay.json")
     m3_quality = _m3_quality_ok(run["m3"] / "replay.json")
-    lineage = [{key: row.get(key, "") for key in ("opportunity_id", "root_cause", "reason", "event_family")} for row in _read_csv(m1_misses, {"opportunity_id"})]
+    lineage = [{key: row.get(key, "") for key in ("opportunity_id", "root_cause", "reason_codes")} for row in _read_csv(m1_misses, {"opportunity_id"})]
     return {"snapshot_jst_date": date, "cutoff_utc": cutoff, "input_row_counts": {key: _row_count(path) for key, path in paths.items()}, "input_fingerprints": _fingerprints(paths), "m1_event_count": len(_read_csv(m1_events, {"event_id"})), "m1_independent_opportunity_count": len(_read_csv(m1_misses, {"opportunity_id"})), "m1_opportunity_id_fingerprint": _id_fingerprint(m1_misses, "opportunity_id"), "m3_event_count": len(_read_csv(m3_events, {"record_id"})), "m3_candidate_episode_count": len(candidate_episodes), "m3_eligible_jst_dates": _jst_dates(m3_events), "m3_validation_jst_dates": validation_dates, "m1_guarded_metrics": m1, "m3_guarded_metrics": m3, "m3_diagnostic_horizons": _m3_diagnostics(m3_summary), "m3_resolved_up_count": m3.get("resolved_up_count"), "m3_resolved_down_count": m3.get("resolved_down_count"), "validation_date_concentration": concentration, "m1_quality_status": "pass" if m1_quality else "fail", "m3_quality_status": "pass" if m3_quality else "fail", "_issue_lineage": lineage, "status": status, "comparison_eligible": comparison, "pareto_dominant_vs_champion": pareto, "improved_guarded_metric_count": improved, "reason_codes": sorted(set(reasons))}
 
 
@@ -346,6 +348,8 @@ def _snapshot_eligible(snapshot: dict[str, Any], date: str | None = None) -> boo
     if date is not None and date not in snapshot.get("m3_eligible_jst_dates", []):
         return False
     if not snapshot.get("m3_validation_jst_dates") or not snapshot.get("validation_date_concentration", {}).get("pass", False):
+        return False
+    if snapshot.get("m3_resolved_up_count", 0) < 10 or snapshot.get("m3_resolved_down_count", 0) < 10:
         return False
     if any(not isinstance(value, (int, float)) for value in _guarded_vector(snapshot.get("m1_guarded_metrics", {}), snapshot.get("m3_guarded_metrics", {})).values()):
         return False
@@ -360,8 +364,17 @@ def _public_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     return public
 
 
+def _candidate_rolling_evidence(rolling: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    latest = sorted(rolling, key=lambda row: row.get("snapshot_jst_date", ""))[-1] if rolling else None
+    if not latest or not _snapshot_eligible(latest, latest.get("snapshot_jst_date")):
+        return latest, {}, {}, {}
+    return latest, latest["m1_guarded_metrics"], latest["m3_guarded_metrics"], latest.get("m3_diagnostic_horizons", {})
+
+
 def _split_gate(splits: dict[str, Any]) -> tuple[bool, list[str]]:
     reasons: list[str] = []
+    if not splits:
+        return False, ["split_required_metric_missing"]
     def visit(value: Any) -> None:
         if not isinstance(value, dict):
             return
@@ -419,8 +432,8 @@ def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed
                     quality = _m1_quality_ok(run["m1"] / "replay.json") and _m3_quality_ok(run["m3"] / "replay.json")
                     if not _snapshot_eligible(champion_snapshot, date):
                         reasons.append("champion_snapshot_not_eligible")
-                    m1_splits = _split_comparison(champion_snapshot.get("_m1_split_summary", {}), m1_summary, "reliable_level_acceptance_corridor", ("direction", "regime", "price_location", "volatility_state", "reliability"), M1_GUARDED)
-                    m3_splits = _split_comparison(champion_snapshot.get("_m3_split_summary", {}), m3_summary, "candidate", ("side", "structural_state", "price_location", "volatility_state", "level_reliability_band"), M3_GUARDED)
+                    m1_splits = _split_comparison(champion_snapshot.get("_m1_split_summary", {}), m1_summary, "reliable_level_acceptance_corridor", M1_SPLIT_DIMENSIONS, M1_GUARDED)
+                    m3_splits = _split_comparison(champion_snapshot.get("_m3_split_summary", {}), m3_summary, "candidate", M3_SPLIT_DIMENSIONS, M3_GUARDED)
                     split_ok, split_reasons = _split_gate({"m1": m1_splits, "m3": m3_splits})
                     reasons.extend(split_reasons)
                     comparison = _snapshot_eligible(champion_snapshot, date) and not reasons and split_ok and numeric and quality and m3.get("resolved_up_count", 0) >= 10 and m3.get("resolved_down_count", 0) >= 10 and concentration.get("pass", False)
@@ -428,6 +441,9 @@ def _rolling_snapshots(paths: dict[str, Path], parameters: dict[str, int], fixed
                     if not comparison: pareto = False
                     status = "established" if numeric else "not_established"
                     snapshot = _snapshot_record(date, cutoff, snapshot_paths, run, m1, m3, validation_dates, reasons, status, comparison, pareto, improved)
+                    snapshot["_champion_m1_metrics"] = champion_m1
+                    snapshot["_champion_m3_metrics"] = champion_m3
+                    snapshot["_champion_baseline_eligible"] = _snapshot_eligible(champion_snapshot, date)
                     snapshot["m1_split_comparison"] = m1_splits
                     snapshot["m3_split_comparison"] = m3_splits
                     snapshots.append(snapshot)
@@ -458,6 +474,9 @@ def _split_comparison(champion_summary: dict[str, Any], candidate_summary: dict[
     for dimension in dimensions:
         left = champion_root.get(dimension, {}) if isinstance(champion_root, dict) else {}
         right = candidate_root.get(dimension, {}) if isinstance(candidate_root, dict) else {}
+        if not isinstance(left, dict) or not isinstance(right, dict) or not left or not right:
+            result[dimension] = {"__missing_dimension__": {"champion": left, "challenger": right, "degradation": False, "missing_metrics": ["dimension"], "status": "unavailable"}}
+            continue
         if policy and isinstance(left, dict):
             left = {key: (value.get(policy) if isinstance(value, dict) and policy in value else value) for key, value in left.items()}
         if policy and isinstance(right, dict):
@@ -488,7 +507,7 @@ def _issue_rows(candidate_id_value: str, m1_misses: list[dict[str, str]], m1_spl
     def add(category: str, source: str, count: int, affected: str, champion: Any = None, challenger: Any = None, reason: str = "evidence_observed") -> None:
         if count:
             rows.append({"schema_version": SCHEMA_VERSION, "method_version": METHOD_VERSION, "candidate_id": candidate_id_value, "issue_category": category, "status": "observed", "evidence_source": source, "evidence_count": count, "affected_metric_split": affected, "champion_value": champion, "candidate_value": challenger, "reason_codes": reason, "actual_backed_count": p8["actual_high_medium_count"], "proposal_eligibility_effect": "diagnostic_only"})
-    tokens = " ".join((row.get("root_cause", "") + " " + row.get("reason", "")).lower() for row in m1_misses)
+    tokens = " ".join((row.get("root_cause", "") + " " + row.get("reason_codes", "")).lower() for row in m1_misses)
     add("reliable level missed", "m1_missed_move_diagnostics", tokens.count("reliable"), "m1.reliable_level_acceptance_corridor")
     add("rejection/break/acceptance/reclaim event missed", "m1_missed_move_diagnostics", sum(tokens.count(token) for token in ("rejection", "break", "acceptance", "reclaim")), "m1.event_family")
     reliability = sum(1 for value in m1_split.get("reliability", {}).values() if value.get("degradation"))
@@ -664,19 +683,15 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
             m1_summary = fresh_m1 if run is None else _read_json(run["m1"] / "replay.json")
             m3_summary = fresh_m3 if run is None else _read_json(run["m3"] / "replay.json")
             rolling = rolling_by_cid.get(cid, [])
-            latest = sorted(rolling, key=lambda row: row.get("snapshot_jst_date", ""))[-1] if rolling else None
+            latest, rolling_m1, rolling_m3, rolling_diagnostics = _candidate_rolling_evidence(rolling)
             if cid == champion_id:
                 candidate_m1 = _m1_metrics(m1_summary)
                 candidate_m3 = _m3_metrics(m3_summary)
                 diagnostics = _m3_diagnostics(m3_summary)
-            elif latest and _snapshot_eligible(latest, latest.get("snapshot_jst_date")):
-                candidate_m1 = latest["m1_guarded_metrics"]
-                candidate_m3 = latest["m3_guarded_metrics"]
-                diagnostics = latest.get("m3_diagnostic_horizons", {})
             else:
-                candidate_m1 = {}
-                candidate_m3 = {}
-                diagnostics = {}
+                candidate_m1 = rolling_m1
+                candidate_m3 = rolling_m3
+                diagnostics = rolling_diagnostics
             reasons: list[str] = []
             structural = True
             if run is not None and _jst_dates(run["m3"] / "events.csv") != champion_dates:
@@ -721,7 +736,12 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
                 m3_splits = {}
                 comparison = False
                 reasons.append("rolling_comparison_not_established")
-            dominates, improved = (False, 0) if cid == champion_id else _dominates(_guarded_vector(candidate_m1, candidate_m3), _guarded_vector(champion_m1, champion_m3))
+            same_date_champion_m1 = latest.get("_champion_m1_metrics", {}) if latest and latest.get("_champion_baseline_eligible") and cid != champion_id else {}
+            same_date_champion_m3 = latest.get("_champion_m3_metrics", {}) if latest and latest.get("_champion_baseline_eligible") and cid != champion_id else {}
+            if cid != champion_id and (not same_date_champion_m1 or not same_date_champion_m3):
+                comparison = False
+                reasons.append("champion_snapshot_not_eligible")
+            dominates, improved = (False, 0) if cid == champion_id else _dominates(_guarded_vector(candidate_m1, candidate_m3), _guarded_vector(same_date_champion_m1, same_date_champion_m3))
             pareto = bool(comparison and dominates)
             if cid != champion_id and not dominates:
                 reasons.append("not_pareto_dominant")
@@ -735,7 +755,7 @@ def run_macro_p9_proposal_engine(*, signals: Path, ohlcv_15m: Path, ohlcv_1h: Pa
             rec["m3_split_comparison_json"] = _canonical(m3_splits)
             records.append(rec)
             lineage = latest.get("_issue_lineage", []) if latest else []
-            issue_rows.extend(_issue_rows(cid, lineage or (_read_csv(run["m1"] / "misses.csv", {"opportunity_id"}) if run is not None else []), m1_splits, candidate_m1, champion_m1, candidate_m3, champion_m3, concentration, p8))
+            issue_rows.extend(_issue_rows(cid, lineage, m1_splits, candidate_m1, same_date_champion_m1, candidate_m3, same_date_champion_m3, concentration, p8))
     dominators = [row for row in records if row["candidate_id"] != champion_id and row["pareto_dominant"]]
     dominators.sort(key=lambda row: (-row["improved_guarded_metric_count"], -(_safe_number(json.loads(row["m1_validation_3h_json"]).get("large_move_recall"), -1)), -(_safe_number(json.loads(row["m3_validation_3h_json"]).get("directional_precision"), -1)), _safe_number(json.loads(row["m1_validation_3h_json"]).get("false_warning_rate"), 999), _safe_number(json.loads(row["m3_validation_3h_json"]).get("opposite_move_rate"), 999), row["combined_burden"], row["candidate_id"]))
     winner = dominators[0]["candidate_id"] if dominators else "none"

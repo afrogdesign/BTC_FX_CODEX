@@ -105,3 +105,7 @@ FIX-04 closes the rolling review blockers: split degradation now follows the dir
 ## Implementation correction — bounded FIX-05
 
 FIX-05 integrates candidate-specific rolling M1/M3 split evidence into actual challenger gating across every snapshot date. Split degradation and missing required metrics now fail closed, while candidate issue lineage remains private to diagnosis and public rolling evidence exposes only counts and deterministic fingerprints. The meaningful lightweight orchestration fixture passed through the real rolling, split, gating, issue publication, and four-output paths. The actual full bundle, second full replay, and actual-bundle four-output byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
+
+## Implementation correction — bounded FIX-06
+
+FIX-06 makes final challenger Pareto and issue diagnosis use same-date rolling champion evidence; terminal champion summaries are no longer challenger comparison fallbacks. Wholly missing split dimensions fail closed, champion direction counts use the existing threshold, and candidate diagnosis reads the actual M1 `root_cause` and `reason_codes` fields. Public lineage remains count/fingerprint only. Lightweight focused validation passed; the actual full bundle, second full replay, and actual-bundle byte identity were not run. M5 acceptance remains pending ChatGPT review; M6 remains unauthorized.
