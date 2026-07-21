@@ -8073,7 +8073,7 @@ class MacroStructureOperatorCliTests(unittest.TestCase):
         summary = {"ok": True, "exit_code": 0, "operator_artifact_id": "operator_test", "report_only": True}
         argv = [
             "log_feedback.py", "render-macro-structure-operator", "--snapshot-root", "snapshots",
-            "--history-root", "history", "--ohlcv-15m-csv", "15m.csv", "--output-root", "operator",
+            "--history-root", "history", "--ohlcv-15m-csv", "15m.csv", "--ohlcv-4h-csv", "fixture_4h.csv", "--output-root", "operator",
             "--symbol", "ETH_USDT", "--stdout-json",
         ]
         with patch.object(sys, "argv", argv), patch("tools.log_feedback.render_macro_structure_operator", return_value=summary) as render, patch("sys.stdout", new_callable=StringIO) as out:
@@ -8081,8 +8081,14 @@ class MacroStructureOperatorCliTests(unittest.TestCase):
             self.assertEqual(render.call_args.kwargs["snapshot_root"], Path("snapshots"))
             self.assertEqual(render.call_args.kwargs["history_root"], Path("history"))
             self.assertEqual(render.call_args.kwargs["ohlcv_15m_csv"], Path("15m.csv"))
+            self.assertEqual(render.call_args.kwargs["ohlcv_4h_csv"], Path("fixture_4h.csv"))
             self.assertEqual(render.call_args.kwargs["symbol"], "ETH_USDT")
             self.assertIn('"operator_artifact_id":"operator_test"', out.getvalue())
+
+            render.reset_mock()
+            sys.argv[:] = [item for item in argv if item not in {"--ohlcv-4h-csv", "fixture_4h.csv"}]
+            self.assertEqual(main(), 0)
+            self.assertIsNone(render.call_args.kwargs["ohlcv_4h_csv"])
 
 
 class MacroStructureHealthCliTests(unittest.TestCase):
