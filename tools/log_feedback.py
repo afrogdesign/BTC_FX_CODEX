@@ -67,6 +67,7 @@ from src.trade.paper_position import STATE_FIELDS, evaluate_paper_position
 from src.trade.phase1b_lite import determine_phase1b_lite_gate
 from src.feedback.turning_volatility_precursor_replay import replay_turning_volatility_precursors
 from src.feedback.macro_structure_volatility_replay import replay_macro_structure_volatility
+from src.feedback.macro_structure_daily_operation import build_macro_structure_daily
 from src.feedback.macro_next_regime_replay import replay_macro_next_regime
 from src.feedback.macro_operator_hierarchy_shadow import render_macro_operator_hierarchy_shadow
 from src.feedback.macro_p9_proposal_engine import run_macro_p9_proposal_engine
@@ -22105,6 +22106,17 @@ def _build_parser() -> argparse.ArgumentParser:
     macro_parser.add_argument("--replace-output", action="store_true")
     macro_parser.add_argument("--stdout-json", action="store_true")
 
+    macro_daily_parser = subparsers.add_parser("run-macro-structure-daily")
+    macro_daily_parser.add_argument("--ohlcv-15m")
+    macro_daily_parser.add_argument("--ohlcv-1h")
+    macro_daily_parser.add_argument("--ohlcv-4h")
+    macro_daily_parser.add_argument("--output-root", default="local/reports/macro_structure")
+    macro_daily_parser.add_argument("--symbol", default="BTC_USDT")
+    macro_daily_parser.add_argument("--ohlcv-limit", type=int, default=500)
+    macro_daily_parser.add_argument("--fetch-public-ohlcv", action="store_true")
+    macro_daily_parser.add_argument("--cutoff-utc")
+    macro_daily_parser.add_argument("--stdout-json", action="store_true")
+
     next_regime_parser = subparsers.add_parser("replay-macro-next-regime")
     next_regime_parser.add_argument("--signals", required=True)
     next_regime_parser.add_argument("--macro-events", required=True)
@@ -23562,6 +23574,21 @@ def main() -> None:
             return 2
         if bool(getattr(args, "stdout_json", False)):
             sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
+        return int(summary.get("exit_code", 0))
+
+    if args.command == "run-macro-structure-daily":
+        try:
+            summary = build_macro_structure_daily(
+                ohlcv_15m=Path(args.ohlcv_15m) if args.ohlcv_15m else None,
+                ohlcv_1h=Path(args.ohlcv_1h) if args.ohlcv_1h else None,
+                ohlcv_4h=Path(args.ohlcv_4h) if args.ohlcv_4h else None,
+                output_root=Path(args.output_root), symbol=args.symbol,
+                ohlcv_limit=int(args.ohlcv_limit), fetch_public_ohlcv=bool(args.fetch_public_ohlcv),
+                cutoff_utc=args.cutoff_utc,
+            )
+        except (OSError, ValueError) as exc:
+            summary = {"ok": False, "exit_code": 2, "error_code": str(exc)}
+        sys.stdout.write(json.dumps(summary, ensure_ascii=False, separators=(",", ":")) + "\n")
         return int(summary.get("exit_code", 0))
 
     if args.command == "replay-macro-next-regime":

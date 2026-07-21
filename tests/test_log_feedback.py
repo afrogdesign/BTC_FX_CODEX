@@ -8013,6 +8013,26 @@ class MacroStructureVolatilityCliTests(unittest.TestCase):
             self.assertTrue(all((root / name).read_text(encoding="utf-8") == "sentinel\n" for name in ("events.csv", "levels.csv", "misses.csv", "replay.json", "replay.md")))
 
 
+class MacroStructureDailyCliTests(unittest.TestCase):
+    def test_parser_dispatches_public_only_report_route(self) -> None:
+        from io import StringIO
+        from tools.log_feedback import main
+
+        summary = {"ok": True, "exit_code": 0, "result_status": "insufficient", "run_id": "run_test"}
+        argv = [
+            "log_feedback.py", "run-macro-structure-daily", "--ohlcv-15m", "15m.csv",
+            "--ohlcv-1h", "1h.csv", "--ohlcv-4h", "4h.csv", "--output-root", "reports",
+            "--stdout-json",
+        ]
+        with patch.object(sys, "argv", argv), patch("tools.log_feedback.build_macro_structure_daily", return_value=summary) as build, patch("sys.stdout", new_callable=StringIO) as out:
+            self.assertEqual(main(), 0)
+            self.assertEqual(build.call_count, 1)
+            self.assertEqual(build.call_args.kwargs["ohlcv_15m"], Path("15m.csv"))
+            self.assertEqual(build.call_args.kwargs["ohlcv_4h"], Path("4h.csv"))
+            self.assertIn('"result_status":"insufficient"', out.getvalue())
+            self.assertNotIn("15m.csv", out.getvalue())
+
+
 class MacroNextRegimeCliTests(unittest.TestCase):
     def test_parser_dispatches_explicit_offline_paths_compactly(self) -> None:
         from io import StringIO
