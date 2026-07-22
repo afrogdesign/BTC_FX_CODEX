@@ -2,24 +2,40 @@
 
 last_updated: 2026-07-22
 
-## Runtime delivery completion
+## Primary source and macro runtime
 
-- primary source commit: `bc61478` (`fix: complete macro runtime delivery chain`)
-- frozen notification source commit: `3e75a2f` (`feat: activate macro public link in notifications`)
-- primary branch: `Ver04-v4`; frozen branch: `Ver04-v2`
-- macro LaunchAgent: existing `com.afrog.btc-macro-structure`, one authorized kickstart completed successfully
-- existing JST schedule preserved: 01:10, 05:10, 09:10, 13:10, 17:10, 21:10
+- primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- branch: `Ver04-v4`
+- accepted primary implementation: `bc61478`
+- prior factual state commit: `601dfc4`
+- macro LaunchAgent: `com.afrog.btc-macro-structure`
+- one authorized macro kickstart succeeded
 - current fixed entry ID: `59baf573aec7c90d3b3e`
 - fixed entry status: `available`
-- public publication: `published`
-- public URL: `https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html`
-- bounded public HTTPS verification: HTTP 200 and current safety/freshness markers verified
-- controlled SMTP verification: sent once successfully; recipient and SMTP values are not recorded
-- frozen non-secret source path points to the primary fixed entry; `.env` is not committed
+- macro runtime status: `success`
+- 4H fingerprint, chart, trendline, structural-event, and scenario models are present
+- public publication was reported `published`
+- controlled verification email was independently found in Gmail with the fixed URL, current health fields, freshness warning, and report-only safety text
 - safety: report-only / human-decided / no automatic order
-- no private/account/position/order endpoint, threshold, recipient, cadence, or unrelated LaunchAgent change
 - push: none
 
-M-VIS1 through M-DELIVERY1 are operationally complete for the bounded runtime task. Future approved notifications retain the existing notification decision and one-send path while appending the fixed macro URL block.
+## Notification runtime reload
 
-Installed-runtime activation is recorded here only from the bounded verification above; no frozen-repo deployment beyond this M-DELIVERY1 scope was performed.
+Operational completion is directly verified for the installed notification monitor.
+
+- active notification repo: primary `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- primary source commit: `bc61478`
+- frozen source commit `3e75a2f` exists but is not the active execution target
+- target: `com.afrog.btc-monitor`; one target-only reload succeeded
+- prior startup: `2026-07-13T15:57:07.931511Z`, PID `90160`
+- current startup: `2026-07-22T04:21:58.891682Z`, PID `14203`
+- loaded ProgramArguments and WorkingDirectory remain primary
+- effective publication enabled: `true`
+- fixed entry path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/local/reports/macro_structure/operator/latest.html`
+- current fixed entry: `59baf573aec7c90d3b3e`; status `available`
+- pre- and post-reload no-send contracts: pass
+- no new email or public publication was performed in this reload task
+- safety: report-only / human-decided / no automatic order
+- push: none
+
+The active spec was archived after direct reload verification. No frozen-repo activation was performed.

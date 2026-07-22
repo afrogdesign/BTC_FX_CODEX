@@ -11,5 +11,12 @@
 - public URL: `https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html`
 - bounded HTTPS verification: HTTP 200; current entry ID and required safety/freshness markers matched
 - controlled SMTP verification: one email sent successfully using the existing sender; no recipient or credential recorded
+- active notification repo: primary; one target-only `com.afrog.btc-monitor` reload succeeded
+- notification startup: prior `2026-07-13T15:57:07.931511Z` / PID `90160`; current `2026-07-22T04:21:58.891682Z` / PID `14203`
+- effective publication enabled: `true`
+- installed fixed-entry path: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/local/reports/macro_structure/operator/latest.html`
+- installed notification no-send contract: pre- and post-reload pass
+- no new email or public publication was performed during the reload task
+- frozen source commit `3e75a2f` exists but is not the active notification execution target
 - safety: report-only / no automatic order / human decides manually
 - push: none
