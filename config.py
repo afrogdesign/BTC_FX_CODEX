@@ -187,6 +187,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
             or key.startswith("OPENAI_")
             or key.startswith("BINANCE_")
             or key.startswith("NOTIFICATION_HTML_")
+            or key == "MACRO_STRUCTURE_FIXED_ENTRY_PATH"
         ):
             merged[key] = _coerce_value(key, value)
 
@@ -293,6 +294,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "NOTIFICATION_HTML_REMOTE_SSH_KEY": "~/.ssh/id_ed25519_afrog_lan",
         "NOTIFICATION_HTML_REMOTE_DIR": "/Volumes/Server_HD2/site/btc-monitor/notifications",
         "NOTIFICATION_HTML_LOCAL_DIR": "logs/notifications_html",
+        "MACRO_STRUCTURE_FIXED_ENTRY_PATH": "local/reports/macro_structure/operator/latest.html",
         "HEARTBEAT_FILE": "logs/heartbeat.txt",
         "HEALTH_CHECK_MAX_HOURS": 6,
         "LOG_RETENTION_SIGNALS_DAYS": 90,

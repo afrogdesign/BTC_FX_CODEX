@@ -1263,6 +1263,21 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "detail_page_published_at_utc": "2026-03-30T18:05:00Z",
                 },
             ), patch("main.send_email", side_effect=_capture_send_email), patch(
+                "main.publish_macro_structure_public",
+                return_value={
+                    "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
+                    "macro_structure_public_status": "published",
+                    "macro_structure_public_url": "https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html",
+                    "macro_structure_public_entry_status": "available",
+                    "macro_structure_public_entry_id": "entry_123",
+                    "macro_structure_public_source_sha256": "a" * 64,
+                    "macro_structure_public_error_code": "",
+                    "macro_structure_public_cutoff_jst": "2026-07-22T05:00:00+09:00",
+                    "macro_structure_public_stale_status": "current",
+                    "macro_structure_public_continuity_status": "continuous",
+                    "macro_structure_public_data_quality_status": "ok",
+                },
+            ), patch(
                 "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
             ), patch(
                 "main.save_signal_snapshot", return_value=Path(tmp_dir) / "logs" / "signals" / "x.json"
@@ -1271,7 +1286,10 @@ class NotificationDetailPageTests(unittest.TestCase):
 
         self.assertIn("【詳細ページ】", captured["body"])
         self.assertIn("https://server.afrog.jp/btc-monitor/notifications/ver02-4-v1/main/20260331_030500.html", captured["body"])
+        self.assertIn("【4H大局チャート（公開URL）】", captured["body"])
+        self.assertIn("https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html", captured["body"])
         self.assertEqual(result["detail_page_status"], "published")
+        self.assertEqual(result["macro_structure_public_status"], "published")
 
     def test_run_cycle_keeps_plain_body_when_detail_page_publish_fails(self) -> None:
         required_env = {
@@ -1325,6 +1343,17 @@ class NotificationDetailPageTests(unittest.TestCase):
                 },
             ), patch(
                 "main.publish_notification_detail", side_effect=RuntimeError("publish failed")
+            ), patch(
+                "main.publish_macro_structure_public",
+                return_value={
+                    "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
+                    "macro_structure_public_status": "failed",
+                    "macro_structure_public_url": "",
+                    "macro_structure_public_entry_status": "",
+                    "macro_structure_public_entry_id": "",
+                    "macro_structure_public_source_sha256": "",
+                    "macro_structure_public_error_code": "macro_public_publish_failed",
+                },
             ), patch("main.send_email", side_effect=_capture_send_email), patch(
                 "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
             ), patch(
@@ -1332,8 +1361,10 @@ class NotificationDetailPageTests(unittest.TestCase):
             ), patch("main.save_json", return_value=None):
                 result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
 
-        self.assertEqual(captured["body"], "summary body")
+        self.assertIn("summary body", captured["body"])
+        self.assertIn("【4H大局チャート】利用不可（macro_public_publish_failed）", captured["body"])
         self.assertEqual(result["detail_page_status"], "failed")
+        self.assertEqual(result["macro_structure_public_status"], "failed")
 
     def test_publish_notification_detail_uses_stable_ip_host(self) -> None:
         cfg = SimpleNamespace(
