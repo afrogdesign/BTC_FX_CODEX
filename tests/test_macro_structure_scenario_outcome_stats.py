@@ -97,6 +97,19 @@ class ScenarioOutcomeStatsTests(unittest.TestCase):
             with self.assertRaises(ScenarioOutcomeStatsError):
                 evaluate_scenario_outcome_stats(root)
 
+    def test_conflicting_event_and_scenario_identity_across_artifacts_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "operators"; root.mkdir(); s = scenario()
+            artifact(root, 0, [s], [event("touch-0", "touch", 0)])
+            artifact(root, 10, [s], [event("touch-0", "touch", 0, direction="DOWN")])
+            with self.assertRaisesRegex(ScenarioOutcomeStatsError, "stats_duplicate_event_conflict"):
+                evaluate_scenario_outcome_stats(root)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "operators"; root.mkdir(); first = scenario(); second = scenario(); second["direction"] = "DOWN"
+            artifact(root, 0, [first]); artifact(root, 10, [second])
+            with self.assertRaisesRegex(ScenarioOutcomeStatsError, "stats_duplicate_scenario_conflict"):
+                evaluate_scenario_outcome_stats(root)
+
     def test_insufficient_and_descriptive_strength(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "operators"; root.mkdir(); s = scenario(); artifact(root, 0, [s])
@@ -110,6 +123,30 @@ class ScenarioOutcomeStatsTests(unittest.TestCase):
             artifact(root2, 0, scenarios); artifact(root2, 12, scenarios)
             result = evaluate_scenario_outcome_stats(root2)
             self.assertEqual(result["evidence_strength"], "descriptive_only")
+
+    def test_group_threshold_is_independent_of_overall_threshold(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "operators"; root.mkdir()
+            scenarios = [scenario(f"up-{i}", direction="UP") for i in range(10)] + [scenario(f"down-{i}", direction="DOWN") for i in range(10)]
+            artifact(root, 0, scenarios); artifact(root, 10, scenarios)
+            result = evaluate_scenario_outcome_stats(root)
+            self.assertGreaterEqual(result["mature_row_count"], 20)
+            for direction in ("UP", "DOWN"):
+                group = result["grouped_counts"]["boundary_reaction_watch"][direction]
+                self.assertEqual(group["mature_row_count"], 10)
+                self.assertEqual(group["evidence_strength"], "insufficient")
+                self.assertEqual(sum(group["outcome_counts"].values()), 30)
+
+    def test_group_with_exactly_twenty_mature_rows_is_descriptive_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "operators"; root.mkdir()
+            scenarios = [scenario(f"up-{i}") for i in range(10)]
+            artifact(root, 0, scenarios); artifact(root, 10, scenarios); artifact(root, 12, scenarios)
+            result = evaluate_scenario_outcome_stats(root)
+            group = result["grouped_counts"]["boundary_reaction_watch"]["UP"]
+            self.assertEqual(group["mature_row_count"], 20)
+            self.assertEqual(group["evidence_strength"], "descriptive_only")
+            self.assertEqual(result["grouped_counts"], evaluate_scenario_outcome_stats(root)["grouped_counts"])
 
     def test_invalid_scenario_artifact_is_excluded_and_publish_is_atomic(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

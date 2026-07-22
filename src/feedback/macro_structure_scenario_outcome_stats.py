@@ -165,6 +165,22 @@ def _load_artifacts(operator_root: Path, max_artifacts: int | None) -> tuple[lis
     if not valid:
         return [], excluded, sorted(set(reasons)) or ["stats_no_valid_artifacts"]
     valid.sort(key=lambda item: (item["cutoff"], item["artifact_id"], item["path_name"]))
+    event_identities: dict[str, str] = {}
+    scenario_identities: dict[str, str] = {}
+    for artifact in valid:
+        for event_id, event in artifact["events"].items():
+            payload = _event_payload(event)
+            prior = event_identities.get(event_id)
+            if prior is not None and prior != payload:
+                raise ScenarioOutcomeStatsError("stats_duplicate_event_conflict")
+            event_identities[event_id] = payload
+        for scenario in artifact["scenarios"]:
+            scenario_id = str(scenario["scenario_id"])
+            payload = _json(scenario)
+            prior = scenario_identities.get(scenario_id)
+            if prior is not None and prior != payload:
+                raise ScenarioOutcomeStatsError("stats_duplicate_scenario_conflict")
+            scenario_identities[scenario_id] = payload
     by_id: dict[str, str] = {}
     deduped: list[dict[str, Any]] = []
     for artifact in valid:
@@ -298,9 +314,19 @@ def evaluate_scenario_outcome_stats(operator_root: Path, *, max_artifacts: int |
     horizons: dict[str, dict[str, int]] = {}
     for horizon in HORIZONS:
         horizons[str(horizon)] = {outcome: sum(row["outcome"] == outcome for row in rows if row["horizon_hours"] == horizon) for outcome in OUTCOMES}
-    grouped: dict[str, dict[str, dict[str, int]]] = {}
+    grouped_counts: dict[str, dict[str, dict[str, int]]] = {}
     for row in rows:
-        grouped.setdefault(row["scenario_type"], {}).setdefault(row["direction"], {outcome: 0 for outcome in OUTCOMES})[row["outcome"]] += 1
+        grouped_counts.setdefault(row["scenario_type"], {}).setdefault(row["direction"], {outcome: 0 for outcome in OUTCOMES})[row["outcome"]] += 1
+    grouped: dict[str, dict[str, dict[str, Any]]] = {}
+    for scenario_type, directions in grouped_counts.items():
+        grouped[scenario_type] = {}
+        for direction, counts in directions.items():
+            mature_count = sum(counts[outcome] for outcome in OUTCOMES if outcome != "immature")
+            grouped[scenario_type][direction] = {
+                "outcome_counts": counts,
+                "mature_row_count": mature_count,
+                "evidence_strength": "descriptive_only" if mature_count >= 20 else "insufficient",
+            }
     source_ids = [item["artifact_id"] for item in artifacts]
     first_cutoff = artifacts[0]["cutoff"].isoformat() if artifacts else ""
     latest_cutoff = artifacts[-1]["cutoff"].isoformat() if artifacts else ""

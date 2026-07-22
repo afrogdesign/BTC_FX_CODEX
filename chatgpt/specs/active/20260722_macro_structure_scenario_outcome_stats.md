@@ -22,8 +22,10 @@ The input is an explicit operator artifact root containing `operator_*/macro_str
 
 Retained structural events after cohort start and no later than the selected artifact determine the result. Confirmation before invalidation is `continuation`; invalidation before or at the same timestamp is `rejection`; no decisive event is `indeterminate`.
 
+All loaded artifacts share one immutable identity namespace. If an `event_id` or `scenario_id` is repeated with a different payload, the run fails closed with the stable conflict reason. Identical repeated payloads are deduplicated deterministically.
+
 ## Evidence boundary
 
-Counts are reported only. Fewer than 20 mature rows in the reported group is `insufficient`; 20 or more is `descriptive_only`. No ratio, probability, confidence, or execution instruction is produced.
+Counts are reported only. The evidence threshold applies independently to every `scenario_type` plus direction group. Each group contains `outcome_counts`, `mature_row_count`, and `evidence_strength`; fewer than 20 mature rows in that group is `insufficient`, while 20 or more is `descriptive_only`. The overall mature-row count and overall evidence strength are retained separately and never determine a group result. No ratio, probability, confidence, or execution instruction is produced.
 
 The evaluator remains report-only / human decides manually / no automatic order.
