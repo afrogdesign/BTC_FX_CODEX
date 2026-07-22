@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from src.notification import macro_structure_public_delivery as delivery
 from src.notification.macro_structure_public_delivery import (
     DEFAULT_SOURCE_PATH,
     MacroPublicDeliveryError,
@@ -57,8 +58,9 @@ def _unavailable() -> str:
     return (
         '<!doctype html><html><body><section id="fixed-latest-entry-unavailable">'
         "<h1>Macro Structure Latest Entry Unavailable</h1>"
-        "<b>entry ID</b>: entry_unavailable_1234567890"
-        "entry_status=unavailable macro_structure_latest_entry.v1 "
+        "<p>entry method version=macro_structure_latest_entry.v1</p>"
+        "<p>entry ID=entry_unavailable_1234567890</p>"
+        "<p>entry_status=unavailable</p>"
         "no complete current entry was published for this attempt "
         "report-only no automatic order human decides manually"
         "</section></body></html>"
@@ -150,15 +152,23 @@ class MacroStructurePublicDeliveryTests(unittest.TestCase):
             result = publish_macro_structure_public(Path(tmp), _cfg(NOTIFICATION_HTML_ENABLED=False), runner=runner)
         self.assertEqual(result["macro_structure_public_status"], "disabled")
         runner.assert_not_called()
+        self.assertEqual(format_macro_structure_email_block(result), "")
 
     def test_publication_sequence_uses_arrays_and_unchanged_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             source = _write_source(root, _available())
             calls: list[tuple[list[str], dict[str, object]]] = []
+            staged_bytes: list[bytes] = []
 
             def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
                 calls.append((command, kwargs))
+                if command[0] == "rsync":
+                    staged_path = Path(command[-2])
+                    self.assertTrue(staged_path.name.startswith(".macro-public-"))
+                    staged_bytes.append(staged_path.read_bytes())
+                if command[0] == "ssh" and "mv" in command:
+                    self.assertTrue(Path(calls[1][0][-2]).exists())
                 return subprocess.CompletedProcess(command, 0, "", "")
 
             result = publish_macro_structure_public(root, _cfg(), runner=runner)
@@ -168,9 +178,24 @@ class MacroStructurePublicDeliveryTests(unittest.TestCase):
             self.assertEqual(calls[0][0][-3:-1], ["mkdir", "-p"])
             self.assertEqual(calls[1][0][0], "rsync")
             self.assertEqual(calls[2][0][calls[2][0].index("mv")], "mv")
+            self.assertEqual(calls[2][0][calls[2][0].index("mv") + 1], "-f")
             self.assertTrue(all(kwargs.get("shell") is False for _, kwargs in calls))
             self.assertEqual(source.read_bytes(), _available().encode())
+            self.assertEqual(staged_bytes, [_available().encode()])
+            self.assertFalse(Path(calls[1][0][-2]).exists())
             self.assertNotIn("platform", result["macro_structure_public_error_code"])
+
+    def test_local_staging_failure_is_stable_and_runs_no_remote_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_source(root, _available())
+            runner = Mock()
+            with patch.object(delivery.tempfile, "mkstemp", side_effect=OSError("raw local path")):
+                result = publish_macro_structure_public(root, _cfg(), runner=runner)
+        self.assertEqual(result["macro_structure_public_status"], "failed")
+        self.assertEqual(result["macro_structure_public_error_code"], "macro_public_publish_failed")
+        self.assertEqual(result["macro_structure_public_url"], "")
+        runner.assert_not_called()
 
     def test_publication_failure_has_stable_code_and_no_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

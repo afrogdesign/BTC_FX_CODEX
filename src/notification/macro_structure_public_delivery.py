@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import html
+import os
 import re
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -53,7 +56,7 @@ _SECRET_PATTERNS = (
     re.compile(r"Authorization:\s*Bearer\b", re.IGNORECASE),
 )
 _LABEL_PATTERNS = {
-    "entry_id": re.compile(r"entry ID</b>:\s*([^<\s]+)", re.IGNORECASE),
+    "entry_id": re.compile(r"entry ID(?:</b>\s*:|\s*=)\s*([^<\s]+)", re.IGNORECASE),
     "source_artifact_id": re.compile(r"source operator artifact ID</b>:\s*([^<]+)", re.IGNORECASE),
     "source_digest": re.compile(r"source digest</b>:\s*([^<]+)", re.IGNORECASE),
     "cutoff_utc": re.compile(r"source cutoff UTC</b>:\s*([^<]+)", re.IGNORECASE),
@@ -201,6 +204,34 @@ def _ssh_args(key: str) -> list[str]:
     return ["-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-i", str(Path(key).expanduser())]
 
 
+@contextmanager
+def _stage_validated_source(model: dict[str, Any]):
+    temporary: Path | None = None
+    descriptor: int | None = None
+    try:
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".macro-public-")
+        temporary = Path(temporary_name)
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = None
+            handle.write(model["source_bytes"])
+            handle.flush()
+            os.fsync(handle.fileno())
+        yield temporary
+    except Exception as exc:  # noqa: BLE001
+        raise MacroPublicDeliveryError("macro_public_publish_failed") from exc
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def _run_remote_publication(model: dict[str, Any], cfg: Any, runner: Callable[..., Any] = subprocess.run) -> None:
     host, key, remote_root = _validated_transport(cfg)
     remote_dir = f"{remote_root}/macro-structure"
@@ -211,17 +242,27 @@ def _run_remote_publication(model: dict[str, Any], cfg: Any, runner: Callable[..
     rsync_ssh = " ".join(["ssh", *ssh_args])
     commands = [
         ["ssh", *ssh_args, host, "mkdir", "-p", remote_dir],
-        ["rsync", "-a", "-e", rsync_ssh, str(model["source_path"]), f"{host}:{remote_temp}"],
-        ["ssh", *ssh_args, host, "mv", remote_temp, remote_latest],
     ]
     try:
-        for command in commands:
-            runner(command, check=True, capture_output=True, text=True, timeout=20, shell=False)
+        with _stage_validated_source(model) as staged_source:
+            commands.extend(
+                [
+                    ["rsync", "-a", "-e", rsync_ssh, str(staged_source), f"{host}:{remote_temp}"],
+                    ["ssh", *ssh_args, host, "mv", "-f", remote_temp, remote_latest],
+                ]
+            )
+            try:
+                for command in commands:
+                    runner(command, check=True, capture_output=True, text=True, timeout=20, shell=False)
+            except Exception as exc:  # noqa: BLE001
+                try:
+                    runner(["ssh", *ssh_args, host, "rm", "-f", remote_temp], check=False, capture_output=True, text=True, timeout=20, shell=False)
+                except Exception:
+                    pass
+                raise MacroPublicDeliveryError("macro_public_publish_failed") from exc
+    except MacroPublicDeliveryError:
+        raise
     except Exception as exc:  # noqa: BLE001
-        try:
-            runner(["ssh", *ssh_args, host, "rm", "-f", remote_temp], check=False, capture_output=True, text=True, timeout=20, shell=False)
-        except Exception:
-            pass
         raise MacroPublicDeliveryError("macro_public_publish_failed") from exc
 
 
@@ -273,6 +314,8 @@ def publish_macro_structure_public(
 
 def format_macro_structure_email_block(delivery: dict[str, Any]) -> str:
     status = str(delivery.get("macro_structure_public_status", "")).strip()
+    if status == "disabled":
+        return ""
     if status == "published":
         url = str(delivery.get("macro_structure_public_url", "")).strip()
         if str(delivery.get("macro_structure_public_entry_status", "")) == "available":
@@ -295,8 +338,6 @@ def format_macro_structure_email_block(delivery: dict[str, Any]) -> str:
             "今回の完全な最新画面は公開されていません。リンク先の利用不可表示を確認してください。"
         )
     code = str(delivery.get("macro_structure_public_error_code", "macro_public_source_invalid")).strip()
-    if status == "disabled":
-        code = "macro_public_disabled"
     return f"【4H大局チャート】利用不可（{code}）"
 
 

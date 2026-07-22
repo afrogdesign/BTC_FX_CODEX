@@ -1345,15 +1345,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                 "main.publish_notification_detail", side_effect=RuntimeError("publish failed")
             ), patch(
                 "main.publish_macro_structure_public",
-                return_value={
-                    "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
-                    "macro_structure_public_status": "failed",
-                    "macro_structure_public_url": "",
-                    "macro_structure_public_entry_status": "",
-                    "macro_structure_public_entry_id": "",
-                    "macro_structure_public_source_sha256": "",
-                    "macro_structure_public_error_code": "macro_public_publish_failed",
-                },
+                side_effect=RuntimeError("publisher internal failure"),
             ), patch("main.send_email", side_effect=_capture_send_email), patch(
                 "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
             ), patch(
@@ -1365,6 +1357,50 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("【4H大局チャート】利用不可（macro_public_publish_failed）", captured["body"])
         self.assertEqual(result["detail_page_status"], "failed")
         self.assertEqual(result["macro_structure_public_status"], "failed")
+
+    def test_run_cycle_does_not_publish_macro_or_send_when_notification_is_suppressed(self) -> None:
+        required_env = {
+            "OPENAI_API_KEY": "x",
+            "SMTP_HOST": "smtp",
+            "SMTP_PORT": "587",
+            "SMTP_USER": "u",
+            "SMTP_PASSWORD": "p",
+            "MAIL_FROM": "a@example.com",
+            "MAIL_TO": "b@example.com",
+            "NOTIFICATION_HTML_ENABLED": "true",
+        }
+        df = _sample_df()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict(os.environ, required_env, clear=False):
+                cfg = load_config(Path(tmp_dir))
+            with patch("main.get_server_time_ms", return_value=1_700_000_000_000), patch(
+                "main.fetch_klines", side_effect=[df, df, df]
+            ), patch("main.validate_klines", return_value=True), patch(
+                "main.fetch_market_structure", return_value=MarketStructureSnapshot(missing_fields=[])
+            ), patch("main.fetch_funding_rate", return_value=0.0), patch(
+                "main.resend_pending_email", return_value=None
+            ), patch("main.cleanup_if_due", return_value=None), patch(
+                "main.build_summary_body", return_value=("summary body", "api")
+            ), patch("main.build_summary_subject", return_value="subject"), patch(
+                "main.should_notify",
+                return_value={
+                    "notify": False,
+                    "notify_reason_codes": [],
+                    "suppress_reason_codes": ["cooldown_active"],
+                    "notification_kind": "none",
+                },
+            ), patch("main.publish_macro_structure_public") as publish_macro, patch(
+                "main.send_email"
+            ) as send_email, patch(
+                "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
+            ), patch(
+                "main.save_signal_snapshot", return_value=Path(tmp_dir) / "logs" / "signals" / "x.json"
+            ), patch("main.save_json", return_value=None):
+                result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
+
+        publish_macro.assert_not_called()
+        send_email.assert_not_called()
+        self.assertEqual(result["macro_structure_public_status"], "disabled")
 
     def test_publish_notification_detail_uses_stable_ip_host(self) -> None:
         cfg = SimpleNamespace(
