@@ -222,6 +222,8 @@ def _decimal(value: str, *, required: bool = False, non_negative: bool = False, 
         number = Decimal(text)
     except InvalidOperation as exc:
         raise ValueError("malformed_numeric") from exc
+    if not number.is_finite():
+        raise ValueError("malformed_numeric")
     if non_negative:
         number = abs(number)
     return format(number, "f")

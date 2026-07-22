@@ -440,6 +440,18 @@ class MexcActualTradeImporterTest(unittest.TestCase):
         self.assertEqual(normalized["fee"], "1.25")
         self.assertEqual(normalized["realized_pnl"], "-12.50")
 
+    def test_non_finite_numeric_values_are_rejected(self) -> None:
+        for value in ("NaN", "Infinity", "-Infinity"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "malformed_numeric"):
+                    normalize_mexc_trade_history([{**_mexc_trade_rows()[0], "約定価格": value}], source_file="Trade History.xlsx")
+        for value in ("NaN USDT", "Infinity USDT"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "malformed_numeric"):
+                    normalize_mexc_position_history([{**_mexc_position_rows()[0], "実現損益": value}], source_file="Position History.xlsx")
+        finite = normalize_mexc_position_history([{**_mexc_position_rows()[0], "実現損益": "-9.75 USDT"}], source_file="Position History.xlsx")[0]
+        self.assertEqual(finite["realized_pnl"], "-9.75")
+
     def test_symbol_alias_and_direction_mapping(self) -> None:
         row = {**_mexc_trade_rows()[0], "先物取引ペア": "BTC/USDT", "方向": "Open Long"}
         normalized = normalize_mexc_trade_history([row], source_file="Trade History.xlsx")[0]
