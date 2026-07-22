@@ -202,8 +202,18 @@ def _parse_datetime(value: str) -> tuple[str, str]:
     return utc.isoformat().replace("+00:00", "Z"), jst.isoformat()
 
 
-def _decimal(value: str, *, required: bool = False, non_negative: bool = False) -> str:
+def _decimal(value: str, *, required: bool = False, non_negative: bool = False, presentation_units: tuple[str, ...] = ()) -> str:
     text = value.strip().replace(",", "").replace("＋", "+").replace("－", "-")
+    if presentation_units:
+        candidates: list[str] = []
+        for unit in presentation_units:
+            escaped = re.escape(unit)
+            for pattern in (rf"^\s*{escaped}\s*", rf"\s*{escaped}\s*$"):
+                candidate = re.sub(pattern, "", text, count=1, flags=re.IGNORECASE)
+                if candidate != text:
+                    candidates.append(candidate.strip())
+        if len(set(candidates)) == 1:
+            text = candidates[0]
     if not text:
         if required:
             raise ValueError("malformed_numeric")
@@ -235,6 +245,10 @@ def _direction(value: str) -> tuple[str, str, str]:
         "close long": ("long", "sell", "close"), "ロングを決済": ("long", "sell", "close"),
         "open short": ("short", "sell", "open"), "ショートを開く": ("short", "sell", "open"),
         "close short": ("short", "buy", "close"), "ショートを決済": ("short", "buy", "close"),
+        "long buy": ("long", "buy", "open"), "long sell": ("long", "sell", "close"),
+        "short sell": ("short", "sell", "open"), "short buy": ("short", "buy", "close"),
+        "buy long": ("long", "buy", "open"), "sell long": ("long", "sell", "close"),
+        "sell short": ("short", "sell", "open"), "buy short": ("short", "buy", "close"),
     }
     if text not in mappings:
         raise ValueError("unknown_direction")
@@ -253,6 +267,35 @@ def _status(value: str, *, position: bool = False) -> tuple[str, str]:
         "open": "open",
     }
     return mapping.get(text, "unknown"), source
+
+
+_HEADER_ALIASES = {
+    "order_history": {
+        "約定数量 (枚)": "約定数量",
+        "取引手数料": "手数料",
+    },
+}
+
+
+def _normalize_headers(category: str, headers: list[str], rows: list[dict[str, str]]) -> tuple[list[str], list[dict[str, str]]]:
+    aliases = _HEADER_ALIASES.get(category, {})
+    if not aliases:
+        return headers, rows
+    normalized = list(headers)
+    for alias, canonical in aliases.items():
+        if alias not in headers:
+            continue
+        if canonical in headers:
+            raise ValueError("ambiguous_header_alias")
+        normalized[normalized.index(alias)] = canonical
+    remapped_rows = []
+    for row in rows:
+        remapped = dict(row)
+        for alias, canonical in aliases.items():
+            if alias in remapped:
+                remapped[canonical] = remapped.pop(alias)
+        remapped_rows.append(remapped)
+    return normalized, remapped_rows
 
 
 def _required_check(category: str, headers: list[str]) -> None:
@@ -355,7 +398,7 @@ def _normalize_row(category: str, raw: dict[str, str], *, path: Path, sheet: str
         row.update({
             "opened_at_utc": opened_utc, "opened_at_jst": opened_jst, "closed_at_utc": closed_utc,
             "closed_at_jst": closed_jst, "symbol": symbol, "side": side,
-            "realized_pnl": _decimal(raw.get("実現損益", "")), "status": normalized_status,
+            "realized_pnl": _decimal(raw.get("実現損益", ""), presentation_units=("USDT",)), "status": normalized_status,
             "source_status": source_status,
         })
         logical_values = (category, row["source_uid_hash"], opened_utc, symbol, side)
@@ -526,13 +569,14 @@ def import_manual_actual_trades(*, input_dir: Path, output_dir: Path | None = No
         for path in paths:
             try:
                 sheet, raw_rows, headers = _sheet_rows(path)
+                headers, raw_rows = _normalize_headers(category, headers, raw_rows)
                 _required_check(category, headers)
             except (zipfile.BadZipFile, KeyError, ET.ParseError, OSError, RuntimeError, NotImplementedError, IndexError):
                 summary["errors"].append("unreadable_workbook")
                 continue
             except ValueError as exc:
                 reason = str(exc)
-                if reason not in {"ambiguous_sheet", "empty_sheet", "missing_required_column", "unreadable_workbook"}:
+                if reason not in {"ambiguous_sheet", "empty_sheet", "missing_required_column", "ambiguous_header_alias", "unreadable_workbook"}:
                     reason = "unreadable_workbook"
                 summary["errors"].append(reason)
                 continue

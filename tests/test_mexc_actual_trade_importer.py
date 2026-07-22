@@ -448,6 +448,41 @@ class MexcActualTradeImporterTest(unittest.TestCase):
         self.assertEqual(normalized["transaction_side"], "buy")
         self.assertEqual(normalized["position_action"], "open")
 
+    def test_latest_direction_and_numeric_presentation_aliases_are_exact(self) -> None:
+        expected = {
+            "Long Buy": ("long", "buy", "open"),
+            "Long Sell": ("long", "sell", "close"),
+            "Short Sell": ("short", "sell", "open"),
+            "Short Buy": ("short", "buy", "close"),
+        }
+        for token, semantics in expected.items():
+            with self.subTest(token=token):
+                row = {**_mexc_trade_rows()[0], "方向": token}
+                normalized = normalize_mexc_trade_history([row], source_file="Trade History.xlsx")[0]
+                self.assertEqual((normalized["side"], normalized["transaction_side"], normalized["position_action"]), semantics)
+        position = {**_mexc_position_rows()[0], "実現損益": "9.75 USDT"}
+        self.assertEqual(normalize_mexc_position_history([position], source_file="Position History.xlsx")[0]["realized_pnl"], "9.75")
+
+    def test_order_header_aliases_and_ambiguous_alias_fail_closed(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_dir = root / "input"
+            output_dir = root / "output"
+            input_dir.mkdir()
+            alias_headers = ["約定数量 (枚)" if h == "約定数量" else "取引手数料" if h == "手数料" else h for h in ORDER_HEADERS]
+            _write_minimal_xlsx(input_dir / "MEXC Trade History.xlsx", TRADE_HEADERS, _mexc_trade_rows())
+            _write_minimal_xlsx(input_dir / "MEXC Order History.xlsx", alias_headers, [{**_mexc_order_rows()[0], "約定数量 (枚)": "2", "取引手数料": "0.88"}])
+            _write_minimal_xlsx(input_dir / "MEXC Position History.xlsx", POSITION_HEADERS, _mexc_position_rows())
+            summary = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertTrue(summary["ok"])
+            self.assertEqual(summary["rows_accepted"], 3)
+
+            ambiguous = [*ORDER_HEADERS, "約定数量 (枚)"]
+            _write_minimal_xlsx(input_dir / "MEXC Order History.xlsx", ambiguous, [{**_mexc_order_rows()[0], "約定数量 (枚)": "2"}])
+            rejected = import_manual_actual_trades(input_dir=input_dir, output_dir=output_dir, dry_run=True)
+            self.assertFalse(rejected["ok"])
+            self.assertIn("ambiguous_header_alias", rejected["errors"])
+
     def test_unknown_direction_and_symbol_are_rejected(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
