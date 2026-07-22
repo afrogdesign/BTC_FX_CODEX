@@ -77,3 +77,32 @@ M-STATS1 is deployed as a non-blocking local shadow auxiliary of the existing ma
 - runtime-shadow spec: `chatgpt/specs/archive/20260722_macro_structure_scenario_stats_runtime_shadow.md`
 - frozen repo was not accessed or activated
 - push: none
+
+
+## 2026-07-23 M-DELIVERY1 runtime publication decoupling acceptance
+
+The fixed macro page publication is accepted as part of the scheduled macro runtime rather than the notification-send branch. This section supersedes older publication-route descriptions above where they conflict.
+
+- implementation report locator: `ae6969e`
+- focused FIX1 report locator: `c4d7caf`
+- accepted runtime route: snapshot -> history -> operator -> fixed public publication -> scenario stats -> health
+- publication runs once after successful operator generation and before scenario stats
+- core success remains snapshot/history/operator only
+- publication failure or disabled state does not change successful core status or suppress scenario stats or health
+- atomic runtime status records bounded `public_delivery_generation` metadata
+- notification integration reads the recorded publication result only; it no longer performs SSH, rsync, remote rename, or fixed-entry validation
+- notification decision, kind, cooldown, duplicate suppression, subject, recipient, and send count were not changed
+- one bounded runtime activation produced entry `113cbd20a4345818f644`
+- runtime status: `success`
+- publication status: `published`
+- local/public entry ID match: confirmed
+- fixed public URL: `https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html`
+- single HTTPS verification contained the required fixed-entry, safety, and freshness markers
+- report-only: `true`
+- automatic order allowed: `false`
+- no new LaunchAgent, plist change, schedule change, notification reload, SMTP test, or notification cycle
+- FIX1 added focused coverage for publication ordering, non-blocking behavior, dry-run isolation, bounded metadata, and runtime-status reader fail-closed behavior
+- runtime/public verification was not repeated during FIX1
+- accepted spec: `chatgpt/specs/archive/20260723_macro_structure_runtime_publication_decouple.md`
+- frozen repo was not accessed
+- push: none

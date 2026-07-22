@@ -1,28 +1,27 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260723-VER04-V4-M-DELIVERY1-RUNTIME-DECOUPLE`
-- mode: `RUNTIME_TASK`
+- current_work_id: `none`
+- mode: `A`
 - primary branch: `Ver04-v4`
-- accepted core runtime source locator: `bc61478`
-- accepted M-STATS1 evaluator report locator: `68ed430`
-- accepted M-STATS1 runtime-shadow report locator: `c4d9a4a`
-- active spec: `chatgpt/specs/active/20260723_macro_structure_runtime_publication_decouple.md`
-- status: implementation approved; fixed public URL currently updates only inside approved notification sends
+- accepted M-DELIVERY1 runtime publication implementation locator: `ae6969e`
+- accepted M-DELIVERY1 focused FIX1 locator: `c4d7caf`
+- accepted spec: `chatgpt/specs/archive/20260723_macro_structure_runtime_publication_decouple.md`
+- status: accepted and closed
 - push: none
 
-## Objective
+## Accepted behavior
 
-- move fixed macro publication from the notification-send branch to the scheduled macro runtime
-- publish once after successful snapshot -> history -> operator
-- keep publication failure non-blocking for core success, scenario stats, and health
-- make notification integration read the recorded publication result without SSH or rsync
-- preserve notification decisions, email subjects, recipients, duplicate suppression, schedule, plist, gates, thresholds, scores, classifiers, and order behavior
+- scheduled macro runtime publishes the fixed macro page after operator success
+- accepted route: snapshot -> history -> operator -> fixed public publication -> scenario stats -> health
+- notification integration reads the recorded publication result and does not republish
+- publication failure remains non-blocking for core success, scenario stats, and health
+- public entry `113cbd20a4345818f644` matched the local fixed entry during the single bounded runtime verification
+- fixed public URL: `https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html`
+- report-only and no automatic order remain enforced
 
-## Validation budget
+## Operational boundary
 
-- matching unit tests only
-- one dry-run
-- task-scoped diff check
-- exactly one macro target kickstart after commit
-- exactly one bounded runtime-status review and one HTTPS GET
-- no notification cycle, SMTP test, notification reload, repeated health cycle, replay, or unchanged retry
+- do not repeat macro kickstart, public publication, health verification, notification cycle, SMTP test, email, or HTTPS acceptance check for this task
+- do not modify plist, schedule, notification trigger, threshold, score, classifier, subject, recipient, or order behavior
+- do not access the frozen runtime repo
+- select a new task only after a concrete product objective is provided

@@ -118,3 +118,21 @@ After one local source commit:
 - Runtime publication is now recorded after operator success and before scenario stats; notification integration reads that recorded result without publishing.
 - Runtime verification 2026-07-23: one kickstart produced entry `113cbd20a4345818f644`; local and fixed public entry IDs matched, and the single HTTPS GET contained the required safety and freshness markers.
 - FIX1 added the previously missing focused unit coverage for runtime publication ordering/non-blocking behavior and the bounded runtime-status reader; no runtime, notification, email, health, or public GET was repeated.
+
+
+## Acceptance record
+
+Accepted on 2026-07-23 after direct MCP review.
+
+- implementation report locator: `ae6969e`
+- focused FIX1 report locator: `c4d7caf`
+- focused tests passed once; task-scoped diff check passed once
+- runtime/public acceptance from the original implementation was not repeated during FIX1
+- accepted entry ID: `113cbd20a4345818f644`
+- runtime publication: `published`
+- local/public entry ID match: confirmed
+- notification integration is read-only for macro publication status
+- publication remains non-blocking for core success, scenario stats, and health
+- reader validation fails closed and clears non-published transport-derived fields
+- no notification cycle, SMTP test, email, notification reload, plist edit, schedule edit, gate/threshold/score/classifier change, or frozen-repo access
+- safety remains report-only / human decides manually / no automatic order
