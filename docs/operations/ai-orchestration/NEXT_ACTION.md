@@ -1,21 +1,23 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260722-VER04-V4-M-STATS1-RUNTIME-SHADOW`
-- mode: `RUNTIME_TASK`
+- current_work_id: `none`
+- mode: `A`
 - primary branch: `Ver04-v4`
-- accepted runtime source locator: `bc61478`
-- accepted M-STATS1 FIX1 report locator: `68ed430`
-- active spec: `chatgpt/specs/active/20260722_macro_structure_scenario_stats_runtime_shadow.md`
-- status: human-approved deployment pending implementation and one bounded runtime verification
+- accepted core runtime source locator: `bc61478`
+- accepted M-STATS1 evaluator report locator: `68ed430`
+- accepted M-STATS1 runtime-shadow report locator: `c4d9a4a`
+- archived spec: `chatgpt/specs/archive/20260722_macro_structure_scenario_stats_runtime_shadow.md`
+- status: M-STATS1 local runtime shadow deployed and accepted
 - push: none
 
-## Scope
+## Accepted result
 
-- add accepted M-STATS1 as a non-blocking local shadow auxiliary after successful macro operator generation
-- default output: `local/reports/macro_structure/scenario_stats`
-- persist privacy-safe stats generation status in the macro runtime result
-- preserve existing snapshot/history/operator and health behavior
-- do not connect stats to notification, mail, public publication, operator latest page, gates, thresholds, scores, classifiers, or order behavior
-- do not edit or reload the existing plist or schedule
+- existing macro core remains snapshot -> history -> operator
+- local scenario stats runs afterward as a non-blocking auxiliary
+- latest directly reviewed stats artifact: `ef3dc500f1368a83912e`
+- current evidence strength: `insufficient`; mature rows: `0`
+- existing health generation remains active and latest reviewed health state is `healthy`
+- notification, mail, public publication, operator latest page, plist, schedule, gates, thresholds, scores, classifiers, and order behavior remain unchanged
+- report-only / human-decided / no automatic order remains enforced
 
-After one local implementation commit, verify the loaded primary-repo target and perform exactly one target-only kickstart without `-k`. Do not retry a failed kickstart or perform another live verification action.
+No further required M task is open. Do not perform another kickstart, reload, notification cycle, email, or public-publication verification for this deployment. Select a new task only after a concrete product objective is specified.

@@ -7,8 +7,9 @@
 - approved_by: human explicit deployment approval on 2026-07-22
 - primary_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - expected_branch: `Ver04-v4`
-- accepted runtime source locator: `bc61478`
+- accepted core runtime source locator: `bc61478`
 - accepted M-STATS1 FIX1 report locator: `68ed430`
+- runtime-shadow report locator: `c4d9a4a`
 - target label: `com.afrog.btc-macro-structure`
 - safety: report-only / human decides manually / no automatic order
 
@@ -96,8 +97,21 @@ After a local task commit:
 
 ## Acceptance
 
-Accept only when source, matching tests, dry-run, one target-only kickstart, runtime status, and generated local stats artifact establish the contract above.
+Accepted on 2026-07-22 after direct AFROG_Business_MCP review.
 
-## Implementation note
-
-The primary runtime wrapper now plans and invokes the accepted stats CLI once after successful snapshot, history, and operator steps, records only compact privacy-safe generation fields, and preserves core success and health behavior when the auxiliary fails. Runtime activation remains pending the single authorized target-only kickstart and bounded verification.
+- runtime status finished at `2026-07-22T08:21:57.814589+00:00`
+- core status: `success`
+- snapshot/history/operator steps: success
+- operator artifact: `operator_9db15ecade825fb21568`
+- stats status: `published`
+- stats artifact: `ef3dc500f1368a83912e`
+- stats evidence: `insufficient`
+- mature rows: `0`
+- valid source artifacts: `4`
+- excluded legacy/incompatible artifacts: `8`
+- immutable JSON/CSV/Markdown/manifest and byte-identical `latest.json` were directly verified
+- health generation published `health_5330bd8fad66b16a07d6` with state `healthy`
+- report-only, private-input false, and automatic-order false were preserved
+- no notification, mail, public-publication, plist, schedule, or unrelated LaunchAgent change was found in the reviewed implementation route
+- exactly one bounded runtime activation was reported; no repeat live verification is authorized
+- commit object access remains unavailable through the safe public workspace; `c4d9a4a` is retained as a report locator
