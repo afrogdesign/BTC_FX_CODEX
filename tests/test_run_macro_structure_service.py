@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import tools.run_macro_structure_service as service
 
@@ -328,6 +328,69 @@ class MacroStructureServiceTests(unittest.TestCase):
             self.assertNotIn("--max-artifacts", result["scenario_stats_command"])
             fetch.assert_not_called()
             run.assert_not_called()
+
+    def test_runtime_publication_success_is_ordered_and_persisted(self) -> None:
+        publication = {"macro_structure_public_status": "published", "macro_structure_public_url": "https://public.example/latest.html", "macro_structure_public_entry_status": "available", "macro_structure_public_entry_id": "entry_public", "macro_structure_public_source_sha256": "a" * 64, "macro_structure_public_cutoff_jst": "2026-07-23T05:00:00+09:00", "macro_structure_public_stale_status": "current", "macro_structure_public_continuity_status": "continuous", "macro_structure_public_data_quality_status": "ok", "macro_structure_public_error_code": ""}
+        events: list[str] = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            def fetch(path: Path, limit: int, interval: str, symbol: str) -> None: path.write_text("valid", encoding="utf-8")
+            def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                if "check-macro-structure-health" in argv: events.append("health"); value, code = self.health_result(), 0
+                elif "build_macro_structure_scenario_outcome_stats.py" in " ".join(argv): events.append("stats"); value, code = self.stats_result(), 0
+                else:
+                    name = "snapshot" if "run-macro-structure-daily" in argv else "history" if "run-macro-structure-history" in argv else "operator"; events.append(name)
+                    value = {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "ok"} if name == "snapshot" else {"ok": True, "history_id": "history_1", "history_result_status": "ok"} if name == "history" else {"ok": True, "operator_artifact_id": "operator_1"}; code = 0
+                return subprocess.CompletedProcess(argv, code, json.dumps(value) + "\n", "")
+            original_atomic = service._atomic_json
+            def atomic(path: Path, payload: dict[str, object]) -> None:
+                events.append("status")
+                original_atomic(path, payload)
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run), patch.object(service, "_atomic_json", side_effect=atomic), patch.object(service, "_runtime_publication", side_effect=lambda _: (events.append("publication") or {"attempted": True, "status": "published", "public_url": publication["macro_structure_public_url"], "entry_status": "available", "entry_id": "entry_public", "source_sha256": "a" * 64, "cutoff_jst": publication["macro_structure_public_cutoff_jst"], "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok", "error_code": ""})):
+                code, result = service.run_service(self.args(root))
+            persisted = json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())
+        self.assertEqual(code, 0); self.assertTrue(result["ok"]); self.assertEqual(events, ["snapshot", "history", "operator", "publication", "stats", "status", "health"])
+        self.assertEqual(persisted["public_delivery_generation"]["status"], "published"); self.assertTrue(persisted["public_delivery_generation"]["attempted"])
+        self.assertEqual(persisted["public_delivery_generation"]["entry_id"], "entry_public"); self.assertEqual(persisted["public_delivery_generation"]["public_url"], publication["macro_structure_public_url"])
+
+    def test_runtime_publication_failure_disabled_and_core_failure_are_non_blocking(self) -> None:
+        for publication, expected_status, expected_attempted in (({"macro_structure_public_status": "failed", "macro_structure_public_error_code": "macro_public_publish_failed"}, "failed", True), ({"macro_structure_public_status": "disabled"}, "disabled", False)):
+            with self.subTest(expected_status=expected_status), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); events: list[str] = []
+                def fetch(path: Path, limit: int, interval: str, symbol: str) -> None: path.write_text("valid", encoding="utf-8")
+                def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+                    if "check-macro-structure-health" in argv: events.append("health"); value = self.health_result()
+                    elif "build_macro_structure_scenario_outcome_stats.py" in " ".join(argv): events.append("stats"); value = self.stats_result()
+                    elif "run-macro-structure-daily" in argv: value = {"ok": True, "run_id": "r", "snapshot_id": "s", "result_status": "ok"}
+                    elif "run-macro-structure-history" in argv: value = {"ok": True, "history_id": "h", "history_result_status": "ok"}
+                    else: value = {"ok": True, "operator_artifact_id": "o"}
+                    return subprocess.CompletedProcess(argv, 0, json.dumps(value) + "\n", "")
+                with patch.object(service, "_fetch_public_ohlcv", side_effect=fetch), patch.object(service.subprocess, "run", side_effect=run), patch.object(service, "_runtime_publication", return_value={"attempted": expected_attempted, "status": expected_status, "error_code": "macro_public_publish_failed"}):
+                    code, result = service.run_service(self.args(root))
+                persisted = json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())
+                self.assertEqual(code, 0); self.assertTrue(result["ok"]); self.assertEqual(persisted["public_delivery_generation"]["status"], expected_status); self.assertIn("stats", events); self.assertIn("health", events)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); publisher = Mock()
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=lambda path, limit, interval, symbol: path.write_text("valid")), patch.object(service.subprocess, "run", return_value=subprocess.CompletedProcess([], 2, '{"ok":false,"error_code":"snapshot_failed"}\n', "")), patch.object(service, "_runtime_publication", publisher):
+                code, result = service.run_service(self.args(root))
+            persisted = json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text())
+            self.assertNotEqual(code, 0); publisher.assert_not_called(); self.assertEqual(persisted["public_delivery_generation"], {"attempted": False, "status": "not_run", "error_code": "macro_public_core_pipeline_failed"})
+
+    def test_dry_run_does_not_load_config_or_publish_and_exposes_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(service, "load_config") as load_config, patch.object(service, "publish_macro_structure_public") as publisher, patch.object(service.subprocess, "run") as run, patch.object(service, "_fetch_public_ohlcv") as fetch:
+                code, result = service.run_service(self.args(root, "--dry-run"))
+            self.assertEqual(code, 0); load_config.assert_not_called(); publisher.assert_not_called(); run.assert_not_called(); fetch.assert_not_called(); self.assertEqual(result["public_delivery"], {"after": "operator", "before": "scenario_stats", "source": "local/reports/macro_structure/operator/latest.html"})
+
+    def test_runtime_publication_metadata_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sentinel = {"macro_structure_public_status": "failed", "macro_structure_public_error_code": "/remote/path exception stdout stderr <html>" , "ssh_host": "HOST_SENTINEL", "ssh_key": "KEY_SENTINEL", "remote_path": "REMOTE_SENTINEL", "stdout": "STDOUT_SENTINEL", "stderr": "STDERR_SENTINEL", "exception": "EXCEPTION_SENTINEL", "raw_html": "HTML_SENTINEL"}
+            with patch.object(service, "_fetch_public_ohlcv", side_effect=lambda path, limit, interval, symbol: path.write_text("valid")), patch.object(service.subprocess, "run", side_effect=lambda argv, **_: subprocess.CompletedProcess(argv, 0, json.dumps({"ok": True, "run_id": "r", "snapshot_id": "s", "result_status": "ok", "history_id": "h", "history_result_status": "ok", "operator_artifact_id": "o", "schema_version": "macro_structure_scenario_outcome_stats.v1", "method_version": "macro_structure_scenario_outcome_stats.v1", "artifact_id": "a", "evidence_strength": "insufficient", "mature_row_count": 0, "source_artifact_count": 1, "excluded_artifact_count": 0}) + "\n", "")), patch.object(service, "load_config", return_value=SimpleNamespace()), patch.object(service, "publish_macro_structure_public", return_value=sentinel):
+                service.run_service(self.args(root))
+            serialized = json.dumps(json.loads((root / "logs/runtime/macro_structure_service_last_result.json").read_text()))
+            for value in ("HOST_SENTINEL", "KEY_SENTINEL", "REMOTE_SENTINEL", "STDOUT_SENTINEL", "STDERR_SENTINEL", "EXCEPTION_SENTINEL", "HTML_SENTINEL"): self.assertNotIn(value, serialized)
 
 
 class MacroStructureServicePlistTests(unittest.TestCase):

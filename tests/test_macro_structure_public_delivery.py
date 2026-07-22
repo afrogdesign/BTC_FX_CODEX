@@ -4,6 +4,7 @@ import hashlib
 import subprocess
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -14,6 +15,7 @@ from src.notification.macro_structure_public_delivery import (
     MacroPublicDeliveryError,
     format_macro_structure_email_block,
     publish_macro_structure_public,
+    read_macro_structure_public_runtime_status,
     resolve_source_path,
     validate_fixed_entry_source,
 )
@@ -259,6 +261,55 @@ class MacroStructurePublicDeliveryTests(unittest.TestCase):
         failed = format_macro_structure_email_block({"macro_structure_public_status": "failed", "macro_structure_public_error_code": "macro_public_publish_failed"})
         self.assertEqual(failed, "【4H大局チャート】利用不可（macro_public_publish_failed）")
         self.assertNotIn("https://", failed)
+
+    def test_runtime_status_reader_maps_published_record_to_email_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = {"attempted": True, "status": "published", "public_url": "https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html", "entry_status": "available", "entry_id": "entry_1", "source_sha256": "a" * 64, "cutoff_jst": "2026-07-23T05:00:00+09:00", "stale_status": "current", "continuity_status": "continuous", "data_quality_status": "ok", "error_code": ""}
+            path = root / "logs/runtime/macro_structure_service_last_result.json"; path.parent.mkdir(parents=True); path.write_text(json.dumps({"public_delivery_generation": nested}), encoding="utf-8")
+            result = read_macro_structure_public_runtime_status(root)
+        self.assertEqual(result["macro_structure_public_method_version"], delivery.METHOD_VERSION)
+        self.assertEqual(result["macro_structure_public_status"], "published")
+        self.assertEqual(result["macro_structure_public_url"], nested["public_url"])
+        self.assertEqual(result["macro_structure_public_entry_status"], "available")
+        self.assertEqual(result["macro_structure_public_entry_id"], "entry_1")
+        self.assertEqual(result["macro_structure_public_source_sha256"], "a" * 64)
+        self.assertEqual(result["macro_structure_public_cutoff_jst"], nested["cutoff_jst"])
+        self.assertEqual(result["macro_structure_public_stale_status"], "current")
+        self.assertEqual(result["macro_structure_public_continuity_status"], "continuous")
+        self.assertEqual(result["macro_structure_public_data_quality_status"], "ok")
+        self.assertEqual(result["macro_structure_public_error_code"], "")
+        self.assertIn("https://server.afrog.jp", format_macro_structure_email_block(result))
+
+    def test_runtime_status_reader_errors_and_bounded_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); missing = read_macro_structure_public_runtime_status(root)
+            self.assertEqual(missing["macro_structure_public_error_code"], "macro_public_runtime_status_missing")
+            path = root / "logs/runtime/macro_structure_service_last_result.json"; path.parent.mkdir(parents=True)
+            malformed = ["{", [], {}, {"public_delivery_generation": {"attempted": True, "status": "unknown"}}, {"public_delivery_generation": {"attempted": False, "status": "published"}}, {"public_delivery_generation": {"attempted": True, "status": "published", "public_url": 1, "entry_id": "x"}}, {"public_delivery_generation": {"attempted": True, "status": "published", "entry_id": "x"}}]
+            for value in malformed:
+                with self.subTest(value=value):
+                    path.write_text(value if isinstance(value, str) else json.dumps(value), encoding="utf-8")
+                    result = read_macro_structure_public_runtime_status(root)
+                    self.assertEqual(result["macro_structure_public_error_code"], "macro_public_runtime_status_invalid")
+            for state, attempted, error in (("failed", True, "macro_public_publish_failed"), ("disabled", False, ""), ("not_run", False, "macro_public_core_pipeline_failed")):
+                with self.subTest(state=state):
+                    path.write_text(json.dumps({"public_delivery_generation": {"attempted": attempted, "status": state, "error_code": error}}), encoding="utf-8")
+                    result = read_macro_structure_public_runtime_status(root)
+                    self.assertEqual(result["macro_structure_public_status"], state)
+                    self.assertEqual(result["macro_structure_public_url"], "")
+                    block = format_macro_structure_email_block(result)
+                    if state == "disabled": self.assertEqual(block, "")
+                    if state == "not_run": self.assertIn("利用不可", block)
+
+    def test_runtime_status_reader_does_not_leak_raw_or_transport_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); path = root / "logs/runtime/macro_structure_service_last_result.json"; path.parent.mkdir(parents=True)
+            sentinels = ["/filesystem/path", "SSH_HOST", "SSH_KEY", "/remote/directory", "raw exception", "{raw json}"]
+            path.write_text(json.dumps({"public_delivery_generation": {"attempted": True, "status": "failed", "error_code": "macro_public_publish_failed", "public_url": sentinels[0], "entry_id": "SSH_HOST"}}), encoding="utf-8")
+            result = read_macro_structure_public_runtime_status(root)
+        serialized = json.dumps(result)
+        for value in sentinels: self.assertNotIn(value, serialized)
 
 
 if __name__ == "__main__":

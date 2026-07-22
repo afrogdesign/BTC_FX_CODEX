@@ -116,3 +116,5 @@ After one local source commit:
 ## Implementation note
 
 - Runtime publication is now recorded after operator success and before scenario stats; notification integration reads that recorded result without publishing.
+- Runtime verification 2026-07-23: one kickstart produced entry `113cbd20a4345818f644`; local and fixed public entry IDs matched, and the single HTTPS GET contained the required safety and freshness markers.
+- FIX1 added the previously missing focused unit coverage for runtime publication ordering/non-blocking behavior and the bounded runtime-status reader; no runtime, notification, email, health, or public GET was repeated.

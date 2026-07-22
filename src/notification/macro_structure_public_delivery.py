@@ -350,13 +350,16 @@ def read_macro_structure_public_runtime_status(base_dir: Path) -> dict[str, Any]
     if status == "published":
         if not result["macro_structure_public_url"] or not result["macro_structure_public_entry_id"]:
             return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+        if not result["macro_structure_public_url"].startswith("https://") or any(char in result["macro_structure_public_entry_id"] for char in "/\\\r\n") or not re.fullmatch(r"[A-Fa-f0-9]+", result["macro_structure_public_source_sha256"]):
+            return _base_result("failed", error_code="macro_public_runtime_status_invalid")
         result["macro_structure_public_error_code"] = ""
     elif status in {"failed", "not_run"} and not result["macro_structure_public_error_code"]:
         result["macro_structure_public_error_code"] = "macro_public_runtime_status_invalid"
     elif status == "disabled":
         result["macro_structure_public_error_code"] = ""
     if status != "published":
-        result["macro_structure_public_url"] = ""
+        for key in mapping.values():
+            result[key] = ""
     return result
 
 
