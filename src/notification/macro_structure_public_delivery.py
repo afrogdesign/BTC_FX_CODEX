@@ -4,6 +4,7 @@ import hashlib
 import html
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -56,7 +57,6 @@ _SECRET_PATTERNS = (
     re.compile(r"Authorization:\s*Bearer\b", re.IGNORECASE),
 )
 _LABEL_PATTERNS = {
-    "entry_id": re.compile(r"entry ID(?:</b>\s*:|\s*=)\s*([^<\s]+)", re.IGNORECASE),
     "source_artifact_id": re.compile(r"source operator artifact ID</b>:\s*([^<]+)", re.IGNORECASE),
     "source_digest": re.compile(r"source digest</b>:\s*([^<]+)", re.IGNORECASE),
     "cutoff_utc": re.compile(r"source cutoff UTC</b>:\s*([^<]+)", re.IGNORECASE),
@@ -65,6 +65,14 @@ _LABEL_PATTERNS = {
     "continuity_status": re.compile(r"source continuity status</b>:\s*([^<]+)", re.IGNORECASE),
     "data_quality_status": re.compile(r"source data-quality status</b>:\s*([^<]+)", re.IGNORECASE),
 }
+_SECTION_PATTERNS = {
+    "available": re.compile(r'<section\b[^>]*\bid="fixed-latest-entry"[^>]*>.*?</section\s*>', re.IGNORECASE | re.DOTALL),
+    "unavailable": re.compile(r'<section\b[^>]*\bid="fixed-latest-entry-unavailable"[^>]*>.*?</section\s*>', re.IGNORECASE | re.DOTALL),
+}
+_AVAILABLE_ENTRY_ID = re.compile(r"<b>entry ID</b>\s*:\s*([^<\s]+)", re.IGNORECASE)
+_UNAVAILABLE_ENTRY_ID = re.compile(r"entry ID\s*=\s*([^<\s]+)", re.IGNORECASE)
+_SAFE_SSH_HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*(?:@[A-Za-z0-9][A-Za-z0-9._-]*)?\Z")
+_SAFE_REMOTE_ROOT = re.compile(r"/[A-Za-z0-9._/-]+\Z")
 
 
 class MacroPublicDeliveryError(Exception):
@@ -90,6 +98,22 @@ def _extract(text: str, key: str, *, required: bool = False) -> str:
     if required and not value:
         raise MacroPublicDeliveryError("macro_public_source_invalid")
     return value
+
+
+def _current_section(text: str, state: str) -> str:
+    pattern = _SECTION_PATTERNS[state]
+    matches = pattern.findall(text)
+    if len(matches) != 1:
+        raise MacroPublicDeliveryError("macro_public_source_invalid")
+    return matches[0]
+
+
+def _current_entry_id(section: str, state: str) -> str:
+    pattern = _AVAILABLE_ENTRY_ID if state == "available" else _UNAVAILABLE_ENTRY_ID
+    values = [_clean_value(match) for match in pattern.findall(section) if _clean_value(match)]
+    if len(values) != 1:
+        raise MacroPublicDeliveryError("macro_public_source_invalid")
+    return values[0]
 
 
 def resolve_source_path(base_dir: Path, cfg: Any) -> Path:
@@ -142,11 +166,13 @@ def validate_fixed_entry_source(path: Path) -> dict[str, Any]:
         raise MacroPublicDeliveryError("macro_public_source_invalid")
 
     source_sha256 = hashlib.sha256(data).hexdigest()
-    entry_id = _extract(text, "entry_id", required=True)
+    state = "available" if has_available else "unavailable"
+    current_section = _current_section(text, state)
+    entry_id = _current_entry_id(current_section, state)
     model: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "method_version": METHOD_VERSION,
-        "entry_status": "available" if has_available else "unavailable",
+        "entry_status": state,
         "entry_id": entry_id,
         "source_sha256": source_sha256,
         "source_size_bytes": len(data),
@@ -193,9 +219,13 @@ def _validated_transport(cfg: Any) -> tuple[str, str, str]:
     values = (host, key, remote_root)
     if any(not value or "\x00" in value or "\n" in value or "\r" in value for value in values):
         raise MacroPublicDeliveryError("macro_public_transport_config_invalid")
+    if host.startswith("-") or not _SAFE_SSH_HOST.fullmatch(host):
+        raise MacroPublicDeliveryError("macro_public_transport_config_invalid")
     if not remote_root.startswith("/"):
         raise MacroPublicDeliveryError("macro_public_transport_config_invalid")
     if ".." in PurePosixPath(remote_root).parts:
+        raise MacroPublicDeliveryError("macro_public_transport_config_invalid")
+    if not _SAFE_REMOTE_ROOT.fullmatch(remote_root):
         raise MacroPublicDeliveryError("macro_public_transport_config_invalid")
     return host, key, remote_root.rstrip("/")
 
@@ -239,7 +269,7 @@ def _run_remote_publication(model: dict[str, Any], cfg: Any, runner: Callable[..
     remote_temp = f"{remote_dir}/{temp_name}"
     remote_latest = f"{remote_dir}/latest.html"
     ssh_args = _ssh_args(key)
-    rsync_ssh = " ".join(["ssh", *ssh_args])
+    rsync_ssh = shlex.join(["ssh", *ssh_args])
     commands = [
         ["ssh", *ssh_args, host, "mkdir", "-p", remote_dir],
     ]
@@ -312,6 +342,9 @@ def publish_macro_structure_public(
     return result
 
 
+publish_macro_structure_public_entry = publish_macro_structure_public
+
+
 def format_macro_structure_email_block(delivery: dict[str, Any]) -> str:
     status = str(delivery.get("macro_structure_public_status", "")).strip()
     if status == "disabled":
@@ -339,6 +372,9 @@ def format_macro_structure_email_block(delivery: dict[str, Any]) -> str:
         )
     code = str(delivery.get("macro_structure_public_error_code", "macro_public_source_invalid")).strip()
     return f"【4H大局チャート】利用不可（{code}）"
+
+
+format_macro_structure_public_email_block = format_macro_structure_email_block
 
 
 def enrich_delivery_email_result(delivery: dict[str, Any], model: dict[str, Any]) -> dict[str, Any]:

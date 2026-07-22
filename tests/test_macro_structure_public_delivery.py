@@ -95,6 +95,23 @@ class MacroStructurePublicDeliveryTests(unittest.TestCase):
         self.assertEqual(model["source_digest"], "")
         self.assertEqual(model["cutoff_jst"], "")
 
+    def test_entry_id_is_scoped_to_the_current_state_section(self) -> None:
+        text = "entry ID=historical_before " + _available() + " entry ID=historical_after"
+        with tempfile.TemporaryDirectory() as tmp:
+            model = validate_fixed_entry_source(_write_source(Path(tmp), text))
+        self.assertEqual(model["entry_id"], "entry_available_1234567890")
+
+    def test_duplicate_or_missing_current_entry_id_fails_closed(self) -> None:
+        duplicate = _available().replace(
+            "<b>entry ID</b>: entry_available_1234567890",
+            "<b>entry ID</b>: first_id <b>entry ID</b>: second_id",
+        )
+        missing = _available().replace("<b>entry ID</b>: entry_available_1234567890", "")
+        for text in (duplicate, missing):
+            with self.subTest(text=text[:20]), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaisesRegex(MacroPublicDeliveryError, "macro_public_source_invalid"):
+                    validate_fixed_entry_source(_write_source(Path(tmp), text))
+
     def test_both_or_neither_state_fails_closed(self) -> None:
         for text in ("<body></body>", _available() + _unavailable()):
             with self.subTest(text=text[:20]):
@@ -140,6 +157,9 @@ class MacroStructurePublicDeliveryTests(unittest.TestCase):
                 ("NOTIFICATION_HTML_REMOTE_DIR", "relative/path", "macro_public_transport_config_invalid"),
                 ("NOTIFICATION_HTML_REMOTE_DIR", "/safe/../unsafe", "macro_public_transport_config_invalid"),
                 ("NOTIFICATION_HTML_REMOTE_SSH_HOST", "host\nunsafe", "macro_public_transport_config_invalid"),
+                ("NOTIFICATION_HTML_REMOTE_SSH_HOST", "host;touch", "macro_public_transport_config_invalid"),
+                ("NOTIFICATION_HTML_REMOTE_SSH_HOST", "-oProxyCommand=x", "macro_public_transport_config_invalid"),
+                ("NOTIFICATION_HTML_REMOTE_DIR", "/safe path", "macro_public_transport_config_invalid"),
             ):
                 with self.subTest(key=key, value=value):
                     result = publish_macro_structure_public(root, _cfg(**{key: value}), runner=Mock())

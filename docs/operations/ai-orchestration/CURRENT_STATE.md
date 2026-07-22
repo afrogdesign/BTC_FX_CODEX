@@ -6,107 +6,79 @@ last_updated: 2026-07-22
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 - branch: `Ver04-v4`
-- accepted visual checkpoint: `475ae4d`
+- latest accepted source checkpoint: `9409551`
 - push: none
 - safety: report-only / human-decided / no automatic order
 - canonical visual plan: `docs/operations/strategy/MACRO_VISUAL_STRUCTURE_PRODUCT_PLAN_20260722.md`
 
-## Accepted backend
+## Accepted source modules
 
-- P1–P8 accepted
-- P9 blocked pending complete private MEXC history input
-- M-OPS1 through M-OPS5 accepted on the existing six-time cadence
-- accepted runtime and health semantics are unchanged
+- M-VIS1 source accepted
+- M-LINE1 source accepted
+- M-EVENT1 source accepted
+- M-HYP1 source accepted
+- M-ENTRY1 source accepted at `475ae4d`
+- M-DELIVERY1 primary-repo source accepted at `9409551`
 
-## Accepted visual Product v1
+## Runtime re-audit result
 
-### M-VIS1
+The 2026-07-22 end-to-end audit found that source acceptance did not yet produce an operationally complete delivery chain.
 
-- accepted checkpoint: `c1ceda3`
-- 4H-first chart, 1H/4H horizontal zones, supplemental 15m view
+### Blocking gap: scheduled operator lacks explicit 4H input
 
-### M-LINE1
+`tools/run_macro_structure_service.py` fetches and stages 4H OHLCV but its operator command passes only `--ohlcv-15m-csv`.
 
-- accepted implementation: `2d47f26`
-- accepted ranking fix: `77b9ca3`
-- deterministic confirmed-4H trendlines and channels
+Observed consequences:
 
-### M-EVENT1
+- scheduled operator output does not contain the M-VIS1 4H model;
+- scheduled output does not contain the M-LINE1, M-EVENT1, or M-HYP1 models;
+- M-ENTRY1 does not publish the fixed `latest.html` during the scheduled cycle;
+- `local/reports/macro_structure/operator/latest.html` is currently absent;
+- the current health artifact can still report `healthy_insufficient`, so health does not prove fixed-entry delivery readiness.
 
-- accepted implementation: `9295005`
-- accepted fixes: `0a6f3f8`, `a79e488`
-- deterministic structure events with valid parent chains and bounded retention
+### Blocking gap: installed notification runtime
 
-### M-HYP1
+- the accepted M-DELIVERY1 integration exists only in the primary repo;
+- the active notification process remains in the frozen runtime repo;
+- no real SSH, rsync, public HTTPS retrieval, or SMTP verification has completed;
+- a relative fixed-entry path in the frozen repo would resolve to the wrong local report root.
 
-- accepted implementation: `882ab64`
-- accepted validation fix: `7a51e98`
-- accepted precedence fix: `e06fb99`
-- bounded condition / next-confirmation / invalidation scenarios
-
-### M-ENTRY1
-
-- accepted implementation: `69c54cd`
-- accepted hardening fix: `475ae4d`
-- active spec: `chatgpt/specs/active/20260722_macro_structure_fixed_latest_entry.md`
-- fixed local entry: `local/reports/macro_structure/operator/latest.html`
-- complete available/unavailable screen with atomic replacement
-- exact section validation and deterministic publication failure semantics
-- no-4H callers do not modify the fixed entry
-
-Visual Product v1 is complete in the primary repo.
-
-## M-DELIVERY1 authorization
-
-The user explicitly authorized completing public-URL delivery through the notification email.
-
-Active specification:
-
-- `chatgpt/specs/active/20260722_macro_structure_public_mail_delivery.md`
-
-Fixed product route:
+Required installed source path:
 
 ```text
-local M-ENTRY1 latest.html
-→ validate available/unavailable status
-→ existing SSH + rsync notification host
-→ atomic remote macro-structure/latest.html
-→ existing approved notification email receives one public URL block
+/Users/marupro/CODEX/100_MCP_Server/btc_monitor/local/reports/macro_structure/operator/latest.html
 ```
 
-Public URL:
+### Additional contract gap
+
+The M-DELIVERY1 entry-ID extraction remains broad rather than state-scoped to the current available or unavailable section. This must be corrected before live activation.
+
+## Corrective active specification
+
+- `chatgpt/specs/active/20260722_macro_structure_runtime_delivery_completion.md`
+- work ID: `BTCFX-20260722-VER04-V4-M-RUNTIME-DELIVERY-COMPLETION`
+- mode: `RUNTIME_TASK`
+- user authorization: explicit
+
+## Product status
 
 ```text
-https://server.afrog.jp/btc-monitor/notifications/macro-structure/latest.html
+M-VIS1 through M-DELIVERY1 source implementation — accepted
+installed 4H generation — incomplete
+fixed latest.html generation on schedule — incomplete
+public URL live publication — incomplete
+notification email live integration — incomplete
 ```
 
-M-DELIVERY1 reuses existing `NOTIFICATION_HTML_*` hosting configuration. It does not add a hosting service, credential, notification trigger, threshold, schedule, or order path.
-
-## Remaining product gap
-
-- M-DELIVERY1 implementation is complete pending ChatGPT acceptance
-- notification email integration is covered by focused no-send tests
-- primary-repo implementation is complete pending review
-- frozen runtime installation remains prohibited without a separately explicit `RUNTIME_TASK`
-
-## Active plan
-
-```text
-M-VIS1 — accepted
-→ M-LINE1 — accepted
-→ M-EVENT1 — accepted
-→ M-HYP1 — accepted
-→ M-ENTRY1 — accepted
-→ M-DELIVERY1 public URL mail integration — implementation pending ChatGPT acceptance
-```
-
-M-STATS1 remains optional and does not block delivery completion.
+The M plan must not be described as operationally complete until the corrective runtime task satisfies its acceptance criteria.
 
 ## Current selected action
 
-- current module: `M-DELIVERY1`
-- mode: one bounded Codex implementation
-- accepted checkpoint: `475ae4d`
-- implementation target: primary repo only
-- validation: focused unittest, no-network/no-send smoke, task-scoped `git diff --check`
-- excluded: real email send, real SSH/rsync during validation, notification threshold changes, LaunchAgent/schedule changes, frozen runtime access, private/account/order endpoints, automatic order
+One bounded RUNTIME_TASK must:
+
+1. pass the staged 4H CSV to the scheduled operator;
+2. prove current fixed `latest.html` generation;
+3. deploy the minimal M-DELIVERY1 integration to the frozen notification runtime;
+4. configure the frozen runtime to read the primary fixed entry;
+5. perform one real public publication and one controlled verification email;
+6. preserve all safety, notification-decision, subject, recipient, threshold, and schedule boundaries.

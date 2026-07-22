@@ -35,7 +35,7 @@ class MacroStructureServiceTests(unittest.TestCase):
             outputs = {
                 "run-macro-structure-daily": {"ok": True, "run_id": "run_1", "snapshot_id": "snap_1", "result_status": "ok", "stale_status": "current"},
                 "run-macro-structure-history": {"ok": True, "history_id": "history_1", "history_result_status": "ok"},
-                "render-macro-structure-operator": {"ok": True, "operator_artifact_id": "operator_1"},
+                "render-macro-structure-operator": {"ok": True, "operator_artifact_id": "operator_1", "latest_entry_status": "available", "latest_entry_id": "entry_1", "latest_entry_method_version": "macro_structure_latest_entry.v1"},
                 "check-macro-structure-health": {"ok": True, "exit_code": 0, "report_written": True, "health_state": "healthy_insufficient", "health_artifact_id": "health_1"},
             }
             commands: list[list[str]] = []
@@ -60,6 +60,12 @@ class MacroStructureServiceTests(unittest.TestCase):
             daily_15m = commands[0][commands[0].index("--ohlcv-15m") + 1]
             operator_15m = commands[2][commands[2].index("--ohlcv-15m-csv") + 1]
             self.assertEqual(daily_15m, operator_15m)
+            daily_4h = commands[0][commands[0].index("--ohlcv-4h") + 1]
+            ops_4h = commands[2][commands[2].index("--ohlcv-4h-csv") + 1]
+            self.assertEqual(daily_4h, ops_4h)
+            self.assertEqual(result["operator_latest_entry_status"], "available")
+            self.assertEqual(result["operator_latest_entry_id"], "entry_1")
+            self.assertEqual(result["operator_latest_entry_method_version"], "macro_structure_latest_entry.v1")
 
     def test_failure_stops_later_steps_and_preserves_previous_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

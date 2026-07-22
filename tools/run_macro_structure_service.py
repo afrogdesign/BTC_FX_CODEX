@@ -149,7 +149,7 @@ def _build_commands(root: Path, python_bin: Path, symbol: str, limit: int, evalu
     return [
         ("snapshot", common + ["run-macro-structure-daily", "--ohlcv-15m", relative(inputs / "ohlcv_15m.csv"), "--ohlcv-1h", relative(inputs / "ohlcv_1h.csv"), "--ohlcv-4h", relative(inputs / "ohlcv_4h.csv"), "--output-root", relative(snapshot_root), "--symbol", symbol, "--ohlcv-limit", str(limit), "--evaluation-time-utc", _iso(evaluation), "--stdout-json"]),
         ("history", common + ["run-macro-structure-history", "--snapshot-root", relative(snapshot_root), "--output-root", relative(history_root), "--symbol", symbol, "--stdout-json"]),
-        ("operator", common + ["render-macro-structure-operator", "--snapshot-root", relative(snapshot_root), "--history-root", relative(history_root), "--ohlcv-15m-csv", relative(inputs / "ohlcv_15m.csv"), "--output-root", relative(operator_root), "--symbol", symbol, "--stdout-json"]),
+        ("operator", common + ["render-macro-structure-operator", "--snapshot-root", relative(snapshot_root), "--history-root", relative(history_root), "--ohlcv-15m-csv", relative(inputs / "ohlcv_15m.csv"), "--ohlcv-4h-csv", relative(inputs / "ohlcv_4h.csv"), "--output-root", relative(operator_root), "--symbol", symbol, "--stdout-json"]),
     ]
 
 
@@ -294,6 +294,9 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                     status.update({
                         "operator_artifact_id": parsed_value.get("operator_artifact_id") or parsed_value.get("artifact_id"),
                         "operator_result_status": parsed_value.get("result_status"),
+                        "operator_latest_entry_status": parsed_value.get("latest_entry_status"),
+                        "operator_latest_entry_id": parsed_value.get("latest_entry_id"),
+                        "operator_latest_entry_method_version": parsed_value.get("latest_entry_method_version"),
                         "operator_artifact_root": "local/reports/macro_structure/operator",
                     })
             if len(parsed_steps) == len(commands):
