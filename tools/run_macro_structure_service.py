@@ -30,6 +30,7 @@ DEFAULT_INPUT_ROOT = "local/runtime/macro_structure_inputs"
 DEFAULT_SNAPSHOT_ROOT = "local/reports/macro_structure"
 DEFAULT_HISTORY_ROOT = "local/reports/macro_structure/history"
 DEFAULT_OPERATOR_ROOT = "local/reports/macro_structure/operator"
+DEFAULT_SCENARIO_STATS_ROOT = "local/reports/macro_structure/scenario_stats"
 DEFAULT_HEALTH_ROOT = "local/reports/macro_structure/health"
 DEFAULT_STATUS = "logs/runtime/macro_structure_service_last_result.json"
 DEFAULT_LOCK = "logs/runtime/macro_structure_service.lock"
@@ -47,6 +48,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot-root", default=DEFAULT_SNAPSHOT_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--history-root", default=DEFAULT_HISTORY_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--operator-root", default=DEFAULT_OPERATOR_ROOT, help=argparse.SUPPRESS)
+    parser.add_argument("--scenario-stats-root", default=DEFAULT_SCENARIO_STATS_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--health-root", default=DEFAULT_HEALTH_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--lock-path", default=DEFAULT_LOCK, help=argparse.SUPPRESS)
     return parser
@@ -210,11 +212,67 @@ def _health_generation(argv: list[str], root: Path) -> dict[str, Any]:
     return result
 
 
+def _stable_subprocess_error(completed: subprocess.CompletedProcess[str], fallback: str) -> str:
+    for output in (completed.stdout, completed.stderr):
+        try:
+            parsed = _parse_compact_json(output)
+        except ValueError:
+            continue
+        code = parsed.get("error_code")
+        if isinstance(code, str) and code and code.replace("_", "").isalnum():
+            return code
+    return fallback
+
+
+def _run_scenario_stats(argv: list[str], root: Path) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(argv, cwd=root, capture_output=True, text=True, encoding="utf-8")
+    except OSError:
+        return {"attempted": True, "status": "failed", "error_code": "scenario_stats_subprocess_failed"}
+    except Exception:
+        return {"attempted": True, "status": "failed", "error_code": "scenario_stats_subprocess_failed"}
+    try:
+        parsed = _parse_compact_json(completed.stdout)
+    except ValueError:
+        return {"attempted": True, "status": "failed", "error_code": _stable_subprocess_error(completed, "scenario_stats_compact_json_missing")}
+    if completed.returncode != 0 or parsed.get("status") == "failed":
+        return {"attempted": True, "status": "failed", "error_code": _stable_subprocess_error(completed, "scenario_stats_generation_failed")}
+    if (
+        parsed.get("schema_version") != "macro_structure_scenario_outcome_stats.v1"
+        or parsed.get("method_version") != "macro_structure_scenario_outcome_stats.v1"
+        or not isinstance(parsed.get("artifact_id"), str)
+        or not parsed["artifact_id"]
+        or parsed.get("evidence_strength") not in {"insufficient", "descriptive_only"}
+        or any(not isinstance(parsed.get(key), int) or parsed[key] < 0 for key in ("mature_row_count", "source_artifact_count", "excluded_artifact_count"))
+    ):
+        return {"attempted": True, "status": "failed", "error_code": "scenario_stats_result_invalid"}
+    return {
+        "attempted": True,
+        "status": "published",
+        "artifact_id": parsed["artifact_id"],
+        "evidence_strength": parsed["evidence_strength"],
+        "mature_row_count": parsed["mature_row_count"],
+        "source_artifact_count": parsed["source_artifact_count"],
+        "excluded_artifact_count": parsed["excluded_artifact_count"],
+    }
+
+
+def _build_scenario_stats_command(root: Path, python_bin: Path, operator_root: Path, scenario_stats_root: Path) -> list[str]:
+    relative = lambda path: _relative(path, root)
+    return [
+        str(python_bin), "tools/build_macro_structure_scenario_outcome_stats.py",
+        "--operator-root", relative(operator_root),
+        "--output-root", relative(scenario_stats_root),
+        "--stdout-json",
+    ]
+
+
 def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, commands: list[tuple[str, list[str]]]) -> dict[str, Any]:
     input_root = root / args.input_root
     snapshot_root = root / args.snapshot_root
     history_root = root / args.history_root
     operator_root = root / args.operator_root
+    scenario_stats_root = root / args.scenario_stats_root
     status_path = root / args.status_path
     health_root = root / args.health_root
     health_command = _build_health_command(root, root / (args.python_bin or (root / ".venv312" / "bin" / "python")), args.symbol, evaluation, status_path, snapshot_root, history_root, operator_root, root / "deploy/com.afrog.btc-macro-structure.plist", health_root)
@@ -226,6 +284,8 @@ def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, 
         "evaluation_utc": _iso(evaluation),
         "roots": {"inputs": _relative(input_root / "latest", root), "snapshot": _relative(snapshot_root, root), "history": _relative(history_root, root), "operator": _relative(operator_root, root)},
         "commands": [argv for _, argv in commands],
+        "scenario_stats_command": _build_scenario_stats_command(root, root / (args.python_bin or (root / ".venv312" / "bin" / "python")), operator_root, scenario_stats_root),
+        "scenario_stats_output_root": _relative(scenario_stats_root, root),
         "health_command": health_command,
         "health_output_root": _relative(health_root, root),
         "safety_boundary": SAFETY,
@@ -239,11 +299,13 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     snapshot_root = root / args.snapshot_root
     history_root = root / args.history_root
     operator_root = root / args.operator_root
+    scenario_stats_root = root / args.scenario_stats_root
     health_root = root / args.health_root
     status_path = root / args.status_path
     lock_path = root / args.lock_path
     evaluation = _normalized_evaluation_time()
     commands = _build_commands(root, python_bin, args.symbol, args.ohlcv_limit, evaluation, input_root, snapshot_root, history_root, operator_root)
+    scenario_stats_command = _build_scenario_stats_command(root, python_bin, operator_root, scenario_stats_root)
     health_command = _build_health_command(root, python_bin, args.symbol, evaluation, status_path, snapshot_root, history_root, operator_root, root / "deploy/com.afrog.btc-macro-structure.plist", health_root)
     if args.dry_run:
         result = _planned_output(root, args, evaluation, commands)
@@ -260,7 +322,7 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
             return 0, result
         started = _utc_now().astimezone(timezone.utc)
-        status: dict[str, Any] = {"ok": False, "service_schema_version": SERVICE_SCHEMA_VERSION, "service_method_version": SERVICE_METHOD_VERSION, "status": "failed", "started_at_utc": _iso(started), "started_at_jst": _jst_iso(started), "evaluation_utc": _iso(evaluation), "evaluation_jst": _jst_iso(evaluation), "symbol": args.symbol, "steps": [], "public_input_fingerprints": {}, "report_only": True, "private_actual_trade_input": False, "automatic_order_allowed": False, "safety_boundary": SAFETY}
+        status: dict[str, Any] = {"ok": False, "service_schema_version": SERVICE_SCHEMA_VERSION, "service_method_version": SERVICE_METHOD_VERSION, "status": "failed", "started_at_utc": _iso(started), "started_at_jst": _jst_iso(started), "evaluation_utc": _iso(evaluation), "evaluation_jst": _jst_iso(evaluation), "symbol": args.symbol, "steps": [], "public_input_fingerprints": {}, "report_only": True, "private_actual_trade_input": False, "automatic_order_allowed": False, "scenario_stats_generation": {"attempted": False, "status": "not_run", "error_code": "scenario_stats_core_pipeline_failed"}, "safety_boundary": SAFETY}
         try:
             input_latest, fingerprints = _stage_public_inputs(input_root, args.symbol, args.ohlcv_limit)
             status["public_input_fingerprints"] = fingerprints
@@ -309,6 +371,7 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                     "stale_status": snapshot.get("stale_status"), "continuity_status": snapshot.get("continuity_status"), "data_quality_status": snapshot.get("data_quality_status"),
                     "snapshot_artifact_root": "local/reports/macro_structure", "history_artifact_root": "local/reports/macro_structure/history", "operator_artifact_root": "local/reports/macro_structure/operator",
                 })
+                status["scenario_stats_generation"] = _run_scenario_stats(scenario_stats_command, root)
         except (OSError, ValueError) as exc:
             status["error_code"] = str(exc)
         finished = _utc_now().astimezone(timezone.utc)

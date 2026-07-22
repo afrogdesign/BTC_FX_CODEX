@@ -1,23 +1,21 @@
 # NEXT_ACTION
 
-- current_work_id: `BTCFX-20260722-VER04-V4-NOTIFICATION-RUNTIME-RELOAD`
+- current_work_id: `BTCFX-20260722-VER04-V4-M-STATS1-RUNTIME-SHADOW`
 - mode: `RUNTIME_TASK`
 - primary branch: `Ver04-v4`
-- accepted primary source: `bc61478`
-- archived spec: `chatgpt/specs/archive/20260722_notification_runtime_reload_completion.md`
-- status: notification runtime reload complete
+- accepted runtime source locator: `bc61478`
+- accepted M-STATS1 FIX1 report locator: `68ed430`
+- active spec: `chatgpt/specs/active/20260722_macro_structure_scenario_stats_runtime_shadow.md`
+- status: human-approved deployment pending implementation and one bounded runtime verification
 - push: none
 
-## Verified runtime result
+## Scope
 
-- active repo: primary `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- target-only reload: pass; prior `2026-07-13T15:57:07.931511Z` / PID `90160` → current `2026-07-22T04:21:58.891682Z` / PID `14203`
-- publication enabled: `true`
-- fixed entry: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor/local/reports/macro_structure/operator/latest.html`
-- current entry ID/status: `59baf573aec7c90d3b3e` / `available`
-- pre/post no-send contract: pass
-- no new email, publication, HTTPS verification, or notification cycle was performed
-- frozen `3e75a2f` remains non-active for this process
-- safety and notification decisions remain unchanged
+- add accepted M-STATS1 as a non-blocking local shadow auxiliary after successful macro operator generation
+- default output: `local/reports/macro_structure/scenario_stats`
+- persist privacy-safe stats generation status in the macro runtime result
+- preserve existing snapshot/history/operator and health behavior
+- do not connect stats to notification, mail, public publication, operator latest page, gates, thresholds, scores, classifiers, or order behavior
+- do not edit or reload the existing plist or schedule
 
-No further M task is required for this bounded reload. Do not perform another live verification action.
+After one local implementation commit, verify the loaded primary-repo target and perform exactly one target-only kickstart without `-k`. Do not retry a failed kickstart or perform another live verification action.
