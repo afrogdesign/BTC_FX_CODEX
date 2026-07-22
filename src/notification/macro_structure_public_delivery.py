@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import json
 import os
 import re
 import shlex
@@ -306,6 +307,57 @@ def _base_result(status: str, *, error_code: str = "") -> dict[str, Any]:
         "macro_structure_public_source_sha256": "",
         "macro_structure_public_error_code": error_code,
     }
+
+
+def read_macro_structure_public_runtime_status(base_dir: Path) -> dict[str, Any]:
+    path = base_dir / "logs/runtime/macro_structure_service_last_result.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return _base_result("failed", error_code="macro_public_runtime_status_missing")
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    nested = payload.get("public_delivery_generation") if isinstance(payload, dict) else None
+    if not isinstance(nested, dict):
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    status = nested.get("status")
+    if status not in {"published", "failed", "disabled", "not_run"}:
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    if not isinstance(nested.get("attempted"), bool):
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    if nested["attempted"] != (status in {"published", "failed"}):
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    error_code = nested.get("error_code", "")
+    if error_code is not None and (not isinstance(error_code, str) or (error_code and not re.fullmatch(r"[A-Za-z0-9_]+", error_code))):
+        return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+    result = _base_result(status, error_code=error_code or "")
+    mapping = {
+        "public_url": "macro_structure_public_url",
+        "entry_status": "macro_structure_public_entry_status",
+        "entry_id": "macro_structure_public_entry_id",
+        "source_sha256": "macro_structure_public_source_sha256",
+        "cutoff_jst": "macro_structure_public_cutoff_jst",
+        "stale_status": "macro_structure_public_stale_status",
+        "continuity_status": "macro_structure_public_continuity_status",
+        "data_quality_status": "macro_structure_public_data_quality_status",
+    }
+    for source, target in mapping.items():
+        value = nested.get(source, "")
+        if value is not None and not isinstance(value, str):
+            return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+        result[target] = value or ""
+    result["macro_structure_public_method_version"] = METHOD_VERSION
+    if status == "published":
+        if not result["macro_structure_public_url"] or not result["macro_structure_public_entry_id"]:
+            return _base_result("failed", error_code="macro_public_runtime_status_invalid")
+        result["macro_structure_public_error_code"] = ""
+    elif status in {"failed", "not_run"} and not result["macro_structure_public_error_code"]:
+        result["macro_structure_public_error_code"] = "macro_public_runtime_status_invalid"
+    elif status == "disabled":
+        result["macro_structure_public_error_code"] = ""
+    if status != "published":
+        result["macro_structure_public_url"] = ""
+    return result
 
 
 def publish_macro_structure_public(

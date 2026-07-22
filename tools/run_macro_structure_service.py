@@ -20,6 +20,8 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 from src.feedback.macro_structure_daily_operation import _fetch_public_ohlcv
+from config import load_config
+from src.notification.macro_structure_public_delivery import publish_macro_structure_public
 
 SERVICE_SCHEMA_VERSION = "macro_structure_runtime_service.v1"
 SERVICE_METHOD_VERSION = "macro_structure_runtime_service.v1"
@@ -34,6 +36,7 @@ DEFAULT_SCENARIO_STATS_ROOT = "local/reports/macro_structure/scenario_stats"
 DEFAULT_HEALTH_ROOT = "local/reports/macro_structure/health"
 DEFAULT_STATUS = "logs/runtime/macro_structure_service_last_result.json"
 DEFAULT_LOCK = "logs/runtime/macro_structure_service.lock"
+PUBLIC_DELIVERY_SOURCE = "local/reports/macro_structure/operator/latest.html"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -267,6 +270,32 @@ def _build_scenario_stats_command(root: Path, python_bin: Path, operator_root: P
     ]
 
 
+def _initial_public_delivery() -> dict[str, Any]:
+    return {"attempted": False, "status": "not_run", "error_code": "macro_public_core_pipeline_failed"}
+
+
+def _runtime_publication(base_dir: Path) -> dict[str, Any]:
+    result = _initial_public_delivery()
+    try:
+        cfg = load_config(base_dir)
+        published = publish_macro_structure_public(base_dir, cfg)
+        raw_status = str(published.get("macro_structure_public_status", "failed"))
+        status = raw_status if raw_status in {"published", "disabled", "failed", "not_run"} else "failed"
+        attempted = status in {"published", "failed"}
+        result = {"attempted": attempted, "status": status}
+        for name, source in (("public_url", "macro_structure_public_url"), ("entry_status", "macro_structure_public_entry_status"), ("entry_id", "macro_structure_public_entry_id"), ("source_sha256", "macro_structure_public_source_sha256"), ("cutoff_jst", "macro_structure_public_cutoff_jst"), ("stale_status", "macro_structure_public_stale_status"), ("continuity_status", "macro_structure_public_continuity_status"), ("data_quality_status", "macro_structure_public_data_quality_status")):
+            value = published.get(source, "")
+            if isinstance(value, (str, int, float, bool)):
+                result[name] = str(value) if value is not None else ""
+        error_code = published.get("macro_structure_public_error_code") or ("macro_public_publish_failed" if status == "failed" else "")
+        result["error_code"] = str(error_code) if isinstance(error_code, str) and error_code.replace("_", "").isalnum() else ("macro_public_publish_failed" if status == "failed" else "")
+        if status != "published":
+            result.pop("public_url", None)
+    except Exception:
+        return {"attempted": True, "status": "failed", "error_code": "macro_public_publish_failed"}
+    return result
+
+
 def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, commands: list[tuple[str, list[str]]]) -> dict[str, Any]:
     input_root = root / args.input_root
     snapshot_root = root / args.snapshot_root
@@ -288,6 +317,7 @@ def _planned_output(root: Path, args: argparse.Namespace, evaluation: datetime, 
         "scenario_stats_output_root": _relative(scenario_stats_root, root),
         "health_command": health_command,
         "health_output_root": _relative(health_root, root),
+        "public_delivery": {"after": "operator", "before": "scenario_stats", "source": PUBLIC_DELIVERY_SOURCE},
         "safety_boundary": SAFETY,
     }
 
@@ -322,7 +352,7 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             print(json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
             return 0, result
         started = _utc_now().astimezone(timezone.utc)
-        status: dict[str, Any] = {"ok": False, "service_schema_version": SERVICE_SCHEMA_VERSION, "service_method_version": SERVICE_METHOD_VERSION, "status": "failed", "started_at_utc": _iso(started), "started_at_jst": _jst_iso(started), "evaluation_utc": _iso(evaluation), "evaluation_jst": _jst_iso(evaluation), "symbol": args.symbol, "steps": [], "public_input_fingerprints": {}, "report_only": True, "private_actual_trade_input": False, "automatic_order_allowed": False, "scenario_stats_generation": {"attempted": False, "status": "not_run", "error_code": "scenario_stats_core_pipeline_failed"}, "safety_boundary": SAFETY}
+        status: dict[str, Any] = {"ok": False, "service_schema_version": SERVICE_SCHEMA_VERSION, "service_method_version": SERVICE_METHOD_VERSION, "status": "failed", "started_at_utc": _iso(started), "started_at_jst": _jst_iso(started), "evaluation_utc": _iso(evaluation), "evaluation_jst": _jst_iso(evaluation), "symbol": args.symbol, "steps": [], "public_input_fingerprints": {}, "report_only": True, "private_actual_trade_input": False, "automatic_order_allowed": False, "scenario_stats_generation": {"attempted": False, "status": "not_run", "error_code": "scenario_stats_core_pipeline_failed"}, "public_delivery_generation": _initial_public_delivery(), "safety_boundary": SAFETY}
         try:
             input_latest, fingerprints = _stage_public_inputs(input_root, args.symbol, args.ohlcv_limit)
             status["public_input_fingerprints"] = fingerprints
@@ -371,6 +401,7 @@ def run_service(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                     "stale_status": snapshot.get("stale_status"), "continuity_status": snapshot.get("continuity_status"), "data_quality_status": snapshot.get("data_quality_status"),
                     "snapshot_artifact_root": "local/reports/macro_structure", "history_artifact_root": "local/reports/macro_structure/history", "operator_artifact_root": "local/reports/macro_structure/operator",
                 })
+                status["public_delivery_generation"] = _runtime_publication(root)
                 status["scenario_stats_generation"] = _run_scenario_stats(scenario_stats_command, root)
         except (OSError, ValueError) as exc:
             status["error_code"] = str(exc)

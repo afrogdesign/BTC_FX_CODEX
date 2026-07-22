@@ -1263,7 +1263,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "detail_page_published_at_utc": "2026-03-30T18:05:00Z",
                 },
             ), patch("main.send_email", side_effect=_capture_send_email), patch(
-                "main.publish_macro_structure_public",
+                "main.read_macro_structure_public_runtime_status",
                 return_value={
                     "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
                     "macro_structure_public_status": "published",
@@ -1344,8 +1344,16 @@ class NotificationDetailPageTests(unittest.TestCase):
             ), patch(
                 "main.publish_notification_detail", side_effect=RuntimeError("publish failed")
             ), patch(
-                "main.publish_macro_structure_public",
-                side_effect=RuntimeError("publisher internal failure"),
+                "main.read_macro_structure_public_runtime_status",
+                return_value={
+                    "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
+                    "macro_structure_public_status": "failed",
+                    "macro_structure_public_url": "",
+                    "macro_structure_public_entry_status": "",
+                    "macro_structure_public_entry_id": "",
+                    "macro_structure_public_source_sha256": "",
+                    "macro_structure_public_error_code": "macro_public_publish_failed",
+                },
             ), patch("main.send_email", side_effect=_capture_send_email), patch(
                 "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
             ), patch(
@@ -1389,7 +1397,7 @@ class NotificationDetailPageTests(unittest.TestCase):
                     "suppress_reason_codes": ["cooldown_active"],
                     "notification_kind": "none",
                 },
-            ), patch("main.publish_macro_structure_public") as publish_macro, patch(
+            ), patch("main.read_macro_structure_public_runtime_status") as reader, patch(
                 "main.send_email"
             ) as send_email, patch(
                 "main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"
@@ -1398,7 +1406,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             ), patch("main.save_json", return_value=None):
                 result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
 
-        publish_macro.assert_not_called()
+        reader.assert_not_called()
         send_email.assert_not_called()
         self.assertEqual(result["macro_structure_public_status"], "disabled")
 

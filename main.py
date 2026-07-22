@@ -62,7 +62,7 @@ from src.notification.detail_page import (
 )
 from src.notification.macro_structure_public_delivery import (
     format_macro_structure_email_block,
-    publish_macro_structure_public,
+    read_macro_structure_public_runtime_status,
 )
 from src.notification.followup import build_followup_notification_context
 from src.notification.trigger import should_notify
@@ -1377,24 +1377,11 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
                 core_result["detail_page_enabled"] = True
                 core_result["detail_page_status"] = "failed"
                 _error_log(base_dir, "notification_detail_page_error", f"{exc}\n{traceback.format_exc()}")
-        try:
-            macro_public_info = publish_macro_structure_public(base_dir, cfg)
-        except Exception as exc:  # noqa: BLE001
-            macro_public_info = {
-                "macro_structure_public_method_version": "macro_structure_public_delivery.v1",
-                "macro_structure_public_status": "failed",
-                "macro_structure_public_url": "",
-                "macro_structure_public_entry_status": "",
-                "macro_structure_public_entry_id": "",
-                "macro_structure_public_source_sha256": "",
-                "macro_structure_public_error_code": "macro_public_publish_failed",
-            }
-            _error_log(base_dir, "macro_structure_public_delivery_error", f"{exc}\n{traceback.format_exc()}")
+        macro_public_info = read_macro_structure_public_runtime_status(base_dir)
         core_result.update(macro_public_info)
-        if macro_public_info.get("macro_structure_public_status") != "disabled":
-            macro_block = format_macro_structure_email_block(macro_public_info)
-            if macro_block and macro_block not in core_result["summary_body"]:
-                core_result["summary_body"] = f"{core_result['summary_body'].rstrip()}\n\n{macro_block}\n"
+        macro_block = format_macro_structure_email_block(macro_public_info)
+        if macro_block and macro_block not in core_result["summary_body"]:
+            core_result["summary_body"] = f"{core_result['summary_body'].rstrip()}\n\n{macro_block}\n"
         if core_result["notification_kind"] == "attention":
             notify_path = get_last_attention_notified_path(base_dir)
         elif core_result["notification_kind"] == "followup":
