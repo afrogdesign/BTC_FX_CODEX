@@ -22057,6 +22057,7 @@ def _build_parser() -> argparse.ArgumentParser:
     trial_parser.add_argument("--decision-events")
     trial_parser.add_argument("--trade-episodes")
     trial_parser.add_argument("--episode-links")
+    trial_parser.add_argument("--output-exact-link-csv")
     trial_parser.add_argument("--dry-run", action="store_true")
     trial_parser.add_argument("--replace-output", action="store_true")
     trial_parser.add_argument("--stdout-json", action="store_true")
@@ -22070,6 +22071,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cycle_parser.add_argument("--decision-events")
     cycle_parser.add_argument("--actual-episodes")
     cycle_parser.add_argument("--actual-links")
+    cycle_parser.add_argument("--output-exact-link-csv")
     cycle_parser.add_argument("--fetch-public-ohlcv", action="store_true")
     cycle_parser.add_argument("--ohlcv-limit", type=int, default=500)
     cycle_parser.add_argument("--max-ohlcv-lag-minutes", type=int, default=60)
@@ -23552,6 +23554,7 @@ def main() -> None:
             decision_events=Path(args.decision_events) if args.decision_events else None,
             trade_episodes=Path(args.trade_episodes) if args.trade_episodes else None,
             episode_links=Path(args.episode_links) if args.episode_links else None,
+            output_exact_link_csv=Path(args.output_exact_link_csv) if args.output_exact_link_csv else None,
             dry_run=bool(args.dry_run), replace_output=bool(args.replace_output),
         )
         if bool(getattr(args, "stdout_json", False)):
@@ -23565,6 +23568,7 @@ def main() -> None:
             decision_events=Path(args.decision_events) if args.decision_events else None,
             actual_episodes=Path(args.actual_episodes) if args.actual_episodes else None,
             actual_links=Path(args.actual_links) if args.actual_links else None,
+            output_exact_link_csv=Path(args.output_exact_link_csv) if args.output_exact_link_csv else None,
             fetch_public_ohlcv=bool(args.fetch_public_ohlcv), ohlcv_limit=int(args.ohlcv_limit),
             max_ohlcv_lag_minutes=int(args.max_ohlcv_lag_minutes), dry_run=bool(args.dry_run),
             replace_output=bool(args.replace_output),

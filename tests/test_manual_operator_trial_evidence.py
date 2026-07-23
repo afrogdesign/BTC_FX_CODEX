@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.feedback.manual_operator_classifier import OUTPUT_HEADERS
-from src.feedback.manual_operator_trial_evidence import ISSUE_RESOLUTION_METADATA, TRIAL_FACT_HEADERS, _counterfactual_classification, _issue_flags, _status, build_manual_operator_trial_evidence
+from src.feedback.manual_operator_trial_evidence import EXACT_OBSERVATION_HEADERS, ISSUE_RESOLUTION_METADATA, TRIAL_FACT_HEADERS, _counterfactual_classification, _issue_flags, _status, build_manual_operator_trial_evidence
 from src.feedback.manual_decision_events import DECISION_HEADERS
 from src.feedback.manual_trade_episode_builder import EPISODE_HEADERS
 from src.feedback.manual_trade_signal_linker import LINK_HEADERS
@@ -50,7 +50,7 @@ class TrialEvidenceTests(unittest.TestCase):
         episode = {key: "" for key in EPISODE_HEADERS}
         episode.update(schema_version="manual_trade_episode.v1", episode_id="ep1", position_id="pos1", symbol="BTCUSDT", side="long", opened_at_utc="2026-07-10T00:30:00Z", closed_at_utc="2026-07-10T01:30:00Z", status="closed", realized_pnl="10", fee_total="2", association_status="matched")
         link = {key: "" for key in LINK_HEADERS}
-        link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id="sig1", link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
+        link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id="sig1", position_side="long", link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
         return self.write("episodes.csv", EPISODE_HEADERS, [episode]), self.write("links.csv", LINK_HEADERS, [link])
 
     def paired_fixtures(self, *, short_direction: str = "80", stop_cause: str = "global") -> dict[str, Path]:
@@ -188,6 +188,27 @@ class TrialEvidenceTests(unittest.TestCase):
         self.assertEqual(result["actual_evidence"]["eligible_rows"], 0)
         with (self.root / "queue.csv").open(newline="", encoding="utf-8") as handle:
             self.assertTrue(any(row["question_type"] == "ambiguous_actual_trade_link" for row in csv.DictReader(handle)))
+
+    def test_exact_link_observation_is_separate_and_non_policy(self) -> None:
+        fixtures = self.fixtures(operator="C_WATCH_ZONE")
+        episodes, links = self.actual_inputs("high")
+        result = self.build(fixtures, trade_episodes=episodes, episode_links=links, output_exact_link_csv=self.root / "exact.csv")
+        self.assertEqual(result["counts"]["trial_fact_rows"], 1)
+        self.assertEqual(result["actual_evidence"]["eligible_rows"], 1)
+        self.assertEqual(result["exact_link_observations"]["eligible_rows"], 1)
+        with (self.root / "exact.csv").open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle); self.assertEqual(reader.fieldnames, EXACT_OBSERVATION_HEADERS); row = next(reader)
+        self.assertEqual(row["operator_class"], "C_WATCH_ZONE")
+        self.assertEqual(row["observation_basis"], "exact_signal_side_candidate_link")
+        self.assertEqual(row["causality_status"], "not_claimed")
+        self.assertEqual(row["policy_denominator_eligible"], "false")
+        self.assertEqual(row["p9_readiness_eligible"], "false")
+        self.assertNotIn("mfe", row); self.assertNotIn("mae", row); self.assertNotIn("comparison_status", row)
+
+    def test_exact_link_observation_omitted_preserves_existing_callers(self) -> None:
+        result = self.build(self.fixtures())
+        self.assertEqual(result["exact_link_observations"]["status"], "omitted")
+        self.assertFalse((self.root / "exact.csv").exists())
 
     def test_unresolved_no_ohlcv_excluded(self) -> None:
         result = self.build(self.fixtures(outcome="no_ohlcv"))

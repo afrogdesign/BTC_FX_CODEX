@@ -403,7 +403,7 @@ def _summary_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Path, report_date: str, output_root: Path, decision_events: Path | None = None, actual_episodes: Path | None = None, actual_links: Path | None = None, fetch_public_ohlcv: bool = False, ohlcv_limit: int = 500, max_ohlcv_lag_minutes: int = 60, dry_run: bool = False, replace_output: bool = False, include_turning_precursor_shadow: bool = False, include_macro_structure_shadow: bool = False) -> dict[str, Any]:
+def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Path, report_date: str, output_root: Path, decision_events: Path | None = None, actual_episodes: Path | None = None, actual_links: Path | None = None, output_exact_link_csv: Path | None = None, fetch_public_ohlcv: bool = False, ohlcv_limit: int = 500, max_ohlcv_lag_minutes: int = 60, dry_run: bool = False, replace_output: bool = False, include_turning_precursor_shadow: bool = False, include_macro_structure_shadow: bool = False) -> dict[str, Any]:
     if (actual_episodes is None) != (actual_links is None):
         return {"ok": False, "exit_code": 2, "errors": ["optional_actual_inputs_must_be_together"], "report_written": False}
     if not report_date.isdigit() or len(report_date) != 8:
@@ -436,7 +436,7 @@ def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Pat
         p5 = build_manual_operator_classifier(scenarios=scenarios, scenario_events=events, candidates=candidate_slice, signal_context=stage / "signal_context_slice.csv", output_csv=stage / "manual_operator_classifications.csv", output_json=stage / "manual_operator_classifications.json", output_md=stage / "manual_operator_classifications.md", report_date=report_date, replace_output=True)
         if not p5.get("ok"):
             return {"ok": False, "exit_code": int(p5.get("exit_code", 2)), "errors": p5.get("errors", ["p5_failed"]), "report_written": False}
-        p8 = build_manual_operator_trial_evidence(scenarios=scenarios, scenario_events=events, classifications=stage / "manual_operator_classifications.csv", output_csv=stage / "manual_operator_trial_facts.csv", output_queue_csv=stage / "manual_operator_trial_review_queue.csv", output_json=stage / "manual_operator_trial_evidence.json", output_md=stage / "manual_operator_trial_evidence.md", report_date=report_date, decision_events=decision_events, trade_episodes=actual_episodes, episode_links=actual_links, replace_output=True)
+        p8 = build_manual_operator_trial_evidence(scenarios=scenarios, scenario_events=events, classifications=stage / "manual_operator_classifications.csv", output_csv=stage / "manual_operator_trial_facts.csv", output_queue_csv=stage / "manual_operator_trial_review_queue.csv", output_json=stage / "manual_operator_trial_evidence.json", output_md=stage / "manual_operator_trial_evidence.md", report_date=report_date, decision_events=decision_events, trade_episodes=actual_episodes, episode_links=actual_links, output_exact_link_csv=(stage / "manual_operator_exact_link_observations.csv") if output_exact_link_csv is not None else None, replace_output=True)
         if not p8.get("ok"):
             return {"ok": False, "exit_code": int(p8.get("exit_code", 2)), "errors": p8.get("errors", ["p8_failed"]), "report_written": False}
         _validate_stage_identity(stage)
@@ -472,7 +472,10 @@ def run_p8_operating_cycle(*, candidates: Path, signal_context: Path, ohlcv: Pat
         if dry_run:
             return {"ok": True, "exit_code": 0, "dry_run": True, "report_written": False, "counts": report["counts"], "class_counts": report["class_counts"], "issue_001": report["issue_001"], "p9_readiness": report["p9_readiness"], "turning_precursor_shadow": shadow, "macro_structure_shadow": macro_shadow, "safety_boundary": SAFETY}
         try:
-            _promote(stage, output_root, list(OUTPUT_NAMES), replace_output)
+            output_names = list(OUTPUT_NAMES)
+            if output_exact_link_csv is not None:
+                output_names.append("manual_operator_exact_link_observations.csv")
+            _promote(stage, output_root, output_names, replace_output)
         except OSError as exc:
             return {"ok": False, "exit_code": 4, "errors": [str(exc)], "report_written": False}
         if shadow["status"] == "success":

@@ -25,6 +25,13 @@ from src.feedback.manual_operator_classifier import classify_manual_operator_can
 
 SCHEMA_VERSION = "manual_operator_trial_evidence.v1"
 METHOD_VERSION = "manual_operator_trial_evidence.v1"
+EXACT_OBSERVATION_SCHEMA_VERSION = "manual_operator_exact_link_observation.v1"
+EXACT_OBSERVATION_HEADERS = [
+    "schema_version", "observation_id", "signal_id", "candidate_id", "scenario_event_id", "classification_id",
+    "event_timestamp_utc", "side", "setup_family", "market_regime", "operator_class", "classifier_method_version",
+    "link_id", "episode_id", "link_confidence", "link_method_version", "association_status", "episode_status",
+    "actual_net_pnl_after_fee", "observation_basis", "causality_status", "policy_denominator_eligible", "p9_readiness_eligible",
+]
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 POLICIES = ("CURRENT_STRICT", "A_ONLY", "A_PLUS_B", "A_PLUS_B_PLUS_C_OBSERVE", "STOP_OVERLAY")
 ISSUE_RESOLUTION_METADATA = {
@@ -284,6 +291,7 @@ def _markdown(report: dict[str, Any]) -> str:
         "", "## Limitations",
         "Unresolved, no_ohlcv, low-confidence, and ambiguous evidence are excluded from performance claims.",
         "Actual trade absence does not prove skip, watch, or intent.",
+        "Exact-link observations are descriptive only; they do not replace scenario selection or claim notification-to-trade causality.",
         "No automatic tuning or production recommendation is applied by this report.",
         "", "## Safety Boundary", SAFETY, "",
     ]
@@ -294,7 +302,8 @@ def build_manual_operator_trial_evidence(
     *, scenarios: Path, scenario_events: Path, classifications: Path, output_csv: Path,
     output_queue_csv: Path, output_json: Path, output_md: Path, report_date: str,
     decision_events: Path | None = None, trade_episodes: Path | None = None,
-    episode_links: Path | None = None, dry_run: bool = False, replace_output: bool = False,
+    episode_links: Path | None = None, output_exact_link_csv: Path | None = None,
+    dry_run: bool = False, replace_output: bool = False,
 ) -> dict[str, Any]:
     if (trade_episodes is None) != (episode_links is None):
         return {"ok": False, "exit_code": 2, "errors": ["optional_actual_inputs_must_be_together"], "report_written": False}
@@ -325,6 +334,15 @@ def build_manual_operator_trial_evidence(
         except (OSError, UnicodeError, csv.Error):
             return {"ok": False, "exit_code": 2, "errors": ["invalid_input"], "report_written": False}
         event_by_id = {row.get("scenario_event_id", ""): row for row in event_rows}
+        actual_links: list[dict[str, str]] = []
+        actual_episodes: list[dict[str, str]] = []
+        if episode_links is not None:
+            actual_links, link_error = _read_csv(episode_links)
+            if link_error:
+                return {"ok": False, "exit_code": 2, "errors": [link_error], "report_written": False}
+            actual_episodes, episode_error = _read_csv(trade_episodes) if trade_episodes is not None else ([], None)
+            if episode_error:
+                return {"ok": False, "exit_code": 2, "errors": [episode_error], "report_written": False}
         # Use A/B/C selection plus STOP overlay, then deduplicate event identity.
         selected: dict[str, dict[str, str]] = {}
         for row in sorted(replay_rows, key=lambda item: (POLICIES.index(item.get("policy_name", "CURRENT_STRICT")) if item.get("policy_name") in POLICIES else 99, item.get("selected_at_utc", ""), item.get("scenario_event_id", ""))):
@@ -404,8 +422,7 @@ def build_manual_operator_trial_evidence(
             rows.append(row)
         queue: list[dict[str, str]] = []
         if episode_links is not None:
-            links, _ = _read_csv(episode_links)
-            for link in links:
+            for link in actual_links:
                 if link.get("link_confidence") in {"low", "ambiguous"}:
                     queue.append({"schema_version": SCHEMA_VERSION, "review_item_id": "rq_" + _hash(link.get("link_id", ""), "low_link"), "question_type": "ambiguous_actual_trade_link", "scenario_id": "", "scenario_event_id": "", "signal_id": link.get("signal_id", ""), "side": "", "policy_name": "", "question": "この実取引linkは対象通知を根拠にしたか", "selectable_options": "yes;no;unknown", "evidence_tier": link.get("link_confidence", ""), "issue_flags": "low_or_ambiguous_link"})
         for row in rows:
@@ -414,6 +431,79 @@ def build_manual_operator_trial_evidence(
         rows.sort(key=lambda row: (row.get("event_timestamp_utc", ""), row.get("scenario_event_id", ""), row.get("trial_fact_id", "")))
         queue.sort(key=lambda row: (row.get("question_type", ""), row.get("review_item_id", "")))
         actual_rows = [row for row in rows if row.get("evidence_tier") == "actual_high_medium"]
+        exact_rows: list[dict[str, str]] = []
+        exact_excluded = Counter()
+        if output_exact_link_csv is not None and trade_episodes is not None and episode_links is not None:
+            episode_by_id = {row.get("episode_id", ""): row for row in actual_episodes}
+            links_by_signal_side: dict[tuple[str, str], list[dict[str, str]]] = {}
+            c_by_signal_side: dict[tuple[str, str], list[dict[str, str]]] = {}
+            for link in actual_links:
+                key = (link.get("signal_id", "").strip(), link.get("position_side", "").strip().lower())
+                links_by_signal_side.setdefault(key, []).append(link)
+            for event in event_rows:
+                cls = class_by_event.get(event.get("scenario_event_id", ""), {})
+                if cls.get("classification_status") == "classified" and cls.get("operator_class") == "C_WATCH_ZONE":
+                    side = (cls.get("side") or event.get("side", "")).strip().lower()
+                    key = (cls.get("source_signal_id") or event.get("source_signal_id", "")).strip(), side
+                    c_by_signal_side.setdefault(key, []).append({"event": event, "class": cls})
+            used_episode_ids: set[str] = set()
+            for key, candidates in c_by_signal_side.items():
+                if len(candidates) != 1:
+                    exact_excluded["candidate_identity_ambiguous_excluded"] += len(candidates)
+                    continue
+                candidate = candidates[0]
+                event = candidate["event"]; cls = candidate["class"]
+                eligible_links = [
+                    link for link in links_by_signal_side.get(key, [])
+                    if link.get("link_status") == "linked"
+                    and link.get("link_confidence") in {"high", "medium"}
+                    and link.get("side_compatibility") == "match"
+                    and link.get("symbol_compatibility") in {"match", "unknown"}
+                ]
+                if len(eligible_links) > 1:
+                    exact_excluded["multiple_link_excluded"] += 1
+                    continue
+                if len(eligible_links) != 1:
+                    exact_excluded["time_or_association_excluded"] += 1
+                    continue
+                link = eligible_links[0]; episode = episode_by_id.get(link.get("episode_id", ""))
+                event_time = _dt(cls.get("event_timestamp_utc") or event.get("event_timestamp_utc"))
+                opened_time = _dt(episode.get("opened_at_utc")) if episode else None
+                gross = _dec(episode.get("realized_pnl")) if episode else None
+                fee = _dec(episode.get("fee_total")) if episode else None
+                if not episode or episode.get("association_status") != "matched" or episode.get("status") != "closed" or not event_time or not opened_time or opened_time < event_time or gross is None or fee is None:
+                    exact_excluded["time_or_association_excluded"] += 1
+                    continue
+                episode_id = episode.get("episode_id", "")
+                if not episode_id or episode_id in used_episode_ids:
+                    exact_excluded["duplicate_episode_excluded"] += 1
+                    continue
+                used_episode_ids.add(episode_id)
+                observation_id = "elo_" + _hash(key[0], key[1], event.get("candidate_id", ""), event.get("scenario_event_id", ""), cls.get("classification_id", ""), link.get("link_id", ""), episode_id, EXACT_OBSERVATION_SCHEMA_VERSION)
+                exact_rows.append({
+                    "schema_version": EXACT_OBSERVATION_SCHEMA_VERSION, "observation_id": observation_id,
+                    "signal_id": key[0], "candidate_id": event.get("candidate_id", ""), "scenario_event_id": event.get("scenario_event_id", ""),
+                    "classification_id": cls.get("classification_id", ""), "event_timestamp_utc": cls.get("event_timestamp_utc") or event.get("event_timestamp_utc", ""),
+                    "side": key[1], "setup_family": cls.get("setup_family", ""), "market_regime": cls.get("market_regime", ""),
+                    "operator_class": "C_WATCH_ZONE", "classifier_method_version": cls.get("classifier_method_version", ""),
+                    "link_id": link.get("link_id", ""), "episode_id": episode_id, "link_confidence": link.get("link_confidence", ""),
+                    "link_method_version": link.get("link_method_version", ""), "association_status": episode.get("association_status", ""), "episode_status": episode.get("status", ""),
+                    "actual_net_pnl_after_fee": str(gross - abs(fee)), "observation_basis": "exact_signal_side_candidate_link",
+                    "causality_status": "not_claimed", "policy_denominator_eligible": "false", "p9_readiness_eligible": "false",
+                })
+        exact_rows.sort(key=lambda row: (row.get("event_timestamp_utc", ""), row.get("observation_id", "")))
+        exact_report = {
+            "status": "provided" if output_exact_link_csv is not None and trade_episodes is not None and episode_links is not None else "omitted",
+            "eligible_rows": len(exact_rows), "unique_episode_count": len({row.get("episode_id") for row in exact_rows if row.get("episode_id")} ),
+            "high_confidence_rows": sum(row.get("link_confidence") == "high" for row in exact_rows),
+            "medium_confidence_rows": sum(row.get("link_confidence") == "medium" for row in exact_rows),
+            "class_distribution": dict(sorted(Counter(row.get("operator_class", "") for row in exact_rows).items())),
+            "candidate_identity_ambiguous_excluded": exact_excluded.get("candidate_identity_ambiguous_excluded", 0),
+            "multiple_link_excluded": exact_excluded.get("multiple_link_excluded", 0),
+            "time_or_association_excluded": exact_excluded.get("time_or_association_excluded", 0),
+            "duplicate_episode_excluded": exact_excluded.get("duplicate_episode_excluded", 0),
+            "causality_status": "not_claimed", "policy_denominator_eligible": False, "p9_readiness_eligible": False,
+        }
         issue_summary = {
             "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY": _issue_summary(rows, "P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", status="open hypothesis", severity="medium", confidence="proxy", tuning="not_eligible"),
             "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY": _issue_summary(rows, "P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY", status="resolved", severity="medium", confidence="accepted_implementation", tuning="not_eligible", resolution_metadata=ISSUE_RESOLUTION_METADATA["P8-ISSUE-002_MAIN_VS_BIG_CHANCE_HIERARCHY"]),
@@ -433,7 +523,7 @@ def build_manual_operator_trial_evidence(
             "practical": {"resolved_events": resolved, "actual_entry_episodes": actual_episode_count, "validation_window_status": "not_established", "ready": False},
         }
         classifier_method_version = replay.get("classifier_method_version") or next((value.get("classifier_method_version") for value in class_by_event.values() if value.get("classifier_method_version")), "")
-        report = {"schema_version": SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "method_version": METHOD_VERSION, "classifier_method_version": classifier_method_version, "replay_method_version": REPLAY_METHOD_VERSION, "input_fingerprints": fingerprints, "max_evaluated_event_timestamp": max_event_timestamp, "report_cutoff": report_date, "eligible_actual_link_policy": ["high", "medium"], "unresolved_no_ohlcv_separated": True, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided", "actual": "provided" if trade_episodes else "missing"}, "cutoff": report_date, "counts": {"trial_fact_rows": len(rows), "resolved_rows": resolved, "unresolved_rows": unresolved, "no_ohlcv_rows": no_ohlcv, "ambiguous_rows": sum("ambiguous" in r.get("outcome_status", "") for r in rows), "scenario_count": len({r.get("scenario_id") for r in rows if r.get("scenario_id")}), "review_queue_size": len(queue)}, "class_distribution": dict(sorted(class_counts.items())), "comparison": dict(sorted(comparisons.items())), "zone_result_counts": dict(sorted(Counter(r.get("zone_result", "") for r in rows if r.get("zone_result")).items())), "breakdowns": {"side": dict(sorted(side_counts.items())), "regime": dict(sorted(regime_counts.items())), "setup_family": dict(sorted(setup_counts.items()))}, "actual_evidence": {"status": "provided" if trade_episodes else "missing", "eligible_rows": len(actual_rows), "unique_episode_count": actual_episode_count, "high_confidence_rows": sum(r.get("actual_link_confidence") == "high" for r in actual_rows), "medium_confidence_rows": sum(r.get("actual_link_confidence") == "medium" for r in actual_rows)}, "link_confidence_coverage": dict(sorted(Counter(r.get("actual_link_confidence", "") for r in rows if r.get("actual_link_confidence")).items())), "issue_flags": dict(sorted(issue_counts.items())), "issue_summary": issue_summary, "review_queue_size": len(queue), "p9_readiness": readiness, "global_stop_opportunity": {"global_stop_present": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows) > 0, "stop_rows": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows), "opposite_side_exists": issue_counts.get("opposite_side_exists", 0), "counterfactual_B": issue_counts.get("opposite_side_counterfactual_B", 0), "counterfactual_C": issue_counts.get("opposite_side_counterfactual_C", 0), "not_eligible": issue_counts.get("opposite_side_not_eligible", 0), "issue_001_qualified_rows": issue_counts.get("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", 0)}, "no_automatic_tuning": True}
+        report = {"schema_version": SCHEMA_VERSION, "report_date": report_date, "report_written": False, "safety_boundary": SAFETY, "method_version": METHOD_VERSION, "classifier_method_version": classifier_method_version, "replay_method_version": REPLAY_METHOD_VERSION, "input_fingerprints": fingerprints, "max_evaluated_event_timestamp": max_event_timestamp, "report_cutoff": report_date, "eligible_actual_link_policy": ["high", "medium"], "unresolved_no_ohlcv_separated": True, "input_status": {"scenarios": "provided", "scenario_events": "provided", "classifications": "provided", "actual": "provided" if trade_episodes else "missing"}, "cutoff": report_date, "counts": {"trial_fact_rows": len(rows), "resolved_rows": resolved, "unresolved_rows": unresolved, "no_ohlcv_rows": no_ohlcv, "ambiguous_rows": sum("ambiguous" in r.get("outcome_status", "") for r in rows), "scenario_count": len({r.get("scenario_id") for r in rows if r.get("scenario_id")}), "review_queue_size": len(queue)}, "class_distribution": dict(sorted(class_counts.items())), "comparison": dict(sorted(comparisons.items())), "zone_result_counts": dict(sorted(Counter(r.get("zone_result", "") for r in rows if r.get("zone_result")).items())), "breakdowns": {"side": dict(sorted(side_counts.items())), "regime": dict(sorted(regime_counts.items())), "setup_family": dict(sorted(setup_counts.items()))}, "actual_evidence": {"status": "provided" if trade_episodes else "missing", "eligible_rows": len(actual_rows), "unique_episode_count": actual_episode_count, "high_confidence_rows": sum(r.get("actual_link_confidence") == "high" for r in actual_rows), "medium_confidence_rows": sum(r.get("actual_link_confidence") == "medium" for r in actual_rows)}, "exact_link_observations": exact_report, "link_confidence_coverage": dict(sorted(Counter(r.get("actual_link_confidence", "") for r in rows if r.get("actual_link_confidence")).items())), "issue_flags": dict(sorted(issue_counts.items())), "issue_summary": issue_summary, "review_queue_size": len(queue), "p9_readiness": readiness, "global_stop_opportunity": {"global_stop_present": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows) > 0, "stop_rows": sum(r.get("operator_class") == "STOP_OR_EXIT" for r in rows), "opposite_side_exists": issue_counts.get("opposite_side_exists", 0), "counterfactual_B": issue_counts.get("opposite_side_counterfactual_B", 0), "counterfactual_C": issue_counts.get("opposite_side_counterfactual_C", 0), "not_eligible": issue_counts.get("opposite_side_not_eligible", 0), "issue_001_qualified_rows": issue_counts.get("P8-ISSUE-001_GLOBAL_STOP_MASKS_SIDE_OPPORTUNITY", 0)}, "no_automatic_tuning": True}
         csv_text = _csv_text(TRIAL_FACT_HEADERS, rows)
         queue_text = _csv_text(QUEUE_HEADERS, queue)
         report["ok"] = True; report["exit_code"] = 0
@@ -441,11 +531,17 @@ def build_manual_operator_trial_evidence(
         md_text = _markdown(report)
         if dry_run:
             return report
-        for path in (output_csv, output_queue_csv, output_json, output_md):
+        output_paths = [output_csv, output_queue_csv, output_json, output_md]
+        if output_exact_link_csv is not None:
+            output_paths.append(output_exact_link_csv)
+        for path in output_paths:
             if path.exists() and not replace_output:
                 return {"ok": False, "exit_code": 4, "errors": ["existing_output_schema_mismatch"], "report_written": False}
         try:
-            _atomic([(output_csv, csv_text), (output_queue_csv, queue_text), (output_json, json_text), (output_md, md_text)])
+            outputs = [(output_csv, csv_text), (output_queue_csv, queue_text), (output_json, json_text), (output_md, md_text)]
+            if output_exact_link_csv is not None:
+                outputs.append((output_exact_link_csv, _csv_text(EXACT_OBSERVATION_HEADERS, exact_rows)))
+            _atomic(outputs)
         except OSError:
             return {"ok": False, "exit_code": 4, "errors": ["output_transaction_failed"], "report_written": False}
         report["report_written"] = True
