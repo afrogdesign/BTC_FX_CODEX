@@ -22,7 +22,7 @@ from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, EVENT_SCHEMA_
 
 SCHEMA_VERSION = "manual_operator_classification.v1"
 REPORT_SCHEMA_VERSION = "manual_operator_classifier_report.v1"
-METHOD_VERSION = "manual_operator_classifier.v2"
+METHOD_VERSION = "manual_operator_classifier.v3"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 JST = ZoneInfo("Asia/Tokyo")
 CLASSES = ("STOP_OR_EXIT", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE")
@@ -384,6 +384,7 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
     wait_max = thresholds[f"{side}_wait_max"] if side in {"long", "short"} else Decimal("0")
     rr_ok = (tp1 is not None and tp1 >= thresholds[f"{side}_tp1_rr_min"]) or (tp2 is not None and tp2 >= thresholds[f"{side}_tp2_rr_min"])
     eligible = candidate_status in {"allowed", "conditional", "armed", "watch"}
+    c_eligible = candidate_status in {"allowed", "conditional", "armed", "watch", "candidate"}
     entry_defined = bool(candidate.get("entry_price") or candidate.get("entry_zone_low") or candidate.get("entry_zone_high") or event.get("entry_price") or event.get("entry_zone_low"))
     non_gate_b = bool(quality == "ok" and not no_trade and entry_defined and direction is not None and execution is not None and wait is not None and direction >= direction_min and execution >= execution_min and wait <= wait_max and rr_ok and eligible and setup_side == side and (side != "long" or setup_status == "ready") and (side != "short" or setup_status in {"ready", "watch"}))
     if non_gate_b and (gate == "blocked" or (gate == "pass" and not a_ok)):
@@ -391,10 +392,15 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         if gate == "blocked": reasons += ("b_formal_gate_not_pass",)
         else: reasons += ("formal_evidence_incomplete",)
         return _base_row(event, candidate, signal, "classified", "B_CHECK_15M", reasons=reasons, required_check="check_15m_trigger_then_human_decides")
-    if side in {"long", "short"} and setup_side and setup_side != side:
+    if side in {"long", "short"} and setup_side not in {"", "none", side}:
         return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("side_mismatch",), required_check="human_review_only")
-    if entry_defined and eligible and side in {"long", "short"} and setup_side == side:
+    c_side_compatible = setup_side in {"", "none", side}
+    if entry_defined and c_eligible and side in {"long", "short"} and c_side_compatible:
         reasons = []
+        if candidate_status == "candidate":
+            reasons.append("c_watch_candidate_status_observation")
+        if setup_side in {"", "none"}:
+            reasons.append("c_watch_primary_setup_side_absent")
         if advisory_only:
             reasons.append("c_watch_no_trade_advisory")
         if direction < direction_min: reasons.append("c_wait_direction_below_threshold")
