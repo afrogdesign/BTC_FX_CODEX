@@ -29,6 +29,30 @@ def _zone(level_id: str, role: str, center: float, band: str = "medium") -> dict
     }
 
 
+def _update_level_table(path: Path, update: object) -> None:
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        fieldnames = reader.fieldnames or []
+    for row in rows:
+        update(row)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader(); writer.writerows(rows)
+
+
+def _append_level_row(path: Path, level_id: str) -> None:
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+        fieldnames = reader.fieldnames or []
+    duplicate = next(row for row in rows if row["level_id"] == level_id)
+    rows.append(dict(duplicate))
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader(); writer.writerows(rows)
+
+
 def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
     snapshot_root = root / "snapshot"
     history_root = root / "history"
@@ -54,7 +78,7 @@ def _make_inputs(root: Path) -> tuple[Path, Path, Path]:
     _write_json(run / "macro_structure_snapshot.json", snap)
     _write_json(run / "run_manifest.json", {"schema_version": snap["schema_version"], "method_version": snap["method_version"], "run_id": "run_fixture", "snapshot_id": "snapshot_fixture", "as_of_utc": snap["as_of_utc"], "evaluated_at_utc": snap["evaluated_at_utc"], "source": "public_ohlcv_only", "report_only": True, "automatic_order_allowed": False, "private_actual_trade_input": False})
     (run / "macro_structure_snapshot.md").write_text("# fixture\n", encoding="utf-8")
-    level_fields = ["level_id", "side", "role", "low", "high", "center", "lifecycle", "reliability_band", "reliability_score"]
+    level_fields = ["level_id", "side", "role", "low", "high", "center", "source_timeframes", "first_seen_at", "last_confirmed_at", "touch_count", "clean_rejection_count", "break_count", "false_break_reclaim_count", "lifecycle", "reliability_score", "reliability_band", "distance_from_price_pct", "distance_from_price_atr", "reason_codes"]
     with (run / "macro_level_reliability.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=level_fields); writer.writeheader()
         for item in (snap["support_zones"][0], snap["resistance_zones"][0]): writer.writerow({field: item[field] for field in level_fields})
@@ -274,6 +298,72 @@ class MacroStructureOperatorArtifactTests(unittest.TestCase):
             self.assertEqual(model["zones"]["displayed_support_count"], 1)
             self.assertEqual(model["zones"]["displayed_resistance_count"], 1)
             self.assertEqual(model["source_trace_map"]["references"], {})
+
+    def test_scalar_obstruction_ids_resolve_from_producer_level_table_with_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8"))
+            data["upside_obstruction"] = "level_resistance"
+            data["downside_obstruction"] = "level_support"
+            _write_json(snap_path, data)
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            by_id = {item["level_id"]: item for item in model["chart_model"]["overlays"]}
+            self.assertIn("upside_obstruction", by_id["level_resistance"]["semantic_labels"])
+            self.assertIn("downside_obstruction", by_id["level_support"]["semantic_labels"])
+
+    def test_obstruction_empty_markers_are_absent(self) -> None:
+        for marker in ("none", "NONE", "insufficient", "INSUFFICIENT", "", "   ", None):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+                snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+                data = json.loads(snap_path.read_text(encoding="utf-8")); data["upside_obstruction"] = marker; _write_json(snap_path, data)
+                result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+                self.assertTrue(result["ok"])
+                model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+                self.assertNotIn("upside_obstruction", {label for item in model["chart_model"]["overlays"] for label in item["semantic_labels"]})
+
+    def test_unknown_duplicate_and_malformed_scalar_obstructions_fail_closed(self) -> None:
+        cases = ("unknown", "duplicate", "malformed")
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+                snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+                data = json.loads(snap_path.read_text(encoding="utf-8")); data["upside_obstruction"] = "level_resistance"; _write_json(snap_path, data)
+                levels_path = snapshot / "run_fixture" / "macro_level_reliability.csv"
+                if case == "unknown":
+                    data["upside_obstruction"] = "missing_level"; _write_json(snap_path, data)
+                elif case == "duplicate":
+                    _append_level_row(levels_path, "level_resistance")
+                else:
+                    _update_level_table(levels_path, lambda row: row.update({"center": "not-a-number"}) if row["level_id"] == "level_resistance" else None)
+                result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+                self.assertEqual(result["error_code"], "zone_evidence_invalid")
+
+    def test_low_reliability_scalar_obstruction_is_not_promoted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8")); data["upside_obstruction"] = "level_resistance"; _write_json(snap_path, data)
+            _update_level_table(snapshot / "run_fixture" / "macro_level_reliability.csv", lambda row: row.update({"reliability_band": "low"}) if row["level_id"] == "level_resistance" else None)
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            resistance = next(item for item in model["chart_model"]["overlays"] if item["level_id"] == "level_resistance")
+            self.assertNotIn("upside_obstruction", resistance["semantic_labels"])
+
+    def test_complete_object_obstruction_reference_remains_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); snapshot, history, ohlcv = _make_inputs(root); output = root / "operator"
+            snap_path = snapshot / "run_fixture" / "macro_structure_snapshot.json"
+            data = json.loads(snap_path.read_text(encoding="utf-8")); data["upside_obstruction"] = _zone("level_resistance", "resistance", 110); _write_json(snap_path, data)
+            result = render_macro_structure_operator(snapshot_root=snapshot, history_root=history, ohlcv_15m_csv=ohlcv, output_root=output)
+            self.assertTrue(result["ok"])
+            model = json.loads((output / result["artifact_dir"] / "macro_structure_operator.json").read_text(encoding="utf-8"))
+            reference = next(item for item in model["chart_model"]["overlays"] if item["level_id"] == "level_resistance")
+            self.assertIn("upside_obstruction", reference["semantic_labels"])
 
     def test_empty_displayed_zone_and_nonempty_partial_optional_reference_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

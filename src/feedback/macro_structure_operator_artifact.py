@@ -259,11 +259,26 @@ def _optional_reference(value: Any) -> dict[str, Any] | None:
     return _validated_zone(value)
 
 
+def _obstruction_reference(value: Any, snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "insufficient"}:
+        return None
+    if isinstance(value, dict):
+        return _optional_reference(value)
+    if isinstance(value, (str, int, float, bool)):
+        matches = [row for row in snapshot.get("_levels", []) if isinstance(row, dict) and row.get("level_id") == value]
+        if len(matches) != 1:
+            raise ValueError("zone_evidence_invalid")
+        return _validated_zone(matches[0])
+    return _validated_zone(value)
+
+
 def _references(snapshot: dict[str, Any], shown: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_id = {item["level_id"]: {**item, "semantic_labels": []} for item in shown}
     for semantic, field in (("nearest_support", "nearest_reliable_support"), ("nearest_resistance", "nearest_reliable_resistance"), ("upside_target", "next_upside_target"), ("downside_target", "next_downside_target"), ("upside_obstruction", "upside_obstruction"), ("downside_obstruction", "downside_obstruction")):
         value = snapshot.get(field)
-        item = _optional_reference(value)
+        item = _obstruction_reference(value, snapshot) if field in {"upside_obstruction", "downside_obstruction"} else _optional_reference(value)
         if item is not None:
             by_id.setdefault(item["level_id"], {**item, "semantic_labels": []})
             by_id[item["level_id"]]["semantic_labels"].append(semantic)
