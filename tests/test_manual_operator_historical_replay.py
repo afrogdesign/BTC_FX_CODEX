@@ -63,6 +63,25 @@ class HistoricalReplayTests(unittest.TestCase):
                 summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]
                 self.assertEqual(summary["actual_linked_episode_count"], 0)
 
+    def test_observe_only_and_stop_overlay_may_join_descriptively(self) -> None:
+        fx = self.fixtures(operator="C_WATCH_ZONE"); episodes, links = self.episode_inputs()
+        result = self.build(fx, trade_episodes=episodes, episode_links=links)
+        with (self.root / "replay.csv").open(newline="", encoding="utf-8") as fp:
+            rows = list(csv.DictReader(fp))
+        self.assertEqual(next(row for row in rows if row["policy_name"] == "A_PLUS_B_PLUS_C_OBSERVE")["actual_join_status"], "matched")
+        fx = self.fixtures(operator="STOP_OR_EXIT"); episodes, links = self.episode_inputs()
+        result = self.build(fx, trade_episodes=episodes, episode_links=links)
+        with (self.root / "replay.csv").open(newline="", encoding="utf-8") as fp:
+            rows = list(csv.DictReader(fp))
+        self.assertEqual(next(row for row in rows if row["policy_name"] == "STOP_OVERLAY")["actual_join_status"], "matched")
+
+    def test_low_and_ambiguous_links_remain_excluded(self) -> None:
+        for confidence in ("low", "ambiguous"):
+            with self.subTest(confidence=confidence):
+                fx = self.fixtures(); episodes, links = self.episode_inputs(confidence=confidence)
+                result = self.build(fx, trade_episodes=episodes, episode_links=links)
+                self.assertEqual(result["actual_summary"]["policy_summaries"]["A_ONLY"]["actual_linked_episode_count"], 0)
+
     def test_policy_selection_and_proxy_outcome(self) -> None:
         fx = self.fixtures(); result = self.build(fx)
         self.assertTrue(result["ok"])
