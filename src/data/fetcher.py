@@ -14,6 +14,7 @@ INTERVAL_MAP = {
     "1h": ("Min60", 60 * 60 * 1000),
     "15m": ("Min15", 15 * 60 * 1000),
 }
+MAX_HISTORICAL_ROWS_PER_REQUEST = 2000
 
 
 class DataFetchError(Exception):
@@ -175,6 +176,66 @@ def fetch_klines(
             df = df.iloc[:-1]
     df = df.reset_index(drop=True)
     return df
+
+
+def fetch_klines_historical(
+    cfg: FetchConfig,
+    interval: str,
+    start_utc_ms: int,
+    end_utc_ms: int,
+    *,
+    max_rows_per_request: int = MAX_HISTORICAL_ROWS_PER_REQUEST,
+) -> pd.DataFrame:
+    """Fetch one bounded, continuous historical range in deterministic chunks."""
+    if interval not in INTERVAL_MAP:
+        raise ValueError("Unsupported interval: %s" % interval)
+    if not 0 < max_rows_per_request <= MAX_HISTORICAL_ROWS_PER_REQUEST:
+        raise ValueError("historical_request_limit_invalid")
+    _, interval_ms = INTERVAL_MAP[interval]
+    if start_utc_ms > end_utc_ms or start_utc_ms % interval_ms or end_utc_ms % interval_ms:
+        raise ValueError("historical_range_not_aligned")
+
+    url = f"{cfg.base_url}/api/v1/contract/kline/{cfg.symbol}"
+    expected_total = ((end_utc_ms - start_utc_ms) // interval_ms) + 1
+    collected: list[pd.DataFrame] = []
+    chunk_start = start_utc_ms
+    while chunk_start <= end_utc_ms:
+        chunk_size = min(max_rows_per_request, ((end_utc_ms - chunk_start) // interval_ms) + 1)
+        chunk_end = chunk_start + (chunk_size - 1) * interval_ms
+        payload = _request_json(
+            "GET",
+            url,
+            params={
+                "interval": INTERVAL_MAP[interval][0],
+                "start": chunk_start // 1000,
+                "end": chunk_end // 1000,
+                "limit": chunk_size,
+            },
+            timeout_sec=cfg.timeout_sec,
+            retry_count=cfg.retry_count,
+            request_interval_sec=cfg.request_interval_sec,
+        )
+        frame = _parse_kline_payload(payload)
+        if frame.empty:
+            raise DataFetchError("historical_ohlcv_truncated_chunk")
+        frame = frame.sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+        if frame["timestamp"].duplicated(keep=False).any():
+            for timestamp, group in frame.groupby("timestamp", sort=False):
+                values = group[["open", "high", "low", "close", "volume"]].drop_duplicates()
+                if len(values) > 1:
+                    raise DataFetchError("historical_ohlcv_conflict")
+            frame = frame.drop_duplicates(subset=["timestamp"], keep="first")
+        timestamps = [int(value) for value in frame["timestamp"]]
+        expected = list(range(chunk_start, chunk_end + interval_ms, interval_ms))
+        if timestamps != expected:
+            raise DataFetchError("historical_ohlcv_missing_or_out_of_range")
+        collected.append(frame)
+        chunk_start = chunk_end + interval_ms
+
+    result = pd.concat(collected, ignore_index=True).sort_values("timestamp", kind="mergesort").reset_index(drop=True)
+    if len(result) != expected_total or result["timestamp"].duplicated().any():
+        raise DataFetchError("historical_ohlcv_continuity_invalid")
+    return result
 
 
 def fetch_funding_rate(cfg: FetchConfig) -> float:

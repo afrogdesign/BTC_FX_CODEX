@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.data.fetcher import FetchConfig, fetch_klines
+from src.data.fetcher import FetchConfig, fetch_klines, fetch_klines_historical
 
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -56,6 +56,16 @@ def _non_negative_float(value: str) -> float:
     if parsed < 0:
         raise argparse.ArgumentTypeError(f"must be non-negative: {value!r}")
     return parsed
+
+
+def _parse_utc_ms(value: str) -> int:
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid UTC timestamp: {value!r}") from exc
+    if parsed.tzinfo is None:
+        raise argparse.ArgumentTypeError("UTC timestamp requires timezone")
+    return int(parsed.astimezone(timezone.utc).timestamp() * 1000)
 
 
 def _format_timestamp(timestamp_ms: int) -> tuple[str, str]:
@@ -121,6 +131,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-sec", type=_positive_int, default=DEFAULT_TIMEOUT_SEC)
     parser.add_argument("--retry-count", type=_positive_int, default=DEFAULT_RETRY_COUNT)
     parser.add_argument("--request-interval-sec", type=_non_negative_float, default=DEFAULT_REQUEST_INTERVAL_SEC)
+    parser.add_argument("--start-utc", type=_parse_utc_ms)
+    parser.add_argument("--end-utc", type=_parse_utc_ms)
+    parser.add_argument("--max-rows-per-request", type=_positive_int, default=2000)
     return parser
 
 
@@ -146,7 +159,18 @@ def main(argv: list[str] | None = None) -> int:
         retry_count=args.retry_count,
         request_interval_sec=args.request_interval_sec,
     )
-    ohlcv_df = fetch_klines(cfg, interval=args.interval, limit=args.limit)
+    if (args.start_utc is None) != (args.end_utc is None):
+        parser.error("--start-utc and --end-utc must be provided together")
+    if args.start_utc is not None:
+        ohlcv_df = fetch_klines_historical(
+            cfg,
+            interval=args.interval,
+            start_utc_ms=args.start_utc,
+            end_utc_ms=args.end_utc,
+            max_rows_per_request=args.max_rows_per_request,
+        )
+    else:
+        ohlcv_df = fetch_klines(cfg, interval=args.interval, limit=args.limit)
     rows = convert_ohlcv_to_diagnostic_rows(
         ohlcv_df,
         source_label=args.source_label,

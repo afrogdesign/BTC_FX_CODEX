@@ -22,9 +22,75 @@ from tools.fetch_active_plan_market_data import (  # noqa: E402
     convert_ohlcv_to_diagnostic_rows,
     main,
 )
+from src.data.fetcher import DataFetchError, FetchConfig, fetch_klines_historical  # noqa: E402
 
 
 class FetchActivePlanMarketDataTest(unittest.TestCase):
+    def test_historical_fetch_chunks_in_forward_non_overlapping_ranges(self) -> None:
+        start = datetime(2024, 6, 8, 0, 0, tzinfo=timezone.utc)
+        timestamps = [int((start + timedelta(minutes=15 * i)).timestamp() * 1000) for i in range(5)]
+        requests = []
+
+        def request(_method, _url, *, params, **_kwargs):
+            requests.append(params)
+            first = int(params["start"] * 1000)
+            last = int(params["end"] * 1000)
+            rows = []
+            for timestamp in timestamps:
+                if first <= timestamp <= last:
+                    rows.append([timestamp, 1, 2, 0, 1.5, 10])
+            return {"data": rows}
+
+        cfg = FetchConfig("https://example.test", "BTC_USDT", 1, 1, 0)
+        with patch("src.data.fetcher._request_json", side_effect=request):
+            frame = fetch_klines_historical(
+                cfg,
+                "15m",
+                timestamps[0],
+                timestamps[-1],
+                max_rows_per_request=2,
+            )
+
+        self.assertEqual(len(frame), 5)
+        self.assertEqual(frame["timestamp"].tolist(), timestamps)
+        self.assertEqual([(item["start"], item["end"], item["limit"]) for item in requests], [
+            (timestamps[0] // 1000, timestamps[1] // 1000, 2),
+            (timestamps[2] // 1000, timestamps[3] // 1000, 2),
+            (timestamps[4] // 1000, timestamps[4] // 1000, 1),
+        ])
+
+    def test_historical_fetch_deduplicates_identical_rows_and_rejects_conflicts(self) -> None:
+        start = int(datetime(2024, 6, 8, tzinfo=timezone.utc).timestamp() * 1000)
+        rows = [[start, 1, 2, 0, 1, 10], [start, 1, 2, 0, 1, 10], [start + 900000, 1, 2, 0, 1, 10]]
+        cfg = FetchConfig("https://example.test", "BTC_USDT", 1, 1, 0)
+        with patch("src.data.fetcher._request_json", return_value={"data": rows}):
+            frame = fetch_klines_historical(cfg, "15m", start, start + 900000, max_rows_per_request=10)
+        self.assertEqual(len(frame), 2)
+
+        conflict = [[start, 1, 2, 0, 1, 10], [start, 1, 3, 0, 1, 10], [start + 900000, 1, 2, 0, 1, 10]]
+        with patch("src.data.fetcher._request_json", return_value={"data": conflict}):
+            with self.assertRaisesRegex(DataFetchError, "historical_ohlcv_conflict"):
+                fetch_klines_historical(cfg, "15m", start, start + 900000, max_rows_per_request=10)
+
+    def test_historical_cli_uses_bounded_fetch_without_changing_schema(self) -> None:
+        sample_df = pd.DataFrame([{"timestamp": 1717804800000, "open": 1, "high": 2, "low": 0, "close": 1.5, "volume": 10}])
+        with TemporaryDirectory() as tmpdir:
+            output_csv = Path(tmpdir) / "ohlcv.csv"
+            with patch("tools.fetch_active_plan_market_data.fetch_klines_historical", return_value=sample_df) as mock_fetch:
+                with redirect_stdout(io.StringIO()):
+                    result = main([
+                        "--output-csv", str(output_csv), "--start-utc", "2024-06-08T00:00:00Z",
+                        "--end-utc", "2024-06-08T00:15:00Z", "--max-rows-per-request", "2000",
+                    ])
+            self.assertEqual(result, 0)
+            mock_fetch.assert_called_once()
+            args, kwargs = mock_fetch.call_args
+            self.assertEqual(args[0].symbol, "BTC_USDT")
+            self.assertEqual(kwargs["start_utc_ms"], 1717804800000)
+            self.assertEqual(kwargs["end_utc_ms"], 1717805700000)
+            self.assertEqual(kwargs["max_rows_per_request"], 2000)
+            with output_csv.open(newline="", encoding="utf-8") as fp:
+                self.assertEqual(csv.DictReader(fp).fieldnames, OUTPUT_COLUMNS)
     def test_convert_ohlcv_to_diagnostic_rows_exact_schema_and_sorting(self) -> None:
         first_utc = datetime(2024, 6, 8, 0, 0, tzinfo=timezone.utc)
         second_utc = datetime(2024, 6, 8, 0, 15, tzinfo=timezone.utc)
