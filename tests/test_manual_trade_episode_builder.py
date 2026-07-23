@@ -80,6 +80,24 @@ class ManualTradeEpisodeBuilderTest(unittest.TestCase):
         self.assertEqual(first[0]["association_status"], "ambiguous")
         self.assertIn("side_conflict", first[0]["association_reason_codes"])
 
+    def test_status_resolution_uses_close_timestamp_only_for_unknown_status(self) -> None:
+        unknown_closed = build_manual_trade_episode_rows(
+            trade_rows=[], order_rows=[], position_rows=[_position() | {"status": "unknown"}]
+        )[0]
+        unknown_open = build_manual_trade_episode_rows(
+            trade_rows=[], order_rows=[], position_rows=[_position(closed="") | {"status": "unknown"}]
+        )[0]
+        explicit_closed = build_manual_trade_episode_rows(
+            trade_rows=[], order_rows=[], position_rows=[_position() | {"status": "closed"}]
+        )[0]
+        explicit_open = build_manual_trade_episode_rows(
+            trade_rows=[], order_rows=[], position_rows=[_position(closed="") | {"status": "open"}]
+        )[0]
+        self.assertEqual(unknown_closed["status"], "closed")
+        self.assertEqual(unknown_open["status"], "unknown")
+        self.assertEqual(explicit_closed["status"], "closed")
+        self.assertEqual(explicit_open["status"], "open")
+
     def test_dry_run_legacy_schema_and_malformed_timestamp(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

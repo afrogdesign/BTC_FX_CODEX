@@ -62,6 +62,16 @@ def _action_side(row: dict[str, Any]) -> str:
     return "unknown"
 
 
+def _episode_status(position: dict[str, Any]) -> str:
+    status = str(position.get("status", "")).strip().lower()
+    if status in {"closed", "open"}:
+        return status
+    has_close_timestamp = bool(str(position.get("closed_at_utc", "")).strip() or str(position.get("closed_at_jst", "")).strip())
+    if status in {"", "unknown"} and has_close_timestamp:
+        return "closed"
+    return "unknown"
+
+
 def _timestamp(row: dict[str, Any], *keys: str) -> datetime | None:
     for key in keys:
         parsed = _parse_dt(row.get(key))
@@ -224,7 +234,7 @@ def build_manual_trade_episode_rows(
             "schema_version": SCHEMA_VERSION, "episode_id": episode_id, "episode_source": "position_backed",
             "position_id": position_id, "symbol": str(position.get("symbol", "")).strip(), "side": side,
             "opened_at_utc": opened_utc, "opened_at_jst": opened_jst, "closed_at_utc": closed_utc,
-            "closed_at_jst": closed_jst, "status": str(position.get("status", "unknown")).strip().lower() or "unknown",
+            "closed_at_jst": closed_jst, "status": _episode_status(position),
             "realized_pnl": "" if pnl is None else format(pnl, "f"), "fee_total": "" if fee_total is None else format(fee_total, "f"),
             "fill_count": str(len(selected_fills)), "order_count": str(len(selected_orders)),
             "association_method_version": method, "association_status": association_status,
