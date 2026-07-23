@@ -154,15 +154,15 @@ class ManualOperatorClassifierTests(unittest.TestCase):
                 self.assertEqual(result["class_counts"].get("STOP_OR_EXIT"), 1)
                 self.assertEqual(result["class_counts"].get("C_WATCH_ZONE", 0), 0)
 
-    def test_classifier_method_version_v3_and_advisory_id_change(self) -> None:
+    def test_classifier_method_version_v4_and_advisory_id_change(self) -> None:
         self.run_classifier(self.fixture())
         with (self.root / "out.csv").open(newline="", encoding="utf-8") as fp:
             normal = next(csv.DictReader(fp)); normal_id = normal["classification_id"]
-        self.assertEqual(normal["classifier_method_version"], "manual_operator_classifier.v3")
+        self.assertEqual(normal["classifier_method_version"], "manual_operator_classifier.v4")
         self.run_classifier(self.fixture(extra_signal={"no_trade_flags": "breakout_follow_candidate"}))
         with (self.root / "out.csv").open(newline="", encoding="utf-8") as fp:
             advisory = next(csv.DictReader(fp)); advisory_id = advisory["classification_id"]
-        self.assertEqual(advisory["classifier_method_version"], "manual_operator_classifier.v3")
+        self.assertEqual(advisory["classifier_method_version"], "manual_operator_classifier.v4")
         self.assertNotEqual(normal_id, advisory_id)
 
     def test_side_regime_setup_breakdowns_and_zero(self) -> None:
@@ -323,6 +323,18 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         self.assertEqual(self.read_rows()[0]["reason_codes"], "side_mismatch")
         result = self.run_classifier(self.fixture(status="pending", direction="40", extra_signal={"primary_setup_side": "none"}))
         self.assertEqual(result["classification_status_counts"].get("insufficient_evidence"), 1)
+
+    def test_candidate_status_v4_b_mapping_and_c_preservation(self) -> None:
+        result = self.run_classifier(self.fixture(status="candidate"))
+        self.assertEqual(result["class_counts"].get("B_CHECK_15M"), 1)
+        self.assertIn("b_candidate_status_allowed_plan", self.read_rows()[0]["reason_codes"])
+        result = self.run_classifier(self.fixture(status="candidate", extra_signal={"no_trade_flags": "breakout_follow_candidate"}))
+        self.assertEqual(result["class_counts"].get("C_WATCH_ZONE"), 1)
+        self.assertEqual(result["class_counts"].get("B_CHECK_15M", 0), 0)
+        result = self.run_classifier(self.fixture(status="candidate", direction="40"))
+        self.assertEqual(result["class_counts"].get("C_WATCH_ZONE"), 1)
+        result = self.run_classifier(self.fixture(status="candidate", extra_signal={"primary_setup_side": ""}))
+        self.assertEqual(result["class_counts"].get("B_CHECK_15M", 0), 0)
 
     def test_public_single_candidate_helper_matches_batch(self) -> None:
         for kwargs in ({"gate": "pass"}, {"gate": "blocked"}, {"gate": "blocked", "direction": "40"}, {"gate": "pass", "quality": "bad"}, {"gate": "blocked", "rr1": "", "rr2": ""}):
