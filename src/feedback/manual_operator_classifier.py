@@ -22,7 +22,7 @@ from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, EVENT_SCHEMA_
 
 SCHEMA_VERSION = "manual_operator_classification.v1"
 REPORT_SCHEMA_VERSION = "manual_operator_classifier_report.v1"
-METHOD_VERSION = "manual_operator_classifier.v1"
+METHOD_VERSION = "manual_operator_classifier.v2"
 SAFETY = "report-only / not FORMAL_GO / no automatic order / human decides manually"
 JST = ZoneInfo("Asia/Tokyo")
 CLASSES = ("STOP_OR_EXIT", "A_FORMAL", "B_CHECK_15M", "C_WATCH_ZONE")
@@ -66,6 +66,14 @@ OUTPUT_HEADERS = [
     "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min",
 ]
 REASON_FUTURE = "future_context_rejected"
+HARD_NO_TRADE_TOKENS = frozenset({"volatile_regime"})
+ADVISORY_NO_TRADE_TOKENS = frozenset({
+    "short_at_major_support_wait_only", "long_at_major_resistance_wait_only",
+    "breakout_follow_candidate", "upside_breakout_follow_watch",
+    "downside_breakdown_follow_watch", "short_invalidated_by_up_break",
+    "long_invalidated_by_down_break", "short_invalidation_watch",
+    "long_invalidation_watch",
+})
 _SENSITIVE = re.compile(r"(?:/private/|file://|api[_-]?key|secret|password|uid_|account[_-])", re.I)
 
 
@@ -347,11 +355,12 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         raise ValueError("future_context")
     quality = signal.get("data_quality_flag", "").strip().lower()
     no_trade = _tokens(signal.get("no_trade_flags"))
+    advisory_only = bool(no_trade) and set(no_trade).issubset(ADVISORY_NO_TRADE_TOKENS)
     candidate_status = candidate.get("candidate_status", event.get("candidate_status", "")).strip().lower()
     stop_reasons: list[str] = []
     if quality and quality != "ok":
         stop_reasons.append("stop_data_quality")
-    if no_trade:
+    if no_trade and not advisory_only:
         stop_reasons.append("stop_no_trade_flag")
     if candidate_status in {"invalidated", "cancelled", "expired"}:
         stop_reasons.append("stop_candidate_" + candidate_status)
@@ -386,6 +395,8 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
         return _base_row(event, candidate, signal, "insufficient_evidence", reasons=("side_mismatch",), required_check="human_review_only")
     if entry_defined and eligible and side in {"long", "short"} and setup_side == side:
         reasons = []
+        if advisory_only:
+            reasons.append("c_watch_no_trade_advisory")
         if direction < direction_min: reasons.append("c_wait_direction_below_threshold")
         if execution < execution_min: reasons.append("c_wait_execution_below_threshold")
         if wait > wait_max: reasons.append("c_wait_pressure_above_threshold")

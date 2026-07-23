@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.feedback.manual_operator_classifier import (
+    ADVISORY_NO_TRADE_TOKENS,
     CANDIDATE_HEADERS,
     EVENT_HEADERS,
     OUTPUT_HEADERS,
@@ -134,6 +135,35 @@ class ManualOperatorClassifierTests(unittest.TestCase):
         self.assertEqual(self.read_after(self.run_classifier(self.fixture(status="invalidated", gate="pass"))["class_counts"], "STOP_OR_EXIT"), 1)
         formal = self.run_classifier(self.fixture(gate="pass")); self.assertEqual(formal["formal_pass_not_a_rows"], 0)
         exceptional = self.run_classifier(self.fixture(gate="pass", setup_status="watch")); self.assertEqual(exceptional["class_counts"]["C_WATCH_ZONE"], 1)
+
+    def test_advisory_tokens_are_c_only_when_prerequisites_hold(self) -> None:
+        for token in sorted(ADVISORY_NO_TRADE_TOKENS):
+            with self.subTest(token=token):
+                result = self.run_classifier(self.fixture(extra_signal={"no_trade_flags": token}))
+                self.assertEqual(result["class_counts"].get("C_WATCH_ZONE"), 1)
+                self.assertEqual(result["class_counts"].get("A_FORMAL", 0), 0)
+                self.assertEqual(result["class_counts"].get("B_CHECK_15M", 0), 0)
+                self.assertIn("c_watch_no_trade_advisory", self.read_rows()[0]["reason_codes"])
+        result = self.run_classifier(self.fixture(extra_signal={"no_trade_flags": "short_at_major_support_wait_only", "confidence_direction_shadow": ""}))
+        self.assertEqual(result["classification_status_counts"].get("insufficient_evidence"), 1)
+
+    def test_hard_unknown_and_mixed_no_trade_tokens_remain_stop(self) -> None:
+        for value in ("volatile_regime", "unknown_token", "breakout_follow_candidate;unknown_token", "breakout_follow_candidate;volatile_regime"):
+            with self.subTest(value=value):
+                result = self.run_classifier(self.fixture(extra_signal={"no_trade_flags": value}))
+                self.assertEqual(result["class_counts"].get("STOP_OR_EXIT"), 1)
+                self.assertEqual(result["class_counts"].get("C_WATCH_ZONE", 0), 0)
+
+    def test_classifier_method_version_v2_and_advisory_id_change(self) -> None:
+        self.run_classifier(self.fixture())
+        with (self.root / "out.csv").open(newline="", encoding="utf-8") as fp:
+            normal = next(csv.DictReader(fp)); normal_id = normal["classification_id"]
+        self.assertEqual(normal["classifier_method_version"], "manual_operator_classifier.v2")
+        self.run_classifier(self.fixture(extra_signal={"no_trade_flags": "breakout_follow_candidate"}))
+        with (self.root / "out.csv").open(newline="", encoding="utf-8") as fp:
+            advisory = next(csv.DictReader(fp)); advisory_id = advisory["classification_id"]
+        self.assertEqual(advisory["classifier_method_version"], "manual_operator_classifier.v2")
+        self.assertNotEqual(normal_id, advisory_id)
 
     def test_side_regime_setup_breakdowns_and_zero(self) -> None:
         result = self.run_classifier(self.fixture(extra_signal={"market_regime": "range"}), thresholds={"long_tp1_rr_min": "0", "long_tp2_rr_min": "0"})
