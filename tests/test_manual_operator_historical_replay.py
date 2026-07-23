@@ -43,10 +43,25 @@ class HistoricalReplayTests(unittest.TestCase):
         row = {key: "" for key in DECISION_HEADERS}; row.update(schema_version="manual_decision_event.v1", decision_event_id=event_id, identity_scope="scenario" if scenario_id else "signal_only", scenario_id=scenario_id, signal_id=signal_id, human_checked_at_utc=checked, human_checked_at_jst=checked, human_action=action, decision_stage="entry", human_side="none", record_status=status, supersedes_decision_event_id=target)
         return row
 
-    def episode_inputs(self, *, status: str = "closed", realized: str = "10", fee: str = "2", opened: str = "2026-07-10T00:30:00Z", closed: str = "2026-07-10T01:30:00Z", confidence: str = "high", signal: str = "sig1") -> tuple[Path, Path]:
+    def episode_inputs(self, *, status: str = "closed", realized: str = "10", fee: str = "2", opened: str = "2026-07-10T00:30:00Z", closed: str = "2026-07-10T01:30:00Z", confidence: str = "high", signal: str = "sig1", symbol_compatibility: str = "match") -> tuple[Path, Path]:
         episode = {key: "" for key in EPISODE_HEADERS}; episode.update(schema_version="manual_trade_episode.v1", episode_id="ep1", position_id="pos1", symbol="BTCUSDT", side="long", opened_at_utc=opened, closed_at_utc=closed, status=status, realized_pnl=realized, fee_total=fee, association_status="matched")
-        link = {key: "" for key in LINK_HEADERS}; link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id=signal, link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility="match")
+        link = {key: "" for key in LINK_HEADERS}; link.update(schema_version="manual_trade_signal_link.v2", link_id="ln1", episode_id="ep1", signal_id=signal, link_confidence=confidence, link_status="linked", side_compatibility="match", symbol_compatibility=symbol_compatibility)
         return self.write("episodes.csv", EPISODE_HEADERS, [episode]), self.write("links.csv", LINK_HEADERS, [link])
+
+    def test_symbol_compatibility_unknown_and_match_are_eligible(self) -> None:
+        for symbol_compatibility in ("unknown", "match"):
+            with self.subTest(symbol_compatibility=symbol_compatibility):
+                fx = self.fixtures(); episodes, links = self.episode_inputs(symbol_compatibility=symbol_compatibility)
+                result = self.build(fx, trade_episodes=episodes, episode_links=links)
+                self.assertEqual(result["actual_summary"]["policy_summaries"]["A_ONLY"]["actual_linked_episode_count"], 1)
+
+    def test_symbol_compatibility_conflict_and_blank_are_excluded(self) -> None:
+        for symbol_compatibility in ("conflict", ""):
+            with self.subTest(symbol_compatibility=symbol_compatibility):
+                fx = self.fixtures(); episodes, links = self.episode_inputs(symbol_compatibility=symbol_compatibility)
+                result = self.build(fx, trade_episodes=episodes, episode_links=links)
+                summary = result["actual_summary"]["policy_summaries"]["A_ONLY"]
+                self.assertEqual(summary["actual_linked_episode_count"], 0)
 
     def test_policy_selection_and_proxy_outcome(self) -> None:
         fx = self.fixtures(); result = self.build(fx)
