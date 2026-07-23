@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -147,6 +148,55 @@ def _parse_kline_payload(payload: dict[str, Any]) -> pd.DataFrame:
     raise DataFetchError("Unsupported kline payload")
 
 
+def _parse_historical_kline_payload(payload: dict[str, Any]) -> pd.DataFrame:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not data:
+        raise DataFetchError("historical_ohlcv_malformed_payload")
+
+    def number(value: Any, field: str) -> float:
+        if isinstance(value, bool):
+            raise DataFetchError(f"historical_ohlcv_malformed_{field}")
+        try:
+            result = float(value)
+        except (TypeError, ValueError):
+            raise DataFetchError(f"historical_ohlcv_malformed_{field}") from None
+        if not math.isfinite(result):
+            raise DataFetchError(f"historical_ohlcv_non_finite_{field}")
+        return result
+
+    def timestamp(value: Any) -> int:
+        result = number(value, "timestamp")
+        if not result.is_integer():
+            raise DataFetchError("historical_ohlcv_malformed_timestamp")
+        value_int = int(result)
+        return value_int * 1000 if value_int < 10_000_000_000 else value_int
+
+    rows: list[dict[str, float | int]] = []
+    if isinstance(data, list):
+        for source in data:
+            if isinstance(source, dict):
+                values = (source.get("time", source.get("timestamp")), source.get("open"), source.get("high"), source.get("low"), source.get("close"), source.get("vol", source.get("volume")))
+            elif isinstance(source, list) and len(source) >= 6:
+                values = tuple(source[:6])
+            else:
+                raise DataFetchError("historical_ohlcv_malformed_row")
+            rows.append({"timestamp": timestamp(values[0]), "open": number(values[1], "open"), "high": number(values[2], "high"), "low": number(values[3], "low"), "close": number(values[4], "close"), "volume": number(values[5], "volume")})
+    elif isinstance(data, dict):
+        columns = (data.get("time", data.get("timestamp")), data.get("open"), data.get("high"), data.get("low"), data.get("close"), data.get("vol", data.get("volume")))
+        if any(not isinstance(column, list) for column in columns):
+            raise DataFetchError("historical_ohlcv_malformed_payload")
+        lengths = {len(column) for column in columns}
+        if len(lengths) != 1 or not lengths:
+            raise DataFetchError("historical_ohlcv_truncated_chunk")
+        for values in zip(*columns):
+            rows.append({"timestamp": timestamp(values[0]), "open": number(values[1], "open"), "high": number(values[2], "high"), "low": number(values[3], "low"), "close": number(values[4], "close"), "volume": number(values[5], "volume")})
+    else:
+        raise DataFetchError("historical_ohlcv_malformed_payload")
+    if not rows:
+        raise DataFetchError("historical_ohlcv_truncated_chunk")
+    return pd.DataFrame(rows)
+
+
 def fetch_klines(
     cfg: FetchConfig,
     interval: str,
@@ -189,10 +239,18 @@ def fetch_klines_historical(
     """Fetch one bounded, continuous historical range in deterministic chunks."""
     if interval not in INTERVAL_MAP:
         raise ValueError("Unsupported interval: %s" % interval)
+    if isinstance(start_utc_ms, bool) or not isinstance(start_utc_ms, int):
+        raise TypeError("historical_start_must_be_integer")
+    if isinstance(end_utc_ms, bool) or not isinstance(end_utc_ms, int):
+        raise TypeError("historical_end_must_be_integer")
+    if isinstance(max_rows_per_request, bool) or not isinstance(max_rows_per_request, int):
+        raise TypeError("historical_request_limit_must_be_integer")
     if not 0 < max_rows_per_request <= MAX_HISTORICAL_ROWS_PER_REQUEST:
         raise ValueError("historical_request_limit_invalid")
     _, interval_ms = INTERVAL_MAP[interval]
-    if start_utc_ms > end_utc_ms or start_utc_ms % interval_ms or end_utc_ms % interval_ms:
+    if start_utc_ms > end_utc_ms:
+        raise ValueError("historical_range_reversed")
+    if start_utc_ms % interval_ms or end_utc_ms % interval_ms:
         raise ValueError("historical_range_not_aligned")
 
     url = f"{cfg.base_url}/api/v1/contract/kline/{cfg.symbol}"
@@ -205,17 +263,12 @@ def fetch_klines_historical(
         payload = _request_json(
             "GET",
             url,
-            params={
-                "interval": INTERVAL_MAP[interval][0],
-                "start": chunk_start // 1000,
-                "end": chunk_end // 1000,
-                "limit": chunk_size,
-            },
+            params={"interval": INTERVAL_MAP[interval][0], "start": chunk_start // 1000, "end": chunk_end // 1000},
             timeout_sec=cfg.timeout_sec,
             retry_count=cfg.retry_count,
             request_interval_sec=cfg.request_interval_sec,
         )
-        frame = _parse_kline_payload(payload)
+        frame = _parse_historical_kline_payload(payload)
         if frame.empty:
             raise DataFetchError("historical_ohlcv_truncated_chunk")
         frame = frame.sort_values("timestamp", kind="mergesort").reset_index(drop=True)

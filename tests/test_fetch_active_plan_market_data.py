@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import sys
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -53,10 +54,10 @@ class FetchActivePlanMarketDataTest(unittest.TestCase):
 
         self.assertEqual(len(frame), 5)
         self.assertEqual(frame["timestamp"].tolist(), timestamps)
-        self.assertEqual([(item["start"], item["end"], item["limit"]) for item in requests], [
-            (timestamps[0] // 1000, timestamps[1] // 1000, 2),
-            (timestamps[2] // 1000, timestamps[3] // 1000, 2),
-            (timestamps[4] // 1000, timestamps[4] // 1000, 1),
+        self.assertEqual([(item["start"], item["end"], set(item)) for item in requests], [
+            (timestamps[0] // 1000, timestamps[1] // 1000, {"interval", "start", "end"}),
+            (timestamps[2] // 1000, timestamps[3] // 1000, {"interval", "start", "end"}),
+            (timestamps[4] // 1000, timestamps[4] // 1000, {"interval", "start", "end"}),
         ])
 
     def test_historical_fetch_deduplicates_identical_rows_and_rejects_conflicts(self) -> None:
@@ -71,6 +72,78 @@ class FetchActivePlanMarketDataTest(unittest.TestCase):
         with patch("src.data.fetcher._request_json", return_value={"data": conflict}):
             with self.assertRaisesRegex(DataFetchError, "historical_ohlcv_conflict"):
                 fetch_klines_historical(cfg, "15m", start, start + 900000, max_rows_per_request=10)
+
+    def test_historical_validation_fails_before_request(self) -> None:
+        start = 1717804800000
+        cfg = FetchConfig("https://example.test", "BTC_USDT", 1, 1, 0)
+        with patch("src.data.fetcher._request_json") as request:
+            with self.assertRaisesRegex(ValueError, "historical_range_reversed"):
+                fetch_klines_historical(cfg, "15m", start + 900000, start)
+            with self.assertRaisesRegex(ValueError, "historical_range_not_aligned"):
+                fetch_klines_historical(cfg, "15m", start + 1, start + 900000)
+            for value in (0, 2001, True, 2.0, "2"):
+                with self.subTest(page_size=value):
+                    with self.assertRaises((ValueError, TypeError)):
+                        fetch_klines_historical(cfg, "15m", start, start, max_rows_per_request=value)
+            for value in (True, 1.0, "1717804800000"):
+                with self.subTest(start=value):
+                    with self.assertRaises(TypeError):
+                        fetch_klines_historical(cfg, "15m", value, start)
+            for value in (True, 1.0, "1717804800000"):
+                with self.subTest(end=value):
+                    with self.assertRaises(TypeError):
+                        fetch_klines_historical(cfg, "15m", start, value)
+        request.assert_not_called()
+
+    def test_historical_rejects_non_finite_and_out_of_range_values(self) -> None:
+        start = 1717804800000
+        cfg = FetchConfig("https://example.test", "BTC_USDT", 1, 1, 0)
+        fields = {"timestamp": start, "open": 1, "high": 2, "low": 0, "close": 1.5, "volume": 10}
+        for field, value in [("timestamp", math.nan), ("timestamp", math.inf), ("open", math.nan), ("high", -math.inf), ("low", math.inf), ("close", math.nan), ("volume", -math.inf)]:
+            row = dict(fields); row[field] = value
+            with self.subTest(field=field, value=value):
+                with patch("src.data.fetcher._request_json", return_value={"data": [row]}):
+                    with self.assertRaises(DataFetchError):
+                        fetch_klines_historical(cfg, "15m", start, start)
+        for row in ([fields, {**fields, "timestamp": start + 1800000}], [{**fields, "timestamp": start - 900000}]):
+            with patch("src.data.fetcher._request_json", return_value={"data": row}):
+                with self.assertRaises(DataFetchError):
+                    fetch_klines_historical(cfg, "15m", start, start + 900000)
+
+    def test_cli_utc_pairing_and_offsets_fail_before_fetch(self) -> None:
+        invalid_pairs = [
+            ["--start-utc", "2024-06-08T00:00:00", "--end-utc", "2024-06-08T00:15:00Z"],
+            ["--start-utc", "2024-06-08T09:00:00+09:00", "--end-utc", "2024-06-08T00:15:00Z"],
+            ["--start-utc", "2024-06-08T00:00:00-05:00", "--end-utc", "2024-06-08T00:15:00Z"],
+            ["--start-utc", "2024-06-08T00:00:00Z"],
+            ["--end-utc", "2024-06-08T00:15:00Z"],
+        ]
+        with patch("tools.fetch_active_plan_market_data.fetch_klines_historical") as historical:
+            for args in invalid_pairs:
+                with self.subTest(args=args), self.assertRaises(SystemExit):
+                    main(args)
+        historical.assert_not_called()
+
+    def test_cli_accepts_z_and_explicit_utc_and_prints_mode_summary(self) -> None:
+        sample = pd.DataFrame([{"timestamp": 1717804800000, "open": 1, "high": 2, "low": 0, "close": 1.5, "volume": 10}])
+        with TemporaryDirectory() as tmpdir:
+            out = Path(tmpdir) / "hist.csv"
+            with patch("tools.fetch_active_plan_market_data.fetch_klines_historical", return_value=sample):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    main(["--output-csv", str(out), "--start-utc", "2024-06-08T00:00:00+00:00", "--end-utc", "2024-06-08T00:00:00Z"])
+            text = stdout.getvalue()
+            self.assertIn("fetch_mode=historical", text)
+            self.assertIn("requested_start_utc=2024-06-08T00:00:00+00:00", text)
+            self.assertIn("expected_row_count=1", text)
+
+    def test_latest_summary_keeps_latest_fetch_and_adds_mode(self) -> None:
+        sample = pd.DataFrame([{"timestamp": 1717804800000, "open": 1, "high": 2, "low": 0, "close": 1.5, "volume": 10}])
+        with TemporaryDirectory() as tmpdir, patch("tools.fetch_active_plan_market_data.fetch_klines", return_value=sample):
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                main(["--output-csv", str(Path(tmpdir) / "latest.csv")])
+        self.assertIn("fetch_mode=latest", stdout.getvalue())
 
     def test_historical_cli_uses_bounded_fetch_without_changing_schema(self) -> None:
         sample_df = pd.DataFrame([{"timestamp": 1717804800000, "open": 1, "high": 2, "low": 0, "close": 1.5, "volume": 10}])

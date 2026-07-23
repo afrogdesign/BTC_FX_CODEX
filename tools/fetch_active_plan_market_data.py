@@ -59,12 +59,17 @@ def _non_negative_float(value: str) -> float:
 
 
 def _parse_utc_ms(value: str) -> int:
+    text = value.strip()
+    if not (text.endswith("Z") or text.endswith("+00:00")):
+        raise argparse.ArgumentTypeError("timestamp must use UTC Z or +00:00")
     try:
-        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"invalid UTC timestamp: {value!r}") from exc
     if parsed.tzinfo is None:
         raise argparse.ArgumentTypeError("UTC timestamp requires timezone")
+    if parsed.utcoffset() != timezone.utc.utcoffset(None):
+        raise argparse.ArgumentTypeError("timestamp must be UTC")
     return int(parsed.astimezone(timezone.utc).timestamp() * 1000)
 
 
@@ -137,8 +142,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _print_summary(output_csv: Path, rows: list[dict[str, object]], *, source_label: str, interval: str, symbol: str) -> None:
+def _print_summary(output_csv: Path, rows: list[dict[str, object]], *, source_label: str, interval: str, symbol: str, fetch_mode: str, requested_start_utc: int | None = None, requested_end_utc: int | None = None, expected_row_count: int | None = None) -> None:
     print(f"output_path={output_csv}")
+    print(f"fetch_mode={fetch_mode}")
     print(f"row_count={len(rows)}")
     if rows:
         print(f"timestamp_min_utc={rows[0]['timestamp_utc']}")
@@ -146,6 +152,11 @@ def _print_summary(output_csv: Path, rows: list[dict[str, object]], *, source_la
     print(f"source={source_label}")
     print(f"interval={interval}")
     print(f"symbol={symbol}")
+    if fetch_mode == "historical":
+        print(f"requested_start_utc={_format_timestamp(requested_start_utc)[0] if requested_start_utc is not None else ''}")
+        print(f"requested_end_utc={_format_timestamp(requested_end_utc)[0] if requested_end_utc is not None else ''}")
+        print(f"expected_row_count={expected_row_count}")
+        print(f"actual_row_count={len(rows)}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -184,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         source_label=args.source_label,
         interval=args.interval,
         symbol=args.symbol,
+        fetch_mode="historical" if args.start_utc is not None else "latest",
+        requested_start_utc=args.start_utc,
+        requested_end_utc=args.end_utc,
+        expected_row_count=((args.end_utc - args.start_utc) // (15 * 60 * 1000) + 1) if args.start_utc is not None else None,
     )
     return 0
 
