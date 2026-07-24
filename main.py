@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from config import load_config
 from src.ai.advice import request_ai_advice
+from src.ai.news_context import build_web_news_context_status, request_web_news_context
 from src.ai.summary import build_summary_body, build_summary_subject
 from src.analysis.chart_pattern_shadow import build_chart_pattern_shadow
 from src.analysis.liquidation import analyze_liquidation_clusters
@@ -122,6 +123,44 @@ def _attach_structural_priority(result: dict[str, Any]) -> None:
 def _attach_operator_decision(result: dict[str, Any]) -> None:
     """Attach the single display-authoritative operator decision before notification handling."""
     result["operator_decision"] = build_operator_decision(result)
+
+
+def _attach_web_news_context(
+    result: dict[str, Any],
+    *,
+    cfg: Any,
+    base_dir: Path,
+    notify: bool,
+) -> None:
+    """Attach optional market news once, without allowing it to interrupt the cycle."""
+    try:
+        if not notify:
+            result["web_news_context"] = build_web_news_context_status(
+                enabled=bool(getattr(cfg, "AI_NEWS_WEB_SEARCH_ENABLED", False)),
+                fetch_status="skipped_non_notify",
+                lookback_hours=int(getattr(cfg, "AI_NEWS_LOOKBACK_HOURS", 6)),
+                max_items=int(getattr(cfg, "AI_NEWS_MAX_ITEMS", 3)),
+            )
+        else:
+            result["web_news_context"] = request_web_news_context(
+                enabled=bool(getattr(cfg, "AI_NEWS_WEB_SEARCH_ENABLED", False)),
+                cli_command=str(getattr(cfg, "AI_ADVICE_CLI_COMMAND", "")),
+                model=str(getattr(cfg, "OPENAI_ADVICE_MODEL", "")),
+                timeout_sec=int(getattr(cfg, "AI_TIMEOUT_SEC", 5)),
+                retry_count=int(getattr(cfg, "AI_RETRY_COUNT", 3)),
+                lookback_hours=int(getattr(cfg, "AI_NEWS_LOOKBACK_HOURS", 6)),
+                max_items=int(getattr(cfg, "AI_NEWS_MAX_ITEMS", 3)),
+                base_dir=base_dir,
+                result_payload=result,
+            )
+    except Exception:  # noqa: BLE001
+        result["web_news_context"] = build_web_news_context_status(
+            enabled=bool(getattr(cfg, "AI_NEWS_WEB_SEARCH_ENABLED", False)),
+            fetch_status="unavailable",
+            lookback_hours=6,
+            max_items=3,
+            error_code="unknown_error",
+        )
 
 
 def _base_dir() -> Path:
@@ -1314,6 +1353,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     core_result["notification_context"] = build_notification_context(core_result)
     if isinstance(followup_context, dict):
         core_result["notification_context"].update(build_followup_notification_context(followup_context))
+    _attach_web_news_context(core_result, cfg=cfg, base_dir=base_dir, notify=notify)
     advice_provider_used = getattr(cfg, "AI_ADVICE_PROVIDER", "api")
     if notify:
         ai_advice, advice_provider_used = request_ai_advice(

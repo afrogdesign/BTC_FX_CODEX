@@ -53,6 +53,8 @@ def _coerce_value(key: str, value: str) -> Any:
         "AI_TIMEOUT_SEC",
         "AI_SUMMARY_TIMEOUT_SEC",
         "AI_RETRY_COUNT",
+        "AI_NEWS_LOOKBACK_HOURS",
+        "AI_NEWS_MAX_ITEMS",
         "AI_POST_REVIEW_MAX_CONSECUTIVE_FAILURES",
         "LOG_RETENTION_SIGNALS_DAYS",
         "LOG_RETENTION_NOTIFICATIONS_DAYS",
@@ -112,6 +114,7 @@ def _coerce_value(key: str, value: str) -> Any:
     }
     bool_keys = {
         "AI_CACHE_ENABLED",
+        "AI_NEWS_WEB_SEARCH_ENABLED",
         "DRYRUN_MODE",
         "NOTIFICATION_HTML_ENABLED",
         "AI_POST_REVIEW_API_FALLBACK_ENABLED",
@@ -185,6 +188,7 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
             or key in REQUIRED_KEYS
             or key.startswith("MEXC_")
             or key.startswith("OPENAI_")
+            or key.startswith("AI_")
             or key.startswith("BINANCE_")
             or key.startswith("NOTIFICATION_HTML_")
             or key == "MACRO_STRUCTURE_FIXED_ENTRY_PATH"
@@ -287,6 +291,9 @@ def load_config(base_dir: Path | None = None) -> AppConfig:
         "AI_TIMEOUT_SEC": 5,
         "AI_SUMMARY_TIMEOUT_SEC": 10,
         "AI_RETRY_COUNT": 3,
+        "AI_NEWS_WEB_SEARCH_ENABLED": False,
+        "AI_NEWS_LOOKBACK_HOURS": 6,
+        "AI_NEWS_MAX_ITEMS": 3,
         "AI_CACHE_ENABLED": False,
         "NOTIFICATION_HTML_ENABLED": False,
         "NOTIFICATION_HTML_PUBLIC_BASE_URL": "https://server.afrog.jp/btc-monitor/notifications",
