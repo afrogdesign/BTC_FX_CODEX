@@ -20,6 +20,30 @@ def _add_factor(bucket: dict[str, float], code: str, delta: float) -> None:
     bucket[code] = round(bucket.get(code, 0.0) + delta, 4)
 
 
+_UP_REVERSAL_FLAGS = {
+    "failed_breakout_up_reversal", "major_support_rejection", "resistance_to_support_flip",
+    "resistance_to_support_retest_confirmed", "trend_flip_early_up", "trend_flip_confirmed_up",
+}
+_DOWN_REVERSAL_FLAGS = {
+    "failed_breakout_down_reversal", "major_resistance_rejection", "support_to_resistance_flip",
+    "support_to_resistance_retest_confirmed", "trend_flip_early_down", "trend_flip_confirmed_down",
+}
+
+
+def _apply_reversal_family(
+    *, family: str, flags: set[str], candidates: dict[str, list[tuple[str, str, float]]],
+    factors: dict[str, dict[str, float]], raw: dict[str, float], diagnostics: list[dict[str, Any]],
+) -> None:
+    for side, options in candidates.items():
+        present = [item for item in options if item[0] in flags]
+        if not present:
+            continue
+        applied = max(present, key=lambda item: abs(item[2]))
+        raw[side] += applied[2]
+        _add_factor(factors[side], applied[1], applied[2])
+        diagnostics.append({"family": family, "side": side, "applied_code": applied[1], "applied_delta": applied[2], "suppressed_codes": [item[1] for item in present if item != applied]})
+
+
 def _top_factors(factors: dict[str, float], *, positive: bool) -> list[dict[str, float | str]]:
     filtered = [
         {"code": code, "score": round(score, 4)}
@@ -47,6 +71,7 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     no_trade_flags: list[str] = []
     warning_flags: list[str] = []
     breakout_inversion_flags: list[str] = []
+    score_evidence_families: list[dict[str, Any]] = []
 
     regime = inputs["market_regime"]
     ema_alignment = inputs["ema_alignment_4h"]
@@ -137,49 +162,24 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         short_raw += 10
         _add_factor(short_factors, "breakout_down", 10.0)
 
-    if "support_to_resistance_flip" in market_map_flags:
-        long_raw -= 12
-        short_raw += 7
-        _add_factor(long_factors, "market_map_support_to_resistance_flip", -12.0)
-        _add_factor(short_factors, "market_map_support_to_resistance_flip", 7.0)
-    if "resistance_to_support_flip" in market_map_flags:
-        short_raw -= 12
-        long_raw += 7
-        _add_factor(short_factors, "market_map_resistance_to_support_flip", -12.0)
-        _add_factor(long_factors, "market_map_resistance_to_support_flip", 7.0)
-
-    if "support_to_resistance_retest_confirmed" in market_map_flags:
-        long_raw -= 4
-        short_raw += 6
-        _add_factor(long_factors, "market_map_support_retest_failed", -4.0)
-        _add_factor(short_factors, "market_map_support_retest_failed", 6.0)
-    if "resistance_to_support_retest_confirmed" in market_map_flags:
-        short_raw -= 4
-        long_raw += 6
-        _add_factor(short_factors, "market_map_resistance_retest_failed", -4.0)
-        _add_factor(long_factors, "market_map_resistance_retest_held", 6.0)
-
-    if "failed_breakout_down_reversal" in market_map_flags:
-        long_raw -= 14
-        short_raw += 8
-        _add_factor(long_factors, "market_map_failed_breakout_down", -14.0)
-        _add_factor(short_factors, "market_map_failed_breakout_down", 8.0)
-    elif "major_resistance_rejection" in market_map_flags:
-        long_raw -= 8
-        short_raw += 3
-        _add_factor(long_factors, "market_map_major_resistance_rejection", -8.0)
-        _add_factor(short_factors, "market_map_major_resistance_rejection", 3.0)
-
-    if "failed_breakout_up_reversal" in market_map_flags:
-        short_raw -= 14
-        long_raw += 8
-        _add_factor(short_factors, "market_map_failed_breakout_up", -14.0)
-        _add_factor(long_factors, "market_map_failed_breakout_up", 8.0)
-    elif "major_support_rejection" in market_map_flags:
-        short_raw -= 8
-        long_raw += 3
-        _add_factor(short_factors, "market_map_major_support_rejection", -8.0)
-        _add_factor(long_factors, "market_map_major_support_rejection", 3.0)
+    raw_scores = {"long": long_raw, "short": short_raw}
+    factor_buckets = {"long": long_factors, "short": short_factors}
+    up_present = bool(_UP_REVERSAL_FLAGS & market_map_flags)
+    down_present = bool(_DOWN_REVERSAL_FLAGS & market_map_flags)
+    if up_present and down_present:
+        warning_flags.append("market_map_direction_conflict")
+    else:
+        if down_present:
+            _apply_reversal_family(family="down_reversal", flags=market_map_flags, factors=factor_buckets, raw=raw_scores, diagnostics=score_evidence_families, candidates={
+                "long": [("support_to_resistance_flip", "market_map_support_to_resistance_flip", -12.0), ("support_to_resistance_retest_confirmed", "market_map_support_retest_failed", -4.0), ("failed_breakout_down_reversal", "market_map_failed_breakout_down", -14.0), ("major_resistance_rejection", "market_map_major_resistance_rejection", -8.0), ("trend_flip_confirmed_down", "market_map_trend_flip_confirmed_down", -8.0)],
+                "short": [("support_to_resistance_flip", "market_map_support_to_resistance_flip", 7.0), ("support_to_resistance_retest_confirmed", "market_map_support_retest_failed", 6.0), ("failed_breakout_down_reversal", "market_map_failed_breakout_down", 8.0), ("major_resistance_rejection", "market_map_major_resistance_rejection", 3.0), ("trend_flip_confirmed_down", "market_map_trend_flip_confirmed_down", 8.0)],
+            })
+        if up_present:
+            _apply_reversal_family(family="up_reversal", flags=market_map_flags, factors=factor_buckets, raw=raw_scores, diagnostics=score_evidence_families, candidates={
+                "long": [("resistance_to_support_flip", "market_map_resistance_to_support_flip", 7.0), ("resistance_to_support_retest_confirmed", "market_map_resistance_retest_held", 6.0), ("failed_breakout_up_reversal", "market_map_failed_breakout_up", 8.0), ("major_support_rejection", "market_map_major_support_rejection", 3.0), ("trend_flip_confirmed_up", "market_map_trend_flip_confirmed_up_weak", 2.0)],
+                "short": [("resistance_to_support_flip", "market_map_resistance_to_support_flip", -12.0), ("resistance_to_support_retest_confirmed", "market_map_resistance_retest_failed", -4.0), ("failed_breakout_up_reversal", "market_map_failed_breakout_up", -14.0), ("major_support_rejection", "market_map_major_support_rejection", -8.0), ("trend_flip_confirmed_up", "market_map_trend_flip_confirmed_up_weak", -3.0)],
+            })
+    long_raw, short_raw = raw_scores["long"], raw_scores["short"]
 
     if "long_into_major_resistance" in market_map_flags:
         long_raw -= 6
@@ -188,16 +188,6 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         short_raw -= 6
         _add_factor(short_factors, "market_map_short_into_major_support", -6.0)
 
-    if "trend_flip_confirmed_down" in market_map_flags:
-        long_raw -= 8
-        short_raw += 8
-        _add_factor(long_factors, "market_map_trend_flip_confirmed_down", -8.0)
-        _add_factor(short_factors, "market_map_trend_flip_confirmed_down", 8.0)
-    if "trend_flip_confirmed_up" in market_map_flags:
-        short_raw -= 3
-        long_raw += 2
-        _add_factor(short_factors, "market_map_trend_flip_confirmed_up_weak", -3.0)
-        _add_factor(long_factors, "market_map_trend_flip_confirmed_up_weak", 2.0)
 
     if regime == "transition" and transition_direction == "down" and breakout_up:
         long_raw -= 8
@@ -240,10 +230,10 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     risk_long = 0.0
     risk_short = 0.0
 
-    if near_resistance:
+    if near_resistance and "long_into_major_resistance" not in market_map_flags:
         risk_long -= 6
         _add_factor(long_factors, "near_resistance_penalty", -6.0)
-    if near_support:
+    if near_support and "short_into_major_support" not in market_map_flags:
         risk_short -= 6
         _add_factor(short_factors, "near_support_penalty", -6.0)
     if rr_long < cfg.MIN_RR_RATIO:
@@ -334,11 +324,11 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
     upside_ema_supportive = ema_alignment == "bullish" or ema20_slope == "up" or price > ema50_4h
     upside_rsi_has_room = 48.0 <= rsi_15m <= 72.0
     upside_volume_confirmed = volume_ratio >= cfg.TRIGGER_VOLUME_RATIO
-    upside_market_map_flip = bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)
+    upside_market_map_flip = bool({"resistance_to_support_retest_confirmed", "trend_flip_confirmed_up"} & market_map_flags)
     downside_ema_supportive = ema_alignment == "bearish" or ema20_slope == "down" or price < ema50_4h
     downside_rsi_has_room = 28.0 <= rsi_15m <= 52.0
     downside_volume_confirmed = volume_ratio >= cfg.TRIGGER_VOLUME_RATIO
-    downside_market_map_flip = bool({"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_map_flags)
+    downside_market_map_flip = bool({"support_to_resistance_retest_confirmed", "trend_flip_confirmed_down"} & market_map_flags)
 
     upside_support_count = sum(
         1
@@ -406,11 +396,11 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
             warning_flags.append("macd_downside_countertrend_risk")
 
     upside_breakout_confirmation = breakout_up and (
-        bool({"resistance_to_support_flip", "trend_flip_confirmed_up"} & market_map_flags)
+        bool({"resistance_to_support_retest_confirmed", "trend_flip_confirmed_up"} & market_map_flags)
         or (near_resistance and volume_ratio >= cfg.TRIGGER_VOLUME_RATIO)
     )
     downside_breakdown_confirmation = breakout_down and (
-        bool({"support_to_resistance_flip", "trend_flip_confirmed_down"} & market_map_flags)
+        bool({"support_to_resistance_retest_confirmed", "trend_flip_confirmed_down"} & market_map_flags)
         or (near_support and volume_ratio >= cfg.TRIGGER_VOLUME_RATIO)
     )
     if upside_breakout_confirmation:
@@ -516,4 +506,8 @@ def compute_scores(inputs: dict[str, Any], cfg: Any) -> dict[str, Any]:
         "direction_score_shadow": _bucket_display(selected_direction_shadow),
         "activity_score_shadow": _bucket_display(selected_activity_shadow),
         "entry_quality_score_shadow": _bucket_display(selected_entry_shadow),
+        "score_evidence_families": score_evidence_families,
+        "score_correlation_suppressed": [item for item in score_evidence_families if item["suppressed_codes"]],
+        "long_display_saturated": long_raw >= 50.0 or long_raw <= -30.0,
+        "short_display_saturated": short_raw >= 50.0 or short_raw <= -30.0,
     }

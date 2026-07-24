@@ -251,35 +251,72 @@ def _detect_role_flip(
     break_threshold = atr * float(getattr(cfg, "MARKET_MAP_ROLE_FLIP_BREAK_ATR", 0.15))
     retest_tolerance = atr * float(getattr(cfg, "MARKET_MAP_RETEST_TOLERANCE_ATR", 0.30))
     rows = _recent_rows(df_15m, max(int(getattr(cfg, "MARKET_MAP_ROLE_FLIP_LOOKBACK_BARS", 16)), 3))
-    closes = [row["close"] for row in rows]
-    if not rows or not closes:
+    if not rows:
         return "", {}, []
+
+    def ordered_indices(level: float, direction: str) -> tuple[int | None, int | None, int | None]:
+        if direction == "down":
+            broke = lambda row: row["close"] < level - break_threshold
+            retested = lambda row: row["high"] >= level - retest_tolerance and row["close"] < level
+            held = lambda row: row["close"] < level
+            wrong_side = lambda row: row["close"] >= level
+        else:
+            broke = lambda row: row["close"] > level + break_threshold
+            retested = lambda row: row["low"] <= level + retest_tolerance and row["close"] > level
+            held = lambda row: row["close"] > level
+            wrong_side = lambda row: row["close"] <= level
+        break_idx: int | None = None
+        retest_idx: int | None = None
+        for index, row in enumerate(rows):
+            if break_idx is None:
+                if broke(row):
+                    break_idx = index
+                continue
+            if wrong_side(row):
+                break_idx = None
+                retest_idx = None
+                continue
+            if retest_idx is None:
+                if retested(row):
+                    retest_idx = index
+                continue
+            if held(row):
+                return break_idx, retest_idx, index
+        return break_idx, retest_idx, None
+
+    def reference(level: dict[str, Any], stage: str, indices: tuple[int | None, int | None, int | None]) -> dict[str, Any]:
+        value = _format_level(level, price, atr)
+        value.update({
+            "confirmation_stage": stage,
+            "break_index": indices[0],
+            "retest_index": indices[1],
+            "hold_index": indices[2],
+        })
+        return value
 
     broken_supports = [level for level in supports if price < float(level["low"]) - break_threshold]
     broken_supports.sort(key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
     for level in broken_supports[:3]:
         low = float(level["low"])
-        broke = any(close < low - break_threshold for close in closes)
-        retested = any(row["high"] >= low - retest_tolerance and row["close"] < low for row in rows[-8:])
-        if broke and retested:
+        indices = ordered_indices(low, "down")
+        if indices[2] is not None:
             flags.extend(["support_to_resistance_flip", "support_to_resistance_retest_confirmed"])
-            return "support_to_resistance_confirmed", _format_level(level, price, atr), _dedupe(flags)
-        if broke and price >= low - (retest_tolerance * 1.5):
+            return "support_to_resistance_confirmed", reference(level, "confirmed", indices), _dedupe(flags)
+        if indices[0] is not None:
             flags.append("support_to_resistance_flip")
-            return "support_to_resistance_early", _format_level(level, price, atr), _dedupe(flags)
+            return "support_to_resistance_early", reference(level, "early", indices), _dedupe(flags)
 
     broken_resistances = [level for level in resistances if price > float(level["high"]) + break_threshold]
     broken_resistances.sort(key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
     for level in broken_resistances[:3]:
         high = float(level["high"])
-        broke = any(close > high + break_threshold for close in closes)
-        retested = any(row["low"] <= high + retest_tolerance and row["close"] > high for row in rows[-8:])
-        if broke and retested:
+        indices = ordered_indices(high, "up")
+        if indices[2] is not None:
             flags.extend(["resistance_to_support_flip", "resistance_to_support_retest_confirmed"])
-            return "resistance_to_support_confirmed", _format_level(level, price, atr), _dedupe(flags)
-        if broke and price <= high + (retest_tolerance * 1.5):
+            return "resistance_to_support_confirmed", reference(level, "confirmed", indices), _dedupe(flags)
+        if indices[0] is not None:
             flags.append("resistance_to_support_flip")
-            return "resistance_to_support_early", _format_level(level, price, atr), _dedupe(flags)
+            return "resistance_to_support_early", reference(level, "early", indices), _dedupe(flags)
 
     return "", {}, []
 
@@ -365,14 +402,15 @@ def _detect_failed_breakout(
 
 def _trend_flip_state(flags: list[str], per_tf_inputs: dict[str, dict[str, Any]]) -> str:
     structures = {tf: str(payload.get("structure", "")) for tf, payload in per_tf_inputs.items()}
-    down_trigger = bool({"support_to_resistance_flip", "failed_breakout_down_reversal"} & set(flags))
-    up_trigger = bool({"resistance_to_support_flip", "failed_breakout_up_reversal"} & set(flags))
+    signals = {tf: str(payload.get("signal", "")).lower() for tf, payload in per_tf_inputs.items()}
+    down_trigger = "support_to_resistance_retest_confirmed" in flags
+    up_trigger = "resistance_to_support_retest_confirmed" in flags
     if down_trigger:
-        if structures.get("1h") == "lh_ll" or (structures.get("15m") == "lh_ll" and structures.get("4h") in {"lh_ll", "mixed"}):
+        if signals.get("15m") == "short" and (signals.get("1h") == "short" or structures.get("1h") == "lh_ll"):
             return "confirmed_down"
         return "early_down"
     if up_trigger:
-        if structures.get("1h") == "hh_hl" or (structures.get("15m") == "hh_hl" and structures.get("4h") in {"hh_hl", "mixed"}):
+        if signals.get("15m") == "long" and (signals.get("1h") == "long" or structures.get("1h") == "hh_hl"):
             return "confirmed_up"
         return "early_up"
     return ""
@@ -481,6 +519,11 @@ def build_market_map(
         {"failed_breakout_up_reversal", "resistance_to_support_flip"} & set(flags)
     ):
         conflicts.append("both_direction_flip_flags")
+    signals = {tf: str(payload.get("signal", "")).lower() for tf, payload in per_tf_inputs.items()}
+    if (level_flip_state.startswith("resistance_to_support") and signals.get("15m") == "short") or (
+        level_flip_state.startswith("support_to_resistance") and signals.get("15m") == "long"
+    ):
+        conflicts.append("opposite_15m_signal_conflict")
 
     active_level_role = active_role
     if level_flip_state.startswith("support_to_resistance"):

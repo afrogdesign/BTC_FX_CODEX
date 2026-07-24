@@ -1399,6 +1399,12 @@ def _operator_v3_wait_status(result: dict[str, Any]) -> str:
 def _operator_v3_conclusion_text(result: dict[str, Any], notification_context: dict[str, Any]) -> str:
     notification_kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
     bias = str(result.get("bias", "")).strip().lower()
+    decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    if str(decision.get("state", "")) in {"blocked", "direction_conflict"}:
+        side = str(decision.get("primary_side", "")).lower()
+        if bool(decision.get("direction_conflict")):
+            return "WAIT。方向スコアと15分足実行方向が競合しているため、新規見送り。"
+        return f"WAIT。{_operator_side_label(side)}を監視するが、新規見送り。"
     long_state = _operator_v3_side_status(notification_context, result, "long")
     short_state = _operator_v3_side_status(notification_context, result, "short")
     if notification_kind == "followup":
@@ -4322,11 +4328,16 @@ def _operator_dashboard_v2_plan_card(result: dict[str, Any], side: str) -> str:
         )
         for group, name, hint, value, tone in rows
     )
+    decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    blocked = bool(decision.get("new_entry_blocked")) or str(decision.get("state", "")) in {"blocked", "direction_conflict"}
+    primary = str(decision.get("primary_side", "")).lower() == side
+    safety = "<strong>実行不可 / 新規見送り</strong>" if blocked else ""
+    saturation = "（上限値。確率・勝率・実行許可ではありません）" if _operator_dashboard_score(result.get(f'{side}_display_score')) in {0, 100} else ""
     return f"""
     <section class="panel side-card {side}" aria-label="{label} trade plan">
       <div class="side-head">
-        <div class="side-title"><span class="side-pill">{label}</span><span class="side-state">{html.escape(_setup_status_label(setup.get('status')))}</span></div>
-        <div class="side-score"><strong>{_operator_dashboard_score(result.get(f'{side}_display_score'))}</strong><small>短期実行スコア / 100</small></div>
+        <div class="side-title"><span class="side-pill">{label}{' / PRIMARY' if primary else ''}</span><span class="side-state">{html.escape(_setup_status_label(setup.get('status')))}</span>{safety}</div>
+        <div class="side-score"><strong>{_operator_dashboard_score(result.get(f'{side}_display_score'))}</strong><small>方向スコア / 100 {saturation}</small></div>
       </div>
       <div class="levels">{rows_html}</div>
       <div class="side-guidance">{html.escape(_operator_dashboard_execution_guidance(result, side))}</div>
@@ -4557,12 +4568,15 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
     execution = action.get("execution_context") if isinstance(action.get("execution_context"), dict) else {}
     structural = action.get("structural_context") if isinstance(action.get("structural_context"), dict) else {}
     tactical = action.get("tactical_context") if isinstance(action.get("tactical_context"), dict) else {}
-    primary_side = str(execution.get("primary_side") or "").lower()
+    decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    primary_side = str(decision.get("primary_side") or execution.get("primary_side") or "").lower()
     primary_class = str(execution.get("primary_action_class") or "NONE")
     primary_state = str(execution.get("primary_state") or "dormant")
     chase_status = str(execution.get("chase_status") or "")
     side_name = _operator_side_label(primary_side)
-    if primary_class == "B_CHECK_15M":
+    if str(decision.get("state", "")) in {"blocked", "direction_conflict"}:
+        headline = "WAIT：方向競合 / 新規見送り" if bool(decision.get("direction_conflict")) else f"WAIT：{side_name}監視 / 新規見送り"
+    elif primary_class == "B_CHECK_15M":
         if primary_side == "short":
             headline = "ショート優先：15分足で戻りを確認"
         elif primary_side == "long":

@@ -49,6 +49,8 @@ def _inputs(
     structure_4h: str = "mixed",
     structure_1h: str = "mixed",
     structure_15m: str = "mixed",
+    signal_1h: str = "wait",
+    signal_15m: str = "wait",
 ) -> dict[str, dict[str, object]]:
     df_4h = _df(_flat_rows(100.0))
     df_1h = _df(_flat_rows(100.0))
@@ -57,16 +59,19 @@ def _inputs(
             "df": df_4h,
             "swings": {"lows": [{"price": support_price}], "highs": [{"price": resistance_price}]},
             "structure": structure_4h,
+            "signal": "wait",
         },
         "1h": {
             "df": df_1h,
             "swings": {"lows": [{"price": support_price + 0.3}], "highs": [{"price": resistance_price - 0.2}]},
             "structure": structure_1h,
+            "signal": signal_1h,
         },
         "15m": {
             "df": df_15m,
             "swings": {"lows": [{"price": support_price}], "highs": [{"price": resistance_price}]},
             "structure": structure_15m,
+            "signal": signal_15m,
         },
     }
 
@@ -94,6 +99,7 @@ class MarketMapTest(unittest.TestCase):
         rows = _flat_rows(100.0, 16) + [
             {"open": 99.7, "high": 100.1, "low": 98.6, "close": 98.8, "volume": 14.0},
             {"open": 98.8, "high": 99.4, "low": 98.4, "close": 98.7, "volume": 12.0},
+            {"open": 98.7, "high": 99.2, "low": 98.2, "close": 98.5, "volume": 11.0},
         ]
         result = build_market_map(
             price=98.7,
@@ -104,6 +110,8 @@ class MarketMapTest(unittest.TestCase):
                 resistance_price=106.0,
                 structure_1h="lh_ll",
                 structure_15m="lh_ll",
+                signal_1h="short",
+                signal_15m="short",
             ),
             volume_info={"expansion_score": 1.0},
             breakout_up=False,
@@ -119,6 +127,7 @@ class MarketMapTest(unittest.TestCase):
         rows = _flat_rows(100.0, 16) + [
             {"open": 100.4, "high": 101.6, "low": 100.2, "close": 101.3, "volume": 14.0},
             {"open": 101.3, "high": 102.0, "low": 100.6, "close": 101.8, "volume": 12.0},
+            {"open": 101.8, "high": 102.2, "low": 101.1, "close": 101.9, "volume": 11.0},
         ]
         result = build_market_map(
             price=101.8,
@@ -129,6 +138,8 @@ class MarketMapTest(unittest.TestCase):
                 resistance_price=100.0,
                 structure_1h="hh_hl",
                 structure_15m="hh_hl",
+                signal_1h="long",
+                signal_15m="long",
             ),
             volume_info={"expansion_score": 1.0},
             breakout_up=True,
@@ -139,6 +150,67 @@ class MarketMapTest(unittest.TestCase):
         self.assertEqual(result["level_flip_state"], "resistance_to_support_confirmed")
         self.assertIn("resistance_to_support_flip", result["flags"])
         self.assertEqual(result["trend_flip_state"], "confirmed_up")
+
+    def test_retest_before_break_and_same_bar_do_not_confirm(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 100.2, "high": 101.0, "low": 99.7, "close": 100.5, "volume": 10.0},
+            {"open": 100.5, "high": 101.8, "low": 100.4, "close": 101.3, "volume": 10.0},
+        ]
+        result = build_market_map(price=101.3, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=94, resistance_price=100, signal_1h="long", signal_15m="long"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertEqual(result["level_flip_state"], "resistance_to_support_early")
+        self.assertIsNone(result["level_flip_reference"]["retest_index"])
+
+    def test_opposite_15m_signal_keeps_ordered_flip_early(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 100.2, "high": 101.6, "low": 100.1, "close": 101.3, "volume": 10.0},
+            {"open": 101.3, "high": 101.8, "low": 100.2, "close": 101.4, "volume": 10.0},
+            {"open": 101.4, "high": 102.0, "low": 101.2, "close": 101.7, "volume": 10.0},
+        ]
+        result = build_market_map(price=101.7, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=94, resistance_price=100, structure_1h="hh_hl", signal_1h="long", signal_15m="short"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertEqual(result["trend_flip_state"], "early_up")
+        self.assertIn("opposite_15m_signal_conflict", result["market_map_conflicts"])
+
+    def test_interrupted_up_sequence_requires_a_new_break(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 100.2, "high": 101.6, "low": 100.1, "close": 101.3, "volume": 10.0},
+            {"open": 101.3, "high": 101.4, "low": 99.4, "close": 99.9, "volume": 10.0},
+            {"open": 99.9, "high": 101.0, "low": 100.1, "close": 100.5, "volume": 10.0},
+            {"open": 100.5, "high": 101.2, "low": 100.4, "close": 101.0, "volume": 10.0},
+        ]
+        result = build_market_map(price=101.0, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=94, resistance_price=100, signal_1h="long", signal_15m="long"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertNotEqual(result["level_flip_state"], "resistance_to_support_confirmed")
+
+    def test_interrupted_down_sequence_requires_a_new_break(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 99.8, "high": 99.9, "low": 98.4, "close": 98.7, "volume": 10.0},
+            {"open": 98.7, "high": 100.5, "low": 98.6, "close": 100.0, "volume": 10.0},
+            {"open": 100.0, "high": 99.9, "low": 99.0, "close": 99.5, "volume": 10.0},
+            {"open": 99.5, "high": 99.7, "low": 98.8, "close": 99.0, "volume": 10.0},
+        ]
+        result = build_market_map(price=98.9, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=100, resistance_price=106, signal_1h="short", signal_15m="short"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertNotEqual(result["level_flip_state"], "support_to_resistance_confirmed")
+
+    def test_new_break_after_invalidation_can_confirm(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 100.2, "high": 101.6, "low": 100.1, "close": 101.3, "volume": 10.0},
+            {"open": 101.3, "high": 101.4, "low": 99.4, "close": 99.9, "volume": 10.0},
+            {"open": 100.0, "high": 101.8, "low": 100.2, "close": 101.4, "volume": 10.0},
+            {"open": 101.4, "high": 101.7, "low": 100.2, "close": 101.3, "volume": 10.0},
+            {"open": 101.3, "high": 101.8, "low": 101.0, "close": 101.5, "volume": 10.0},
+        ]
+        result = build_market_map(price=101.5, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=94, resistance_price=100, signal_1h="long", signal_15m="long"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertEqual(result["level_flip_state"], "resistance_to_support_confirmed")
+        self.assertEqual(result["level_flip_reference"]["break_index"], 13)
+
+    def test_opposite_15m_conflict_is_symmetric_down(self) -> None:
+        rows = _flat_rows(100.0, 16) + [
+            {"open": 99.8, "high": 99.9, "low": 98.4, "close": 98.7, "volume": 10.0},
+            {"open": 98.7, "high": 99.8, "low": 98.5, "close": 98.8, "volume": 10.0},
+            {"open": 98.8, "high": 99.2, "low": 98.5, "close": 98.7, "volume": 10.0},
+        ]
+        result = build_market_map(price=98.7, atr=1.0, per_tf_inputs=_inputs(df_15m=_df(rows), support_price=100, resistance_price=106, structure_1h="lh_ll", signal_1h="short", signal_15m="long"), volume_info={}, breakout_up=False, breakout_down=False, cfg=SimpleNamespace())
+        self.assertEqual(result["trend_flip_state"], "early_down")
+        self.assertIn("opposite_15m_signal_conflict", result["market_map_conflicts"])
 
     def test_failed_breakout_down_reversal_uses_major_resistance_rejection(self) -> None:
         rows = _flat_rows(103.0, 12) + [

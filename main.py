@@ -22,6 +22,7 @@ from src.analysis.big_chance import (
 )
 from src.analysis.funding import format_funding_pct, funding_rate_label, funding_rate_raw_to_pct
 from src.analysis.market_map import build_market_map
+from src.analysis.operator_decision import build_operator_decision
 from src.analysis.oi_cvd import analyze_oi_cvd
 from src.analysis.orderbook import analyze_orderbook
 from src.analysis.position_risk import apply_prelabel_to_setup, evaluate_position_risk, reconcile_prelabel_with_setup
@@ -359,15 +360,13 @@ def _runtime_actionability_fields(
 
 
 _DIRECTIONAL_VOLUME_LONG_FLAGS = {
-    "failed_breakout_up_reversal",
-    "resistance_to_support_flip",
     "resistance_to_support_retest_confirmed",
+    "trend_flip_confirmed_up",
 }
 
 _DIRECTIONAL_VOLUME_SHORT_FLAGS = {
-    "failed_breakout_down_reversal",
-    "support_to_resistance_flip",
     "support_to_resistance_retest_confirmed",
+    "trend_flip_confirmed_down",
 }
 
 
@@ -654,9 +653,9 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     market_structure = fetch_market_structure(cfg, base_dir=base_dir)
 
     per_tf_inputs = {
-        "4h": {"df": df_4h, "swings": tf_4h["swings"], "structure": tf_4h["structure"]},
-        "1h": {"df": df_1h, "swings": tf_1h["swings"], "structure": tf_1h["structure"]},
-        "15m": {"df": df_15m, "swings": tf_15m["swings"], "structure": tf_15m["structure"]},
+        "4h": {"df": df_4h, "swings": tf_4h["swings"], "structure": tf_4h["structure"], "signal": tf_4h["signal"]},
+        "1h": {"df": df_1h, "swings": tf_1h["swings"], "structure": tf_1h["structure"], "signal": tf_1h["signal"]},
+        "15m": {"df": df_15m, "swings": tf_15m["swings"], "structure": tf_15m["structure"], "signal": tf_15m["signal"]},
     }
     all_support_zones, all_resistance_zones = build_all_support_resistance(per_tf_inputs, atr_15m)
     support_zones, resistance_zones = build_support_resistance(per_tf_inputs, atr_15m)
@@ -1017,6 +1016,10 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
         "score_factor_breakdown_short": score_info["short_factor_breakdown"],
         "top_positive_factors": score_info["top_positive_factors"],
         "top_negative_factors": score_info["top_negative_factors"],
+        "score_evidence_families": score_info["score_evidence_families"],
+        "score_correlation_suppressed": score_info["score_correlation_suppressed"],
+        "long_display_saturated": score_info["long_display_saturated"],
+        "short_display_saturated": score_info["short_display_saturated"],
         "confidence": confidence,
         "agreement_with_machine": agreement_with_machine,
         "prelabel": effective_prelabel,
@@ -1286,6 +1289,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     last_result = load_json(get_last_result_path(base_dir))
     _attach_side_aware_mtf_action(core_result, last_result)
     _attach_structural_priority(core_result)
+    core_result["operator_decision"] = build_operator_decision(core_result)
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
     last_followup_notified = load_json(get_last_followup_notified_path(base_dir))

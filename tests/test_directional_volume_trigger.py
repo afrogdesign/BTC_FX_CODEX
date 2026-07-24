@@ -88,7 +88,7 @@ class DirectionalVolumeTriggerTests(unittest.TestCase):
         self.assertEqual(up, {"trigger_up": True, "trigger_down": False})
         self.assertEqual(down, {"trigger_up": False, "trigger_down": True})
 
-    def test_market_map_flags_trigger_direction(self) -> None:
+    def test_only_confirmed_market_map_flags_trigger_direction(self) -> None:
         long_result = _directional_volume_triggers(
             volume_ratio=1.0,
             volume_threshold=2.0,
@@ -100,7 +100,7 @@ class DirectionalVolumeTriggerTests(unittest.TestCase):
             range_low=95,
             breakout_up=False,
             breakout_down=False,
-            market_map={"flags": ["resistance_to_support_flip"]},
+            market_map={"flags": ["resistance_to_support_retest_confirmed"]},
         )
         short_result = _directional_volume_triggers(
             volume_ratio=1.0,
@@ -113,11 +113,15 @@ class DirectionalVolumeTriggerTests(unittest.TestCase):
             range_low=95,
             breakout_up=False,
             breakout_down=False,
-            market_map={"flags": ["support_to_resistance_flip"]},
+            market_map={"flags": ["support_to_resistance_retest_confirmed"]},
         )
 
         self.assertEqual(long_result, {"trigger_up": True, "trigger_down": False})
         self.assertEqual(short_result, {"trigger_up": False, "trigger_down": True})
+
+    def test_plain_flip_and_failed_breakout_do_not_trigger(self) -> None:
+        result = _directional_volume_triggers(volume_ratio=1.0, volume_threshold=2.0, candle_open=100, candle_high=105, candle_low=95, candle_close=100, range_high=105, range_low=95, breakout_up=False, breakout_down=False, market_map={"flags": ["resistance_to_support_flip", "failed_breakout_up_reversal"]})
+        self.assertEqual(result, {"trigger_up": False, "trigger_down": False})
 
     def test_explicit_opposing_breakouts_can_still_create_both(self) -> None:
         result = _directional_volume_triggers(

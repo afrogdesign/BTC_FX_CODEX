@@ -288,10 +288,18 @@ def _is_watch_blocked_context(result: dict[str, Any], status: str | None = None)
 
 
 def _subject_direction_label(result: dict[str, Any], bias: str, status: str) -> str:
+    decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    state = str(decision.get("state", ""))
+    side = str(decision.get("primary_side", "")).lower()
+    if state in {"blocked", "direction_conflict"}:
+        if state == "direction_conflict" or bool(decision.get("direction_conflict")):
+            return "方向競合 / 実行不可"
+        return "ショート監視 / 実行不可" if side == "short" else ("ロング監視 / 実行不可" if side == "long" else "方向確認待ち / 実行不可")
     if _is_watch_blocked_context(result, status):
-        if bias == "long":
+        watch_side = side if side in {"long", "short"} else bias
+        if watch_side == "long":
             return "上方向監視"
-        if bias == "short":
+        if watch_side == "short":
             return "下方向監視"
     return direction_compact_label(bias)
 
