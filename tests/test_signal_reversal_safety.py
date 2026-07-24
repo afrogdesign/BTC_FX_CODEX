@@ -5,7 +5,7 @@ import unittest
 
 from src.analysis.operator_decision import build_operator_decision
 from src.analysis.scoring import compute_scores
-from src.ai.summary import build_summary_subject
+from src.ai.summary import build_summary_body, build_summary_subject
 from src.notification.detail_page import build_notification_detail_html
 from src.presentation.sanitize import build_display_context
 
@@ -69,6 +69,11 @@ class SignalReversalSafetyTests(unittest.TestCase):
         self.assertNotIn("短期実行スコア", html)
         self.assertIn("REPORT ONLY", html)
         self.assertNotIn("上方向監視", build_summary_subject(result))
+        body, _ = build_summary_body(provider="", api_key="", model="", cli_command="", timeout_sec=0, retry_count=0, base_dir=None, result_payload=result)
+        self.assertIn("実行判断: 方向競合・新規見送り", body)
+        self.assertIn("監視方向: ショート", body)
+        self.assertIn("方向スコア上の傾き: ロング", body)
+        self.assertNotIn("通常バイアス: 上方向 / 実行判断:", body)
 
     def test_2005_keeps_short_monitoring(self) -> None:
         result = _incident("short", "short", "short")

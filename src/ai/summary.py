@@ -440,9 +440,17 @@ def _compact_email_body(
     lines = [heading, _compact_handling_line(result=result, display_context=display_context, notification_context=notification_context)]
     lines.extend(_compact_holding_lines(notification_kind))
     lines.append(_compact_big_chance_line(result))
-    lines.append(
-        f"通常バイアス: {_compact_direction_text(result, display_context)} / 実行判断: {str(notification_context.get('execution_label', '見送り')).strip() or '見送り'}"
-    )
+    operator_decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    if bool(operator_decision.get("direction_conflict")) and bool(operator_decision.get("new_entry_blocked")):
+        side = str(operator_decision.get("primary_side", "none")).lower()
+        score_bias = str(operator_decision.get("score_bias", "wait")).lower()
+        side_label = "ショート" if side == "short" else ("ロング" if side == "long" else "なし")
+        score_label = "ロング" if score_bias == "long" else ("ショート" if score_bias == "short" else "中立")
+        lines.extend(["実行判断: 方向競合・新規見送り", f"監視方向: {side_label}", f"方向スコア上の傾き: {score_label}"])
+    else:
+        lines.append(
+            f"通常バイアス: {_compact_direction_text(result, display_context)} / 実行判断: {str(notification_context.get('execution_label', '見送り')).strip() or '見送り'}"
+        )
     lines.append(f"現在: {_format_price(result.get('current_price'))}")
     lines.extend(_compact_price_zones(result, notification_context))
     detail_line = _compact_detail_url_line(result)

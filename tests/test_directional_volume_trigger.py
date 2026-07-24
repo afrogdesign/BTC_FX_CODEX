@@ -123,6 +123,13 @@ class DirectionalVolumeTriggerTests(unittest.TestCase):
         result = _directional_volume_triggers(volume_ratio=1.0, volume_threshold=2.0, candle_open=100, candle_high=105, candle_low=95, candle_close=100, range_high=105, range_low=95, breakout_up=False, breakout_down=False, market_map={"flags": ["resistance_to_support_flip", "failed_breakout_up_reversal"]})
         self.assertEqual(result, {"trigger_up": False, "trigger_down": False})
 
+    def test_market_map_conflict_blocks_only_market_map_triggers(self) -> None:
+        conflicted = {"flags": ["resistance_to_support_retest_confirmed", "support_to_resistance_retest_confirmed"], "market_map_conflicts": ["market_map_direction_conflict"]}
+        blocked = _directional_volume_triggers(volume_ratio=1.0, volume_threshold=2.0, candle_open=100, candle_high=105, candle_low=95, candle_close=100, range_high=105, range_low=95, breakout_up=False, breakout_down=False, market_map=conflicted)
+        explicit = _directional_volume_triggers(volume_ratio=1.0, volume_threshold=2.0, candle_open=100, candle_high=105, candle_low=95, candle_close=100, range_high=105, range_low=95, breakout_up=True, breakout_down=False, market_map=conflicted)
+        self.assertEqual(blocked, {"trigger_up": False, "trigger_down": False})
+        self.assertEqual(explicit, {"trigger_up": True, "trigger_down": False})
+
     def test_explicit_opposing_breakouts_can_still_create_both(self) -> None:
         result = _directional_volume_triggers(
             volume_ratio=1.0,

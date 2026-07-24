@@ -294,9 +294,8 @@ def _detect_role_flip(
         })
         return value
 
-    broken_supports = [level for level in supports if price < float(level["low"]) - break_threshold]
-    broken_supports.sort(key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
-    for level in broken_supports[:3]:
+    support_candidates = sorted(supports, key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
+    for level in support_candidates[:3]:
         low = float(level["low"])
         indices = ordered_indices(low, "down")
         if indices[2] is not None:
@@ -306,9 +305,8 @@ def _detect_role_flip(
             flags.append("support_to_resistance_flip")
             return "support_to_resistance_early", reference(level, "early", indices), _dedupe(flags)
 
-    broken_resistances = [level for level in resistances if price > float(level["high"]) + break_threshold]
-    broken_resistances.sort(key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
-    for level in broken_resistances[:3]:
+    resistance_candidates = sorted(resistances, key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
+    for level in resistance_candidates[:3]:
         high = float(level["high"])
         indices = ordered_indices(high, "up")
         if indices[2] is not None:
@@ -503,22 +501,24 @@ def build_market_map(
         flags.extend(failed_flags)
 
     flags = _dedupe(flags)
-    trend_state = _trend_flip_state(flags, per_tf_inputs)
-    if trend_state == "confirmed_down":
-        flags.append("trend_flip_confirmed_down")
-    elif trend_state == "confirmed_up":
-        flags.append("trend_flip_confirmed_up")
-    elif trend_state == "early_down":
-        flags.append("trend_flip_early_down")
-    elif trend_state == "early_up":
-        flags.append("trend_flip_early_up")
-    flags = _dedupe(flags)
-
     conflicts: list[str] = []
-    if bool({"failed_breakout_down_reversal", "support_to_resistance_flip"} & set(flags)) and bool(
-        {"failed_breakout_up_reversal", "resistance_to_support_flip"} & set(flags)
-    ):
-        conflicts.append("both_direction_flip_flags")
+    up_family = {"failed_breakout_up_reversal", "major_support_rejection", "resistance_to_support_flip", "resistance_to_support_retest_confirmed"}
+    down_family = {"failed_breakout_down_reversal", "major_resistance_rejection", "support_to_resistance_flip", "support_to_resistance_retest_confirmed"}
+    direction_conflict = bool(set(flags) & up_family) and bool(set(flags) & down_family)
+    if direction_conflict:
+        conflicts.append("market_map_direction_conflict")
+        trend_state = ""
+    else:
+        trend_state = _trend_flip_state(flags, per_tf_inputs)
+        if trend_state == "confirmed_down":
+            flags.append("trend_flip_confirmed_down")
+        elif trend_state == "confirmed_up":
+            flags.append("trend_flip_confirmed_up")
+        elif trend_state == "early_down":
+            flags.append("trend_flip_early_down")
+        elif trend_state == "early_up":
+            flags.append("trend_flip_early_up")
+        flags = _dedupe(flags)
     signals = {tf: str(payload.get("signal", "")).lower() for tf, payload in per_tf_inputs.items()}
     if (level_flip_state.startswith("resistance_to_support") and signals.get("15m") == "short") or (
         level_flip_state.startswith("support_to_resistance") and signals.get("15m") == "long"

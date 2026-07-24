@@ -385,12 +385,14 @@ def _directional_volume_triggers(
     market_map: dict[str, Any] | None,
 ) -> dict[str, bool]:
     flags = set((market_map or {}).get("flags") or [])
+    market_map_conflicts = set((market_map or {}).get("market_map_conflicts") or [])
+    market_map_conflicted = "market_map_direction_conflict" in market_map_conflicts
     trigger_up = bool(breakout_up)
     trigger_down = bool(breakout_down)
 
-    if flags & _DIRECTIONAL_VOLUME_LONG_FLAGS:
+    if not market_map_conflicted and flags & _DIRECTIONAL_VOLUME_LONG_FLAGS:
         trigger_up = True
-    if flags & _DIRECTIONAL_VOLUME_SHORT_FLAGS:
+    if not market_map_conflicted and flags & _DIRECTIONAL_VOLUME_SHORT_FLAGS:
         trigger_down = True
 
     if float(volume_ratio) < float(volume_threshold):
