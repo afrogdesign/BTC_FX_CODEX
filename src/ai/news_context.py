@@ -139,8 +139,8 @@ def _normalize_success(payload: dict[str, Any], *, enabled: bool, lookback_hours
         raise ValueError(validation_error)
     status = payload["status"]
     direction = str(payload.get("direction", "unknown")).strip().lower()
-    if status not in _STATUSES or direction not in _DIRECTIONS:
-        return None
+    if direction not in _DIRECTIONS:
+        direction = "unknown"
     try:
         confidence = float(payload.get("confidence", 0.0))
     except (TypeError, ValueError):

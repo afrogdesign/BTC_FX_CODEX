@@ -9,6 +9,11 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
+from config import load_config
+from main import run_cycle
+from src.data.exchange_fetcher import MarketStructureSnapshot
+from tests.test_chart_pattern_shadow import _sample_df
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -94,6 +99,16 @@ class AiNewsContextTest(TestCase):
         self.assertEqual(result["items"], [])
         self.assertEqual(run.call_count, 1)
 
+    def test_invalid_root_direction_is_completed_as_unknown(self) -> None:
+        payload = {"status": "material_news", "direction": None, "confidence": 0.4, "summary": "material", "items": []}
+        with patch("src.ai.news_context.run_cli_json", return_value=payload) as run, patch("src.ai.news_context.write_ai_error_log") as log:
+            result = request_web_news_context(enabled=True, cli_command="codex", model="m", timeout_sec=5, retry_count=2, lookback_hours=6, max_items=3, base_dir=BASE_DIR, result_payload={})
+        self.assertEqual(result["fetch_status"], "completed")
+        self.assertEqual(result["news_status"], "material_news")
+        self.assertEqual(result["direction"], "unknown")
+        self.assertEqual(run.call_count, 1)
+        log.assert_not_called()
+
     def test_missing_command_and_retry_recovery(self) -> None:
         missing = request_web_news_context(enabled=True, cli_command="", model="m", timeout_sec=5, retry_count=2, lookback_hours=6, max_items=3, base_dir=BASE_DIR, result_payload={})
         self.assertEqual(missing["error_code"], "cli_command_missing")
@@ -156,3 +171,70 @@ class AiNewsContextTest(TestCase):
         self.assertTrue(cfg.AI_NEWS_WEB_SEARCH_ENABLED)
         self.assertEqual(cfg.AI_NEWS_LOOKBACK_HOURS, 9)
         self.assertEqual(cfg.AI_NEWS_MAX_ITEMS, 2)
+
+    def test_run_cycle_news_exception_isolated_before_advice_and_summary(self) -> None:
+        required_env = {
+            "OPENAI_API_KEY": "x",
+            "SMTP_HOST": "smtp",
+            "SMTP_PORT": "587",
+            "SMTP_USER": "u",
+            "SMTP_PASSWORD": "p",
+            "MAIL_FROM": "a@example.com",
+            "MAIL_TO": "b@example.com",
+            "AI_NEWS_WEB_SEARCH_ENABLED": "true",
+            "DRYRUN_MODE": "true",
+        }
+        df = _sample_df()
+        captured: dict[str, object] = {}
+        deterministic_fields = (
+            "long_display_score", "short_display_score", "score_gap", "confidence",
+            "signals_4h", "signals_1h", "signals_15m", "trade_execution_gate",
+            "phase1_observation_gate", "phase1b_lite_gate", "opportunity_gate",
+            "operator_decision", "active_trade_plan", "primary_entry_mid",
+            "primary_stop_loss", "primary_tp1", "primary_tp2", "notify", "notification_kind",
+        )
+
+        def _capture_advice(**kwargs: object) -> tuple[dict[str, object], str]:
+            payload = kwargs["machine_payload"]
+            captured["advice_payload"] = {key: copy.deepcopy(payload.get(key)) for key in deterministic_fields}
+            captured["news_at_advice"] = copy.deepcopy(payload.get("web_news_context"))
+            return ({"decision": "WAIT", "quality": "B", "confidence": 0.5, "notes": "stub"}, "api")
+
+        def _capture_summary(**kwargs: object) -> tuple[str, str]:
+            payload = kwargs["result_payload"]
+            captured["summary_payload"] = {key: copy.deepcopy(payload.get(key)) for key in deterministic_fields}
+            captured["news_at_summary"] = copy.deepcopy(payload.get("web_news_context"))
+            return ("summary body", "api")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict(os.environ, required_env, clear=False):
+                cfg = load_config(Path(tmp_dir))
+            with patch("main.get_server_time_ms", return_value=1_700_000_000_000), patch(
+                "main.fetch_klines", side_effect=[df, df, df]
+            ), patch("main.validate_klines", return_value=True), patch(
+                "main.fetch_market_structure", return_value=MarketStructureSnapshot(missing_fields=[])
+            ), patch("main.fetch_funding_rate", return_value=0.0), patch(
+                "main.resend_pending_email", return_value=None
+            ), patch("main.cleanup_if_due", return_value=None), patch(
+                "main.request_web_news_context", side_effect=RuntimeError("unexpected news failure")
+            ) as news_fetch, patch(
+                "main.request_ai_advice", side_effect=_capture_advice
+            ) as advice, patch(
+                "main.build_summary_body", side_effect=_capture_summary
+            ) as summary, patch(
+                "main.should_notify",
+                return_value={"notify": True, "notify_reason_codes": ["test"], "suppress_reason_codes": [], "notification_kind": "main"},
+            ), patch("main.append_trade_log", return_value=Path(tmp_dir) / "logs" / "csv" / "trades.csv"), patch(
+                "main.save_signal_snapshot", return_value=Path(tmp_dir) / "logs" / "signals" / "x.json"
+            ), patch("main.save_json", return_value=None):
+                result = run_cycle(cfg=cfg, base_dir=Path(tmp_dir))
+
+        news_fetch.assert_called_once()
+        advice.assert_called_once()
+        summary.assert_called_once()
+        expected_news = {"fetch_status": "unavailable", "news_status": "unknown", "error_code": "unknown_error"}
+        self.assertEqual({key: captured["news_at_advice"][key] for key in expected_news}, expected_news)
+        self.assertEqual({key: captured["news_at_summary"][key] for key in expected_news}, expected_news)
+        final_snapshot = {key: copy.deepcopy(result.get(key)) for key in deterministic_fields}
+        self.assertEqual(captured["advice_payload"], final_snapshot)
+        self.assertEqual(captured["summary_payload"], final_snapshot)
