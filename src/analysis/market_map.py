@@ -294,10 +294,16 @@ def _detect_role_flip(
         })
         return value
 
-    support_candidates = sorted(supports, key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
-    for level in support_candidates[:3]:
-        low = float(level["low"])
-        indices = ordered_indices(low, "down")
+    def candidates_with_break(levels: list[dict[str, Any]], direction: str, level_key: str) -> list[tuple[dict[str, Any], tuple[int | None, int | None, int | None]]]:
+        candidates = []
+        for level in levels:
+            indices = ordered_indices(float(level[level_key]), direction)
+            if indices[0] is not None:
+                candidates.append((level, indices))
+        candidates.sort(key=lambda candidate: (_zone_distance(price, candidate[0]), -float(candidate[0].get("strength", 0.0))))
+        return candidates[:3]
+
+    for level, indices in candidates_with_break(supports, "down", "low"):
         if indices[2] is not None:
             flags.extend(["support_to_resistance_flip", "support_to_resistance_retest_confirmed"])
             return "support_to_resistance_confirmed", reference(level, "confirmed", indices), _dedupe(flags)
@@ -305,10 +311,7 @@ def _detect_role_flip(
             flags.append("support_to_resistance_flip")
             return "support_to_resistance_early", reference(level, "early", indices), _dedupe(flags)
 
-    resistance_candidates = sorted(resistances, key=lambda level: (_zone_distance(price, level), -float(level.get("strength", 0.0))))
-    for level in resistance_candidates[:3]:
-        high = float(level["high"])
-        indices = ordered_indices(high, "up")
+    for level, indices in candidates_with_break(resistances, "up", "high"):
         if indices[2] is not None:
             flags.extend(["resistance_to_support_flip", "resistance_to_support_retest_confirmed"])
             return "resistance_to_support_confirmed", reference(level, "confirmed", indices), _dedupe(flags)
@@ -531,9 +534,10 @@ def build_market_map(
     elif level_flip_state.startswith("resistance_to_support"):
         active_level_role = "support"
 
+    primary_state = "direction_conflict" if direction_conflict else _primary_state(flags, trend_state, failed_breakout_state, active_level_role)
     return {
         "version": "v1",
-        "market_map_primary_state": _primary_state(flags, trend_state, failed_breakout_state, active_level_role),
+        "market_map_primary_state": primary_state,
         "flags": flags,
         "major_support_levels": nearest_supports,
         "major_resistance_levels": nearest_resistances,

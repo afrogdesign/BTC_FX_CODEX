@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.analysis.market_map import build_market_map
+from src.analysis.market_map import _detect_role_flip, build_market_map
 
 
 class _MiniSeries(list):
@@ -77,6 +77,20 @@ def _inputs(
 
 
 class MarketMapTest(unittest.TestCase):
+    def test_historical_break_candidates_bypass_three_nearer_unbroken_levels(self) -> None:
+        def level(low: float, high: float, strength: float) -> dict[str, object]:
+            return {"low": low, "high": high, "mid": (low + high) / 2, "strength": strength, "source": "15m", "sources": ["15m"], "confluence_count": 1, "reaction_count": 1, "wick_rejections": 0, "volume_touches": 0, "last_touch_age": 0}
+        up_rows = _flat_rows(100.0, 16) + [{"open": 100.0, "high": 100.3, "low": 100.0, "close": 100.2, "volume": 10.0}, {"open": 100.2, "high": 100.2, "low": 100.0, "close": 100.05, "volume": 10.0}, {"open": 100.05, "high": 100.2, "low": 100.0, "close": 100.05, "volume": 10.0}]
+        state, reference, _ = _detect_role_flip(price=100.05, atr=1.0, supports=[], resistances=[level(99.9, 100.1, 9), level(99.8, 100.12, 8), level(99.7, 100.14, 7), level(100.0, 100.0, 1)], df_15m=_df(up_rows), cfg=SimpleNamespace())
+        self.assertEqual(state, "resistance_to_support_confirmed")
+        self.assertEqual(reference["high"], 100.0)
+        self.assertLess(reference["break_index"], reference["retest_index"])
+        self.assertLess(reference["retest_index"], reference["hold_index"])
+
+        down_rows = _flat_rows(100.0, 16) + [{"open": 100.0, "high": 100.0, "low": 99.7, "close": 99.8, "volume": 10.0}, {"open": 99.8, "high": 100.0, "low": 99.8, "close": 99.95, "volume": 10.0}, {"open": 99.95, "high": 100.0, "low": 99.8, "close": 99.95, "volume": 10.0}]
+        state, reference, _ = _detect_role_flip(price=99.95, atr=1.0, supports=[level(99.9, 100.1, 9), level(99.88, 100.2, 8), level(99.86, 100.3, 7), level(100.0, 100.0, 1)], resistances=[], df_15m=_df(down_rows), cfg=SimpleNamespace())
+        self.assertEqual(state, "support_to_resistance_confirmed")
+        self.assertEqual(reference["low"], 100.0)
     def test_multitimeframe_levels_merge_and_keep_confluence(self) -> None:
         result = build_market_map(
             price=100.0,
@@ -122,6 +136,7 @@ class MarketMapTest(unittest.TestCase):
         self.assertEqual(result["level_flip_state"], "support_to_resistance_confirmed")
         self.assertIn("support_to_resistance_flip", result["flags"])
         self.assertEqual(result["trend_flip_state"], "confirmed_down")
+        self.assertEqual(result["market_map_primary_state"], "confirmed_down")
 
     def test_resistance_to_support_flip_is_confirmed_after_retest_hold(self) -> None:
         rows = _flat_rows(100.0, 16) + [
@@ -150,6 +165,7 @@ class MarketMapTest(unittest.TestCase):
         self.assertEqual(result["level_flip_state"], "resistance_to_support_confirmed")
         self.assertIn("resistance_to_support_flip", result["flags"])
         self.assertEqual(result["trend_flip_state"], "confirmed_up")
+        self.assertEqual(result["market_map_primary_state"], "confirmed_up")
 
     def test_retest_before_break_and_same_bar_do_not_confirm(self) -> None:
         rows = _flat_rows(100.0, 16) + [
@@ -241,6 +257,7 @@ class MarketMapTest(unittest.TestCase):
         self.assertIn("market_map_direction_conflict", result["market_map_conflicts"])
         self.assertNotEqual(result["trend_flip_state"], "confirmed_up")
         self.assertNotIn("trend_flip_confirmed_up", result["flags"])
+        self.assertEqual(result["market_map_primary_state"], "direction_conflict")
 
     def test_market_map_direction_conflict_is_symmetric_down(self) -> None:
         rows = _flat_rows(100.0, 16) + [
@@ -252,6 +269,7 @@ class MarketMapTest(unittest.TestCase):
         self.assertIn("market_map_direction_conflict", result["market_map_conflicts"])
         self.assertNotEqual(result["trend_flip_state"], "confirmed_down")
         self.assertNotIn("trend_flip_confirmed_down", result["flags"])
+        self.assertEqual(result["market_map_primary_state"], "direction_conflict")
 
     def test_failed_breakout_down_reversal_uses_major_resistance_rejection(self) -> None:
         rows = _flat_rows(103.0, 12) + [
