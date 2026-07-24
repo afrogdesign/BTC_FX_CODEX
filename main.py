@@ -119,6 +119,11 @@ def _attach_structural_priority(result: dict[str, Any]) -> None:
     result["structural_priority"] = build_structural_priority(result)
 
 
+def _attach_operator_decision(result: dict[str, Any]) -> None:
+    """Attach the single display-authoritative operator decision before notification handling."""
+    result["operator_decision"] = build_operator_decision(result)
+
+
 def _base_dir() -> Path:
     return Path(__file__).resolve().parent
 
@@ -1291,7 +1296,7 @@ def run_cycle(cfg: Any | None = None, base_dir: Path | None = None) -> dict[str,
     last_result = load_json(get_last_result_path(base_dir))
     _attach_side_aware_mtf_action(core_result, last_result)
     _attach_structural_priority(core_result)
-    core_result["operator_decision"] = build_operator_decision(core_result)
+    _attach_operator_decision(core_result)
     last_notified = load_json(get_last_notified_path(base_dir))
     last_attention_notified = load_json(get_last_attention_notified_path(base_dir))
     last_followup_notified = load_json(get_last_followup_notified_path(base_dir))
