@@ -40,4 +40,20 @@ class ModernAttributionTests(unittest.TestCase):
         signal = next(r for r in out["ledger"] if r["ledger_basis"] == "notification_without_accepted_actual"); self.assertEqual(signal["actual_realized_pnl"], ""); self.assertEqual(signal["usefulness_category"], "useful_no_entry_proxy")
         self.assertEqual(out["report"]["causality_statement"]["automatic_causal_claims"], 0)
 
+    def test_actual_metrics_require_linked_status_and_confidence(self):
+        links = [
+            {"link_id":"l1","episode_id":"e1","signal_id":"s1","link_status":"linked","link_confidence":"high","link_reason":"matched"},
+            {"link_id":"l2","episode_id":"e2","signal_id":"s2","link_status":"linked","link_confidence":"medium","link_reason":"matched"},
+            {"link_id":"l3","episode_id":"e3","signal_id":"s3","link_status":"ambiguous","link_confidence":"high","link_reason":"competing_candidate_tie"},
+            {"link_id":"l4","episode_id":"e4","signal_id":"s4","link_status":"no_candidate","link_confidence":"medium","link_reason":"no_candidate"},
+            {"link_id":"l5","episode_id":"e5","signal_id":"s5","link_status":"linked","link_confidence":"low","link_reason":"matched"},
+        ]
+        episodes = [{"episode_id":"e1","realized_pnl":"10"},{"episode_id":"e2","realized_pnl":"20"},{"episode_id":"e3","realized_pnl":"30"},{"episode_id":"e4","realized_pnl":"40"},{"episode_id":"e5","realized_pnl":"50"}]
+        out = build_modern_outputs(links, [], episodes, [], [])
+        metrics = out["report"]["actual_attribution"]
+        self.assertEqual(metrics["accepted_high_medium"], 2)
+        self.assertEqual(metrics["accepted_high_medium_rows_with_pnl"], 2)
+        self.assertEqual(metrics["accepted_actual_pnl_aggregate"], 30.0)
+        self.assertEqual(metrics["low_ambiguous_no_candidate_descriptive_rows"], 3)
+
 if __name__ == "__main__": unittest.main()
