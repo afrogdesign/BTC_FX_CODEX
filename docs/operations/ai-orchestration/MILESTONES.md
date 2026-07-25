@@ -122,3 +122,17 @@ The route preserves strict formal gates and adds operator-action layers without 
 - pre-optimization milestone document: `history/record-optimization-20260721/MILESTONES_PRE_OPTIMIZATION.md`
 - task-level history: `TASK_LEDGER.md`
 - implementation evidence: git history and compact reports
+
+## 2026-07-25 — P generation alignment WP0–WP8 closed
+
+- accepted closure commit: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`
+- WP7 review ID: `wp7_889b730abeac4ead3ae9ea7afb0c0cd9`
+- WP8 closure ID: `wp8_f4eeadd6864d736e7c457490d362ac0b`
+- WP0 through WP8 are accepted and their completed active specs are archived
+- readiness remains `collecting`; no behavior proposal was selected
+- implementation decision: `no_implementation_authorized`
+- adoption decision: `no_adoption_authorized`
+- current v4 cumulative classification and proxy-trial cohorts remain missing
+- accepted actual associations are descriptive only: high/medium `58`, low/ambiguous/no-candidate `91`, automatic causal claims `0`
+- no source, gate, classifier, score, threshold, notification, runtime, launchd, mail, canonical-link, schedule, production, `FORMAL_GO`, or order behavior changed
+- the package is complete as a report-only, non-adopted result; future work requires material current-generation evidence and a new bounded human-approved route

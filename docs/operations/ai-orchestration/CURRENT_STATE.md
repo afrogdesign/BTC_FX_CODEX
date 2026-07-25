@@ -132,3 +132,30 @@ The fixed macro page publication is accepted as part of the scheduled macro runt
 - accepted spec: `chatgpt/specs/archive/20260723_macro_structure_runtime_publication_decouple.md`
 - frozen repo was not accessed
 - push: none
+
+
+## Authoritative override — P generation-alignment closure through WP8
+
+last_verified_at: `2026-07-25`
+verified_branch: `Ver04-v5`
+verified_head: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`
+status_source: `local/reports/p_proposals/wp8_closure_20260725/wp8_closure.json`
+
+This section supersedes earlier P-package status and authorized-work statements in this file where they conflict.
+
+- WP0 through WP8 are accepted.
+- WP8 closure commit: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`.
+- WP7 review ID: `wp7_889b730abeac4ead3ae9ea7afb0c0cd9`.
+- WP8 closure ID: `wp8_f4eeadd6864d736e7c457490d362ac0b`.
+- P9 readiness v2 state: `collecting`.
+- WP7 selection status: `no_behavior_proposal_selected`.
+- selected proposal: `null`.
+- implementation decision: `no_implementation_authorized`.
+- adoption decision: `no_adoption_authorized`.
+- completion status: `completed_no_approved_proposal`.
+- current classifier: `manual_operator_classifier.v4`.
+- cumulative classification and proxy-trial cohorts remain `manual_operator_classifier.v1`; current v4 cohorts are missing.
+- accepted high/medium actual associations: `58`; descriptive low/ambiguous/no-candidate: `91`; automatic causal claims: `0`.
+- no source, gate, classifier, score, threshold, notification, runtime, launchd, mail, canonical-link, schedule, production, FORMAL_GO, or order behavior was changed by WP8.
+- the P generation-alignment package is complete through WP8 as a report-only, non-adopted result.
+- H2 through H8 and every production/live action remain unauthorized.
