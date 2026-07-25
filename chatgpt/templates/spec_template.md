@@ -54,7 +54,7 @@ Codex may choose small helpers, fixtures, and internal structure inside the acce
 ## Stop conditions
 
 - material ambiguity outside the contract
-- runtime or frozen-repo access required but not authorized
+- installed runtime, launchd, schedule, mail, or delivery operation required but not explicitly authorized
 - safety boundary would change
 - unrelated dirty changes overlap the task files
 

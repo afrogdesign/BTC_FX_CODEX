@@ -130,16 +130,12 @@ Do not reopen accepted M-OPS1–M-OPS3 without a concrete contradiction.
 
 The runtime spec is archived after acceptance. M-OPS5 remains a separate source task.
 
-M-OPS4 was completed under an explicit human-approved `RUNTIME_TASK` for the target only:
-
-- operating an installed runtime, launchd, schedule, mail, or delivery target without an explicit named `RUNTIME_TASK`; installed targets are not repositories;
-- inspecting or changing installed launchd/plist/cron/schedule configuration;
-- installing a recurring macro pipeline.
+M-OPS4 was completed under an explicit human-approved `RUNTIME_TASK` for the named installed target only. It covered target-specific launchd/plist/schedule inspection, installation, and verification; it did not authorize a second or old repository.
 
 The bounded task:
 
 1. inspect the actual installed target and existing schedule;
-2. confirm the runtime repo/path rather than assuming it;
+2. confirm the canonical repository source and the installed target path;
 3. connect accepted commands in order:
    - `run-macro-structure-daily`
    - `run-macro-structure-history`

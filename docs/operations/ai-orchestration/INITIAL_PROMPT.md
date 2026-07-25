@@ -28,8 +28,6 @@ Canonical repository:
 
 `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 
-`/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-
 Rules:
 
 - repo確認は最初に `AFROG_MCP` を使う
