@@ -51,6 +51,10 @@ def _signal(value: Any) -> str:
     return SIGNAL_LABELS.get(_token(value), "判定材料不足")
 
 
+def _valid_signal(value: Any) -> bool:
+    return _token(value) in {"long", "short", "up", "down", "wait", "neutral"}
+
+
 def _action(value: Any) -> str:
     return ACTION_LABELS.get(str(value or "").strip().upper(), "新規見送り・保護確認")
 
@@ -76,16 +80,22 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
     structural = action.get("structural_context") if isinstance(action.get("structural_context"), dict) else {}
     tactical = action.get("tactical_context") if isinstance(action.get("tactical_context"), dict) else {}
     decision = result.get("operator_decision") if isinstance(result.get("operator_decision"), dict) else {}
+    structural_priority = result.get("structural_priority")
+    structural_priority = structural_priority if isinstance(structural_priority, dict) else {}
     primary = _token(decision.get("primary_side") or execution.get("primary_side"))
+    primary = primary if primary in {"long", "short"} else ""
+    raw_15m = result.get("signals_15m")
+    execution_candidate = primary if not _valid_signal(raw_15m) and primary else None
     signals = {
         "4H": result.get("signals_4h") or structural.get("signals_4h"),
         "1H": result.get("signals_1h") or tactical.get("signals_1h"),
-        "15M": result.get("signals_15m") or execution.get("primary_state"),
+        "15M": raw_15m if _valid_signal(raw_15m) else execution_candidate,
     }
     normalized = [_token(value) for value in signals.values()]
     alignment = _token(
-        decision.get("alignment_state")
+        structural_priority.get("alignment_state")
         or structural.get("alignment_state")
+        or decision.get("alignment_state")
         or result.get("alignment_state")
     )
     if not alignment:
@@ -130,7 +140,7 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
     elif candidate:
         auxiliary_note = "補助監視です。現在の判断を上書きしません。"
     return {
-        "primary_side": primary if primary in {"long", "short"} else "",
+        "primary_side": primary,
         "signals": {key: {"raw": value, "label": _signal(value)} for key, value in signals.items()},
         "alignment": ALIGNMENT_LABELS.get(alignment, "判定材料不足"),
         "alignment_raw": alignment,
@@ -138,5 +148,16 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
         "new_entry_blocked": bool(decision.get("new_entry_blocked")) or _token(decision.get("state")) in {"blocked", "direction_conflict"},
         "candidate": candidate,
         "auxiliary_note": auxiliary_note,
+        "structural": {
+            "present": bool(structural_priority.get("present")),
+            "long_points": structural_priority.get("long_points"),
+            "short_points": structural_priority.get("short_points"),
+            "long_share": structural_priority.get("long_share"),
+            "short_share": structural_priority.get("short_share"),
+        },
+        "next_condition": next(
+            (row["next_condition"] for row in rows if row["priority"] and row.get("next_condition")),
+            "",
+        ),
         "diagnostic": {"alignment": alignment, "primary_side": primary, "signals": signals},
     }

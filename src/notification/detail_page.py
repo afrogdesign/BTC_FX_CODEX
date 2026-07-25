@@ -4144,6 +4144,11 @@ def _operator_dashboard_v2_css() -> str:
       .topbar { margin-left:4px; }
     }
     .area-2, .area-3 { margin-top:12px; padding:18px; }
+    .area-2-score-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:9px; margin-top:14px; }
+    .score-summary { padding:12px; border:1px solid var(--line); border-radius:12px; background:#091724; }
+    .score-summary span, .score-summary small { display:block; color:var(--muted); font-size:10px; font-weight:900; }
+    .score-summary strong { display:block; margin:4px 0; font-size:20px; }
+    .score-summary small { font-weight:700; line-height:1.45; }
     .section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
     .section-heading h2 { margin:2px 0 0; font-size:20px; }
     .section-heading p { margin:0; color:var(--muted); font-size:11px; }
@@ -4178,6 +4183,7 @@ def _operator_dashboard_v2_css() -> str:
     .diagnostic-details summary { padding:14px 18px; }
     @media (max-width:860px) {
       .timeframe-grid { grid-template-columns:1fr; }
+      .area-2-score-grid { grid-template-columns:1fr; }
       .action-grid { grid-template-columns:1fr; }
       .area-3 .action-grid .operator-action-card:not(.priority) { order:2; }
       .area-3 .action-grid .operator-action-card.priority { order:1; }
@@ -4189,7 +4195,7 @@ def _operator_dashboard_v2_css() -> str:
 
 def _operator_report_action_card(row: dict[str, Any] | None, result: dict[str, Any]) -> str:
     row = row or {
-        "side": "unknown", "label": "判定待ち", "priority": False, "stage": "新規見送り・保護確認",
+        "side": "long", "label": "Long", "priority": False, "stage": "新規見送り・保護確認",
         "state": "判定材料不足", "next_condition": "必要な証拠がそろうまで判定を保留します。", "entry_low": None,
         "entry_high": None, "invalidation": None, "no_chase": False, "higher": "4H 判定材料不足 / 1H 判定材料不足",
     }
@@ -4208,17 +4214,38 @@ def _operator_report_action_card(row: dict[str, Any] | None, result: dict[str, A
 
 def _operator_report_conditions(result: dict[str, Any], reasons: list[str], view: dict[str, Any]) -> str:
     primary = view.get("primary_side") or ""
+    primary_row = next((row for row in view.get("rows", []) if row.get("priority")), None)
     setup = result.get(f"{primary}_setup") if primary in {"long", "short"} and isinstance(result.get(f"{primary}_setup"), dict) else {}
     layer = setup.get("value_defense_entry_layer") if isinstance(setup.get("value_defense_entry_layer"), dict) else {}
     invalidation = layer.get("invalidation_zone") if isinstance(layer.get("invalidation_zone"), dict) else {}
-    next_event = reasons[0] if reasons else "価格帯と15分足の反応が確認できるまで待ちます。"
+    next_event = str(view.get("next_condition") or (primary_row or {}).get("next_condition") or "価格帯と15分足の反応が確認できるまで待ちます。")
+    invalidation_event = (
+        f"{_operator_dashboard_zone(invalidation)} を明確に抜け、回収できない場合"
+        if invalidation.get("low") is not None and invalidation.get("high") is not None
+        else "無効化ラインはデータ未取得"
+    )
     cards = (
         ("次に確認するイベント", next_event),
-        ("判断を弱める条件", f"{_operator_dashboard_zone(invalidation)} を明確に抜け、回収できない場合"),
+        ("判断を弱める条件", invalidation_event),
         ("現在の状態", "新規エントリーを保留し、15分足の確認を優先" if view.get("new_entry_blocked") else "条件と価格反応がそろうかを監視"),
     )
     body = "".join(f'<article class="condition"><div class="condition-label"><span>確認</span></div><strong>{html.escape(label)}</strong><p>{html.escape(str(value))}</p></article>' for label, value in cards)
     return f'<div class="panel section-card"><span class="area-kicker">AREA 5</span><h2 class="section-title">判断が変わる条件</h2><p class="section-lead">次に起きる具体的なイベントを優先表示します。完全な価格表は価格マップで確認します。</p><div class="condition-grid">{body}</div></div>'
+
+
+def _operator_report_score_summary(result: dict[str, Any], view: dict[str, Any]) -> str:
+    structural = view.get("structural") if isinstance(view.get("structural"), dict) else {}
+
+    def display(value: Any) -> str:
+        return html.escape(str(value)) if value not in (None, "") else "判定材料不足"
+
+    long_structural = structural.get("long_points") if structural.get("long_points") not in (None, "") else structural.get("long_share")
+    short_structural = structural.get("short_points") if structural.get("short_points") not in (None, "") else structural.get("short_share")
+    return f'''<div class="area-2-score-grid">
+      <article class="score-summary structural-allocation"><span>中期構造配分</span><strong>Long {display(long_structural)} / Short {display(short_structural)}</strong><small>4H / 1Hの構造配分。確率・勝率・実行許可ではありません。</small></article>
+      <article class="score-summary independent-score"><span>Long方向材料スコア（独立評価）</span><strong>{display(result.get("long_display_score"))}</strong><small>Shortと合計100にする必要はなく、勝率・確率・実行許可ではありません。</small></article>
+      <article class="score-summary independent-score"><span>Short方向材料スコア（独立評価）</span><strong>{display(result.get("short_display_score"))}</strong><small>Longと独立した評価で、勝率・確率・実行許可ではありません。</small></article>
+    </div>'''
 
 
 def _operator_dashboard_score(value: Any) -> int:
@@ -4711,14 +4738,17 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
         f'<article class="timeframe-card tf-{key.lower()}"><span class="tf-kicker">{key}</span><strong>{html.escape(value["label"])}</strong><p>{"中期の構造" if key == "4H" else "戦術確認・転換" if key == "1H" else "実行タイミング"}</p></article>'
         for key, value in view["signals"].items()
     )
-    action_cards = "".join(_operator_report_action_card(row, result) for row in (rows_by_side.get(view["primary_side"]), rows_by_side.get("short" if view["primary_side"] == "long" else "long")))
+    ordered_rows = list(view["rows"])
+    if view["primary_side"] in {"long", "short"}:
+        ordered_rows.sort(key=lambda row: (not row["priority"], row["side"]))
+    action_cards = "".join(_operator_report_action_card(row, result) for row in ordered_rows)
     diagnostic = html.escape(json.dumps(view["diagnostic"], ensure_ascii=False, sort_keys=True))
     return f"""<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(STABLE_DETAIL_PAGE_PRODUCT_LABEL)}</title><style>{_operator_dashboard_v2_css()}</style></head>
 <body class="v2-report operator-dashboard"><div class="shell">
   <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>{html.escape(timestamp)}</span><span>signal {html.escape(str(result.get('signal_id') or ''))}</span><span>{html.escape(kind)}</span></div></div>
   <header class="hero area-1"><div class="hero-main"><div class="status-line"><span class="status-badge">今の結論</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word{decision_word_class}">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><p class="boundary-note">この報告書は表示専用です。売買許可・確率・勝率を示さず、最終判断と注文は人間が行います。</p></div><div class="hero-side"><div class="current-label">現在値 / 更新時刻</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="current-timestamp">{html.escape(timestamp)}</div><div class="metric-stack">{metrics}</div><p class="metric-note">機械評価インデックスであり、確率・勝率・実行許可ではありません。</p></div></header>
-  <section class="area-2 panel"><div class="section-heading"><div><span class="area-kicker">AREA 2</span><h2>時間軸別の方向</h2></div><strong class="alignment-summary">{html.escape(view["alignment"])}</strong></div><div class="timeframe-grid">{tf_cards}</div></section>
+  <section class="area-2 panel"><div class="section-heading"><div><span class="area-kicker">AREA 2</span><h2>時間軸別の方向</h2></div><strong class="alignment-summary">{html.escape(view["alignment"])}</strong></div><div class="timeframe-grid">{tf_cards}</div>{_operator_report_score_summary(result, view)}</section>
   <section class="area-3 panel"><div class="section-heading"><div><span class="area-kicker">AREA 3</span><h2>15分足の実行判断</h2></div><p>現在の優先側を先に確認し、Long / Shortを同じ基準で比較します。</p></div><div class="action-grid">{action_cards}</div></section>
   <main class="area-4 workspace"><section class="panel chart-panel"><div class="panel-head"><div><span class="area-kicker">AREA 4</span><h2 id="chart-heading">価格マップ｜15分足の実行位置</h2><p>価格レベルの正本。15分足 / 1時間足 / 4時間足を切り替えて確認します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long方向評価・浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long方向評価・本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short方向評価・浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short方向評価・本命ゾーン</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>中期構造配分とは別の独立したLong / Short方向評価</span><span>基本：4ゾーン / 全レイヤー：SL・TP等</span></div></div></div></section></main>
   <section class="area-5 lower-grid">{_operator_report_conditions(result, reasons, view)}<div class="opportunity-stack"><h2 class="aux-heading">補助監視</h2>{_operator_dashboard_v2_big_chance(result)}{_operator_dashboard_v2_context(result)}</div></section>
