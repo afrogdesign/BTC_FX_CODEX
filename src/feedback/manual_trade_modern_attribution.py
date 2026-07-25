@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import csv
+import hashlib
+import io
+import json
+from collections import Counter
+from typing import Any, Iterable, Mapping
+
+MODERN_ATTRIBUTION_SCHEMA_VERSION = "manual_trade_modern_attribution.v1"
+MODERN_LINK_CANDIDATE_VERSION = "manual_trade_signal_attribution_candidate.v3"
+
+CANDIDATE_HEADERS = ("schema_version", "candidate_id", "baseline_link_id", "episode_id", "signal_id", "baseline_link_status", "baseline_link_confidence", "baseline_link_reason", "reason_bucket", "candidate_relation", "notification_kind", "was_notified", "notify_reason_codes", "operator_decision_state", "operator_primary_side", "formal_execution_gate", "formal_blockers", "active_primary_action", "side_aware_primary_class", "side_aware_primary_state", "structural_priority_side", "structural_alignment_state", "modern_metadata_status", "human_basis", "causality_status")
+LEDGER_HEADERS = ("schema_version", "ledger_id", "ledger_basis", "signal_id", "episode_id", "notification_kind", "was_notified", "notify_reason_codes", "operator_decision_state", "operator_primary_side", "formal_execution_gate", "formal_blockers", "p5_operator_classes", "active_primary_action", "side_aware_primary_class", "side_aware_primary_state", "structural_priority_side", "structural_alignment_state", "proxy_outcomes", "actual_link_confidence", "actual_position_side", "entry_latency_minutes", "actual_realized_pnl", "usefulness_category", "human_basis", "causality_status")
+QUEUE_HEADERS = ("schema_version", "review_item_id", "question_type", "baseline_link_id", "episode_id", "signal_id", "reason_bucket", "modern_metadata_status", "usefulness_category", "question", "human_basis", "causality_status")
+MODERN_FIELDS = ("was_notified", "notify_reason_codes", "reason_for_notification", "summary_variant", "advice_variant", "trade_execution_gate", "trade_execution_blockers", "active_primary_action", "side_aware_primary_side", "side_aware_primary_class", "side_aware_primary_state", "structural_priority_side", "structural_alignment_state", "operator_decision_state", "operator_decision_primary_side", "followup_for_signal_id")
+
+def _s(value: Any) -> str: return "" if value is None else str(value).strip()
+def _hash(*values: Any) -> str: return hashlib.sha256("|".join(_s(v) for v in values).encode()).hexdigest()
+def _truth(value: Any) -> str:
+    return "true" if _s(value).lower() in {"1", "true", "yes", "y", "通知", "あり"} else ("false" if _s(value) else "")
+def _csv(headers: Iterable[str], rows: list[Mapping[str, Any]]) -> bytes:
+    out = io.StringIO(newline="")
+    writer = csv.DictWriter(out, fieldnames=list(headers), lineterminator="\n")
+    writer.writeheader()
+    for row in rows: writer.writerow({key: _s(row.get(key)) for key in headers})
+    return out.getvalue().encode()
+def _metadata(rows: list[Mapping[str, Any]]) -> dict[str, dict[str, str]]:
+    indexed: dict[str, dict[str, str]] = {}
+    for row in rows:
+        signal = _s(row.get("signal_id"))
+        if not signal: continue
+        selected = {field: _s(row.get(field)) for field in MODERN_FIELDS}
+        old = indexed.get(signal)
+        if old is None: indexed[signal] = selected; continue
+        for field, value in selected.items():
+            if value and old[field] and value != old[field]: raise ValueError("signal_identity_conflict")
+            if value and not old[field]: old[field] = value
+    return indexed
+def _notification(row: Mapping[str, Any]) -> str:
+    for field in ("notification_kind", "summary_variant", "reason_for_notification", "notification_class"):
+        value = _s(row.get(field))
+        if value: return value
+    return ""
+def _reason(link: Mapping[str, Any], meta: Mapping[str, Any]) -> str:
+    side = _s(link.get("side_compatibility")).lower()
+    symbol = _s(link.get("symbol_compatibility")).lower()
+    reason = _s(link.get("link_reason")).lower()
+    if side in {"conflict", "mismatch", "incompatible"} or "side_conflict" in reason: return "side_conflict"
+    if symbol in {"conflict", "mismatch", "incompatible"} or "symbol_conflict" in reason: return "symbol_conflict"
+    if reason == "competing_candidate_tie": return "ambiguous_tie"
+    if "followup" in reason or "management" in reason or "followup" in _notification(meta).lower() or "management" in _notification(meta).lower(): return "followup_only"
+    signal = _s(link.get("signal_id"))
+    if not signal or reason in {"", "no_candidate"} or _s(link.get("link_status")) == "no_candidate": return "no_candidate"
+    status, confidence = _s(link.get("link_status")), _s(link.get("link_confidence")).lower()
+    if status == "linked" and confidence in {"high", "medium", "low"}: return "linked_" + confidence
+    if status == "ambiguous" or confidence == "ambiguous": return "ambiguous_tie"
+    return "multiple_signal_candidates"
+def _relation(link: Mapping[str, Any]) -> str:
+    status = _s(link.get("link_status"))
+    if status == "linked": return "preserved_v2_link"
+    if status == "ambiguous": return "preserved_v2_ambiguous"
+    return "preserved_v2_no_candidate"
+def _status(meta: Mapping[str, Any]) -> str:
+    values = [value for value in meta.values() if _s(value)]
+    return "missing" if not values else ("complete" if len(values) == len(MODERN_FIELDS) else "partial")
+def _candidate(link: Mapping[str, Any], meta: Mapping[str, Any]) -> dict[str, str]:
+    row = {key: "" for key in CANDIDATE_HEADERS}
+    row.update({"schema_version": MODERN_LINK_CANDIDATE_VERSION, "candidate_id": "mlc_" + _hash(link.get("link_id"), MODERN_LINK_CANDIDATE_VERSION)[:24], "baseline_link_id": _s(link.get("link_id")), "episode_id": _s(link.get("episode_id")), "signal_id": _s(link.get("signal_id")), "baseline_link_status": _s(link.get("link_status")), "baseline_link_confidence": _s(link.get("link_confidence")), "baseline_link_reason": _s(link.get("link_reason")), "reason_bucket": _reason(link, meta), "candidate_relation": _relation(link), "notification_kind": _notification(meta), "was_notified": _truth(meta.get("was_notified")), "notify_reason_codes": _s(meta.get("notify_reason_codes")), "operator_decision_state": _s(meta.get("operator_decision_state")), "operator_primary_side": _s(meta.get("operator_decision_primary_side")), "formal_execution_gate": _s(meta.get("trade_execution_gate")), "formal_blockers": _s(meta.get("trade_execution_blockers")), "active_primary_action": _s(meta.get("active_primary_action")), "side_aware_primary_class": _s(meta.get("side_aware_primary_class")), "side_aware_primary_state": _s(meta.get("side_aware_primary_state")), "structural_priority_side": _s(meta.get("structural_priority_side")), "structural_alignment_state": _s(meta.get("structural_alignment_state")), "modern_metadata_status": _status(meta), "human_basis": "unknown", "causality_status": "not_claimed"})
+    return row
+def _usefulness(candidate: Mapping[str, Any], episode: Mapping[str, Any] | None, trial: Mapping[str, Any] | None, classification: Mapping[str, Any] | None) -> str:
+    accepted = candidate.get("baseline_link_status") == "linked" and candidate.get("baseline_link_confidence") in {"high", "medium"}
+    reason = _s(candidate.get("reason_bucket"))
+    if not accepted: return "ambiguous"
+    if reason == "followup_only": return "management_useful"
+    gate = _s(candidate.get("formal_execution_gate")).lower()
+    op = _s(candidate.get("operator_decision_state")).lower()
+    cls = _s((classification or {}).get("operator_class"))
+    if gate == "pass": return "formal_candidate_used"
+    if op in {"check_15m", "watch_zone"} or "B_CHECK_15M" in cls or "C_WATCH_ZONE" in cls: return "chart_check_then_entry"
+    if "attention" in _s(candidate.get("notification_kind")).lower(): return "attention_then_entry"
+    return "ambiguous"
+def build_modern_outputs(links: list[Mapping[str, Any]], signals: list[Mapping[str, Any]], episodes: list[Mapping[str, Any]], classifications: list[Mapping[str, Any]], trials: list[Mapping[str, Any]]) -> dict[str, Any]:
+    meta = _metadata(signals)
+    by_episode = { _s(row.get("episode_id")): row for row in episodes if _s(row.get("episode_id")) }
+    by_signal_class = { _s(row.get("source_signal_id")): row for row in classifications if _s(row.get("source_signal_id")) }
+    by_signal_trial = { _s(row.get("signal_id")): row for row in trials if _s(row.get("signal_id")) }
+    candidates = [_candidate(link, meta.get(_s(link.get("signal_id")), {field: "" for field in MODERN_FIELDS})) for link in links]
+    candidates.sort(key=lambda row: (row["episode_id"], row["baseline_link_id"]))
+    ledger: list[dict[str, str]] = []; queue: list[dict[str, str]] = []
+    for candidate in candidates:
+        sid, eid = candidate["signal_id"], candidate["episode_id"]
+        episode = by_episode.get(eid); trial = by_signal_trial.get(sid); cls = by_signal_class.get(sid)
+        usefulness = _usefulness(candidate, episode, trial, cls)
+        row = {key: "" for key in LEDGER_HEADERS}
+        row.update({"schema_version": MODERN_ATTRIBUTION_SCHEMA_VERSION, "ledger_id": "led_" + _hash(candidate["baseline_link_id"], "actual_episode")[:24], "ledger_basis": "actual_episode", "signal_id": sid, "episode_id": eid, "notification_kind": candidate["notification_kind"], "was_notified": candidate["was_notified"], "notify_reason_codes": candidate["notify_reason_codes"], "operator_decision_state": candidate["operator_decision_state"], "operator_primary_side": candidate["operator_primary_side"], "formal_execution_gate": candidate["formal_execution_gate"], "formal_blockers": candidate["formal_blockers"], "p5_operator_classes": _s((cls or {}).get("operator_class")), "active_primary_action": candidate["active_primary_action"], "side_aware_primary_class": candidate["side_aware_primary_class"], "side_aware_primary_state": candidate["side_aware_primary_state"], "structural_priority_side": candidate["structural_priority_side"], "structural_alignment_state": candidate["structural_alignment_state"], "proxy_outcomes": _s((trial or {}).get("outcome_status")), "actual_link_confidence": candidate["baseline_link_confidence"], "actual_position_side": _s((episode or {}).get("side")), "actual_realized_pnl": _s((episode or {}).get("realized_pnl")) if candidate["baseline_link_status"] == "linked" else "", "usefulness_category": usefulness, "human_basis": "unknown", "causality_status": "not_claimed"})
+        ledger.append(row)
+        if candidate["reason_bucket"] in {"side_conflict", "symbol_conflict", "ambiguous_tie", "no_candidate"}:
+            queue.append({"schema_version": MODERN_ATTRIBUTION_SCHEMA_VERSION, "review_item_id": "mar_" + _hash(candidate["baseline_link_id"], candidate["reason_bucket"])[:24], "question_type": "low_or_ambiguous_link", "baseline_link_id": candidate["baseline_link_id"], "episode_id": eid, "signal_id": sid, "reason_bucket": candidate["reason_bucket"], "modern_metadata_status": candidate["modern_metadata_status"], "usefulness_category": usefulness, "question": "Review baseline link attribution", "human_basis": "unknown", "causality_status": "not_claimed"})
+        if candidate["modern_metadata_status"] != "complete":
+            queue.append({"schema_version": MODERN_ATTRIBUTION_SCHEMA_VERSION, "review_item_id": "mar_" + _hash(candidate["baseline_link_id"], "metadata")[:24], "question_type": "missing_modern_metadata", "baseline_link_id": candidate["baseline_link_id"], "episode_id": eid, "signal_id": sid, "reason_bucket": candidate["reason_bucket"], "modern_metadata_status": candidate["modern_metadata_status"], "usefulness_category": usefulness, "question": "Review modern signal metadata coverage", "human_basis": "unknown", "causality_status": "not_claimed"})
+        if candidate["baseline_link_confidence"] in {"high", "medium"} and usefulness in {"formal_candidate_used", "chart_check_then_entry", "attention_then_entry", "management_useful"}:
+            queue.append({"schema_version": MODERN_ATTRIBUTION_SCHEMA_VERSION, "review_item_id": "mar_" + _hash(candidate["baseline_link_id"], "human_basis")[:24], "question_type": "human_basis_for_high_medium_actual", "baseline_link_id": candidate["baseline_link_id"], "episode_id": eid, "signal_id": sid, "reason_bucket": candidate["reason_bucket"], "modern_metadata_status": candidate["modern_metadata_status"], "usefulness_category": usefulness, "question": "Confirm human basis for descriptive usefulness", "human_basis": "unknown", "causality_status": "not_claimed"})
+    notified = { _s(row.get("signal_id")): row for row in signals if _truth(row.get("was_notified")) == "true" }
+    accepted_signals = {row["signal_id"] for row in candidates if row["baseline_link_status"] == "linked" and row["baseline_link_confidence"] in {"high", "medium"}}
+    for sid, signal in sorted(notified.items()):
+        if sid in accepted_signals: continue
+        row = {key: "" for key in LEDGER_HEADERS}; row.update({"schema_version": MODERN_ATTRIBUTION_SCHEMA_VERSION, "ledger_id": "led_" + _hash(sid, "notification_without_accepted_actual")[:24], "ledger_basis": "notification_without_accepted_actual", "signal_id": sid, "notification_kind": _notification(signal), "was_notified": "true", "notify_reason_codes": _s(signal.get("notify_reason_codes")), "operator_decision_state": _s(signal.get("operator_decision_state")), "operator_primary_side": _s(signal.get("operator_decision_primary_side")), "formal_execution_gate": _s(signal.get("trade_execution_gate")), "formal_blockers": _s(signal.get("trade_execution_blockers")), "active_primary_action": _s(signal.get("active_primary_action")), "side_aware_primary_class": _s(signal.get("side_aware_primary_class")), "side_aware_primary_state": _s(signal.get("side_aware_primary_state")), "structural_priority_side": _s(signal.get("structural_priority_side")), "structural_alignment_state": _s(signal.get("structural_alignment_state")), "proxy_outcomes": _s(by_signal_trial.get(sid, {}).get("outcome_status")), "usefulness_category": "useful_no_entry_proxy" if _s(by_signal_trial.get(sid, {}).get("outcome_status")).lower() in {"win", "positive", "favorable", "success"} else "no_actual_action", "human_basis": "unknown", "causality_status": "not_claimed"}); ledger.append(row)
+    ledger.sort(key=lambda row: row["ledger_id"]); queue.sort(key=lambda row: row["review_item_id"])
+    report = {"baseline_episodes": len(episodes), "baseline_links": len(links), "reason_bucket_counts": dict(sorted(Counter(row["reason_bucket"] for row in candidates).items())), "confidence_counts": dict(sorted(Counter(_s(row.get("link_confidence")) for row in links).items())), "modern_metadata_coverage": dict(sorted(Counter(row["modern_metadata_status"] for row in candidates).items())), "actual_attribution": {"accepted_high_medium": sum(row["baseline_link_status"] == "linked" and row["baseline_link_confidence"] in {"high", "medium"} for row in candidates), "actual_pnl_rows": sum(bool(row["actual_realized_pnl"]) for row in ledger if row["ledger_basis"] == "actual_episode")}, "proxy_only_usefulness": dict(sorted(Counter(row["usefulness_category"] for row in ledger if row["ledger_basis"] == "notification_without_accepted_actual").items())), "notification_kind_breakdown": dict(sorted(Counter(row["notification_kind"] or "blank" for row in candidates).items())), "operator_state_breakdown": dict(sorted(Counter(row["operator_decision_state"] or "blank" for row in candidates).items())), "review_queue_counts": dict(sorted(Counter(row["question_type"] for row in queue).items())), "causality_statement": {"automatic_causal_claims": 0, "status": "not_claimed"}, "canonical_link_replacement": False, "safety_boundary": "report-only / no causal claim / no baseline adoption / no P9 decision / no automatic order"}
+    report_md = "\n".join(("# Modern attribution report", "", f"- Baseline episodes: {len(episodes)}", f"- Baseline links: {len(links)}", "- Actual attribution and proxy usefulness are separate.", "- Automatic causal claims: 0.", "- Canonical v2 link replacement: false.", "- report-only / human approval required / no automatic order.", ""))
+    return {"candidate_csv": _csv(CANDIDATE_HEADERS, candidates), "ledger_csv": _csv(LEDGER_HEADERS, ledger), "queue_csv": _csv(QUEUE_HEADERS, queue), "report": report, "report_md": report_md, "candidates": candidates, "ledger": ledger, "queue": queue}
