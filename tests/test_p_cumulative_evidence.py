@@ -31,8 +31,8 @@ class CumulativeEvidenceTests(unittest.TestCase):
         inputs["signal_log"] = ([row(signal_id="s", event_timestamp_utc="2026-07-26T00:00:00Z")], inputs["signal_log"][1])
         with self.assertRaises(ValueError): build_evidence_facts(inputs, generation(), "2026-07-25T00:00:00Z")
     def test_identity_conflict(self):
-        r1 = row(classification_id="c", classifier_method_version="v1")
-        r2 = row(classification_id="c", classifier_method_version="v2")
+        r1 = row(classification_id="c", classifier_method_version="v1", operator_class="A_FORMAL")
+        r2 = row(classification_id="c", classifier_method_version="v1", operator_class="B_CHECK_15M")
         inputs = {"classifications":([r1,r2], {"logical_name":"c","row_count":2,"fingerprint":"x"}), "trial_facts":([], {"logical_name":"t","row_count":0,"fingerprint":""}), "episodes":([], {"logical_name":"e","row_count":0,"fingerprint":""}), "links_v2":([], {"logical_name":"l","row_count":0,"fingerprint":""}), "signal_log":([], {"logical_name":"s","row_count":0,"fingerprint":""})}
         with self.assertRaises(EvidenceIdentityConflict): build_evidence_facts(inputs, generation(), "2026-07-25T00:00:00Z")
 
@@ -48,7 +48,7 @@ class CumulativeEvidenceTests(unittest.TestCase):
     def test_actual_link_only_confidence_and_deterministic_order(self):
         base = {"classifications":([row(classification_id="c1", classifier_method_version="v1"), row(classification_id="c2", classifier_method_version="v4")], {"logical_name":"c","row_count":2,"fingerprint":"c"}), "trial_facts":([], {"logical_name":"t","row_count":0,"fingerprint":"t"}), "episodes":([row(episode_id="e1", association_method_version="a", realized_pnl="4")], {"logical_name":"e","row_count":1,"fingerprint":"e"}), "links_v2":([row(link_id="l1", link_confidence="high", link_method_version="l", link_status="linked", episode_id="e1")], {"logical_name":"l","row_count":1,"fingerprint":"l"}), "signal_log":([], {"logical_name":"s","row_count":0,"fingerprint":"s"})}
         facts, _ = build_evidence_facts(base, generation(), "2026-07-25T00:00:00Z")
-        self.assertEqual([r["component_version"] for r in facts if r["evidence_kind"] == "classification"], ["v1", "v4"])
+        self.assertEqual(sorted(r["component_version"] for r in facts if r["evidence_kind"] == "classification"), ["v1", "v4"])
         files, result = build_bundle(base, generation(), "2026-07-25T00:00:00Z")
         manifest = result["manifest"]
         self.assertEqual(manifest["actual_link_confidence_counts"], {"high": 1})

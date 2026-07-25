@@ -1153,3 +1153,18 @@ chore: record P operational evidence acceptance
 local generated reportsは通常commitしない。既存repo方針でtracked evidenceが必要な場合だけ、最小summaryを追加する。
 
 pushは明示的な既存運用方針に従う。upstreamがない場合やpush許可が不明な場合はcommitまでで停止する。
+
+## FIX2 — 日次rolling snapshotとcurrent evidenceの整合
+
+`manual_operator_classifications.csv`と`manual_operator_trial_facts.csv`はappend-only eventではなく、成功した日次directoryごとのrolling snapshotとして扱う。accepted directoryをYYYYMMDD昇順で処理し、snapshot identityはそれぞれ次の複合キーとする。
+
+- classification: `classification|classifier_method_version|classification_id`
+- proxy trial fact: `proxy_trial_fact|classifier_method_version|trial_fact_id`
+
+同一snapshot payloadはexact duplicateとしてdedupeし、同一snapshot identityのmutable payload変更はrevisionとして扱う。selected current date/cutoff以前の最新accepted snapshotを採用し、過去revisionを累積facts/cohortへ二重計上しない。v1/v4はcomponent versionを含むため別cohortとして保持する。immutable anchor（classificationはidentity/source signal/candidate/event timestamp/side/version、trialはidentity/scenario/scenario event/signal/candidate/event timestamp/side/setup/version）が異なる場合だけfail closedし、logical source、identity、first/conflicting date、field名をcompactに返す。canonical episode/link/signal inputsは従来どおりsame identity/different payloadをstrict conflictとする。
+
+refresh manifestは`latest_accepted_snapshot_as_of_cutoff` policy、logical sourceごとのexact duplicate/revised identity/superseded/selected row counts、relative snapshot lineage、selected payload fingerprintを記録する。これらはrun identityへ反映し、同一selected state/source HEAD/cutoffは同一bytes/historyとなる。
+
+formal gate semantic impactのheadline populationはselected latest classification snapshotsのみとし、trial factsはheadlineへ重複加算しない。notification usefulnessのactual categoryはlinked high/mediumかつ`was_notified=true`のactual rowだけに付与し、nonacceptedまたは未通知/unknownはblank、proxy-onlyは別集計とする。`automatic_causal_claims=0`、`causality_status=not_claimed`、`canonical_link_replacement=false`を維持する。
+
+`--current-date`で指定されたYYYYMMDD directoryが不存在、incomplete、unsuccessful、malformed、report-date mismatchの場合は earlier directoryへfallbackせずfail closedする。older historical incomplete directoriesはwarningsとしてのみ保持する。FIX2 acceptanceはselected current date 20260724とcycle manifest由来cutoffを使い、automatic source HEAD resolutionを使用する。同一snapshot identityのmutable revision conflictはinput defectではなくsnapshot collapseで解消し、immutable anchor conflictは停止条件として扱う。

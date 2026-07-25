@@ -70,6 +70,8 @@ def scan_daily_directories(daily_root: str | Path, current_date: str | None = No
     root = Path(daily_root)
     dirs = sorted((p for p in root.iterdir() if p.is_dir() and DATE_RE.fullmatch(p.name)), key=lambda p: p.name) if root.exists() else []
     if current_date:
+        if not DATE_RE.fullmatch(current_date) or not any(p.name == current_date for p in dirs):
+            raise EvidenceInputError("selected_current_date_missing:" + str(current_date))
         dirs = [p for p in dirs if p.name <= current_date]
     if not dirs:
         raise EvidenceInputError("no_daily_directories")
@@ -111,10 +113,24 @@ def _row_time(row: dict[str, str], fields: tuple[str, ...]) -> datetime:
         raise EvidenceInputError("naive_event_timestamp")
     return parsed.astimezone(timezone.utc)
 
-def _aggregate_csv(accepted: list[dict[str, Any]], filename: str, logical: str, cutoff: datetime) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, str]]:
+def _snapshot_identity(kind: str, row: dict[str, str]) -> tuple[str, str, str]:
+    if kind == "classification":
+        return kind, _s(row.get("classifier_method_version")), _s(row.get("classification_id"))
+    return "proxy_trial_fact", _s(row.get("classifier_method_version")), _s(row.get("trial_fact_id"))
+
+def _snapshot_anchors(kind: str, row: dict[str, str]) -> tuple[str, ...]:
+    fields = ("classification_id", "source_signal_id", "signal_id", "candidate_id", "event_timestamp_utc", "side", "classifier_method_version") if kind == "classification" else ("trial_fact_id", "scenario_id", "scenario_event_id", "signal_id", "candidate_id", "event_timestamp_utc", "side", "setup_family", "classifier_method_version")
+    return tuple(_s(row.get(field)) for field in fields)
+
+def _row_payload(row: dict[str, str]) -> str:
+    return json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+def _collapse_snapshots(accepted: list[dict[str, Any]], filename: str, logical: str, kind: str, cutoff: datetime) -> tuple[list[dict[str, str]], dict[str, Any], dict[str, str], dict[str, Any]]:
     rows: list[dict[str, str]] = []
     source_fingerprints: dict[str, str] = {}
     headers: list[str] | None = None
+    selected: dict[tuple[str, str, str], dict[str, Any]] = {}
+    exact_duplicates = 0; revisions = 0; superseded = 0; revised_ids: set[tuple[str, str, str]] = set()
     for item in accepted:
         path = item["path"] / filename
         data = path.read_bytes()
@@ -125,13 +141,32 @@ def _aggregate_csv(accepted: list[dict[str, Any]], filename: str, logical: str, 
                 raise EvidenceInputError("invalid_csv_schema:" + logical)
             if headers is None: headers = list(reader.fieldnames)
             elif list(reader.fieldnames) != headers: raise EvidenceInputError("incompatible_csv_schema:" + logical)
-            for row in reader:
+            daily_rows = sorted((dict(row) for row in reader), key=_row_payload)
+            for row in daily_rows:
                 value = dict(row)
                 if _row_time(value, ("event_timestamp_utc",)) > cutoff:
                     raise EvidenceInputError("future_daily_event_timestamp:" + logical)
-                rows.append(value)
-    joined = b"".join((date.encode() + b":" + fingerprint.encode() + b"\n") for date, fingerprint in sorted(source_fingerprints.items()))
-    return rows, {"logical_name": logical, "row_count": len(rows), "fingerprint": _sha(joined)}, source_fingerprints
+                identity = _snapshot_identity(kind, value)
+                if not identity[1] or not identity[2]:
+                    raise EvidenceInputError("missing_snapshot_identity:" + logical)
+                anchors = _snapshot_anchors(kind, value)
+                prior = selected.get(identity)
+                if prior is not None:
+                    anchor_fields = ("classification_id", "source_signal_id", "signal_id", "candidate_id", "event_timestamp_utc", "side", "classifier_method_version") if kind == "classification" else ("trial_fact_id", "scenario_id", "scenario_event_id", "signal_id", "candidate_id", "event_timestamp_utc", "side", "setup_family", "classifier_method_version")
+                    differing = [field for field, old, new in zip(anchor_fields, prior["anchors"], anchors) if old != new]
+                    if differing:
+                        raise EvidenceInputError("snapshot_immutable_anchor_conflict:%s:%s:%s:%s:%s" % (logical, "|".join(identity), prior["date"], item["date"], ",".join(differing)))
+                    if prior["payload"] == _row_payload(value):
+                        exact_duplicates += 1
+                    else:
+                        revisions += 1; superseded += 1; revised_ids.add(identity)
+                selected[identity] = {"row": value, "date": item["date"], "first_date": prior["first_date"] if prior is not None else item["date"], "revision_count": (prior["revision_count"] + 1 if prior is not None and prior["payload"] != _row_payload(value) else (prior["revision_count"] if prior is not None else 0)), "anchors": anchors, "payload": _row_payload(value)}
+    rows = [selected[key]["row"] for key in sorted(selected)]
+    selected_bytes = ("\n".join(_row_payload(row) for row in rows) + "\n").encode()
+    meta = {"logical_name": logical, "row_count": len(rows), "fingerprint": _sha(selected_bytes), "headers": headers or []}
+    identities = [{"component_version": key[1], "source_identity": key[2], "first_source_date": selected[key]["first_date"], "latest_source_date": selected[key]["date"], "revision_count": selected[key]["revision_count"]} for key in sorted(selected)]
+    stats = {"snapshot_exact_duplicate_count": exact_duplicates, "snapshot_revised_identity_count": len(revised_ids), "snapshot_superseded_row_count": superseded, "selected_snapshot_row_count": len(rows), "snapshot_lineage": {logical: {"source_dates": sorted(source_fingerprints), "first_accepted_date": accepted[0]["date"], "latest_accepted_date": accepted[-1]["date"], "selected_row_count": len(rows), "identities": identities}}}
+    return rows, meta, source_fingerprints, stats
 
 
 def _canonical(root: Path, filename: str, logical: str, cutoff: datetime) -> tuple[list[dict[str, str]], dict[str, Any]]:
@@ -165,18 +200,18 @@ def refresh(root: Path, daily_root: Path, output_root: Path, runtime_generation:
     generation_head, resolution = _head(root, source_head)
     cutoff = _utc(accepted[-1]["manifest"]["source"]["max_timestamp"])
     cutoff_dt = datetime.fromisoformat(cutoff.replace("Z", "+00:00"))
-    classifications, cmeta, cfp = _aggregate_csv(accepted, "manual_operator_classifications.csv", "daily_classifications", cutoff_dt)
-    trials, tmeta, tfp = _aggregate_csv(accepted, "manual_operator_trial_facts.csv", "daily_trial_facts", cutoff_dt)
+    classifications, cmeta, cfp, cstats = _collapse_snapshots(accepted, "manual_operator_classifications.csv", "daily_classifications", "classification", cutoff_dt)
+    trials, tmeta, tfp, tstats = _collapse_snapshots(accepted, "manual_operator_trial_facts.csv", "daily_trial_facts", "proxy_trial_fact", cutoff_dt)
     episodes, emeta = _canonical(root, "manual_trade_episodes.csv", "manual_trade_episodes.csv", cutoff_dt)
     links, lmeta = _canonical(root, "manual_trade_signal_links.csv", "manual_trade_signal_links.csv", cutoff_dt)
     signals, smeta = _canonical(root, "trades.csv", "trades.csv", cutoff_dt)
     generation = GenerationIdentity(program="P", runtime_generation=runtime_generation, source_head=generation_head, schema_version="p_cumulative_evidence.v1", method_version="p_cumulative_evidence.v1", cutoff_utc=cutoff, classifier_version="manual_operator_classifier.v4", linker_version="manual_trade_signal_link.v2", p8_evidence_version="manual_operator_trial_evidence.v1")
     inputs = {"classifications": (classifications, cmeta), "trial_facts": (trials, tmeta), "episodes": (episodes, emeta), "links_v2": (links, lmeta), "signal_log": (signals, smeta)}
     files, result = build_bundle(inputs, generation, cutoff)
-    formal_rows = classifications + trials
+    formal_rows = classifications
     files.update(build_formal_outputs(formal_rows))
     manifest = result["manifest"]
-    manifest.update({"source_head_resolution": resolution, "accepted_daily_directories": [item["date"] for item in accepted], "warnings": sorted(warnings), "per_source_fingerprints": {"classifications": cfp, "trial_facts": tfp, "episodes": emeta, "links_v2": lmeta, "signal_log": smeta}, "lineage": [{"date": item["date"], "logical_directory": "logs/p8_operating_cycles/" + item["date"]} for item in accepted]})
+    manifest.update({"source_head_resolution": resolution, "accepted_daily_directories": [item["date"] for item in accepted], "warnings": sorted(warnings), "snapshot_policy": "latest_accepted_snapshot_as_of_cutoff", "snapshot_exact_duplicate_count": {"classifications": cstats["snapshot_exact_duplicate_count"], "trial_facts": tstats["snapshot_exact_duplicate_count"]}, "snapshot_revised_identity_count": {"classifications": cstats["snapshot_revised_identity_count"], "trial_facts": tstats["snapshot_revised_identity_count"]}, "snapshot_superseded_row_count": {"classifications": cstats["snapshot_superseded_row_count"], "trial_facts": tstats["snapshot_superseded_row_count"]}, "selected_snapshot_row_count": {"classifications": cstats["selected_snapshot_row_count"], "trial_facts": tstats["selected_snapshot_row_count"]}, "snapshot_lineage": {**cstats["snapshot_lineage"], **tstats["snapshot_lineage"]}, "per_source_fingerprints": {"classifications": cfp, "trial_facts": tfp, "episodes": emeta, "links_v2": lmeta, "signal_log": smeta}, "lineage": [{"date": item["date"], "logical_directory": "logs/p8_operating_cycles/" + item["date"]} for item in accepted]})
     manifest["output_fingerprints"] = {name: _sha(data) for name, data in sorted(files.items()) if name != "evidence_manifest.json"}
     contract = dict(manifest); contract.pop("manifest_contract_fingerprint", None); contract["output_fingerprints"] = dict(manifest["output_fingerprints"])
     manifest["manifest_contract_fingerprint"] = _sha((json.dumps(contract, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode())

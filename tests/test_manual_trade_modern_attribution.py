@@ -36,6 +36,7 @@ class ModernAttributionTests(unittest.TestCase):
         actual = [r for r in out["ledger"] if r["ledger_basis"] == "actual_episode"]
         self.assertEqual(actual[0]["entry_latency_minutes"], "12"); self.assertEqual(actual[0]["p5_operator_classes"], "A_FORMAL;B_CHECK_15M")
         low = next(r for r in actual if r["actual_link_confidence"] == "low"); self.assertEqual(low["actual_realized_pnl"], "20")
+        self.assertEqual(low["usefulness_category"], "")
         self.assertEqual(out["report"]["actual_attribution"]["accepted_high_medium"], 1); self.assertEqual(out["report"]["actual_attribution"]["accepted_high_medium_rows_with_pnl"], 1)
         signal = next(r for r in out["ledger"] if r["ledger_basis"] == "notification_without_accepted_actual"); self.assertEqual(signal["actual_realized_pnl"], ""); self.assertEqual(signal["usefulness_category"], "useful_no_entry_proxy")
         self.assertEqual(out["report"]["causality_statement"]["automatic_causal_claims"], 0)
@@ -70,5 +71,8 @@ class ModernAttributionTests(unittest.TestCase):
         self.assertEqual(metrics["not_notified_accepted_actual_associations"], 1)
         self.assertEqual(metrics["unknown_notification_status_accepted_actual_associations"], 1)
         self.assertEqual(metrics["human_confirmed_usefulness_count"], 0)
+        actual = {row["signal_id"]: row for row in out["ledger"] if row["ledger_basis"] == "actual_episode"}
+        self.assertEqual(actual["s2"]["usefulness_category"], "")
+        self.assertEqual(actual["s3"]["usefulness_category"], "")
 
 if __name__ == "__main__": unittest.main()

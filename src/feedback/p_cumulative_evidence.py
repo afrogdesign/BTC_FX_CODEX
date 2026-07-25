@@ -120,7 +120,7 @@ def _fact(kind: str, row: Mapping[str, Any], source: str, generation: Generation
     if dt > _parse_cutoff(cutoff):
         raise EvidenceInputError("future_event_timestamp")
     component = _component(kind, row)
-    evidence_id = "ev_" + _sha256(kind + "|" + identity)
+    evidence_id = "ev_" + _sha256(kind + "|" + component + "|" + identity)
     actual_pnl = _value(row, "realized_pnl", "actual_realized_pnl", "actual_net_pnl_after_fee") if kind == "actual_episode" else ""
     basis = "proxy" if kind == "proxy_trial_fact" else ("actual" if kind in {"actual_episode", "actual_link"} else "descriptive")
     fact = {key: "" for key in EVIDENCE_HEADERS}

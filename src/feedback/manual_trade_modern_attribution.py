@@ -78,7 +78,7 @@ def _candidate(link: Mapping[str, Any], meta: Mapping[str, Any]) -> dict[str, st
 def _usefulness(candidate: Mapping[str, Any], episode: Mapping[str, Any] | None, trial: Mapping[str, Any] | None, classification: Mapping[str, Any] | None) -> str:
     accepted = candidate.get("baseline_link_status") == "linked" and candidate.get("baseline_link_confidence") in {"high", "medium"}
     reason = _s(candidate.get("reason_bucket"))
-    if not accepted: return "ambiguous"
+    if not accepted: return ""
     if candidate.get("was_notified") != "true": return ""
     if reason == "followup_only": return "management_useful"
     gate = _s(candidate.get("formal_execution_gate")).lower()
