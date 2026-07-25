@@ -4,6 +4,15 @@ last_updated: `2026-07-25`
 authoritative_closure: `wp8_f4eeadd6864d736e7c457490d362ac0b`
 reviewed_head: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`
 
+## Latest P operational evidence acceptance
+
+- implementation commit: `1224a31f1126bdc17564192193e00a8224ee927e`
+- artifact locators: `local/reports/p_evidence/p_current_generation/latest/` and `local/reports/p8_daily_v2/wp5_wp6_acceptance_20260724_fix2/`
+- source HEAD was resolved automatically as `1224a31f1126bdc17564192193e00a8224ee927e`; cutoff was `2026-07-24T02:15:00Z` from the selected cycle manifest.
+- snapshot policy is `latest_accepted_snapshot_as_of_cutoff`; selected classification/trial rows are `907/346`, with v1/v4 cohorts `679/228` and `297/49`.
+- P9 v2 is `baseline_available`, but frozen proposal thresholds and frozen validation cohort remain missing. No formal gate change is approved.
+- evidence is report-only/descriptive with no automatic causality; production, notification, runtime, mail, and order behavior remain unchanged.
+
 ## Current task — P current-generation evidence collection
 
 Status: `waiting_for_material_input`

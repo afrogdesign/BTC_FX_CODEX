@@ -159,3 +159,18 @@ This section supersedes earlier P-package status and authorized-work statements 
 - no source, gate, classifier, score, threshold, notification, runtime, launchd, mail, canonical-link, schedule, production, FORMAL_GO, or order behavior was changed by WP8.
 - the P generation-alignment package is complete through WP8 as a report-only, non-adopted result.
 - H2 through H8 and every production/live action remain unauthorized.
+
+## P operational evidence FIX2 acceptance
+
+- implementation commit: `1224a31f1126bdc17564192193e00a8224ee927e`
+- acceptance evidence: `local/reports/p_evidence/p_current_generation/latest/`; P8/P9 v2: `local/reports/p8_daily_v2/wp5_wp6_acceptance_20260724_fix2/`
+- acceptance source head: `1224a31f1126bdc17564192193e00a8224ee927e`; cycle-derived cutoff: `2026-07-24T02:15:00Z`
+- snapshot policy: `latest_accepted_snapshot_as_of_cutoff`; accepted daily directories: `14`
+- selected snapshots: classification `907`, proxy-trial `346`; revisions classification `23`, trial `48`; superseded rows `23` / `48`
+- cohorts: classification v1/v4 `679/228`; proxy-trial v1/v4 `297/49`
+- actual associations `58`; notified accepted actual `58`; not-notified `0`; unknown notification status `0`; human-confirmed usefulness `0`; metadata-complete notified actual `0`
+- ambiguous notified actual `54` / rate `0.9310344827586207`; direction match/mismatch/unknown `0/0/58`; Long/Short `25/33`
+- formal headline population is selected classification snapshots only: advisory `898`, hard `3`, unknown `0`, mixed `3`, blocker removed `898`, other blockers `896`, potentially pass `2`
+- P9 v2 state: `baseline_available`; missing requirements: frozen proposal thresholds and frozen validation cohort; production_ready `false`; proposal approval `not_requested`
+- evidence remains descriptive and no-causality: automatic causal claims `0`, `causality_status=not_claimed`, canonical link replacement `false`
+- formal gate change remains unapproved; no source, gate, classifier, score, threshold, notification, runtime, launchd, mail, schedule, production, FORMAL_GO, or order behavior changed.

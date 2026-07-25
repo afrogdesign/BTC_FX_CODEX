@@ -50,3 +50,7 @@
 ## Safety boundary
 
 report-only / human-decided / no automatic tuning / no automatic phase promotion / no automatic order。source、gate、threshold、classifier、notification、runtime、mailはWP0で変更していない。
+
+## P operational evidence acceptance locator
+
+FIX2 implementation `1224a31f1126bdc17564192193e00a8224ee927e` produced the report-only current evidence bundle at `local/reports/p_evidence/p_current_generation/latest/` and the P8/P9 v2 shadow at `local/reports/p8_daily_v2/wp5_wp6_acceptance_20260724_fix2/`. The selected snapshot policy is `latest_accepted_snapshot_as_of_cutoff`; the cycle-derived cutoff is `2026-07-24T02:15:00Z`, and source HEAD resolution was automatic. Current P9 v2 is `baseline_available` with frozen proposal thresholds and frozen validation cohort still missing. Formal headline impact uses selected classification snapshots only; the formal gate remains unchanged and unapproved. All evidence is descriptive, `automatic_causal_claims=0`, `causality_status=not_claimed`, and `canonical_link_replacement=false`.
