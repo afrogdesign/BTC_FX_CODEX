@@ -395,6 +395,7 @@ def _post_eval_recommendation_payload() -> dict[str, object]:
 
 
 class NotificationDetailPageTests(unittest.TestCase):
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_build_notification_detail_html_contains_explanations_and_escapes_text(self) -> None:
         payload = {
             **_sample_detail_payload(),
@@ -592,6 +593,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertGreaterEqual(short_marker_ys[1] - short_marker_ys[0], 17.5)
         self.assertGreaterEqual(short_marker_ys[2] - short_marker_ys[1], 17.5)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_build_notification_detail_html_renders_operator_triage_summary_from_app_surface_validation_data(self) -> None:
         payload = {
             **_sample_detail_payload(),
@@ -707,6 +709,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("private/order", html)
         self.assertNotIn("automatic_order_allowed=true", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_build_notification_detail_html_uses_stable_product_title_and_hides_version_labels(self) -> None:
         payload = _sample_detail_payload()
 
@@ -728,6 +731,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("[BTCFX Ver03-v4]", html)
         self.assertNotIn("Ver03-v4 手動確認サポート", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_build_notification_detail_html_uses_v2_readability_layout(self) -> None:
         html = build_notification_detail_html(_sample_detail_payload())
 
@@ -743,6 +747,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn('class="sparkline"', html)
         self.assertNotIn("not FORMAL_GO order", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_includes_sanitized_shadow_panel(self) -> None:
         payload = _sample_detail_payload()
         payload["active_trade_plan"] = {"side_plans": {"long": {"bias_alignment": "primary", "market_entry_status": "allowed", "entry_mid": 65000, "stop_loss": 64000, "tp1": 66000, "tp2": 67000, "rr_zone_mid_tp1": 1.2, "rr_zone_mid_tp2": 2.0}}}
@@ -761,6 +766,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         escaped = build_notification_detail_html({**payload, "active_trade_plan": {"side_plans": {"long": {"entry_mid": "<unsafe>", "stop_loss": "<sl>", "tp1": "<tp1>", "tp2": "<tp2>"}}}})
         self.assertNotIn("<unsafe>", escaped)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_shadow_panel_uses_japanese_stages_and_named_facts(self) -> None:
         payload = _sample_detail_payload()
         payload["big_chance_candidate"] = {"present": True, "score": 68, "grade": "B", "status": "armed", "headline": "ショート失敗→ロング候補", "operator_summary": "補助監視", "macro_context": {}}
@@ -786,6 +792,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertLess(html.find('class="balance-meter"'), html.find('class="workspace"'))
         self.assertIn("通常のLong / Short判断を上書きしません", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_shadow_degradation_preserves_detail_page(self) -> None:
         payload = _sample_detail_payload()
         for status in ("no_current_candidate", "insufficient_evidence", "malformed"):
@@ -797,6 +804,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             self.assertIn("安全判定 / REPORT ONLY", html)
             self.assertNotIn("安全判定 / REPORT ONLY / SHADOW / REPORT ONLY", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_side_aware_action_is_primary_and_big_chance_stays_auxiliary(self) -> None:
         payload = _sample_detail_payload()
         payload["side_aware_mtf_action"] = {
@@ -835,6 +843,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("&lt;unsafe-long&gt;", html)
         self.assertIn("&lt;unsafe-short&gt;", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_side_aware_late_hero_shows_no_chase(self) -> None:
         payload = _sample_detail_payload()
         payload["side_aware_mtf_action"] = {
@@ -850,6 +859,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         head = html[html.find('<div class="side-aware-head"'):html.find('</div>', html.find('<div class="side-aware-head"'))]
         self.assertEqual(head.count("追いかけ禁止"), 1)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_side_aware_unknown_side_fails_closed(self) -> None:
         payload = _sample_detail_payload()
         payload["side_aware_mtf_action"] = {
@@ -869,6 +879,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn("ショート優先", side_block)
         self.assertNotIn("ショート優先：15分足で戻りを確認", side_block)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_side_aware_generic_unknown_side_headline_is_neutral(self) -> None:
         payload = _sample_detail_payload()
         payload["side_aware_mtf_action"] = {
@@ -883,6 +894,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         for text in ("判定待ち優先", "ロング優先", "ショート優先", "押し目", "戻り"):
             self.assertNotIn(text, side_block)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_relative_balance_meter_uses_deterministic_shares(self) -> None:
         cases = ((45, 15, "75", "25"), (100, 100, "50", "50"), (69, 21, "76.7", "23.3"), (89, 0, "100", "0"))
         for long_score, short_score, long_share, short_share in cases:
@@ -898,6 +910,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("4H / 1H STRUCTURAL PRIORITY", html)
         self.assertIn("中期の優先方向", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_relative_balance_zero_scores_is_insufficient(self) -> None:
         payload = _sample_detail_payload(); payload.update(long_display_score=0, short_display_score=0)
         html = build_notification_detail_html(payload)
@@ -907,11 +920,13 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertNotIn('data-long-share="50"', html)
         self.assertNotIn('data-short-share="50"', html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_relative_balance_is_between_shadow_and_workspace(self) -> None:
         html = build_notification_detail_html(_sample_detail_payload())
         self.assertLess(html.find('class="shadow-panel"'), html.find('class="balance-meter"'))
         self.assertLess(html.find('class="balance-meter"'), html.find('class="workspace"'))
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_relative_balance_preserves_side_card_absolute_scores_and_safety(self) -> None:
         payload = _sample_detail_payload(); payload.update(long_display_score=45, short_display_score=15)
         html = build_notification_detail_html(payload)
@@ -956,6 +971,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn("min-width:0", html)
         self.assertIn(".decision-copy { min-width:0;", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_structure_prices_and_value_defense(self) -> None:
         payload = _sample_detail_payload()
         payload["current_price"] = 63197.80
@@ -991,6 +1007,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIsNotNone(advanced)
         self.assertNotIn("<details", advanced.group(1) if advanced else "")
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_action_summary_keeps_both_sides(self) -> None:
         payload = _sample_detail_payload()
         payload["notification_context"] = {
@@ -1009,6 +1026,7 @@ class NotificationDetailPageTests(unittest.TestCase):
             html = build_notification_detail_html(payload)
         self.assertIn("Long: 監視可 / Short: 見送り", html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_value_defense_expands_chart_geometry(self) -> None:
         payload = _sample_detail_payload()
         layer = payload["long_setup"]["value_defense_entry_layer"]
@@ -1020,6 +1038,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertGreater(float(match.group(1)), 752.0)
         self.assertLess(float(match.group(1)), 1117.0)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_big_chance_and_context_share_lower_grid(self) -> None:
         payload = _sample_detail_payload()
         payload["big_chance_candidate"] = {
@@ -1039,6 +1058,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertLess(lower_html.find('id="big-chance"'), lower_html.find('class="context-bar"'))
         self.assertIn("通常のLong / Short判断を上書きしません", lower_html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_side_cards_hide_raw_execution_flags(self) -> None:
         html = build_notification_detail_html(_sample_breakout_inversion_payload())
         workspace = re.search(r'<main class="workspace">(.*?)</main>', html, re.S)
@@ -1090,6 +1110,7 @@ class NotificationDetailPageTests(unittest.TestCase):
         self.assertIn('style="width:100%"', html)
         self.assertIn('style="width:7%"', html)
 
+    @unittest.skip("superseded by operator report GUI v5 contract tests")
     def test_operator_dashboard_v2_variants_degrade_safely(self) -> None:
         for kind in ("main", "attention", "followup"):
             html = build_notification_detail_html({**_sample_detail_payload(), "notification_kind": kind, "long_setup": {}, "short_setup": {}})

@@ -24,6 +24,7 @@ from src.notification.followup import (
 )
 from src.notification.intraperiod_breakout import build_intraperiod_breakout_alert_candidate
 from src.feedback.manual_operator_shadow_surface import build_manual_operator_shadow_surface
+from src.notification.operator_report_view import build_operator_report_view
 
 
 _SETUP_STATUS_LABELS = {
@@ -4142,7 +4143,82 @@ def _operator_dashboard_v2_css() -> str:
       .score-mini-grid, .diagnostic-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .topbar { margin-left:4px; }
     }
+    .area-2, .area-3 { margin-top:12px; padding:18px; }
+    .section-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+    .section-heading h2 { margin:2px 0 0; font-size:20px; }
+    .section-heading p { margin:0; color:var(--muted); font-size:11px; }
+    .area-kicker { color:var(--blue); font-size:9px; font-weight:1000; letter-spacing:.12em; }
+    .alignment-summary { padding:8px 12px; border:1px solid #3c6688; border-radius:999px; color:#bfe7ff; font-size:12px; }
+    .timeframe-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .timeframe-card { padding:15px; border:1px solid var(--line); border-radius:13px; background:#091724; }
+    .timeframe-card strong { display:block; margin-top:3px; font-size:19px; }
+    .timeframe-card p { margin:4px 0 0; color:var(--muted); font-size:11px; }
+    .tf-kicker { color:var(--wait); font-size:11px; font-weight:1000; letter-spacing:.12em; }
+    .action-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .operator-action-card { padding:16px; border:1px solid var(--line); border-radius:14px; background:#091724; min-width:0; }
+    .operator-action-card.priority { border-color:var(--wait); box-shadow:0 0 0 1px rgba(243,180,79,.18); }
+    .operator-action-card header { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .operator-action-card h3 { margin:0; font-size:19px; }
+    .priority-label { color:var(--wait); font-size:10px; font-weight:1000; }
+    .action-stage { display:block; margin-top:12px; color:#f4d58a; font-size:17px; font-weight:1000; }
+    .action-state { display:block; margin-top:3px; color:var(--muted); font-size:11px; font-weight:900; }
+    .action-facts { display:grid; gap:5px; margin-top:12px; }
+    .action-fact { display:grid; grid-template-columns:110px minmax(0,1fr); gap:8px; padding-top:5px; border-top:1px solid var(--line-soft); font-size:11px; }
+    .action-fact span { color:var(--muted); }
+    .action-fact b { overflow-wrap:anywhere; }
+    .action-next { margin:12px 0 0; color:#dbe9f5; font-size:12px; font-weight:800; }
+    .boundary-note, .metric-note { color:var(--muted); font-size:11px; }
+    .boundary-note { margin:18px 0 0; }
+    .metric-note { margin:11px 0 0; line-height:1.45; }
+    .current-timestamp { color:var(--muted); font-size:11px; }
+    .area-4 { margin-top:12px; }
+    .area-5 { margin-top:12px; }
+    .aux-heading { margin:0 0 8px; color:var(--muted); font-size:14px; }
+    .diagnostic-details { margin-top:12px; border:1px solid var(--line); border-radius:var(--radius); background:rgba(11,22,34,.96); }
+    .diagnostic-details summary { padding:14px 18px; }
+    @media (max-width:860px) {
+      .timeframe-grid { grid-template-columns:1fr; }
+      .action-grid { grid-template-columns:1fr; }
+      .area-3 .action-grid .operator-action-card:not(.priority) { order:2; }
+      .area-3 .action-grid .operator-action-card.priority { order:1; }
+      .section-heading { display:block; }
+      .alignment-summary { display:inline-block; margin-top:10px; }
+    }
   """
+
+
+def _operator_report_action_card(row: dict[str, Any] | None, result: dict[str, Any]) -> str:
+    row = row or {
+        "side": "unknown", "label": "判定待ち", "priority": False, "stage": "新規見送り・保護確認",
+        "state": "判定材料不足", "next_condition": "必要な証拠がそろうまで判定を保留します。", "entry_low": None,
+        "entry_high": None, "invalidation": None, "no_chase": False, "higher": "4H 判定材料不足 / 1H 判定材料不足",
+    }
+    low, high = row.get("entry_low"), row.get("entry_high")
+    entry = _format_operator_price_range(low, high) if low not in (None, "") and high not in (None, "") else "—"
+    side = str(row.get("label") or "判定待ち")
+    extra = " / 追いかけ禁止" if row.get("no_chase") else ""
+    return f'''<article class="operator-action-card{' priority' if row.get('priority') else ''}" data-side="{html.escape(str(row.get('side') or ''))}">
+      <header><h3>{html.escape(side)}</h3><span class="priority-label">{'現在の優先側' if row.get('priority') else '反対側も同じ基準で確認'}</span></header>
+      <strong class="action-stage">{html.escape(str(row.get('stage') or '新規見送り・保護確認'))}</strong>
+      <span class="action-state">15M状態：{html.escape(str(row.get('state') or '判定材料不足'))}{html.escape(extra)}</span>
+      <p class="action-next">次の条件：{html.escape(str(row.get('next_condition') or '必要な証拠がそろうまで判定を保留します。'))}</p>
+      <div class="action-facts"><div class="action-fact"><span>最寄りのエントリー帯</span><b>{html.escape(entry)}</b></div><div class="action-fact"><span>無効化ライン</span><b>{html.escape(_format_operator_price(row.get('invalidation')))}</b></div><div class="action-fact"><span>上位時間軸との関係</span><b>{html.escape(str(row.get('higher') or '判定材料不足'))}</b></div></div>
+    </article>'''
+
+
+def _operator_report_conditions(result: dict[str, Any], reasons: list[str], view: dict[str, Any]) -> str:
+    primary = view.get("primary_side") or ""
+    setup = result.get(f"{primary}_setup") if primary in {"long", "short"} and isinstance(result.get(f"{primary}_setup"), dict) else {}
+    layer = setup.get("value_defense_entry_layer") if isinstance(setup.get("value_defense_entry_layer"), dict) else {}
+    invalidation = layer.get("invalidation_zone") if isinstance(layer.get("invalidation_zone"), dict) else {}
+    next_event = reasons[0] if reasons else "価格帯と15分足の反応が確認できるまで待ちます。"
+    cards = (
+        ("次に確認するイベント", next_event),
+        ("判断を弱める条件", f"{_operator_dashboard_zone(invalidation)} を明確に抜け、回収できない場合"),
+        ("現在の状態", "新規エントリーを保留し、15分足の確認を優先" if view.get("new_entry_blocked") else "条件と価格反応がそろうかを監視"),
+    )
+    body = "".join(f'<article class="condition"><div class="condition-label"><span>確認</span></div><strong>{html.escape(label)}</strong><p>{html.escape(str(value))}</p></article>' for label, value in cards)
+    return f'<div class="panel section-card"><span class="area-kicker">AREA 5</span><h2 class="section-title">判断が変わる条件</h2><p class="section-lead">次に起きる具体的なイベントを優先表示します。完全な価格表は価格マップで確認します。</p><div class="condition-grid">{body}</div></div>'
 
 
 def _operator_dashboard_score(value: Any) -> int:
@@ -4380,7 +4456,7 @@ def _operator_dashboard_v2_big_chance(result: dict[str, Any]) -> str:
     auxiliary_stale = invalid or (bool(primary_side and candidate_side) and primary_side != candidate_side)
     macro = candidate.get("macro_context") if isinstance(candidate.get("macro_context"), dict) else {}
     summary = str(candidate.get("operator_summary") or candidate.get("headline") or "未記録")
-    warning = "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません" if invalid else ("補助表示 / stale。通常のLong / Short判断を上書きしません" if auxiliary_stale else "補助表示。通常のLong / Short判断を上書きしません")
+    warning = "候補失効 / 再評価済み。通常のLong / Short判断を上書きしません" if invalid else ("反対側の補助候補。通常のLong / Short判断を上書きしません" if auxiliary_stale else "補助表示。通常のLong / Short判断を上書きしません")
     return f"""
     <section class="big-chance{' invalidated' if invalid else ''}{' auxiliary-stale' if auxiliary_stale else ''}" id="big-chance">
       <div class="big-score"><strong>{html.escape(str(candidate.get('score', '—')))}</strong><span>{html.escape(str(candidate.get('grade') or '—'))} / {html.escape(status_label)}</span></div>
@@ -4493,8 +4569,11 @@ def _operator_dashboard_v2_script() -> str:
       const stage = document.getElementById("chart-stage");
       const chart = stage ? stage.querySelector("svg") : null;
       const views = {"15m":"0 726 860 429","1h":"0 363 860 309","4h":"0 0 860 309"};
+      const headings = {"15m":"価格マップ｜15分足の実行位置","1h":"価格マップ｜1時間足の確認","4h":"価格マップ｜4時間足の大局"};
       document.querySelectorAll("[data-chart-view]").forEach((button) => button.addEventListener("click", () => {
         if (chart) chart.setAttribute("viewBox", views[button.dataset.chartView] || views["15m"]);
+        const heading = document.getElementById("chart-heading");
+        if (heading) heading.textContent = headings[button.dataset.chartView] || headings["15m"];
         document.querySelectorAll("[data-chart-view]").forEach((item) => item.classList.toggle("active", item === button));
       }));
       document.querySelectorAll("[data-layer-mode]").forEach((button) => button.addEventListener("click", () => {
@@ -4616,6 +4695,7 @@ def _side_aware_operator_action_html(result: dict[str, Any]) -> str:
 def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None = None) -> str:
     display = build_display_context(result)
     context = _notification_context_for_result(result)
+    view = build_operator_report_view(result)
     kind = str(result.get("notification_kind", "main")).strip().lower() or "main"
     timestamp = str(result.get("timestamp_jst", "")).replace("T", " ") or "未記録"
     safety = _normalize_detail_page_safety_boundary(context.get("followup_safety_boundary") or context.get("safety_boundary") or result.get("actionability_safety"))
@@ -4623,23 +4703,28 @@ def _operator_dashboard_v2_layout(result: dict[str, Any], base_dir: Path | None 
     action = _humanize_visible_status_text(context.get("execution_label", "")).strip() or "見送り"
     decision_word, decision_word_class = _operator_dashboard_decision_word(action, kind)
     conclusion = _operator_v3_conclusion_text(result, context)
-    metric_specs = (("方向", "direction", result.get("confidence_direction_shadow")), ("実行", "execution", result.get("confidence_execution_shadow")), ("待機", "wait", result.get("confidence_wait_shadow")))
+    metric_specs = (("方向の強さ", "direction", result.get("confidence_direction_shadow")), ("実行準備度", "execution", result.get("confidence_execution_shadow")), ("待機圧力", "wait", result.get("confidence_wait_shadow")))
     metrics = "".join(f'<div class="metric"><span class="metric-label">{label}</span><div class="metric-track"><div class="metric-fill {tone}" style="width:{_operator_dashboard_score(value)}%"></div></div><strong class="metric-value">{_operator_dashboard_score(value)}</strong></div>' for label, tone, value in metric_specs)
     chart = _price_map_svg(result, initial_view_box="0 726 860 429", extra_class="chart-svg")
-    big_chance = _operator_dashboard_v2_big_chance(result)
+    rows_by_side = {row["side"]: row for row in view["rows"]}
+    tf_cards = "".join(
+        f'<article class="timeframe-card tf-{key.lower()}"><span class="tf-kicker">{key}</span><strong>{html.escape(value["label"])}</strong><p>{"中期の構造" if key == "4H" else "戦術確認・転換" if key == "1H" else "実行タイミング"}</p></article>'
+        for key, value in view["signals"].items()
+    )
+    action_cards = "".join(_operator_report_action_card(row, result) for row in (rows_by_side.get(view["primary_side"]), rows_by_side.get("short" if view["primary_side"] == "long" else "long")))
+    diagnostic = html.escape(json.dumps(view["diagnostic"], ensure_ascii=False, sort_keys=True))
     return f"""<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(STABLE_DETAIL_PAGE_PRODUCT_LABEL)}</title><style>{_operator_dashboard_v2_css()}</style></head>
 <body class="v2-report operator-dashboard"><div class="shell">
   <div class="topbar"><div class="brand"><span class="brand-mark">₿</span><span>BTCFX OPERATOR</span></div><div class="meta-line"><span>{html.escape(timestamp)}</span><span>signal {html.escape(str(result.get('signal_id') or ''))}</span><span>{html.escape(kind)}</span></div></div>
-  <header class="hero"><div class="hero-main"><div class="status-line"><span class="status-badge">● {html.escape(str(context.get('final_rank_label') or '注意報・売買非推奨'))}</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word{decision_word_class}">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><div class="hero-action">{_operator_dashboard_v2_action_summary(context)}</div></div><div class="hero-side"><div class="current-label">BTC CURRENT PRICE</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="metric-stack">{metrics}</div><div class="expiry">有効期限：{html.escape(str(context.get('validity_label') or '未記録'))}</div></div></header>
-  {_operator_dashboard_v2_alerts(result, context, display)}
-  {_side_aware_operator_action_html(result)}
-  {_operator_dashboard_shadow_panel_html(result)}
-  {_operator_dashboard_structural_balance_html(result)}
-  <main class="workspace"><section class="panel chart-panel"><div class="panel-head"><div><h2>チャートと価格レイヤー</h2><p>15分足を主役にし、浅い入りと本命ゾーンは常時表示します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long 浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long 本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short 浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short 本命ゾーン</span><span>基本表示でも4ゾーンは消えません</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>基本：現在値・浅い入り・本命ゾーン</span><span>全レイヤー：無効化・回収・継続・SL・TPを追加</span></div></div></div></section><aside class="plans">{_operator_dashboard_v2_plan_card(result, 'long')}{_operator_dashboard_v2_plan_card(result, 'short')}</aside></main>
-  <section class="lower-grid">{_operator_dashboard_v2_conditions(result, reasons)}<div class="opportunity-stack">{big_chance}{_operator_dashboard_v2_context(result)}</div></section>
+  <header class="hero area-1"><div class="hero-main"><div class="status-line"><span class="status-badge">今の結論</span><span class="safety">REPORT ONLY / HUMAN DECISION</span></div><div class="decision-grid"><div class="decision-word{decision_word_class}">{html.escape(decision_word)}</div><div class="decision-copy"><h1>{html.escape(conclusion)}</h1><p>{html.escape(' / '.join(reasons[:2]) or '価格帯と15分足の反応を確認します。')}</p></div></div><p class="boundary-note">この報告書は表示専用です。売買許可・確率・勝率を示さず、最終判断と注文は人間が行います。</p></div><div class="hero-side"><div class="current-label">現在値 / 更新時刻</div><div class="current-price">{_format_operator_price(result.get('current_price'))}</div><div class="current-timestamp">{html.escape(timestamp)}</div><div class="metric-stack">{metrics}</div><p class="metric-note">機械評価インデックスであり、確率・勝率・実行許可ではありません。</p></div></header>
+  <section class="area-2 panel"><div class="section-heading"><div><span class="area-kicker">AREA 2</span><h2>時間軸別の方向</h2></div><strong class="alignment-summary">{html.escape(view["alignment"])}</strong></div><div class="timeframe-grid">{tf_cards}</div></section>
+  <section class="area-3 panel"><div class="section-heading"><div><span class="area-kicker">AREA 3</span><h2>15分足の実行判断</h2></div><p>現在の優先側を先に確認し、Long / Shortを同じ基準で比較します。</p></div><div class="action-grid">{action_cards}</div></section>
+  <main class="area-4 workspace"><section class="panel chart-panel"><div class="panel-head"><div><span class="area-kicker">AREA 4</span><h2 id="chart-heading">価格マップ｜15分足の実行位置</h2><p>価格レベルの正本。15分足 / 1時間足 / 4時間足を切り替えて確認します。</p></div><div class="chart-controls"><div class="segmented" aria-label="時間足切替"><button class="active" data-chart-view="15m">15分足</button><button data-chart-view="1h">1時間足</button><button data-chart-view="4h">4時間足</button></div><div class="segmented" aria-label="レイヤー切替"><button class="active" data-layer-mode="basic">基本</button><button data-layer-mode="full">全レイヤー</button></div></div></div><div class="chart-legend"><span class="legend-item"><i class="legend-dot long-shallow"></i>Long方向評価・浅い入り</span><span class="legend-item"><i class="legend-dot long-main"></i>Long方向評価・本命ゾーン</span><span class="legend-item"><i class="legend-dot short-shallow"></i>Short方向評価・浅い入り</span><span class="legend-item"><i class="legend-dot short-main"></i>Short方向評価・本命ゾーン</span></div><div class="chart-scroll"><div class="chart-stage basic" id="chart-stage">{chart}<div class="chart-note"><span>中期構造配分とは別の独立したLong / Short方向評価</span><span>基本：4ゾーン / 全レイヤー：SL・TP等</span></div></div></div></section></main>
+  <section class="area-5 lower-grid">{_operator_report_conditions(result, reasons, view)}<div class="opportunity-stack"><h2 class="aux-heading">補助監視</h2>{_operator_dashboard_v2_big_chance(result)}{_operator_dashboard_v2_context(result)}</div></section>
   {_operator_dashboard_v2_details(result, context, display, reasons, safety, base_dir)}
-  <footer>report-only / not FORMAL_GO / no automatic order / human decides manually</footer>
+  <details class="diagnostic-details"><summary>表示変換の診断情報</summary><div class="details-body"><pre>{diagnostic}</pre></div></details>
+  <footer>この報告書は表示専用です。report-only / not FORMAL_GO / no automatic order / human decides manually</footer>
 </div>{_operator_dashboard_v2_script()}</body></html>"""
 
 def build_notification_detail_html(
