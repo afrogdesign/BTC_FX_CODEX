@@ -5,7 +5,8 @@ last_updated: 2026-07-25
 ## Canonical P state — 2026-07-25
 
 - branch: `Ver04-v5`
-- current HEAD: `34c751fb9f257d188dc1ed2680df90fbe29855d1`
+- WP0/WP1 reviewed base HEAD: `34c751fb9f257d188dc1ed2680df90fbe29855d1`
+- WP0/WP1 reconciliation implementation commit: `f4966efe2891e87e2a095293721b48bdad0ec091`
 - actual input status: `provided`
 - actual episodes / links: `149` / `149`
 - actual eligible rows: `2`; high-confidence `0`; medium-confidence `2`

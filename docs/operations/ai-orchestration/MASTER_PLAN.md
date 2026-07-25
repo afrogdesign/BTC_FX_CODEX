@@ -38,7 +38,7 @@ Priority:
 
 ### 3.0 Current canonical state — 2026-07-25
 
-Branch `Ver04-v5`, HEAD `34c751fb9f257d188dc1ed2680df90fbe29855d1`。canonical actual inputは`provided`で、actual episodes/linksは`149/149`。現行selected actual evidenceはeligible `2`、high `0`、medium `2`、unique actual episodes used `2`、resolved proxy events `40`、unresolved proxy events `4`である。
+Branch `Ver04-v5`。WP0/WP1 reviewed baseは`34c751fb9f257d188dc1ed2680df90fbe29855d1`、reconciliation implementation commitは`f4966efe2891e87e2a095293721b48bdad0ec091`である。canonical actual inputは`provided`で、actual episodes/linksは`149/149`。現行selected actual evidenceはeligible `2`、high `0`、medium `2`、unique actual episodes used `2`、resolved proxy events `40`、unresolved proxy events `4`である。
 
 Product routeは`program=P`, `phase=P9`。P9 initial/practical readinessはともに`false`で、blockerはactual不存在ではなく量、side/setup coverage、confidence、validation windowの不足である。P8 daily healthは一回のcycleの健康・lineage、P9 cumulative evidenceは複数日/episodeのproposal eligibilityであり、daily successからP9 readinessへ自動昇格しない。
 

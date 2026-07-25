@@ -1,5 +1,10 @@
 # P8 / P9 Issue Register
 
+last_updated: 2026-07-25
+status: active
+operating_specification: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
+current_reconciliation: `docs/operations/ai-orchestration/P_GENERATION_RECONCILIATION_REPORT.md`
+
 ## 2026-07-25 current reconciliation — WP0/WP1
 
 - actual input/episode/link availability: `provided` / `149` / `149`。
@@ -9,10 +14,6 @@
 - P8 daily healthはone-cycle health/lineage、P9 cumulative evidenceは複数日・複数episodeのproposal eligibilityであり、相互に自動昇格しない。
 - Product P9とMacro `program=M`の`macro_p9_proposal_engine.v1`（M5/M6 improvement proposal）を区別する。
 - production changeなし。report-only / human-decided / no automatic tuning / no automatic order。
-
-last_updated: 2026-07-11
-status: active
-source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`
 
 ## Rules
 
