@@ -5,7 +5,7 @@ last_updated: 2026-07-22
 ## Primary source and macro runtime
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- branch: `Ver04-v4`
+- branch: `Ver04-v5`
 - accepted core runtime implementation: `bc61478`
 - prior factual state commit: `601dfc4`
 - macro LaunchAgent: `com.afrog.btc-macro-structure`

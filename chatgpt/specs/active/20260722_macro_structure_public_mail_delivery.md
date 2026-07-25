@@ -4,7 +4,7 @@
 - schema_version: `macro_structure_public_delivery.v1`
 - method_version: `macro_structure_public_delivery.v1`
 - status: fixed by ChatGPT; implementation pending
-- branch: `Ver04-v4`
+- branch: `Ver04-v5`
 - accepted predecessor: M-ENTRY1 at `475ae4d`
 
 ## 1. Purpose

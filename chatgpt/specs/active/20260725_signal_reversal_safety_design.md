@@ -10,7 +10,7 @@ tags:
   - operator-ui
 status: design-fixed
 work_id: P-SAFETY-REVERSAL-1
-target_branch: Ver04-v4
+target_branch: Ver04-v5
 ---
 
 > [!abstract]
@@ -44,7 +44,7 @@ target_branch: Ver04-v4
 |---|---|
 | Work ID | `P-SAFETY-REVERSAL-1` |
 | 対象リポジトリ | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` |
-| 対象ブランチ | `Ver04-v4` |
+| 対象ブランチ | `Ver04-v5` |
 | 調査時のHEAD locator | `f08a815` |
 | 設計状態 | `design-fixed / implementation-pending` |
 | 実装方式 | 1回の bounded CODEX task |
