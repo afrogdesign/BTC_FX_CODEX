@@ -28,6 +28,7 @@ _COMPARISON_STATUSES = {
     "not_comparable_program",
     "not_comparable_runtime_generation",
     "not_comparable_schema_version",
+    "baseline_reset_required_component_version",
     "baseline_reset_required_method_version",
     "not_comparable_legacy_unversioned",
 }
@@ -136,6 +137,13 @@ def compare_generation_identities(
         return GenerationComparison("not_comparable_schema_version", False, False, ("schema_version_mismatch",))
     if selected is not None and (getattr(baseline, selected) == LEGACY_UNVERSIONED or getattr(candidate, selected) == LEGACY_UNVERSIONED):
         return GenerationComparison("not_comparable_legacy_unversioned", False, False, ("claim_component_legacy_unversioned",))
+    if selected is not None and getattr(baseline, selected) != getattr(candidate, selected):
+        return GenerationComparison(
+            "baseline_reset_required_component_version",
+            False,
+            True,
+            (f"claim_component_version_mismatch:{selected}",),
+        )
     if baseline.method_version != candidate.method_version:
         return GenerationComparison("baseline_reset_required_method_version", False, True, ("method_version_mismatch",))
     reasons = ("source_head_changed",) if baseline.source_head != candidate.source_head else ("generation_contract_match",)

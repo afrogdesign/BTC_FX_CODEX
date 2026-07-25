@@ -67,6 +67,35 @@ class GenerationIdentityContractTests(unittest.TestCase):
         self.assertTrue(source.comparable)
         self.assertEqual(compare_generation_identities(base, base).reason_codes, ("generation_contract_match",))
 
+    def test_selected_component_mismatch_requires_baseline_reset(self) -> None:
+        result = compare_generation_identities(
+            identity(classifier_version="manual_operator_classifier.v4"),
+            identity(classifier_version="manual_operator_classifier.v5"),
+            "classifier_version",
+        )
+        self.assertEqual(result.status, "baseline_reset_required_component_version")
+        self.assertFalse(result.comparable)
+        self.assertTrue(result.baseline_reset_required)
+        self.assertEqual(result.reason_codes, ("claim_component_version_mismatch:classifier_version",))
+
+    def test_selected_component_match_remains_comparable(self) -> None:
+        result = compare_generation_identities(
+            identity(classifier_version="manual_operator_classifier.v4"),
+            identity(classifier_version="manual_operator_classifier.v4"),
+            "classifier_version",
+        )
+        self.assertEqual(result.status, "comparable")
+        self.assertTrue(result.comparable)
+
+    def test_selected_component_mismatch_precedes_method_mismatch(self) -> None:
+        result = compare_generation_identities(
+            identity(classifier_version="manual_operator_classifier.v4", method_version="method.v1"),
+            identity(classifier_version="manual_operator_classifier.v5", method_version="method.v2"),
+            "classifier_version",
+        )
+        self.assertEqual(result.status, "baseline_reset_required_component_version")
+        self.assertTrue(result.baseline_reset_required)
+
     def test_unknown_comparison_component_is_rejected(self) -> None:
         with self.assertRaises(ValueError): compare_generation_identities(identity(), identity(), "unknown_version")
 

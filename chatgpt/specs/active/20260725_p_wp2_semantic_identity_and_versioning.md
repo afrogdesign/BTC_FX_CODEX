@@ -308,6 +308,7 @@ comparable
 not_comparable_program
 not_comparable_runtime_generation
 not_comparable_schema_version
+baseline_reset_required_component_version
 baseline_reset_required_method_version
 not_comparable_legacy_unversioned
 ```
@@ -318,8 +319,9 @@ not_comparable_legacy_unversioned
 2. runtime generation mismatch
 3. primary schema mismatch
 4. claim-relevant fieldが`legacy_unversioned`
-5. method version mismatch
-6. comparable
+5. claim-relevant component version mismatch
+6. method version mismatch
+7. comparable
 
 契約:
 
@@ -327,6 +329,7 @@ not_comparable_legacy_unversioned
 - runtime generation mismatchはdefault比較不可。
 - schema mismatchは比較不可。
 - claim-relevant versionが`legacy_unversioned`なら比較資格を自動付与しない。
+- callerがclaim-relevant component fieldを指定した場合、両方がnon-legacyでも実際のcomponent version値を比較する。値が異なる場合は`baseline_reset_required_component_version`、`comparable=false`、`baseline_reset_required=true`とする。
 - methodだけが異なる場合は`baseline_reset_required_method_version`、`comparable=false`、`baseline_reset_required=true`。
 - `source_head`差だけでは自動的に性能比較不可としない。generation/schema/methodの契約で判断し、source_headはlineageとして残す。
 - callerが比較対象component fieldを指定できるようにする。未指定時はprimary `schema_version`と`method_version`を使う。
@@ -408,6 +411,7 @@ no_trade_flags=[unknown] -> no_trade_flags_presentあり
 - generation mismatch not comparable
 - schema mismatch not comparable
 - legacy claim field not comparable
+- selected component version mismatch requests component baseline reset before method reset
 - method mismatch requests baseline reset
 - identical compatible identity comparable
 - source_head-only difference remains comparable
@@ -494,12 +498,13 @@ WP2は次をすべて満たした時だけaccepted候補となる。
 4. unknownはfail-closed、advisory-onlyは既存C behaviorを維持する。
 5. formal gateのnon-empty blockingが不変である。
 6. generation identityがP/M、generation、schema、method、legacyを分離する。
-7. method mismatchがbaseline resetを要求する。
-8. source_head-only differenceをperformance generation mismatchと誤認しない。
-9. P5 fixed fixture output parityが通る。
-10. source、test、spec、1行reconciliation fix以外を変更しない。
-11. runtime、notification、mail、P9、order behaviorを変更しない。
-12. local commitが作成され、pushしない。
+7. selected component version mismatchがmethod mismatchより先にbaseline resetを要求する。
+8. method mismatchがbaseline resetを要求する。
+9. source_head-only differenceをperformance generation mismatchと誤認しない。
+10. P5 fixed fixture output parityが通る。
+11. source、test、spec、1行reconciliation fix以外を変更しない。
+12. runtime、notification、mail、P9、order behaviorを変更しない。
+13. local commitが作成され、pushしない。
 
 ## 13. Post-WP2 boundary
 
