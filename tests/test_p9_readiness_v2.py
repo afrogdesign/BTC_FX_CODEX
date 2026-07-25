@@ -16,4 +16,10 @@ class P9ReadinessTests(unittest.TestCase):
         validation.update({"validation_status":"passed","versions_frozen_before_validation":True,"thresholds_frozen_before_validation":True}); self.assertEqual(evaluate_readiness(m,t,c,modern,scope,validation)["state"],"human_approval_required")
         validation["validation_status"]="failed"; self.assertEqual(evaluate_readiness(m,t,c,modern,scope,validation)["state"],"rejected")
 
+    def test_notification_usefulness_is_separate(self):
+        m,t,c,modern=base(); m["cumulative_evidence_pointer"].update({"missing_current_component_cohorts":[],"current_component_cohorts":["a"]}); modern["actual_attribution"]={"accepted_high_medium_actual_associations":58,"notified_accepted_actual_associations":0}; out=evaluate_readiness(m,t,c,modern); self.assertIn("actual_association_coverage",out["dimensions"]); self.assertEqual(out["dimensions"]["notification_usefulness"]["state"],"collecting")
+
+    def test_unsupported_minimum_does_not_qualify(self):
+        m,t,c,modern=base(); m["cumulative_evidence_pointer"].update({"missing_current_component_cohorts":[],"current_component_cohorts":["a"],"cohort_counts":{"x|classification|manual_operator_classifier.v4":2,"x|proxy_trial_fact|manual_operator_classifier.v4":2}}); scope={"minimum_requirements":{"n":1},"threshold_status":"frozen_before_validation"}; out=evaluate_readiness(m,t,c,modern,scope); self.assertEqual(out["dimensions"]["proposal_eligibility"]["state"],"collecting")
+
 if __name__ == "__main__": unittest.main()

@@ -56,4 +56,19 @@ class ModernAttributionTests(unittest.TestCase):
         self.assertEqual(metrics["accepted_actual_pnl_aggregate"], 30.0)
         self.assertEqual(metrics["low_ambiguous_no_candidate_descriptive_rows"], 3)
 
+    def test_notification_statuses_are_separate_from_association(self):
+        links = [
+            {"link_id":"l1","episode_id":"e1","signal_id":"s1","link_status":"linked","link_confidence":"high","link_reason":"matched"},
+            {"link_id":"l2","episode_id":"e2","signal_id":"s2","link_status":"linked","link_confidence":"medium","link_reason":"matched"},
+            {"link_id":"l3","episode_id":"e3","signal_id":"s3","link_status":"linked","link_confidence":"high","link_reason":"matched"},
+        ]
+        signals = [{"signal_id":"s1","was_notified":"true"},{"signal_id":"s2","was_notified":"false"},{"signal_id":"s3","was_notified":"unexpected"}]
+        out = build_modern_outputs(links, signals, [{"episode_id":"e1"},{"episode_id":"e2"},{"episode_id":"e3"}], [], [])
+        metrics = out["report"]["actual_attribution"]
+        self.assertEqual(metrics["accepted_high_medium_actual_associations"], 3)
+        self.assertEqual(metrics["notified_accepted_actual_associations"], 1)
+        self.assertEqual(metrics["not_notified_accepted_actual_associations"], 1)
+        self.assertEqual(metrics["unknown_notification_status_accepted_actual_associations"], 1)
+        self.assertEqual(metrics["human_confirmed_usefulness_count"], 0)
+
 if __name__ == "__main__": unittest.main()
