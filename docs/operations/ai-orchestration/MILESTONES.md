@@ -1,5 +1,15 @@
 # MILESTONES
 
+## 2026-07-25 — P generation alignment WP0/WP1 accepted
+
+- WP0 contract inventory accepted。
+- WP1 canonical reconciliation accepted after FIX1 and NEXT_ACTION precedence reconciliation。
+- accepted implementation commits: `f4966efe2891e87e2a095293721b48bdad0ec091`, `581361fff179f7030193d28e3980900ca47d28f4`。
+- actual input `provided`; episodes/links `149/149`。
+- P8 daily health and Product P9 cumulative evidence are separated。
+- WP2 is the sole authorized next report-only/spec-first package。
+- no source, gate, classifier, threshold, notification, runtime, P9, or order change。
+
 このファイルは受理済みの大きな節目だけを記録する。FIX単位の経過、未受理結果、current taskは記録しない。
 
 ## 2026-07-21 — M5 champion/challenger proposal engine accepted

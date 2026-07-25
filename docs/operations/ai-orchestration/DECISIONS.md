@@ -1,5 +1,20 @@
 # AI Decisions
 
+## DEC-20260725-016: Accept WP0/WP1 and authorize WP2 semantic identity work
+
+### Decision
+
+- WP0 and WP1 are accepted. WP1 includes FIX1 and the safe precedence reconciliation of the existing `NEXT_ACTION.md` content.
+- Existing `NEXT_ACTION.md` content is retained as historical/operational context. The new authoritative section supersedes conflicting prior next-work wording.
+- `WP2 — Semantic Identity and Versioning` is authorized as the sole next package.
+- WP2 is limited to contract/spec/report work unless a later separately reviewed implementation task explicitly authorizes source changes.
+- WP2 does not authorize gate, classifier, threshold, scoring, notification, mail, runtime, Product P9, production adoption, or order changes.
+- Frozen runtime is obsolete and out of scope.
+
+### Safety boundary
+
+report-only / spec-first / not `FORMAL_GO` / no automatic tuning / no automatic classifier, gate, threshold, or scoring change / no notification behavior change / no runtime, launchd, or mail change / no Product P9 activation / no private, account, or order endpoint / no automatic order / human decides trading manually.
+
 ## DEC-20260725-015: Canonical actual evidence and generation boundaries
 
 ### Decision

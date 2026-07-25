@@ -116,9 +116,9 @@ P9 readinessは次を許可しない。
 
 ## 7. Current next-task selection
 
-WP0はChatGPT reviewでaccepted。WP1はこのconsistency FIXと、既存dirtyな`NEXT_ACTION.md`の安全なreconciliationが残っているためpendingである。
+WP0はaccepted。WP1はFIX1と、既存内容を保持した`NEXT_ACTION.md`のprecedence reconciliationを完了してacceptedである。
 
-推奨候補は`WP2 — Semantic Identity and Versioning`（report-only/spec-first）の1件だけである。ただしWP1がacceptedされ、`NEXT_ACTION.md`を安全にreconcileできるまでWP2は未認可である。WP2はsource、gate、classifier、threshold、notification、runtimeを変更しない。`NEXT_ACTION.md`自体は今回も未編集である。
+`WP2 — Semantic Identity and Versioning`が唯一のauthorized next packageである。WP2はreport-only/spec-firstとしてidentity、generation、schema/method version、legacy separation、comparison boundariesを定義する。production behavior、gate、classifier decisions、thresholds、scoring、notifications、mail、runtime、Product P9 state、ordersは変更しない。
 
 ## 8. Related routes
 

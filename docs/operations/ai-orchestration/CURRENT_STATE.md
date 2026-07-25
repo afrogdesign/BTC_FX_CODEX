@@ -20,6 +20,14 @@ last_updated: 2026-07-25
 - Macro `macro_p9_proposal_engine.v1` is `program=M` M5/M6 proposal engine, not Product P9
 - safety: report-only / human-decided / no automatic tuning / no automatic order
 
+## Current authorized work
+
+- WP0 and WP1 are accepted.
+- `WP2 — Semantic Identity and Versioning` is the sole authorized next package.
+- WP2 is report-only/spec-first and defines identity, generation, schema/method version, legacy separation, and comparison boundaries.
+- This status authorizes no source behavior, gate, classifier, threshold, scoring, notification, mail, runtime, Product P9, or order change.
+- Reviewed-base and implementation-commit records above are historical anchors; no self-invalidating exact current HEAD field is used.
+
 ## Primary source and macro runtime
 
 - primary repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`

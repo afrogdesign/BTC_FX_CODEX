@@ -7,12 +7,14 @@ Work ID: `P-GENERATION-ALIGNMENT-WP0-WP1`
 
 WP0は現行sourceのcontract owner・version・consumer・authorityを整理し、ChatGPT reviewでacceptedされた。WP1はactual evidenceが既に存在する現行truthをcanonical docsへ反映したが、canonical-document consistency FIXが必要であり、現時点では未受理である。source、test、gate、threshold、classifier、notification、runtimeは変更していない。
 
-## ChatGPT review disposition — 2026-07-25
+## Final ChatGPT review disposition — 2026-07-25
 
 - WP0: accepted。
-- WP1: このconsistency FIX後にChatGPT reviewを受けるpending状態。
-- `docs/operations/ai-orchestration/NEXT_ACTION.md`: 既存dirty-file collisionとしてdeferred。未編集・未stage。
-- WP2 — Semantic Identity and Versioning: recommended candidate only。WP1 acceptanceと`NEXT_ACTION.md`の安全なreconciliationが完了するまでunauthorized。
+- WP1: accepted after FIX1 and NEXT_ACTION precedence reconciliation。
+- FIX1 commit `581361fff179f7030193d28e3980900ca47d28f4`: accepted。
+- `docs/operations/ai-orchestration/NEXT_ACTION.md`: existing content was preserved and the collision was resolved by adding an authoritative precedence section。
+- WP2 — Semantic Identity and Versioning: authorized as the sole next report-only/spec-first package。
+- Product P9 and all production behavior changes remain unauthorized。
 
 ## 2. Verified repository baseline
 
