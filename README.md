@@ -11,15 +11,12 @@
 
 ## Repository
 
-Primary working repo:
+Canonical repository (development/source/runtime-source):
 
 `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 
-Frozen old runtime repo:
-
-`/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-
-通常作業はprimary repoだけを対象にします。frozen repoは明示された`RUNTIME_TASK`以外で使用しません。
+インストール済みruntime、LaunchAgent、schedule、mail、public deliveryはoperational targetであり、別repositoryではありません。
+`RUNTIME_TASK`は明示されたinstalled operationだけを認可し、second/old repositoryを認可しません。history/archiveは履歴であり、通常のcurrent-state searchから除外します。
 
 ## Setup
 

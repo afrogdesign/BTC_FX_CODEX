@@ -2,8 +2,8 @@
 
 ## Metadata
 
-- repo: `afrogdesign/BTC_FX_CODEX`
-- working_repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- canonical_repository: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- repository_role: development/source/runtime-source; installed targets are operational targets, not repositories
 - created_at: `2026-07-02`
 - status: final design draft for user-reviewed product direction
 - prior_baseline: `Ver03-v4`

@@ -174,7 +174,7 @@ Do not:
 
 - route current M work to M5 refresh while runtime approval is pending;
 - reopen accepted M1/M-OPS1/M-OPS2/M-OPS3 semantics without a demonstrated contradiction;
-- read, edit, or run the frozen runtime repo without explicit `RUNTIME_TASK` approval;
+- operate an installed runtime, launchd, schedule, mail, or delivery target without explicit named `RUNTIME_TASK` approval;
 - mix runtime/schedule work with mail, notification, production policy, or order behavior;
 - start M6 without one eligible challenger and explicit approval;
 - create new orchestration frameworks.
@@ -235,7 +235,7 @@ M-OPS1–M-OPS4 satisfy the accepted source, local-artifact, and target-only run
 - no private/account/order endpoints;
 - no unapproved runtime, launchd, mail, notification, gate, threshold, scoring, or classifier change;
 - generated/private data remains local and uncommitted;
-- frozen runtime repo requires explicit `RUNTIME_TASK`.
+- the canonical repository is `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`; installed targets are operational targets, not repositories, and old repositories are never fallback.
 
 M-OPS source and local evidence remain Ver04.x. `Ver05` requires explicitly approved production adoption, matching validation, runtime verification where applicable, and ChatGPT acceptance.
 

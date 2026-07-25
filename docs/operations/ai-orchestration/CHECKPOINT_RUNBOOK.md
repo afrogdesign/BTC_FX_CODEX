@@ -14,7 +14,7 @@ MCP primary ワークフローでの最小 checkpoint push 手順を定義しま
 
 - 毎 task の routine push はしない
 - branch の節目でないときは push しない
-- old runtime execution repo を触る目的では使わない
+- installed runtime targetの操作を目的に使わない。必要なら別途明示された`RUNTIME_TASK`で扱う。
 
 ## Preconditions
 
@@ -41,7 +41,7 @@ MCP primary ワークフローでの最小 checkpoint push 手順を定義しま
 
 - local checks が通ってからだけ push する
 - generated files, secrets, runtime files, logs, `.venv312/`, unrelated files を含めない
-- old runtime execution repo は触らない
+- second/old repositoryは触らない。installed targetはrepositoryではない。
 
 ## Checkpoint hash fidelity note
 
@@ -60,7 +60,7 @@ MCP primary ワークフローでの最小 checkpoint push 手順を定義しま
 - local checks が失敗
 - scope 外の file が混入
 - secrets や runtime files が見える
-- old runtime execution repo を触る必要が出た
+- installed runtime、launchd、schedule、mail、delivery targetの操作が必要になった
 
 ## Compact report fields
 

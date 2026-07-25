@@ -132,7 +132,7 @@ The runtime spec is archived after acceptance. M-OPS5 remains a separate source 
 
 M-OPS4 was completed under an explicit human-approved `RUNTIME_TASK` for the target only:
 
-- reading, editing, or running the frozen runtime repo;
+- operating an installed runtime, launchd, schedule, mail, or delivery target without an explicit named `RUNTIME_TASK`; installed targets are not repositories;
 - inspecting or changing installed launchd/plist/cron/schedule configuration;
 - installing a recurring macro pipeline.
 

@@ -24,19 +24,20 @@ notification mailを受け取った人間が15分足を確認し、manual tradin
 
 ## 2. Repo boundary
 
-Primary repo:
+Canonical repository:
 
 `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 
-Frozen runtime repo:
-
-`/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
+`/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
 
 Rules:
 
-- repo確認は最初に `AFROG_Business_MCP` を使う
-- 通常作業はprimary repoだけを対象にする
-- frozen runtime repoは明示された `RUNTIME_TASK` 以外でread、edit、run、compare、syncしない
+- repo確認は最初に `AFROG_MCP` を使う
+- canonical repositoryだけがdevelopment/source/runtime-source repositoryである
+- installed runtime、launchd、schedule、mail、delivery targetはoperational targetでありrepositoryではない
+- `RUNTIME_TASK`は明示されたinstalled operationだけを認可し、second/old repositoryを認可しない
+- history/archiveはhistorical/non-bindingであり、historical research以外のcurrent-state searchから除外する
+- old repositoryをsearch、compare、sync、fallback利用しない
 - branchとHEADはchat historyから推測せず、repo状態で確認する
 - 未確認のfile、diff、test、artifactを確認済みとして扱わない
 

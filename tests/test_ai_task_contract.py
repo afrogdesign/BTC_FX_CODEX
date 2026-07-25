@@ -84,9 +84,16 @@ class TaskContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             validate_task(bad)
         bad = self.implementation()
-        bad["repo"]["working_dir"] = "/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor"
+        bad["repo"]["working_dir"] = "/tmp/noncanonical-repo"
         with self.assertRaises(ContractError):
             validate_task(bad)
+        runtime = self.implementation()
+        runtime["stage"] = "runtime"
+        runtime["mode"] = "RUNTIME_TASK"
+        self.assertEqual(validate_task(runtime), canonical_sha(runtime))
+        runtime["repo"]["working_dir"] = "/tmp/noncanonical-repo"
+        with self.assertRaises(ContractError):
+            validate_task(runtime)
         bad = self.acceptance()
         bad["allowed"]["edit"] = ["tools/x.py"]
         with self.assertRaises(ContractError):

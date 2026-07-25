@@ -765,7 +765,7 @@ score_vs_15m_signal_conflict
 
 - `.env`、API key、secret
 - LaunchAgent、plist、cron、schedule
-- frozen runtime repo
+- unapproved installed runtime/launchd/schedule/mail/delivery operation
 - SMTP、SSH、rsync、公開先設定
 - notification cooldown、duplicate suppression、recipient、send count
 - `trade_execution_gate`のthresholdやpass条件の緩和
@@ -985,7 +985,7 @@ CODEXが最初に読むものは以下だけとする。
 - 全logs
 - 全local reports
 - 全spec
-- frozen runtime repo
+- old repositories; installed targets are not repositories
 
 ### 10.2 実行禁止
 
@@ -1143,7 +1143,7 @@ NOTES: <必要な場合のみ1行>
 
 次スレッドでは、ChatGPTは以下を行う。
 
-1. `AFROG_Business_MCP`で本設計書の存在と内容を確認
+1. `AFROG_MCP`で本設計書の存在と内容を確認
 2. 必要なsourceとtestだけを再確認
 3. 本設計を1つのbounded CODEX promptへまとめる
 4. CODEXに実装・focused test・commit・compact reportを1回で行わせる

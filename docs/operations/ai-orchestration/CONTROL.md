@@ -8,13 +8,15 @@ This file contains stable controls only. Current phase and Work ID belong in `CU
 
 | Label | Path | Rule |
 |---|---|---|
-| primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | normal read/edit/test/git |
-| frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | explicit `RUNTIME_TASK` only |
+| canonical repository | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | only development/source/runtime-source repo; normal read/edit/test/git |
+| installed runtime/delivery target | operational target | explicit named `RUNTIME_TASK` only; never a second repository |
 
 - branch is confirmed with `git status --short --branch`
 - push requires explicit `CHECKPOINT_PUSH`
 - normal work uses local validation and local commit
 - ChatGPT uses `AFROG_MCP` for primary inspection
+- history/archive is historical and non-binding, and is excluded from normal current-state search unless historical research is explicit
+- old repositories are not searched, compared, synchronized, or used as fallback
 
 ## Responsibility control
 

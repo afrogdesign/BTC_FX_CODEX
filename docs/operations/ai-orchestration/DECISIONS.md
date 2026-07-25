@@ -449,3 +449,21 @@ Routing the project to M5 evidence waiting before this connection is complete co
 - installed runtime/schedule, live delivery, production policy, and M6 adoption remain separately human-approved;
 - support/resistance confidence must fail closed to `insufficient` when evidence is weak, stale, discontinuous, or not prior-only;
 - autonomous calculation never becomes automatic order permission.
+
+## DEC-20260725-017: Single-repo operating contract
+
+Date: 2026-07-25
+Status: accepted
+
+### Decision
+
+- `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` is the only canonical development, source, and runtime-source repository.
+- Installed runtime, launchd, schedule, mail, and public delivery targets are operational targets, not repositories.
+- `RUNTIME_TASK` authorizes only the explicitly named installed operation and never authorizes a second, old, or fallback repository.
+- History and archive material is historical and non-binding and is excluded from normal current-state search unless historical research is explicitly requested.
+- Older repo-selection and frozen-repo operating assumptions in prior records are superseded by this decision without rewriting history.
+- The report-only, human-decided, no-automatic-order boundary remains unchanged; no gate, score, threshold, classifier, notification, mail, schedule, runtime, production, or trading behavior changes are authorized by this decision.
+
+### Reason
+
+One repository must have one unambiguous source of truth. Operational targets may be acted on only by a separately explicit `RUNTIME_TASK`, while old repositories must not be searched, compared, synchronized, or used as fallback.

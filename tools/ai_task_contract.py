@@ -13,7 +13,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PRIMARY_REPO = "/Users/marupro/CODEX/100_MCP_Server/btc_monitor"
-FROZEN_REPO = "/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor"
 OUTBOX = "/Users/marupro/CODEX/chatGPTweb-to-Terminal/outbox/response.txt"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -178,7 +177,7 @@ def validate_task(task: dict[str, Any]) -> str:
     repo = _object(task["repo"], "repo", {"working_dir", "expected_branch", "expected_base_commit"})
     _required(repo, {"working_dir", "expected_branch", "expected_base_commit"}, "repo")
     working_dir = _string(repo["working_dir"], "repo.working_dir")
-    if working_dir not in {PRIMARY_REPO, FROZEN_REPO} or (working_dir == FROZEN_REPO and stage != "runtime"):
+    if working_dir != PRIMARY_REPO:
         raise ContractError("invalid working_dir for stage")
     _string(repo["expected_branch"], "repo.expected_branch")
     if repo["expected_base_commit"] is not None and (not isinstance(repo["expected_base_commit"], str) or not HEX40.fullmatch(repo["expected_base_commit"])):

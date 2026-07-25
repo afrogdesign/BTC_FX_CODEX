@@ -37,10 +37,12 @@ If work IDs, active spec, branch, or scope conflict, stop rather than guessing.
 
 ## Repo boundary
 
-- primary working repo: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
-- frozen old runtime repo: `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor`
-- normal work stays in the primary repo
-- do not read, edit, run, compare, or sync the frozen repo unless the task is explicitly `RUNTIME_TASK`
+- canonical repository: `/Users/marupro/CODEX/100_MCP_Server/btc_monitor`
+- this is the only development, source, and runtime-source repository
+- installed runtime, launchd, schedule, mail, and public delivery targets are operational targets, not repositories
+- `RUNTIME_TASK` authorizes only the explicitly named installed operation and never authorizes a second repository
+- history/archive material is historical and non-binding; exclude it from normal current-state search unless historical research is explicit
+- do not search, compare, synchronize, or use old repositories as fallback
 - branch is read from `git status --short --branch`; do not infer it from chat or old docs
 - push only for an explicit `CHECKPOINT_PUSH`
 

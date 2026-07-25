@@ -126,7 +126,7 @@ Report:
 - M1–M5 are accepted foundations;
 - M-OPS1–M-OPS3 are accepted and must not be reopened without a concrete contradiction;
 - M-OPS4 is accepted only for the target `com.afrog.btc-macro-structure`, primary repo, six JST times, and report-only boundaries recorded in the archived runtime spec;
-- frozen runtime repo access, installed scheduling, launchd/plist/cron, mail, and notification changes remain prohibited until that approval;
+- installed runtime, scheduling, launchd/plist/cron, mail, and notification operations remain prohibited until an explicit named `RUNTIME_TASK`; installed targets are not repositories;
 - M5 `winner=none` does not invalidate accepted M-OPS source/artifact work;
 - M5/M6 remains secondary and follows its separate plan only when improvement/adoption is being considered.
 
@@ -176,8 +176,8 @@ Human approval is not required for public-data calculations or local artifacts. 
 
 | Purpose | Path | Rule |
 |---|---|---|
-| primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | normal read/edit/test/git |
-| frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | explicit `RUNTIME_TASK` only |
+| canonical repository | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | only development/source/runtime-source repo |
+| installed runtime/delivery target | operational target | explicit named `RUNTIME_TASK` only; never a second repository |
 
 ChatGPT uses `AFROG_MCP` as the primary repo inspection path. Branch and HEAD are confirmed from local repo state when git evidence is required.
 
@@ -205,7 +205,7 @@ Do not broadly scan:
 - `docs/operations/strategy/archive/`
 - old task notes in the orchestration root
 - unrelated generated outputs and logs
-- frozen runtime repo
+- old repositories; installed targets are not repositories
 
 Read a historical file only when a current task identifies the exact evidence or decision being investigated.
 

@@ -4432,7 +4432,7 @@ class LogFeedbackTest(unittest.TestCase):
             rows = _load_csv_rows(reviews_path)
             self.assertEqual(rows[0]["review_model"], "gpt-5.3-codex")
 
-    def test_sync_ai_post_reviews_resolves_legacy_cli_path(self) -> None:
+    def test_sync_ai_post_reviews_resolves_configured_noncanonical_cli_path(self) -> None:
         with TemporaryDirectory() as tmpdir:
             base_dir = Path(tmpdir)
             logs_csv = base_dir / "logs" / "csv"
@@ -4484,7 +4484,7 @@ class LogFeedbackTest(unittest.TestCase):
                 "tf_15m_eval": "mixed",
                 "memo": "ok",
             }
-            legacy_path = "/Users/marupro/CODEX/BTC_FX_CODEX/btc_monitor/tools/codex_cli_wrapper.py"
+            legacy_path = "/tmp/legacy-layout/tools/codex_cli_wrapper.py"
             with patch("tools.log_feedback.run_cli_json", return_value=ai_result) as mocked_cli, patch("tools.log_feedback.load_config") as mocked_cfg:
                 mocked_cfg.return_value = type(
                     "Cfg",

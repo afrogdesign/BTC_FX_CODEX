@@ -101,7 +101,7 @@ M-STATS1 is deployed as a non-blocking local shadow auxiliary of the existing ma
 - one bounded target activation was reported and verified through the resulting runtime status/artifacts; do not repeat live verification
 - commit object access is restricted in the safe public workspace; `c4d9a4a` remains a report locator
 - runtime-shadow spec: `chatgpt/specs/archive/20260722_macro_structure_scenario_stats_runtime_shadow.md`
-- frozen repo was not accessed or activated
+- no second repository was accessed or activated; installed targets remain separate operational targets
 - push: none
 
 
@@ -130,7 +130,7 @@ The fixed macro page publication is accepted as part of the scheduled macro runt
 - FIX1 added focused coverage for publication ordering, non-blocking behavior, dry-run isolation, bounded metadata, and runtime-status reader fail-closed behavior
 - runtime/public verification was not repeated during FIX1
 - accepted spec: `chatgpt/specs/archive/20260723_macro_structure_runtime_publication_decouple.md`
-- frozen repo was not accessed
+- no second repository was accessed; installed targets remain separate operational targets
 - push: none
 
 
