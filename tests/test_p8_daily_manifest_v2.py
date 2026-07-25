@@ -40,4 +40,20 @@ class P8ManifestTests(unittest.TestCase):
         args=fixtures(); args[0]["stage_statuses"]["p5"]="failed"
         with self.assertRaisesRegex(ValueError,"operational_health_failed"): build_manifest(*args,"r","h","2026-07-25T01:00:00Z")
 
+    def test_readiness_state_transitions_use_actual_states(self):
+        first,_=build_manifest(*fixtures(),"r","h","2026-07-25T01:00:00Z")
+        self.assertFalse(any(x["type"] == "p9_readiness_state_transition" for x in first["meaningful_changes"]))
+        same,_=build_manifest(*fixtures(),"r","h","2026-07-25T01:00:00Z",first)
+        self.assertFalse(any(x["type"] == "p9_readiness_state_transition" for x in same["meaningful_changes"]))
+        baseline_args=list(fixtures()); baseline_args[4]["generation"]["classifier_version"]="manual_operator_classifier.v4"; baseline_args[4]["cohort_counts"]={"P|r|classification|manual_operator_classifier.v4":1,"P|r|proxy_trial_fact|manual_operator_classifier.v4":1}
+        baseline,_=build_manifest(*baseline_args,"r","h","2026-07-25T01:00:00Z",first)
+        transitions=[x for x in baseline["meaningful_changes"] if x["type"] == "p9_readiness_state_transition"]
+        self.assertEqual(transitions,[{"type":"p9_readiness_state_transition","from":"collecting","to":"baseline_available"}])
+        back,_=build_manifest(*fixtures(),"r","h","2026-07-25T01:00:00Z",baseline)
+        transitions=[x for x in back["meaningful_changes"] if x["type"] == "p9_readiness_state_transition"]
+        self.assertEqual(transitions,[{"type":"p9_readiness_state_transition","from":"baseline_available","to":"collecting"}])
+        reset,_=build_manifest(*fixtures("v5"),"r","h","2026-07-25T01:00:00Z",baseline)
+        self.assertTrue(any(x["type"] == "generation_baseline_reset" for x in reset["meaningful_changes"]))
+        self.assertFalse(any(x["type"] == "p9_readiness_state_transition" for x in reset["meaningful_changes"]))
+
 if __name__ == "__main__": unittest.main()
