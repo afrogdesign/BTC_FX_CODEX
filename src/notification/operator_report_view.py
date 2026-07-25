@@ -55,6 +55,61 @@ def _valid_signal(value: Any) -> bool:
     return _token(value) in {"long", "short", "up", "down", "wait", "neutral"}
 
 
+def _direction(value: Any) -> str | None:
+    normalized = _token(value)
+    if normalized in {"long", "up"}:
+        return "Long"
+    if normalized in {"short", "down"}:
+        return "Short"
+    return None
+
+
+def _join_timeframes(items: list[tuple[str, str]]) -> str:
+    grouped: list[str] = []
+    index = 0
+    while index < len(items):
+        direction = items[index][1]
+        names = [items[index][0]]
+        index += 1
+        while index < len(items) and items[index][1] == direction:
+            names.append(items[index][0])
+            index += 1
+        grouped.append(f"・".join(names) + f"は{direction}")
+    return "、".join(grouped)
+
+
+def _timeframe_summary(signals: dict[str, Any], alignment: str, blocked: bool = False) -> str:
+    names = ("4H", "1H", "15M")
+    directions = [_direction(signals.get(name)) for name in names]
+    known = [(name, value) for name, value in zip(names, directions) if value is not None]
+    state = _token(alignment)
+
+    if state == "turning_candidate" and known:
+        if len(known) == 3 and len({value for _, value in known}) == 1:
+            direction_text = f"4H・1H・15Mが{known[0][1]}で一致"
+        else:
+            direction_text = _join_timeframes(known)
+        return f"{direction_text} — 反対方向への転換候補"
+
+    conflict_state = blocked or state in {"conflict", "conflicts", "direction_conflict", "blocked"}
+    if conflict_state and len(known) >= 2:
+        return f"{_join_timeframes(known)} — 4H・1H・15Mの方向が競合しているため新規見送り"
+
+    if len(known) == 3:
+        values = [value for _, value in known]
+        if len(set(values)) == 1:
+            return f"4H・1H・15Mが{values[0]}で一致"
+        if values[0] == values[1] and values[2] != values[0]:
+            return f"4H・1Hは{values[0]}、15Mは{values[2]}のため短期は逆行"
+        return f"{_join_timeframes(known)} — 4H・1H・15Mの方向が競合しているため新規見送り"
+
+    if not known:
+        return "4H・1H・15Mの判定材料が不足"
+
+    missing = [(name, "判定材料不足") for name in names if _direction(signals.get(name)) is None]
+    return "、".join([_join_timeframes(known), "・".join(name for name, _ in missing) + "は判定材料不足"])
+
+
 def _action(value: Any) -> str:
     return ACTION_LABELS.get(str(value or "").strip().upper(), "新規見送り・保護確認")
 
@@ -85,11 +140,10 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
     primary = _token(decision.get("primary_side") or execution.get("primary_side"))
     primary = primary if primary in {"long", "short"} else ""
     raw_15m = result.get("signals_15m")
-    execution_candidate = primary if not _valid_signal(raw_15m) and primary else None
     signals = {
         "4H": result.get("signals_4h") or structural.get("signals_4h"),
         "1H": result.get("signals_1h") or tactical.get("signals_1h"),
-        "15M": raw_15m if _valid_signal(raw_15m) else execution_candidate,
+        "15M": raw_15m if _valid_signal(raw_15m) else None,
     }
     normalized = [_token(value) for value in signals.values()]
     alignment = _token(
@@ -108,6 +162,8 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
             alignment = "countertrend"
         else:
             alignment = "conflicts"
+    blocked = bool(decision.get("new_entry_blocked")) or _token(decision.get("state")) in {"blocked", "direction_conflict"}
+    alignment_summary = _timeframe_summary(signals, alignment, blocked=blocked)
     rows = []
     for side in ("long", "short"):
         raw = action.get(side) if isinstance(action.get(side), dict) else {}
@@ -143,9 +199,10 @@ def build_operator_report_view(result: dict[str, Any]) -> dict[str, Any]:
         "primary_side": primary,
         "signals": {key: {"raw": value, "label": _signal(value)} for key, value in signals.items()},
         "alignment": ALIGNMENT_LABELS.get(alignment, "判定材料不足"),
+        "alignment_summary": alignment_summary,
         "alignment_raw": alignment,
         "rows": rows,
-        "new_entry_blocked": bool(decision.get("new_entry_blocked")) or _token(decision.get("state")) in {"blocked", "direction_conflict"},
+        "new_entry_blocked": blocked,
         "candidate": candidate,
         "auxiliary_note": auxiliary_note,
         "structural": {

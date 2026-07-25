@@ -25,29 +25,29 @@ def _payload(four_h: str = "long", one_h: str = "long", fifteen: str = "long") -
 
 class OperatorReportViewTests(unittest.TestCase):
     def test_all_long(self):
-        self.assertEqual(build_operator_report_view(_payload())["alignment"], "時間軸は同方向")
+        self.assertEqual(build_operator_report_view(_payload())["alignment_summary"], "4H・1H・15MがLongで一致")
 
     def test_all_short(self):
-        self.assertEqual(build_operator_report_view(_payload("short", "short", "short"))["alignment"], "時間軸は同方向")
+        self.assertEqual(build_operator_report_view(_payload("short", "short", "short"))["alignment_summary"], "4H・1H・15MがShortで一致")
 
     def test_countertrend_long_15m(self):
-        self.assertIn("逆方向", build_operator_report_view(_payload("short", "short", "long"))["alignment"])
+        self.assertEqual(build_operator_report_view(_payload("short", "short", "long"))["alignment_summary"], "4H・1HはShort、15MはLongのため短期は逆行")
 
     def test_countertrend_short_15m(self):
-        self.assertIn("逆方向", build_operator_report_view(_payload("long", "long", "short"))["alignment"])
+        self.assertEqual(build_operator_report_view(_payload("long", "long", "short"))["alignment_summary"], "4H・1HはLong、15MはShortのため短期は逆行")
 
     def test_turning_candidate(self):
         payload = _payload("long", "short", "short")
         payload["structural_priority"] = {"alignment_state": "turning_candidate"}
         payload["operator_decision"]["alignment_state"] = "turning_candidate"
-        self.assertIn("転換", build_operator_report_view(payload)["alignment"])
+        self.assertEqual(build_operator_report_view(payload)["alignment_summary"], "4HはLong、1H・15MはShort — 反対方向への転換候補")
 
     def test_conflict_blocks_new_entry(self):
-        payload = _payload("long", "short", "wait")
+        payload = _payload("long", "short", "long")
         payload["operator_decision"] = {"state": "direction_conflict", "new_entry_blocked": True}
         view = build_operator_report_view(payload)
         self.assertTrue(view["new_entry_blocked"])
-        self.assertIn("競合", view["alignment"])
+        self.assertEqual(view["alignment_summary"], "4HはLong、1HはShort、15MはLong — 4H・1H・15Mの方向が競合しているため新規見送り")
 
     def test_no_chase_and_invalidated(self):
         payload = _payload()
@@ -60,7 +60,7 @@ class OperatorReportViewTests(unittest.TestCase):
     def test_insufficient_structural_evidence(self):
         payload = _payload("", "", "wait")
         view = build_operator_report_view(payload)
-        self.assertIn("証拠不足", view["alignment"])
+        self.assertEqual(view["alignment_summary"], "4H・1H・15Mの判定材料が不足")
 
     def test_opposite_big_chance_is_auxiliary(self):
         payload = _payload()
@@ -89,7 +89,7 @@ class OperatorReportViewTests(unittest.TestCase):
 
     def test_five_area_order(self):
         html = build_notification_detail_html(_payload())
-        positions = [html.find(token) for token in ("今の結論", "時間軸別の方向", "15分足の実行判断", "価格マップ｜", "判断が変わる条件")]
+        positions = [html.find(token) for token in ("AREA 1", "AREA 2", "AREA 3", "AREA 4", "AREA 5")]
         self.assertEqual(positions, sorted(positions))
 
     def test_one_canonical_conclusion(self):
@@ -158,7 +158,7 @@ class OperatorReportViewTests(unittest.TestCase):
     def test_structural_priority_alignment_wins(self):
         payload = _payload("long", "long", "long")
         payload["structural_priority"] = {"alignment_state": "turning_candidate"}
-        self.assertEqual(build_operator_report_view(payload)["alignment"], "転換候補を監視")
+        self.assertEqual(build_operator_report_view(payload)["alignment_summary"], "4H・1H・15MがLongで一致 — 反対方向への転換候補")
 
     def test_two_real_action_cards_for_missing_invalid_and_malformed_priority(self):
         for primary in (None, "mystery", {"bad": "value"}):
@@ -177,13 +177,27 @@ class OperatorReportViewTests(unittest.TestCase):
         payload["side_aware_mtf_action"]["short"]["state"] = "armed"
         payload["operator_decision"]["primary_side"] = "short"
         view = build_operator_report_view(payload)
-        self.assertEqual(view["signals"]["15M"]["label"], "Short方向")
+        self.assertEqual(view["signals"]["15M"]["label"], "判定材料不足")
         self.assertEqual(view["rows"][1]["state"], "条件待ち")
 
         payload["operator_decision"]["primary_side"] = ""
         payload["side_aware_mtf_action"]["execution_context"]["primary_side"] = ""
         view = build_operator_report_view(payload)
         self.assertEqual(view["signals"]["15M"]["label"], "判定材料不足")
+
+    def test_partial_evidence_names_only_known_timeframes(self):
+        payload = _payload("long", "wait", "neutral")
+        view = build_operator_report_view(payload)
+        self.assertEqual(view["alignment_summary"], "4HはLong、1H・15Mは判定材料不足")
+        self.assertNotIn("1HはLong", view["alignment_summary"])
+
+    def test_lifecycle_values_are_not_directions(self):
+        for lifecycle in ("armed", "watch", "late"):
+            payload = _payload("long", lifecycle, lifecycle)
+            view = build_operator_report_view(payload)
+            self.assertEqual(view["signals"]["1H"]["label"], "判定材料不足")
+            self.assertEqual(view["signals"]["15M"]["label"], "判定材料不足")
+            self.assertIn("判定材料不足", view["alignment_summary"])
 
     def test_priority_next_condition_is_area_five_event(self):
         payload = _payload()
