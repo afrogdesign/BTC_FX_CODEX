@@ -1,8 +1,8 @@
 # NEXT_ACTION
 
 last_updated: `2026-07-25`
-authoritative_closure: `wp8_f4eeadd6864d736e7c457490d362ac0b`
-reviewed_head: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`
+authoritative_closure: `P-OPERATIONAL-COMPLETION-1-FIX2`
+reviewed_head: `1224a31f1126bdc17564192193e00a8224ee927e`
 
 ## Latest P operational evidence acceptance
 
@@ -13,31 +13,30 @@ reviewed_head: `d43a67db7e8b339316e6a2ffd14144bf362b5aa8`
 - P9 v2 is `baseline_available`, but frozen proposal thresholds and frozen validation cohort remain missing. No formal gate change is approved.
 - evidence is report-only/descriptive with no automatic causality; production, notification, runtime, mail, and order behavior remain unchanged.
 
-## Current task — P current-generation evidence collection
+## Canonical next action — P baseline decision
 
-Status: `waiting_for_material_input`
+Status: `baseline_available_spec_decision_required`
 
-The only authorized next P task is bounded, delta-only collection of current-generation evidence for `manual_operator_classifier.v4`.
+The next P action is ChatGPT-led, spec-first product judgment on:
 
-Start this task only after at least one material new accepted input exists for either:
+- whether to freeze proposal thresholds;
+- how to define the frozen validation cohort.
 
-- the cumulative v4 classification cohort; or
-- the cumulative v4 proxy-trial cohort.
+This documentation correction authorizes no implementation, threshold freeze, validation execution, proposal selection, formal gate change, or production adoption.
 
-When the trigger exists:
+Any future proposal specification must explicitly account for the accepted evidence-quality limitations:
 
-1. process only the new evidence and minimum matching lineage;
-2. preserve actual and proxy evidence as separate facts;
-3. update cumulative evidence and the P8/P9 report-only manifests deterministically;
-4. reassess readiness without inventing thresholds or mixing generations;
-5. stop before proposal selection, validation-policy approval, source behavior change, or production adoption.
-
-Until the trigger exists, perform no P implementation, replay, runtime operation, notification change, threshold freeze, proposal approval, or production action.
+- human-confirmed usefulness: `0`;
+- metadata-complete notified actual: `0`;
+- operator direction unknown: `58 of 58`;
+- ambiguous notified actual: `54 of 58`.
 
 Safety boundary:
 
-- P9 remains `collecting`;
-- no proposal is selected or under review;
-- H2 through H8 remain unauthorized;
-- no gate, Phase1, classifier, score, threshold, notification, canonical-link, runtime, launchd, mail, schedule, production, `FORMAL_GO`, or automatic-order change;
-- human decides manually.
+- report-only;
+- descriptive and no causal claim;
+- P9 `production_ready=false`;
+- proposal approval `not_requested`;
+- formal gate unchanged and unapproved;
+- H2 through H8 unauthorized;
+- no classifier, score, threshold, notification, canonical-link, runtime, launchd, mail, schedule, `FORMAL_GO`, or automatic-order change.
