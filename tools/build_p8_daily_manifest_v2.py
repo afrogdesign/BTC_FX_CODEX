@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.feedback.p8_daily_manifest_v2 import IdentityConflict, InputError, OutputConflict, build_manifest, read_csv, read_json, write_outputs
+from src.feedback.p8_daily_manifest_v2 import IdentityConflict, InputError, OutputConflict, QUEUE_HEADERS, TRIAL_HEADERS, build_manifest, read_csv, read_json, write_outputs
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Build independent P8 daily manifest v2 and P9 readiness v2 shadow")
@@ -16,7 +16,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     a = parser().parse_args(argv)
     try:
-        cycle, _ = read_json(a.cycle_manifest, "cycle_manifest.json"); trial, _ = read_json(a.trial_report, "manual_operator_trial_evidence.json"); facts, _ = read_csv(a.trial_facts, "manual_operator_trial_facts.csv"); queue, _ = read_csv(a.review_queue, "manual_operator_trial_review_queue.csv"); cumulative, _ = read_json(a.cumulative_manifest, "evidence_manifest.json"); modern, _ = read_json(a.modern_attribution_report, "modern_attribution_report.json")
+        cycle, cycle_meta = read_json(a.cycle_manifest, "cycle_manifest"); trial, trial_meta = read_json(a.trial_report, "trial_report"); facts, facts_meta = read_csv(a.trial_facts, "trial_facts", TRIAL_HEADERS); queue, queue_meta = read_csv(a.review_queue, "review_queue", QUEUE_HEADERS); cumulative, cumulative_meta = read_json(a.cumulative_manifest, "cumulative_manifest"); modern, modern_meta = read_json(a.modern_attribution_report, "modern_attribution_report")
+        cumulative["_input_fingerprint"] = cumulative_meta["fingerprint"]; modern["_input_fingerprint"] = modern_meta["fingerprint"]
         previous = None
         if a.previous_v2_manifest: previous, _ = read_json(a.previous_v2_manifest, "previous_v2_manifest.json")
         scope = None
@@ -25,7 +26,8 @@ def main(argv: list[str] | None = None) -> int:
         validation = None
         if a.frozen_validation:
             validation, _ = read_json(a.frozen_validation, "frozen_validation.json")
-        manifest, files = build_manifest(cycle, trial, facts, queue, cumulative, modern, a.runtime_generation, a.source_head, a.cutoff_utc, previous, scope, validation)
+        input_meta = {"cycle_manifest": cycle_meta, "trial_report": trial_meta, "trial_facts": facts_meta, "review_queue": queue_meta, "cumulative_manifest": cumulative_meta, "modern_attribution_report": modern_meta}
+        manifest, files = build_manifest(cycle, trial, facts, queue, cumulative, modern, a.runtime_generation, a.source_head, a.cutoff_utc, previous, scope, validation, input_meta)
         write_outputs(a.output_root, files, a.replace_output)
         if a.stdout_json:
             q, actual = manifest["review_queue_delta"], manifest["actual_attribution_delta"]
@@ -38,7 +40,10 @@ def main(argv: list[str] | None = None) -> int:
     except OutputConflict as exc:
         if a.stdout_json: sys.stdout.write(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")) + "\n")
         return 4
-    except (InputError, ValueError, OSError) as exc:
+    except (InputError, ValueError) as exc:
         if a.stdout_json: sys.stdout.write(json.dumps({"ok": False, "error": str(exc)}, separators=(",", ":")) + "\n")
         return 2
+    except OSError as exc:
+        if a.stdout_json: sys.stdout.write(json.dumps({"ok": False, "error": "output_transaction_conflict"}, separators=(",", ":")) + "\n")
+        return 4
 if __name__ == "__main__": raise SystemExit(main())

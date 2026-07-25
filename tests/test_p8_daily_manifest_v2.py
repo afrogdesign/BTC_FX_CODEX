@@ -30,4 +30,14 @@ class P8ManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             write_outputs(Path(td)/"out",files); write_outputs(Path(td)/"out",files,replace=True)
 
+    def test_provenance_headers_and_output_fingerprints(self):
+        args=list(fixtures()); meta={name:{"logical_name":name,"fingerprint":name,"row_count":1} for name in ("cycle_manifest","trial_report","trial_facts","review_queue","cumulative_manifest","modern_attribution_report")}; args[4]["_input_fingerprint"]="cumulative"; args[5]["_input_fingerprint"]="modern"; manifest,files=build_manifest(*args,"r","h","2026-07-25T01:00:00Z",input_meta=meta)
+        self.assertEqual(set(manifest["input_fingerprints"]),set(meta)); self.assertTrue(all(manifest["input_fingerprints"].values())); self.assertEqual(manifest["cumulative_evidence_pointer"]["fingerprint"],"cumulative"); self.assertEqual(manifest["modern_attribution_pointer"]["fingerprint"],"modern"); self.assertEqual(set(manifest["output_fingerprints"]),{"p8_daily_summary_v2.md","p9_readiness_v2.json","p9_readiness_migration_report.md"})
+        with tempfile.TemporaryDirectory() as td:
+            dest=Path(td)/"out"; write_outputs(dest,files); promoted=__import__("json").loads((dest/"p8_daily_manifest_v2.json").read_bytes()); self.assertEqual(promoted["output_fingerprints"]["p8_daily_summary_v2.md"],__import__("hashlib").sha256((dest/"p8_daily_summary_v2.md").read_bytes()).hexdigest())
+
+    def test_core_health_fails_closed(self):
+        args=fixtures(); args[0]["stage_statuses"]["p5"]="failed"
+        with self.assertRaisesRegex(ValueError,"operational_health_failed"): build_manifest(*args,"r","h","2026-07-25T01:00:00Z")
+
 if __name__ == "__main__": unittest.main()
