@@ -19,6 +19,11 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from src.feedback.manual_scenario_normalizer import EVENT_HEADERS, EVENT_SCHEMA_VERSION, SCENARIO_HEADERS, SCENARIO_SCHEMA_VERSION
+from src.contracts.operator_semantics import (
+    ADVISORY_NO_TRADE_TOKENS,
+    HARD_NO_TRADE_TOKENS,
+    classify_no_trade_tokens,
+)
 
 SCHEMA_VERSION = "manual_operator_classification.v1"
 REPORT_SCHEMA_VERSION = "manual_operator_classifier_report.v1"
@@ -66,14 +71,6 @@ OUTPUT_HEADERS = [
     "long_direction_min", "long_execution_min", "long_wait_max", "long_tp1_rr_min", "long_tp2_rr_min",
 ]
 REASON_FUTURE = "future_context_rejected"
-HARD_NO_TRADE_TOKENS = frozenset({"volatile_regime"})
-ADVISORY_NO_TRADE_TOKENS = frozenset({
-    "short_at_major_support_wait_only", "long_at_major_resistance_wait_only",
-    "breakout_follow_candidate", "upside_breakout_follow_watch",
-    "downside_breakdown_follow_watch", "short_invalidated_by_up_break",
-    "long_invalidated_by_down_break", "short_invalidation_watch",
-    "long_invalidation_watch",
-})
 _SENSITIVE = re.compile(r"(?:/private/|file://|api[_-]?key|secret|password|uid_|account[_-])", re.I)
 
 
@@ -354,8 +351,9 @@ def _classify(event: dict[str, str], candidate: dict[str, str], signal: dict[str
     if candidate_dt > event_dt or signal_dt > event_dt:
         raise ValueError("future_context")
     quality = signal.get("data_quality_flag", "").strip().lower()
-    no_trade = _tokens(signal.get("no_trade_flags"))
-    advisory_only = bool(no_trade) and set(no_trade).issubset(ADVISORY_NO_TRADE_TOKENS)
+    no_trade_semantics = classify_no_trade_tokens(signal.get("no_trade_flags"))
+    no_trade = no_trade_semantics.normalized_tokens
+    advisory_only = no_trade_semantics.all_advisory
     candidate_status = candidate.get("candidate_status", event.get("candidate_status", "")).strip().lower()
     stop_reasons: list[str] = []
     if quality and quality != "ok":

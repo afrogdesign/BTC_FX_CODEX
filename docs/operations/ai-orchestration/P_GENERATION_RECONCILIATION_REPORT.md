@@ -5,7 +5,7 @@ Work ID: `P-GENERATION-ALIGNMENT-WP0-WP1`
 
 ## 1. Executive summary
 
-WP0は現行sourceのcontract owner・version・consumer・authorityを整理し、ChatGPT reviewでacceptedされた。WP1はactual evidenceが既に存在する現行truthをcanonical docsへ反映したが、canonical-document consistency FIXが必要であり、現時点では未受理である。source、test、gate、threshold、classifier、notification、runtimeは変更していない。
+WP0は現行sourceのcontract owner・version・consumer・authorityを整理し、ChatGPT reviewでacceptedされた。WP1はactual evidenceが既に存在する現行truthをcanonical docsへ反映し、FIX1と`NEXT_ACTION.md`のprecedence reconciliationを経てacceptedされた。source、test、gate、threshold、classifier、notification、runtimeは変更していない。
 
 ## Final ChatGPT review disposition — 2026-07-25
 
