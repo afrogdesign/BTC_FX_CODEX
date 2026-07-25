@@ -4202,7 +4202,7 @@ def _operator_report_action_card(row: dict[str, Any] | None, result: dict[str, A
     low, high = row.get("entry_low"), row.get("entry_high")
     entry = _format_operator_price_range(low, high) if low not in (None, "") and high not in (None, "") else "—"
     side = str(row.get("label") or "判定待ち")
-    extra = " / 追いかけ禁止" if row.get("no_chase") else ""
+    extra = " / 追いかけ禁止" if row.get("no_chase") and "追いかけ禁止" not in str(row.get("state") or "") else ""
     return f'''<article class="operator-action-card{' priority' if row.get('priority') else ''}" data-side="{html.escape(str(row.get('side') or ''))}">
       <header><h3>{html.escape(side)}</h3><span class="priority-label">{'現在の優先側' if row.get('priority') else '反対側も同じ基準で確認'}</span></header>
       <strong class="action-stage">{html.escape(str(row.get('stage') or '新規見送り・保護確認'))}</strong>

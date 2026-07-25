@@ -885,3 +885,43 @@ HTMLを開いて5秒以内に、次へ答えられること。
 | 視覚優先度 | 最新情報を大きく、固定説明と補助候補を小さくする |
 
 最初に実装すべきなのは、色や装飾の変更ではない。**用語の正本化、時間軸の明示、重複する2つの判断エリアの統合、最新情報と固定説明の優先度分離**である。これらを完了した後に、余白、色、モバイル表示を整える。
+
+
+---
+
+## 実装記録・受け入れ保留 — 2026-07-25
+
+acceptance_status: `implemented / acceptance pending`
+
+この節は、front matterの`status: proposal`を実装結果について上書きする。
+
+- branch: `Ver04-v5`
+- implementation commit: `22dee8fbbb6830518af6824d8d42d9c148a69a03`
+- push: `none`
+- tracked changes:
+  - `src/notification/detail_page.py`
+  - `src/notification/operator_report_view.py`
+  - `tests/test_operator_report_view.py`
+- exact-signal preview: `local/operator_report_gui_v5_preview/20260724_220500/index.html`（untracked）
+- preview input: `logs/signals/20260724_220500.json`
+- preview timestamp: `2026-07-25 07:05:00.871936+09:00`
+
+### 実装確認（最終受け入れは保留）
+
+- 5エリア構成とAREA 1〜5の順序を確認した。
+- Area 2の方向総括はview modelで生成し、rendererはescapeして表示するだけとした。
+- `long/up`と`short/down`だけを方向として正規化し、`wait`、`neutral`、lifecycle値、欠損、malformed値は方向へ変換しない。
+- 15M方向を`primary_side`から補完しないfail-closed契約を確認した。
+- Long / Short action cardは欠損・unknown・malformedな優先側でも各1枚を維持する。
+- renderer regression testsは現存し、focused test群にskipはない。
+- exact-signal previewのsignal、timestamp、価格、setup、chart dataが入力JSONと対応することを確認した。
+- chart controls、`viewBox="0 726 860 429"`、Big Chanceの補助・非上書き表示、安全境界を確認した。
+- gate、classifier、score、threshold、通知、mail、runtime、LaunchAgent、schedule、注文動作は変更していない。
+
+### 検証
+
+- Codex repository environment: `./.venv312/bin/python -m unittest tests.test_notification_detail_page tests.test_operator_report_view` => pass、skipped=0
+- task-scoped `git diff --check` => pass
+- ChatGPT MCP review: pending
+- AFROG MCP標準Pythonでの再実行は、MCP環境に`pandas`がないためimport段階で実行不可。repository `.venv312`の合格結果、test実体、commit差分、artifact/input整合を実装確認のlocatorとする。最終受け入れはChatGPT review後に判断する。
+- browser、screenshot、notification送信、mail送信、runtime restart、public publicationは実施していない。

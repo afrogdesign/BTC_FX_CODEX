@@ -81,6 +81,15 @@ class OperatorReportViewTests(unittest.TestCase):
         self.assertNotIn('<script>alert("x")</script>', html)
         self.assertIn("&lt;script&gt;", html)
 
+    def test_setup_and_diagnostic_dynamic_values_are_escaped(self):
+        payload = _payload()
+        payload["long_setup"]["value_defense_entry_layer"]["shallow_retest_zone"]["low"] = '<img src=x onerror="alert(1)">'
+        payload["signals_4h"] = '<script>alert("direction")</script>'
+        html = build_notification_detail_html(payload)
+        self.assertNotIn('<img src=x onerror="alert(1)">', html)
+        self.assertNotIn('<script>alert("direction")</script>', html)
+        self.assertIn("&lt;script&gt;", html)
+
     def test_raw_terms_only_in_diagnostic_details(self):
         html = build_notification_detail_html(_payload())
         visible = re.sub(r"<details.*?</details>", "", html, flags=re.S)
@@ -161,7 +170,7 @@ class OperatorReportViewTests(unittest.TestCase):
         self.assertEqual(build_operator_report_view(payload)["alignment_summary"], "4H・1H・15MがLongで一致 — 反対方向への転換候補")
 
     def test_two_real_action_cards_for_missing_invalid_and_malformed_priority(self):
-        for primary in (None, "mystery", {"bad": "value"}):
+        for primary in (None, "", "mystery", {"bad": "value"}):
             payload = _payload()
             payload["operator_decision"]["primary_side"] = primary
             html = build_notification_detail_html(payload)
@@ -169,6 +178,31 @@ class OperatorReportViewTests(unittest.TestCase):
             self.assertEqual(html.count('data-side="long"'), 1)
             self.assertEqual(html.count('data-side="short"'), 1)
             self.assertNotIn('data-side="unknown"', html)
+
+    def test_unknown_primary_side_does_not_infer_timeframe_direction(self):
+        payload = _payload("wait", "wait", "wait")
+        payload["operator_decision"]["primary_side"] = "mystery"
+        view = build_operator_report_view(payload)
+        self.assertEqual(view["primary_side"], "")
+        self.assertEqual(view["signals"]["15M"]["label"], "中立・様子見")
+        self.assertEqual(view["alignment_summary"], "4H・1H・15Mの判定材料が不足")
+
+    def test_malformed_operator_decision_still_has_two_cards(self):
+        payload = _payload()
+        payload["operator_decision"] = {"primary_side": {"unexpected": "object"}}
+        html = build_notification_detail_html(payload)
+        self.assertEqual(html.count('class="operator-action-card'), 2)
+        self.assertEqual(html.count('data-side="long"'), 1)
+        self.assertEqual(html.count('data-side="short"'), 1)
+
+    def test_no_chase_is_human_facing_once_inside_priority_card(self):
+        payload = _payload()
+        payload["side_aware_mtf_action"]["long"].update({"state": "late", "chase_status": "late_no_chase"})
+        html = build_notification_detail_html(payload)
+        area = html[html.find('class="area-3'):html.find('class="area-4')]
+        long_card = area[area.find('data-side="long"'):area.find('</article>', area.find('data-side="long"'))]
+        self.assertIn("追いかけ禁止", long_card)
+        self.assertEqual(long_card.count("追いかけ禁止"), 1)
 
     def test_lifecycle_is_not_a_timeframe_direction(self):
         payload = _payload()
@@ -222,7 +256,7 @@ class OperatorReportViewTests(unittest.TestCase):
         self.assertIn("現在値 / 更新時刻", html)
         self.assertIn("65,818", html)
         self.assertIn("REPORT ONLY / HUMAN DECISION", html)
-        for term in ("Ver02.6-v2", "Ver03-v4", "send_email", "private/order"):
+        for term in ("Ver02.6-v2", "Ver03-v4", "send_email", "private/order", "private endpoint", "account endpoint", "order endpoint"):
             self.assertNotIn(term, html)
 
     def test_chart_geometry_big_chance_and_responsive_contract(self):
@@ -236,13 +270,60 @@ class OperatorReportViewTests(unittest.TestCase):
         self.assertIn("overflow-x:auto", html)
         self.assertIn("@media (max-width:860px)", html)
 
+    def test_primary_15m_markers_and_zones_stay_in_visible_chart_range(self):
+        html = build_notification_detail_html(_payload())
+        svg = re.search(r'<svg viewBox="0 726 860 429".*?</svg>', html, re.S)
+        self.assertIsNotNone(svg)
+        svg_html = svg.group(0) if svg else ""
+        marker_y = [float(value) for value in re.findall(r'class="marker-label marker-(?:long|short)"[^>]* y="([0-9.]+)"', svg_html)]
+        if not marker_y:
+            marker_y = [float(value) for value in re.findall(r' y="([0-9.]+)"[^>]* class="marker-label marker-(?:long|short)"', svg_html)]
+        self.assertGreaterEqual(len(marker_y), 6)
+        self.assertTrue(all(726.0 <= value <= 1155.0 for value in marker_y))
+        self.assertIn('class="value-defense-band-long"', svg_html)
+        self.assertIn('class="value-defense-band-short"', svg_html)
+
+    def test_missing_one_or_both_setups_preserves_surface_chart_and_cards(self):
+        for missing in (("long_setup",), ("short_setup",), ("long_setup", "short_setup")):
+            payload = _payload()
+            for key in missing:
+                payload[key] = {}
+            html = build_notification_detail_html(payload)
+            self.assertEqual(html.count('class="operator-action-card'), 2)
+            self.assertIn("chart-panel", html)
+            self.assertIn("AREA 1", html)
+            self.assertIn("AREA 5", html)
+            area = html[html.find('class="area-3'):html.find('class="area-4')]
+            self.assertGreaterEqual(area.count("<b>—</b>"), 2)
+
     def test_notification_kinds_keep_same_report_only_surface_and_diagnostics_below(self):
         for kind in ("main", "attention", "followup"):
             html = build_notification_detail_html({**_payload(), "notification_kind": kind})
             self.assertIn("operator-dashboard", html)
+            for area in ("AREA 1", "AREA 2", "AREA 3", "AREA 4", "AREA 5"):
+                self.assertIn(area, html)
+            self.assertIn("REPORT ONLY / HUMAN DECISION", html)
+            self.assertIn("この報告書は表示専用です。", html)
             self.assertIn("<details", html)
             self.assertNotIn("private/account/order", html)
             self.assertLess(html.find('class="area-4'), html.find('<section class="panel details-panel"'))
+
+    def test_big_chance_is_later_auxiliary_and_not_stale_in_visible_text(self):
+        payload = _payload()
+        payload["big_chance_candidate"] = {
+            "present": True,
+            "side": "short",
+            "status": "stale",
+            "headline": "反対側候補",
+            "operator_summary": "補助候補",
+            "macro_context": {},
+        }
+        html = build_notification_detail_html(payload)
+        self.assertLess(html.find("判断が変わる条件"), html.find('id="big-chance"'))
+        visible = re.sub(r"<details.*?</details>|<style.*?</style>|<script.*?</script>|<[^>]+>", "", html, flags=re.S)
+        self.assertIn("補助監視", visible)
+        self.assertIn("通常のLong / Short判断を上書きしません", visible)
+        self.assertNotIn("stale", visible.lower())
 
 
 if __name__ == "__main__":
