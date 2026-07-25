@@ -153,6 +153,15 @@ Never use reset, restore, checkout, clean, or stash apply/pop/drop to remove exi
 - no unapproved `paper_positions.csv` integration
 - do not relax `trade_execution_gate`, `phase1b_lite_gate`, or `opportunity_gate` without explicit approval
 
+## ChatGPT MCP review
+
+For a routine committed-task review, start with `AFROG_MCP`'s
+`get_workspace_repo_status`, then the commit-scoped
+`get_workspace_repo_diff(scope="commit", commit="<reported commit>")`.
+Ignore unrelated dirty/untracked entries; use log or targeted file reads only for
+one unresolved acceptance question, and stop when the acceptance facts are sufficient.
+See `docs/operations/ai-orchestration/AI_WORKFLOW.md` Step G for the detailed contract.
+
 ## Reporting
 
 ```text

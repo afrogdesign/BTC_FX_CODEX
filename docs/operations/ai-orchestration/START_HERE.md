@@ -43,6 +43,18 @@ Read only the delta:
 
 Do not reread stable planning or workflow docs.
 
+### New Codex report review
+
+Triage the Codex report first as a locator, not proof. For a committed task, use
+the two-call Git fast path before source reads or searches:
+
+1. `get_workspace_repo_status`
+2. `get_workspace_repo_diff(scope="commit", commit="<reported commit>")`
+
+Use conditional log or targeted file reads only for one explicit unresolved
+acceptance question. Ignore unrelated dirty/untracked entries; they are not review
+targets. The detailed contract is `AI_WORKFLOW.md` Step G.
+
 ### Fresh Codex context
 
 Read:
@@ -167,7 +179,7 @@ Human approval is not required for public-data calculations or local artifacts. 
 | primary working repo | `/Users/marupro/CODEX/100_MCP_Server/btc_monitor` | normal read/edit/test/git |
 | frozen old runtime repo | `/Users/marupro/CODEX/01_active/BTC_FX_CODEX/btc_monitor` | explicit `RUNTIME_TASK` only |
 
-ChatGPT uses `AFROG_Business_MCP` as the primary repo inspection path. Branch and HEAD are confirmed from local repo state when git evidence is required.
+ChatGPT uses `AFROG_MCP` as the primary repo inspection path. Branch and HEAD are confirmed from local repo state when git evidence is required.
 
 ## 7. Current source-of-truth order
 

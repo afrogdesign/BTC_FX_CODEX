@@ -184,7 +184,16 @@ Heavy validationはChatGPTが明示承認した場合だけ行う。
 
 ## 9. Review
 
-Codex reportはproofではなくlocatorとして扱う。
+Codex reportはproofではなくlocatorとして扱う。通常のcommit reviewは、まず
+報告内容をtriageし、その後に次の2-call fast pathを使う。
+
+1. `get_workspace_repo_status`
+2. `get_workspace_repo_diff(scope="commit", commit="<reported commit>")`
+
+statusの大量dirty一覧はtask対象との重複確認以外では無視する。log、個別
+file range、searchは未解決の具体的確認事項がある場合だけ使い、十分な
+acceptance factsが揃った時点で停止する。repo-wide search、同義検索の反復、
+全file読取、重複validationは行わない。詳細は`AI_WORKFLOW.md` Step Gに従う。
 
 ChatGPTが直接確認する。
 
@@ -206,6 +215,7 @@ Material FIXは原則1回まで。
 
 - task対象と重なる差分だけ確認する
 - unrelated差分は保存したまま続行する
+- statusのunrelated dirty/untracked entriesは列挙・調査・要約しない
 - task filesだけをstage、commitする
 - working tree全体をcleanにすることを完了条件にしない
 

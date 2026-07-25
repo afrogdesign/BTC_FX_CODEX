@@ -226,18 +226,79 @@ Add `Known state`, `Allowed read`, detailed CLI/output contracts, or heavy-run a
 
 ### Step G: review Codex output efficiently
 
+The Codex report is a locator, not proof. Start with AFROG_MCP Git inspection before broad file reads or text search.
+
+#### Committed-task fast path
+
+For a normal report that names a commit, triage the report first and extract its
+reported branch, commit, changed files, validation, artifact, blocker, push state,
+and allowed task scope. The report is a locator, not proof. Then use this order:
+
+1. `get_workspace_repo_status` once.
+   - use only `branch`, `head`, `detached_head`, `conflicts`, `index_lock`, and whether task files overlap current dirty changes;
+   - do not enumerate, investigate, summarize, or clean unrelated dirty/untracked entries.
+2. `get_workspace_repo_diff(scope="commit", commit="<reported commit>")` exactly once.
+   - confirm the reported commit exists;
+   - confirm `changed_files` stays inside the allowed task scope;
+   - inspect the commit diff for the required behavior and safety boundary.
+3. Call `get_workspace_repo_log` only when status and commit diff do not already resolve commit identity, HEAD relationship, or subject.
+4. Call `read_public_file_range` only when the commit diff does not provide enough semantic or safety context for a specific changed section.
+
+The default budget for a normal committed task is exactly these two Git MCP calls.
+At most two narrowly targeted follow-up calls are allowed, and each must answer one
+explicit unresolved acceptance question. Do not add a call for reassurance.
+
+If a required Git MCP call fails, retry that exact call at most once only when the
+failure appears transient. Otherwise use the next narrowest available inspection
+method once, state the resulting evidence limitation honestly, and stop; do not
+enter tool-discovery, repeated-search, or broad-read loops.
+
+Do not call `list_resources` during routine review when the required AFROG_MCP Git
+tools are already known. Do not call `public_workspace_status` or
+`list_public_files` when `get_workspace_repo_status` already confirms the repo.
+Do not read full changed files before inspecting the commit diff, use
+`read_public_files_batch` as the default commit review, search repository-wide for
+branch names already established by Git state and the commit diff, repeat equivalent
+branch-string searches, inspect archives/logs/generated outputs/unrelated dirty
+files, search for alternative tools after a suitable Git tool succeeds, or rerun a
+successful MCP call solely for reassurance.
+Do not treat working-tree cleanliness as an acceptance requirement; only task-file
+overlap, conflicts, and index-lock state are relevant to this review path.
+
+#### Non-commit or artifact review
+
+When no commit exists, inspect only the task-scoped working diff, changed source, matching tests, actual CLI route, and fresh artifact needed for acceptance.
+
+#### Acceptance stop condition
+
+Stop the review and decide once all applicable facts are established:
+
+- actual branch matches the task;
+- reported commit matches `HEAD`, or its intended relationship to `HEAD` is explicitly understood;
+- changed files are within the allowed scope;
+- required behavior is visible in the commit diff or one targeted file range;
+- conflicts and index lock are absent;
+- task-specific validation is appropriate for the change type;
+- no safety-boundary or production/runtime/notification/mail/order violation is present.
+
+Do not continue checking merely to accumulate duplicate evidence.
+
+#### Decision sequence
+
 Review in this order:
 
 1. **Report triage** — identify claimed files, tests, commit, artifact, blocker, and any heavy run.
-2. **Direct repo review** — inspect only the changed implementation, matching tests, CLI route, generated output, and active-spec note that determine acceptance.
+2. **Direct repo review** — use the Git fast path, then inspect only the changed implementation, matching tests, CLI route, generated output, and active-spec note that determine acceptance.
 3. **Validation sufficiency** — decide whether existing static/fixture evidence is enough or one heavy acceptance run is still necessary.
 4. **Boundary review** — confirm no production/runtime/notification/mail/order change and no unrelated tracked data.
 5. **Decision** — accept, authorize one acceptance run, issue one minimal FIX, or stop for human judgment.
 
-The report is a locator, not proof of implementation correctness.
-
 Do not:
 
+- start with repo-wide text search or whole-file reads when the commit diff is sufficient
+- search repeatedly for old/new branch strings after the changed lines are already visible in the commit diff
+- inspect the full unrelated dirty tree beyond task-file overlap
+- call multiple tools to prove the same branch, commit, changed-file, or safety fact
 - repeat broad source review after the same area was already accepted
 - request another test solely because the same test passed previously and no related code changed
 - retask for minor report formatting or wording differences

@@ -14,7 +14,7 @@ This file contains stable controls only. Current phase and Work ID belong in `CU
 - branch is confirmed with `git status --short --branch`
 - push requires explicit `CHECKPOINT_PUSH`
 - normal work uses local validation and local commit
-- ChatGPT uses `AFROG_Business_MCP` for primary inspection
+- ChatGPT uses `AFROG_MCP` for primary inspection
 
 ## Responsibility control
 
@@ -55,6 +55,13 @@ Detailed process: `AI_WORKFLOW.md`.
 New `BOUNDED_CODEX`, `REVIEW_ONLY`, `CHECKPOINT_PUSH`, and `RUNTIME_TASK` work normally follows `ChatGPT compact prompt → bounded Codex execution → compact text report → ChatGPT MCP review`.
 
 Task manifests, `validate-task`, `render-prompt`, `json_v1`, and `validate-report` are optional strict tooling used only when ChatGPT explicitly determines that machine alignment adds material evidence. Normal tasks do not create or self-validate JSON reports; user-visible reports and `response.txt` use the existing compact report format. Optional strict tooling preserves all scope, safety, validation, approval, reporting, and outbox controls.
+
+For committed-task review, default to one `get_workspace_repo_status` call followed
+by one commit-scoped `get_workspace_repo_diff` call. Ignore unrelated dirty and
+untracked entries; do not enumerate or investigate them. Optional log, file-range,
+or other MCP calls require one explicit unresolved acceptance question. Duplicate
+evidence gathering is prohibited, and review must stop once the acceptance facts
+are sufficient. Detailed mechanics remain canonical in `AI_WORKFLOW.md` Step G.
 
 ## Git and dirty tree
 
