@@ -1,6 +1,6 @@
 # Product Implementation Route
 
-last_updated: 2026-07-21
+last_updated: 2026-07-25
 status: canonical product route
 
 ## 1. Objective
@@ -49,7 +49,7 @@ P1〜P7を新規実装taskとして再開しない。修正が必要な場合は
 
 ## 4. Current product gap
 
-現在の最大の不足はactual-backed ground truthである。
+現在の不足はactual-backed ground truthの不存在ではなく、量、side/setup coverage、confidence、validation windowである。canonical actual inputはprovidedであり、episodes/linksは149/149、current eligible rowsは2（high 0、medium 2）である。
 
 実装済み基盤:
 
@@ -71,7 +71,9 @@ P1〜P7を新規実装taskとして再開しない。修正が必要な場合は
 - side / regime / setup別の安定したvalidation window
 - P9 proposalを判断できるevidence量
 
-actual tradeがない期間もmarket-path proxyは収集できるが、proxyを実利益として扱わない。
+actual tradeとmarket-path proxyは引き続き分離する。resolved proxy 40、unresolved proxy 4はactual PnLの代替ではない。
+
+Product P9は`program=P`, `phase=P9`。Macroの`macro_p9_proposal_engine.v1`は`program=M`のM5/M6 improvement proposalであり、本routeのP9ではない。
 
 ## 5. P8 operating route
 
@@ -113,6 +115,8 @@ P9 readinessは次を許可しない。
 - automatic phase promotion
 
 ## 7. Current next-task selection
+
+WP0/WP1受理後の推奨単一作業は`WP2 — Semantic Identity and Versioning`（report-only/spec-first）である。source、gate、classifier、threshold、notification、runtimeは変更しない。既存dirtyの`NEXT_ACTION.md`には反映していない。
 
 次のProduct taskは固定済みではない。ChatGPTが既存P8 / M5 evidenceを確認し、次のどれか1件を選ぶ。
 

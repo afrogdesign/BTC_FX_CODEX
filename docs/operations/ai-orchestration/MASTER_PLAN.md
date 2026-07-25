@@ -1,6 +1,6 @@
 # btc_monitor Master Plan
 
-last_updated: 2026-07-21
+last_updated: 2026-07-25
 status: canonical overall plan
 
 ## 1. Product objective
@@ -36,6 +36,14 @@ Priority:
 
 ## 3. Product / P route
 
+### 3.0 Current canonical state — 2026-07-25
+
+Branch `Ver04-v5`, HEAD `34c751fb9f257d188dc1ed2680df90fbe29855d1`。canonical actual inputは`provided`で、actual episodes/linksは`149/149`。現行selected actual evidenceはeligible `2`、high `0`、medium `2`、unique actual episodes used `2`、resolved proxy events `40`、unresolved proxy events `4`である。
+
+Product routeは`program=P`, `phase=P9`。P9 initial/practical readinessはともに`false`で、blockerはactual不存在ではなく量、side/setup coverage、confidence、validation windowの不足である。P8 daily healthは一回のcycleの健康・lineage、P9 cumulative evidenceは複数日/episodeのproposal eligibilityであり、daily successからP9 readinessへ自動昇格しない。
+
+Macroの`macro_p9_proposal_engine.v1`は`program=M`のM5/M6 improvement proposal engineであり、Product P9とは別namespaceである。全体はreport-only / human-decided / no automatic tuning / no automatic phase promotion / no automatic order。
+
 | Phase | Result | Status |
 |---|---|---|
 | P1–P7 | importer, linking, scenarios, classifier, replay, shadow | accepted |
@@ -45,10 +53,8 @@ Priority:
 Current blocker:
 
 ```text
-complete private MEXC export batch missing
-→ no actual episode/link pair
-→ actual-backed evidence = 0
-→ P9 remains blocked
+actual evidence exists but is insufficient in volume, coverage, confidence, and validation window
+→ Product P9 remains evidence-gated and human-approval pending
 ```
 
 This is an accepted no-repeat boundary, not a source defect.
@@ -106,7 +112,7 @@ M-OPS1 current snapshot and daily local report — accepted at 89bd338
 → M-OPS2 chronological history and reliability continuity — accepted at dea0e33
 → M-OPS3 chart-first operator artifact — accepted at 09330b9
 → M-OPS4 separate runtime/schedule enablement — accepted at `a9b3d46` / runtime `690c014`
-→ M-OPS5 autonomous status and stale-data health — next, not started
+→ M-OPS5 autonomous status and stale-data health — accepted in the existing report-only lane
 ```
 
 There is no active source implementation spec.
@@ -158,10 +164,10 @@ Compact prompts and compact reports remain normal. Strict manifest tooling is op
 Current order:
 
 ```text
-P remains parked on private input
-→ M-OPS1–M-OPS3 remain accepted and unchanged
-→ M-OPS4 accepted target-specific runtime and schedule
-→ define M-OPS5 health/status source as a separate phase
+P8 continues evidence collection with actual and proxy lanes separated
+→ Product P9 remains evidence-gated and human-approval pending
+→ Macro M-OPS1–M-OPS5 remain accepted on the existing report-only lane
+→ Product/Macro namespace and version boundaries are retained
 ```
 
 Do not:

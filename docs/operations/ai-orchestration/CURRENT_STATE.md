@@ -1,6 +1,23 @@
 # CURRENT_STATE
 
-last_updated: 2026-07-22
+last_updated: 2026-07-25
+
+## Canonical P state — 2026-07-25
+
+- branch: `Ver04-v5`
+- current HEAD: `34c751fb9f257d188dc1ed2680df90fbe29855d1`
+- actual input status: `provided`
+- actual episodes / links: `149` / `149`
+- actual eligible rows: `2`; high-confidence `0`; medium-confidence `2`
+- unique actual episodes used: `2`
+- resolved / unresolved proxy events: `40` / `4`
+- classifier: `manual_operator_classifier.v4`
+- Product P9 (`program=P`, `phase=P9`) initial readiness: `false`; practical readiness: `false`
+- blocker: evidence volume, side/setup coverage, confidence, and validation window; not actual input absence
+- proxy and actual evidence remain separate; no phase promotion, P9 start, FORMAL_GO, or production tuning is approved
+- P8 daily health is one cycle's health/lineage; Product P9 cumulative evidence is multi-day/version-consistent proposal eligibility
+- Macro `macro_p9_proposal_engine.v1` is `program=M` M5/M6 proposal engine, not Product P9
+- safety: report-only / human-decided / no automatic tuning / no automatic order
 
 ## Primary source and macro runtime
 

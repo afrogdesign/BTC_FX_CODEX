@@ -1,5 +1,21 @@
 # AI Decisions
 
+## DEC-20260725-015: Canonical actual evidence and generation boundaries
+
+### Decision
+
+- canonical actual input is provided; actual episodes and links are generated at 149/149.
+- `DEC-20260721-012`の「actual inputとepisode/linkが存在しない」という部分をsupersedeする。旧decisionは当時のsnapshotとして履歴に残す。
+- Product P9（`program=P`, `phase=P9`）はactual不存在ではなくevidence sufficiency不足により未承認である。
+- P8 daily healthとP9 cumulative readinessを分離する。
+- classifier/method versionを跨ぐ単純比較・単純合算を禁止し、version別segmentを保持する。version不明は`legacy_unversioned`とする。
+- Product P9とMacro `program=M` M5/M6 proposal engine（既存module `macro_p9_proposal_engine.v1`）を区別する。
+- safetyはreport-only / human-decided / no automatic tuning / no automatic orderとする。
+
+### Consequences
+
+Eligible actual rowsは2（high 0、medium 2）に留まり、P9開始、FORMAL_GO、production tuning、phase promotionは承認されない。P8 cycle成功はP9 readinessを自動的にtrueにしない。
+
 ## DEC-20260608-001: Ver03-v2 begins with AI operation anchors
 
 Date: 2026-06-08

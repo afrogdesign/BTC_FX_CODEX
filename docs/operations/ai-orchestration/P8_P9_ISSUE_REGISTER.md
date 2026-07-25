@@ -1,5 +1,15 @@
 # P8 / P9 Issue Register
 
+## 2026-07-25 current reconciliation — WP0/WP1
+
+- actual input/episode/link availability: `provided` / `149` / `149`。
+- current actual eligible evidence: `2` rows（high `0`, medium `2`）; resolved/unresolved proxy events `40/4`。proxyとactualは分離する。
+- Product P9（`program=P`, `phase=P9`）initial/practical readinessはfalse。practical falseは証拠不足だけでなくsourceの固定false欠陥も含む。
+- classifier generationは単純比較しない。`manual_operator_classifier.v4`をversion cohortとして扱い、不明は`legacy_unversioned`へ分離する。
+- P8 daily healthはone-cycle health/lineage、P9 cumulative evidenceは複数日・複数episodeのproposal eligibilityであり、相互に自動昇格しない。
+- Product P9とMacro `program=M`の`macro_p9_proposal_engine.v1`（M5/M6 improvement proposal）を区別する。
+- production changeなし。report-only / human-decided / no automatic tuning / no automatic order。
+
 last_updated: 2026-07-11
 status: active
 source_of_truth: `docs/operations/strategy/P8_P9_EVIDENCE_TUNING_OPERATING_SPEC_20260711.md`

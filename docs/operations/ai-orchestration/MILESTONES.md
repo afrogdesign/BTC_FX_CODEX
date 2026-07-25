@@ -1,5 +1,13 @@
 # MILESTONES
 
+## 2026-07-25 — P generation alignment WP0/WP1 reconciliation
+
+- branch `Ver04-v5`, HEAD `34c751fb9f257d188dc1ed2680df90fbe29855d1`でcontract inventoryとcanonical reconciliationを実施。
+- actual inputはprovided、actual episodes/linksは149/149。現行eligible rowsは2（high 0、medium 2）。
+- P8 daily healthとProduct P9 cumulative evidenceを分離し、P9はevidence-gated/human approval pendingとして維持。
+- 過去のactual missing記述は当時のsnapshotであり、履歴を改変しない。
+- source、gate、threshold、classifier、notification、runtime変更なし。
+
 このファイルは受理済みの大きな節目だけを記録する。FIX単位の経過、未受理結果、current taskは記録しない。
 
 ## 2026-07-21 — M5 champion/challenger proposal engine accepted
