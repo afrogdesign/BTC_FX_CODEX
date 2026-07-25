@@ -96,7 +96,7 @@ def read_logical_csv(path: str | Path, logical_name: str | None = None) -> tuple
     return rows, {"logical_name": logical_name or p.name, "row_count": len(rows), "fingerprint": _sha256(raw), "headers": list(reader.fieldnames)}
 
 def _source_id(kind: str, row: Mapping[str, Any]) -> str:
-    field = {"classification": "classification_id", "proxy_trial_fact": "trial_fact_id", "actual_episode": "episode_id", "actual_link": "link_id"}.get(kind, "signal_id")
+    field = {"classification": "classification_id", "proxy_trial_fact": "trial_fact_id", "actual_episode": "episode_id", "actual_link": "link_id", "exact_observation": "observation_id", "active_plan_candidate": "candidate_id", "signal_outcome": "signal_id", "decision_event": "signal_id"}.get(kind, "signal_id")
     return _text(row.get(field))
 
 def _value(row: Mapping[str, Any], *keys: str) -> str:
@@ -107,7 +107,7 @@ def _value(row: Mapping[str, Any], *keys: str) -> str:
     return ""
 
 def _component(kind: str, row: Mapping[str, Any]) -> str:
-    keys = {"classification": ("classifier_method_version",), "proxy_trial_fact": ("classifier_method_version",), "actual_episode": ("association_method_version",), "actual_link": ("link_method_version",), "decision_event": ("evaluation_trace_version",)}[kind]
+    keys = {"classification": ("classifier_method_version",), "proxy_trial_fact": ("classifier_method_version",), "actual_episode": ("association_method_version",), "actual_link": ("link_method_version",), "decision_event": ("evaluation_trace_version",), "exact_observation": ("schema_version",), "active_plan_candidate": ("active_plan_version", "schema_version"), "signal_outcome": ("evaluation_trace_version", "schema_version")}[kind]
     return _value(row, *keys) or LEGACY_UNVERSIONED
 
 def _fact(kind: str, row: Mapping[str, Any], source: str, generation: GenerationIdentity, cutoff: str) -> tuple[dict[str, str], datetime]:
@@ -195,7 +195,7 @@ def build_evidence_facts(inputs: Mapping[str, tuple[list[dict[str, str]], Mappin
 
 def build_summary(facts: list[dict[str, str]], generation: GenerationIdentity, cutoff_utc: str, input_meta: Mapping[str, Any]) -> str:
     kinds = Counter(row["evidence_kind"] for row in facts)
-    links = Counter(row["actual_link_confidence"] or "blank" for row in facts if row["evidence_kind"] in {"actual_link", "actual_episode"})
+    links = Counter(row["actual_link_confidence"] or "blank" for row in facts if row["evidence_kind"] == "actual_link")
     cohorts = Counter(row["cohort_key"] for row in facts)
     return "\n".join(("# P cumulative evidence summary", "", "- This is full-period evidence, not daily 5-day health.", f"- Generation: `{generation.runtime_generation}` / source `{generation.source_head}`.", f"- Cutoff: `{cutoff_utc}`.", f"- Actual episode/link baseline rows: {sum(row['evidence_kind']=='actual_episode' for row in facts)} / {sum(row['evidence_kind']=='actual_link' for row in facts)}.", f"- Evidence kinds: `{json.dumps(dict(sorted(kinds.items())), sort_keys=True)}`.", f"- Actual link confidence: `{json.dumps(dict(sorted(links.items())), sort_keys=True)}`.", f"- Cohorts: `{json.dumps(dict(sorted(cohorts.items())), sort_keys=True)}`.", "- Proxy, actual, and descriptive evidence remain separate; actual PnL is never proxy PnL.", "- Baseline candidate only; H2 human adoption is not recorded.", "- report-only / not FORMAL_GO / no automatic order.", "- Input fingerprints are recorded in the manifest without absolute paths.", ""))
 
@@ -213,7 +213,7 @@ def build_bundle(inputs: Mapping[str, tuple[list[dict[str, str]], Mapping[str, A
         "modern_attribution_report.md": modern["report_md"].encode("utf-8"),
     }
     fingerprints = {name: _sha256(data) for name, data in sorted(files.items())}
-    manifest = {"schema_version": EVIDENCE_MANIFEST_VERSION, "method_version": EVIDENCE_METHOD_VERSION, "generation": generation.to_dict(), "cutoff_utc": cutoff_utc, "input_sources": [{"logical_name": meta["logical_name"], "row_count": meta["row_count"], "fingerprint": meta["fingerprint"]} for _, meta in sorted(inputs.values(), key=lambda x: x[1]["logical_name"])], "input_status": "provided", **stats, "cohort_counts": dict(sorted(Counter(row["cohort_key"] for row in facts).items())), "evidence_basis_counts": dict(sorted(Counter(row["evidence_basis"] for row in facts).items())), "actual_link_confidence_counts": dict(sorted(Counter(row["actual_link_confidence"] or "blank" for row in facts if row["evidence_kind"] in {"actual_episode", "actual_link"}).items())), "output_fingerprints": fingerprints, "safety_boundary": SAFETY_BOUNDARY}
+    manifest = {"schema_version": EVIDENCE_MANIFEST_VERSION, "method_version": EVIDENCE_METHOD_VERSION, "generation": generation.to_dict(), "cutoff_utc": cutoff_utc, "input_sources": [{"logical_name": meta["logical_name"], "row_count": meta["row_count"], "fingerprint": meta["fingerprint"]} for _, meta in sorted(inputs.values(), key=lambda x: x[1]["logical_name"])], "input_status": "provided", **stats, "cohort_counts": dict(sorted(Counter(row["cohort_key"] for row in facts).items())), "evidence_basis_counts": dict(sorted(Counter(row["evidence_basis"] for row in facts).items())), "actual_link_confidence_counts": dict(sorted(Counter(row["actual_link_confidence"] or "blank" for row in facts if row["evidence_kind"] == "actual_link").items())), "output_fingerprints": fingerprints, "safety_boundary": SAFETY_BOUNDARY}
     manifest_pre = _json_bytes(manifest)
     run_id = "p_ev_" + _sha256(_json_bytes({"generation": generation.to_dict(), "cutoff_utc": cutoff_utc, "inputs": [(m["logical_name"], m["fingerprint"]) for _, m in sorted(inputs.values(), key=lambda x: x[1]["logical_name"])]}))[:32]
     manifest["run_id"] = run_id

@@ -223,12 +223,18 @@ Mapping requirements:
 - actual episode identity: `episode_id`
 - actual link identity: `link_id`
 - decision event identity: nonblank `signal_id`
+- exact observation identity: `observation_id`
+- active plan candidate identity: `candidate_id`
+- signal outcome identity: nonblank `signal_id`
 - blank `signal_id` signal-log rowsはcountしてmanifestへ記録するが、decision evidence rowにはしない。
 - classification component versionは`classifier_method_version`。
 - trial fact component versionは`classifier_method_version`。
 - episode component versionは`association_method_version`。
 - link component versionは`link_method_version`。
 - decision event component versionは`evaluation_trace_version`、空なら`legacy_unversioned`。
+- exact observation component versionは`schema_version`、空なら`legacy_unversioned`。
+- active plan candidate component versionは`active_plan_version`、次に`schema_version`、両方空なら`legacy_unversioned`。
+- signal outcome component versionは`evaluation_trace_version`、次に`schema_version`、両方空なら`legacy_unversioned`。
 - `cohort_key`はprogram、runtime generation、evidence kind、component versionを含む決定的な文字列。
 
 ### 5.4 Manifest
@@ -337,13 +343,15 @@ followup_for_signal_id
 `notification_kind`は次のfieldの最初のnonblank値をそのまま使用する。
 
 ```text
-notification_kind
-summary_variant
-reason_for_notification
-notification_class
+signal metadata `notification_kind`
+signal metadata `summary_variant`
+signal metadata `reason_for_notification`
+baseline v2 link `notification_class`
 ```
 
 値の意味を推測して書き換えない。
+
+同一signalに複数classificationまたはtrial factがある場合、`p5_operator_classes`と`proxy_outcomes`は全nonblank値をsort・deduplicateして保存する。最後の1rowで上書きしない。
 
 ### 6.3 Candidate output
 
@@ -445,6 +453,10 @@ notification_without_accepted_actual
 ```
 
 Accepted actual attribution for descriptive aggregation is v2 `link_status=linked` and confidence `high|medium` only。low/ambiguousはactual usefulnessの分子へ入れない。
+
+- `entry_latency_minutes`はbaseline v2 linkの`time_delta_minutes`をそのまま保持する。
+- low/ambiguous/no-candidate episode rowはactual episodeの記述としてPnLを保持してよいが、`accepted_high_medium`、accepted actual PnL row count、accepted actual PnL aggregateへ入れない。
+- positive proxy evidenceには少なくとも`resolved_positive`、`positive`、`win`、`favorable`、`success`を含める。値をactual successとは呼ばない。
 
 Conservative usefulness category rules:
 
@@ -597,8 +609,10 @@ signal_log = logs/csv/trades.csv
 output_root = local/reports/p_evidence/wp3_wp4_acceptance_20260725
 runtime_generation = Ver04-v5
 source_head = 3bb8c0853a718d270d802fa941f0ed7cef3fd2f1
-cutoff_utc = 2026-07-25T00:00:00Z
+cutoff_utc = 2026-07-25T01:05:00.785295Z
 ```
+
+最初のsmokeは`2026-07-25T00:00:00Z`でfail-closedし、`trades.csv`末尾の`2026-07-25T01:05:00.785295Z`を正しく拒否した。FIX1では原因を変更したため、上記の実データ終端cutoffでsmokeをexactly one rerunしてよい。cutoffを実データ終端より後へ広げない。
 
 Do not use raw XLSX, `manual_actual_*`, network, runtime, mail, or notification commands.
 

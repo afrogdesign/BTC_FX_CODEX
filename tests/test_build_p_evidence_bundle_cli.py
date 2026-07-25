@@ -27,4 +27,8 @@ class BundleCliTests(unittest.TestCase):
             proc=subprocess.run(args, text=True, capture_output=True)
             self.assertEqual(proc.returncode,0,proc.stderr+proc.stdout); self.assertEqual(len(proc.stdout.splitlines()),1); self.assertEqual(json.loads(proc.stdout)["history_files"],8)
 
+    def test_missing_input_is_compact_exit_two(self):
+        proc = subprocess.run([sys.executable, "tools/build_p_evidence_bundle.py", "--classifications", "/missing", "--trial-facts", "/missing", "--episodes", "/missing", "--links-v2", "/missing", "--signal-log", "/missing", "--output-root", "/tmp/not-used", "--runtime-generation", "r", "--source-head", "h", "--cutoff-utc", "2026-07-25T00:00:00Z", "--stdout-json"], text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 2); self.assertNotIn("Traceback", proc.stdout + proc.stderr); self.assertEqual(len(proc.stdout.splitlines()), 1); self.assertNotIn("/missing", proc.stdout)
+
 if __name__ == "__main__": unittest.main()
