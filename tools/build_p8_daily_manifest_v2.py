@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
         explicit_source = bool(source_head)
         if not source_head:
             source_head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-        if not source_head or (not explicit_source and not re.fullmatch(r"[0-9a-fA-F]{40}", source_head)): raise InputError("invalid_source_head")
+        if not source_head or not re.fullmatch(r"[0-9a-fA-F]{40}", source_head): raise InputError("invalid_source_head")
         cutoff = a.cutoff_utc or cycle.get("source", {}).get("max_timestamp")
         if not cutoff: raise InputError("missing_cutoff_utc")
         cumulative["_input_fingerprint"] = cumulative_meta["fingerprint"]; modern["_input_fingerprint"] = modern_meta["fingerprint"]
@@ -40,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
             validation, _ = read_json(a.frozen_validation, "frozen_validation.json")
         input_meta = {"cycle_manifest": cycle_meta, "trial_report": trial_meta, "trial_facts": facts_meta, "review_queue": queue_meta, "cumulative_manifest": cumulative_meta, "modern_attribution_report": modern_meta}
         manifest, files = build_manifest(cycle, trial, facts, queue, cumulative, modern, a.runtime_generation, source_head, cutoff, previous, scope, validation, input_meta)
+        manifest["source_head_resolution"] = "explicit_override" if explicit_source else "git"
+        files["p8_daily_manifest_v2.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
         write_outputs(a.output_root, files, a.replace_output)
         if a.stdout_json:
             q, actual = manifest["review_queue_delta"], manifest["actual_attribution_delta"]

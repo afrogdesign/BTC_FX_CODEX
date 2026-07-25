@@ -25,7 +25,7 @@ def _s(value: Any) -> str:
 
 
 def _tokens(row: Mapping[str, Any]) -> Any:
-    return row.get("no_trade_flags", row.get("formal_blockers", ""))
+    return row.get("no_trade_flags", "")
 
 
 def _other_reasons(row: Mapping[str, Any], semantic: Any) -> list[str]:
@@ -50,7 +50,7 @@ def build_impact(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         unknown = bool(semantic.unknown_tokens)
         mixed = bool(semantic.hard_tokens and semantic.advisory_tokens)
         other = _other_reasons(row, semantic)
-        if "no_trade_flags" not in row and "formal_blockers" not in row:
+        if "no_trade_flags" not in row:
             missing_fields.add("no_trade_flags")
         if "formal_execution_gate" not in row and "trade_execution_gate" not in row:
             missing_fields.add("formal_execution_gate")

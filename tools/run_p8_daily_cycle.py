@@ -125,10 +125,20 @@ def run_daily_cycle(args: argparse.Namespace) -> int:
     report_stage_failure = False
     cycle_manifest_path = output_root / "cycle_manifest.json"
     if success and cycle_manifest_path.is_file():
+        try:
+            manifest_payload = json.loads(cycle_manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(manifest_payload, dict):
+                raise ValueError
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            report_stage_failure = True
+            evidence_result = {"status": "failed", "error": "missing_or_invalid_core_manifest"}
+    if success and not report_stage_failure and cycle_manifest_path.is_file():
         evidence_cmd = [python_bin, "tools/refresh_p_current_evidence.py", "--repo-root", str(root), "--current-date", report_date, "--runtime-generation", "Ver04-v5", "--stdout-json"]
         evidence_completed = subprocess.run(evidence_cmd, cwd=root, capture_output=True, text=True, encoding="utf-8")
         evidence_result = _parse_json_line(evidence_completed.stdout)
         evidence_result["status"] = "success" if evidence_completed.returncode == 0 and evidence_result.get("ok") is True else "failed"
+        if evidence_result["status"] == "failed" and not evidence_result.get("error"):
+            evidence_result["error"] = "report_stage_failed"
         if evidence_result["status"] != "success": report_stage_failure = True
         if not report_stage_failure:
             cumulative = root / "local/reports/p_evidence/p_current_generation/latest/evidence_manifest.json"
@@ -140,12 +150,13 @@ def run_daily_cycle(args: argparse.Namespace) -> int:
             p8_completed = subprocess.run(p8_cmd, cwd=root, capture_output=True, text=True, encoding="utf-8")
             p8_v2_result = _parse_json_line(p8_completed.stdout)
             p8_v2_result["status"] = "success" if p8_completed.returncode == 0 and p8_v2_result.get("ok") is True else "failed"
+            if p8_v2_result["status"] == "failed" and not p8_v2_result.get("error"):
+                p8_v2_result["error"] = "report_stage_failed"
             if p8_v2_result["status"] != "success": report_stage_failure = True
-    if success and report_stage_failure:
-        status = "partial_failure"
-    else:
-        status = "success" if success else "failed"
-    status = "success" if success else "failed"
+    elif success and not cycle_manifest_path.is_file():
+        report_stage_failure = True
+        evidence_result = {"status": "failed", "error": "missing_or_invalid_core_manifest"}
+    status = "partial_failure" if success and report_stage_failure else ("success" if success else "failed")
     payload = {
         "started_at_jst": started, "finished_at_jst": finished, "report_date": report_date,
         "status": status, "returncode": int(completed.returncode if not report_stage_failure else (p8_v2_result.get("returncode") or 1)), "output_root": _relative(output_root, root),
@@ -156,9 +167,9 @@ def run_daily_cycle(args: argparse.Namespace) -> int:
         "issue_001": parsed.get("issue_001", {}), "error_codes": parsed.get("errors", []) if not success else [],
         "turning_precursor_shadow": parsed.get("turning_precursor_shadow", {"enabled": bool(args.include_turning_precursor_shadow), "status": "disabled"}),
         "macro_structure_shadow": parsed.get("macro_structure_shadow", {"enabled": bool(args.include_macro_structure_shadow), "status": "disabled"}),
-        "evidence_refresh": {"status": evidence_result.get("status", "not_run"), "run_id": evidence_result.get("run_id", ""), "latest_manifest_path": "local/reports/p_evidence/p_current_generation/latest/evidence_manifest.json" if evidence_result.get("status") == "success" else "", "current_v4_classification_rows": evidence_result.get("current_v4_classification_rows", 0), "current_v4_proxy_trial_rows": evidence_result.get("current_v4_proxy_trial_rows", 0)},
+        "evidence_refresh": {"status": evidence_result.get("status", "not_run"), "error": evidence_result.get("error", ""), "run_id": evidence_result.get("run_id", ""), "latest_manifest_path": "local/reports/p_evidence/p_current_generation/latest/evidence_manifest.json" if evidence_result.get("status") == "success" else "", "current_v4_classification_rows": evidence_result.get("current_v4_classification_rows", 0), "current_v4_proxy_trial_rows": evidence_result.get("current_v4_proxy_trial_rows", 0)},
         "formal_gate_semantic_impact": {"status": "success" if evidence_result.get("status") == "success" else evidence_result.get("status", "not_run"), "rows_where_no_trade_blocker_would_be_removed": evidence_result.get("formal_gate_semantic_impact", {}).get("rows_where_no_trade_blocker_would_be_removed", 0), "rows_potentially_changed_to_pass": evidence_result.get("formal_gate_semantic_impact", {}).get("rows_potentially_changed_to_pass", 0)},
-        "p8_v2": {"status": p8_v2_result.get("status", "not_run"), "run_id": p8_v2_result.get("run_id", ""), "manifest_path": _relative(output_root / "p8_v2/p8_daily_manifest_v2.json", root) if p8_v2_result.get("status") == "success" else "", "readiness_state": p8_v2_result.get("readiness_v2_state", ""), "missing_requirements": p8_v2_result.get("missing_requirements", [])},
+        "p8_v2": {"status": p8_v2_result.get("status", "not_run"), "error": p8_v2_result.get("error", ""), "run_id": p8_v2_result.get("run_id", ""), "manifest_path": _relative(output_root / "p8_v2/p8_daily_manifest_v2.json", root) if p8_v2_result.get("status") == "success" else "", "readiness_state": p8_v2_result.get("readiness_v2_state", ""), "missing_requirements": p8_v2_result.get("missing_requirements", [])},
         "safety_boundary": SAFETY,
     }
     _atomic_json(status_path, payload)

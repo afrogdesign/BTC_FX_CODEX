@@ -42,7 +42,7 @@ class RunP8DailyCycleTests(unittest.TestCase):
 
     def test_no_actual_pair_omits_actual_arguments(self) -> None:
         with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed('{"ok":true,"counts":{}}')) as run:
-            self.assertEqual(run_p8_daily_cycle.main(self.args()), 0)
+            self.assertEqual(run_p8_daily_cycle.main(self.args()), 1)
         argv = run.call_args.args[0]; self.assertNotIn("--actual-episodes", argv); self.assertNotIn("--actual-links", argv)
 
     def test_both_actual_files_are_passed(self) -> None:
@@ -62,8 +62,8 @@ class RunP8DailyCycleTests(unittest.TestCase):
     def test_success_writes_compact_last_result(self) -> None:
         response = '{"ok":true,"counts":{"trial_fact_rows":2},"p9_readiness":{"initial":{"ready":false}}}'
         with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed(response)):
-            self.assertEqual(run_p8_daily_cycle.main(self.args()), 0)
-        status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text()); self.assertEqual(status["status"], "success"); self.assertEqual(status["counts"]["trial_fact_rows"], 2)
+            self.assertEqual(run_p8_daily_cycle.main(self.args()), 1)
+        status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text()); self.assertEqual(status["status"], "partial_failure"); self.assertEqual(status["counts"]["trial_fact_rows"], 2)
 
     def test_failure_writes_compact_failure_result_and_nonzero(self) -> None:
         with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed('{"ok":false,"errors":["candidate_ahead_of_ohlcv"]}', 2)):
@@ -85,7 +85,7 @@ class RunP8DailyCycleTests(unittest.TestCase):
 
     def test_opt_in_shadow_flag_is_forwarded(self) -> None:
         with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed('{"ok":true,"turning_precursor_shadow":{"enabled":true,"status":"success"}}')) as run:
-            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow")), 0)
+            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow")), 1)
         self.assertIn("--include-turning-precursor-shadow", run.call_args.args[0])
         status = json.loads((self.root / "logs/runtime/p8_daily_cycle_last_result.json").read_text())
         self.assertEqual(status["turning_precursor_shadow"]["status"], "success")
@@ -93,7 +93,7 @@ class RunP8DailyCycleTests(unittest.TestCase):
     def test_macro_shadow_flag_is_optional_and_coexists_with_turning(self) -> None:
         response = '{"ok":true,"macro_structure_shadow":{"enabled":true,"status":"success"},"turning_precursor_shadow":{"enabled":true,"status":"success"}}'
         with patch("tools.run_p8_daily_cycle.subprocess.run", return_value=self.completed(response)) as run:
-            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow", "--include-macro-structure-shadow")), 0)
+            self.assertEqual(run_p8_daily_cycle.main(self.args("--include-turning-precursor-shadow", "--include-macro-structure-shadow")), 1)
         argv = run.call_args.args[0]
         self.assertEqual(argv.count("--include-macro-structure-shadow"), 1)
         self.assertEqual(argv.count("--include-turning-precursor-shadow"), 1)

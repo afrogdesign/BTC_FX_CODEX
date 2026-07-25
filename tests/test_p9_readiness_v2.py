@@ -3,7 +3,7 @@ from src.feedback.p9_readiness_v2 import evaluate_readiness
 
 def base():
     manifest={"generation":{"classifier_version":"manual_operator_classifier.v4"},"operational_health":{"state":"healthy"},"cumulative_evidence_pointer":{"compatibility_status":"compatible","missing_current_component_cohorts":["v4"],"current_component_cohorts":[],"cohort_counts":{},"fingerprints_present":True,"available_segments":[]},"modern_attribution_pointer":{"accepted_high_medium_actual":58}}
-    trial={"p9_readiness":{"initial":{"ready":False},"practical":{"ready":False}}}; cum={}; modern={"causality_statement":{"automatic_causal_claims":0},"canonical_link_replacement":False}; return manifest,trial,cum,modern
+    trial={"p9_readiness":{"initial":{"ready":False},"practical":{"ready":False}}}; cum={}; modern={"causality_statement":{"automatic_causal_claims":0},"canonical_link_replacement":False,"actual_attribution":{"accepted_high_medium_actual_associations":58,"notified_accepted_actual_associations":58}}; return manifest,trial,cum,modern
 class P9ReadinessTests(unittest.TestCase):
     def test_collecting_and_legacy_separation(self):
         m,t,c,modern=base(); out=evaluate_readiness(m,t,c,modern); self.assertEqual(out["state"],"collecting"); self.assertEqual(out["legacy_readiness_v1"],t["p9_readiness"]); self.assertFalse(out["production_ready"]); self.assertEqual(out["proposal_approval_status"],"not_requested")

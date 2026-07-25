@@ -9,7 +9,7 @@ def fixtures(classifier="v4"):
     facts=[{"review_item_id":"r1","evidence_tier":"actual_high_medium","actual_episode_id":"e1","actual_link_confidence":"medium","no_trade_flags":"unknown_token"}]
     queue=[{"review_item_id":"q1"}]
     cumulative={"run_id":"run","schema_version":"p_cumulative_evidence.v1","method_version":"p_cumulative_evidence.v1","input_status":"provided","cutoff_utc":"2026-07-25T00:00:00Z","generation":{"program":"P","runtime_generation":"r","classifier_version":"v1"},"input_sources":[{"fingerprint":"i"}],"output_fingerprints":{"x":"x"},"cohort_counts":{"P|r|classification|v1":1,"P|r|proxy_trial_fact|v1":1}}
-    modern={"baseline_episodes":149,"baseline_links":149,"actual_attribution":{"accepted_high_medium":58},"causality_statement":{"automatic_causal_claims":0},"canonical_link_replacement":False}
+    modern={"baseline_episodes":149,"baseline_links":149,"actual_attribution":{"accepted_high_medium":58,"notified_accepted_actual_associations":58},"causality_statement":{"automatic_causal_claims":0},"canonical_link_replacement":False}
     return cycle,trial,facts,queue,cumulative,modern
 
 class P8ManifestTests(unittest.TestCase):

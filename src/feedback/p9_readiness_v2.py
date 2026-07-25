@@ -101,11 +101,6 @@ def evaluate_readiness(manifest: Mapping[str, Any], trial_report: Mapping[str, A
     if not pointer.get("fingerprints_present", True): missing_evidence.append("cumulative evidence fingerprints")
     actual = _modern_facts(modern_report)
     report_actual = modern_report.get("actual_attribution", {})
-    if not report_actual and manifest.get("modern_attribution_pointer", {}).get("accepted_high_medium_actual"):
-        actual["accepted_actual_associations"] = int(manifest["modern_attribution_pointer"]["accepted_high_medium_actual"] or 0)
-    if "notified_accepted_actual_associations" not in report_actual and actual["accepted_actual_associations"]:
-        # v1 compatibility input had no notification split; the new report never uses this path.
-        actual["notified_accepted_actual"] = actual["accepted_actual_associations"]
     actual["classification_cohort_rows"] = current_class_rows
     actual["proxy_trial_fact_cohort_rows"] = current_proxy_rows
     actual_required = bool(scope.get("actual_required", False))
